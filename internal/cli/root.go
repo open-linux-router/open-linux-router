@@ -26,6 +26,7 @@ const DefaultSocket = "/run/olr/olrd.sock"
 type globalOptions struct {
 	socket string
 	output string
+	dryRun bool
 }
 
 // NewRoot returns the root command with the hub-level commands attached.
@@ -45,10 +46,16 @@ func NewRoot() *cobra.Command {
 		SilenceErrors: true,
 	}
 
-	root.PersistentFlags().StringVar(&opts.socket, "socket", DefaultSocket,
+	root.PersistentFlags().StringVar(&opts.socket, FlagSocket, DefaultSocket,
 		"olrd control socket")
-	root.PersistentFlags().StringVarP(&opts.output, "output", "o", "text",
+	root.PersistentFlags().StringVarP(&opts.output, FlagOutput, "o", OutputText,
 		"output format: text|json")
+
+	// Changes apply on return (design.md §5.1), so the only way to look before
+	// leaping is to ask. Global rather than per-module: "show me what this
+	// would do" should mean the same thing everywhere in the tool.
+	root.PersistentFlags().BoolVar(&opts.dryRun, FlagDryRun, false,
+		"show what would change and exit without applying it")
 
 	root.AddGroup(
 		&cobra.Group{ID: GroupModules, Title: "Modules:"},
