@@ -297,7 +297,9 @@ run the command that would fix it. Every homelab router does this eventually.
 
 ## 6. Surfaces
 
-All four are generated from the same per-module schema.
+All four derive from the same per-module schema. **Derive, not fetch** — the
+schema is a build-time source for the CLI and a runtime document for the REST,
+UI, and MCP surfaces. See §10 resolved, *static command tree*.
 
 ### 6.1 CLI — `olr`, an `aws`-style hub
 
@@ -310,7 +312,23 @@ olr status                        aggregate: drift + daemon liveness
 olr diff                          pending/drifted, per module
 olr history | rollback            per-module revisions
 olr adopt <iface> | release       take/hand back interface ownership
+
+olr daemon start | stop | status  manage olrd itself — see below
 ```
+
+The command tree is registered in Go, so `olr --help` is truthful with `olrd`
+stopped and there is no schema to fetch, cache, or invalidate.
+
+**Two tiers.** Most of `olr` is a client of `olrd` on equal footing with the
+WebUI and MCP (§1). But `olr daemon …` manages `olrd` itself, so it cannot be
+one — starting a daemon cannot be an HTTP call to that daemon, and `status` has
+to answer when it is wedged. Those commands talk to systemd directly and are
+grouped separately in `--help`. The "equal clients" rule in §1 governs
+*configuration*; daemon lifecycle is not configuration.
+
+The shared verb vocabulary (§3.2 rule 4) is enforced in code, not documented:
+constructing a command with a verb outside the vocabulary panics at startup.
+Verb drift across modules is invisible in review and obvious at startup.
 
 ### 6.2 REST API
 
@@ -365,6 +383,20 @@ nothing.
 libraries, trivial `.deb`, clean arm64 cross-compile. TypeScript SPA embedded
 in the binary.
 
+| | Choice | Note |
+|---|---|---|
+| Language | Go, `go.mod` floor **1.23** | `CGO_ENABLED=0`; nothing needs a newer language version |
+| HTTP | stdlib `net/http` + 1.22 `ServeMux` | core is thin (§3); a framework would leak into the API contract |
+| CLI | `spf13/cobra` | static tree, §6.1 |
+| Schema | `invopop/jsonschema`, draft 2020-12 | OpenAPI 3.1 is a superset, so one dialect serves REST, MCP, and UI |
+| netlink | `vishvananda/netlink` | |
+| nftables | `google/nftables` | direct netlink, no `nft` binary |
+| systemd | `coreos/go-systemd/dbus` | §5.4 daemon liveness |
+| Logging | `log/slog` | stdlib, structured (§3.3) |
+| `.deb` | `nfpm` | single binary, cross-arch, no Ruby |
+
+Six direct dependencies for v1. For a router that is a feature.
+
 ---
 
 ## 9. Milestones
@@ -393,8 +425,11 @@ in the binary.
 4. **Wi-Fi on-box or bring-your-own AP?** On-box hostapd is a driver and
    regulatory rabbit hole. Assuming wired router + separate APs on a VLAN trunk
    is far cheaper and matches most homelab setups.
-5. **Test hardware.** N100 mini-PC, Raspberry Pi, repurposed x86? Sets what
-   milestone 1 can be validated against, and whether we need a VM harness first.
+5. **Revision storage.** Numbered snapshots under
+   `/etc/open-linux-router/revisions/<module>/`, or a git repo in
+   `/etc/open-linux-router`? Git gives `history`/`rollback` and real diffs
+   nearly free, at the cost of a git dependency in the control plane and odd
+   behaviour if a user pokes at it. Leaning snapshots.
 
 ### Resolved
 
@@ -404,3 +439,47 @@ in the binary.
   scope and are rigorously non-invasive outside it (§3.4).
 - **Third-party modules.** Not needed as a plugin API — the extension surface is
   the distro. Modules stay a bounded in-tree list, mounted explicitly (§3.2).
+- **Language: Go.** Confirmed against Rust rather than assumed. This project is
+  ~90% config rendering, schema plumbing, HTTP, and process supervision and ~10%
+  netlink — Rust's advantages land on the 10% that §3.4 gives away to existing
+  daemons. Two things decided it. Runtime reflection makes one tagged struct
+  drive CLI, REST, UI, and MCP (§3.2 rule 3); `schemars` is compile-time, so the
+  surfaces would need a hand-written interpreter. And `google/nftables` is pure
+  Go over netlink, where Rust's `rustables` wraps libnftnl — a C dependency that
+  would compromise both the static binary and the arm64 cross-build.
+- **Static command tree.** The CLI does not fetch a schema from `olrd` at
+  runtime. Alternative considered and rejected: fetch-and-cache, which would let
+  `olr` drive a newer or remote daemon but makes `olr --help` depend on the
+  daemon being reachable. See §6.1.
+- **CLI is two-tier.** `olr daemon …` is below the API, everything else is a
+  client of it (§6.1). §1's "equal clients" governs configuration, not lifecycle.
+- **Config format: JSON.** Round-trips through the same struct tags as the REST
+  body and the reflected schema, so there is no second dialect and no mapping
+  layer. TOML would be friendlier to read and was rejected for that duplication.
+  Three consequences:
+  - `time.Duration` needs a wrapper type, or a 12h lease serialises as
+    `43200000000000`.
+  - JSON has no comments, so the §3.4 ownership header becomes a `"$schema"`
+    key pointing at the published schema — which also makes the file
+    editor-validatable. Generated *daemon* configs keep a real comment header;
+    dnsmasq and nftables formats both support one.
+  - Reflection derives `required` from the absence of `omitempty`, not from a
+    tag. So core publishes two projections of every module schema: full for
+    PUT, relaxed for PATCH and `olr set`. Without this a single-field update
+    fails validation against its own schema.
+- **DHCP backend: dnsmasq, not Kea.** dnsmasq serves DHCPv4, DHCPv6 **and RA**
+  in one daemon; Kea does no RA at all and would need radvd as a third daemon —
+  decisive given IPv6 is a dimension, not a module (§4.3). Also: trixie ships
+  Kea 2.6.3, which **predates** the July 2025 Kea 3.0 hook relicensing, so
+  `host_cmds`/`subnet_cmds` are still commercially licensed there, and pulling
+  ISC's own repo would break the plain-`apt` promise in §1. Kept behind a
+  backend interface; Kea is the v2 upgrade path for lease DB and HA.
+  Two obligations follow: the module **must** render `port=0` or dnsmasq
+  silently becomes a second resolver and violates §4.2; and the lease-to-DNS
+  publish path §4.2 gives up has to be rebuilt over `dhcp-script`.
+- **Test hardware.** Previously open. Resolved by workflow rather than
+  purchase: code is authored and built on x86_64 Linux, cross-checked for
+  arm64, and end-to-end tested by hand on real hardware. Consequence for
+  layout — keep renderers, lease parsing, schema, config store, and validation
+  free of Linux-only imports so they are unit-testable anywhere; isolate
+  netlink, nftables, and systemd behind an interface.
