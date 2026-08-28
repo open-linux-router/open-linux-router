@@ -121,7 +121,7 @@ func (p Plan) Empty() bool { return len(p.Changes) == 0 && p.Action == ActionNon
 // It validates first and returns the error rather than planning against a
 // config that cannot be applied — the whole value of validation is that it
 // happens before anything is written (design.md §5.3.1).
-func BuildPlan(b Backend, desired Config, links LinkView, obs Observed, now time.Time) (Plan, error) {
+func BuildPlan(b Dnsmasq, desired Config, links LinkView, obs Observed, now time.Time) (Plan, error) {
 	result := Validate(desired, links)
 	if err := result.Err(); err != nil {
 		return Plan{Validation: result}, err
@@ -163,7 +163,7 @@ func BuildPlan(b Backend, desired Config, links LinkView, obs Observed, now time
 		if slices.Contains(wanted, path) {
 			continue
 		}
-		reloadable := isReloadablePath(b, path)
+		reloadable := b.reloadable(path)
 		if !reloadable {
 			wantReloadOnly = false
 		}
@@ -237,10 +237,10 @@ func classify(desired Config, plan Plan, obs Observed, now time.Time) (Impact, [
 
 // Dropped returns the active leases that the desired config would stop serving.
 //
-// A lease survives if its address still falls inside some pool's range, or if it
-// is pinned by a reservation — dnsmasq honours a reservation outside the
-// dynamic range, so an address being outside every range is not on its own
-// enough to call it dropped.
+// The question is deliberately "will this client keep the address it is holding
+// right now", not "did a range field change". Answering it from the live lease
+// database is what makes `disruptive` a fact rather than a guess (design.md
+// §11.3), so the cases below are about the client's experience, not ours.
 func Dropped(c Config, leases []Lease, now time.Time) []Lease {
 	var dropped []Lease
 	for _, l := range leases {
@@ -248,7 +248,18 @@ func Dropped(c Config, leases []Lease, now time.Time) []Lease {
 			continue
 		}
 		if !c.Enabled {
+			// Nothing renews, so every live lease is lost regardless of family.
 			dropped = append(dropped, l)
+			continue
+		}
+		if !l.IP.Is4() {
+			// IPv6 leases are governed by the ra field rather than by a range,
+			// and dnsmasq's lease file does not record which interface a lease
+			// was handed out on — so there is nothing here to compare them
+			// against. Counting them as dropped would mark *every* apply on an
+			// IPv6-enabled box disruptive, which would train operators to
+			// ignore the word. Left for when the lease event stream (§11.5)
+			// supplies the interface.
 			continue
 		}
 		if servedBy(c, l) {
@@ -259,14 +270,30 @@ func Dropped(c Config, leases []Lease, now time.Time) []Lease {
 	return dropped
 }
 
+// servedBy reports whether the client holding this lease keeps this address.
 func servedBy(c Config, l Lease) bool {
-	for _, p := range c.Pools {
-		if inRange(p.Start, p.End, l.IP) {
-			return true
+	// A reservation matching the client's MAC is decisive and outranks every
+	// range: dnsmasq will hand that client exactly the reserved address and
+	// nothing else. So the lease survives only if the reservation names the
+	// address the client already holds — pinning a client to a *different*
+	// address moves it, which is a client losing the address it holds.
+	if l.MAC != "" {
+		for _, r := range c.Reservations {
+			if r.MAC == l.MAC {
+				return r.IP == l.IP
+			}
 		}
 	}
+
+	// The address is reserved for somebody else, so this holder loses it.
 	for _, r := range c.Reservations {
-		if r.IP == l.IP || (l.MAC != "" && r.MAC == l.MAC) {
+		if r.IP == l.IP {
+			return false
+		}
+	}
+
+	for _, p := range c.Pools {
+		if inRange(p.Start, p.End, l.IP) {
 			return true
 		}
 	}
@@ -301,14 +328,4 @@ func describeDropped(c Config, dropped []Lease) string {
 	}
 	return fmt.Sprintf("%d client(s) %s because no pool or reservation covers them any more: %s%s",
 		len(dropped), verb, strings.Join(listed, ", "), suffix)
-}
-
-// isReloadablePath reports whether a stray file sits in one of the directories
-// dnsmasq re-reads on SIGHUP.
-func isReloadablePath(b Backend, path string) bool {
-	d, ok := b.(Dnsmasq)
-	if !ok {
-		return false
-	}
-	return strings.HasPrefix(path, d.Paths.HostsDir+"/") || strings.HasPrefix(path, d.Paths.OptsDir+"/")
 }

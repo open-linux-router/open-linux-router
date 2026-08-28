@@ -323,6 +323,101 @@ func TestImpactOrdering(t *testing.T) {
 	}
 }
 
+// `disruptive` is computed from the live lease database rather than by
+// comparing config fields, which is what makes it a fact (design.md §11.3). The
+// question is "does this client keep the address it is holding", and a
+// reservation is the case where the config looks additive but the client moves.
+func TestPinningAClientToADifferentAddressIsDisruptive(t *testing.T) {
+	current := validConfig(t)
+	obs := observe(t, current, true, activeLease(t, "192.168.1.150", "aa:bb:cc:dd:ee:ff", "laptop"))
+
+	desired := current.Clone()
+	desired.SetReservation(Reservation{MAC: "aa:bb:cc:dd:ee:ff", IP: addr(t, "192.168.1.50")})
+
+	plan := buildPlan(t, desired, obs)
+
+	if plan.Impact != ImpactDisruptive {
+		t.Errorf("Impact = %s, want disruptive: the client is pinned away from the address it holds", plan.Impact)
+	}
+	if len(plan.Reasons) == 0 || !strings.Contains(plan.Reasons[0], "laptop") {
+		t.Errorf("reasons do not name the client that loses its address: %v", plan.Reasons)
+	}
+}
+
+// The inverse, which matters just as much: over-reporting `disruptive` teaches
+// operators to click through it.
+func TestPinningAClientToTheAddressItHoldsIsNotDisruptive(t *testing.T) {
+	current := validConfig(t)
+	obs := observe(t, current, true, activeLease(t, "192.168.1.150", "aa:bb:cc:dd:ee:ff", "laptop"))
+
+	desired := current.Clone()
+	desired.SetReservation(Reservation{MAC: "aa:bb:cc:dd:ee:ff", IP: addr(t, "192.168.1.150")})
+
+	plan := buildPlan(t, desired, obs)
+
+	if plan.Impact != ImpactReload {
+		t.Errorf("Impact = %s, want reload: the client keeps its address", plan.Impact)
+	}
+}
+
+func TestReservingAnAddressAnotherClientHoldsIsDisruptive(t *testing.T) {
+	current := validConfig(t)
+	obs := observe(t, current, true, activeLease(t, "192.168.1.150", "aa:bb:cc:dd:ee:ff", "laptop"))
+
+	desired := current.Clone()
+	desired.SetReservation(Reservation{MAC: "11:22:33:44:55:66", IP: addr(t, "192.168.1.150")})
+
+	plan := buildPlan(t, desired, obs)
+
+	if plan.Impact != ImpactDisruptive {
+		t.Errorf("Impact = %s, want disruptive: the address is promised to somebody else", plan.Impact)
+	}
+}
+
+// Pools and reservations are IPv4, and dnsmasq's lease file does not record the
+// interface a lease was handed out on — so an IPv6 lease matches no range by
+// construction. Counting those as dropped would mark every apply on an
+// IPv6-enabled box disruptive, which is the fastest way to make the word
+// meaningless.
+func TestIPv6LeasesDoNotMakeEveryChangeDisruptive(t *testing.T) {
+	current := validConfig(t)
+	current.Pools[0].RA = RASLAAC
+	v6 := Lease{IP: addr(t, "2001:db8::1234"), IAID: "1", Expires: planNow.Add(time.Hour)}
+	obs := observe(t, current, true,
+		activeLease(t, "192.168.1.150", "aa:bb:cc:dd:ee:ff", "laptop"), v6)
+
+	desired := current.Clone()
+	desired.Pools[0].Domain = "lan"
+
+	plan := buildPlan(t, desired, obs)
+
+	if plan.Impact == ImpactDisruptive {
+		t.Errorf("setting a domain was called disruptive because of an IPv6 lease: %v", plan.Reasons)
+	}
+}
+
+// Turning DHCP off is the one case where an IPv6 lease is genuinely lost too:
+// nothing renews.
+func TestDisablingDropsEveryLeaseIncludingIPv6(t *testing.T) {
+	current := validConfig(t)
+	current.Pools[0].RA = RASLAAC
+	v6 := Lease{IP: addr(t, "2001:db8::1234"), IAID: "1", Expires: planNow.Add(time.Hour)}
+	obs := observe(t, current, true,
+		activeLease(t, "192.168.1.150", "aa:bb:cc:dd:ee:ff", "laptop"), v6)
+
+	desired := current.Clone()
+	desired.Enabled = false
+
+	plan := buildPlan(t, desired, obs)
+
+	if plan.Impact != ImpactDisruptive {
+		t.Errorf("Impact = %s, want disruptive", plan.Impact)
+	}
+	if dropped := Dropped(desired, obs.Leases, planNow); len(dropped) != 2 {
+		t.Errorf("dropped %d leases, want both", len(dropped))
+	}
+}
+
 func changePaths(p Plan) []string {
 	out := make([]string, len(p.Changes))
 	for i, c := range p.Changes {

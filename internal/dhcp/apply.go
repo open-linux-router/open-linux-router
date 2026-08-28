@@ -2,10 +2,13 @@ package dhcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -18,7 +21,7 @@ import (
 // discarded on error.
 type Applier struct {
 	// Backend renders the daemon's files.
-	Backend Backend
+	Backend Dnsmasq
 	// Links is the window onto the link module.
 	Links LinkView
 	// Service supervises the daemon.
@@ -34,6 +37,33 @@ type Applier struct {
 	// Nil means PortConflict. Injectable so the refusal path is testable
 	// without arranging for a real port conflict on the build machine.
 	PortCheck func() (bool, error)
+
+	// Settle is how long apply watches a started backend before believing it.
+	// Zero means DefaultSettle; negative means check once and return.
+	Settle time.Duration
+}
+
+// DefaultSettle is the post-apply observation window (design.md §11.5).
+//
+// It is not a guess at how long dnsmasq takes to start — it is how long we
+// watch it *after* systemd says the job is done. The unit is Type=simple, so
+// systemd reports success the moment the process is forked, which is before
+// dnsmasq has read a config file or bound a socket. A config it rejects at
+// runtime therefore looks identical to a healthy start for the first fraction
+// of a second.
+const DefaultSettle = 1500 * time.Millisecond
+
+// settleInterval is how often the unit is sampled during that window.
+const settleInterval = 250 * time.Millisecond
+
+func (a Applier) settleWindow() time.Duration {
+	if a.Settle == 0 {
+		return DefaultSettle
+	}
+	if a.Settle < 0 {
+		return 0
+	}
+	return a.Settle
 }
 
 func (a Applier) portCheck() func() (bool, error) {
@@ -85,25 +115,36 @@ func (a Applier) Load() (Config, error) { return LoadConfig(a.ConfigPath) }
 func (a Applier) Observe(ctx context.Context) (Observed, error) {
 	obs := Observed{Files: map[string][]byte{}}
 
-	// The main config, plus everything in the directories we own. Files we did
-	// not render must be included or a stale reservation would never be
-	// noticed.
-	paths := []string{a.Paths.Conf}
-	for _, dir := range []string{a.Paths.HostsDir, a.Paths.OptsDir} {
-		entries, err := os.ReadDir(dir)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return Observed{}, fmt.Errorf("reading %s: %w", dir, err)
-		}
-		for _, e := range entries {
-			if !e.IsDir() {
-				paths = append(paths, filepath.Join(dir, e.Name()))
+	// Everything under the directories we own, walked rather than listed. A
+	// file we did not render must still be seen or a stale reservation would
+	// keep being served — and that argument does not stop at the two
+	// directories we happen to write today: a file left behind anywhere in the
+	// rendered tree by an older olr, or by a hand-edit, is exactly the drift
+	// §5.4 exists to surface.
+	paths := map[string]bool{a.Paths.Conf: true}
+	for _, root := range a.observedRoots() {
+		err := filepath.WalkDir(root, func(path string, e fs.DirEntry, err error) error {
+			switch {
+			case os.IsNotExist(err):
+				return nil
+			case err != nil:
+				return err
+			case e.IsDir():
+				return nil
+			case strings.HasPrefix(e.Name(), "."):
+				// writeFileAtomic's temporary files. Skipping them keeps a
+				// crashed apply's leftovers out of the plan rather than
+				// scheduling a delete for a name that will never recur.
+				return nil
 			}
+			paths[path] = true
+			return nil
+		})
+		if err != nil {
+			return Observed{}, fmt.Errorf("reading %s: %w", root, err)
 		}
 	}
-	for _, p := range paths {
+	for p := range paths {
 		data, err := os.ReadFile(p)
 		if os.IsNotExist(err) {
 			continue
@@ -266,9 +307,118 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 		if err != nil {
 			return result, err
 		}
+
+		// Post-apply verification (design.md §11.5). §3.6 permits it explicitly:
+		// "did the unit come up and stay up" is bounded, where "did a client get
+		// a lease" would be convergence and would freeze every other module.
+		//
+		// It is worth the wall-clock. A DHCP server that died is invisible for
+		// hours and then breaks every device at once as leases expire, and it is
+		// the one failure the lockout guard (§5.5) does not cover — the operator
+		// keeps their own session throughout.
+		if desired.Enabled && action != ActionStop {
+			if err := run("verify "+a.Backend.Unit()+" stayed up", func() error {
+				return a.verifyServing(ctx)
+			}); err != nil {
+				return result, err
+			}
+		}
 	}
 
 	return result, nil
+}
+
+// verifyServing watches the unit for the settle window and fails if it does not
+// stay active.
+//
+// Staying up is the whole check, and it is a stronger signal than it looks:
+// dnsmasq exits on a bad config or a socket it cannot bind rather than sitting
+// there alive and idle. So a process still running after the window has parsed
+// its configuration and bound its sockets. Asserting on UDP/67 directly was
+// considered and rejected — a group serving only RA never binds it, so the
+// check would fail exactly where IPv6 is configured correctly.
+func (a Applier) verifyServing(ctx context.Context) error {
+	deadline := time.Now().Add(a.settleWindow())
+	for {
+		status, err := a.Service.Status(ctx)
+		switch {
+		case errors.Is(err, ErrNoServiceManager):
+			// Nothing to verify against. Observe already reports this as "not
+			// running" and `olr dhcp status` surfaces it on its own line;
+			// failing the apply here would turn "we cannot tell" into "it
+			// broke", which are different answers (§3.4).
+			return nil
+		case err != nil:
+			return err
+		case !status.Active:
+			return fmt.Errorf(
+				"%s did not stay up after starting (%s).\n"+
+					"The backend accepted the job and then exited, which usually means it "+
+					"rejected the rendered configuration or could not bind a socket.\n"+
+					"See `journalctl -u %s`",
+				status.Unit, describeState(status), status.Unit)
+		}
+
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(min(settleInterval, remaining)):
+		}
+	}
+}
+
+func describeState(s ServiceStatus) string {
+	parts := make([]string, 0, 2)
+	if s.State != "" {
+		parts = append(parts, "state "+s.State)
+	}
+	if s.SubState != "" {
+		parts = append(parts, "sub-state "+s.SubState)
+	}
+	if len(parts) == 0 {
+		return "no state reported"
+	}
+	return strings.Join(parts, ", ")
+}
+
+// observedRoots is the set of directories Observe walks.
+//
+// HostsDir and OptsDir normally sit under the rendered config's own directory
+// and are subsumed by the first root; they are listed anyway because Paths is
+// free-form, and a nested one is dropped rather than walked twice.
+func (a Applier) observedRoots() []string {
+	seen := map[string]bool{}
+	var candidates []string
+	for _, p := range []string{filepath.Dir(a.Paths.Conf), a.Paths.HostsDir, a.Paths.OptsDir} {
+		if p == "" || p == "." || p == string(filepath.Separator) {
+			continue
+		}
+		p = filepath.Clean(p)
+		if !seen[p] {
+			seen[p] = true
+			candidates = append(candidates, p)
+		}
+	}
+
+	var roots []string
+	for _, c := range candidates {
+		nested := false
+		for _, other := range candidates {
+			if other != c && strings.HasPrefix(c, other+string(filepath.Separator)) {
+				nested = true
+				break
+			}
+		}
+		if !nested {
+			roots = append(roots, c)
+		}
+	}
+	sort.Strings(roots)
+	return roots
 }
 
 // Leases reads the current lease database.

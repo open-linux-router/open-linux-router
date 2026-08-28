@@ -13,12 +13,14 @@
 port=0
 
 # Bind only the interfaces that have a pool, so another DHCP or DNS server on
-# this machine keeps its own sockets (design.md §3.4).
-bind-interfaces
+# this machine keeps its own sockets (design.md §3.4). bind-dynamic and not
+# bind-interfaces: both allow a second instance, but bind-interfaces binds only
+# what exists at startup, and a router creates bridges and VLANs after boot.
+bind-dynamic
 except-interface=lo
 
 dhcp-leasefile=/var/lib/open-linux-router/dhcp/leases
-pid-file=/run/olr/dhcp.pid
+pid-file=/run/olr/dhcp/dhcp.pid
 
 # Reservations and per-pool options live in directories because dnsmasq re-reads
 # those on SIGHUP but never re-reads this file. That is what makes adding a

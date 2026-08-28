@@ -45,7 +45,12 @@ RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
 
 # The only paths we need to write: the lease database and the pid file.
 ReadWritePaths=/var/lib/open-linux-router/dhcp
-RuntimeDirectory=olr
+
+# olr/dhcp, not olr. systemd deletes a RuntimeDirectory when the unit stops, and
+# /run/olr also holds olrd's control socket and the lockout guard's revert
+# snapshots. Naming it here would mean `systemctl stop olr-dhcp` silently took
+# olrd's socket with it.
+RuntimeDirectory=olr/dhcp
 RuntimeDirectoryMode=0755
 
 [Install]

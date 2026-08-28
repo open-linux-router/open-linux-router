@@ -568,20 +568,21 @@ func mutate(c *cobra.Command, e *env, edit func(*Config) error) error {
 		return err
 	}
 
-	cfg, err := a.Load()
-	if err != nil {
-		return err
-	}
-	if err := edit(&cfg); err != nil {
-		return err
-	}
-
 	ctx := c.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
+	// A dry run writes nothing, so it takes no lock (design.md §3.6: reads
+	// never take it).
 	if cli.DryRun(c) {
+		cfg, err := a.Load()
+		if err != nil {
+			return err
+		}
+		if err := edit(&cfg); err != nil {
+			return err
+		}
 		plan, err := a.Plan(ctx, cfg)
 		if err != nil {
 			return err
@@ -590,6 +591,23 @@ func mutate(c *cobra.Command, e *env, edit func(*Config) error) error {
 			return cli.JSON(c.OutOrStdout(), plan)
 		}
 		return writePlanText(c.OutOrStdout(), plan, true)
+	}
+
+	// The load, the edit and the apply are one critical section. Splitting them
+	// is what loses a concurrent change: both readers see the same stored
+	// config, each adds its own item, and the second write drops the first.
+	unlock, err := cli.Lock(a.ConfigPath)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	cfg, err := a.Load()
+	if err != nil {
+		return err
+	}
+	if err := edit(&cfg); err != nil {
+		return err
 	}
 
 	result, err := a.Apply(ctx, cfg)

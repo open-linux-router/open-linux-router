@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeService records what was asked of the daemon without needing one.
@@ -14,9 +15,30 @@ type fakeService struct {
 	active bool
 	calls  []string
 	fail   error
+
+	// statusErr is returned by Status instead of a state.
+	statusErr error
+
+	// diesAfter makes the unit go inactive after this many Status calls,
+	// modelling a backend that accepts the start job and then exits. That is
+	// what a Type=simple unit looks like when dnsmasq parses the rendered
+	// config, dislikes it, and quits — systemd has already reported the job
+	// "done" by then.
+	diesAfter int
+	statusN   int
 }
 
 func (f *fakeService) Status(context.Context) (ServiceStatus, error) {
+	if f.statusErr != nil {
+		return ServiceStatus{Unit: "olr-dhcp.service"}, f.statusErr
+	}
+	f.statusN++
+	if f.diesAfter > 0 && f.statusN > f.diesAfter {
+		f.active = false
+		return ServiceStatus{
+			Unit: "olr-dhcp.service", Active: false, State: "failed", SubState: "failed",
+		}, nil
+	}
 	return ServiceStatus{Unit: "olr-dhcp.service", Active: f.active, State: "active"}, nil
 }
 
@@ -62,6 +84,11 @@ func testApplier(t *testing.T) (Applier, *fakeService) {
 		// machine's /proc and make these tests depend on whether anything
 		// happens to be serving DHCP there.
 		PortCheck: func() (bool, error) { return false, nil },
+		// Check the unit once and return, rather than watching it for the
+		// default window. The fake service is decided the instant it is asked,
+		// so waiting would only add DefaultSettle to every apply in the file.
+		// The window itself is exercised by TestVerifyServing below.
+		Settle: -1,
 	}, svc
 }
 
@@ -364,6 +391,143 @@ func TestWriteFileAtomicReplacesAndLeavesNoTemporaries(t *testing.T) {
 		}
 		t.Errorf("temporary files left behind: %v", names)
 	}
+}
+
+// design.md §11.5: a dead DHCP server is invisible for hours and then breaks
+// every device at once. The unit is Type=simple, so systemd reports the start
+// job done the moment the process is forked — before dnsmasq has read a config
+// file. Without the settle window this apply reports success.
+func TestApplyFailsWhenTheBackendExitsAfterStarting(t *testing.T) {
+	a, svc := testApplier(t)
+	a.Settle = 300 * time.Millisecond
+	svc.diesAfter = 1 // survives Observe's look, gone by the time we verify
+
+	result, err := a.Apply(context.Background(), validConfig(t))
+	if err == nil {
+		t.Fatal("Apply reported success for a backend that exited straight after starting")
+	}
+	if !strings.Contains(err.Error(), "did not stay up") {
+		t.Errorf("error does not say what happened: %v", err)
+	}
+	if !strings.Contains(err.Error(), "journalctl") {
+		t.Errorf("error does not point at the daemon's own logs: %v", err)
+	}
+
+	// The start still happened, so the operator has to be told the difference
+	// between "we never tried" and "we tried and it died".
+	if !equalStrings(svc.calls, []string{"start"}) {
+		t.Errorf("service calls = %v, want [start]", svc.calls)
+	}
+	var verify *Step
+	for i, s := range result.Steps {
+		if strings.HasPrefix(s.Description, "verify ") {
+			verify = &result.Steps[i]
+		}
+	}
+	if verify == nil {
+		t.Fatalf("no verification step recorded: %+v", result.Steps)
+	}
+	if verify.Done {
+		t.Error("the verification step is recorded as having succeeded")
+	}
+}
+
+func TestApplyVerifiesTheBackendStayedUp(t *testing.T) {
+	a, svc := testApplier(t)
+	a.Settle = 200 * time.Millisecond
+
+	result, err := a.Apply(context.Background(), validConfig(t))
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	// Sampling once would pass on a backend that dies a moment later, which is
+	// the whole failure this exists to catch. Observe accounts for one call, so
+	// anything above two means the window was actually watched.
+	if svc.statusN < 3 {
+		t.Errorf("the unit was sampled %d times; the settle window was not watched", svc.statusN)
+	}
+	if !hasStep(result.Steps, "verify ") {
+		t.Errorf("no verification step recorded: %+v", result.Steps)
+	}
+}
+
+// "We could not tell" and "it broke" are different answers, and only one of
+// them is honest (design.md §3.4). A box with no systemd must still apply.
+func TestVerificationIsSkippedWithoutAServiceManager(t *testing.T) {
+	a, svc := testApplier(t)
+	svc.statusErr = ErrNoServiceManager
+
+	if _, err := a.Apply(context.Background(), validConfig(t)); err != nil {
+		t.Fatalf("Apply failed on a box with no service manager: %v", err)
+	}
+}
+
+// Disabling stops the backend, so there is nothing to verify stayed up.
+func TestVerificationIsSkippedWhenDisabling(t *testing.T) {
+	a, _ := testApplier(t)
+	ctx := context.Background()
+	c := validConfig(t)
+	if _, err := a.Apply(ctx, c); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	c.Enabled = false
+	result, err := a.Apply(ctx, c)
+	if err != nil {
+		t.Fatalf("disabling failed: %v", err)
+	}
+	if hasStep(result.Steps, "verify ") {
+		t.Errorf("a stopped backend was checked for still being up: %+v", result.Steps)
+	}
+}
+
+// The delete pass has to see the whole rendered tree, not just the two
+// directories we happen to write today. A file left anywhere under it by an
+// older olr keeps being read by dnsmasq.
+func TestObserveSeesFilesOutsideTheKnownDirectories(t *testing.T) {
+	a, _ := testApplier(t)
+	ctx := context.Background()
+	if _, err := a.Apply(ctx, validConfig(t)); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	root := filepath.Dir(a.Paths.Conf)
+	stale := filepath.Join(root, "legacy", "dnsmasq.conf.old")
+	if err := os.MkdirAll(filepath.Dir(stale), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale, []byte("dhcp-range=10.0.0.5,10.0.0.9\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A temporary file from a crashed apply, on the other hand, is not intent
+	// that leaked — scheduling a delete for a name that will never recur would
+	// be noise in every plan.
+	temp := filepath.Join(root, ".dnsmasq.conf.123456")
+	if err := os.WriteFile(temp, []byte("half written"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	obs, err := a.Observe(ctx)
+	if err != nil {
+		t.Fatalf("Observe: %v", err)
+	}
+	if _, ok := obs.Files[stale]; !ok {
+		t.Errorf("Observe missed %s; saw %v", stale, keys(obs.Files))
+	}
+	if _, ok := obs.Files[temp]; ok {
+		t.Errorf("Observe picked up the temporary file %s", temp)
+	}
+}
+
+func hasStep(steps []Step, prefix string) bool {
+	for _, s := range steps {
+		if strings.HasPrefix(s.Description, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func equalStrings(a, b []string) bool {

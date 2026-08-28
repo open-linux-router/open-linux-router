@@ -27,6 +27,12 @@ type Paths struct {
 	// LeaseFile is the lease database.
 	LeaseFile string
 	// PIDFile is where the daemon writes its pid.
+	//
+	// It lives in the module's own runtime subdirectory, not directly in
+	// /run/olr. The unit declares that subdirectory with RuntimeDirectory=, and
+	// systemd deletes a RuntimeDirectory when its unit stops — so naming
+	// /run/olr itself would make stopping the DHCP backend delete olrd's
+	// control socket and the §5.5 guard snapshots along with it.
 	PIDFile string
 }
 
@@ -41,7 +47,7 @@ func DefaultPaths() Paths {
 		HostsDir:  rendered + "/hosts.d",
 		OptsDir:   rendered + "/opts.d",
 		LeaseFile: "/var/lib/open-linux-router/dhcp/leases",
-		PIDFile:   "/run/olr/dhcp.pid",
+		PIDFile:   "/run/olr/dhcp/dhcp.pid",
 	}
 }
 
@@ -97,23 +103,15 @@ func (r *Rendered) sort() {
 	slices.SortFunc(r.Files, func(a, b File) int { return strings.Compare(a.Path, b.Path) })
 }
 
-// Backend renders a config into the files of a concrete DHCP server and names
-// the unit that runs it.
+// Dnsmasq renders a config into dnsmasq's files and names the unit that runs
+// it.
 //
-// dnsmasq is the only implementation (design.md §10: it does DHCPv4, DHCPv6 and
-// RA in one daemon, where Kea needs radvd as a third). The interface exists
-// because that entry also names Kea as the v2 upgrade path for lease DB and HA,
-// and a seam declared now is a seam nobody has to retrofit later.
-type Backend interface {
-	// Name identifies the backend in status output.
-	Name() string
-	// Unit is the systemd unit that supervises it.
-	Unit() string
-	// Render is pure: same config and same link facts, same bytes.
-	Render(c Config, links LinkView) (Rendered, error)
-}
-
-// Dnsmasq renders for dnsmasq.
+// There is deliberately no Backend interface here. design.md §10 commits to
+// dnsmasq permanently — it serves DHCPv4, DHCPv6 and RA in one daemon where Kea
+// would need radvd as a third — so by §3.1's own test there is nothing to
+// iterate over and exactly one implementation. An interface would also have to
+// carry reloadable(), which is a question about *dnsmasq's* directory-reload
+// behaviour and means nothing to another server.
 type Dnsmasq struct {
 	Paths Paths
 
@@ -134,10 +132,10 @@ func (d Dnsmasq) WithSource(path string) Dnsmasq {
 	return d
 }
 
-// Name implements Backend.
+// Name identifies the backend in status output.
 func (Dnsmasq) Name() string { return "dnsmasq" }
 
-// Unit implements Backend.
+// Unit is the systemd unit that supervises it.
 //
 // Deliberately not the distro's dnsmasq.service. That unit and
 // /etc/dnsmasq.d belong to whatever the operator installed dnsmasq for;
@@ -162,7 +160,15 @@ func (d Dnsmasq) header(what string) string {
 `, what, source)
 }
 
-// Render implements Backend.
+// reloadable reports whether a path sits in one of the directories dnsmasq
+// re-reads on SIGHUP. Used by the planner to tell a reload from a restart,
+// including for stray files no longer rendered by the current config.
+func (d Dnsmasq) reloadable(path string) bool {
+	return strings.HasPrefix(path, d.Paths.HostsDir+"/") ||
+		strings.HasPrefix(path, d.Paths.OptsDir+"/")
+}
+
+// Render is pure: same config and same link facts, same bytes.
 func (d Dnsmasq) Render(c Config, links LinkView) (Rendered, error) {
 	c = c.Clone()
 	c.Normalize()
@@ -220,8 +226,10 @@ func (d Dnsmasq) renderMain(c Config, links LinkView) ([]byte, error) {
 port=0
 
 # Bind only the interfaces that have a pool, so another DHCP or DNS server on
-# this machine keeps its own sockets (design.md §3.4).
-bind-interfaces
+# this machine keeps its own sockets (design.md §3.4). bind-dynamic and not
+# bind-interfaces: both allow a second instance, but bind-interfaces binds only
+# what exists at startup, and a router creates bridges and VLANs after boot.
+bind-dynamic
 except-interface=lo
 
 `)
