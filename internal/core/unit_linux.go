@@ -1,6 +1,6 @@
 //go:build linux
 
-package dhcp
+package core
 
 import (
 	"context"
@@ -11,25 +11,25 @@ import (
 	"github.com/coreos/go-systemd/v22/dbus"
 )
 
-// systemdService drives a unit over the system bus.
+// systemdUnit drives a unit over the system bus.
 //
 // D-Bus rather than shelling out to systemctl (design.md §8): the properties
 // come back typed, there is no output format to parse and re-parse when systemd
 // changes it, and job completion is reported rather than inferred from an exit
 // code.
-type systemdService struct {
+type systemdUnit struct {
 	unit string
 }
 
-// NewService returns a Service for a systemd unit.
-func NewService(unit string) (Service, error) {
-	return systemdService{unit: unit}, nil
+// NewUnit returns a Unit for a systemd unit name.
+func NewUnit(unit string) (Unit, error) {
+	return systemdUnit{unit: unit}, nil
 }
 
 // connect opens a system bus connection. One per call: these are short
 // operations at human timescale, and a cached connection would have to handle
 // systemd restarting underneath it.
-func (s systemdService) connect(ctx context.Context) (*dbus.Conn, error) {
+func (s systemdUnit) connect(ctx context.Context) (*dbus.Conn, error) {
 	conn, err := dbus.NewSystemdConnectionContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrNoServiceManager, err)
@@ -37,19 +37,19 @@ func (s systemdService) connect(ctx context.Context) (*dbus.Conn, error) {
 	return conn, nil
 }
 
-func (s systemdService) Status(ctx context.Context) (ServiceStatus, error) {
+func (s systemdUnit) Status(ctx context.Context) (UnitStatus, error) {
 	conn, err := s.connect(ctx)
 	if err != nil {
-		return ServiceStatus{Unit: s.unit}, err
+		return UnitStatus{Unit: s.unit}, err
 	}
 	defer conn.Close()
 
 	props, err := conn.GetUnitPropertiesContext(ctx, s.unit)
 	if err != nil {
-		return ServiceStatus{Unit: s.unit}, fmt.Errorf("reading %s properties: %w", s.unit, err)
+		return UnitStatus{Unit: s.unit}, fmt.Errorf("reading %s properties: %w", s.unit, err)
 	}
 
-	status := ServiceStatus{
+	status := UnitStatus{
 		Unit:     s.unit,
 		State:    stringProp(props, "ActiveState"),
 		SubState: stringProp(props, "SubState"),
@@ -71,17 +71,17 @@ func (s systemdService) Status(ctx context.Context) (ServiceStatus, error) {
 	return status, nil
 }
 
-func (s systemdService) Start(ctx context.Context) error   { return s.job(ctx, "start") }
-func (s systemdService) Stop(ctx context.Context) error    { return s.job(ctx, "stop") }
-func (s systemdService) Restart(ctx context.Context) error { return s.job(ctx, "restart") }
-func (s systemdService) Reload(ctx context.Context) error  { return s.job(ctx, "reload") }
+func (s systemdUnit) Start(ctx context.Context) error   { return s.job(ctx, "start") }
+func (s systemdUnit) Stop(ctx context.Context) error    { return s.job(ctx, "stop") }
+func (s systemdUnit) Restart(ctx context.Context) error { return s.job(ctx, "restart") }
+func (s systemdUnit) Reload(ctx context.Context) error  { return s.job(ctx, "reload") }
 
 // job runs a unit job and waits for systemd to report how it finished.
 //
 // Waiting matters: `olr dhcp set` applies on return (design.md §5.1), so
 // returning as soon as the job is *queued* would let the command report success
 // while the daemon is still failing to start.
-func (s systemdService) job(ctx context.Context, verb string) error {
+func (s systemdUnit) job(ctx context.Context, verb string) error {
 	conn, err := s.connect(ctx)
 	if err != nil {
 		return err
@@ -118,7 +118,7 @@ func (s systemdService) job(ctx context.Context, verb string) error {
 
 // hint appends the daemon's own complaint to a failed job, so the operator does
 // not have to go and find it in the journal.
-func (s systemdService) hint(ctx context.Context) string {
+func (s systemdUnit) hint(ctx context.Context) string {
 	status, err := s.Status(ctx)
 	if err != nil {
 		return ""
