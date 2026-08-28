@@ -1,0 +1,26 @@
+{
+  "lan0": {
+    "name": "lan0",
+    "adopted": true,
+    "up": true,
+    "prefixes": ["192.168.10.1/24"]
+  },
+  "lan1": {
+    "name": "lan1",
+    "adopted": true,
+    "up": true,
+    "prefixes": ["192.168.20.1/24", "fd00:20::1/64"]
+  },
+  "wan0": {
+    "name": "wan0",
+    "adopted": true,
+    "up": true,
+    "prefixes": ["203.0.113.7/24"]
+  },
+  "guest0": {
+    "name": "guest0",
+    "adopted": false,
+    "up": true,
+    "prefixes": ["192.168.30.1/24"]
+  }
+}

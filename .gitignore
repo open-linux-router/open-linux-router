@@ -5,3 +5,5 @@
 # lets `go build` work on a fresh clone with no Node installed.
 /internal/webui/assets/*
 !/internal/webui/assets/.gitkeep
+
+/web/node_modules/
