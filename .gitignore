@@ -1,1 +1,7 @@
 /dist/
+
+# The built SPA is a build artefact. The directory itself is committed, holding
+# only .gitkeep, because //go:embed fails on a missing directory — that is what
+# lets `go build` work on a fresh clone with no Node installed.
+/internal/webui/assets/*
+!/internal/webui/assets/.gitkeep

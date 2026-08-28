@@ -1,0 +1,2 @@
+# Placeholder so //go:embed has a directory on a fresh clone.
+# `make web` fills this with the built SPA; see .gitignore.
