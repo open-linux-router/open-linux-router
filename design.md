@@ -107,7 +107,7 @@ So the uniformity lives in a **schema document**, not in Go types.
 
 ### 3.2 Module conventions
 
-Four rules. No abstraction, no registry, no codegen framework.
+Five rules. No abstraction, no registry, no codegen framework.
 
 1. A module owns a config namespace and its own file under
    `/etc/open-linux-router/`.
@@ -115,6 +115,19 @@ Four rules. No abstraction, no registry, no codegen framework.
 3. A module's config is a **tagged Go struct**; JSON Schema is derived from it
    by reflection. That struct is the single source for CLI flags, REST body,
    UI form, and MCP tool definition.
+
+   **A type whose Go shape differs from its JSON shape must say so, or the
+   schema publishes a lie.** `netip.Addr` is a struct of unexported fields that
+   marshals as a *string*; reflected naively it becomes
+   `{"type":"object","properties":{}}`, and every surface derived from that
+   document is then wrong about the wire format — while the code keeps working,
+   so nothing fails until a UI form or an MCP tool is built on it. Core maps the
+   stdlib cases centrally and applies one general rule — *a type that marshals
+   as text is a JSON string* — so a module only needs its own
+   `JSONSchema()` when it knows something the rule cannot: which strings are
+   legal, or that a field is an enum. This is the same trap §10 names for
+   durations, one level up: a wrapper that fixes the *encoding* still publishes
+   `integer` unless the schema is fixed too.
 4. Shared verb vocabulary so the CLI stays predictable:
    `show`, `set`, `add`, `rm`, `status`, `logs`, `enable`, `disable`.
 5. Every module exposes a **declared escape hatch** — a config field passed
@@ -691,6 +704,27 @@ Verb drift across modules is invisible in review and obvious at startup.
 from the config structs. Read surface includes **observed resources** (leases,
 WAN state, stations) declared alongside config but never stored or revisioned.
 
+**Two listeners, authenticated differently, because they are different things.**
+The unix socket is the local admin path and its access control is the socket's
+mode and group — filesystem permissions *are* its authentication, and a token
+would add nothing a local caller has not already proven. TCP has no such
+property and is always authenticated. Wrapping both in one scheme would break
+`olr` over the socket for no gain.
+
+Until `auth` exists (§10 open decision 1) the TCP scheme is a **single bearer
+token** in `/etc/open-linux-router/api-token`, generated on first start. This is
+a floor, not a design: it is real authentication and one file, and it
+deliberately does not imitate a session, a role, or an identity that `auth`
+would then have to contradict. An unauthenticated listener is available only for
+development and refuses to bind anything but loopback — an open admin API on a
+router's LAN address is not a convenience.
+
+**Observed resources are not schema-published yet, and that is a gap.** Config
+structs are reflected; the read and plan shapes are not, so a typed client has
+to hand-write them and finds out at runtime when one drifts. Publishing response
+schemas beside the config schema is what closes it, and it is worth doing before
+a second module doubles the hand-written surface.
+
 ### 6.3 WebUI
 
 SPA embedded in the binary, a pure client of the API.
@@ -702,7 +736,27 @@ agents cannot do it — which rebuilds the exact UniFi limitation we're trying t
 beat. Composite operations are first-class core operations with their own
 routes; recipes state their own step order explicitly.
 
+**Instant, except when it would disconnect you.** §5.1 says toggling a switch
+applies instantly, with no "Apply changes" bar; §5.3.3 says the UI should warn
+*"this will drop all LAN connections"* instead of showing a spinner. Those only
+look contradictory. The rule is: every change is planned first, applied
+immediately, and **held for confirmation only when the plan comes back
+`disruptive`** — at which point the diff and the affected clients are shown.
+The extra round trip buys the one outcome an operator cannot cheaply recover
+from, which is being disconnected from the router by their own click. Nothing
+else interrupts them.
+
+This is also why `disruptive` has to be a *fact* rather than a guess (§5.3.3):
+a classification that cried wolf would train the operator to click through the
+one dialog that matters.
+
 Live data (throughput, station lists, DNS query log) streams over SSE.
+
+**The browser cannot authenticate an `EventSource`** — it sends no
+`Authorization` header — so consuming the stream from the SPA needs either a
+cookie session or a fetch-based reader. Deferred rather than chosen: while the
+only event is "something was applied", refetching after a mutation covers it,
+and the decision is better made against real live data than in advance of it.
 
 ### 6.4 MCP + skills
 
@@ -752,6 +806,21 @@ in the binary.
 
 Six direct dependencies for v1. For a router that is a feature.
 
+The SPA is a separate budget, spent where the product is judged (§1, "UX first"):
+
+| | Choice | Note |
+|---|---|---|
+| Build | Vite, TypeScript | output is static files; no Node on the router |
+| UI | React + `react-router` | declarative routing, no SSR — the daemon serves files |
+| Styling | Tailwind v4 + shadcn/ui | components are vendored into the repo, not a dependency to track |
+| Server state | TanStack Query | the entire UI is server state; hand-rolling the cache is the one place real code would be written for nothing |
+| Types | generated from the published schema | §3.2 rule 3 — a field added in Go appears in TypeScript |
+
+The asymmetry is deliberate. Node is a build-time dependency only: `go build`
+works on a clone with no npm installed, and a binary built that way serves an
+explanatory page instead of a UI. Nothing about the router's runtime depends on
+this column.
+
 ---
 
 ## 9. Milestones
@@ -769,6 +838,20 @@ Six direct dependencies for v1. For a router that is a feature.
 5. **Make it programmable.** OpenAPI publication, MCP server, skills.
 6. **Then:** `qos`, `vpn`, `routing`, `wifi`.
 
+**Order taken so far, and why it departs from the list.** `olrd`, the core
+control plane and the WebUI shell landed before milestone 1, against a single
+module (`dhcp`) driven over HTTP. The reason is that the load-bearing bet of
+this whole architecture is §3.2 rule 3 — *one tagged struct drives CLI, REST, UI
+and MCP* — and nothing tests that bet until one struct has actually reached a
+browser. It paid immediately: reflecting `netip.Addr` and a duration wrapper
+published the wrong types on every surface, a defect invisible from Go and
+uncorrectable later without breaking clients.
+
+What that jump does **not** buy is milestone 1. Pools are still keyed by kernel
+interface name, so the DHCP screen is keyed on something §4.4 says is an
+implementation detail, and it is scaffolding until `link` lands groups. Nothing
+downstream should be built on that key in the meantime.
+
 ---
 
 ## 10. Open decisions
@@ -785,10 +868,23 @@ Six direct dependencies for v1. For a router that is a feature.
    regulatory rabbit hole. Assuming wired router + separate APs on a VLAN trunk
    is far cheaper and matches most homelab setups.
 5. **Revision storage.** Numbered snapshots under
-   `/etc/open-linux-router/revisions/<module>/`, or a git repo in
-   `/etc/open-linux-router`? Git gives `history`/`rollback` and real diffs
-   nearly free, at the cost of a git dependency in the control plane and odd
-   behaviour if a user pokes at it. Leaning snapshots.
+   `/etc/open-linux-router/revisions/<module>/`, a git repo in
+   `/etc/open-linux-router`, or **SQLite** in `/var/lib`? Git gives
+   `history`/`rollback` and real diffs nearly free, at the cost of a git
+   dependency in the control plane and odd behaviour if a user pokes at it.
+   SQLite is the newest candidate and the strongest on mechanics — atomic,
+   indexed, no second process, and it answers `history` without walking a
+   directory. Its cost is size, not correctness: `CGO_ENABLED=0` is
+   non-negotiable (§8), so it would have to be `modernc.org/sqlite`, which is
+   transpiled C and roughly ten megabytes of binary against a document that
+   counts six direct dependencies as a feature.
+
+   Whichever wins, **intent stays a JSON file** (§3.2 rule 1). The store holds
+   past copies, never the live one: "SSH in and read the config" is the recovery
+   path on a router, and a database is the wrong thing to meet at that moment.
+   The same store is the natural home for the throughput history §6.3 needs,
+   which is the one genuine query workload in the product and may end up
+   deciding this.
 6. **Who owns the device inventory?** (§4.4) Devices are a foundation object —
    `firewall` and `qos` reference them and must not depend on `dhcp` to do it —
    but `clients` is currently a v2 read-mostly module. Either it is promoted to
@@ -808,6 +904,27 @@ Six direct dependencies for v1. For a router that is a feature.
 
 ### Resolved
 
+- **HTTP stays stdlib; no web framework.** Reaffirmed against a concrete
+  proposal to adopt `gin`, and the deciding argument was not taste. A framework's
+  binding tags (`binding:"required"`) are a *second* source of requiredness on
+  the same structs that this document already derives `required` from — the
+  absence of `omitempty` (see *Config format: JSON* below). Two sources for one
+  fact is what §4.1 forbids, and here they would disagree silently, in the
+  document every other surface is generated from. What remains of the framework's
+  value is routing that 1.22 `ServeMux` already does, middleware that is thirty
+  lines, and SSE that is `http.Flusher` either way — against a dozen transitive
+  dependencies inside the process holding `CAP_NET_ADMIN`.
+- **No database in the control plane, for now.** Also reaffirmed against a
+  concrete proposal. Config is a file per module (§3.2 rule 1) and stays one;
+  SQLite's real candidacy is revision history and throughput series, which is
+  open decision 5 above rather than settled here. The distinction worth keeping
+  is *which data* — intent, which must survive being read by a human with a
+  broken box, versus derived history, which never has to.
+- **The API's auth floor is a bearer token** (§6.2), scoped to the TCP listener
+  only, with the unix socket relying on its file mode. Chosen because the
+  alternative was not "wait for `auth`" but "ship an unauthenticated admin API",
+  and because a token is the one credential shape that does not prejudge what
+  `auth` will be.
 - **Coexistence stance.** Previously open. Settled by §1: if the answer to
   *"I need X"* is *"install X the Linux way,"* then never breaking X is a
   requirement, not a courtesy. We take exclusive ownership of a narrow, declared
