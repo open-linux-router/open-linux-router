@@ -76,18 +76,21 @@ var ownedDirectives = map[string]string{
 	"except-interface": "managed with interface",
 	"bind-interfaces":  "managed with interface",
 	"dhcp-range":       "set by the pool's start, end, lease_time and ra fields",
-	"dhcp-host":        "use reservations",
-	"dhcp-hostsfile":   "reservations are rendered into the module's hosts directory",
-	"dhcp-hostsdir":    "reservations are rendered into the module's hosts directory",
-	"dhcp-optsfile":    "use the pool's options field",
-	"dhcp-optsdir":     "use the pool's options field",
-	"dhcp-leasefile":   "the lease database location is fixed",
-	"dhcp-script":      "reserved for publishing leases to the dns module",
-	"conf-file":        "the module owns this file; including another would hide configuration from olr",
-	"conf-dir":         "the module owns this file; including another would hide configuration from olr",
-	"pid-file":         "managed with the service unit",
-	"user":             "managed with the service unit",
-	"group":            "managed with the service unit",
+	"dhcp-authoritative": "always set; olr refuses to start when another DHCP server holds the port, " +
+		"so this module is authoritative by construction",
+	"dhcp-lease-max": "sized from the configured pools, so that a large pool is not silently capped",
+	"dhcp-host":      "use reservations",
+	"dhcp-hostsfile": "reservations are rendered into the module's hosts directory",
+	"dhcp-hostsdir":  "reservations are rendered into the module's hosts directory",
+	"dhcp-optsfile":  "use the pool's options field",
+	"dhcp-optsdir":   "use the pool's options field",
+	"dhcp-leasefile": "the lease database location is fixed",
+	"dhcp-script":    "reserved for publishing leases to the dns module",
+	"conf-file":      "the module owns this file; including another would hide configuration from olr",
+	"conf-dir":       "the module owns this file; including another would hide configuration from olr",
+	"pid-file":       "managed with the service unit",
+	"user":           "managed with the service unit",
+	"group":          "managed with the service unit",
 }
 
 // renderedOptions are the DHCP options with a dedicated config field. Setting
@@ -146,9 +149,35 @@ func Validate(c Config, links LinkView) Result {
 
 	validateOverlaps(&r, c.Pools)
 	validateReservations(&r, c, prefixes)
+	validateCapacity(&r, c)
 	validateExtraConf(&r, c.ExtraConf)
 
 	return r
+}
+
+// LargePoolWarning is the total pool capacity above which a config is worth
+// remarking on. Not a limit — dnsmasq will serve it and so will we.
+const LargePoolWarning = 10000
+
+// validateCapacity remarks on a pool large enough to be a liability.
+//
+// dnsmasq's own 1000-lease default exists to stop a hostile client on the LAN
+// inventing leases until the daemon runs out of memory, and we raise that
+// ceiling to whatever the pools imply (see leaseMax). Raising it is right — a
+// pool that cannot fill is worse — but a /16 handed out to an untrusted network
+// is a decision worth making on purpose rather than by leaving a prefix at its
+// default. A warning says so and gets out of the way.
+func validateCapacity(r *Result, c Config) {
+	total := 0
+	for _, p := range c.Pools {
+		total += RangeSize(p.Start, p.End)
+	}
+	if total > LargePoolWarning {
+		r.warnf("pools",
+			"the pools total %d addresses; dnsmasq holds a record per lease, so a range this large is "+
+				"a memory cost and something for a hostile client on the network to exhaust",
+			total)
+	}
 }
 
 // validatePoolRange checks the range against the interface it is served on, and

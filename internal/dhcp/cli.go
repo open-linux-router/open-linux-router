@@ -18,68 +18,60 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/open-linux-router/open-linux-router/internal/cli"
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// env carries the flags every dhcp command shares.
-type env struct {
-	configPath string
-	linksPath  string
-}
+// Every command here is a client of olrd (design.md §6.1). None of them touches
+// the config document, the rendered files or systemd directly, and that is the
+// point rather than an implementation detail: a CLI that wrote the system on its
+// own would be a second writer, holding a lock olrd cannot see, running its own
+// copy of the validation rules, and publishing none of the change events the UI
+// listens for. §3.6's "one global apply lock" is only true if there is one
+// process doing the applying.
+//
+// The visible consequence is that these commands need olrd running. That is
+// consistent with §6.1's two tiers — `olr daemon …` is the tier that works with
+// olrd stopped, and it is grouped separately for exactly this reason.
 
 // Command returns the module's command tree. Mounted explicitly by cmd/olr.
 func Command() *cobra.Command {
-	e := &env{}
-
-	c := cli.NewModule("dhcp", "DHCP server (dnsmasq)",
-		showCommand(e),
-		setCommand(e),
-		addCommand(e),
-		rmCommand(e),
-		statusCommand(e),
-		logsCommand(e),
-		enableCommand(e),
-		disableCommand(e),
+	return cli.NewModule("dhcp", "DHCP server (dnsmasq)",
+		showCommand(),
+		setCommand(),
+		addCommand(),
+		rmCommand(),
+		statusCommand(),
+		logsCommand(),
+		enableCommand(),
+		disableCommand(),
 	)
-
-	c.PersistentFlags().StringVar(&e.configPath, "config", ConfigPath,
-		"module configuration file")
-	c.PersistentFlags().StringVar(&e.linksPath, "links", "",
-		"JSON file of interface facts, until the link module lands")
-
-	return c
 }
 
-// applier builds the module's working object from the flags.
-func (e *env) applier() (Applier, error) {
-	links, err := e.links()
-	if err != nil {
-		return Applier{}, err
+// Endpoints this module's commands call. Spelled once so a rename cannot leave
+// half the commands pointing at the old path.
+const (
+	configEndpoint = core.APIPrefix + "/" + ModuleName + "/config"
+	planEndpoint   = core.APIPrefix + "/" + ModuleName + "/plan"
+	statusEndpoint = core.APIPrefix + "/" + ModuleName + "/status"
+	leasesEndpoint = core.APIPrefix + "/" + ModuleName + "/leases"
+)
+
+// ctxOf is the request context, falling back to Background for a command
+// invoked outside cobra's execution (which the tests do).
+func ctxOf(c *cobra.Command) context.Context {
+	if ctx := c.Context(); ctx != nil {
+		return ctx
 	}
-	a, err := NewApplier(links)
-	if err != nil {
-		return Applier{}, err
-	}
-	if e.configPath != "" {
-		a.ConfigPath = e.configPath
-		a.Backend = NewDnsmasq(a.Paths).WithSource(e.configPath)
-	}
-	return a, nil
+	return context.Background()
 }
 
-// links resolves the interface facts dhcp validates against.
-//
-// design.md §4.1 is explicit that these come from the link module and are never
-// copied here. That module does not exist yet, so rather than inventing a
-// second source of truth the CLI requires the operator to supply them and says
-// why. A wrong answer here would silently produce a pool outside its subnet,
-// which is the exact failure cross-module validation exists to catch.
-func (e *env) links() (LinkView, error) {
-	if e.linksPath == "" {
-		return nil, fmt.Errorf(
-			"interface facts are unavailable: the link module is not implemented yet, " +
-				"so pass --links <file> with the adopted interfaces and their addresses")
+// loadConfig fetches stored intent.
+func loadConfig(c *cobra.Command) (Config, error) {
+	var cfg Config
+	if err := cli.ClientFor(c).Get(ctxOf(c), configEndpoint, &cfg); err != nil {
+		return Config{}, err
 	}
-	return LoadLinks(e.linksPath)
+	return cfg, nil
 }
 
 // verb wraps cli.Verb so the shared vocabulary check still runs (design.md
@@ -93,11 +85,11 @@ func verb(name, short string, build func(*cobra.Command)) *cobra.Command {
 
 // ---------------------------------------------------------------- show
 
-func showCommand(e *env) *cobra.Command {
+func showCommand() *cobra.Command {
 	c := verb("show", "Show DHCP configuration", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
-			cfg, err := LoadConfig(e.configPath)
+			cfg, err := loadConfig(c)
 			if err != nil {
 				return err
 			}
@@ -112,7 +104,7 @@ func showCommand(e *env) *cobra.Command {
 		&cobra.Command{
 			Use: "pools", Short: "List address pools", Args: cobra.NoArgs,
 			RunE: func(c *cobra.Command, _ []string) error {
-				cfg, err := LoadConfig(e.configPath)
+				cfg, err := loadConfig(c)
 				if err != nil {
 					return err
 				}
@@ -125,7 +117,7 @@ func showCommand(e *env) *cobra.Command {
 		&cobra.Command{
 			Use: "reservations", Short: "List address reservations", Args: cobra.NoArgs,
 			RunE: func(c *cobra.Command, _ []string) error {
-				cfg, err := LoadConfig(e.configPath)
+				cfg, err := loadConfig(c)
 				if err != nil {
 					return err
 				}
@@ -143,50 +135,31 @@ func showCommand(e *env) *cobra.Command {
 				"database and are never stored or revisioned by olr (design.md §6.2).",
 			Args: cobra.NoArgs,
 			RunE: func(c *cobra.Command, _ []string) error {
-				a, err := e.applierWithoutLinks()
-				if err != nil {
-					return err
-				}
-				leases, problems, err := a.Leases()
-				if err != nil {
+				var resp leasesResponse
+				if err := cli.ClientFor(c).Get(ctxOf(c), leasesEndpoint, &resp); err != nil {
 					return err
 				}
 				if cli.IsJSON(c) {
-					return cli.JSON(c.OutOrStdout(), map[string]any{
-						"leases": leases, "problems": problems,
-					})
+					return cli.JSON(c.OutOrStdout(), resp)
 				}
-				return writeLeasesText(c.OutOrStdout(), leases, problems)
+				return writeLeasesText(c.OutOrStdout(), resp)
 			},
 		},
 	)
 	return c
 }
 
-// applierWithoutLinks is for read-only commands that never validate or render,
-// so they work before the link module exists and without --links.
-func (e *env) applierWithoutLinks() (Applier, error) {
-	a, err := NewApplier(nil)
-	if err != nil {
-		return Applier{}, err
-	}
-	if e.configPath != "" {
-		a.ConfigPath = e.configPath
-	}
-	return a, nil
-}
-
 // ---------------------------------------------------------------- set / add
 
-func setCommand(e *env) *cobra.Command {
+func setCommand() *cobra.Command {
 	c := verb("set", "Change DHCP configuration", func(c *cobra.Command) {})
-	c.AddCommand(poolCommand(e, "set"), extraConfCommand(e))
+	c.AddCommand(poolCommand("set"), extraConfCommand())
 	return c
 }
 
-func addCommand(e *env) *cobra.Command {
+func addCommand() *cobra.Command {
 	c := verb("add", "Add a reservation or pool", func(c *cobra.Command) {})
-	c.AddCommand(poolCommand(e, "add"), reservationCommand(e))
+	c.AddCommand(poolCommand("add"), reservationCommand())
 	return c
 }
 
@@ -285,7 +258,7 @@ func (f *poolFlags) apply(c *cobra.Command, p *Pool) error {
 	return nil
 }
 
-func poolCommand(e *env, mode string) *cobra.Command {
+func poolCommand(mode string) *cobra.Command {
 	flags := &poolFlags{}
 
 	short := "Add an address pool on an interface"
@@ -299,7 +272,7 @@ func poolCommand(e *env, mode string) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			iface := args[0]
-			return mutate(c, e, func(cfg *Config) error {
+			return mutate(c, func(cfg *Config) error {
 				pool, exists := cfg.Pool(iface)
 				switch {
 				case mode == "add" && exists:
@@ -323,7 +296,7 @@ func poolCommand(e *env, mode string) *cobra.Command {
 	return c
 }
 
-func reservationCommand(e *env) *cobra.Command {
+func reservationCommand() *cobra.Command {
 	var mac, ip, hostname, lease string
 
 	c := &cobra.Command{
@@ -334,7 +307,7 @@ func reservationCommand(e *env) *cobra.Command {
 			"it cannot then collide with an address the pool hands out.",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
-			return mutate(c, e, func(cfg *Config) error {
+			return mutate(c, func(cfg *Config) error {
 				normalized, err := NormalizeMAC(mac)
 				if err != nil {
 					return fmt.Errorf("--mac: %w", err)
@@ -366,7 +339,7 @@ func reservationCommand(e *env) *cobra.Command {
 	return c
 }
 
-func extraConfCommand(e *env) *cobra.Command {
+func extraConfCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "extra-conf <file>",
 		Short: "Replace the dnsmasq passthrough configuration",
@@ -390,7 +363,7 @@ func extraConfCommand(e *env) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return mutate(c, e, func(cfg *Config) error {
+			return mutate(c, func(cfg *Config) error {
 				cfg.ExtraConf = strings.TrimRight(string(data), "\n")
 				return nil
 			})
@@ -400,14 +373,14 @@ func extraConfCommand(e *env) *cobra.Command {
 
 // ---------------------------------------------------------------- rm
 
-func rmCommand(e *env) *cobra.Command {
+func rmCommand() *cobra.Command {
 	c := verb("rm", "Remove a reservation or pool", func(c *cobra.Command) {})
 
 	c.AddCommand(
 		&cobra.Command{
 			Use: "pool <interface>", Short: "Remove an interface's pool", Args: cobra.ExactArgs(1),
 			RunE: func(c *cobra.Command, args []string) error {
-				return mutate(c, e, func(cfg *Config) error {
+				return mutate(c, func(cfg *Config) error {
 					if !cfg.RemovePool(args[0]) {
 						return fmt.Errorf("%s has no pool", args[0])
 					}
@@ -418,7 +391,7 @@ func rmCommand(e *env) *cobra.Command {
 		&cobra.Command{
 			Use: "reservation <mac>", Short: "Remove a reservation", Args: cobra.ExactArgs(1),
 			RunE: func(c *cobra.Command, args []string) error {
-				return mutate(c, e, func(cfg *Config) error {
+				return mutate(c, func(cfg *Config) error {
 					if !cfg.RemoveReservation(args[0]) {
 						return fmt.Errorf("no reservation for %s", args[0])
 					}
@@ -432,80 +405,57 @@ func rmCommand(e *env) *cobra.Command {
 
 // ---------------------------------------------------------------- lifecycle
 
-func enableCommand(e *env) *cobra.Command {
+func enableCommand() *cobra.Command {
 	return verb("enable", "Enable the DHCP service", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
-			return mutate(c, e, func(cfg *Config) error { cfg.Enabled = true; return nil })
+			return mutate(c, func(cfg *Config) error { cfg.Enabled = true; return nil })
 		}
 	})
 }
 
-func disableCommand(e *env) *cobra.Command {
+func disableCommand() *cobra.Command {
 	return verb("disable", "Disable the DHCP service", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
-			return mutate(c, e, func(cfg *Config) error { cfg.Enabled = false; return nil })
+			return mutate(c, func(cfg *Config) error { cfg.Enabled = false; return nil })
 		}
 	})
 }
 
-func statusCommand(e *env) *cobra.Command {
+func statusCommand() *cobra.Command {
 	return verb("status", "Show service state, leases and drift", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
 			if err := cli.ValidateOutput(c); err != nil {
 				return err
 			}
-			a, err := e.applierWithoutLinks()
-			if err != nil {
+			ctx, client := ctxOf(c), cli.ClientFor(c)
+
+			// Two endpoints because they are two questions and either can fail
+			// on its own: §5.4 keeps drift and backend liveness separate, and
+			// pool occupancy comes from the lease database rather than from
+			// systemd. Neither answer is allowed to suppress the other.
+			var status statusResponse
+			if err := client.Get(ctx, statusEndpoint, &status); err != nil {
 				return err
 			}
-			cfg, err := a.Load()
-			if err != nil {
+			var leases leasesResponse
+			if err := client.Get(ctx, leasesEndpoint, &leases); err != nil {
 				return err
-			}
-
-			ctx := c.Context()
-			if ctx == nil {
-				ctx = context.Background()
-			}
-			service, serviceErr := a.Service.Status(ctx)
-			leases, problems, err := a.Leases()
-			if err != nil {
-				return err
-			}
-
-			status := map[string]any{
-				"enabled": cfg.Enabled,
-				"backend": a.Backend.Name(),
-				"service": service,
-				"leases":  len(leases),
-				"pools":   a.Usage(cfg, leases),
-			}
-			if serviceErr != nil {
-				status["service_error"] = serviceErr.Error()
-			}
-
-			// Drift needs interface facts, so it is reported only when they are
-			// available. Saying "drift unknown" is honest; guessing is not.
-			if links, linkErr := e.links(); linkErr == nil {
-				a.Links = links
-				if plan, err := a.Plan(ctx, cfg); err == nil {
-					status["drifted"] = !plan.Empty()
-					status["impact"] = plan.Impact
-				}
 			}
 
 			if cli.IsJSON(c) {
-				return cli.JSON(c.OutOrStdout(), status)
+				return cli.JSON(c.OutOrStdout(), map[string]any{
+					"status": status, "leases": leases,
+				})
 			}
-			return writeStatusText(c.OutOrStdout(), cfg, a, service, serviceErr, leases, problems, status)
+			return writeStatusText(c.OutOrStdout(), status, leases)
 		}
 	})
 }
 
-func logsCommand(e *env) *cobra.Command {
+func logsCommand() *cobra.Command {
 	var (
 		lines  int
 		follow bool
@@ -519,26 +469,24 @@ func logsCommand(e *env) *cobra.Command {
 			"reimplementing it. Anything journalctl can do to these logs, it can\n" +
 			"still do directly."
 		c.RunE = func(c *cobra.Command, _ []string) error {
-			a, err := e.applierWithoutLinks()
-			if err != nil {
-				return err
-			}
+			// The one command here that does not go through olrd, and it does
+			// not because there is nothing for olrd to add: the logs are
+			// journald's, the unit name is a constant, and streaming a follow
+			// through the API would be reimplementing journalctl over HTTP.
+			// This is a read of somebody else's data, not a write to ours.
+			unit := Dnsmasq{}.Unit()
 
 			journalctl, err := exec.LookPath("journalctl")
 			if err != nil {
-				return fmt.Errorf("journalctl not found; this module keeps its logs in the journal, under the unit %s", a.Backend.Unit())
+				return fmt.Errorf("journalctl not found; this module keeps its logs in the journal, under the unit %s", unit)
 			}
 
-			args := []string{"-u", a.Backend.Unit(), "-n", strconv.Itoa(lines)}
+			args := []string{"-u", unit, "-n", strconv.Itoa(lines)}
 			if follow {
 				args = append(args, "-f")
 			}
 
-			ctx := c.Context()
-			if ctx == nil {
-				ctx = context.Background()
-			}
-			cmd := exec.CommandContext(ctx, journalctl, args...)
+			cmd := exec.CommandContext(ctxOf(c), journalctl, args...)
 			cmd.Stdout = c.OutOrStdout()
 			cmd.Stderr = c.ErrOrStderr()
 			return cmd.Run()
@@ -558,33 +506,30 @@ func logsCommand(e *env) *cobra.Command {
 // Applying happens on return, with no staged commit (design.md §5.1), so the
 // diff and the impact are printed either way — the operator sees what happened
 // rather than only that something did.
-func mutate(c *cobra.Command, e *env, edit func(*Config) error) error {
+// It is a read-modify-write against the API and takes no lock of its own. The
+// window between the GET and the PUT is real, and it is the same window the
+// WebUI has; closing it belongs in core — as a revision the write is
+// conditional on — rather than in a lock this process holds and olrd cannot see,
+// which is what used to be here and never excluded the daemon at all.
+func mutate(c *cobra.Command, edit func(*Config) error) error {
 	if err := cli.ValidateOutput(c); err != nil {
 		return err
 	}
+	ctx, client := ctxOf(c), cli.ClientFor(c)
 
-	a, err := e.applier()
+	cfg, err := loadConfig(c)
 	if err != nil {
 		return err
 	}
-
-	ctx := c.Context()
-	if ctx == nil {
-		ctx = context.Background()
+	if err := edit(&cfg); err != nil {
+		return err
 	}
 
-	// A dry run writes nothing, so it takes no lock (design.md §3.6: reads
-	// never take it).
+	// A dry run asks what would happen and stops. This is the HTTP spelling of
+	// the same question the WebUI asks before every edit (§5.1/§5.3.3).
 	if cli.DryRun(c) {
-		cfg, err := a.Load()
-		if err != nil {
-			return err
-		}
-		if err := edit(&cfg); err != nil {
-			return err
-		}
-		plan, err := a.Plan(ctx, cfg)
-		if err != nil {
+		var plan planView
+		if err := client.Post(ctx, planEndpoint, cfg, &plan); err != nil {
 			return err
 		}
 		if cli.IsJSON(c) {
@@ -593,28 +538,12 @@ func mutate(c *cobra.Command, e *env, edit func(*Config) error) error {
 		return writePlanText(c.OutOrStdout(), plan, true)
 	}
 
-	// The load, the edit and the apply are one critical section. Splitting them
-	// is what loses a concurrent change: both readers see the same stored
-	// config, each adds its own item, and the second write drops the first.
-	unlock, err := cli.Lock(a.ConfigPath)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
-	cfg, err := a.Load()
-	if err != nil {
-		return err
-	}
-	if err := edit(&cfg); err != nil {
-		return err
-	}
-
-	result, err := a.Apply(ctx, cfg)
-	if err != nil {
+	var result applyResponse
+	if err := client.Put(ctx, configEndpoint, cfg, &result); err != nil {
 		// Report what landed before returning the failure: there is no
 		// rollback, so which steps completed is the operator's starting point
-		// (design.md §5.3.2).
+		// (design.md §5.3.2). The body carries them even on a 500, which is why
+		// the client decodes it either way.
 		writeStepsText(c.ErrOrStderr(), result.Steps)
 		return err
 	}

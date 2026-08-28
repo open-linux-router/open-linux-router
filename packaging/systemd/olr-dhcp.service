@@ -17,10 +17,28 @@ Type=simple
 
 # Fail fast and legibly on a config dnsmasq will not accept, rather than
 # flapping under Restart=on-failure with the reason buried in the journal.
+#
+# This is also the *only* place the rendered config is syntax-checked: olrd
+# executes no subprocesses (§3.6), so it cannot run `dnsmasq --test` itself
+# before writing. That is adequate rather than a gap, because the escape hatch —
+# the one field whose contents olr does not itself construct — is rendered into
+# this file, which is not reloadable, so any change to it forces a restart and
+# therefore passes through here.
 ExecStartPre=/usr/sbin/dnsmasq --test -C /etc/open-linux-router/rendered/dhcp/dnsmasq.conf
 
 # -k keeps dnsmasq in the foreground so systemd supervises the real process
 # rather than a pid file.
+#
+# The path is absolute and Debian's, because the package depends on
+# dnsmasq-base and that is where Debian puts it. On a distribution that puts it
+# elsewhere, override just this line rather than editing the unit:
+#
+#   /etc/systemd/system/olr-dhcp.service.d/10-path.conf
+#     [Service]
+#     ExecStartPre=
+#     ExecStartPre=/usr/bin/dnsmasq --test -C /etc/open-linux-router/rendered/dhcp/dnsmasq.conf
+#     ExecStart=
+#     ExecStart=/usr/bin/dnsmasq -k -C /etc/open-linux-router/rendered/dhcp/dnsmasq.conf
 ExecStart=/usr/sbin/dnsmasq -k -C /etc/open-linux-router/rendered/dhcp/dnsmasq.conf
 
 # SIGHUP re-reads the hosts and options directories but never the config file.
@@ -43,8 +61,13 @@ ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
 
-# The only paths we need to write: the lease database and the pid file.
-ReadWritePaths=/var/lib/open-linux-router/dhcp
+# The lease database. StateDirectory= and not ReadWritePaths=: systemd refuses
+# to start a unit whose ReadWritePaths= target does not exist, and at boot this
+# unit can legitimately run before olr has ever applied anything and created it.
+# StateDirectory= makes systemd create it instead, so the unit is self-
+# sufficient. The path is /var/lib/<name>, so this is the same directory.
+StateDirectory=open-linux-router/dhcp
+StateDirectoryMode=0755
 
 # olr/dhcp, not olr. systemd deletes a RuntimeDirectory when the unit stops, and
 # /run/olr also holds olrd's control socket and the lockout guard's revert

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 func TestParseDuration(t *testing.T) {
@@ -186,8 +188,11 @@ func TestConfigRoundTripsThroughJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MarshalConfig: %v", err)
 	}
-	if !strings.Contains(string(data), `"$schema"`) {
-		t.Error("marshalled config carries no $schema key; JSON has no comments, so that key is the ownership header")
+	// The ownership header is the document's "$schema" (core.SchemaURL), and
+	// there is exactly one. A module's subtree must not carry a second — it
+	// would be a claim about a document this module does not own.
+	if strings.Contains(string(data), `"$schema"`) {
+		t.Error("module subtree carries its own $schema key; the document owns that")
 	}
 
 	back, err := UnmarshalConfig(data)
@@ -195,7 +200,6 @@ func TestConfigRoundTripsThroughJSON(t *testing.T) {
 		t.Fatalf("UnmarshalConfig: %v\n%s", err, data)
 	}
 
-	original.Schema = SchemaURL
 	original.Normalize()
 	if diff := configDiff(original, back); diff != "" {
 		t.Errorf("config did not survive the round trip: %s", diff)
@@ -213,12 +217,18 @@ func configDiff(a, b Config) string {
 	return "\n  want: " + string(ja) + "\n  got:  " + string(jb)
 }
 
-// A missing file means "never configured", which is what a fresh install looks
-// like — not an error to be reported to the operator.
-func TestLoadMissingConfigIsEmptyNotAnError(t *testing.T) {
-	c, err := LoadConfig(t.TempDir() + "/absent.json")
+// A document without a dhcp section means "never configured", which is what a
+// fresh install looks like — not an error to be reported to the operator.
+func TestMissingSectionIsEmptyNotAnError(t *testing.T) {
+	store := core.NewStore(t.TempDir()+"/olr.json", ModuleName)
+	doc, err := store.Load()
 	if err != nil {
-		t.Fatalf("LoadConfig on a missing file: %v", err)
+		t.Fatalf("Load on a missing document: %v", err)
+	}
+
+	c, err := FromDocument(doc)
+	if err != nil {
+		t.Fatalf("FromDocument: %v", err)
 	}
 	if c.Enabled || len(c.Pools) != 0 {
 		t.Errorf("expected a zero config, got %+v", c)

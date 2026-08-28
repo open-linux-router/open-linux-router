@@ -35,6 +35,13 @@ export interface Plan {
   changes: Change[]
   action: ServiceAction
   impact: Impact
+  /**
+   * The boot-time state the unit will be moved to, absent when it already
+   * matches. Separate from `action` because "running now" and "running after a
+   * reboot" are different promises: a unit that is active but not enabled looks
+   * healthy until the power goes out.
+   */
+  enable?: boolean
   reasons?: string[]
   empty: boolean
   warnings?: Problem[]
@@ -62,7 +69,14 @@ export interface ApplyResult {
 export interface UnitStatus {
   unit: string
   active: boolean
+  /** Whether it starts at boot — not the same question as `active`. */
   enabled: boolean
+  /**
+   * Whether the unit file exists at all. Distinguished from `enabled` because
+   * the two need different answers: disabled is something olr fixes on the next
+   * apply, missing means the package is incomplete and applying will not help.
+   */
+  installed: boolean
   state: string
   sub_state?: string
   since?: string

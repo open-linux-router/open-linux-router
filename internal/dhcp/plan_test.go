@@ -52,6 +52,62 @@ func TestPlanIsEmptyWhenNothingChanged(t *testing.T) {
 	}
 }
 
+// Roughly half of a rendered dnsmasq.conf is comments, all of it string
+// literals in render.go. So a release that reworded one of them would, under a
+// plain byte comparison, mark every deployed box as drifted and bounce its DHCP
+// server — an upgrade note becoming an outage. The file is still brought up to
+// date; it is simply not a reason to signal anything.
+func TestARewordedCommentIsNotDrift(t *testing.T) {
+	c := validConfig(t)
+	obs := observe(t, c, true)
+
+	// Stand in for the next release's renderer: same directives, different
+	// prose, plus a blank line for good measure.
+	conf := DefaultPaths().Conf
+	obs.Files[conf] = []byte("# an older release said something else here\n\n" +
+		string(obs.Files[conf]))
+
+	plan := buildPlan(t, c, obs)
+
+	if !plan.Empty() {
+		t.Errorf("a comment-only difference was reported as drift: %v", changePaths(plan))
+	}
+	if plan.Action != ActionNone {
+		t.Errorf("Action = %q, want none; a comment must not bounce the daemon", plan.Action)
+	}
+	if plan.Impact != ImpactNone {
+		t.Errorf("Impact = %s, want none", plan.Impact)
+	}
+	// But the file is still scheduled for rewriting, so the stale prose does
+	// not survive forever.
+	if len(plan.Changes) != 1 || plan.Changes[0].Path != conf {
+		t.Fatalf("expected the file to still be rewritten, got %v", changePaths(plan))
+	}
+	if plan.Changes[0].Impact != ImpactNone {
+		t.Errorf("change Impact = %s, want none", plan.Changes[0].Impact)
+	}
+}
+
+// The other half of the same rule: a directive changing underneath us is real
+// drift, and normalisation must not swallow it.
+func TestAChangedDirectiveIsStillDrift(t *testing.T) {
+	c := validConfig(t)
+	obs := observe(t, c, true)
+
+	conf := DefaultPaths().Conf
+	obs.Files[conf] = []byte(strings.Replace(string(obs.Files[conf]),
+		"dhcp-authoritative", "# dhcp-authoritative", 1))
+
+	plan := buildPlan(t, c, obs)
+
+	if plan.Empty() {
+		t.Error("a hand-edited directive was not reported as drift")
+	}
+	if plan.Action != ActionRestart {
+		t.Errorf("Action = %q, want restart", plan.Action)
+	}
+}
+
 // The whole point of the hosts.d/opts.d split: the most common edit must not
 // bounce the daemon.
 func TestAddingAReservationOnlyReloads(t *testing.T) {

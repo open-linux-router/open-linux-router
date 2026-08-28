@@ -25,7 +25,6 @@ export type RouterAdvertisementMode = '' | 'off' | 'slaac' | 'stateful'
 export type IPAddress5 = string
 
 export interface DhcpConfig {
-  $schema?: string
   enabled: boolean
   pools?: Pool[]
   reservations?: Reservation[]

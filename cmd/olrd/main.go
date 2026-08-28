@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -87,7 +88,15 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	applier, err := dhcp.NewApplierAt(links, opts.root)
+
+	// One store for the whole box (core.ConfigPath). The module list is given
+	// literally here for the same reason the mounts below are: the set is
+	// bounded and known at compile time (§3.2), and the order it is given in is
+	// the order the document is written in.
+	store := core.NewStore(core.RootedConfigPath(opts.root), dhcp.ModuleName)
+	checkStore(store, logger)
+
+	applier, err := dhcp.NewApplierAt(store, links, opts.root)
 	if err != nil {
 		return fmt.Errorf("initialising dhcp: %w", err)
 	}
@@ -218,6 +227,35 @@ func tcpListener(opts options, handler http.Handler, logger *slog.Logger) (tcpSe
 func serve(s *http.Server, l net.Listener, logger *slog.Logger) {
 	if err := s.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("server stopped", "error", err)
+	}
+}
+
+// checkStore reads the configuration document once at startup, to say something
+// about it while there is still an operator watching.
+//
+// It never fails the start. A box whose config file is corrupt is exactly the
+// box whose API has to come up, because the API is how it gets fixed — and each
+// request reports the parse error again on its own. What this buys is that the
+// error is in the journal at boot rather than only in the reply to whoever asks
+// first.
+func checkStore(store *core.Store, logger *slog.Logger) {
+	doc, err := store.Load()
+	if err != nil {
+		logger.Error("configuration could not be read; the API will report this on every request",
+			"path", store.Path(), "error", err)
+		return
+	}
+	if unknown := doc.Unknown(); len(unknown) > 0 {
+		// Preserved, not dropped: this is what an older olr sees after a newer
+		// one has written a module it does not have. Saying so beats silence,
+		// because the alternative reading — "my config vanished" — is the one
+		// an operator would otherwise reach for.
+		logger.Warn("configuration contains sections for modules this build does not have; they are preserved untouched",
+			"path", store.Path(), "sections", strings.Join(unknown, ", "))
+	}
+	if legacy := store.LegacyPaths(); len(legacy) > 0 {
+		logger.Warn("per-module configuration files found; they are read only when the document is absent and can be deleted once it exists",
+			"document", store.Path(), "files", strings.Join(legacy, ", "))
 	}
 }
 

@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 // Applier turns intent into a running DHCP server.
@@ -28,10 +30,10 @@ type Applier struct {
 	Service Service
 	// Paths is the on-disk layout.
 	Paths Paths
-	// ConfigPath is where intent is stored. Core will own this file — with
-	// revision history and `olr dhcp rollback` — once it exists; until then the
-	// module reads and writes it directly.
-	ConfigPath string
+	// Store is core's configuration document, which owns this module's intent
+	// alongside every other module's. Revision history will attach here rather
+	// than in the module (design.md §10 open decision 5).
+	Store *core.Store
 
 	// PortCheck reports whether something already holds the DHCP server port.
 	// Nil means PortConflict. Injectable so the refusal path is testable
@@ -73,29 +75,26 @@ func (a Applier) portCheck() func() (bool, error) {
 	return PortConflict
 }
 
-// NewApplier wires up the default dnsmasq backend against a link view.
-func NewApplier(links LinkView) (Applier, error) {
-	return NewApplierAt(links, "")
-}
-
-// NewApplierAt is NewApplier with every path relocated under root.
+// NewApplierAt wires up the dnsmasq backend against a link view, with every
+// rendered path relocated under root.
 //
 // An empty root is the real system. See RootedPaths for why a non-empty one
 // exists — it is the development escape hatch, not a supported deployment
-// layout, and nothing but the daemon's own flags should ever set it.
-func NewApplierAt(links LinkView, root string) (Applier, error) {
+// layout, and nothing but the daemon's own flags should ever set it. The store
+// is passed in already rooted, because core owns that path.
+func NewApplierAt(store *core.Store, links LinkView, root string) (Applier, error) {
 	paths := RootedPaths(root)
-	backend := NewDnsmasq(paths).WithSource(RootedConfigPath(root))
+	backend := NewDnsmasq(paths).WithSource(store.Path())
 	service, err := NewService(backend.Unit())
 	if err != nil {
 		return Applier{}, err
 	}
 	return Applier{
-		Backend:    backend,
-		Links:      links,
-		Service:    service,
-		Paths:      paths,
-		ConfigPath: RootedConfigPath(root),
+		Backend: backend,
+		Links:   links,
+		Service: service,
+		Paths:   paths,
+		Store:   store,
 	}, nil
 }
 
@@ -112,8 +111,14 @@ type ApplyResult struct {
 	Steps []Step `json:"steps"`
 }
 
-// Load reads stored intent.
-func (a Applier) Load() (Config, error) { return LoadConfig(a.ConfigPath) }
+// Load reads stored intent out of the configuration document.
+func (a Applier) Load() (Config, error) {
+	doc, err := a.Store.Load()
+	if err != nil {
+		return Config{}, err
+	}
+	return FromDocument(doc)
+}
 
 // Observe reads the actual state of the system: what is on disk, whether the
 // daemon is running, and which leases are held.
@@ -141,7 +146,7 @@ func (a Applier) Observe(ctx context.Context) (Observed, error) {
 			case e.IsDir():
 				return nil
 			case strings.HasPrefix(e.Name(), "."):
-				// writeFileAtomic's temporary files. Skipping them keeps a
+				// core.WriteFileAtomic's temporary files. Skipping them keeps a
 				// crashed apply's leftovers out of the plan rather than
 				// scheduling a delete for a name that will never recur.
 				return nil
@@ -174,7 +179,10 @@ func (a Applier) Observe(ctx context.Context) (Observed, error) {
 	// failing the whole observation: the file half of the answer is still
 	// useful, and `olr dhcp status` surfaces the service error separately.
 	if status, err := a.Service.Status(ctx); err == nil {
+		obs.ServiceKnown = true
 		obs.Running = status.Active
+		obs.EnabledAtBoot = status.Enabled
+		obs.Installed = status.Installed
 	}
 
 	return obs, nil
@@ -229,17 +237,30 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 	// Intent is stored first, before anything it describes. If a later step
 	// fails, a re-run has something to finish the job from — which is the whole
 	// premise of idempotent re-apply instead of rollback (§5.3.2).
-	if err := run("store configuration in "+a.ConfigPath, func() error {
+	//
+	// Read-modify-write on the shared document, so a save here cannot drop
+	// another module's configuration. It is safe without further locking
+	// because every config write in the process already holds the one global
+	// apply lock (§3.6) — that is precisely the TOCTOU the single lock exists
+	// to close.
+	if err := run("store configuration in "+a.Store.Path(), func() error {
+		doc, err := a.Store.Load()
+		if err != nil {
+			return err
+		}
 		data, err := MarshalConfig(desired)
 		if err != nil {
 			return err
 		}
-		return writeFileAtomic(a.ConfigPath, data, 0o644)
+		doc.Set(ModuleName, data)
+		return a.Store.Save(doc)
 	}); err != nil {
 		return result, err
 	}
 
-	if plan.Empty() {
+	// nothingToDo, not Empty: a change that is only cosmetic is not drift, but
+	// it is still a file to bring up to date.
+	if plan.nothingToDo() {
 		return result, nil
 	}
 
@@ -275,10 +296,22 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 				return result, fmt.Errorf("internal: planned %s but rendered nothing for it", change.Path)
 			}
 			if err := run("write "+file.Path, func() error {
-				return writeFileAtomic(file.Path, file.Data, file.Mode)
+				return core.WriteFileAtomic(file.Path, file.Data, file.Mode)
 			}); err != nil {
 				return result, err
 			}
+		}
+	}
+
+	// Checked before anything is asked of systemd, because the error it would
+	// otherwise produce — a bare "Unit olr-dhcp.service not found" from D-Bus —
+	// names neither the cause nor the fix. A missing unit file is a packaging
+	// problem and no amount of re-applying will resolve it.
+	if plan.Action != ActionNone || plan.Enable != nil {
+		if err := run("check "+a.Backend.Unit()+" is installed", func() error {
+			return a.checkInstalled(ctx)
+		}); err != nil {
+			return result, err
 		}
 	}
 
@@ -294,6 +327,23 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 				return ErrPortInUse()
 			}
 			return nil
+		}); err != nil {
+			return result, err
+		}
+	}
+
+	// Boot-time state before the service action, so that a backend which then
+	// fails to start is at least configured the way the operator asked. The
+	// reverse order would leave a box that came up, failed, and would also not
+	// have come back after a reboot.
+	if plan.Enable != nil {
+		enable := *plan.Enable
+		verb := map[bool]string{true: "enable", false: "disable"}[enable]
+		if err := run(verb+" "+a.Backend.Unit()+" at boot", func() error {
+			if enable {
+				return a.Service.Enable(ctx)
+			}
+			return a.Service.Disable(ctx)
 		}); err != nil {
 			return result, err
 		}
@@ -335,6 +385,30 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 	}
 
 	return result, nil
+}
+
+// checkInstalled refuses to drive a unit whose file is not on the box.
+//
+// Not an error where the service manager itself is missing: that is a developer
+// machine, and "we cannot tell" must not be reported as "it is broken" — the
+// same distinction verifyServing makes (§3.4).
+func (a Applier) checkInstalled(ctx context.Context) error {
+	status, err := a.Service.Status(ctx)
+	switch {
+	case errors.Is(err, ErrNoServiceManager):
+		return nil
+	case err != nil:
+		return err
+	case !status.Installed:
+		return fmt.Errorf(
+			"%s is not installed, so there is no DHCP server for olr to drive.\n"+
+				"The unit ships with olr; a missing one means the package is incomplete or was "+
+				"installed by unpacking the binaries alone.\n"+
+				"Reinstall the package, or copy the unit from packaging/systemd and run "+
+				"`systemctl daemon-reload`",
+			status.Unit)
+	}
+	return nil
 }
 
 // verifyServing watches the unit for the settle window and fails if it does not
@@ -441,39 +515,4 @@ func (a Applier) Usage(c Config, leases []Lease) []Usage {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Interface < out[j].Interface })
 	return out
-}
-
-// writeFileAtomic replaces a file in one step, so a reader — including the
-// daemon re-reading a hosts directory — never sees a half-written config
-// (design.md §3.3, atomic file replacement).
-func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName) // no-op once the rename succeeds
-
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	// Durability before visibility: a rename that survives a crash pointing at
-	// unflushed content would leave an empty config where a valid one was.
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmpName, mode); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, path)
 }

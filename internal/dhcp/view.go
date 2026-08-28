@@ -26,6 +26,11 @@ type planView struct {
 	Action  ServiceAction `json:"action"`
 	Impact  Impact        `json:"impact"`
 
+	// Enable, when non-nil, is the boot-time state the unit will be moved to.
+	// Surfaced because "running now" and "running after a reboot" are different
+	// promises, and only one of them is visible without asking.
+	Enable *bool `json:"enable,omitempty"`
+
 	// Reasons explains the impact in the operator's terms — above all, which
 	// clients a disruptive change would drop.
 	Reasons []string `json:"reasons,omitempty"`
@@ -53,6 +58,7 @@ func viewPlan(p Plan) planView {
 		Changes:  make([]changeView, 0, len(p.Changes)),
 		Action:   p.Action,
 		Impact:   p.Impact,
+		Enable:   p.Enable,
 		Reasons:  p.Reasons,
 		Empty:    p.Empty(),
 		Warnings: problems(p.Validation.Warnings),

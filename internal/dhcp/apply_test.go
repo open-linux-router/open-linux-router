@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 // fakeService records what was asked of the daemon without needing one.
@@ -15,6 +17,15 @@ type fakeService struct {
 	active bool
 	calls  []string
 	fail   error
+
+	// enabled is the boot-time state, tracked separately from active because
+	// that is exactly the distinction under test: a unit can be running now and
+	// still not come back after a reboot.
+	enabled bool
+
+	// notInstalled models a box where the unit file was never laid down, which
+	// is what an incomplete install looks like.
+	notInstalled bool
 
 	// statusErr is returned by Status instead of a state.
 	statusErr error
@@ -37,9 +48,13 @@ func (f *fakeService) Status(context.Context) (ServiceStatus, error) {
 		f.active = false
 		return ServiceStatus{
 			Unit: "olr-dhcp.service", Active: false, State: "failed", SubState: "failed",
+			Enabled: f.enabled, Installed: !f.notInstalled,
 		}, nil
 	}
-	return ServiceStatus{Unit: "olr-dhcp.service", Active: f.active, State: "active"}, nil
+	return ServiceStatus{
+		Unit: "olr-dhcp.service", Active: f.active, State: "active",
+		Enabled: f.enabled, Installed: !f.notInstalled,
+	}, nil
 }
 
 func (f *fakeService) do(verb string) error {
@@ -52,6 +67,10 @@ func (f *fakeService) do(verb string) error {
 		f.active = true
 	case "stop":
 		f.active = false
+	case "enable":
+		f.enabled = true
+	case "disable":
+		f.enabled = false
 	}
 	return nil
 }
@@ -60,6 +79,8 @@ func (f *fakeService) Start(context.Context) error   { return f.do("start") }
 func (f *fakeService) Stop(context.Context) error    { return f.do("stop") }
 func (f *fakeService) Restart(context.Context) error { return f.do("restart") }
 func (f *fakeService) Reload(context.Context) error  { return f.do("reload") }
+func (f *fakeService) Enable(context.Context) error  { return f.do("enable") }
+func (f *fakeService) Disable(context.Context) error { return f.do("disable") }
 
 // testApplier builds an Applier rooted entirely inside a temp directory, which
 // is what makes the whole apply path testable without root, systemd or /etc.
@@ -75,11 +96,11 @@ func testApplier(t *testing.T) (Applier, *fakeService) {
 	}
 	svc := &fakeService{}
 	return Applier{
-		Backend:    NewDnsmasq(paths),
-		Links:      testLinks(),
-		Service:    svc,
-		Paths:      paths,
-		ConfigPath: filepath.Join(root, "dhcp.json"),
+		Backend: NewDnsmasq(paths),
+		Links:   testLinks(),
+		Service: svc,
+		Paths:   paths,
+		Store:   core.NewStore(filepath.Join(root, "olr.json"), ModuleName),
 		// Pinned rather than left to PortConflict, which would read the build
 		// machine's /proc and make these tests depend on whether anything
 		// happens to be serving DHCP there.
@@ -101,13 +122,16 @@ func TestApplyOnAFreshSystem(t *testing.T) {
 		t.Fatalf("Apply: %v", err)
 	}
 
-	if _, err := os.Stat(a.ConfigPath); err != nil {
+	if _, err := os.Stat(a.Store.Path()); err != nil {
 		t.Errorf("intent was not stored: %v", err)
 	}
 	if _, err := os.Stat(a.Paths.Conf); err != nil {
 		t.Errorf("dnsmasq.conf was not written: %v", err)
 	}
-	if want := []string{"start"}; !equalStrings(svc.calls, want) {
+	// Enabled as well as started. A router that serves DHCP until its next
+	// power cut and then does not is the failure this ordering exists to
+	// prevent, so both calls are asserted rather than just the visible one.
+	if want := []string{"enable", "start"}; !equalStrings(svc.calls, want) {
 		t.Errorf("service calls = %v, want %v", svc.calls, want)
 	}
 	if result.Plan.Action != ActionStart {
@@ -117,6 +141,116 @@ func TestApplyOnAFreshSystem(t *testing.T) {
 		if !step.Done {
 			t.Errorf("step %q did not complete: %s", step.Description, step.Error)
 		}
+	}
+}
+
+// A unit that is running but not enabled is the shape of the bug this phase
+// exists to close: everything looks healthy, and the box comes back from a
+// power cut with no DHCP at all. It has to read as drift.
+func TestAnEnabledConfigOnADisabledUnitIsDrift(t *testing.T) {
+	a, svc := testApplier(t)
+	c := validConfig(t)
+
+	if _, err := a.Apply(context.Background(), c); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if !svc.enabled {
+		t.Fatal("the first apply did not enable the unit")
+	}
+
+	// Somebody ran `systemctl disable olr-dhcp` behind our back.
+	svc.enabled = false
+	svc.calls = nil
+
+	plan, err := a.Drift(context.Background())
+	if err != nil {
+		t.Fatalf("Drift: %v", err)
+	}
+	if plan.Empty() {
+		t.Fatal("a disabled unit was not reported as drift")
+	}
+	if plan.Enable == nil || !*plan.Enable {
+		t.Fatalf("Enable = %v, want a pending enable", plan.Enable)
+	}
+	// Said in the operator's terms, because the consequence is invisible until
+	// the next reboot.
+	if !strings.Contains(strings.Join(plan.Reasons, " "), "reboot") {
+		t.Errorf("reasons do not explain the consequence: %v", plan.Reasons)
+	}
+	// Nothing a client holds changes when a unit is enabled.
+	if plan.Impact != ImpactNone {
+		t.Errorf("Impact = %s, want none", plan.Impact)
+	}
+
+	if _, err := a.Apply(context.Background(), c); err != nil {
+		t.Fatalf("second Apply: %v", err)
+	}
+	if !equalStrings(svc.calls, []string{"enable"}) {
+		t.Errorf("service calls = %v, want [enable] and nothing else", svc.calls)
+	}
+}
+
+// Disabling means both halves too, or the box would come back serving DHCP the
+// operator had switched off.
+func TestDisablingStopsAndDisables(t *testing.T) {
+	a, svc := testApplier(t)
+	c := validConfig(t)
+
+	if _, err := a.Apply(context.Background(), c); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	svc.calls = nil
+
+	c.Enabled = false
+	if _, err := a.Apply(context.Background(), c); err != nil {
+		t.Fatalf("Apply disabling: %v", err)
+	}
+
+	if !equalStrings(svc.calls, []string{"disable", "stop"}) {
+		t.Errorf("service calls = %v, want [disable stop]", svc.calls)
+	}
+	if svc.enabled {
+		t.Error("the unit still starts at boot after being disabled")
+	}
+}
+
+// D-Bus answers a missing unit with a bare "Unit ... not found", which names
+// neither the cause nor the fix. A missing unit file is a packaging problem.
+func TestApplyRefusesWhenTheUnitIsNotInstalled(t *testing.T) {
+	a, svc := testApplier(t)
+	svc.notInstalled = true
+
+	result, err := a.Apply(context.Background(), validConfig(t))
+	if err == nil {
+		t.Fatal("Apply drove a unit that is not installed")
+	}
+	if !strings.Contains(err.Error(), "not installed") {
+		t.Errorf("error does not name the cause: %v", err)
+	}
+	if !strings.Contains(err.Error(), "Reinstall") {
+		t.Errorf("error does not name the fix: %v", err)
+	}
+	if len(svc.calls) != 0 {
+		t.Errorf("the service was driven anyway: %v", svc.calls)
+	}
+	// Intent is still stored: the config is fine, the box is not, and a re-run
+	// after fixing the package should have something to finish from (§5.3.2).
+	if _, err := os.Stat(a.Store.Path()); err != nil {
+		t.Errorf("intent was not stored before the refusal: %v", err)
+	}
+	if len(result.Steps) == 0 {
+		t.Error("no steps reported, so the operator cannot tell what landed")
+	}
+}
+
+// A developer box has no system bus. "We cannot tell" must not be reported as
+// "it is broken" (§3.4) — the same rule verifyServing follows.
+func TestApplyDoesNotRefuseWhenThereIsNoServiceManager(t *testing.T) {
+	a, svc := testApplier(t)
+	svc.statusErr = ErrNoServiceManager
+
+	if _, err := a.Apply(context.Background(), validConfig(t)); err != nil {
+		t.Fatalf("Apply refused on a box with no service manager: %v", err)
 	}
 }
 
@@ -271,7 +405,7 @@ func TestApplyRejectsAnInvalidConfigBeforeWritingAnything(t *testing.T) {
 	if _, err := a.Apply(context.Background(), c); err == nil {
 		t.Fatal("Apply accepted an invalid config")
 	}
-	if _, err := os.Stat(a.ConfigPath); !os.IsNotExist(err) {
+	if _, err := os.Stat(a.Store.Path()); !os.IsNotExist(err) {
 		t.Error("an invalid config was still stored")
 	}
 	if _, err := os.Stat(a.Paths.Conf); !os.IsNotExist(err) {
@@ -353,46 +487,6 @@ func TestPortCheckDoesNotBlockAReload(t *testing.T) {
 	}
 }
 
-func TestWriteFileAtomicReplacesAndLeavesNoTemporaries(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "sub", "file.conf")
-
-	if err := writeFileAtomic(path, []byte("first\n"), 0o644); err != nil {
-		t.Fatalf("writeFileAtomic: %v", err)
-	}
-	if err := writeFileAtomic(path, []byte("second\n"), 0o600); err != nil {
-		t.Fatalf("writeFileAtomic: %v", err)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != "second\n" {
-		t.Errorf("content = %q, want %q", data, "second\n")
-	}
-
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Errorf("mode = %v, want 0600", info.Mode().Perm())
-	}
-
-	entries, err := os.ReadDir(filepath.Dir(path))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 1 {
-		names := make([]string, len(entries))
-		for i, e := range entries {
-			names[i] = e.Name()
-		}
-		t.Errorf("temporary files left behind: %v", names)
-	}
-}
-
 // design.md §11.5: a dead DHCP server is invisible for hours and then breaks
 // every device at once. The unit is Type=simple, so systemd reports the start
 // job done the moment the process is forked — before dnsmasq has read a config
@@ -415,8 +509,8 @@ func TestApplyFailsWhenTheBackendExitsAfterStarting(t *testing.T) {
 
 	// The start still happened, so the operator has to be told the difference
 	// between "we never tried" and "we tried and it died".
-	if !equalStrings(svc.calls, []string{"start"}) {
-		t.Errorf("service calls = %v, want [start]", svc.calls)
+	if !equalStrings(svc.calls, []string{"enable", "start"}) {
+		t.Errorf("service calls = %v, want [enable start]", svc.calls)
 	}
 	var verify *Step
 	for i, s := range result.Steps {

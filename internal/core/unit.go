@@ -32,6 +32,16 @@ type Unit interface {
 	Restart(ctx context.Context) error
 	// Reload signals the unit to re-read what it can without restarting.
 	Reload(ctx context.Context) error
+
+	// Enable makes the unit start at boot, and Disable stops it doing so.
+	//
+	// These are separate from Start and Stop because they answer a different
+	// question, and conflating them is how a router comes back from a power cut
+	// with no DHCP. Start is "run now"; Enable is "run after the next reboot
+	// too". A module whose config says the service is on means both — the
+	// operator did not ask for a server that survives until the next power cut.
+	Enable(ctx context.Context) error
+	Disable(ctx context.Context) error
 }
 
 // UnitStatus is the daemon-liveness half of `olr status` (design.md §5.4) —
@@ -43,6 +53,14 @@ type UnitStatus struct {
 	Active bool `json:"active"`
 	// Enabled reports whether it starts at boot.
 	Enabled bool `json:"enabled"`
+	// Installed reports whether the unit file exists at all.
+	//
+	// Distinguished from Enabled because the two failures need different
+	// answers: a unit that is installed but disabled is a config problem olr
+	// can fix on the next apply, while a unit that was never installed means
+	// the package is broken or absent and no amount of applying will help.
+	// Without this the operator gets D-Bus's bare "Unit ... not found".
+	Installed bool `json:"installed"`
 	// State is systemd's ActiveState, verbatim, so an unusual one is reported
 	// rather than flattened into a boolean.
 	State string `json:"state"`

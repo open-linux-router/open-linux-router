@@ -5,19 +5,13 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
-)
 
-// SchemaURL is the published schema for this module's config file.
-//
-// JSON has no comments, so this key stands in for the ownership header every
-// other generated file carries (design.md §3.4), and has the side benefit of
-// making the file validate in an editor.
-const SchemaURL = "https://open-linux-router.org/schema/v1/dhcp.json"
+	"github.com/open-linux-router/open-linux-router/internal/core"
+)
 
 // DefaultLeaseTime applies to any pool that does not set one. dnsmasq's own
 // default is one hour, which is short enough that a busy LAN renews constantly.
@@ -34,10 +28,6 @@ const MinLeaseTime = Duration(2 * time.Minute)
 // Fields without `omitempty` are reflected as schema-required (design.md §10,
 // config format), so the tags are load-bearing.
 type Config struct {
-	// Schema points at SchemaURL. Purely informational to us; we neither
-	// require nor validate it.
-	Schema string `json:"$schema,omitempty"`
-
 	// Enabled controls whether the DHCP server runs at all. Disabling stops the
 	// service but keeps the configuration, so it can be turned back on without
 	// retyping it.
@@ -412,16 +402,16 @@ func (c *Config) RemoveReservation(mac string) bool {
 	return true
 }
 
-// MarshalConfig renders the config as the bytes we would write to disk:
-// indented, schema-stamped, newline-terminated.
+// MarshalConfig renders the config as the module's subtree of the document.
+//
+// It does not stamp a "$schema" key: the document has exactly one, written by
+// the store (core.SchemaURL), and a second one nested inside a module's subtree
+// would be a claim this module is not in a position to make. Indentation is
+// likewise not ours — the store re-indents the whole document in one pass, so
+// what matters here is only the values and their canonical order.
 func MarshalConfig(c Config) ([]byte, error) {
-	c.Schema = SchemaURL
 	c.Normalize()
-	b, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	return append(b, '\n'), nil
+	return json.Marshal(c)
 }
 
 // UnmarshalConfig parses a config, rejecting unknown fields.
@@ -440,20 +430,19 @@ func UnmarshalConfig(data []byte) (Config, error) {
 	return c, nil
 }
 
-// LoadConfig reads a config file. A missing file is not an error — it means the
-// module has never been configured, which is a legitimate state and exactly
-// what a fresh install looks like.
-func LoadConfig(path string) (Config, error) {
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
+// FromDocument reads this module's subtree out of the configuration document.
+//
+// A document without a "dhcp" key is not an error — it means the module has
+// never been configured, which is a legitimate state and exactly what a fresh
+// install looks like.
+func FromDocument(d core.Document) (Config, error) {
+	raw, ok := d.Raw(ModuleName)
+	if !ok {
 		return Config{}, nil
 	}
+	c, err := UnmarshalConfig(raw)
 	if err != nil {
-		return Config{}, fmt.Errorf("reading %s: %w", path, err)
-	}
-	c, err := UnmarshalConfig(data)
-	if err != nil {
-		return Config{}, fmt.Errorf("%s: %w", path, err)
+		return Config{}, fmt.Errorf("%s configuration: %w", ModuleName, err)
 	}
 	return c, nil
 }

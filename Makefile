@@ -14,6 +14,17 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
+# Package version, which is not the same string as VERSION: dpkg and apk want
+# a number, and `git describe` on an untagged tree gives a bare commit hash.
+# Falls back to 0.0.0 so `make package` works on a fresh clone.
+PKGVERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+ifeq ($(strip $(PKGVERSION)),)
+PKGVERSION := 0.0.0
+endif
+
+# Architectures both packaging targets build for.
+ARCHES := amd64 arm64
+
 LDFLAGS := -s -w \
   -X github.com/open-linux-router/open-linux-router/internal/buildinfo.Version=$(VERSION) \
   -X github.com/open-linux-router/open-linux-router/internal/buildinfo.Commit=$(COMMIT) \
@@ -98,6 +109,41 @@ dev: build ## Run olrd against a scratch root, for `npm run dev` to proxy to
 	  --root $(DEV_ROOT) \
 	  --links $(WEB)/dev-links.json \
 	  --log-level debug
+
+.PHONY: package
+package: web cross ## Build .deb and .apk for every architecture
+	@# The dependency on dnsmasq is declared in the package rather than checked
+	@# in Go: apt resolves it before any of our code runs.
+	@command -v nfpm >/dev/null 2>&1 || { \
+	  echo "nfpm not found. Install it with:"; \
+	  echo "  go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest"; \
+	  exit 1; }
+	@mkdir -p $(DIST)
+	for arch in $(ARCHES); do \
+	  for packager in deb apk; do \
+	    ARCH=$$arch VERSION=$(PKGVERSION) \
+	      nfpm package -f packaging/nfpm.yaml -p $$packager -t $(DIST) || exit 1; \
+	  done; \
+	done
+	@ls -1 $(DIST)/*.deb $(DIST)/*.apk 2>/dev/null || true
+
+.PHONY: tarball
+tarball: web cross ## Build the static tarballs, for distributions the .deb does not cover
+	@# The fallback path, and it is a fallback: without a package manager
+	@# nothing resolves the dnsmasq dependency, so install.sh has to look for it
+	@# by hand and write a unit drop-in when the path is not Debian's.
+	for arch in $(ARCHES); do \
+	  stage=$(DIST)/olr-$(PKGVERSION)-linux-$$arch; \
+	  rm -rf $$stage && mkdir -p $$stage/systemd; \
+	  cp $(DIST)/$(BIN)-linux-$$arch $$stage/$(BIN); \
+	  cp $(DIST)/$(DBIN)-linux-$$arch $$stage/$(DBIN); \
+	  cp packaging/systemd/*.service $$stage/systemd/; \
+	  cp packaging/tarball/install.sh $$stage/install.sh; \
+	  chmod +x $$stage/install.sh $$stage/$(BIN) $$stage/$(DBIN); \
+	  tar -C $(DIST) -czf $$stage.tar.gz $$(basename $$stage) || exit 1; \
+	  rm -rf $$stage; \
+	done
+	@ls -1 $(DIST)/*.tar.gz 2>/dev/null || true
 
 .PHONY: test
 test: ## Run tests

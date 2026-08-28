@@ -1,0 +1,73 @@
+# Package definition for nfpm (https://nfpm.goreleaser.com).
+#
+# One artefact serves both distribution routes. A .deb attached to a GitHub
+# release installs with `apt install ./olr_*.deb`, and the same file goes into
+# an apt repository later without being rebuilt — so choosing to host a
+# repository is a decision that can be deferred rather than one that has to be
+# made now.
+#
+# The dependency is the point. design.md §3.4 gives DHCP away to dnsmasq, and
+# declaring that here means "is dnsmasq installed, and where" stops being a
+# question olr has to answer in Go: apt answers it, and answers it before any
+# of our code runs.
+
+name: olr
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+section: net
+priority: optional
+maintainer: open-linux-router <iloahz@gmail.com>
+vendor: open-linux-router
+homepage: https://github.com/open-linux-router/open-linux-router
+license: MIT
+description: |
+  Router control plane for an ordinary Linux box.
+  olr renders configuration for the daemons a router is already made of —
+  dnsmasq, nftables, unbound — and drives them through systemd, over a CLI,
+  a REST API and a web UI generated from one schema. The box stays an
+  ordinary Linux machine: nothing outside olr's declared scope is touched.
+
+depends:
+  - dnsmasq-base
+
+overrides:
+  apk:
+    depends:
+      # Alpine has no split base package.
+      - dnsmasq
+  rpm:
+    depends:
+      - dnsmasq
+
+contents:
+  - src: dist/olr-linux-${ARCH}
+    dst: /usr/bin/olr
+    file_info:
+      mode: 0755
+
+  - src: dist/olrd-linux-${ARCH}
+    dst: /usr/bin/olrd
+    file_info:
+      mode: 0755
+
+  # Units, not enabled here. postinstall enables olrd, because a control plane
+  # that is installed and not running is a surprise; olr-dhcp.service is left
+  # alone deliberately — the dhcp module enables it when its configuration says
+  # DHCP is on, and enabling it here would start a DHCP server nobody asked for.
+  - src: packaging/systemd/olrd.service
+    dst: /lib/systemd/system/olrd.service
+  - src: packaging/systemd/olr-dhcp.service
+    dst: /lib/systemd/system/olr-dhcp.service
+
+  # The configuration document lives here. Created empty: an absent document
+  # means "never configured", which is what a fresh install is.
+  - dst: /etc/open-linux-router
+    type: dir
+    file_info:
+      mode: 0755
+
+scripts:
+  postinstall: packaging/scripts/postinstall.sh
+  preremove: packaging/scripts/preremove.sh
+  postremove: packaging/scripts/postremove.sh

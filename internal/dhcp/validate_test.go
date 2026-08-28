@@ -207,6 +207,21 @@ func TestValidateRejects(t *testing.T) {
 		mutate:  func(c *Config) { c.ExtraConf = "# a comment\nport=53" },
 		path:    "extra_dnsmasq_conf line 2",
 		message: "belongs to the dns module",
+	}, {
+		// Rendered unconditionally now, so setting it here would emit the
+		// directive twice.
+		name:    "escape hatch sets dhcp-authoritative",
+		mutate:  func(c *Config) { c.ExtraConf = "dhcp-authoritative" },
+		path:    "extra_dnsmasq_conf line 1",
+		message: "authoritative by construction",
+	}, {
+		// The lease ceiling is derived from the pools; a hand-set one would
+		// silently cap a pool that olr reports as having free addresses, which
+		// is the exact bug rendering it was meant to fix.
+		name:    "escape hatch sets dhcp-lease-max",
+		mutate:  func(c *Config) { c.ExtraConf = "dhcp-lease-max=50" },
+		path:    "extra_dnsmasq_conf line 1",
+		message: "sized from the configured pools",
 	}}
 
 	for _, tc := range tests {

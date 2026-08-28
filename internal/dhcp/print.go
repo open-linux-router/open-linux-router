@@ -6,7 +6,8 @@ import (
 	"net/netip"
 	"strings"
 	"text/tabwriter"
-	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 // Text output for humans; -o json is the machine-readable surface. Both come
@@ -77,20 +78,25 @@ func writeReservationsText(w io.Writer, reservations []Reservation) error {
 	return t.Flush()
 }
 
-func writeLeasesText(w io.Writer, leases []Lease, problems []Problem) error {
-	if len(leases) == 0 {
+func writeLeasesText(w io.Writer, resp leasesResponse) error {
+	if len(resp.Leases) == 0 {
 		fmt.Fprintln(w, "No leases held.")
 	} else {
-		now := time.Now()
 		t := table(w)
 		fmt.Fprintln(t, "ADDRESS\tCLIENT\tHOSTNAME\tEXPIRES")
-		for _, l := range leases {
+		for _, l := range resp.Leases {
 			client := l.MAC
 			if client == "" {
 				client = "iaid " + l.IAID
 			}
-			expires := humanTime(l.Expires)
-			if !l.Active(now) {
+			// Active is computed by the server against the same instant it
+			// stamped the response with, so it is not recomputed here against a
+			// different clock.
+			expires := "never"
+			if l.Expires != nil {
+				expires = humanTime(*l.Expires)
+			}
+			if !l.Active {
 				expires += " (expired)"
 			}
 			fmt.Fprintf(t, "%s\t%s\t%s\t%s\n", l.IP, client, orDash(l.Hostname), expires)
@@ -102,68 +108,88 @@ func writeLeasesText(w io.Writer, leases []Lease, problems []Problem) error {
 
 	// Unparsable lines are reported rather than dropped: a silently short count
 	// looks exactly like a quiet network (design.md §3.4, report honestly).
-	if len(problems) > 0 {
-		fmt.Fprintf(w, "\n%s in the lease database could not be read:\n", plural(len(problems), "line"))
-		for _, p := range problems {
-			fmt.Fprintf(w, "  %s\n", p)
+	if len(resp.Problems) > 0 {
+		fmt.Fprintf(w, "\n%s in the lease database could not be read:\n", plural(len(resp.Problems), "line"))
+		for _, p := range resp.Problems {
+			fmt.Fprintf(w, "  %s\n", problemText(p))
 		}
 	}
 	return nil
 }
 
-func writeStatusText(
-	w io.Writer, cfg Config, a Applier,
-	service ServiceStatus, serviceErr error,
-	leases []Lease, problems []Problem, extra map[string]any,
-) error {
+// problemText renders a core.Problem the way dhcp.Problem renders itself, so
+// the CLI's wording does not depend on which side of the API it came from.
+func problemText(p core.Problem) string {
+	if p.Path == "" {
+		return p.Message
+	}
+	return p.Path + ": " + p.Message
+}
+
+func writeStatusText(w io.Writer, status statusResponse, leases leasesResponse) error {
 	state := "disabled"
-	if cfg.Enabled {
+	if status.Enabled {
 		state = "enabled"
 	}
 	fmt.Fprintf(w, "configuration: %s\n", state)
 
 	switch {
-	case serviceErr != nil:
-		fmt.Fprintf(w, "service:       unknown (%v)\n", serviceErr)
-	case service.Active:
-		fmt.Fprintf(w, "service:       %s, running since %s", service.Unit, humanTime(service.Since))
-		if service.MainPID > 0 {
-			fmt.Fprintf(w, " (pid %d)", service.MainPID)
+	case status.Service == nil:
+		fmt.Fprintf(w, "service:       unknown (%s)\n", orDash(status.ServiceError))
+	case status.Service.Active:
+		fmt.Fprintf(w, "service:       %s, running since %s",
+			status.Service.Unit, humanTime(status.Service.Since))
+		if status.Service.MainPID > 0 {
+			fmt.Fprintf(w, " (pid %d)", status.Service.MainPID)
 		}
 		fmt.Fprintln(w)
 	default:
-		fmt.Fprintf(w, "service:       %s, %s\n", service.Unit, orDash(service.State))
+		fmt.Fprintf(w, "service:       %s, %s\n", status.Service.Unit, orDash(status.Service.State))
 	}
 
-	if drifted, ok := extra["drifted"].(bool); ok {
-		if drifted {
-			fmt.Fprintf(w, "drift:         yes — run `olr dhcp show --dry-run` to see it\n")
-		} else {
-			fmt.Fprintln(w, "drift:         none")
+	// Reported on its own line, because a unit that is running now and not
+	// enabled is the failure that costs nothing until the next reboot and then
+	// costs every address on the network at once.
+	if status.Service != nil {
+		boot := "yes"
+		if !status.Service.Enabled {
+			boot = "NO — DHCP will not come back after a reboot"
+			if !status.Service.Installed {
+				boot = "no — the unit is not installed; reinstall the olr package"
+			}
 		}
-	} else {
-		// Honest about not knowing, rather than reporting "no drift" because
-		// we could not look.
-		fmt.Fprintln(w, "drift:         unknown (pass --links to check)")
+		fmt.Fprintf(w, "starts at boot: %s\n", boot)
 	}
 
-	fmt.Fprintf(w, "leases:        %d\n", len(leases))
+	switch {
+	case status.DriftError != "":
+		// Honest about not knowing, rather than reporting "no drift" because we
+		// could not look.
+		fmt.Fprintf(w, "drift:         unknown (%s)\n", status.DriftError)
+	case status.Drifted:
+		fmt.Fprintln(w, "drift:         yes — run `olr dhcp show --dry-run` to see it")
+	default:
+		fmt.Fprintln(w, "drift:         none")
+	}
 
-	if usage := a.Usage(cfg, leases); len(usage) > 0 {
+	fmt.Fprintf(w, "leases:        %d\n", len(leases.Leases))
+
+	if len(leases.Usage) > 0 {
 		fmt.Fprintln(w)
 		t := table(w)
 		fmt.Fprintln(t, "INTERFACE\tSIZE\tACTIVE\tEXPIRED\tFREE\tUSED")
-		for _, u := range usage {
+		for _, u := range leases.Usage {
 			fmt.Fprintf(t, "%s\t%d\t%d\t%d\t%d\t%d%%\n",
-				u.Interface, u.Size, u.Active, u.Expired, u.Free(), u.Percent())
+				u.Interface, u.Size, u.Active, u.Expired, u.Free, u.Percent)
 		}
 		if err := t.Flush(); err != nil {
 			return err
 		}
 	}
 
-	if len(problems) > 0 {
-		fmt.Fprintf(w, "\n%s in the lease database could not be read\n", plural(len(problems), "line"))
+	if len(leases.Problems) > 0 {
+		fmt.Fprintf(w, "\n%s in the lease database could not be read\n",
+			plural(len(leases.Problems), "line"))
 	}
 	return nil
 }
@@ -172,10 +198,10 @@ func writeStatusText(
 // past tense, because "would restart" and "restarted" are answers to different
 // questions and conflating them is how an operator ends up unsure whether
 // anything happened.
-func writePlanText(w io.Writer, plan Plan, dryRun bool) error {
-	if plan.Empty() {
+func writePlanText(w io.Writer, plan planView, dryRun bool) error {
+	if plan.Empty {
 		fmt.Fprintln(w, "Nothing to do; the configuration is already applied.")
-		return writeWarnings(w, plan.Validation.Warnings)
+		return writeWarnings(w, plan.Warnings)
 	}
 
 	verb := map[bool]string{true: "would change", false: "changed"}[dryRun]
@@ -187,6 +213,10 @@ func writePlanText(w io.Writer, plan Plan, dryRun bool) error {
 	if plan.Action != ActionNone {
 		fmt.Fprintf(w, "\nservice: %s\n", describeAction(plan.Action, dryRun))
 	}
+	if plan.Enable != nil {
+		fmt.Fprintf(w, "boot:    %s\n",
+			describeEnable(*plan.Enable, dryRun))
+	}
 	fmt.Fprintf(w, "impact:  %s\n", plan.Impact)
 	for _, reason := range plan.Reasons {
 		fmt.Fprintf(w, "         %s\n", reason)
@@ -195,20 +225,20 @@ func writePlanText(w io.Writer, plan Plan, dryRun bool) error {
 	if dryRun {
 		fmt.Fprintln(w)
 		for _, c := range plan.Changes {
-			fmt.Fprintln(w, c.Diff())
+			fmt.Fprintln(w, c.Diff)
 		}
 	}
 
-	return writeWarnings(w, plan.Validation.Warnings)
+	return writeWarnings(w, plan.Warnings)
 }
 
-func writeWarnings(w io.Writer, warnings []Problem) error {
+func writeWarnings(w io.Writer, warnings []core.Problem) error {
 	if len(warnings) == 0 {
 		return nil
 	}
 	fmt.Fprintf(w, "\n%s:\n", plural(len(warnings), "warning"))
 	for _, p := range warnings {
-		fmt.Fprintf(w, "  %s\n", p)
+		fmt.Fprintf(w, "  %s\n", problemText(p))
 	}
 	return nil
 }
@@ -252,6 +282,20 @@ func describeAction(action ServiceAction, dryRun bool) string {
 		return past
 	}
 	return string(action)
+}
+
+// describeEnable words the boot-time change, in the same two tenses.
+func describeEnable(enable, dryRun bool) string {
+	switch {
+	case enable && dryRun:
+		return "would be set to start at boot"
+	case enable:
+		return "set to start at boot"
+	case dryRun:
+		return "would no longer start at boot"
+	default:
+		return "no longer starts at boot"
+	}
 }
 
 func orDash(s string) string {

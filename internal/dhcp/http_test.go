@@ -111,7 +111,7 @@ func TestInvalidConfigIsRejectedBeforeAnythingIsWritten(t *testing.T) {
 		t.Errorf("no field-addressed problem returned: %+v", body.Error)
 	}
 
-	if _, err := os.Stat(applier.ConfigPath); !os.IsNotExist(err) {
+	if _, err := os.Stat(applier.Store.Path()); !os.IsNotExist(err) {
 		t.Error("a rejected config was written to disk anyway")
 	}
 	if _, err := os.Stat(applier.Paths.Conf); !os.IsNotExist(err) {
@@ -297,7 +297,7 @@ func TestPlanDoesNotApply(t *testing.T) {
 		t.Error("plan carried no diff")
 	}
 
-	if _, err := os.Stat(applier.ConfigPath); !os.IsNotExist(err) {
+	if _, err := os.Stat(applier.Store.Path()); !os.IsNotExist(err) {
 		t.Error("a plan wrote the config to disk")
 	}
 }

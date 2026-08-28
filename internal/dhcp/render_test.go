@@ -77,7 +77,11 @@ func TestRenderEverything(t *testing.T) {
 		{MAC: "aa:bb:cc:dd:ee:ff", IP: addr(t, "192.168.1.50"), Hostname: "nas"},
 		{MAC: "11:22:33:44:55:66", IP: addr(t, "192.168.1.51"), LeaseTime: Duration(0)},
 	}
-	c.ExtraConf = "log-dhcp\ndhcp-authoritative"
+	// Directives the module does not render itself, which is the whole point of
+	// the escape hatch. dhcp-authoritative used to stand here and no longer can:
+	// the module renders it now, so setting it through extra_dnsmasq_conf is a
+	// validation error (see TestExtraConfMayNotSetARenderedDirective).
+	c.ExtraConf = "log-dhcp\ndhcp-rapid-commit"
 
 	renderGolden(t, "everything", c, testLinks())
 }
@@ -169,6 +173,36 @@ func TestRenderIsDeterministic(t *testing.T) {
 		if string(first.Files[i].Data) != string(second.Files[i].Data) {
 			t.Errorf("%s differs after reordering the config", first.Files[i].Path)
 		}
+	}
+}
+
+// dnsmasq's default ceiling is 1000 leases and it is enforced silently: past
+// it the daemon simply stops answering, while `olr dhcp status` goes on
+// reporting free addresses from the range. Sizing the directive to the pools is
+// what keeps those two answers the same.
+func TestLeaseMaxCoversThePools(t *testing.T) {
+	small := validConfig(t) // 192.168.1.100-200, well under the default
+	if got := leaseMax(small); got != DefaultLeaseMax {
+		t.Errorf("leaseMax for a small pool = %d, want dnsmasq's own default %d", got, DefaultLeaseMax)
+	}
+
+	// A /16 worth of pool: 8000 addresses plus a reservation outside it.
+	big := validConfig(t)
+	big.Pools[0].Start = addr(t, "192.168.1.1")
+	big.Pools[0].End = addr(t, "192.168.32.64")
+	big.Reservations = []Reservation{{MAC: "aa:bb:cc:dd:ee:ff", IP: addr(t, "192.168.1.50")}}
+
+	want := RangeSize(big.Pools[0].Start, big.Pools[0].End) + 1
+	if got := leaseMax(big); got != want {
+		t.Errorf("leaseMax = %d, want %d (every address in the pool, plus the reservation)", got, want)
+	}
+
+	// A stateful DHCPv6 range hands out addresses too, so it has to be counted
+	// or the ceiling would be short by exactly the size of that range.
+	v6 := validConfig(t)
+	v6.Pools[0].RA = RAStateful
+	if got, floor := leaseMax(v6), RangeSize(v6.Pools[0].Start, v6.Pools[0].End)+StatefulRASize; got < floor && floor > DefaultLeaseMax {
+		t.Errorf("leaseMax = %d, want at least %d for a stateful IPv6 range", got, floor)
 	}
 }
 

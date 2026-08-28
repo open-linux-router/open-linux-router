@@ -7,10 +7,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-)
 
-// ConfigPath is where the module's intent lives. Core revisions this file.
-const ConfigPath = "/etc/open-linux-router/dhcp.json"
+	"github.com/open-linux-router/open-linux-router/internal/core"
+)
 
 // Paths locates everything the backend writes or tells the daemon about.
 //
@@ -62,11 +61,6 @@ func RootedPaths(root string) Paths {
 		LeaseFile: filepath.Join(root, "/var/lib/open-linux-router/dhcp/leases"),
 		PIDFile:   filepath.Join(root, "/run/olr/dhcp/dhcp.pid"),
 	}
-}
-
-// RootedConfigPath is ConfigPath relocated under root, on the same terms.
-func RootedConfigPath(root string) string {
-	return filepath.Join(root, ConfigPath)
 }
 
 // File is one rendered file.
@@ -140,7 +134,7 @@ type Dnsmasq struct {
 }
 
 // NewDnsmasq returns a backend writing to the given layout.
-func NewDnsmasq(p Paths) Dnsmasq { return Dnsmasq{Paths: p, Source: ConfigPath} }
+func NewDnsmasq(p Paths) Dnsmasq { return Dnsmasq{Paths: p, Source: core.ConfigPath} }
 
 // WithSource names the intent file in generated headers.
 func (d Dnsmasq) WithSource(path string) Dnsmasq {
@@ -166,7 +160,7 @@ func (Dnsmasq) Unit() string { return "olr-dhcp.service" }
 func (d Dnsmasq) header(what string) string {
 	source := d.Source
 	if source == "" {
-		source = ConfigPath
+		source = core.ConfigPath
 	}
 	return fmt.Sprintf(`# %s
 #
@@ -176,6 +170,32 @@ func (d Dnsmasq) header(what string) string {
 # lost. Use `+"`olr dhcp set`"+`, or the extra_dnsmasq_conf field for settings
 # olr does not model.
 `, what, source)
+}
+
+// Canonical reduces a rendered file to what dnsmasq actually reads: comments
+// and blank lines removed.
+//
+// This is what stops a comment from being a config change. Roughly half of what
+// we render is the ownership header and the explanations around each directive,
+// all of it string literals in this file — so without normalisation, editing
+// one of those comments in a new olr release would mark every deployed box as
+// drifted and schedule a restart of its DHCP server. The file still gets
+// rewritten; it just stops being a reason to signal the daemon.
+//
+// Normalisation belongs to the backend rather than to the planner because it is
+// a statement about *this* file format. A future nftables or unbound backend
+// brings its own; the planner only ever calls this.
+func (Dnsmasq) Canonical(data []byte) []byte {
+	lines := strings.Split(string(data), "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		kept = append(kept, trimmed)
+	}
+	return []byte(strings.Join(kept, "\n"))
 }
 
 // reloadable reports whether a path sits in one of the directories dnsmasq
@@ -263,6 +283,26 @@ except-interface=lo
 	fmt.Fprintf(&b, "dhcp-hostsdir=%s\n", d.Paths.HostsDir)
 	fmt.Fprintf(&b, "dhcp-optsdir=%s\n", d.Paths.OptsDir)
 
+	b.WriteString(`
+# We refuse to start when anything else holds UDP/67, so dnsmasq genuinely is
+# the only DHCP server here and the precondition for this directive holds.
+#
+# It is what makes "why did this device not get an address" stop being the
+# common support question. Without it dnsmasq ignores a DHCPREQUEST for a lease
+# it has no record of — a device returning after a range change, or after the
+# lease database was lost — and that client waits out a timeout instead of
+# being told to ask again.
+dhcp-authoritative
+`)
+
+	fmt.Fprintf(&b, `
+# dnsmasq's own default is 1000 leases, which a larger pool would hit silently:
+# it would simply stop answering while every olr surface still reported free
+# addresses. Sized from the configured pools instead, and never lowered below
+# dnsmasq's default so this can only ever raise the ceiling.
+dhcp-lease-max=%d
+`, leaseMax(c))
+
 	if !c.Enabled {
 		b.WriteString(`
 # NOTE: the dhcp module is disabled. The pools below are rendered so that
@@ -315,6 +355,36 @@ enable-ra
 	}
 
 	return []byte(b.String()), nil
+}
+
+// DefaultLeaseMax is dnsmasq's own ceiling on concurrent leases.
+//
+// It exists to stop a host inventing thousands of leases and exhausting the
+// daemon's memory, so it is a real defence and not merely a default to
+// override. leaseMax only ever raises it.
+const DefaultLeaseMax = 1000
+
+// StatefulRASize is how many addresses the stateful DHCPv6 range hands out.
+// It follows from the ::100–::1ff bounds raRange writes and is stated here so
+// the lease ceiling and the range cannot drift apart.
+const StatefulRASize = 0x100
+
+// leaseMax sizes dnsmasq's lease ceiling to what the config could actually hand
+// out.
+//
+// Every address in a pool, every reservation — which may legitimately sit
+// outside its pool's range and so cost an extra lease — and every stateful
+// DHCPv6 range. That total is a true upper bound: dnsmasq reuses a lease record
+// when an expired one is handed out again, so nothing accumulates beyond it.
+func leaseMax(c Config) int {
+	total := len(c.Reservations)
+	for _, p := range c.Pools {
+		total += RangeSize(p.Start, p.End)
+		if p.RA.OrDefault() == RAStateful {
+			total += StatefulRASize
+		}
+	}
+	return max(total, DefaultLeaseMax)
 }
 
 // raRange builds the IPv6 dhcp-range for a mode.

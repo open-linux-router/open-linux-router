@@ -57,11 +57,18 @@ func (s systemdUnit) Status(ctx context.Context) (UnitStatus, error) {
 	}
 	status.Active = status.State == "active" || status.State == "reloading"
 
-	// UnitFileState is "enabled", "disabled", "masked", "static", or absent
-	// when the unit file is not installed at all.
+	// UnitFileState is "enabled", "disabled", "masked", "static", or empty when
+	// the unit file is not installed at all — systemd answers for a unit it has
+	// never heard of rather than failing, so an absent state is the only signal
+	// that the file is missing.
 	switch unitFile := stringProp(props, "UnitFileState"); unitFile {
+	case "":
+		status.Installed = false
 	case "enabled", "enabled-runtime":
+		status.Installed = true
 		status.Enabled = true
+	default:
+		status.Installed = true
 	}
 
 	if ts := uint64Prop(props, "ActiveEnterTimestamp"); ts > 0 {
@@ -75,6 +82,57 @@ func (s systemdUnit) Start(ctx context.Context) error   { return s.job(ctx, "sta
 func (s systemdUnit) Stop(ctx context.Context) error    { return s.job(ctx, "stop") }
 func (s systemdUnit) Restart(ctx context.Context) error { return s.job(ctx, "restart") }
 func (s systemdUnit) Reload(ctx context.Context) error  { return s.job(ctx, "reload") }
+
+// Enable installs the unit's [Install] symlinks so it starts at boot.
+//
+// Idempotent, and called on every apply rather than only when the state
+// changes: it is one D-Bus round trip at human timescale, and the alternative —
+// tracking whether we think it is already enabled — is a cache that can be
+// wrong in the direction that loses DHCP after a reboot.
+func (s systemdUnit) Enable(ctx context.Context) error {
+	conn, err := s.connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	// runtime=false writes under /etc so it survives a reboot, which is the
+	// entire point. force=true lets an existing symlink be replaced rather than
+	// making a re-enable an error.
+	if _, _, err := conn.EnableUnitFilesContext(ctx, []string{s.unit}, false, true); err != nil {
+		return fmt.Errorf("enabling %s: %w", s.unit, err)
+	}
+	return s.reloadDaemon(ctx, conn)
+}
+
+// Disable removes those symlinks. It does not stop a running unit; the caller
+// decides that separately, because "do not come back after a reboot" and "stop
+// now" are different requests.
+func (s systemdUnit) Disable(ctx context.Context) error {
+	conn, err := s.connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if _, err := conn.DisableUnitFilesContext(ctx, []string{s.unit}, false); err != nil {
+		return fmt.Errorf("disabling %s: %w", s.unit, err)
+	}
+	return s.reloadDaemon(ctx, conn)
+}
+
+// reloadDaemon is systemd's daemon-reload, so the symlink change is visible to
+// systemd rather than only on disk.
+//
+// Over D-Bus rather than by running systemctl: §3.6's sandbox on olrd is
+// affordable precisely because olrd executes no subprocesses, and the first
+// exec added would cost most of it.
+func (s systemdUnit) reloadDaemon(ctx context.Context, conn *dbus.Conn) error {
+	if err := conn.ReloadContext(ctx); err != nil {
+		return fmt.Errorf("reloading the systemd manager after changing %s: %w", s.unit, err)
+	}
+	return nil
+}
 
 // job runs a unit job and waits for systemd to report how it finished.
 //
