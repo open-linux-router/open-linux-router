@@ -1,7 +1,7 @@
+import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDhcpLeases, useDhcpStatus } from '@/features/dhcp/queries'
@@ -25,46 +25,57 @@ export function OverviewPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
         <p className="text-sm text-muted-foreground">
-          One module is mounted so far. More arrive with link and dial.
+          One part of the router is set up so far. More arrive with link and dial.
         </p>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">DHCP</CardTitle>
-            <CardDescription>Address assignment</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {status.isPending ? (
-              <Skeleton className="h-6 w-24" />
-            ) : status.isError ? (
-              <p className="text-sm text-muted-foreground">Unavailable</p>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={status.data.enabled ? 'default' : 'secondary'}>
-                  {status.data.enabled ? 'Enabled' : 'Disabled'}
-                </Badge>
-                {status.data.drifted && !status.data.drift_error && (
-                  <Badge
-                    variant="secondary"
-                    className="bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                  >
-                    Not yet applied
+        {/* The whole card is the link. One target beats a card containing a
+            button, and it gives the row the same affordance as everywhere
+            else in the app. */}
+        <Card className="transition-colors focus-within:border-ring hover:border-foreground/20">
+          <Link to="/dhcp" className="block outline-none">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-1.5 text-base">
+                Addresses
+                <ChevronRight className="size-4 text-muted-foreground/60" aria-hidden />
+              </CardTitle>
+              <CardDescription>Handing out addresses to your devices</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {status.isPending ? (
+                <Skeleton className="h-5 w-24" />
+              ) : status.isError ? (
+                <p className="text-sm text-muted-foreground">Cannot reach the router</p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={status.data.enabled ? 'success' : 'secondary'}>
+                    {status.data.enabled ? 'On' : 'Off'}
                   </Badge>
-                )}
-              </div>
-            )}
-            <p className="text-sm text-muted-foreground">
-              {active === undefined ? '—' : `${active} active lease${active === 1 ? '' : 's'}`}
-            </p>
-            <Button variant="outline" size="sm" render={<Link to="/dhcp">Open DHCP</Link>} />
-          </CardContent>
+                  {status.data.drifted && !status.data.drift_error && (
+                    <Badge variant="warning">Not yet applied</Badge>
+                  )}
+                </div>
+              )}
+              {active === undefined ? (
+                <Skeleton className="h-4 w-32" />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {active} device{active === 1 ? '' : 's'} connected
+                </p>
+              )}
+            </CardContent>
+          </Link>
         </Card>
 
-        <Card className="border-dashed">
+        {/* Card draws its edge with a ring, so `border-dashed` alone was doing
+            nothing and this read as an equal peer to the live card. Drop the
+            ring and use a real dashed border to mark it as a placeholder. */}
+        <Card className="border border-dashed bg-transparent ring-0">
           <CardHeader>
-            <CardTitle className="text-base text-muted-foreground">Networks and WAN</CardTitle>
+            <CardTitle className="text-base text-muted-foreground">
+              Networks and internet
+            </CardTitle>
             <CardDescription>
               Arrives with the link and dial modules. Until then this box has no
               opinion about its own interfaces.

@@ -1,3 +1,4 @@
+import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -29,11 +30,15 @@ export function ReservationDialog({
   onOpenChange,
   initial,
   onSubmit,
+  onRemove,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   initial?: Reservation
   onSubmit: (reservation: Reservation) => void
+  /** Only supplied when editing. Removing is an edit to the thing you opened,
+      which is why it lives here rather than as a second button on the row. */
+  onRemove?: () => void
 }) {
   const [draft, setDraft] = useState<Reservation>(initial ?? EMPTY)
   const editing = initial !== undefined
@@ -54,10 +59,10 @@ export function ReservationDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{editing ? 'Edit fixed address' : 'Add fixed address'}</DialogTitle>
+          <DialogTitle>{editing ? 'Edit reserved address' : 'Reserve an address'}</DialogTitle>
           <DialogDescription>
-            Always give this device the same address. Adding one is a reload, so
-            connected clients are not interrupted.
+            Always give this device the same address. Devices stay connected
+            while this is added.
           </DialogDescription>
         </DialogHeader>
 
@@ -95,6 +100,18 @@ export function ReservationDialog({
         </div>
 
         <DialogFooter>
+          {onRemove && (
+            <Button
+              variant="destructive"
+              className="mr-auto"
+              onClick={() => {
+                onRemove()
+                onOpenChange(false)
+              }}
+            >
+              <Trash2 className="size-4" aria-hidden /> Remove
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

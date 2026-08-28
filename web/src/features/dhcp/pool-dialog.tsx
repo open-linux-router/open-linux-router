@@ -1,3 +1,4 @@
+import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -23,11 +24,22 @@ import type { Pool, RouterAdvertisementMode } from '@/lib/config-types'
 // The RA vocabulary comes from the published schema (RAMode.JSONSchema in Go),
 // so these labels are the only thing added here. The values themselves are not
 // restated — see config-types.ts.
-const RA_LABELS: Record<Exclude<RouterAdvertisementMode, ''>, string> = {
-  off: 'Off — no IPv6',
-  slaac: 'SLAAC — advertise the prefix (recommended)',
-  stateful: 'Stateful — also hand out addresses over DHCPv6',
-}
+//
+// Split into a short label and a hint because the label has to survive in the
+// closed trigger, where "SLAAC — advertise the prefix (recommended)" was
+// truncated into uselessness. The protocol name is not what an operator is
+// choosing between; what the devices end up doing is.
+const RA_OPTIONS: { value: Exclude<RouterAdvertisementMode, ''>; label: string; hint: string }[] = [
+  { value: 'off', label: 'Off', hint: 'No IPv6 on this network.' },
+  {
+    value: 'slaac',
+    label: 'Automatic',
+    hint: 'Devices choose their own IPv6 address. Recommended.',
+  },
+  { value: 'stateful', label: 'Managed', hint: 'The router hands out IPv6 addresses too.' },
+]
+
+const RA_LABEL = new Map(RA_OPTIONS.map((o) => [o.value as string, o.label]))
 
 const EMPTY: Pool = { interface: '', start: '', end: '' }
 
@@ -36,12 +48,16 @@ export function PoolDialog({
   onOpenChange,
   initial,
   onSubmit,
+  onRemove,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Undefined when adding. */
   initial?: Pool
   onSubmit: (pool: Pool) => void
+  /** Only supplied when editing. Removing is an edit to the thing you opened,
+      which is why it lives here rather than as a second button on the row. */
+  onRemove?: () => void
 }) {
   const [draft, setDraft] = useState<Pool>(initial ?? EMPTY)
   const editing = initial !== undefined
@@ -67,7 +83,7 @@ export function PoolDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{editing ? 'Edit pool' : 'Add pool'}</DialogTitle>
+          <DialogTitle>{editing ? 'Edit address range' : 'Add address range'}</DialogTitle>
           <DialogDescription>
             An address range served on one interface. The range must fall inside
             a subnet already configured on that interface.
@@ -86,8 +102,8 @@ export function PoolDialog({
             />
             {editing && (
               <p className="text-xs text-muted-foreground">
-                The interface identifies the pool and cannot be changed. Remove
-                and re-add to move it.
+                The interface identifies this range and cannot be changed.
+                Remove and re-add to move it.
               </p>
             )}
           </div>
@@ -132,13 +148,18 @@ export function PoolDialog({
                 value={draft.ra ?? 'off'}
                 onValueChange={(v) => field('ra', v as RouterAdvertisementMode)}
               >
-                <SelectTrigger id="pool-ra">
-                  <SelectValue />
+                <SelectTrigger id="pool-ra" className="w-full">
+                  {/* Without the render function this shows the raw schema
+                      value — the trigger read "slaac". */}
+                  <SelectValue>{(value: string) => RA_LABEL.get(value) ?? 'Off'}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(RA_LABELS).map(([value, label]) => (
+                  {RA_OPTIONS.map(({ value, label, hint }) => (
                     <SelectItem key={value} value={value}>
-                      {label}
+                      <span className="flex flex-col gap-0.5">
+                        <span>{label}</span>
+                        <span className="text-xs text-muted-foreground">{hint}</span>
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -182,6 +203,18 @@ export function PoolDialog({
         </div>
 
         <DialogFooter>
+          {onRemove && (
+            <Button
+              variant="destructive"
+              className="mr-auto"
+              onClick={() => {
+                onRemove()
+                onOpenChange(false)
+              }}
+            >
+              <Trash2 className="size-4" aria-hidden /> Remove
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
