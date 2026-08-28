@@ -425,3 +425,26 @@ func changePaths(p Plan) []string {
 	}
 	return out
 }
+
+// Impact is an int with a text encoding, so the two halves have to agree or a
+// plan can be sent but never read back by a Go client.
+func TestImpactRoundTripsThroughText(t *testing.T) {
+	for _, want := range []Impact{ImpactNone, ImpactReload, ImpactRestart, ImpactDisruptive} {
+		text, err := want.MarshalText()
+		if err != nil {
+			t.Fatalf("MarshalText(%v): %v", want, err)
+		}
+		var got Impact
+		if err := got.UnmarshalText(text); err != nil {
+			t.Fatalf("UnmarshalText(%q): %v", text, err)
+		}
+		if got != want {
+			t.Errorf("round trip of %v gave %v", want, got)
+		}
+	}
+
+	var i Impact
+	if err := i.UnmarshalText([]byte("catastrophic")); err == nil {
+		t.Error("want an error for an unknown impact")
+	}
+}

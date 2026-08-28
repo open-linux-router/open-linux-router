@@ -48,6 +48,28 @@ func (i Impact) String() string {
 // MarshalText makes Impact a JSON string.
 func (i Impact) MarshalText() ([]byte, error) { return []byte(i.String()), nil }
 
+// UnmarshalText parses that string back.
+//
+// The pair has to exist together. Impact is an int with a text encoding, so
+// without this a plan can be sent but never read: any Go client of the API —
+// `olr` itself, once it consumes /api/dhcp/plan rather than calling the module
+// directly — fails to decode the response it was just handed.
+func (i *Impact) UnmarshalText(text []byte) error {
+	switch string(text) {
+	case "none":
+		*i = ImpactNone
+	case "reload":
+		*i = ImpactReload
+	case "restart":
+		*i = ImpactRestart
+	case "disruptive":
+		*i = ImpactDisruptive
+	default:
+		return fmt.Errorf("unknown impact %q (want none, reload, restart or disruptive)", text)
+	}
+	return nil
+}
+
 // ChangeKind is what happens to a file.
 type ChangeKind string
 

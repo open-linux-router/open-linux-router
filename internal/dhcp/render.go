@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/netip"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -41,14 +42,31 @@ type Paths struct {
 // Generated files sit under our own directory with an ownership header
 // (design.md §3.4/§7), never in the daemon's own configuration directories.
 func DefaultPaths() Paths {
-	const rendered = "/etc/open-linux-router/rendered/dhcp"
+	return RootedPaths("")
+}
+
+// RootedPaths is the same layout relocated under root.
+//
+// An empty root gives the real one. A non-empty root is for development: it
+// lets olrd run as an ordinary user against a scratch directory, so the whole
+// render-plan-apply path — the part the WebUI drives — can be exercised without
+// root, systemd, or writing into a real /etc. The paths stay internally
+// consistent because the rendered config names them, which is the same reason
+// Paths is a struct rather than a set of constants.
+func RootedPaths(root string) Paths {
+	rendered := filepath.Join(root, "/etc/open-linux-router/rendered/dhcp")
 	return Paths{
-		Conf:      rendered + "/dnsmasq.conf",
-		HostsDir:  rendered + "/hosts.d",
-		OptsDir:   rendered + "/opts.d",
-		LeaseFile: "/var/lib/open-linux-router/dhcp/leases",
-		PIDFile:   "/run/olr/dhcp/dhcp.pid",
+		Conf:      filepath.Join(rendered, "dnsmasq.conf"),
+		HostsDir:  filepath.Join(rendered, "hosts.d"),
+		OptsDir:   filepath.Join(rendered, "opts.d"),
+		LeaseFile: filepath.Join(root, "/var/lib/open-linux-router/dhcp/leases"),
+		PIDFile:   filepath.Join(root, "/run/olr/dhcp/dhcp.pid"),
 	}
+}
+
+// RootedConfigPath is ConfigPath relocated under root, on the same terms.
+func RootedConfigPath(root string) string {
+	return filepath.Join(root, ConfigPath)
 }
 
 // File is one rendered file.

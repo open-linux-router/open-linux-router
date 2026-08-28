@@ -75,8 +75,17 @@ func (a Applier) portCheck() func() (bool, error) {
 
 // NewApplier wires up the default dnsmasq backend against a link view.
 func NewApplier(links LinkView) (Applier, error) {
-	paths := DefaultPaths()
-	backend := NewDnsmasq(paths)
+	return NewApplierAt(links, "")
+}
+
+// NewApplierAt is NewApplier with every path relocated under root.
+//
+// An empty root is the real system. See RootedPaths for why a non-empty one
+// exists — it is the development escape hatch, not a supported deployment
+// layout, and nothing but the daemon's own flags should ever set it.
+func NewApplierAt(links LinkView, root string) (Applier, error) {
+	paths := RootedPaths(root)
+	backend := NewDnsmasq(paths).WithSource(RootedConfigPath(root))
 	service, err := NewService(backend.Unit())
 	if err != nil {
 		return Applier{}, err
@@ -86,7 +95,7 @@ func NewApplier(links LinkView) (Applier, error) {
 		Links:      links,
 		Service:    service,
 		Paths:      paths,
-		ConfigPath: ConfigPath,
+		ConfigPath: RootedConfigPath(root),
 	}, nil
 }
 
