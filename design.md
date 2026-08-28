@@ -21,7 +21,7 @@ design is §11. Open decisions at the bottom.
   escape hatch (§3.2 rule 5), or plain Linux. **We hide complexity; we never
   hide capability.** This is the rule that reconciles "UX first" with "we do not
   hide Linux": those are not in tension, they describe the default and the floor.
-  Corollary — the name of the daemon we drive is an implementation detail, and
+  Corollary — the name of the backend we drive is an implementation detail, and
   belongs in `status`, `logs`, and the escape hatch, not on the common path.
 - **API-first, genuinely open.** The HTTP API is the substrate, not a wrapper.
   WebUI, CLI, and MCP are all equal clients of it.
@@ -118,7 +118,7 @@ Four rules. No abstraction, no registry, no codegen framework.
 4. Shared verb vocabulary so the CLI stays predictable:
    `show`, `set`, `add`, `rm`, `status`, `logs`, `enable`, `disable`.
 5. Every module exposes a **declared escape hatch** — a config field passed
-   through to the underlying daemon or ruleset verbatim
+   through to the underlying backend or ruleset verbatim
    (`dns.extra_unbound_conf`, `firewall.raw_nft`). Declared in our config and
    rendered by us, so it stays single-source and revisioned, unlike editing the
    file out of band. We make the common 95% pleasant; we do not hide Linux.
@@ -133,14 +133,17 @@ core.Mount("dhcp",     dhcp.Handler(),     dhcp.Schema)
 // …
 ```
 
-Because the contract is *HTTP routes + a schema fragment*, moving a module out
-of process later is a one-line change and touches nothing else:
+Because the contract is *HTTP routes + a schema fragment*, a module's control
+code could in principle be proxied to another process (`core.Proxy("dns",
+"/run/olr/dns.sock", …)`) rather than mounted. **This hatch exists and is
+deliberately unused** — §3.5 argues against ever taking it, and it is *not* the
+mechanism by which backends run out of process. Backends were never in process
+to begin with. The two are easy to confuse and mean opposite things:
 
-```go
-core.Proxy("dns", "/run/olr/dns.sock", schemaFromSocket)
-```
-
-Start everything in-process. That decision is now cheap to revisit.
+| | Lives where | Why |
+|---|---|---|
+| Module control code (render, plan, validate) | **in `olrd`** | §3.5 |
+| Backend (dnsmasq, unbound, ours) | **its own unit, always** | §3.5 |
 
 ### 3.3 Shared library
 
@@ -148,10 +151,11 @@ What core offers modules (they call it, not the reverse):
 
 - config file read/write with per-module revision history
 - config templating and atomic file replacement
-- systemd unit management for supervised daemons
+- systemd unit management for **backends** (§3.5)
 - nftables table helpers (own table per module, documented hook priorities)
 - netlink helpers
 - structured logging and event publication
+- the global apply lock (§3.6) — modules do not take their own
 
 ### 3.4 Good citizen rules
 
@@ -185,7 +189,160 @@ a feature; pretending we are the only actor is a bug.
 | a logging system | journald |
 | an updater | apt |
 | a plugin runtime | apt + systemd units |
-| DHCP / DNS / routing implementations | dnsmasq or Kea, unbound, bird |
+| DHCP / DNS / routing implementations | dnsmasq, unbound, bird |
+
+### 3.5 Process model
+
+How many processes are **ours**, and what is allowed to live inside them. The
+two get conflated easily, because most of the processes on a running box are
+not ours at all.
+
+```
+  olrd ─────────────────────────────── 1 process, ours, resident
+   │
+   ├─ link      → netlink               (no process)
+   ├─ firewall  → nftables netlink      (no process)
+   ├─ qos       → tc netlink            (no process)
+   ├─ clients   → reads                 (no process)
+   ├─ system    → D-Bus to systemd      (no process)
+   │
+   ├─ dhcp      → dnsmasq  ──────────── 1  ours to supervise,
+   ├─ dns       → unbound  ──────────── 1  not ours to write
+   ├─ dial      → pppd / dhcpcd ─────── 0–1 per WAN
+   ├─ wifi      → hostapd  ──────────── 1 per radio (later)
+   └─ routing   → bird     ──────────── 1 (later)
+
+  transient:   olr guard expire   armed only during the §5.5 window
+               dhcp-script        per lease event, forked by dnsmasq
+```
+
+`dhcp` and `dns` already have their own processes. **The module is not the
+server** — it is the controller that renders config and reloads the backend.
+
+**The invariant that decides everything else:**
+
+> **`systemctl restart olrd` must never drop a packet, expire a lease, or break
+> a session.**
+
+Which gives a decidable test for where any new code goes:
+
+**Does it have to keep running while `olrd` is stopped?** Yes → its own binary
+and its own unit. No → a package inside `olrd`.
+
+The test discriminates correctly on the awkward cases. The netlink watcher that
+feeds §6.3's live UI runs continuously inside `olrd`, and that is fine: if
+`olrd` dies you lose live updates, not connectivity.
+
+Generalised, this is the same rule as §5.5: **nothing that must survive `olrd`'s
+death may live in `olrd`.** Data plane → its own unit. Guard state → a disk
+snapshot plus a transient timer. One principle, two mechanisms.
+
+**Modules stay in `olrd`.** Splitting module *control* code into per-module
+processes was considered and rejected on three counts:
+
+1. **It breaks §5.3.1, the highest-value mechanism in the design.** "Check the
+   pool falls inside `link`'s subnet" is a function call on a pure read. Across
+   processes it becomes an HTTP round trip that can fail, plus a TOCTOU window
+   in which `link` can change between validate and apply.
+2. **The lease→DNS path becomes two hops per lease.** §4.2 gives up dnsmasq's
+   built-in fusion and rebuilds it over `dhcp-script`; that fires on every
+   renewal.
+3. **Startup ordering becomes a systemd graph.** In-process, `link` before
+   `dial` before `dns` is the literal list in §3.2. Across processes it is
+   `After=`/`Requires=` over six units — and §3.1 found that *nothing iterates
+   over modules*. Splitting manufactures exactly the iteration requirement that
+   finding removed.
+
+The usual argument for splitting — fault isolation — does not apply. The risky
+code is in the backends, and those are **already** separate processes **already**
+supervised by systemd.
+
+**Backends are separate processes even when we write them.** The rule is not
+"reuse the distro"; it is stronger, and survives us writing our own
+implementation. If `olr-dhcpd` ever exists it is a binary and a unit, never
+a goroutine, because:
+
+- **A goroutine server means building a process supervisor inside `olrd`** —
+  restart policy, backoff, liveness — which is precisely what §3.4 refuses to
+  build. As a unit it is free, and §5.4's "is the backend alive" stays one
+  uniform D-Bus query with no special case.
+- **It is the most dangerous code on the box.** A DHCP server binds `:67` and
+  parses unauthenticated packets from every device on the LAN. `olrd` holds
+  `CAP_NET_ADMIN` and the admin API. They must not share an address space.
+- **§3.2's module rules stay uniform** — render config, reload unit, read
+  status. One shape, no exceptions.
+
+**Corollary, and the easy mistake:** we drive our own backend exactly the way we
+drive dnsmasq — a rendered config file and a signal — **not** a private RPC
+channel just because we happen to own both ends. A private channel reintroduces
+two module shapes through the back door, and it costs two things for free: the
+backend stops being independently runnable and debuggable, and §3.2 rule 5's
+escape hatch stops working for it.
+
+### 3.6 Concurrency and privilege inside `olrd`
+
+**One global apply lock.** Every config write across every module takes it. Not
+per-module.
+
+The simplicity argument is obvious; the correctness one is better. A global lock
+is what makes §5.3.1 sound — validate `dhcp`'s pool against `link`'s subnet,
+then apply, with nothing able to move `link` in between. Per-module locks
+reintroduce the TOCTOU that validation exists to prevent. The contention budget
+is a human clicking a toggle; there is no throughput requirement to trade
+against.
+
+**Reads never take it.** §5.4 already requires reads to hit actual system state
+— netlink, nftables, the lease file, D-Bus. There is nothing to serialise.
+
+**Apply must be bounded, and this is what keeps the global lock viable.** Apply
+is render, reload, return. It **never** waits for convergence: `dial` returns
+when `pppd` is started, not when the session is up. Convergence is observed
+state (§6.2), streamed over SSE. Without this rule one 30-second PPPoE dial
+freezes every other module.
+
+This does **not** forbid post-apply verification (§11.5). "Did the unit come up
+and bind?" is bounded and belongs inside apply; "did a client get a lease?" is
+convergence and does not. The line is whether the answer depends on some other
+device on the network deciding to speak.
+
+**The `dhcp-script` callback bypasses the lock.** It writes *observed* state —
+not config, not revisioned (§4.5) — so it lands on a separate endpoint and
+cannot deadlock against a running apply.
+
+**`olrd` executes no subprocesses.** Per §8's stack, `google/nftables` and
+`vishvananda/netlink` are direct netlink and `coreos/go-systemd/dbus` is D-Bus.
+There is no `exec.Command("nft")` and no `exec.Command("systemctl")`. That makes
+the sandbox nearly free:
+
+```ini
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/etc/open-linux-router /var/lib/open-linux-router /run/olr
+```
+
+Worth stating as a rule, because the first `exec.Command` silently costs all of
+it. **One exception is already visible and should be taken deliberately rather
+than by accident:** `olr logs` (§3.2 rule 4) currently execs `journalctl` in the
+*CLI* process, which is outside `olrd` and therefore fine. The moment the WebUI
+wants logs, `olrd` needs journal access — and `go-systemd/sdjournal` is cgo,
+which §8's `CGO_ENABLED=0` forbids. So the sanctioned form is `journalctl -o
+json`, read-only, and it is the only exec `olrd` may ever hold.
+
+**Privilege separation is deferred, not foreclosed.** The one split that could
+ever be justified is not per-module but privsep —
+network-facing HTTP/TLS unprivileged, netlink and file writes behind a socket.
+Skipped for v1: Go is memory-safe, so the classic pre-auth memory-corruption
+motivation is weak, and an authenticated admin can legitimately do everything
+anyway.
+
+The seam costs nothing to keep, because it already exists for another reason.
+§10's test-hardware entry requires isolating netlink, nftables and systemd
+behind an interface so the rest is unit-testable off-Linux. **That testability
+seam is the privsep seam.** Keeping it clean for tests keeps privsep a cheap
+option nobody has to plan for.
 
 ---
 
@@ -236,9 +393,14 @@ case: `dhcp` wants to register lease hostnames in `dns`, and `dns` wants lease
 data. Direction is fixed — `dhcp` *publishes* leases, `dns` *subscribes*.
 (This is precisely why dnsmasq fuses the two; see §4.2.)
 
-### 4.2 One daemon, one owner
+### 4.2 One backend, one owner
 
-Exactly one module owns any given daemon or config file. dnsmasq can serve both
+Throughout this document **daemon** means `olrd`, ours, one of; **backend** means
+a supervised service it drives — dnsmasq, unbound, `pppd`, hostapd, bird — of
+which there are many and none are ours to write (§3.5). The distinction matters
+most here, where the two would otherwise both be called "the daemon."
+
+Exactly one module owns any given backend or config file. dnsmasq can serve both
 DHCP and DNS — if `dhcp` and `dns` both wrote `dnsmasq.conf`, module isolation
 would break at the worst possible place. So:
 
@@ -392,18 +554,41 @@ health machinery.
 Two things were hiding under the word "health":
 
 - **drift** — applies to every module, derived as above
-- **is the supervised daemon alive** — only daemon-backed modules
-  (`dhcp`, `dns`, `dial`, `wifi`, dynamic `routing`); mostly a systemd query
+- **is the backend alive** — only backend-backed modules (`dhcp`, `dns`,
+  `dial`, `wifi`, dynamic `routing`); mostly a systemd query (§3.5)
 
 ### 5.5 Lockout guard
 
-Not a transaction — a dead-man's switch. `olrd` remembers what changed in the
-last 90 seconds; if admin reachability is lost and nobody confirms, it reverts
-those modules. One **global** reachability probe, not per-module health.
+Not a transaction — a dead-man's switch. If admin reachability is lost within 90
+seconds of a change and nobody confirms, the change is reverted. One **global**
+reachability probe, not per-module health.
 
 The failure this prevents is not an enterprise failure. You are on your laptop,
 on the LAN, changing the LAN. Your session dies mid-sequence and now you cannot
 run the command that would fix it. Every homelab router does this eventually.
+
+**The guard must not live in `olrd`'s memory.** This is the §3.5 invariant
+applied: state that has to survive `olrd`'s death cannot be held by `olrd`. An
+in-process 90-second timer dies with the process — and a change catastrophic
+enough to need reverting is exactly the kind that takes `olrd` down or reboots
+the box. The mechanism would evaporate in precisely the case it exists for.
+
+So the guard is on disk and the timer belongs to systemd:
+
+```
+apply    → write the revert snapshot to /run/olr/guard/<id>.json
+         → systemd-run --on-active=90s olr guard expire <id>
+confirm  → stop the transient unit, drop the snapshot
+timeout  → olr guard expire probes reachability, reverts from the snapshot
+```
+
+Three properties fall out. It survives `olrd` crashing; it survives `olrd` never
+having started; and `olr guard expire` is an ordinary CLI path, so the revert is
+inspectable and testable without simulating a wedged daemon.
+
+`/run` rather than `/etc` is deliberate: the snapshot must not outlive a reboot.
+A box that came back up is reachable by definition, so an expired guard replayed
+after boot would revert a change that turned out to be fine.
 
 ### 5.6 Automatic behaviour must be declared, never inferred
 
@@ -434,7 +619,7 @@ to is what is forbidden. Three obligations come with any `auto`:
    This is a real cost: a new dimension on the CLI, API and UI. It is also
    better than the boolean it replaces.
 3. **Faults must not hide inside it.** "Standing by because a peer exists" is
-   `auto` working. "Not running because the daemon died" is a fault. If those
+   `auto` working. "Not running because the backend died" is a fault. If those
    collapse into one status, `auto` becomes the place failures go to hide.
 
 **Refuse, do not disable.** When `on` meets a conflict, we decline to start and
@@ -470,7 +655,7 @@ olr <module> <verb> [args]        olr dns show
                                   olr dhcp add reservation --mac … --ip …
                                   olr firewall rm rule 4
 
-olr status                        aggregate: drift + daemon liveness
+olr status                        aggregate: drift + backend liveness
 olr diff                          pending/drifted, per module
 olr history | rollback            per-module revisions
 olr adopt <iface> | release       take/hand back interface ownership
@@ -553,7 +738,7 @@ in the binary.
 | Schema | `invopop/jsonschema`, draft 2020-12 | OpenAPI 3.1 is a superset, so one dialect serves REST, MCP, and UI |
 | netlink | `vishvananda/netlink` | |
 | nftables | `google/nftables` | direct netlink, no `nft` binary |
-| systemd | `coreos/go-systemd/dbus` | §5.4 daemon liveness |
+| systemd | `coreos/go-systemd/dbus` | §5.4 backend liveness |
 | Logging | `log/slog` | stdlib, structured (§3.3) |
 | `.deb` | `nfpm` | single binary, cross-arch, no Ruby |
 
@@ -635,6 +820,36 @@ Six direct dependencies for v1. For a router that is a feature.
   daemon being reachable. See §6.1.
 - **CLI is two-tier.** `olr daemon …` is below the API, everything else is a
   client of it (§6.1). §1's "equal clients" governs configuration, not lifecycle.
+- **Process model: one resident `olrd`; modules in, backends out** (§3.5).
+  Settled by the invariant that restarting `olrd` must never disturb traffic.
+  Two alternatives were considered and rejected:
+  - **Module-per-process.** Rejected on §5.3.1 (cross-module validation becomes
+    a fallible round trip with a TOCTOU window), on the per-lease `dhcp-script`
+    path becoming two hops, and on startup order degenerating into a six-unit
+    systemd graph — reintroducing the module iteration §3.1 had eliminated.
+  - **Socket activation with idle exit.** Rejected: it optimises idle RSS, the
+    cheapest resource on the box, and pays for it where it hurts. A monitoring
+    loop calling `olr status` becomes a cold spawn per poll, each re-reflecting
+    the schema, so the access pattern a router actually sees is the one it
+    handles worst. It also makes `inactive` the healthy state in
+    `systemctl status`, adds a second unit, and adds an idle timeout with no
+    principled value. Keeping `olrd` resident also preserves §6.1's two-tier
+    rationale unchanged, since `olr daemon start` remains a real operation.
+- **`olrd` is a control plane, not a worker.** It may cache only what is derived
+  and cheap to rebuild — the reflected schema, the route table, the OpenAPI
+  document. Never config, never observed state, never revision history. The test:
+  `kill -9 olrd` followed by a restart must not change a single answer the API
+  gives. Residency is what makes this rule necessary — a long-lived process is
+  somewhere to put state, and §5.4's drift detection silently stops being true
+  the moment intent is compared against memory instead of reality (§4.5).
+- **One global apply lock, and apply is bounded** (§3.6). Not per-module: a
+  single lock is what makes §5.3.1's validate-then-apply free of a TOCTOU
+  window. Viable only because apply never waits for convergence — it renders,
+  reloads and returns, leaving "is the WAN actually up" to observed state.
+- **Vocabulary: `daemon` is `olrd`, `backend` is what it drives** (§4.2). The
+  document previously used "daemon" for both, which made `olr daemon status`
+  read ambiguously against "is dnsmasq alive" — two different questions with
+  two different answers.
 - **Config format: JSON.** Round-trips through the same struct tags as the REST
   body and the reflected schema, so there is no second dialect and no mapping
   layer. TOML would be friendlier to read and was rejected for that duplication.
@@ -798,8 +1013,9 @@ rather than a guess.
 
 - **Post-apply verification.** A dead DHCP server is invisible for hours and
   then breaks everything at once when leases expire. §5.5's lockout guard covers
-  *admin reachability*, not this. Nothing currently confirms the daemon is alive
-  and bound after an apply, and it should.
+  *admin reachability*, not this. Nothing currently confirms the backend is alive
+  and bound after an apply, and it should — §3.6 permits this explicitly, since
+  checking that a unit came up is bounded rather than waiting for convergence.
 - **`dhcp-script` is not wired up.** It is the only real IPC dnsmasq offers, and
   it is what turns leases from a polled file into an event stream — the live
   device list (§6.3 SSE), the §4.1 lease publish to `dns`, and the event history
