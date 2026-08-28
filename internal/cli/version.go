@@ -15,8 +15,7 @@ func versionCommand() *cobra.Command {
 		GroupID: GroupLocal,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := fmt.Fprintf(cmd.OutOrStdout(), "olr %s (commit %s, built %s)\n",
-				buildinfo.Version, buildinfo.Commit, buildinfo.Date)
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "olr %s\n", buildinfo.String())
 			return err
 		},
 	}

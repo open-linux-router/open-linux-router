@@ -1,0 +1,61 @@
+[Unit]
+Description=open-linux-router control plane
+Documentation=https://github.com/open-linux-router/open-linux-router
+After=network-pre.target
+Wants=network-pre.target
+
+# Deliberately no Requires= or After= on any backend unit.
+#
+# olrd supervises olr-dhcp.service rather than depending on it, and the
+# dependency must not be inverted: design.md §3.5 requires that restarting olrd
+# never drops a packet or expires a lease. An After=olr-dhcp.service would make
+# the backend's state a precondition of the control plane starting, which is
+# exactly backwards — the backend has to keep serving while olrd is stopped.
+
+[Service]
+Type=notify
+NotifyAccess=main
+
+ExecStart=/usr/bin/olrd
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=on-failure
+RestartSec=2
+
+# The sandbox from design.md §3.6, which is affordable only because olrd
+# executes no subprocesses. There is no exec.Command("nft") and no
+# exec.Command("systemctl") — nftables and netlink are spoken directly and
+# systemd over D-Bus. The first exec added to olrd silently costs most of what
+# is below, so this block is a standing constraint on the code, not decoration.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# AF_NETLINK for link/firewall, AF_UNIX for the control socket and D-Bus,
+# AF_INET/AF_INET6 for the optional TCP listener.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
+
+# The only paths olrd writes: module configuration, its own state, and the
+# runtime directory holding the control socket and the §5.5 guard snapshots.
+ReadWritePaths=/etc/open-linux-router /var/lib/open-linux-router
+StateDirectory=open-linux-router
+RuntimeDirectory=olr
+RuntimeDirectoryMode=0755
+
+# /run/olr is cleared on stop, but the guard snapshots under it are meant to be
+# lost on reboot anyway (§5.5): a box that came back up is reachable by
+# definition, so replaying an expired guard would revert a change that was fine.
+
+[Install]
+WantedBy=multi-user.target
