@@ -38,7 +38,7 @@ design is §11. Open decisions at the bottom.
 - Carrier or enterprise features (MPLS, VRF at scale, HA clustering). **HA is
   now structural, not merely descoped:** §10 commits to dnsmasq permanently, and
   dnsmasq has no lease synchronisation, so two boxes can never share DHCP state.
-  The same choice caps us at hundreds of clients per segment, not thousands.
+  The same choice caps us at hundreds of clients per group, not thousands.
   Both ceilings are accepted deliberately; neither is a gap to be closed later.
 - Managing third-party APs/switches as a fleet controller. Maybe later; not v1.
 - A plugin API or third-party module ecosystem — see the extension surface
@@ -349,11 +349,11 @@ option nobody has to plan for.
 ## 4. Modules
 
 Bounded list. Not expected to grow much. The object they all key off is the
-**segment** (§4.4), not the kernel interface.
+**group** (§4.4), not the kernel interface.
 
 | | Module | Owns | v1 |
 |---|---|---|---|
-| **Foundation** | `link` | NICs, bridges, VLANs, bonds, addresses (netlink); **segments** (§4.4) | ✅ |
+| **Foundation** | `link` | NICs, bridges, VLANs, bonds, addresses (netlink); **groups** (§4.4) | ✅ |
 | | `dial` | WAN: DHCP client, PPPoE, static, LTE; IPv6 PD | ✅ |
 | **Services** | `dhcp` | dnsmasq — DHCPv4, DHCPv6 **and RA** (§4.2) | ✅ |
 | | `dns` | unbound — **DNS only** | ✅ |
@@ -371,7 +371,7 @@ Bounded list. Not expected to grow much. The object they all key off is the
 module's state **through that module's public API** — it never keeps its own
 copy. Single ownership of every fact, so drift is structurally impossible.
 
-Concretely, what the dependents read from `link` is a **segment** (§4.4): a
+Concretely, what the dependents read from `link` is a **group** (§4.4): a
 named network with a subnet and a router address. They do not read interface
 names, and they do not restate a subnet `link` already owns.
 
@@ -411,8 +411,8 @@ would break at the worst possible place. So:
 **`dhcp` owns router advertisement, exclusively.** This is not obvious from the
 module's name and is easy to violate by accident, so it is stated here rather
 than left implied. dnsmasq's `enable-ra` means the DHCP module is what announces
-the default route on every IPv6 segment. No other module may run radvd, CoreRAD,
-or `IPv6SendRA` — a second RA source on one segment is the same class of failure
+the default route on every IPv6 group. No other module may run radvd, CoreRAD,
+or `IPv6SendRA` — a second RA source on one group is the same class of failure
 as two modules writing one config file, except it presents as intermittent
 IPv6 breakage rather than as a merge conflict.
 
@@ -436,29 +436,29 @@ this, and both are structural rather than matters of taste:
   an address and cannot route. RA is not the IPv6 analogue of DHCP — it is more
   fundamental than DHCPv6.
 - **Android has never implemented DHCPv6, and Google closed the request as
-  "Won't Fix (Intended Behavior)."** Any segment that relies on stateful DHCPv6
+  "Won't Fix (Intended Behavior)."** Any group that relies on stateful DHCPv6
   silently loses every Android device on it. For our audience that is most of
   the handsets on the LAN.
 
 So the smallest correct thing is also the most compatible thing. Stateful
 DHCPv6 becomes an advanced mode later, labelled with the Android consequence.
 
-### 4.4 The shared objects: segment and device
+### 4.4 The shared objects: group and device
 
 Two objects are referenced by many modules and owned by one. They are the
 reason the module list stays orthogonal without the product feeling like a pile
 of daemons.
 
-**A segment is a named network:** name, VLAN, bridge/members, subnet, router
+**A group is a named network:** name, VLAN, bridge/members, subnet, router
 address. `link` owns it, because `link` already owns addresses and a second
 owner of the subnet would be exactly the private copy §4.1 forbids.
 
-Modules key off the **segment**, never the kernel interface. `vlan30` is an
+Modules key off the **group**, never the kernel interface. `vlan30` is an
 implementation detail; `guest` is the thing the operator named, and the thing
 that survives being moved to a different bridge. This is what makes a "guest
 network" an object with a lifecycle — creatable, renamable, inspectable,
 deletable — rather than a write-only recipe whose output is scattered across
-four modules. §6.3 composite operations compose *over* segments; they are not a
+four modules. §6.3 composite operations compose *over* groups; they are not a
 substitute for having them.
 
 **A device is a client on the network,** keyed by MAC. It is a **join of two
@@ -477,9 +477,17 @@ lease data — resolves with §4.1's own rule: identity flows one way as config,
 lease facts flow the other way as a subscription. Which module owns the
 inventory is **open** (§10).
 
-**Naming.** "Network" is the segment. "Group" is reserved for *sets of devices*
-— parental controls, firewall rules, QoS classes — which cut across networks and
-are a different concept entirely. Using one word for both forecloses the other.
+**Naming.** "Group" and "network" name the same object. `group` is what this
+document, the schema, and the API call it; **network** is what the operator sees
+(`olr net add iot`, "guest network"). That is progressive disclosure (§1), not
+two things to keep in sync — there is one object with one owner, and the second
+word is a label on the common path rather than a second model.
+
+**"Tag" is reserved for *sets of devices*** — parental controls, firewall rules,
+QoS classes — which cut across groups and are a different concept entirely. It
+needs its own word: using one word for both forecloses the other, and a rule
+that applies to "the kids' iPads wherever they connect" is not a rule about a
+network.
 
 ### 4.5 Own the model, never the state
 
@@ -602,7 +610,7 @@ from "we drifted into it."
 The pattern, using the DHCP server as the worked example:
 
 ```
-auto   serve unless another server is already answering on this segment
+auto   serve unless another server is already answering on this group
 on     always serve; refuse to start into a detected conflict, loudly
 off    never serve
 ```
@@ -750,7 +758,7 @@ Six direct dependencies for v1. For a router that is a feature.
 
 1. **Get a box online.** `link` + `dial` + minimal core (config store, routes,
    `olr` skeleton). Success: WAN up via DHCP and PPPoE, `olr status` truthful.
-   **`link` must land segments (§4.4) here**, not later — every module after this
+   **`link` must land groups (§4.4) here**, not later — every module after this
    keys off them, so retrofitting the primary key is the one sequencing mistake
    that would be expensive.
 2. **Make it a router.** `firewall` (zones/NAT) + `dhcp` + `dns`. Success: a
@@ -793,7 +801,7 @@ Six direct dependencies for v1. For a router that is a feature.
    clients" and be honest that it is not an inventory.
 8. **Does creating a network default DHCP on?** Leaning yes — a LAN without
    DHCP is the unusual case, and §5.1 immediate-apply makes it cheap to undo.
-9. **What is a segment, exactly?** (§4.4) Its field set is now the most
+9. **What is a group, exactly?** (§4.4) Its field set is now the most
    load-bearing schema in the project: `link`, `dhcp`, `dns`, `firewall` and
    later `wifi` all key off it. Worth designing deliberately rather than
    growing.
@@ -901,14 +909,28 @@ Six direct dependencies for v1. For a router that is a feature.
   thousands-of-clients ceiling become permanent product boundaries (§1
   non-goals), not gaps to close.
 
-- **The segment is the unit of network** (§4.4), owned by `link`, and modules
+- **The group is the unit of network** (§4.4), owned by `link`, and modules
   key off it rather than off kernel interface names. Considered and rejected: a
   separate `network` module, which would own a name and a subnet that `link`
   must know anyway — two sources for one fact, which §4.1 forbids. Consequence
-  for `dhcp`: the pool's primary key is a segment, its range is derived from the
-  segment's prefix by default, and most of the cross-module validation §5.3.1
+  for `dhcp`: the pool's primary key is a group, its range is derived from the
+  group's prefix by default, and most of the cross-module validation §5.3.1
   celebrates stops being *needed* for the common case, because the subnet is
   given rather than asserted and re-checked.
+
+- **The object is called a `group`, not a `segment`.** Renamed on comprehension:
+  "segment" is a network engineer's word for a broadcast domain, and the
+  audience for this product is not reliably a network engineer. The object was
+  always presented to the operator as a *network* (§4.4 naming), so the rename
+  costs nothing on the common path and makes the design vocabulary match the
+  product's.
+
+  One consequence, and it is the reason this entry exists rather than being a
+  silent find-and-replace: **"group" was previously reserved for sets of
+  devices**, and that concept is real — parental controls and QoS classes cut
+  across networks. It is now called a **tag** (§4.4). Recorded so the next
+  reader does not rediscover the collision and assume one of the two concepts
+  was dropped.
 
 - **Progressive disclosure** (§1) as the rule reconciling "UX first" with "we do
   not hide Linux." They describe the default and the floor, not a tension.
@@ -930,7 +952,7 @@ DHCPv6 and RA (§4.2).
 
 Two nouns, both defined in §4.4, neither of them owned here:
 
-- **Network settings** attach to a **segment**. `link` owns the segment; `dhcp`
+- **Network settings** attach to a **group**. `link` owns the group; `dhcp`
   owns what it serves there.
 - **A fixed address** is a property **of a device**, not a standalone row. It is
   set from the device list, not by typing a MAC into a form. The difference
@@ -942,12 +964,12 @@ it is what forces every workflow to start from a hardware address the operator
 has to go and find. Device inventory ownership is §10 open decision 6, and it
 blocks this surface.
 
-### 11.2 Per-segment settings
+### 11.2 Per-group settings
 
 | Field | Default | Note |
 |---|---|---|
 | `dhcp` | `on` | `auto \| on \| off` per §5.6 |
-| `range` | derived | from the segment prefix; explicit overrides |
+| `range` | derived | from the group prefix; explicit overrides |
 | `lease` | 12h | |
 | `dns` | the router | |
 | `domain` | the base domain | |
@@ -974,7 +996,7 @@ free. Deriving it gives that for free; asking the operator to type it does not.
 ### 11.3 The guarantee the file layout exists to buy
 
 dnsmasq re-reads its hosts and options directories on SIGHUP but never re-reads
-its configuration file. Reservations and per-segment options therefore live in
+its configuration file. Reservations and per-group options therefore live in
 directories, and that asymmetry is the whole reason for the layout. Stated as a
 promise, because it is user-facing and testable:
 
@@ -1001,21 +1023,30 @@ rather than a guess.
 
 | | | |
 |---|---|---|
-| **v1** | per-segment `auto\|on\|off`, derived range, fixed addresses, lease/DNS/domain, IPv6 SLAAC+RDNSS | |
+| **v1** | per-group `auto\|on\|off`, derived range, fixed addresses, lease/DNS/domain, IPv6 SLAAC+RDNSS | |
 | | pool usage, foreign-DHCP-server detection, recent DHCP events | "why did this device not get an address" is the single most common support question; these three answer it |
 | **v2** | PXE / netboot (`dhcp-boot`) | high demand in *this* audience — Proxmox, netboot.xyz |
 | | deny DHCP to a device (`dhcp-ignore`) | belongs with inventory blocking, not here |
 | | option 121 static routes, stateful DHCPv6 | escape hatch until then |
 | **Never** | DHCP relay | different object shape; settled once, not revisited |
-| | per-vendor-class options, multiple pools per segment | escape hatch, permanently |
+| | per-vendor-class options, multiple pools per group | escape hatch, permanently |
 
 ### 11.5 Known gaps
 
-- **Post-apply verification.** A dead DHCP server is invisible for hours and
-  then breaks everything at once when leases expire. §5.5's lockout guard covers
-  *admin reachability*, not this. Nothing currently confirms the backend is alive
-  and bound after an apply, and it should — §3.6 permits this explicitly, since
-  checking that a unit came up is bounded rather than waiting for convergence.
+- **Post-apply verification — closed.** A dead DHCP server is invisible for
+  hours and then breaks everything at once when leases expire, and §5.5's
+  lockout guard does not cover it: the operator keeps their own session
+  throughout. Apply now watches the unit for a bounded window after the service
+  action and fails if it does not stay active, which §3.6 permits explicitly.
+
+  The window is the point, not the check. The unit is `Type=simple`, so systemd
+  reports the start job `done` the moment the process is forked — before
+  dnsmasq has read a config file or bound a socket. A single sample straight
+  after the job therefore passes for a backend that is about to exit. Asserting
+  on UDP/67 instead was considered and rejected: a group serving only RA never
+  binds it, so that check would fail exactly where IPv6 is configured
+  correctly. Staying alive is the stronger signal anyway, because dnsmasq exits
+  on a config it rejects rather than idling.
 - **`dhcp-script` is not wired up.** It is the only real IPC dnsmasq offers, and
   it is what turns leases from a polled file into an event stream — the live
   device list (§6.3 SSE), the §4.1 lease publish to `dns`, and the event history
