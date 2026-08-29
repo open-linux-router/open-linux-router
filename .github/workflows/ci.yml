@@ -1,0 +1,68 @@
+# Build and test on every push and pull request.
+#
+# The two jobs are deliberately independent, because the codebase is: `go build`
+# works on a clone with no Node installed (design.md §8 — the committed
+# .gitkeep under internal/webui/assets exists precisely for that), so a broken
+# SPA build must not hide a broken daemon build, or the reverse.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A newer push to the same branch makes the older run's answer uninteresting.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # go-version-file, not a literal: this builds at the 1.23 floor go.mod
+      # declares, which is what turns design.md §8's "nothing needs a newer
+      # language version" from a comment into something CI enforces.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet and test
+        run: make check
+
+      # Both shipping architectures compile. Cross-compiling is pure Go here
+      # (CGO_ENABLED=0), so this needs no toolchain beyond the one above.
+      - name: Cross-compile
+        run: make cross
+
+  web:
+    name: Web UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 24, not 22: react-router 8 declares node >=22.22.0, so the LTS line
+      # above it is the one that satisfies every dependency without pinning to
+      # a patch release that will go stale.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: make web-deps NPM_INSTALL=ci
+
+      - name: Lint
+        run: cd web && npm run lint
+
+      # `npm run build` is `tsc -b && vite build`, so this type-checks too.
+      - name: Build
+        run: cd web && npm run build

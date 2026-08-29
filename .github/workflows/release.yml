@@ -1,0 +1,139 @@
+# Build the distributable artefacts and publish them on a GitHub release.
+#
+# design.md §8 names two routes onto a box: a .deb (which declares the dnsmasq
+# dependency, so apt resolves it before any of our code runs) and a static
+# tarball for the distributions the .deb does not cover. The Makefile already
+# builds both; this only decides when, and where they land.
+#
+# Cutting a release is therefore:
+#
+#     git tag -a v0.1.0 -m 'v0.1.0' && git push origin v0.1.0
+#
+# Running this workflow by hand instead builds the same artefacts and attaches
+# them to the run, publishing nothing — which is how to exercise packaging
+# without spending a version number on it.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # to create the release
+
+# Never cancel a run that may be halfway through publishing; just don't let two
+# of them race.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags, for `git describe` in the Makefile
+
+      # The go.mod floor again, as in CI: the released binary is built by the
+      # same toolchain the tests ran against. `go install nfpm` below may need
+      # a newer one, and Go's own toolchain switching fetches it if so.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # CI has almost certainly run on this commit already, but a tag can be
+      # pushed at anything. Thirty seconds here is cheaper than a bad release,
+      # and it runs before the SPA work so a failure arrives sooner.
+      - name: Vet and test
+        run: make check
+
+      # Matches ci.yml; see the note there about react-router's node floor.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install SPA dependencies
+        run: make web-deps NPM_INSTALL=ci
+
+      - name: Install nfpm
+        run: |
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      # VERSION is what the binary reports (internal/buildinfo); PKGVERSION is
+      # what dpkg and apk sort on, and they want a bare number with no leading
+      # v. Both are passed explicitly rather than left to `git describe`, so the
+      # artefacts carry the tag that triggered this and nothing else.
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            version="$GITHUB_REF_NAME"
+            pkgversion="${version#v}"
+          else
+            # A manual run is not a release. 0.0.0 is the Makefile's own
+            # fallback for an untagged tree; keep the packages unmistakably
+            # unreleasable while still building them for real.
+            version="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+            pkgversion="0.0.0"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "pkgversion=$pkgversion" >> "$GITHUB_OUTPUT"
+
+      # One invocation, not two: `package` and `tarball` share the `web` and
+      # `cross` prerequisites, and make runs a phony target once per run. Split
+      # across two invocations the SPA would be built twice.
+      #
+      # The version reaches the shell through env, not through `${{ }}` pasted
+      # into the script: a tag name is user-supplied text, and interpolating it
+      # into a command line is how that text becomes a command.
+      - name: Build packages and tarballs
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PKGVERSION: ${{ steps.version.outputs.pkgversion }}
+        run: make package tarball VERSION="$VERSION" PKGVERSION="$PKGVERSION"
+
+      # Bare names in the file, so `sha256sum -c SHA256SUMS` works in whatever
+      # directory someone downloaded the assets into.
+      - name: Checksum
+        run: cd dist && sha256sum *.deb *.apk *.tar.gz > SHA256SUMS
+
+      - name: Show what was built
+        run: ls -lh dist/*.deb dist/*.apk dist/*.tar.gz dist/SHA256SUMS
+
+      - name: Upload artefacts
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: olr-${{ steps.version.outputs.version }}
+          path: |
+            dist/*.deb
+            dist/*.apk
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+      # gh is preinstalled on the runner and the token is the one GitHub already
+      # issued this job, so releasing costs no third-party action.
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.version }}
+        run: |
+          # v0.1.0 is a release; v0.1.0-rc1 is not. Anything after the version
+          # numbers means "not finished yet".
+          prerelease=''
+          case "$TAG" in
+            *-*) prerelease='--prerelease' ;;
+          esac
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            $prerelease \
+            dist/*.deb dist/*.apk dist/*.tar.gz dist/SHA256SUMS

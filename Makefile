@@ -1,5 +1,6 @@
 GO      ?= go
 NPM     ?= npm
+NPM_INSTALL ?= install
 DIST    := dist
 WEB     := web
 ASSETS  := internal/webui/assets
@@ -81,7 +82,11 @@ cross: ## Build both binaries for linux/amd64 and linux/arm64
 
 .PHONY: web-deps
 web-deps: ## Install the web UI's node modules
-	cd $(WEB) && $(NPM) install
+	@# `install` for a developer, who may be adding a dependency; CI overrides
+	@# this with `ci`, which installs exactly the lockfile and fails rather than
+	@# rewriting it. Same target either way, so there is one answer to "how are
+	@# the SPA's dependencies installed".
+	cd $(WEB) && $(NPM) $(NPM_INSTALL)
 
 .PHONY: web
 web: ## Build the SPA into internal/webui/assets

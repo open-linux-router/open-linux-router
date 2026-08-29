@@ -41,13 +41,19 @@ overrides:
       - dnsmasq
 
 contents:
+  # `expand: true` is required for ${ARCH} to mean anything here. nfpm expands
+  # environment variables in top-level fields unconditionally, but in contents
+  # only for entries that ask — so without it, the source path stays literal and
+  # nfpm fails looking for a file named `dist/olr-linux-${ARCH}`.
   - src: dist/olr-linux-${ARCH}
     dst: /usr/bin/olr
+    expand: true
     file_info:
       mode: 0755
 
   - src: dist/olrd-linux-${ARCH}
     dst: /usr/bin/olrd
+    expand: true
     file_info:
       mode: 0755
 
