@@ -11,17 +11,32 @@ PKG     := ./cmd/olr
 DBIN    := olrd
 DPKG    := ./cmd/olrd
 
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+# The version lives in one file, VERSION, and everything else is derived from
+# it: what the binaries report, what dpkg and apk sort on, the tarball names,
+# and what the release publishes. Bumping it is a reviewable commit, and the
+# tag that follows only records which commit claims that number — so a clone
+# with no tags fetched gives the same answer CI does. PKGVERSION is the bare
+# form because dpkg and apk sort on it, and they want a number with no v.
+PKGVERSION ?= $(shell tr -d '[:space:]' < VERSION)
+
+# Set by the release workflow from the pushed tag; empty for a local check.
+# Exported rather than pasted into version-check's recipe: a tag name is
+# user-supplied text, and interpolating it is how that text becomes a command.
+TAG ?=
+export TAG
+
+# Empty when this build *is* the release — HEAD carries the tag, and nothing has
+# been edited since — and a marker otherwise, so a build from a working tree
+# cannot report itself as the released artefact. That guarantee is the one thing
+# the old `git describe --dirty` bought which a file on its own does not.
+GITSUFFIX := $(shell \
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0; \
+  git tag --points-at HEAD 2>/dev/null | grep -Fqx 'v$(PKGVERSION)' || printf %s -dev; \
+  git diff --quiet HEAD -- 2>/dev/null || printf %s -dirty)
+
+VERSION ?= v$(PKGVERSION)$(GITSUFFIX)
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-
-# Package version, which is not the same string as VERSION: dpkg and apk want
-# a number, and `git describe` on an untagged tree gives a bare commit hash.
-# Falls back to 0.0.0 so `make package` works on a fresh clone.
-PKGVERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
-ifeq ($(strip $(PKGVERSION)),)
-PKGVERSION := 0.0.0
-endif
 
 # Architectures both packaging targets build for.
 ARCHES := amd64 arm64
@@ -45,7 +60,30 @@ DEV_SOCKET ?= $(DEV_ROOT)/olrd.sock
 .PHONY: help
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) \
-	  | awk -F':.*?## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
+	  | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+
+.PHONY: version
+version: ## Print the version this build stamps in
+	@echo '$(VERSION)'
+
+.PHONY: pkgversion
+pkgversion: ## Print the bare version, as dpkg, apk and the tarballs want it
+	@echo '$(PKGVERSION)'
+
+.PHONY: version-check
+version-check: ## Check VERSION is well-formed, and matches $TAG when one is set
+	@# The release workflow runs this before it runs anything else, so that a
+	@# mistyped tag costs seconds rather than a published version number.
+	@# A trailing -rc1 and the like is allowed: release.yml reads the dash as
+	@# "prerelease", so the two agree on what an unfinished version looks like.
+	@echo '$(PKGVERSION)' | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$$' || { \
+	  echo "VERSION is not a version number: '$(PKGVERSION)'" >&2; exit 1; }
+	@if [ -n "$$TAG" ] && [ "$$TAG" != "v$(PKGVERSION)" ]; then \
+	  echo "tag $$TAG does not match VERSION, which says v$(PKGVERSION)" >&2; \
+	  echo "the file is the source of truth: bump VERSION in a commit, then tag it" >&2; \
+	  exit 1; \
+	fi
+	@echo "VERSION $(PKGVERSION) ok$${TAG:+, matching tag $$TAG}"
 
 .PHONY: deps
 deps: ## Download modules

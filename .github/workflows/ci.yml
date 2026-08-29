@@ -34,6 +34,13 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # The VERSION file is what the release will publish, so a malformed one
+      # is caught on the pull request that writes it rather than by the tag
+      # push that was meant to ship it. No tags are needed for this, so the
+      # shallow checkout above is enough.
+      - name: Check the version file
+        run: make version-check
+
       - name: Vet and test
         run: make check
 

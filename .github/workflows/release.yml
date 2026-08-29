@@ -5,9 +5,15 @@
 # tarball for the distributions the .deb does not cover. The Makefile already
 # builds both; this only decides when, and where they land.
 #
-# Cutting a release is therefore:
+# The version itself is not decided here. It lives in the VERSION file, so
+# cutting a release starts with a commit that can be reviewed:
 #
-#     git tag -a v0.1.0 -m 'v0.1.0' && git push origin v0.1.0
+#     echo 0.1.0 > VERSION && git commit -am 'Release 0.1.0'
+#     git tag -a v0.1.0 -m 'v0.1.0' && git push origin main v0.1.0
+#
+# The tag only records which commit claims that number. If the two disagree the
+# tag is a typo, and the first step below stops the run rather than publishing
+# a version nobody reviewed.
 #
 # Running this workflow by hand instead builds the same artefacts and attaches
 # them to the run, publishing nothing — which is how to exercise packaging
@@ -35,7 +41,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # tags, for `git describe` in the Makefile
+          fetch-depth: 0 # tags, so the Makefile can tell a release build from a dev one
+
+      # First, and before the toolchains: a mistyped tag should cost seconds,
+      # not a full test and SPA build. TAG travels by environment rather than
+      # `${{ }}` interpolation — a tag name is user-supplied text, and pasting
+      # it into a command line is how that text becomes a command.
+      - name: Check the tag matches VERSION
+        if: github.ref_type == 'tag'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: make version-check
 
       # The go.mod floor again, as in CI: the released binary is built by the
       # same toolchain the tests ran against. `go install nfpm` below may need
@@ -65,21 +81,24 @@ jobs:
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-      # VERSION is what the binary reports (internal/buildinfo); PKGVERSION is
-      # what dpkg and apk sort on, and they want a bare number with no leading
-      # v. Both are passed explicitly rather than left to `git describe`, so the
-      # artefacts carry the tag that triggered this and nothing else.
+      # Both numbers come from the Makefile, which reads them from the VERSION
+      # file — asking make is what keeps a release from being versioned by a
+      # different rule than a developer's `make package`. VERSION is what the
+      # binary reports (internal/buildinfo); PKGVERSION is what dpkg and apk
+      # sort on, and they want a bare number with no leading v.
       - name: Resolve version
         id: version
         run: |
+          version="$(make -s version)"
           if [ "$GITHUB_REF_TYPE" = tag ]; then
-            version="$GITHUB_REF_NAME"
-            pkgversion="${version#v}"
+            pkgversion="$(make -s pkgversion)"
           else
-            # A manual run is not a release. 0.0.0 is the Makefile's own
-            # fallback for an untagged tree; keep the packages unmistakably
-            # unreleasable while still building them for real.
-            version="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+            # A manual run is not a release. Keep the packages unmistakably
+            # unreleasable — 0.0.0 sorts below every real version, so one
+            # installed by accident is replaced by the next genuine release
+            # rather than shadowing it. The binary inside still says
+            # <version>-dev, which is the Makefile's own answer for a commit
+            # that is not the tagged one.
             pkgversion="0.0.0"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"

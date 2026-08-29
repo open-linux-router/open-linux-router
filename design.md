@@ -821,6 +821,22 @@ works on a clone with no npm installed, and a binary built that way serves an
 explanatory page instead of a UI. Nothing about the router's runtime depends on
 this column.
 
+**The version is a file, not a tag.** `VERSION` at the repo root holds a bare
+number — `0.1.0`, no leading `v` — and the Makefile derives everything else from
+it: what `olr version` prints, what dpkg and apk sort on, what the tarballs are
+called, what a release publishes. A tag records only *which commit claims that
+number*, so cutting a release is a reviewable commit followed by a matching
+`v0.1.0` tag, and CI refuses to publish when the two disagree (`make
+version-check`).
+
+The alternative — deriving the version from `git describe` — was what this
+replaced. It makes the number appear for the first time in a command typed at a
+shell, where a typo becomes a published release with no diff to review, and it
+gives a clone that fetched no tags a different answer than CI. The one thing it
+did buy is kept: a build that is not the tagged commit reports `0.1.0-dev`
+(and `-dirty` for an edited tree), so a working-tree binary can never claim to
+be the released artefact.
+
 ---
 
 ## 9. Milestones
