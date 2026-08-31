@@ -19,11 +19,16 @@ const EMPTY: Reservation = { mac: '', ip: '' }
 /**
  * Adds or edits a fixed address.
  *
- * Worth knowing while reading this: design.md §11.1 says a fixed address is a
- * property *of a device*, and §10 open decision 6 — who owns the device
- * inventory — is still open and explicitly blocks that surface. So this form
- * edits a flat MAC-to-IP entry, which the design names as the shape to grow out
- * of. It will be replaced by a device-centric one, not extended.
+ * design.md §11.1 says a fixed address is a property *of a device*, set from the
+ * device list rather than by typing a MAC into a form. That is now how it is
+ * normally reached: the Devices screen opens this dialog with the MAC already
+ * filled in, so the operator never goes and finds a hardware address.
+ *
+ * The flat MAC-to-IP form survives underneath because the fact itself still
+ * belongs to `dhcp` — §4.1 forbids `devices` keeping its own copy — and because
+ * the Addresses screen still needs a way to add a reservation for a device that
+ * has never appeared on the network. What changed is which door an operator
+ * usually comes through, not who owns the room.
  */
 export function ReservationDialog({
   open,

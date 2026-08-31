@@ -3,6 +3,7 @@ import { Link, Route, Routes } from 'react-router'
 import { AppShell } from '@/components/layout/app-shell'
 import { Button } from '@/components/ui/button'
 import { AuthGate } from '@/components/layout/auth-gate'
+import { DevicesPage } from '@/routes/devices'
 import { DhcpPage } from '@/routes/dhcp'
 import { OverviewPage } from '@/routes/overview'
 
@@ -12,6 +13,7 @@ export function App() {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<OverviewPage />} />
+          <Route path="devices" element={<DevicesPage />} />
           <Route path="dhcp" element={<DhcpPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>

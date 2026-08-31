@@ -368,6 +368,7 @@ Bounded list. Not expected to grow much. The object they all key off is the
 |---|---|---|---|
 | **Foundation** | `link` | NICs, bridges, VLANs, bonds, addresses (netlink); **groups** (§4.4) | ✅ |
 | | `dial` | WAN: DHCP client, PPPoE, static, LTE; IPv6 PD | ✅ |
+| | `devices` | **device identity** (§4.4); joins presence from leases + ARP | ✅ |
 | **Services** | `dhcp` | dnsmasq — DHCPv4, DHCPv6 **and RA** (§4.2) | ✅ |
 | | `dns` | unbound — **DNS only** | ✅ |
 | | `firewall` | nftables `olr_filter`, `olr_nat` — zones, rules, NAT, forwards | ✅ |
@@ -375,8 +376,7 @@ Bounded list. Not expected to grow much. The object they all key off is the
 | | `routing` | static + policy routes; later bird (BGP/OSPF) | |
 | | `vpn` | wireguard — remote access, site-to-site | |
 | | `wifi` | hostapd — only if the box has radios | |
-| **Operational** | `clients` | read-mostly: leases + ARP/ND + stations + conntrack | |
-| | `system` | hostname, time, admin users, updates, backup, logs | ✅ |
+| **Operational** | `system` | hostname, time, admin users, updates, backup, logs | ✅ |
 
 ### 4.1 Dependencies form a DAG
 
@@ -394,7 +394,7 @@ link ──┬─→ dial ──┬─→ dns      (upstream resolvers)
        │          ├─→ firewall (NAT egress iface)
        │          └─→ routing  (default route, PD prefix)
        ├─→ dhcp ──┬─→ dns      (lease hostnames, one-way publish)
-       │          ├─→ clients
+       │          ├─→ devices  (leases as presence; identity flows the other way)
        │          └─→ qos
        ├─→ firewall
        ├─→ routing
@@ -849,8 +849,9 @@ be the released artefact.
 2. **Make it a router.** `firewall` (zones/NAT) + `dhcp` + `dns`. Success: a
    client on LAN reaches the internet with no hand-edited config.
 3. **Make it safe.** Lockout guard, per-module revisions, impact classification.
-4. **Make it visible.** WebUI shell, `clients` inventory, live throughput.
-   The device inventory may have to move earlier — see §10 open decision 6.
+4. **Make it visible.** WebUI shell, `devices` inventory, live throughput.
+   The inventory did move earlier: identity landed with the device list, which
+   is what unblocked the §11.1 fixed-address surface.
 5. **Make it programmable.** OpenAPI publication, MCP server, skills.
 6. **Then:** `qos`, `vpn`, `routing`, `wifi`.
 
@@ -873,7 +874,7 @@ downstream should be built on that key in the meantime.
 ## 10. Open decisions
 
 1. **`access` module split.** Assumed here as three concerns —
-   `firewall` (zones/rules/NAT/forwards), `clients` (inventory, blocking,
+   `firewall` (zones/rules/NAT/forwards), `devices` (inventory, blocking,
    parental), `auth` (who may log into olr, folded into `system`).
    Confirm this matches the intent.
 2. **Immediate apply** (§5.1) — assumed yes; confirm.
@@ -901,24 +902,49 @@ downstream should be built on that key in the meantime.
    The same store is the natural home for the throughput history §6.3 needs,
    which is the one genuine query workload in the product and may end up
    deciding this.
-6. **Who owns the device inventory?** (§4.4) Devices are a foundation object —
-   `firewall` and `qos` reference them and must not depend on `dhcp` to do it —
-   but `clients` is currently a v2 read-mostly module. Either it is promoted to
-   v1 and grows an intent half, or something else owns identity. This blocks the
-   `dhcp` fixed-address surface, since a fixed address is a property *of a
-   device*. **The most urgent of these.**
-7. **Does the device list read ARP/ND in v1?** A statically-addressed printer
-   never speaks DHCP, so a lease-derived list silently omits it and operators
-   will notice. Either read the neighbour table too, or name the screen "DHCP
-   clients" and be honest that it is not an inventory.
-8. **Does creating a network default DHCP on?** Leaning yes — a LAN without
+6. **Does creating a network default DHCP on?** Leaning yes — a LAN without
    DHCP is the unusual case, and §5.1 immediate-apply makes it cheap to undo.
-9. **What is a group, exactly?** (§4.4) Its field set is now the most
+7. **What is a group, exactly?** (§4.4) Its field set is now the most
    load-bearing schema in the project: `link`, `dhcp`, `dns`, `firewall` and
    later `wifi` all key off it. Worth designing deliberately rather than
    growing.
 
 ### Resolved
+
+- **`devices` owns the inventory, and it is a module of its own.** (was open
+  decision 6, §4.4) `clients` is promoted to v1, renamed to `devices` after the
+  object it owns, and grows the intent half: MAC, name, category, model, notes.
+  The alternatives both failed on §4.1. Identity in `dhcp` would force
+  `firewall` to depend on `dhcp` to write a rule about a laptop, which §4.4
+  forbids in as many words. A separate identity module *beside* a `clients`
+  reader would split one object across two owners and leave the join homeless.
+
+  Presence stays read-through and arrives via a consumer-declared interface, the
+  way `dhcp` reads `link` through `LinkView`: `devices` never imports `dhcp`, and
+  the lease adapter is wired in `cmd/olrd`. What was going to be the `clients`
+  module — conntrack, wifi stations — becomes further presence sources behind
+  that same interface rather than a second module with a second name for one
+  object.
+
+  **The fixed address does not move.** `dhcp` keeps owning it; the device list
+  joins against it per request. §11.1 asked that the *workflow* start from the
+  device, not that the fact change hands — and moving it would have been the
+  private copy §4.1 exists to prevent. This unblocks that surface.
+
+- **The device list reads ARP, from `/proc/net/arp`.** (was open decision 7)
+  The screen is called Devices, so it has to be one: a lease-derived list omits
+  the statically-addressed printer, and operators notice. Reading the kernel's
+  neighbour table costs no new dependency, which is why it beat the netlink
+  library — `go.mod` has three direct dependencies and that restraint is worth
+  more than IPv6 coverage in v1.
+
+  The cost is stated rather than hidden. `/proc/net/arp` is IPv4-only, so ND
+  waits for `link` to bring netlink in properly (milestone 1), and a v6-only
+  client is invisible to both sources until then. A device that neither takes a
+  lease nor answers ARP is absent until added by hand, and the screen says so
+  next to its `as_of` rather than implying the list is complete. On a machine
+  with no `/proc/net/arp` at all — every non-Linux developer box — that is
+  reported as a problem on the response, never swallowed.
 
 - **HTTP stays stdlib; no web framework.** Reaffirmed against a concrete
   proposal to adopt `gin`, and the deciding argument was not taste. A framework's
@@ -1094,8 +1120,9 @@ Two nouns, both defined in §4.4, neither of them owned here:
 
 Modelling fixed addresses as a flat MAC→IP table is the failure mode to avoid;
 it is what forces every workflow to start from a hardware address the operator
-has to go and find. Device inventory ownership is §10 open decision 6, and it
-blocks this surface.
+has to go and find. `devices` now owns identity (§10, resolved), so this surface
+is unblocked: the device list is where a fixed address is set, with the MAC
+already known, and `dhcp` still owns the reservation itself.
 
 ### 11.2 Per-group settings
 

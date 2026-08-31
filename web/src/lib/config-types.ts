@@ -3,6 +3,48 @@
 // Regenerate with `make types` (olrd must be running).
 // Source of truth: the Go config structs — see design.md §3.2 rule 3.
 
+/**
+ * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
+ */
+export type DeviceCategory =
+  | ''
+  | 'unknown'
+  | 'phone'
+  | 'tablet'
+  | 'laptop'
+  | 'desktop'
+  | 'watch'
+  | 'ereader'
+  | 'tv'
+  | 'speaker'
+  | 'console'
+  | 'camera'
+  | 'doorbell'
+  | 'thermostat'
+  | 'sensor'
+  | 'plug'
+  | 'light'
+  | 'vacuum'
+  | 'printer'
+  | 'nas'
+  | 'server'
+  | 'sbc'
+  | 'router'
+  | 'accesspoint'
+  | 'switch'
+  | 'hub'
+
+export interface DevicesConfig {
+  devices?: Device[]
+}
+export interface Device {
+  mac: string
+  name?: string
+  category?: DeviceCategory
+  model?: string
+  notes?: string
+}
+
 export type IPAddress = string
 export type IPAddress1 = string
 /**

@@ -27,6 +27,7 @@ import (
 
 	"github.com/open-linux-router/open-linux-router/internal/buildinfo"
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/devices"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/webui"
 )
@@ -93,7 +94,12 @@ func run() error {
 	// literally here for the same reason the mounts below are: the set is
 	// bounded and known at compile time (§3.2), and the order it is given in is
 	// the order the document is written in.
-	store := core.NewStore(core.RootedConfigPath(opts.root), dhcp.ModuleName)
+	// `devices` follows `dhcp` rather than leading it. Its identity half is a
+	// foundation object that `firewall` and `qos` will reference (§4.4), but its
+	// presence half reads the lease database through `dhcp`, so it is the later
+	// of the two to come up.
+	store := core.NewStore(core.RootedConfigPath(opts.root),
+		dhcp.ModuleName, devices.ModuleName)
 	checkStore(store, logger)
 
 	applier, err := dhcp.NewApplierAt(store, links, opts.root)
@@ -111,6 +117,22 @@ func run() error {
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
 	}.Handler(), dhcp.Config{})
+
+	srv.Mount(devices.ModuleName, devices.HTTP{
+		Applier: devices.Applier{
+			Store: store,
+			// Two presence sources, and the pair is the point: leases know
+			// about anything that asked for an address, ARP sees the
+			// statically-addressed printer that never did (§10 decision 7).
+			Presence: []devices.PresenceSource{
+				dhcpPresence{applier: applier},
+				devices.ARP{},
+			},
+			Fixed: dhcpFixedAddresses{applier: applier},
+		},
+		Lock:   srv.ApplyLock(),
+		Events: srv.Events(),
+	}.Handler(), devices.Config{})
 
 	// --- routes -----------------------------------------------------------
 	//

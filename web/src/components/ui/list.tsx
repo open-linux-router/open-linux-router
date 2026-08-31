@@ -34,6 +34,7 @@ function List({ className, ...props }: React.ComponentProps<'ul'>) {
 function ListRow({
   title,
   subtitle,
+  leading,
   trailing,
   onSelect,
   className,
@@ -41,12 +42,19 @@ function ListRow({
 }: Omit<React.ComponentProps<'li'>, 'title' | 'onSelect'> & {
   title: React.ReactNode
   subtitle?: React.ReactNode
+  /**
+   * Something to identify the row at a glance, before its name — a device's
+   * picture, say. Kept out of `title` so it cannot end up inside the truncating
+   * text box, where a wide element would eat the name it is meant to support.
+   */
+  leading?: React.ReactNode
   /** Quiet supporting value, right-aligned. Stands down on narrow screens. */
   trailing?: React.ReactNode
   onSelect?: () => void
 }) {
   const body = (
     <>
+      {leading}
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{title}</div>
         {subtitle && <div className="truncate text-[0.8rem] text-muted-foreground">{subtitle}</div>}

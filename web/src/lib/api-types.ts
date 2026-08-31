@@ -10,9 +10,10 @@
 //
 // The fix is to have core publish response schemas next to the config schema
 // and extend scripts/gen-types.mjs to consume them. Until then, this file and
-// internal/dhcp/view.go must be changed together.
+// internal/dhcp/view.go and internal/devices/view.go must be changed together.
 
 import type { Problem } from '@/lib/api'
+import type { DeviceCategory, DevicesConfig } from '@/lib/config-types'
 
 /** What applying a change will cost (design.md §5.3.3, internal/dhcp Impact). */
 export type Impact = 'none' | 'reload' | 'restart' | 'disruptive'
@@ -118,4 +119,81 @@ export interface DhcpLeases {
   usage: PoolUsage[]
   problems?: Problem[]
   as_of: string
+}
+
+// --- devices ---------------------------------------------------------------
+
+/**
+ * Where a resolved value came from — internal/devices Origin.
+ *
+ * The distinction is the point of the screen: what an operator was told and
+ * what we inferred must never look the same, or a guess reads as a fact.
+ */
+export type Origin = 'operator' | 'detected' | 'observed' | ''
+
+/** Which source saw a device — internal/devices Source. */
+export type PresenceSource = 'dhcp-lease' | 'arp'
+
+/**
+ * One row of the device list: identity joined to presence
+ * (design.md §4.4, internal/devices deviceView).
+ */
+export interface DeviceRow {
+  mac: string
+
+  /** Already resolved: stored name, else observed hostname, else empty. */
+  name: string
+  name_origin?: Origin
+
+  category: DeviceCategory
+  category_origin?: Origin
+
+  /** What detection produced, whether or not it won. */
+  detected_category?: DeviceCategory
+  detect_reason?: string
+  vendor?: string
+
+  model?: string
+  notes?: string
+
+  /** Whether a human has described this device, as opposed to it merely being seen. */
+  stored: boolean
+
+  /** Any source considers it current. */
+  online: boolean
+
+  /**
+   * Any source has ever seen it. Distinct from `online`: a stored device that
+   * has never been seen is a typo'd MAC or a machine that has not been plugged
+   * in, and neither is the same as "away".
+   */
+  seen: boolean
+
+  ips?: string[]
+  hostname?: string
+  sources?: PresenceSource[]
+
+  /** null for no lease, and for a lease that never expires. */
+  expires: string | null
+
+  /** The reserved address. Owned by dhcp, joined here so no client repeats it. */
+  fixed_ip?: string
+}
+
+export interface DeviceList {
+  devices: DeviceRow[]
+  problems?: Problem[]
+  as_of: string
+}
+
+/**
+ * The result of storing identity.
+ *
+ * No `steps`, unlike dhcp's ApplyResult: this module writes one document
+ * atomically, so there is no half-finished state to report.
+ */
+export interface DevicesApplyResult {
+  plan: Plan
+  config: DevicesConfig
+  error?: { message: string; problems?: Problem[] }
 }

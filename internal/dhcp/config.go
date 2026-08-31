@@ -3,7 +3,6 @@ package dhcp
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/netip"
 	"slices"
 	"strconv"
@@ -280,12 +279,13 @@ func (d *Duration) UnmarshalText(text []byte) error {
 // NormalizeMAC lowercases and canonicalises a hardware address, so that
 // "AA-BB-CC-DD-EE-FF" and "aa:bb:cc:dd:ee:ff" are one reservation rather than
 // two. It returns an error for anything net.ParseMAC rejects.
+//
+// The implementation is core's, because the `devices` module keys identity by
+// the same string and the device list joins the two on it (design.md §4.4). It
+// stays exported here so that this module's own call sites read in its own
+// vocabulary rather than reaching across for a spelling rule.
 func NormalizeMAC(s string) (string, error) {
-	hw, err := net.ParseMAC(strings.TrimSpace(s))
-	if err != nil {
-		return "", fmt.Errorf("invalid MAC address %q", s)
-	}
-	return strings.ToLower(hw.String()), nil
+	return core.NormalizeMAC(s)
 }
 
 // Normalize puts the config in canonical form: MACs lowercased, pools sorted by

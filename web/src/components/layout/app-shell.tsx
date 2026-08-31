@@ -1,4 +1,4 @@
-import { Activity, Network, Router } from 'lucide-react'
+import { Activity, Laptop, Network, Router } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
 
 import { ThemeToggle } from '@/components/layout/theme-toggle'
@@ -7,6 +7,9 @@ import { cn } from '@/lib/utils'
 
 const NAV = [
   { to: '/', label: 'Overview', icon: Activity, end: true },
+  // Devices before Addresses: §4.4 makes the device the object an operator
+  // actually goes looking for, and a fixed address is a property of one.
+  { to: '/devices', label: 'Devices', icon: Laptop, end: false },
   { to: '/dhcp', label: 'Addresses', icon: Network, end: false },
 ]
 
