@@ -1,8 +1,14 @@
 # `dns` module design
 
-Status: **design only**. Nothing here is built. `internal/dns` does not exist,
-and no daemon in the packaging renders DNS configuration. Section references
-are to `design.md`.
+Status: **§6's v1 row is built.** `internal/dns` is the module, `internal/dnsrelay`
+and `cmd/olr-dnsd` are the relay, and the packaging carries `olr-dns.service`
+(unbound, on loopback:5353) and `olr-dnsd.service` (ours, on :53). Section
+references are to `design.md`.
+
+Two things this document argued about were settled while building it, and both
+are recorded where they arise: §7.1 turned out to have been decided already by
+`design.md` §3.5, and §6's "blocking is native and cheap" does not survive the
+relay — see §4.4. The v2 and Never rows stand as written.
 
 This document exists because DNS turned out not to be a service olr configures.
 It is the layer that decides which traffic can be policed at all, and that
@@ -144,6 +150,13 @@ carry forwarding, so **per-client upstream selection is not expressible in
 unbound**. (Established from documentation, not verified against the build in
 trixie. It is load-bearing — confirm before relying on it.)
 
+> **Built:** the view half of this stopped mattering. Once the relay owns `:53`,
+> every query reaches unbound from `127.0.0.1` and all views collapse into one,
+> so blocking moved into the relay (§4.4) and unbound is configured with no
+> views at all. §7.4's verification is therefore no longer blocking — it becomes
+> load-bearing again only if v2's per-client upstream selection is attempted
+> inside unbound rather than by pointing clients at a second resolver.
+
 That matters because a global `forward-zone: "."` to the proxy's resolver gives
 full fidelity — every name gets a fake IP, and the proxy has an exact domain
 rather than a sniff — but only if **every** device exits via the proxy. With
@@ -278,6 +291,46 @@ messy many-to-many. The path hardest to route is the easiest to account for.
 IP→ASN stays the fallback for what this can never cover — clients that resolved
 before olr started, connected by address, or asked somewhere we cannot see.
 
+### 4.4 Blocking lives in the relay, not in unbound's views
+
+A correction to §3 and to §6's "blocking is native and cheap", found while
+building and forced by the rest of this document rather than chosen.
+
+unbound selects a view by the **client's netblock**. The moment the relay owns
+`:53`, every query reaches unbound from `127.0.0.1`, so every view matches the
+same netblock and the whole mechanism collapses into one. The relay is the only
+thing left that still knows who asked.
+
+So the relay answers blocked names itself, which §4.1 already anticipated as the
+one place the invariant bends — "returning NXDOMAIN or an override requires
+synthesising a response. Small, and the only code path that must be exactly
+right." It is about a hundred lines, and it buys two things beyond making the
+feature work at all: unbound stays a plain recursive resolver with no views, so
+the escape hatch stays a plain passthrough; and the answer is exact about the
+client rather than about a netblock the resolver had to be told about twice.
+
+The synthesised response echoes the query's ID and question section, because a
+client matches on both and silently discards anything else — a blocked name that
+produced a discarded answer would present as a timeout, which is the failure
+blocking exists to avoid.
+
+### 4.5 Where the observations are read from
+
+The query log and the name map live in the relay's memory and are served over a
+read-only unix socket at `/run/olr/dns/observe.sock`, which `olrd` reads through
+on every request.
+
+This is the *read* direction only. §3.5's "not a private RPC channel" governs
+how we **drive** a backend, and that stays rendered files plus SIGHUP: the relay
+starts from `relay.json` and `policy.d/` with nothing else alive on the box. A
+read-only socket costs neither of the two things that corollary names — the
+relay is still independently runnable, and `curl --unix-socket` on it is a
+better debugging story than parsing a lease file, not a worse one.
+
+A socket rather than a state file because the alternative is a line per query
+appended to disk, and a great many olr boxes boot from an SD card. It also
+leaves §7.5 genuinely open instead of quietly answering it.
+
 ---
 
 ## 5. The risk, which is availability
@@ -307,6 +360,21 @@ shape to argue for — at the cost of the single-daemon simplicity that is
 currently a property of the design. **Open, and it determines whether the risk
 above stays manageable.**
 
+> **Built, and it was never open:** `design.md` §3.5 had already decided this.
+> "Backends are separate processes even when we write them… if `olr-dhcpd` ever
+> exists it is a binary and a unit, never a goroutine", and its test — *does it
+> have to keep running while `olrd` is stopped?* — DNS fails plainly. So the
+> relay is `cmd/olr-dnsd`, `Type=notify`, `Restart=always`.
+>
+> One correction to the paragraph above: it is *not* configured by reading from
+> `olrd` over a socket. §3.5's corollary is that we drive our own backend the way
+> we drive dnsmasq — rendered files and a signal — because a private channel
+> costs the backend its ability to be run and debugged on its own. `relay.json`
+> is a restart; `policy.d/` is a SIGHUP.
+>
+> The observation direction is a socket; see §4.5 for why that is not the same
+> thing.
+
 Also new: a network-facing UDP listener is a posture olr does not currently have
 at all — `olrd` is a unix socket and a config renderer. Bind to LAN interfaces
 only and access-control by source, or we have shipped an amplifier.
@@ -317,9 +385,9 @@ only and access-control by source, or we have shipped an amplifier.
 
 | | | |
 |---|---|---|
-| **v1** | resolver leg: DNAT hijack of forwarded `:53`, upstream = unbound, per-group policy | |
+| **v1** | resolver leg: DNAT hijack of forwarded `:53`, upstream = unbound, per-group policy | built; policy keys off client prefixes until `link` lands groups |
 | | passthrough relay with tee, query log, domain→IP map | the observability case is the whole reason to own :53 |
-| | per-client blocking, DoT `:853` drop | blocking is native and cheap; the block is what protects everything else |
+| | per-client blocking, DoT `:853` drop | built **in the relay**, not in unbound views — §4.4; the block is what protects everything else |
 | **v2** | per-client upstream selection (proxy vs direct) | needs §2.1's return-path answer first |
 | | DoH `:443` blocklist, TCP and UDP | ongoing maintenance, not a one-off |
 | | fake-IP route as a global domain rule | belongs with §12, not here |
@@ -330,8 +398,9 @@ only and access-control by source, or we have shipped an amplifier.
 
 ## 7. Open
 
-1. **Separate process or inside `olrd`** (§5). The one that decides whether
-   owning :53 is acceptable.
+1. ~~**Separate process or inside `olrd`** (§5).~~ **Closed** — `design.md` §3.5
+   had already decided it. `cmd/olr-dnsd`, its own unit, `Restart=always`,
+   driven by rendered files and a signal.
 2. **SNAT toward next-hop exits, or a dedicated segment for the proxy box**
    (§2.1). Determines whether byte accounting sees both directions.
 3. **Fake-IP destination routing versus per-source assignment — which wins.**
@@ -341,6 +410,42 @@ only and access-control by source, or we have shipped an amplifier.
    proxy. That is exactly the surprise §5.6 exists to prevent, so whichever way
    it goes, the effective value and its source have to be visible.
 4. **Whether unbound views really cannot carry `forward-zone`** (§3). Verify
-   against trixie before the ladder in §3 is relied upon.
+   against trixie before the ladder in §3 is relied upon. **No longer blocking:**
+   blocking moved into the relay (§4.4) and unbound is rendered with no views at
+   all, so this only matters again if v2's per-client upstream selection is
+   attempted inside unbound rather than with a second resolver process.
 5. **Where the query log lives.** It is a second workload voting in §10's
-   revision-storage decision, and the larger of the two.
+   revision-storage decision, and the larger of the two. v1 keeps it in the
+   relay's memory and serves it over a socket (§4.5), which bounds the memory
+   and pre-decides nothing — the log starts empty after a restart, and the API
+   says so rather than implying a history it lacks.
+
+---
+
+## 8. Known gaps in what is built
+
+Stated here rather than left to be discovered, per the rule that we document
+what we do not cover instead of implying coverage we do not have.
+
+- **A redirect that failed to load is not detected.** `olr-dnsd.service` loads
+  `hijack.nft` in `ExecStartPost` with a leading `-`, so a failure is logged and
+  does not take DNS down with it — the right trade, since a broken redirect
+  costs the redirect and a failed unit costs the building its name resolution.
+  But nothing reads the ruleset back, so `olr dns status` cannot say the
+  redirect is missing. Reading nftables belongs to the `firewall` module; this
+  closes when that lands.
+- **IPv6 is captured only if there is an IPv6 listen address.** The renderer
+  emits per-family redirect rules and warns when one family has none, which is
+  honest but not the same as covering it. A client resolving over IPv6 on a
+  dual-stack network bypasses the redirect entirely — the same failure the
+  routing model records for a v4-only exit.
+- **Policies key off client prefixes, not groups.** `link` has not landed, so
+  this is the same stand-in `internal/dhcp` makes by keying pools off kernel
+  interface names, and it changes shape at the same time.
+- **The query log is of *answered* queries.** A query that never gets an answer
+  produces no observation, by §4.2's design — there is no pending-query map and
+  no timeout sweeper. The `failed` counter is where those show up.
+- **Not verified end to end.** The renderers, the planner, the policy matcher
+  and the relay's own request path are unit-tested, including byte-for-byte
+  passthrough against a fake upstream. Real `:53` capture, `nft -f` loading and
+  unbound interop need Linux with `CAP_NET_ADMIN` and have not been exercised.

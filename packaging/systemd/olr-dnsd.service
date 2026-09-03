@@ -1,0 +1,88 @@
+[Unit]
+Description=open-linux-router DNS relay (olr-dnsd)
+Documentation=https://github.com/open-linux-router/open-linux-router
+After=network.target olr-dns.service
+
+# Wants, not Requires. The resolver behind us should come up first — a relay
+# whose upstream is not answering serves SERVFAIL, and clients cache that — but
+# refusing to start because unbound is momentarily down would turn a degraded
+# minute into an outage that needs a human. Wants+After orders without coupling.
+Wants=olr-dns.service
+
+[Service]
+# notify, and it is load-bearing rather than decorative: ExecStartPost below
+# redirects the whole network's DNS at this process, and doing that before it
+# could answer would point every device at a closed port. sd_notify(READY=1) is
+# sent once every socket is bound.
+Type=notify
+NotifyAccess=main
+
+ExecStart=/usr/bin/olr-dnsd
+
+# The nftables redirect, loaded once the relay is listening and torn down when
+# it stops. Tying its lifetime to this unit is the whole point of putting it
+# here rather than in a unit of its own.
+#
+# The `+` prefix runs these as root, outside the sandbox below. That is what
+# lets the relay itself — the most exposed process on the box, parsing
+# unauthenticated packets from every device on the LAN — hold no privileges at
+# all while still getting its ruleset loaded.
+#
+# The leading `-` on the load is deliberate and is a judgement, not laziness: if
+# the ruleset fails to load, clients that use this resolver still resolve.
+# Failing the unit would take DNS down for everybody to punish a failure that
+# costs only the redirect. The error is in the journal instead. Note the
+# consequence, which is a real gap: olr does not currently detect a redirect
+# that silently failed to load, because reading nftables back belongs to the
+# firewall module.
+#
+# The file is absent whenever the hijack is off, and `test -f` makes that a
+# no-op rather than an error the operator has to learn to ignore.
+ExecStartPost=+-/bin/sh -c 'f=/etc/open-linux-router/rendered/dns/hijack.nft; test -f "$f" || exit 0; exec /usr/sbin/nft -f "$f"'
+ExecStopPost=+-/usr/sbin/nft delete table inet olr-dns
+
+# SIGHUP re-reads the policy directory and nothing else. That asymmetry is why
+# olrd renders two files: rebinding a socket is a restart, and editing a
+# blocklist — much the more common operation — must not interrupt a query.
+ExecReload=/bin/kill -HUP $MAINPID
+
+# always, not on-failure. The relay is stateless: there is no cache to warm, so
+# a restart costs milliseconds and clients retry unprompted (docs/dns.md §5).
+# That is precisely what makes a crash loop survivable here where it would not
+# be for a real resolver — and DNS being down reads to every occupant of the
+# building as the internet being broken, so coming back matters more than
+# staying down to be diagnosed.
+Restart=always
+RestartSec=2
+
+# Binding :53 is the only privilege this process gets, and it does not keep a
+# root identity to do it. design.md §3.5 is explicit about why this matters more
+# here than for most units: a DNS server parses unauthenticated packets from
+# every device on the LAN, which is the most dangerous code on the box.
+DynamicUser=yes
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# olr/dns, not olr. systemd deletes a RuntimeDirectory when its unit stops, and
+# /run/olr also holds olrd's control socket and the lockout guard's revert
+# snapshots. Naming it here would mean `systemctl stop olr-dnsd` silently took
+# olrd's socket with it.
+RuntimeDirectory=olr/dns
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target

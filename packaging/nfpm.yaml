@@ -6,10 +6,10 @@
 # repository is a decision that can be deferred rather than one that has to be
 # made now.
 #
-# The dependency is the point. design.md §3.4 gives DHCP away to dnsmasq, and
-# declaring that here means "is dnsmasq installed, and where" stops being a
-# question olr has to answer in Go: apt answers it, and answers it before any
-# of our code runs.
+# The dependencies are the point. design.md §3.4 gives DHCP away to dnsmasq and
+# name resolution away to unbound, and declaring that here means "is it
+# installed, and where" stops being a question olr has to answer in Go: apt
+# answers it, and answers it before any of our code runs.
 
 name: olr
 arch: ${ARCH}
@@ -30,15 +30,27 @@ description: |
 
 depends:
   - dnsmasq-base
+  # olr owns :53 and applies policy there, but it does not resolve names and
+  # never will — recursion, DNSSEC validation and caching are permanently out of
+  # scope (docs/dns.md §6). unbound does that part.
+  - unbound
+  # Only the DNS redirect needs it, but the alternative is an operator turning
+  # that on and getting a failure out of a unit rather than out of olr. A router
+  # without nftables is not a configuration worth optimising the package for.
+  - nftables
 
 overrides:
   apk:
     depends:
       # Alpine has no split base package.
       - dnsmasq
+      - unbound
+      - nftables
   rpm:
     depends:
       - dnsmasq
+      - unbound
+      - nftables
 
 contents:
   # `expand: true` is required for ${ARCH} to mean anything here. nfpm expands
@@ -57,14 +69,29 @@ contents:
     file_info:
       mode: 0755
 
+  # The DNS relay. A binary and a unit, never a goroutine inside olrd
+  # (design.md §3.5): it has to keep answering while olrd is stopped, and it
+  # parses unauthenticated packets from every device on the LAN, so it must not
+  # share an address space with the admin API.
+  - src: dist/olr-dnsd-linux-${ARCH}
+    dst: /usr/bin/olr-dnsd
+    expand: true
+    file_info:
+      mode: 0755
+
   # Units, not enabled here. postinstall enables olrd, because a control plane
-  # that is installed and not running is a surprise; olr-dhcp.service is left
-  # alone deliberately — the dhcp module enables it when its configuration says
-  # DHCP is on, and enabling it here would start a DHCP server nobody asked for.
+  # that is installed and not running is a surprise; the backend units are left
+  # alone deliberately — each module enables its own when its configuration says
+  # that service is on, and enabling them here would start a DHCP server and
+  # take over :53 on a box where nobody asked for either.
   - src: packaging/systemd/olrd.service
     dst: /lib/systemd/system/olrd.service
   - src: packaging/systemd/olr-dhcp.service
     dst: /lib/systemd/system/olr-dhcp.service
+  - src: packaging/systemd/olr-dns.service
+    dst: /lib/systemd/system/olr-dns.service
+  - src: packaging/systemd/olr-dnsd.service
+    dst: /lib/systemd/system/olr-dnsd.service
 
   # The configuration document lives here. Created empty: an absent document
   # means "never configured", which is what a fresh install is.

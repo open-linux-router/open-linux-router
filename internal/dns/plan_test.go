@@ -1,0 +1,341 @@
+package dns
+
+import (
+	"net/netip"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+// observedFor renders a config and presents it back as what is on disk, so a
+// test can start from "already applied" and change one thing.
+func observedFor(t *testing.T, b Backend, c Config, running bool) Observed {
+	t.Helper()
+	rendered, err := b.Render(c, testLinks())
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	obs := Observed{Files: map[string][]byte{}, Units: map[string]UnitState{}}
+	for _, f := range rendered.Files {
+		obs.Files[f.Path] = f.Data
+	}
+	for _, unit := range b.Units() {
+		obs.Units[unit] = UnitState{
+			Known: true, Running: running, EnabledAtBoot: running, Installed: true,
+		}
+	}
+	return obs
+}
+
+func planFor(t *testing.T, b Backend, cfg Config, obs Observed) Plan {
+	t.Helper()
+	plan, err := BuildPlan(b, cfg, testLinks(), obs, time.Now())
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	return plan
+}
+
+func actionFor(plan Plan, unit string) ServiceAction {
+	for _, s := range plan.Services {
+		if s.Unit == unit {
+			return s.Action
+		}
+	}
+	return ActionNone
+}
+
+// The drift check (design.md §5.4): plan unchanged intent against reality and
+// see whether the diff is empty.
+func TestPlanOfAnAppliedConfigIsEmpty(t *testing.T) {
+	b := testBackend(t)
+	cfg := validConfig()
+
+	plan := planFor(t, b, cfg, observedFor(t, b, cfg, true))
+	if !plan.Empty() {
+		t.Errorf("an applied config planned work: %+v %v", plan.Services, plan.Changes)
+	}
+	if plan.Impact != ImpactNone {
+		t.Errorf("impact = %s, want none", plan.Impact)
+	}
+}
+
+// The whole reason policies live in a directory: the relay re-reads it on
+// SIGHUP, so the commonest edit costs nobody an interrupted query.
+func TestAddingABlockedNameIsAReloadOfTheRelayAlone(t *testing.T) {
+	b := testBackend(t)
+	before := validConfig()
+	obs := observedFor(t, b, before, true)
+
+	after := validConfig()
+	after.Policies = []Policy{{Name: "kids", Block: []string{"example.com"}}}
+	after.Normalize()
+
+	plan := planFor(t, b, after, obs)
+
+	if got := actionFor(plan, b.RelayUnit()); got != ActionReload {
+		t.Errorf("relay action = %s, want reload", got)
+	}
+	if got := actionFor(plan, b.ResolverUnit()); got != ActionNone {
+		t.Errorf("resolver action = %s, want none — a blocklist is nothing to do with unbound", got)
+	}
+	if plan.Impact != ImpactReload {
+		t.Errorf("impact = %s, want reload", plan.Impact)
+	}
+}
+
+// A forwarder change is unbound's business and must not disturb the socket the
+// whole network is talking to.
+func TestChangingTheUpstreamRestartsOnlyTheResolver(t *testing.T) {
+	b := testBackend(t)
+	before := validConfig()
+	obs := observedFor(t, b, before, true)
+
+	after := validConfig()
+	after.Upstream = Upstream{
+		Mode:    ModeForward,
+		Servers: []netip.AddrPort{netip.MustParseAddrPort("1.1.1.1:53")},
+	}
+
+	plan := planFor(t, b, after, obs)
+
+	if got := actionFor(plan, b.ResolverUnit()); got != ActionRestart {
+		t.Errorf("resolver action = %s, want restart", got)
+	}
+	if got := actionFor(plan, b.RelayUnit()); got != ActionNone {
+		t.Errorf("relay action = %s, want none", got)
+	}
+}
+
+// A policy removed from the config has to be removed from the directory too:
+// the relay reads whatever is in it, not whatever we meant to put there.
+func TestRemovingAPolicyDeletesItsFile(t *testing.T) {
+	b := testBackend(t)
+	before := validConfig()
+	before.Policies = []Policy{{Name: "kids", Block: []string{"example.com"}}}
+	before.Normalize()
+	obs := observedFor(t, b, before, true)
+
+	plan := planFor(t, b, validConfig(), obs)
+
+	stale := filepath.Join(b.Paths.PolicyDir, "kids.json")
+	var found bool
+	for _, c := range plan.Changes {
+		if c.Path == stale {
+			found = true
+			if c.Kind != ChangeDelete {
+				t.Errorf("stale policy planned as %s, want delete", c.Kind)
+			}
+			if c.Impact != ImpactReload {
+				t.Errorf("deleting a policy planned %s, want reload", c.Impact)
+			}
+			if c.Unit != b.RelayUnit() {
+				t.Errorf("stale policy attributed to %q, want %q", c.Unit, b.RelayUnit())
+			}
+		}
+	}
+	if !found {
+		t.Errorf("the stale policy file was not scheduled for deletion; changes: %v", plan.Changes)
+	}
+	// The delete is only half of it — without the signal the relay goes on
+	// enforcing a rule the operator removed.
+	if got := actionFor(plan, b.RelayUnit()); got != ActionReload {
+		t.Errorf("relay action = %s, want reload", got)
+	}
+}
+
+// A resolver going away costs everybody everything immediately, and does not
+// present as "DNS is down" — it presents as the internet being broken.
+func TestDisablingIsDisruptive(t *testing.T) {
+	b := testBackend(t)
+	cfg := validConfig()
+	obs := observedFor(t, b, cfg, true)
+
+	off := validConfig()
+	off.Enabled = false
+
+	plan := planFor(t, b, off, obs)
+
+	if plan.Impact != ImpactDisruptive {
+		t.Errorf("impact = %s, want disruptive", plan.Impact)
+	}
+	if got := actionFor(plan, b.RelayUnit()); got != ActionStop {
+		t.Errorf("relay action = %s, want stop", got)
+	}
+	if len(plan.Reasons) == 0 || !strings.Contains(plan.Reasons[0], "every device") {
+		t.Errorf("the reason does not say who is affected: %v", plan.Reasons)
+	}
+}
+
+// Answered from who has actually been resolving through us, not from whether a
+// field changed — the same move internal/dhcp makes against the lease database.
+func TestNarrowingAllowFromReportsWhoLosesResolution(t *testing.T) {
+	b := testBackend(t)
+	cfg := validConfig()
+	cfg.AllowFrom = []netip.Prefix{
+		netip.MustParsePrefix("192.168.1.0/24"),
+		netip.MustParsePrefix("192.168.2.0/24"),
+	}
+	cfg.Normalize()
+
+	obs := observedFor(t, b, cfg, true)
+	obs.Clients = []Client{
+		{Addr: netip.MustParseAddr("192.168.1.10"), Queries: 40, LastSeen: time.Now()},
+		{Addr: netip.MustParseAddr("192.168.2.20"), Queries: 12, LastSeen: time.Now()},
+	}
+
+	narrowed := validConfig() // only 192.168.1.0/24
+	plan := planFor(t, b, narrowed, obs)
+
+	if plan.Impact != ImpactDisruptive {
+		t.Errorf("impact = %s, want disruptive", plan.Impact)
+	}
+	joined := strings.Join(plan.Reasons, " ")
+	if !strings.Contains(joined, "192.168.2.20") {
+		t.Errorf("the reason does not name the device that loses resolution: %v", plan.Reasons)
+	}
+	if strings.Contains(joined, "192.168.1.10") {
+		t.Errorf("a device that keeps resolving was reported as losing it: %v", plan.Reasons)
+	}
+}
+
+// A device that has not asked in a long time must not veto a legitimate
+// tightening forever.
+func TestDeniedIgnoresLongGoneClients(t *testing.T) {
+	now := time.Now()
+	cfg := validConfig()
+
+	denied := Denied(cfg, testLinks(), []Client{
+		{Addr: netip.MustParseAddr("10.1.1.1"), LastSeen: now.Add(-2 * RecentWindow)},
+	}, now)
+	if len(denied) != 0 {
+		t.Errorf("a client last seen days ago was counted: %v", denied)
+	}
+
+	denied = Denied(cfg, testLinks(), []Client{
+		{Addr: netip.MustParseAddr("10.1.1.1"), LastSeen: now},
+	}, now)
+	if len(denied) != 1 {
+		t.Errorf("a current client outside the allow list was not counted: %v", denied)
+	}
+}
+
+// Empty allow_from means the listen networks, and Denied has to apply the same
+// rule the relay will — otherwise it would report the whole LAN as cut off.
+func TestDeniedUsesTheDerivedAllowList(t *testing.T) {
+	cfg := validConfig()
+	cfg.AllowFrom = nil
+
+	denied := Denied(cfg, testLinks(), []Client{
+		{Addr: netip.MustParseAddr("192.168.1.10"), LastSeen: time.Now()},
+	}, time.Now())
+	if len(denied) != 0 {
+		t.Errorf("a client on the listen network was reported as denied: %v", denied)
+	}
+}
+
+// A unit that is running now and not enabled costs nothing until the box
+// reboots, and then costs the whole network its name resolution.
+func TestBootStateIsDrift(t *testing.T) {
+	b := testBackend(t)
+	cfg := validConfig()
+	obs := observedFor(t, b, cfg, true)
+	for unit, state := range obs.Units {
+		state.EnabledAtBoot = false
+		obs.Units[unit] = state
+	}
+
+	plan := planFor(t, b, cfg, obs)
+
+	if plan.Empty() {
+		t.Fatal("a unit that would not come back after a reboot did not read as drift")
+	}
+	for _, s := range plan.Services {
+		if s.Enable == nil || !*s.Enable {
+			t.Errorf("%s: enable = %v, want true", s.Unit, s.Enable)
+		}
+	}
+	if !strings.Contains(strings.Join(plan.Reasons, " "), "reboot") {
+		t.Errorf("the reason does not mention the reboot: %v", plan.Reasons)
+	}
+}
+
+// "We could not tell" and "it is off" are different answers. Treating the first
+// as the second would make every box without a system bus report permanent
+// drift and carry an enable step that can never be satisfied.
+func TestUnknownServiceStateDoesNotManufactureAnEnableStep(t *testing.T) {
+	b := testBackend(t)
+	cfg := validConfig()
+	obs := observedFor(t, b, cfg, true)
+	for unit := range obs.Units {
+		obs.Units[unit] = UnitState{} // nothing known
+	}
+
+	plan := planFor(t, b, cfg, obs)
+	for _, s := range plan.Services {
+		if s.Enable != nil {
+			t.Errorf("%s carries an enable step on a box with no service manager", s.Unit)
+		}
+	}
+}
+
+// A reworded comment in a new release rewrites the file and must not restart
+// the resolver, or `olr status` cries wolf on every upgrade.
+func TestCosmeticChangesAreNotDrift(t *testing.T) {
+	b := testBackend(t)
+	cfg := validConfig()
+	obs := observedFor(t, b, cfg, true)
+
+	// Simulate the previous release's wording.
+	old := strings.Replace(string(obs.Files[b.Paths.UnboundConf]),
+		"# Generated by open-linux-router from", "# Written by open-linux-router from", 1)
+	obs.Files[b.Paths.UnboundConf] = []byte(old)
+
+	plan := planFor(t, b, cfg, obs)
+
+	if plan.Empty() != true {
+		t.Errorf("a comment change read as drift: %v", plan.Changes)
+	}
+	// It is still a file to write — Apply's early exit is a different predicate.
+	if plan.nothingToDo() {
+		t.Error("the file was not scheduled for rewriting")
+	}
+	for _, c := range plan.Changes {
+		if c.Path == b.Paths.UnboundConf && c.Impact != ImpactNone {
+			t.Errorf("comment-only change classified %s", c.Impact)
+		}
+	}
+}
+
+func TestBuildPlanRefusesAnInvalidConfig(t *testing.T) {
+	b := testBackend(t)
+	bad := validConfig()
+	bad.Listen = nil
+
+	if _, err := BuildPlan(b, bad, testLinks(), Observed{}, time.Now()); err == nil {
+		t.Fatal("planning succeeded against a config that cannot be applied")
+	}
+}
+
+// Impact is an int with a text encoding, so without the pair a plan can be sent
+// and never read — and `olr dns` is a client of its own module's API.
+func TestImpactRoundTrips(t *testing.T) {
+	for _, i := range []Impact{ImpactNone, ImpactReload, ImpactRestart, ImpactDisruptive} {
+		text, err := i.MarshalText()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var back Impact
+		if err := back.UnmarshalText(text); err != nil {
+			t.Fatalf("UnmarshalText(%q): %v", text, err)
+		}
+		if back != i {
+			t.Errorf("%s round-tripped to %s", i, back)
+		}
+	}
+	var i Impact
+	if err := i.UnmarshalText([]byte("nonsense")); err == nil {
+		t.Error("an unknown impact was accepted")
+	}
+}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/open-linux-router/open-linux-router/internal/cli"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
+	"github.com/open-linux-router/open-linux-router/internal/dns"
 )
 
 func main() {
@@ -16,6 +17,7 @@ func main() {
 	// list rather than a registry (design.md §3.2).
 	root.AddCommand(
 		dhcp.Command(),
+		dns.Command(),
 	)
 
 	if err := root.Execute(); err != nil {

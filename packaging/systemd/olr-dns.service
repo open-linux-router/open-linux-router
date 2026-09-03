@@ -1,0 +1,92 @@
+[Unit]
+Description=open-linux-router DNS resolver (unbound)
+Documentation=man:unbound(8)
+After=network.target
+
+# Deliberately no Conflicts=unbound.service.
+#
+# This is a second, separate unbound instance, and it does not even want the
+# same socket: olr's own relay owns :53 and this one answers on 127.0.0.1:5353.
+# The distro's unbound.service and /etc/unbound belong to whatever the operator
+# installed unbound for, and taking them over would be squatting shared state
+# (design.md §3.4). The two can run side by side without either noticing.
+
+[Service]
+Type=simple
+
+# The root trust anchor, bootstrapped before unbound needs it.
+#
+# The leading `-` is not laziness: unbound-anchor exits non-zero when it
+# *updated* the key, which is the ordinary case, and it falls back to a built-in
+# copy when the network is not up yet. Treating either as a failure would mean a
+# box that cannot reach the internet also cannot resolve locally — the worst
+# possible time to refuse to start.
+#
+# The anchor is ours rather than /var/lib/unbound's because unbound rewrites it
+# as the root KSK rolls, and writing into the distro package's state directory
+# is exactly the interference §3.4 forbids.
+ExecStartPre=-/usr/sbin/unbound-anchor -a /var/lib/open-linux-router/dns/root.key
+
+# Fail fast and legibly on a config unbound will not accept, rather than
+# flapping under Restart=on-failure with the reason buried in the journal.
+#
+# This is also the *only* place the rendered config is syntax-checked: olrd
+# executes no subprocesses (design.md §3.6), so it cannot run unbound-checkconf
+# itself before writing.
+ExecStartPre=/usr/sbin/unbound-checkconf /etc/open-linux-router/rendered/dns/unbound.conf
+
+# -d keeps unbound in the foreground so systemd supervises the real process
+# rather than a pid file. -p suppresses the pid file entirely.
+#
+# The paths are Debian's, because the package depends on unbound and that is
+# where Debian puts it. On a distribution that puts it elsewhere, override just
+# these lines rather than editing the unit:
+#
+#   /etc/systemd/system/olr-dns.service.d/10-path.conf
+#     [Service]
+#     ExecStartPre=
+#     ExecStart=
+#     ExecStart=/usr/bin/unbound -d -p -c /etc/open-linux-router/rendered/dns/unbound.conf
+ExecStart=/usr/sbin/unbound -d -p -c /etc/open-linux-router/rendered/dns/unbound.conf
+
+# SIGHUP makes unbound re-read its configuration and flush the cache. The flush
+# is the load-bearing half: changing a forwarder while the old answers are still
+# cached would leave the box resolving through the previous upstream for as long
+# as those entries live.
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=on-failure
+RestartSec=2
+
+# unbound answers on 5353, which is unprivileged, and talks to the root servers
+# and forwarders outbound. It needs no capabilities at all — the rendered config
+# sets `username: ""` and `chroot: ""` precisely so that the confinement is
+# systemd's and there is exactly one place to read it.
+DynamicUser=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# The trust anchor, which unbound rewrites as the root key rolls.
+# StateDirectory= and not ReadWritePaths=: systemd refuses to start a unit whose
+# ReadWritePaths= target does not exist, and at boot this unit can legitimately
+# run before olr has ever applied anything and created it. StateDirectory= makes
+# systemd create it instead, and with DynamicUser=yes it also owns it correctly.
+StateDirectory=open-linux-router/dns
+StateDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target

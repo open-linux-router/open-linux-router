@@ -62,35 +62,7 @@ func TestDiffOfADeletedFileIsAllRemovals(t *testing.T) {
 	}
 }
 
-func TestDiffOps(t *testing.T) {
-	tests := []struct {
-		name          string
-		before, after []string
-		want          []string
-	}{
-		{"identical", []string{"a", "b"}, []string{"a", "b"}, []string{" a", " b"}},
-		{"insert", []string{"a", "c"}, []string{"a", "b", "c"}, []string{" a", "+b", " c"}},
-		{"delete", []string{"a", "b", "c"}, []string{"a", "c"}, []string{" a", "-b", " c"}},
-		{"replace", []string{"a"}, []string{"b"}, []string{"-a", "+b"}},
-		{"empty before", nil, []string{"a"}, []string{"+a"}},
-		{"empty after", []string{"a"}, nil, []string{"-a"}},
-		{"both empty", nil, nil, nil},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := diffOps(tc.before, tc.after)
-			if strings.Join(got, "|") != strings.Join(tc.want, "|") {
-				t.Errorf("diffOps = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
-func TestPlural(t *testing.T) {
-	if got := plural(1, "line"); got != "1 line" {
-		t.Errorf("plural(1) = %q", got)
-	}
-	if got := plural(3, "line"); got != "3 lines" {
-		t.Errorf("plural(3) = %q", got)
-	}
-}
+// The line-level diffing — diffOps, the context collapsing, the pluralisation —
+// moved to core when the dns module needed the same thing, and its table tests
+// went with it. What stays here is what is this module's: that a Change renders
+// with a header naming the path and what applying it costs.

@@ -109,7 +109,7 @@ func writeLeasesText(w io.Writer, resp leasesResponse) error {
 	// Unparsable lines are reported rather than dropped: a silently short count
 	// looks exactly like a quiet network (design.md §3.4, report honestly).
 	if len(resp.Problems) > 0 {
-		fmt.Fprintf(w, "\n%s in the lease database could not be read:\n", plural(len(resp.Problems), "line"))
+		fmt.Fprintf(w, "\n%s in the lease database could not be read:\n", core.Plural(len(resp.Problems), "line"))
 		for _, p := range resp.Problems {
 			fmt.Fprintf(w, "  %s\n", problemText(p))
 		}
@@ -189,7 +189,7 @@ func writeStatusText(w io.Writer, status statusResponse, leases leasesResponse) 
 
 	if len(leases.Problems) > 0 {
 		fmt.Fprintf(w, "\n%s in the lease database could not be read\n",
-			plural(len(leases.Problems), "line"))
+			core.Plural(len(leases.Problems), "line"))
 	}
 	return nil
 }
@@ -205,7 +205,7 @@ func writePlanText(w io.Writer, plan planView, dryRun bool) error {
 	}
 
 	verb := map[bool]string{true: "would change", false: "changed"}[dryRun]
-	fmt.Fprintf(w, "%s %s:\n", plural(len(plan.Changes), "file"), verb)
+	fmt.Fprintf(w, "%s %s:\n", core.Plural(len(plan.Changes), "file"), verb)
 	for _, c := range plan.Changes {
 		fmt.Fprintf(w, "  %-6s %s\n", c.Kind, c.Path)
 	}
@@ -236,7 +236,7 @@ func writeWarnings(w io.Writer, warnings []core.Problem) error {
 	if len(warnings) == 0 {
 		return nil
 	}
-	fmt.Fprintf(w, "\n%s:\n", plural(len(warnings), "warning"))
+	fmt.Fprintf(w, "\n%s:\n", core.Plural(len(warnings), "warning"))
 	for _, p := range warnings {
 		fmt.Fprintf(w, "  %s\n", problemText(p))
 	}

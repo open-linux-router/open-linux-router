@@ -29,6 +29,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/devices"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
+	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/webui"
 )
 
@@ -89,22 +90,32 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	dnsLinks, err := loadDNSLinks(opts.links)
+	if err != nil {
+		return err
+	}
 
 	// One store for the whole box (core.ConfigPath). The module list is given
 	// literally here for the same reason the mounts below are: the set is
 	// bounded and known at compile time (§3.2), and the order it is given in is
 	// the order the document is written in.
-	// `devices` follows `dhcp` rather than leading it. Its identity half is a
+	// `dhcp` then `dns` is §3.2's own literal list, and it is also the order
+	// they matter in on a box being brought up: addresses first, then names.
+	// `devices` follows both rather than leading them. Its identity half is a
 	// foundation object that `firewall` and `qos` will reference (§4.4), but its
-	// presence half reads the lease database through `dhcp`, so it is the later
-	// of the two to come up.
+	// presence half reads the lease database through `dhcp`, so it is the last
+	// of the three to come up.
 	store := core.NewStore(core.RootedConfigPath(opts.root),
-		dhcp.ModuleName, devices.ModuleName)
+		dhcp.ModuleName, dns.ModuleName, devices.ModuleName)
 	checkStore(store, logger)
 
 	applier, err := dhcp.NewApplierAt(store, links, opts.root)
 	if err != nil {
 		return fmt.Errorf("initialising dhcp: %w", err)
+	}
+	dnsApplier, err := dns.NewApplierAt(store, dnsLinks, opts.root)
+	if err != nil {
+		return fmt.Errorf("initialising dns: %w", err)
 	}
 	if opts.root != "" {
 		logger.Warn("running against a relocated root; this is a development mode",
@@ -117,6 +128,12 @@ func run() error {
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
 	}.Handler(), dhcp.Config{})
+
+	srv.Mount(dns.ModuleName, dns.HTTP{
+		Applier: dnsApplier,
+		Lock:    srv.ApplyLock(),
+		Events:  srv.Events(),
+	}.Handler(), dns.Config{})
 
 	srv.Mount(devices.ModuleName, devices.HTTP{
 		Applier: devices.Applier{
@@ -293,6 +310,26 @@ func loadLinks(path string) (dhcp.LinkView, error) {
 		return dhcp.StaticLinks{}, nil
 	}
 	links, err := dhcp.LoadLinks(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	return links, nil
+}
+
+// loadDNSLinks reads the same file again, into the dns module's own view.
+//
+// Twice, rather than once into a shared type, and deliberately: design.md §4.1
+// has each consumer declare the facts it needs, and the two modules do not need
+// the same ones — dhcp names an interface and asks about it, dns names an
+// address and has to find which interface owns it. Both of these stand-ins are
+// deleted the day the link module lands and satisfies both interfaces directly,
+// so a shared abstraction here would be one built for a pair of things with a
+// known expiry date.
+func loadDNSLinks(path string) (dns.LinkView, error) {
+	if path == "" {
+		return dns.StaticLinks{}, nil
+	}
+	links, err := dns.LoadLinks(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}

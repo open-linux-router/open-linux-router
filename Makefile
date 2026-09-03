@@ -5,11 +5,16 @@ DIST    := dist
 WEB     := web
 ASSETS  := internal/webui/assets
 
-# Two binaries: the CLI and the resident control plane (design.md §3.5).
+# Three binaries: the CLI, the resident control plane, and the DNS relay
+# (design.md §3.5). The relay is its own binary rather than a goroutine because
+# it has to keep answering while olrd is stopped — that section gives the test,
+# and DNS fails it.
 BIN     := olr
 PKG     := ./cmd/olr
 DBIN    := olrd
 DPKG    := ./cmd/olrd
+NBIN    := olr-dnsd
+NPKG    := ./cmd/olr-dnsd
 
 # The version lives in one file, VERSION, and everything else is derived from
 # it: what the binaries report, what dpkg and apk sort on, the tarball names,
@@ -105,17 +110,20 @@ tidy: ## Tidy modules, keeping the go.mod floor at 1.23
 	$(GO) mod edit -go=1.23
 
 .PHONY: build
-build: ## Build olr and olrd for the host (does not rebuild the web UI)
+build: ## Build olr, olrd and olr-dnsd for the host (does not rebuild the web UI)
 	$(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN) $(PKG)
 	$(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(DIST)/$(DBIN) $(DPKG)
+	$(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(DIST)/$(NBIN) $(NPKG)
 
 .PHONY: cross
-cross: ## Build both binaries for linux/amd64 and linux/arm64
+cross: ## Build every binary for linux/amd64 and linux/arm64
 	for arch in amd64 arm64; do \
 	  GOOS=linux GOARCH=$$arch $(GO) build -trimpath -ldflags '$(LDFLAGS)' \
 	    -o $(DIST)/$(BIN)-linux-$$arch $(PKG) || exit 1; \
 	  GOOS=linux GOARCH=$$arch $(GO) build -trimpath -ldflags '$(LDFLAGS)' \
 	    -o $(DIST)/$(DBIN)-linux-$$arch $(DPKG) || exit 1; \
+	  GOOS=linux GOARCH=$$arch $(GO) build -trimpath -ldflags '$(LDFLAGS)' \
+	    -o $(DIST)/$(NBIN)-linux-$$arch $(NPKG) || exit 1; \
 	done
 
 .PHONY: web-deps
@@ -180,9 +188,10 @@ tarball: web cross ## Build the static tarballs, for distributions the .deb does
 	  rm -rf $$stage && mkdir -p $$stage/systemd; \
 	  cp $(DIST)/$(BIN)-linux-$$arch $$stage/$(BIN); \
 	  cp $(DIST)/$(DBIN)-linux-$$arch $$stage/$(DBIN); \
+	  cp $(DIST)/$(NBIN)-linux-$$arch $$stage/$(NBIN); \
 	  cp packaging/systemd/*.service $$stage/systemd/; \
 	  cp packaging/tarball/install.sh $$stage/install.sh; \
-	  chmod +x $$stage/install.sh $$stage/$(BIN) $$stage/$(DBIN); \
+	  chmod +x $$stage/install.sh $$stage/$(BIN) $$stage/$(DBIN) $$stage/$(NBIN); \
 	  tar -C $(DIST) -czf $$stage.tar.gz $$(basename $$stage) || exit 1; \
 	  rm -rf $$stage; \
 	done

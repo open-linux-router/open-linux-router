@@ -3,11 +3,9 @@
 package dhcp
 
 import (
-	"bufio"
 	"fmt"
-	"os"
-	"strconv"
-	"strings"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 // dhcpServerPort is the UDP port a DHCPv4 server listens on.
@@ -21,56 +19,11 @@ const dhcpServerPort = 67
 // stopping their daemon — machine-wide interference of exactly the kind §3.4
 // forbids — we look first and refuse with an explanation.
 //
-// It reads /proc/net/udp rather than trying to bind, because dnsmasq sets
-// SO_REUSEADDR: a successful test bind would prove nothing.
-func PortConflict() (bool, error) {
-	for _, path := range []string{"/proc/net/udp", "/proc/net/udp6"} {
-		inUse, err := portListedIn(path, dhcpServerPort)
-		if err != nil {
-			return false, err
-		}
-		if inUse {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func portListedIn(path string, port uint64) (bool, error) {
-	f, err := os.Open(path)
-	if os.IsNotExist(err) {
-		// No procfs entry to read: report "cannot tell" as "no conflict"
-		// rather than blocking a legitimate start on a missing file.
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("reading %s: %w", path, err)
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	scanner.Scan() // header
-
-	for scanner.Scan() {
-		fields := strings.Fields(scanner.Text())
-		if len(fields) < 2 {
-			continue
-		}
-		// local_address is "HEXADDR:HEXPORT".
-		_, hexPort, ok := strings.Cut(fields[1], ":")
-		if !ok {
-			continue
-		}
-		listening, err := strconv.ParseUint(hexPort, 16, 32)
-		if err != nil {
-			continue
-		}
-		if listening == port {
-			return true, nil
-		}
-	}
-	return false, scanner.Err()
-}
+// The procfs scan itself is core's, because the dns module needs the identical
+// check for :53 and a second copy is a second place to fix a parsing bug. What
+// stays here is the port and the refusal text: only this module can name
+// dnsmasq and the command that finds the incumbent.
+func PortConflict() (bool, error) { return core.UDPPortInUse(dhcpServerPort) }
 
 // ErrPortInUse explains a refused start.
 func ErrPortInUse() error {
