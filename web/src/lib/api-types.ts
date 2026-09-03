@@ -10,7 +10,19 @@
 //
 // The fix is to have core publish response schemas next to the config schema
 // and extend scripts/gen-types.mjs to consume them. Until then, this file and
-// internal/dhcp/view.go and internal/devices/view.go must be changed together.
+// internal/dhcp/view.go, internal/devices/view.go and internal/dns/view.go must
+// be changed together — three copies now, not two.
+//
+// What closing it actually costs, recorded here so it is not re-derived:
+//   - The view structs are unexported in all three modules (planView, queryView,
+//     …), so core needs them exported, or a registration point beside the config
+//     value Mount already takes.
+//   - Impact is an int with MarshalText, so reflection publishes a bare `string`
+//     and the unions below would *regress* unless Impact, ChangeKind and
+//     ServiceAction each grow a JSONSchema() method — the move
+//     internal/dns/schema.go already makes for UpstreamMode.
+//   - `Plan` collides across modules in one flat generated file, so the
+//     generator needs a per-module namespace it does not have today.
 
 import type { Problem } from '@/lib/api'
 import type { DeviceCategory, DevicesConfig } from '@/lib/config-types'
@@ -27,15 +39,40 @@ export interface Change {
   path: string
   kind: ChangeKind
   impact: Impact
+  /**
+   * Which backend reads this file. Only modules driving more than one daemon
+   * set it — dns writes unbound.conf and the relay's config, and signalling the
+   * wrong one is the bug this field exists to prevent.
+   */
+  unit?: string
   diff: string
 }
 
-/** The answer to "what would applying this do?" — internal/dhcp planView. */
-export interface Plan {
+/**
+ * What every module's plan carries.
+ *
+ * Split out because the tail is not shared: a module with one daemon reports a
+ * single `action`, and one with two reports a list. Flattening them into a
+ * single `Plan` is how a dns page ends up reading `plan.action`, getting
+ * `undefined`, and reporting a bare "Applied" for a change that restarted the
+ * resolver.
+ */
+export interface PlanCore {
   backend: string
   changes: Change[]
-  action: ServiceAction
   impact: Impact
+  reasons?: string[]
+  empty: boolean
+  warnings?: Problem[]
+}
+
+/**
+ * The answer to "what would applying this do?" for a module with one backend —
+ * internal/dhcp planView, and internal/devices, whose view.go says it mirrors
+ * dhcp's shape deliberately so one renderer serves both.
+ */
+export interface Plan extends PlanCore {
+  action: ServiceAction
   /**
    * The boot-time state the unit will be moved to, absent when it already
    * matches. Separate from `action` because "running now" and "running after a
@@ -43,9 +80,26 @@ export interface Plan {
    * healthy until the power goes out.
    */
   enable?: boolean
-  reasons?: string[]
-  empty: boolean
-  warnings?: Problem[]
+}
+
+/** One unit's worth of pending work — internal/dns ServicePlan. */
+export interface ServicePlan {
+  unit: string
+  action: ServiceAction
+  /** As {@link Plan.enable}, but per unit. */
+  enable?: boolean
+}
+
+/**
+ * internal/dns planView.
+ *
+ * `services` rather than `action` because this module drives two daemons:
+ * unbound resolves and olr-dnsd owns :53. They fail differently and are
+ * signalled independently — editing a blocklist reloads the relay and must not
+ * touch the resolver at all — so a single action could not say what happened.
+ */
+export interface DnsPlan extends PlanCore {
+  services: ServicePlan[]
 }
 
 /** One unit of work and how it went. */
@@ -196,4 +250,120 @@ export interface DevicesApplyResult {
   plan: Plan
   config: DevicesConfig
   error?: { message: string; problems?: Problem[] }
+}
+
+// --- dns -------------------------------------------------------------------
+//
+// Mirrors internal/dns/view.go. Everything below `DnsStatus.stats` is observed:
+// never stored, never cached, read through the relay's socket on every request
+// and stamped with `as_of` (design.md §4.5).
+
+/** As {@link ApplyResult}, for the module whose plan carries two units. */
+export interface DnsApplyResult {
+  plan: DnsPlan
+  steps?: Step[]
+  error?: { message: string; problems?: Problem[] }
+}
+
+/**
+ * One backend's liveness — internal/dns serviceView.
+ *
+ * `status` is absent with `error` set when the query itself failed, which is
+ * normal on a box with no system bus and must not read as "stopped".
+ */
+export interface DnsService {
+  unit: string
+  status?: UnitStatus
+  error?: string
+}
+
+export interface DnsStatus {
+  enabled: boolean
+  /**
+   * Both backends, always resolver first then relay. Reported separately on
+   * purpose: "DNS is broken" has two very different causes and only one of them
+   * is ours.
+   */
+  services: DnsService[]
+  drifted: boolean
+  drift?: DnsPlan
+  drift_error?: string
+  /** Absent with `stats_error` set when the relay is not answering — which is
+   *  itself the most useful thing the reply can say. */
+  stats?: DnsStats
+  stats_error?: string
+  as_of: string
+}
+
+/** One address the relay has recently answered — internal/dns clientView. */
+export interface DnsClient {
+  address: string
+  queries: number
+  last_seen: string
+}
+
+/**
+ * The relay's account of itself, gaps included — internal/dns statsView.
+ *
+ * `dropped` and `unparsed` are published rather than kept internal, and that is
+ * the point: a query log that silently shed entries under load would be worse
+ * than none, because it would look complete.
+ */
+export interface DnsStats {
+  /** When the relay started. The log does not survive a restart. */
+  since: string
+  queries: number
+  blocked: number
+  refused: number
+  failed: number
+  /** Observations lost because the tee was full. */
+  dropped: number
+  /** Responses the observer could not read. */
+  unparsed: number
+  /** Entries the log currently holds, and the bound it holds them under. */
+  held: number
+  capacity: number
+  clients?: DnsClient[]
+}
+
+/** One answered query — internal/dns queryView. */
+export interface QueryRow {
+  at: string
+  client: string
+  name: string
+  type: string
+  rcode: string
+  /**
+   * `blocked` and `policy` together answer "why can this device not reach that
+   * site". A blocked entry without the rule that blocked it sends the operator
+   * hunting.
+   */
+  blocked: boolean
+  policy?: string
+  answers?: string[]
+  /** The CNAME chain. Its tail is why a device that asked for one name shows up
+   *  talking to a CDN. */
+  chain?: string[]
+}
+
+export interface DnsQueries {
+  queries: QueryRow[]
+  stats?: DnsStats
+  as_of: string
+}
+
+/** One domain→address pairing — internal/dns nameView. */
+export interface NameRow {
+  client: string
+  name: string
+  address: string
+  chain?: string[]
+  expires: string
+  last_seen: string
+}
+
+export interface DnsNames {
+  names: NameRow[]
+  stats?: DnsStats
+  as_of: string
 }

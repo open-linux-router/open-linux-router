@@ -2,7 +2,9 @@ package dns
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
@@ -53,6 +55,8 @@ func (h HTTP) Handler() http.Handler {
 	// /queries and /names are read through the relay's socket on every
 	// request. They are the reason to own :53 at all — the resolver leg buys
 	// nothing that can be seen without them.
+	//
+	// /queries and /names take an optional ?limit=; see readLimit.
 	mux.HandleFunc("GET /status", h.getStatus)
 	mux.HandleFunc("GET /queries", h.getQueries)
 	mux.HandleFunc("GET /names", h.getNames)
@@ -304,6 +308,42 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 	core.WriteJSON(w, http.StatusOK, resp)
 }
 
+// readLimit reads the optional ?limit= that bounds an observed list.
+//
+// Absent means everything, and that default is load-bearing: `olr dns queries`
+// is a client of this same endpoint, and a limit applied by default would make
+// the CLI quietly start truncating a log an operator asked to read in full. The
+// UI, which polls, asks for a bound explicitly.
+//
+// The list is bounded either way — the relay holds QueryLog.Entries and no more
+// — so this is about not moving the whole of it every few seconds, not about
+// safety. stats.held still reports the true total, so a caller that asked for
+// fewer can say how many it is not showing.
+//
+// A malformed or negative limit is refused rather than ignored: a client that
+// meant to bound a response and did not is better off hearing about it than
+// receiving five thousand entries it will try to render.
+func readLimit(r *http.Request) (int, bool, error) {
+	raw := r.URL.Query().Get("limit")
+	if raw == "" {
+		return 0, false, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return 0, false, fmt.Errorf("limit must be a non-negative whole number, not %q", raw)
+	}
+	return n, true, nil
+}
+
+// clamp returns the newest n entries. The lists arrive newest first, so this is
+// a prefix rather than a tail.
+func clamp[T any](in []T, n int, ok bool) []T {
+	if !ok || n >= len(in) {
+		return in
+	}
+	return in[:n]
+}
+
 type queriesResponse struct {
 	Queries []queryView `json:"queries"`
 	Stats   *statsView  `json:"stats,omitempty"`
@@ -316,6 +356,12 @@ func (h HTTP) getQueries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	limit, bounded, err := readLimit(r)
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	queries, stats, err := h.Applier.Observer.Queries(r.Context())
 	if err != nil {
 		// A 503 and not a 500: the relay being down is a state of the system,
@@ -324,6 +370,7 @@ func (h HTTP) getQueries(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
+	queries = clamp(queries, limit, bounded)
 
 	resp := queriesResponse{Queries: make([]queryView, 0, len(queries)), AsOf: time.Now()}
 	for _, q := range queries {
@@ -347,11 +394,18 @@ func (h HTTP) getNames(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	limit, bounded, err := readLimit(r)
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	names, stats, err := h.Applier.Observer.Names(r.Context())
 	if err != nil {
 		core.WriteError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
+	names = clamp(names, limit, bounded)
 
 	resp := namesResponse{Names: make([]nameView, 0, len(names)), AsOf: time.Now()}
 	for _, n := range names {

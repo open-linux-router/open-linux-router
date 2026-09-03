@@ -94,3 +94,61 @@ export interface Reservation {
   hostname?: string
   lease_time?: Duration
 }
+
+/**
+ * An address and port, such as 192.168.1.1:53 or [2001:db8::1]:53.
+ */
+export type AddressAndPort = string
+/**
+ * An address and prefix length in CIDR form, such as 192.168.1.0/24.
+ */
+export type IPPrefix = string
+/**
+ * How names are resolved. recurse walks the DNS from the root, so no third party sees everything this network looks up and there is no forwarder to be down. forward sends every query to the servers listed instead, which is faster from cold and the only option where an upstream's own filtering is wanted. Empty means recurse.
+ */
+export type UpstreamMode = '' | 'recurse' | 'forward'
+/**
+ * An address and port, such as 192.168.1.1:53 or [2001:db8::1]:53.
+ */
+export type AddressAndPort1 = string
+/**
+ * An address and prefix length in CIDR form, such as 192.168.1.0/24.
+ */
+export type IPPrefix1 = string
+/**
+ * What a blocked name answers with. nxdomain says the name does not exist, which is the honest answer and the one clients cache and back off from. zero answers 0.0.0.0 and ::, which some networks prefer because an app that reads NXDOMAIN as "the network is down" will retry forever, where a refused connection fails at once. Empty means nxdomain.
+ */
+export type BlockedNameResponse = '' | 'nxdomain' | 'zero'
+
+export interface DnsConfig {
+  enabled: boolean
+  listen?: AddressAndPort[]
+  allow_from?: IPPrefix[]
+  upstream: Upstream
+  policies?: Policy[]
+  hijack: Hijack
+  query_log: QueryLog
+  extra_unbound_conf?: string
+}
+export interface Upstream {
+  mode?: UpstreamMode
+  servers?: AddressAndPort1[]
+  tls?: boolean
+  tls_name?: string
+}
+export interface Policy {
+  name: string
+  clients?: IPPrefix1[]
+  block?: string[]
+  allow?: string[]
+  response?: BlockedNameResponse
+}
+export interface Hijack {
+  enabled: boolean
+  interfaces?: string[]
+  block_dot?: boolean
+}
+export interface QueryLog {
+  enabled: boolean
+  entries?: number
+}

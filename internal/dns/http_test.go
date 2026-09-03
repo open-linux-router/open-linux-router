@@ -309,6 +309,85 @@ func TestQueriesAndNamesAreStamped(t *testing.T) {
 	}
 }
 
+// The UI polls these endpoints, and the relay holds thousands of entries. The
+// default has to stay unbounded, though: `olr dns queries` reads the same route,
+// and a limit applied without being asked for would make the CLI truncate a log
+// an operator asked to see in full.
+func TestQueriesAndNamesTakeAnOptionalLimit(t *testing.T) {
+	applier, resolver, relay := testApplier(t)
+	resolver.active, relay.active = true, true
+
+	var queries []Query
+	var names []Name
+	for i := 0; i < 5; i++ {
+		queries = append(queries, Query{
+			At: time.Now(), Client: netip.MustParseAddr("192.168.1.10"),
+			Name: "example.com", Type: "A", Rcode: "NOERROR",
+		})
+		names = append(names, Name{
+			Client: netip.MustParseAddr("192.168.1.10"), Name: "example.com",
+			Addr: netip.MustParseAddr("93.184.216.34"), Expires: time.Now().Add(time.Hour),
+		})
+	}
+	applier.Observer = stubObserver{
+		queries: queries, names: names,
+		stats: Stats{Since: time.Now(), Queries: 5, Held: 5, Capacity: 100},
+	}
+	h := HTTP{Applier: applier, Lock: core.NewLock(), Events: core.NewEvents()}.Handler()
+
+	read := func(t *testing.T, path string) queriesResponse {
+		t.Helper()
+		w := do(t, h, http.MethodGet, path, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET %s status = %d, body %s", path, w.Code, w.Body)
+		}
+		var resp queriesResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	if got := read(t, "/queries"); len(got.Queries) != 5 {
+		t.Errorf("no limit returned %d queries, want all 5", len(got.Queries))
+	}
+
+	got := read(t, "/queries?limit=2")
+	if len(got.Queries) != 2 {
+		t.Errorf("limit=2 returned %d queries, want 2", len(got.Queries))
+	}
+	// The count the caller is not being shown still has to be reachable, or a
+	// truncated list looks like the whole of a quiet network.
+	if got.Stats == nil || got.Stats.Held != 5 {
+		t.Errorf("held count did not survive the limit: %+v", got.Stats)
+	}
+
+	// Asking for more than there is is not an error, and must not pad.
+	if got := read(t, "/queries?limit=50"); len(got.Queries) != 5 {
+		t.Errorf("limit=50 returned %d queries, want 5", len(got.Queries))
+	}
+
+	w := do(t, h, http.MethodGet, "/names?limit=3", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", w.Code, w.Body)
+	}
+	var namesResp namesResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &namesResp); err != nil {
+		t.Fatal(err)
+	}
+	if len(namesResp.Names) != 3 {
+		t.Errorf("limit=3 returned %d names, want 3", len(namesResp.Names))
+	}
+
+	// Refused rather than ignored: a client that meant to bound the response
+	// and mistyped it should hear so, not receive everything.
+	for _, bad := range []string{"/queries?limit=nope", "/queries?limit=-1", "/names?limit=x"} {
+		if w := do(t, h, http.MethodGet, bad, ""); w.Code != http.StatusBadRequest {
+			t.Errorf("GET %s status = %d, want 400", bad, w.Code)
+		}
+	}
+}
+
 // stubObserver returns fixed observations.
 type stubObserver struct {
 	queries []Query

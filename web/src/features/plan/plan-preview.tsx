@@ -1,44 +1,51 @@
 import { Badge } from '@/components/ui/badge'
-import type { Impact, Plan } from '@/lib/api-types'
+import type { Impact, PlanCore } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
+
+/**
+ * The plan preview, shared by every module that has one.
+ *
+ * The *rendering* of a plan is module-agnostic — a diff is a diff, and a reason
+ * is already a sentence written for a human. The *wording of the impact* is
+ * not: dhcp's `disruptive` means devices lose an address, dns's means the whole
+ * house loses name resolution, and one label cannot honestly say both. So the
+ * widgets live here and the labels arrive from the caller.
+ *
+ * Typed to {@link PlanCore} rather than to either module's plan: nothing below
+ * reads `action` or `services`, and demanding one of them would be the only
+ * reason this file could not serve both.
+ */
 
 /**
  * How each impact class reads to an operator (design.md §5.3.3).
  *
  * The labels answer "what happens to me?", not "what does the daemon do?".
- * `reload` and `restart` are facts about dnsmasq that an operator cannot act
- * on; whether their devices stay connected is the thing they actually want to
+ * `reload` and `restart` are facts about a daemon that an operator cannot act
+ * on; whether their devices keep working is the thing they actually want to
  * know, so that is what the badge says. The daemon's own word for it is still
  * one disclosure away, in the change detail.
  */
-const IMPACT: Record<
+export type ImpactLabels = Record<
   Impact,
   { label: string; hint: string; variant: 'secondary' | 'success' | 'warning' | 'destructive' }
-> = {
-  none: {
-    label: 'No change',
-    hint: 'Nothing running changes.',
-    variant: 'secondary',
-  },
-  reload: {
-    label: 'Seamless',
-    hint: 'Devices stay connected and notice nothing.',
-    variant: 'success',
-  },
-  restart: {
-    label: 'Brief pause',
-    hint: 'Address handling stops for a moment. Devices keep the addresses they already have.',
-    variant: 'warning',
-  },
-  disruptive: {
-    label: 'Devices disconnect',
-    hint: 'Devices using an address from this router will lose it.',
-    variant: 'destructive',
-  },
+>
+
+function entry(labels: ImpactLabels, impact: Impact) {
+  // Falls back rather than crashing on an impact a newer daemon knows and this
+  // build does not. A wrong-but-quiet badge beats a blank page over a label.
+  return labels[impact] ?? labels.none
 }
 
-export function ImpactBadge({ impact, className }: { impact: Impact; className?: string }) {
-  const meta = IMPACT[impact] ?? IMPACT.none
+export function ImpactBadge({
+  impact,
+  labels,
+  className,
+}: {
+  impact: Impact
+  labels: ImpactLabels
+  className?: string
+}) {
+  const meta = entry(labels, impact)
   return (
     <Badge variant={meta.variant} className={className}>
       {meta.label}
@@ -46,8 +53,8 @@ export function ImpactBadge({ impact, className }: { impact: Impact; className?:
   )
 }
 
-export function impactHint(impact: Impact): string {
-  return (IMPACT[impact] ?? IMPACT.none).hint
+export function impactHint(labels: ImpactLabels, impact: Impact): string {
+  return entry(labels, impact).hint
 }
 
 /**
@@ -58,7 +65,7 @@ export function impactHint(impact: Impact): string {
  * same disclosure as the file diffs would hide the answer along with the
  * evidence.
  */
-export function PlanReasons({ plan }: { plan: Plan }) {
+export function PlanReasons({ plan }: { plan: PlanCore }) {
   if (!plan.reasons?.length) return null
 
   return (
@@ -81,11 +88,11 @@ export function PlanReasons({ plan }: { plan: Plan }) {
  * "3 files will change" is not something an operator can act on. Showing the
  * lines is what lets a human — or an agent proposing a change for review
  * (design.md §6.4) — see that a pool moved by one address rather than that
- * something moved. It now sits behind a disclosure rather than in front of the
+ * something moved. It sits behind a disclosure rather than in front of the
  * decision: still available to whoever wants it, no longer the first thing
  * between an operator and their answer.
  */
-export function PlanDiff({ plan }: { plan: Plan }) {
+export function PlanDiff({ plan, labels }: { plan: PlanCore; labels: ImpactLabels }) {
   if (plan.empty) {
     return <p className="text-sm text-muted-foreground">No changes.</p>
   }
@@ -96,7 +103,7 @@ export function PlanDiff({ plan }: { plan: Plan }) {
         <div key={change.path} className="overflow-hidden rounded-lg border">
           <div className="flex items-center gap-2 border-b bg-muted/50 px-3 py-1.5">
             <span className="truncate font-mono text-xs">{change.path}</span>
-            <ImpactBadge impact={change.impact} className="ml-auto shrink-0" />
+            <ImpactBadge impact={change.impact} labels={labels} className="ml-auto shrink-0" />
           </div>
           <pre className="max-h-64 overflow-auto px-3 py-2 font-mono text-xs leading-relaxed">
             {change.diff.split('\n').map((line, i) => (

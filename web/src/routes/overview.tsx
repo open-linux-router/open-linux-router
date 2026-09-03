@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDhcpLeases, useDhcpStatus } from '@/features/dhcp/queries'
+import { useDnsStatus } from '@/features/dns/queries'
 
 /**
  * A placeholder until there is something real to show.
@@ -12,11 +13,12 @@ import { useDhcpLeases, useDhcpStatus } from '@/features/dhcp/queries'
  * The overview this project actually wants — throughput, WAN state, a device
  * inventory — needs the link and dial modules, which are milestone 1 and not
  * yet written (design.md §9). Rather than invent numbers, this shows only what
- * the one mounted module can honestly answer.
+ * the mounted modules can honestly answer.
  */
 export function OverviewPage() {
   const status = useDhcpStatus()
   const leases = useDhcpLeases()
+  const dns = useDnsStatus()
 
   const active = leases.data?.leases.filter((l) => l.active).length
 
@@ -25,7 +27,7 @@ export function OverviewPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
         <p className="text-sm text-muted-foreground">
-          One part of the router is set up so far. More arrive with link and dial.
+          Two parts of the router are set up so far. More arrive with link and dial.
         </p>
       </header>
 
@@ -62,6 +64,50 @@ export function OverviewPage() {
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {active} device{active === 1 ? '' : 's'} connected
+                </p>
+              )}
+            </CardContent>
+          </Link>
+        </Card>
+
+        <Card className="transition-colors focus-within:border-ring hover:border-foreground/20">
+          <Link to="/dns" className="block outline-none">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-1.5 text-base">
+                DNS
+                <ChevronRight className="size-4 text-muted-foreground/60" aria-hidden />
+              </CardTitle>
+              <CardDescription>Looking up names for your devices</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {dns.isPending ? (
+                <Skeleton className="h-5 w-24" />
+              ) : dns.isError ? (
+                <p className="text-sm text-muted-foreground">Cannot reach the router</p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={dns.data.enabled ? 'success' : 'secondary'}>
+                    {dns.data.enabled ? 'On' : 'Off'}
+                  </Badge>
+                  {dns.data.drifted && !dns.data.drift_error && (
+                    <Badge variant="warning">Not yet applied</Badge>
+                  )}
+                </div>
+              )}
+              {/* The counters and not the daemon's state: "we blocked 412 things"
+                  is what someone opens this page hoping to see. `stats` is absent
+                  when the DNS server is not answering, which is worth saying
+                  rather than papering over with a zero. */}
+              {dns.isPending ? (
+                <Skeleton className="h-4 w-40" />
+              ) : dns.data?.stats ? (
+                <p className="text-sm text-muted-foreground">
+                  {dns.data.stats.queries.toLocaleString()} looked up,{' '}
+                  {dns.data.stats.blocked.toLocaleString()} blocked
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {dns.data?.enabled ? 'Not answering right now' : 'Nothing is being looked up'}
                 </p>
               )}
             </CardContent>

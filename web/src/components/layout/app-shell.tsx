@@ -1,4 +1,4 @@
-import { Activity, Laptop, Network, Router } from 'lucide-react'
+import { Activity, Globe, Laptop, Network, Router } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
 
 import { ThemeToggle } from '@/components/layout/theme-toggle'
@@ -11,6 +11,12 @@ const NAV = [
   // actually goes looking for, and a fixed address is a property of one.
   { to: '/devices', label: 'Devices', icon: Laptop, end: false },
   { to: '/dhcp', label: 'Addresses', icon: Network, end: false },
+  // "DNS" and not a translation of it. The rule everywhere else in this app is
+  // to use the word the audience already knows, which is why dhcp's section is
+  // called Addresses — nobody outside networking says "DHCP". The same rule
+  // gives the opposite answer here: "DNS" *is* consumer vocabulary, and
+  // renaming it to Names or Filtering would make a familiar thing unfamiliar.
+  { to: '/dns', label: 'DNS', icon: Globe, end: false },
 ]
 
 export function AppShell() {

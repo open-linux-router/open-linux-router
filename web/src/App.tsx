@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { AuthGate } from '@/components/layout/auth-gate'
 import { DevicesPage } from '@/routes/devices'
 import { DhcpPage } from '@/routes/dhcp'
+import { DnsPage } from '@/routes/dns'
 import { OverviewPage } from '@/routes/overview'
 
 export function App() {
@@ -15,6 +16,7 @@ export function App() {
           <Route index element={<OverviewPage />} />
           <Route path="devices" element={<DevicesPage />} />
           <Route path="dhcp" element={<DhcpPage />} />
+          <Route path="dns" element={<DnsPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
