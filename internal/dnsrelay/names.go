@@ -16,10 +16,12 @@ import (
 // clients that resolved before the relay started, connected by address, or
 // asked somewhere we cannot see.
 //
-// A useful inversion worth remembering while reading this file: fake IPs are
-// 1:1 with names, so attribution for proxy-routed traffic is exact, and it is
-// *directly* resolved traffic that gets the messy many-to-many below. The path
-// hardest to route is the easiest to account for.
+// The many-to-many below applies to every flow, with no exception for traffic
+// that happens to be proxied. An earlier design had one — it routed by domain
+// name using a proxy's fake IPs, and those are 1:1 with names, so anything
+// routed that way attributed exactly. docs/gateway.md §4 removed that mechanism,
+// and the map is the weaker, uniform story that remains. Better one account of
+// how accurate this is than two.
 
 // NameGrace is how long an entry outlives the TTL that created it.
 //

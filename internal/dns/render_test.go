@@ -118,10 +118,14 @@ func TestRenderUnbound(t *testing.T) {
 	}
 }
 
-// The one range deliberately absent from the rebinding list. Adding it would
-// make domain routing fail with no error anywhere: the proxy mints a fake IP in
-// 198.18.0.0/15 and unbound would silently strip it.
-func TestRenderKeepsTheFakeIPRangeOutOfTheRebindList(t *testing.T) {
+// The one range deliberately absent from the rebinding list.
+//
+// olr does not route by domain name and so has no use for a fake IP of its own
+// (docs/gateway.md §4). This guards somebody else's setup: an operator running
+// mihomo in fake-IP mode with `upstream` pointed at its resolver would have
+// every answer stripped, with the cause a line in a rendered config they have
+// no reason to suspect.
+func TestRenderDoesNotStripTheBenchmarkingRange(t *testing.T) {
 	b := testBackend(t)
 	conf := renderDirectives(t, b, validConfig(), b.Paths.UnboundConf)
 
@@ -129,7 +133,7 @@ func TestRenderKeepsTheFakeIPRangeOutOfTheRebindList(t *testing.T) {
 		t.Error("rebinding protection is not configured at all")
 	}
 	if strings.Contains(conf, "198.18.") {
-		t.Error("198.18.0.0/15 is in the rebinding list; that silently breaks fake-IP domain routing")
+		t.Error("198.18.0.0/15 is in the rebinding list; that silently breaks a fake-IP proxy behind us")
 	}
 }
 

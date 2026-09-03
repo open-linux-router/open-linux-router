@@ -280,13 +280,20 @@ func (b Backend) Render(c Config, links LinkView) (Rendered, error) {
 // configures none of these by default, so leaving the list out would mean
 // leaving the defence off.
 //
-// 198.18.0.0/15 is deliberately absent, and that absence is load-bearing rather
-// than an oversight. It is the benchmarking range proxies use for fake-IP
-// answers, and docs/dns.md's domain-routing story depends on those answers
-// reaching the client intact. Adding it here would make domain routing fail
-// with no error anywhere — the proxy would mint a fake IP and unbound would
-// silently strip it. Whoever adds "the missing one" to this list breaks that,
-// so: it is missing on purpose.
+// 198.18.0.0/15 is deliberately absent, and it stays absent even though olr no
+// longer has any use of its own for it. docs/gateway.md §4 took routing by
+// domain name out of the design, so nothing here mints or routes a fake IP —
+// but an operator is still free to run mihomo in fake-IP mode and point
+// `upstream` at its resolver, and adding this range would strip their answers
+// with no error anywhere. Their proxy would look broken and the cause would be
+// a line in olr's rendered config they have no reason to suspect.
+//
+// The insurance is close to free. 198.18.0.0/15 is the RFC 2544 benchmarking
+// range: it is not routed on the internet and it is not on anybody's LAN, so it
+// is not a path to a device the way the ranges below are. Leaving it out gives
+// up almost no rebinding protection and avoids silently breaking a setup that
+// is none of our business. Whoever adds "the missing one" to this list should
+// know they are choosing the other side of that trade.
 var rebindPrefixes = []string{
 	"10.0.0.0/8",
 	"172.16.0.0/12",

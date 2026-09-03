@@ -5,10 +5,12 @@ and `cmd/olr-dnsd` are the relay, and the packaging carries `olr-dns.service`
 (unbound, on loopback:5353) and `olr-dnsd.service` (ours, on :53). Section
 references are to `design.md`.
 
-Two things this document argued about were settled while building it, and both
-are recorded where they arise: §7.1 turned out to have been decided already by
-`design.md` §3.5, and §6's "blocking is native and cheap" does not survive the
-relay — see §4.4. The v2 and Never rows stand as written.
+Three things this document argued about have since been settled, and each is
+recorded where it arises: §7.1 turned out to have been decided already by
+`design.md` §3.5; §6's "blocking is native and cheap" does not survive the relay
+(§4.4); and **olr no longer routes by domain name at all**, which closes §7.3 and
+takes fake-IP out of the design entirely — `docs/gateway.md` §4 has that
+argument, and §2 and §4.3 here are trimmed to match.
 
 This document exists because DNS turned out not to be a service olr configures.
 It is the layer that decides which traffic can be policed at all, and that
@@ -87,19 +89,22 @@ differently.
 
 | | Gateway leg | Resolver leg |
 |---|---|---|
-| Buys | Packets reach the box at all: per-source `Internet via`, IP/GEOIP rules, byte accounting | Domain→exit routing, blocklists, per-tag blocking, the query log |
+| Buys | Packets reach the box at all: per-source `Internet via`, IP/GEOIP rules, byte accounting | Blocklists, per-tag blocking, the query log, and exact names for the proxy's own domain rules |
 | Missing | Nothing works; the box never sees the traffic | Domain policy silently does not apply |
 | Fails | Loudly | **Silently** |
 
-The reverse mismatch is the safe one: resolver-here, gateway-elsewhere fails
-loudly, because the client receives a fake IP and hands it to a router with no
-route for it. So the only dangerous misconfiguration is gateway-yes /
-resolver-no, which is exactly what §1.1 forecloses.
+The reverse mismatch is the milder one: resolver-here, gateway-elsewhere costs
+the policy but not the connectivity — the client still receives a routable
+address and still reaches the internet, and only the name-dependent half goes
+unapplied. So the dangerous misconfiguration is gateway-yes / resolver-no, which
+is exactly what §1.1 forecloses.
 
-One constraint that is easy to miss: the resolver and the proxy must be in the
-same **policy domain**. The resolver that mints a fake IP and the proxy that
-receives the packet have to share the mapping table. Split them across boxes
-and the fake IP means nothing on arrival.
+One constraint that is easy to miss, and which — since gateway:§4 — applies to
+the *operator's* proxy rather than to us: whatever resolver a proxy derives its
+domain rules from has to be the one its clients actually used, or it is matching
+on names nobody asked it for. olr's part is to make the recommended arrangement
+expressible — point `upstream` at the proxy's resolver, so one answer serves
+both — not to model the mapping itself.
 
 ### 2.1 Gateway leg
 
@@ -157,14 +162,31 @@ trixie. It is load-bearing — confirm before relying on it.)
 > load-bearing again only if v2's per-client upstream selection is attempted
 > inside unbound rather than by pointing clients at a second resolver.
 
-That matters because a global `forward-zone: "."` to the proxy's resolver gives
-full fidelity — every name gets a fake IP, and the proxy has an exact domain
-rather than a sniff — but only if **every** device exits via the proxy. With
-mixed exits, a modem-exit device also receives `198.18.x`, hands it to the
-modem, and is blackholed.
+The forwarding half still binds, and it is the constraint behind `upstream`
+being one setting for the whole box: **one resolver, one upstream.**
 
-The escape is one layer down, not one layer out. Source-matched DNAT on port 53
-selects the resolver per client:
+That has a sharp edge, and it is the one hazard gateway:§4.1's recommendation
+carries. Pointing `upstream` at the proxy's own resolver is the arrangement that
+gives the proxy exact names to match its domain rules on — but the upstream is
+global, so *every* device gets whatever that resolver answers. If the proxy is
+running **fake-IP**, a device on `Internet via: Modem` receives `198.18.x`, hands
+it to the modem, and is blackholed. It will read as "the internet is broken for
+the tablet and fine for the laptop", which is a miserable thing to debug.
+
+Two ways out, and the first is the recommendation:
+
+- **Ask the proxy for real addresses.** mihomo's `redir-host` mode answers with
+  the genuine address and keeps its own ip→domain cache, so its rules still
+  match and every device — proxied or not — gets something routable. This costs
+  the operator nothing olr was relying on, because since gateway:§4 olr never
+  wants a fake IP for anything.
+- **Or forward only when everything exits via the proxy.** Then there is no
+  device left to blackhole. Fine for the single-exit network, and it stops being
+  fine the moment a second exit appears, which is not a footgun worth leaving
+  armed.
+
+The escape from the global constraint itself is one layer down, not one layer
+out. Source-matched DNAT on port 53 selects the resolver per client:
 
 ```
 nft prerouting: ip saddr @proxy_clients udp dport 53 dnat to <resolver-B>
@@ -174,12 +196,11 @@ and this machinery is required anyway — option 6 is *advice*, DNAT is
 *enforcement*, and the DoH/DoT defence already needs every forwarded `:53`
 hijacked regardless of what a client has configured. Pointing different source
 sets at different resolvers is an extension of a rule we must write, not a new
-mechanism.
+mechanism. That is v2's per-client upstream selection, and it is what lets a
+fake-IP proxy coexist with mixed exits properly rather than by convention.
 
-Which reframes the constraint: domain routing is global if we want one resolver,
-and per-exit if we are willing to run one resolver process per distinct DNS
-policy. That is a tradeable, and it should be argued to the operator in those
-terms — *"a second resolver so Modem devices don't get Netflix through the
+Either way it is a tradeable to be argued to the operator in their terms —
+*"a second resolver so the devices on Modem don't get Netflix's address from the
 proxy"* — never as a limitation of a daemon they did not choose.
 
 ---
@@ -285,11 +306,12 @@ as it is.
 Skip authority and additional sections, RRSIG/NSEC (relay, never validate), and
 everything non-address. Log the qtype; map only A and AAAA.
 
-**A useful inversion:** fake IPs are 1:1 with names, so attribution for
-proxy-routed traffic is exact, and it is directly-resolved traffic that gets the
-messy many-to-many. The path hardest to route is the easiest to account for.
-IP→ASN stays the fallback for what this can never cover — clients that resolved
-before olr started, connected by address, or asked somewhere we cannot see.
+The many-to-many applies to everything, with no exception for proxy-routed
+traffic. An earlier draft had one — fake IPs are 1:1 with names, so anything
+routed by name attributed exactly — but gateway:§4 removed the mechanism that
+produced them, and one honest story about accuracy beats two. IP→ASN stays the
+fallback for what this can never cover: clients that resolved before olr
+started, connected by address, or asked somewhere we cannot see.
 
 ### 4.4 Blocking lives in the relay, not in unbound's views
 
@@ -390,9 +412,9 @@ only and access-control by source, or we have shipped an amplifier.
 | | per-client blocking, DoT `:853` drop | built **in the relay**, not in unbound views — §4.4; the block is what protects everything else |
 | **v2** | per-client upstream selection (proxy vs direct) | needs §2.1's return-path answer first |
 | | DoH `:443` blocklist, TCP and UDP | ongoing maintenance, not a one-off |
-| | fake-IP route as a global domain rule | belongs with §12, not here |
 | **Never** | recursion, DNSSEC validation, our own cache | the moment this process needs a cache, it is a design change and not a refactor |
 | | authoritative service, zone transfers | escape hatch, permanently |
+| | minting or routing fake IPs | gateway:§4 — routing by name is the proxy's job |
 
 ---
 
@@ -403,12 +425,12 @@ only and access-control by source, or we have shipped an amplifier.
    driven by rendered files and a signal.
 2. **SNAT toward next-hop exits, or a dedicated segment for the proxy box**
    (§2.1). Determines whether byte accounting sees both directions.
-3. **Fake-IP destination routing versus per-source assignment — which wins.**
-   §12 lists the domain rule as global and `Internet via` as per-source; if
-   global means global, the fake-IP route sits at higher RPDB priority and a
-   device showing `Internet via Modem` still reaches some names through the
-   proxy. That is exactly the surprise §5.6 exists to prevent, so whichever way
-   it goes, the effective value and its source have to be visible.
+3. ~~**Fake-IP destination routing versus per-source assignment — which wins.**~~
+   **Closed by deletion**, which is the only way a question like this closes
+   cleanly: it asked which of two things wins, and `gateway.md` §4 removed one of
+   them. olr does not route by name, so there is no global domain rule to
+   compete with `Internet via`, and the §5.6 surprise it worried about cannot
+   arise. Routing by name stays the proxy's job.
 4. **Whether unbound views really cannot carry `forward-zone`** (§3). Verify
    against trixie before the ladder in §3 is relied upon. **No longer blocking:**
    blocking moved into the relay (§4.4) and unbound is rendered with no views at

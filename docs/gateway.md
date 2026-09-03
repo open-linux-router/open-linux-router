@@ -149,18 +149,21 @@ from the screen, so the plan step refuses:
 
 §5.6's *refuse, do not disable*, one level down.
 
-### 2.4 Four objects, four questions
+### 2.4 Three objects, three questions
 
 | Object | Answers | Scope |
 |---|---|---|
 | **Exit** | how traffic leaves | — |
 | **`Internet via`** assignment | who uses which exit | per network / tag / device |
 | **Static route** | how to reach one specific place | everyone |
-| **Domain rule** | which names go somewhere else | per source (§4) |
 
 Only the second is per-source, which is why only it needs the ladder and the
-other three stay flat lists. Keeping them apart is what stops any one of them
+other two stay flat lists. Keeping them apart is what stops any one of them
 growing a precedence model.
+
+There was a fourth — a domain rule, answering *which names go somewhere else*.
+It is gone, and §4 explains why: routing by name is the proxy's job, and it was
+the one object the ladder could not express.
 
 Two of the six most common requests — *"reach the office subnet"* and *"IoT gets
 no internet"* — turn out not to involve a proxy at all. The first is a static
@@ -223,7 +226,6 @@ table inet olr_route {
     ct mark and 0x00ff0000 != 0  meta mark set ct mark  return    # restore, §3.4
     ip  saddr @dev_clash  counter name "r1" meta mark set … or 0x00120000
     ip6 saddr @dev_clash  counter name "r1" meta mark set … or 0x00120000
-    ip  daddr 198.18.0.0/15 counter name "r2" meta mark set … or 0x00120000
     counter name "unpoliced"
     ct mark set meta mark                                          # save
   }
@@ -239,8 +241,8 @@ setup breaks: without it, an exit table's default route swallows traffic to your
 own LAN.
 
 **Named counters, not anonymous inline ones.** Re-rendering a chain zeroes
-anonymous counters, so editing rule 3 would reset rule 1's numbers. Named objects
-survive rule replacement. The `unpoliced` counter is what makes per-exit totals
+anonymous counters, so adding an exit would reset every other exit's numbers.
+Named objects survive rule replacement. The `unpoliced` counter is what makes per-exit totals
 reconcile against the box total — see §7's residual rule.
 
 ### 3.4 Flow stickiness
@@ -305,62 +307,75 @@ Same feature, completely different experience for whoever is holding the tablet.
 
 ---
 
-## 4. Domain rules, and the answer to dns:§7.3
+## 4. Domain rules are the proxy's, not ours
 
-A domain cannot be matched at the routing layer — routing sees addresses. The
-mechanism is the proxy's own fake-IP range, which is a *destination prefix*, and
-prefixes are something the RPDB routes natively:
+An earlier draft of this section routed by name, using the proxy's fake-IP range
+as a destination prefix. That is out. **olr routes by source and by destination
+prefix; it does not route by name**, and the mechanism is recorded as rejected
+in §10 so it is not re-proposed on its merits — which were real.
 
-```
-client asks for netflix.com
-  → olr's :53 relay forwards this (client, name) to the proxy's resolver   [dns:§4]
-  → proxy answers 198.18.x.x from its fake-IP pool
-  → client connects to 198.18.x.x
-  → nft matches the fake-IP prefix → mark → the proxy exit
-  → proxy maps it back to netflix.com
-```
+The argument is not that it could not be built. It is that the operator already
+owns a domain-routing engine:
 
-No nftables set population, no dnstap, no DNS interception beyond the `:53` hijack
-dns:§3 requires anyway.
+> **Whoever runs mihomo or sing-box has already written their domain rules, in
+> a tool built for it, with rule providers and GeoSite sets we would never
+> match. A second list in olr is two places that can disagree.**
 
-### 4.1 Per-source wins, and the conflict is prevented rather than resolved
+And when they disagree it does not fail cleanly. It produces *"I put
+netflix.com in olr and it still goes direct"*, whose cause is a rule inside the
+proxy that won — a thing olr cannot see, explain, or show in a diff.
 
-dns:§7.3 asks which wins when a device set to `Internet via: Modem` resolves a
-name carrying a global domain rule. It is a real trap: if that device receives a
-fake IP and the fake-IP prefix routes to the proxy for everyone, the device
-silently reaches some names through an exit its own setting says it does not use.
+**So the division is by layer, and each side does the part it can do well.**
+olr decides *which traffic reaches the proxy at all*: `Internet via` per network,
+tag or device (§2). The proxy decides *what to do with it*, by name, using its
+own configuration. Neither needs to know the other's rules.
 
-The resolution is at the resolver, not the router:
+### 4.1 What the operator does instead
 
-> **A device receives a fake IP if and only if it is routed to that proxy.**
+Assign the source to the proxy exit and let the proxy sort it out. For the
+proxy's own domain rules to work it has to see names, and there are two ways
+that happens. Both are worth stating: the first is a setting an operator has to
+be told to make, and the second is what silently happens if they do not.
 
-Because olr owns `:53` and applies policy per client, the upstream is chosen per
-`(device, domain)`. A device on `Internet via: Modem` is never handed
-`198.18.x.x` at all, so the ambiguity cannot arise. The fake-IP route is not a
-global rule that competes with per-source assignment — it is the mechanical tail
-of a per-source decision already made.
+- **Point olr's resolver at the proxy's.** `olr dns set --mode forward --upstream
+  <the proxy's resolver>` makes every answer the network gets come from the
+  thing that also routes it, so its rules match on an exact name. This is the
+  configuration to recommend, **with one condition attached**: the proxy must
+  answer with real addresses — mihomo's `redir-host` — and not fake ones.
+  `upstream` is global (dns:§3), so a fake-IP proxy hands `198.18.x` to *every*
+  device including the ones on `Internet via: Modem`, and those are blackholed.
+  It presents as "the internet works on the laptop and not the tablet", which is
+  a miserable thing to debug. Nothing is lost by asking: olr has no use for a
+  fake IP anywhere, so `redir-host` costs the operator nothing they were relying
+  on.
+- **Otherwise the proxy sniffs.** TLS SNI and HTTP Host, per dns:§2.2, which
+  works today and degrades as ECH deploys. Fine as a fallback, not something to
+  design around.
 
-This is why **DNS policy is derived from the exit assignment and is not
-independently configurable**. Letting an operator point a device's resolver at
-one exit and its traffic at another is a way to build a network where names
-resolve to addresses nothing can route.
+An operator who genuinely wants fake-IP can still run it — that is their proxy's
+business, and olr's rendered unbound deliberately does not strip `198.18.0.0/15`
+from answers (`rebindPrefixes` in `internal/dns/render.go`). What they cannot do
+yet is combine it with mixed exits, which waits on dns v2's per-client upstream
+selection.
 
-Two consequences:
+### 4.2 What this costs, stated
 
-- **Each proxy exit needs a distinct fake-IP range**, or an address cannot be
-  attributed back to an exit. Irrelevant with one proxy; a required field with
-  two.
-- **A domain rule for a device whose exit is direct works** — olr forwards just
-  that name to the proxy's resolver, the device gets a fake IP for that name
-  only, and everything else resolves and routes normally.
+*"Send only Netflix through the proxy and everything else direct"* is **not
+expressible in olr**. It is expressible in the proxy, which is where the rest of
+that operator's domain policy already lives.
 
-### 4.2 What it does not cover
+What it buys back is worth more than it looks:
 
-A client that resolves elsewhere never receives a fake IP, so nothing triggers.
-dns:§2.2 ranks the defences by cost to defeat; the short version is that DoH/DoT
-blocking is load-bearing for domain routing, blocklists and the query log at
-once, and browsers auto-upgrade to DoH by default, so this is the common case
-rather than the adversarial one.
+- **`Internet via` becomes the only per-source question.** §2.4 drops from four
+  objects to three, and the ladder covers all of what remains.
+- **DNS policy and exit assignment are now independent.** The earlier draft had
+  to forbid configuring them separately — a device handed a fake IP for an exit
+  it does not use reaches that exit silently, so the resolver's upstream had to
+  be derived from the routing decision. With no fake IPs there is nothing to
+  desynchronise: blocking, the query log and `Internet via` are three unrelated
+  settings, and an operator can reason about each without the others.
+- **dns:§7.3 closes by deletion.** It asked which wins between a global domain
+  rule and a per-source assignment. There is no longer a global domain rule.
 
 ---
 
@@ -522,9 +537,11 @@ the bytes are smallest.** Video — the traffic that actually fills a link — r
 on dedicated hostnames and address ranges and attributes cleanly. Shared CDN
 addresses carry the long tail of pages and API calls.
 
-dns:§4.3's inversion applies here too: fake IPs are 1:1 with names, so
-proxy-routed traffic attributes exactly, and it is directly-resolved traffic that
-is messy.
+This applies uniformly, which it did not in an earlier draft: when olr routed by
+name, proxy-routed traffic carried a 1:1 fake IP and attributed exactly, so the
+ambiguity above was only the direct path's problem. With §4's decision every
+flow attributes through the same many-to-many map, so there is one story about
+accuracy rather than two — and the honest one is the weaker of the two.
 
 ### 7.3 The residual is always a visible row
 
@@ -588,11 +605,11 @@ ISP-supplied router cannot say.
 | | foreign `ip rule` detection and refusal | |
 | **v2** | `local_socket` (TPROXY) | wants dns:§2.1's return-path answer settled first |
 | | tag and device tiers of the ladder | |
-| | domain rules (fake-IP), per source | needs dns v2 |
 | | conntrack-derived per-flow detail | |
 | **Later** | multi-WAN failover policy beyond `block` / `direct` | hysteresis and probe design are their own scope |
 | | an advanced source+destination rule list | the only thing the ladder cannot express |
 | **Never** | our own proxy engine, or wrapping one | §10 |
+| | routing by domain name, by any mechanism | §4 — it is the proxy's job, and doing it too is two rule lists that disagree |
 
 ---
 
@@ -624,9 +641,23 @@ ISP-supplied router cannot say.
   UDP, ICMP and IPv6 with no signal. The empty state should guide instead —
   *a SOCKS5 proxy cannot carry all traffic on its own* — with the path to making
   it into one.
-- **Populating nftables sets from the resolver** (dnstap, or dnsmasq's `nftset`).
-  Made unnecessary by §4: the fake-IP range is already a prefix, and prefixes
-  route natively.
+- **Routing by the proxy's fake-IP range.** The mechanism §4 used to be built
+  on, and the reason it is recorded rather than merely dropped is that it was
+  genuinely elegant: a fake IP is a destination prefix, the RPDB routes prefixes
+  natively, and it needed no set population, no dnstap, and no DNS interception
+  beyond the `:53` hijack we do anyway. What it cost was a permanent structural
+  coupling — the resolver's upstream had to be derived from the routing decision
+  for every device, forever, or a device silently reached an exit its own
+  setting said it did not use. Paying that to duplicate a feature the operator's
+  proxy already has, better, was the wrong trade. §4 has the full argument.
+- **Populating nftables sets from the resolver** (dnstap, dnsmasq's `nftset`, or
+  our own relay, which already parses every answer and would be the natural
+  place). The remaining way to route by name once fake-IP is gone, and rejected
+  on its own merits rather than by the old "§4 makes it unnecessary": the set
+  update races the client's first packet. A rule that works on the second
+  connection and not the first is worse than no rule, because it presents as
+  flakiness rather than as a missing feature, and the operator debugs their
+  network instead of reading a scope table.
 - **Fake-IP for the entire LAN**, to make byte attribution exact by construction.
   It is the only complete answer to shared-CDN-address ambiguity, and it requires
   synthesising every answer, breaks IP literals and out-of-band resolvers, and
