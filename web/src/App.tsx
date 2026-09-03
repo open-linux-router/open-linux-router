@@ -7,6 +7,7 @@ import { DevicesPage } from '@/routes/devices'
 import { DhcpPage } from '@/routes/dhcp'
 import { DnsPage } from '@/routes/dns'
 import { OverviewPage } from '@/routes/overview'
+import { RoutingPage } from '@/routes/routing'
 
 export function App() {
   return (
@@ -17,6 +18,7 @@ export function App() {
           <Route path="devices" element={<DevicesPage />} />
           <Route path="dhcp" element={<DhcpPage />} />
           <Route path="dns" element={<DnsPage />} />
+          <Route path="internet" element={<RoutingPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

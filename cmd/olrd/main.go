@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"strings"
@@ -30,6 +31,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/devices"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
+	"github.com/open-linux-router/open-linux-router/internal/routing"
 	"github.com/open-linux-router/open-linux-router/internal/webui"
 )
 
@@ -94,6 +96,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	routingLinks, err := loadRoutingLinks(opts.links)
+	if err != nil {
+		return err
+	}
 
 	// One store for the whole box (core.ConfigPath). The module list is given
 	// literally here for the same reason the mounts below are: the set is
@@ -105,8 +111,11 @@ func run() error {
 	// foundation object that `firewall` and `qos` will reference (§4.4), but its
 	// presence half reads the lease database through `dhcp`, so it is the last
 	// of the three to come up.
+	// `routing` sits after them all, because an exit is only useful once
+	// clients have addresses and names — and because docs/gateway.md §4 has its
+	// domain half depending on `dns` owning :53, not the other way round.
 	store := core.NewStore(core.RootedConfigPath(opts.root),
-		dhcp.ModuleName, dns.ModuleName, devices.ModuleName)
+		dhcp.ModuleName, dns.ModuleName, devices.ModuleName, routing.ModuleName)
 	checkStore(store, logger)
 
 	applier, err := dhcp.NewApplierAt(store, links, opts.root)
@@ -151,6 +160,35 @@ func run() error {
 		Events: srv.Events(),
 	}.Handler(), devices.Config{})
 
+	// `routing` is the one module whose configuration lives in the kernel
+	// rather than in a file some backend reads, so two things follow that the
+	// others do not need: it is applied at startup (below), and a background
+	// prober can change what the kernel should hold without the operator
+	// touching anything.
+	prober := routing.NewProber()
+	prober.Log = logger
+	routingApplier := routing.Applier{
+		Kernel: routing.NewKernel(),
+		Links:  routingLinks,
+		Store:  store,
+		Probes: prober,
+	}
+	prober.OnChange = func(exit string, up bool) {
+		// An exit changed state, so the routing the kernel should hold has
+		// changed with it — a dead exit's traffic goes to `unreachable`, and a
+		// recovered one gets its route back. Re-applying is how that lands,
+		// and it goes through the same global apply lock as an operator's edit
+		// (§3.6) so the two can never interleave.
+		reapplyRouting(routingApplier, srv, logger, exit, up)
+	}
+
+	srv.Mount(routing.ModuleName, routing.HTTP{
+		Applier: routingApplier,
+		Lock:    srv.ApplyLock(),
+		Events:  srv.Events(),
+		Watch:   func(cfg routing.Config) { prober.Watch(context.Background(), cfg) },
+	}.Handler(), routing.Config{})
+
 	// --- routes -----------------------------------------------------------
 	//
 	// The API and the SPA are composed here rather than inside core, which has
@@ -167,6 +205,22 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Routing is put back into the kernel here, and it is the only module that
+	// needs this.
+	//
+	// dnsmasq and unbound read files that survive a reboot; nftables rules,
+	// `ip rule` entries and route tables do not, so without this a box would
+	// come back up with its configuration intact and none of it in force. It is
+	// idempotent by construction — the plan against an already-correct kernel
+	// is empty and nothing is written — which is what keeps design.md §3.5's
+	// invariant true: `systemctl restart olrd` re-runs this and disturbs no
+	// traffic.
+	//
+	// It never fails the start. A box whose routing cannot be programmed is
+	// exactly the box whose API has to come up, because the API is how it gets
+	// fixed.
+	startRouting(ctx, routingApplier, prober, logger)
 
 	var listeners []net.Listener
 
@@ -334,6 +388,77 @@ func loadDNSLinks(path string) (dns.LinkView, error) {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 	return links, nil
+}
+
+// loadRoutingLinks is the third of them, for the third module that needs
+// interface facts and does not need quite the same ones — routing matches
+// traffic on a network's *prefixes*, and checks a next hop against them.
+func loadRoutingLinks(path string) (routing.LinkView, error) {
+	if path == "" {
+		return routing.StaticLinks{}, nil
+	}
+	links, err := routing.LoadLinks(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	return links, nil
+}
+
+// startRouting programs stored routing intent and starts the health probes.
+func startRouting(ctx context.Context, a routing.Applier, prober *routing.Prober, logger *slog.Logger) {
+	cfg, err := a.Load()
+	if err != nil {
+		logger.Error("routing configuration could not be read; nothing was programmed",
+			"error", err)
+		return
+	}
+	if cfg.Empty() && !cfg.Enabled {
+		return
+	}
+
+	result, _, err := a.Apply(ctx, cfg, netip.Addr{})
+	switch {
+	case err != nil && result.Plan.Blocked != "":
+		// §6's refusal, which is the one failure here an operator can act on
+		// directly — and the one where saying nothing would leave them
+		// wondering why their exits do nothing.
+		logger.Error("routing was not applied because something else is managing it",
+			"reason", result.Plan.Blocked)
+	case err != nil:
+		logger.Error("routing could not be applied", "error", err,
+			"steps", len(result.Steps))
+	case !result.Plan.Empty():
+		logger.Info("routing applied", "changes", len(result.Plan.Changes))
+	}
+
+	prober.Watch(ctx, cfg)
+}
+
+// reapplyRouting re-programs the kernel after an exit changed health.
+func reapplyRouting(a routing.Applier, srv *core.Server, logger *slog.Logger, exit string, up bool) {
+	// Bounded, because it runs under the global apply lock and design.md §3.6
+	// requires apply to be bounded rather than to wait for convergence.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := srv.ApplyLock().Do(ctx, func() error {
+		cfg, err := a.Load()
+		if err != nil {
+			return err
+		}
+		_, _, err = a.Apply(ctx, cfg, netip.Addr{})
+		return err
+	})
+	if err != nil {
+		logger.Error("could not re-route after an exit changed state",
+			"exit", exit, "up", up, "error", err)
+		return
+	}
+
+	// Announced so the UI re-reads. The device that just lost its internet is
+	// on somebody's screen, and "no internet — Clash is down" is only useful if
+	// it appears without a refresh.
+	srv.Events().Publish(core.Event{Type: core.EventApplied, Module: routing.ModuleName})
 }
 
 func newLogger(level string) (*slog.Logger, error) {

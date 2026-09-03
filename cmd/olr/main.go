@@ -8,6 +8,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/cli"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
+	"github.com/open-linux-router/open-linux-router/internal/routing"
 )
 
 func main() {
@@ -18,6 +19,7 @@ func main() {
 	root.AddCommand(
 		dhcp.Command(),
 		dns.Command(),
+		routing.Command(),
 	)
 
 	if err := root.Execute(); err != nil {

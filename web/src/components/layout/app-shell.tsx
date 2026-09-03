@@ -1,4 +1,4 @@
-import { Activity, Globe, Laptop, Network, Router } from 'lucide-react'
+import { Activity, Globe, Laptop, Network, Router, Waypoints } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
 
 import { ThemeToggle } from '@/components/layout/theme-toggle'
@@ -17,6 +17,10 @@ const NAV = [
   // gives the opposite answer here: "DNS" *is* consumer vocabulary, and
   // renaming it to Names or Filtering would make a familiar thing unfamiliar.
   { to: '/dns', label: 'DNS', icon: Globe, end: false },
+  // "Internet", not "Routing": the schema word for the object is `exit` and the
+  // engineer's word for the section is routing, but what an operator is here to
+  // decide is how a network reaches the internet (docs/gateway.md §1.3).
+  { to: '/internet', label: 'Internet', icon: Waypoints, end: false },
 ]
 
 export function AppShell() {

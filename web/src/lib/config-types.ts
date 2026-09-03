@@ -33,18 +33,6 @@ export type DeviceCategory =
   | 'accesspoint'
   | 'switch'
   | 'hub'
-
-export interface DevicesConfig {
-  devices?: Device[]
-}
-export interface Device {
-  mac: string
-  name?: string
-  category?: DeviceCategory
-  model?: string
-  notes?: string
-}
-
 export type IPAddress = string
 export type IPAddress1 = string
 /**
@@ -65,7 +53,68 @@ export type IPAddress4 = string
  */
 export type RouterAdvertisementMode = '' | 'off' | 'slaac' | 'stateful'
 export type IPAddress5 = string
+/**
+ * An address and port, such as 192.168.1.1:53 or [2001:db8::1]:53.
+ */
+export type AddressAndPort = string
+/**
+ * An address and prefix length in CIDR form, such as 192.168.1.0/24.
+ */
+export type IPPrefix = string
+/**
+ * How names are resolved. recurse walks the DNS from the root, so no third party sees everything this network looks up and there is no forwarder to be down. forward sends every query to the servers listed instead, which is faster from cold and the only option where an upstream's own filtering is wanted. Empty means recurse.
+ */
+export type UpstreamMode = '' | 'recurse' | 'forward'
+/**
+ * An address and port, such as 192.168.1.1:53 or [2001:db8::1]:53.
+ */
+export type AddressAndPort1 = string
+/**
+ * An address and prefix length in CIDR form, such as 192.168.1.0/24.
+ */
+export type IPPrefix1 = string
+/**
+ * What a blocked name answers with. nxdomain says the name does not exist, which is the honest answer and the one clients cache and back off from. zero answers 0.0.0.0 and ::, which some networks prefer because an app that reads NXDOMAIN as "the network is down" will retry forever, where a refused connection fails at once. Empty means nxdomain.
+ */
+export type BlockedNameResponse = '' | 'nxdomain' | 'zero'
+/**
+ * How this exit delivers traffic. interface sends it out a device — a WireGuard or Tailscale interface, a PPPoE session, a proxy's TUN. next_hop hands it to another box on the network, such as the modem or a machine running a proxy. blocked refuses it, so applications fail immediately and visibly rather than hanging.
+ */
+export type ExitForm = 'interface' | 'next_hop' | 'blocked'
+export type IPAddress6 = string
+/**
+ * What happens to IPv6 traffic from sources assigned to this exit. via carries it through the exit, which needs the exit to actually have IPv6. block refuses it, so clients fall back to IPv4 immediately. direct lets it take the box's normal path, which leaks every site with an AAAA record around the exit. Empty means block.
+ */
+export type IPv6Handling = '' | 'via' | 'block' | 'direct'
+/**
+ * What happens to assigned traffic when the health check fails. block stops it, so the problem is visible and diagnosable. direct sends it out the box's normal path instead, which silently leaks exactly the traffic that was meant to be routed. Empty means block.
+ */
+export type BehaviourWhenTheExitIsDown = '' | 'block' | 'direct'
+export type AddressAndPort2 = string
+/**
+ * A duration with a unit, such as 30s, 5s or 1m30s. Units are ns, us, ms, s, m and h.
+ */
+export type Duration1 = string
 
+/**
+ * The whole box's configuration, one property per module — the shape of /etc/open-linux-router/olr.json.
+ */
+export interface OlrDocument {
+  devices?: DevicesConfig
+  dhcp?: DhcpConfig
+  dns?: DnsConfig
+  routing?: RoutingConfig
+}
+export interface DevicesConfig {
+  devices?: Device[]
+}
+export interface Device {
+  mac: string
+  name?: string
+  category?: DeviceCategory
+  model?: string
+  notes?: string
+}
 export interface DhcpConfig {
   enabled: boolean
   pools?: Pool[]
@@ -94,32 +143,6 @@ export interface Reservation {
   hostname?: string
   lease_time?: Duration
 }
-
-/**
- * An address and port, such as 192.168.1.1:53 or [2001:db8::1]:53.
- */
-export type AddressAndPort = string
-/**
- * An address and prefix length in CIDR form, such as 192.168.1.0/24.
- */
-export type IPPrefix = string
-/**
- * How names are resolved. recurse walks the DNS from the root, so no third party sees everything this network looks up and there is no forwarder to be down. forward sends every query to the servers listed instead, which is faster from cold and the only option where an upstream's own filtering is wanted. Empty means recurse.
- */
-export type UpstreamMode = '' | 'recurse' | 'forward'
-/**
- * An address and port, such as 192.168.1.1:53 or [2001:db8::1]:53.
- */
-export type AddressAndPort1 = string
-/**
- * An address and prefix length in CIDR form, such as 192.168.1.0/24.
- */
-export type IPPrefix1 = string
-/**
- * What a blocked name answers with. nxdomain says the name does not exist, which is the honest answer and the one clients cache and back off from. zero answers 0.0.0.0 and ::, which some networks prefer because an app that reads NXDOMAIN as "the network is down" will retry forever, where a refused connection fails at once. Empty means nxdomain.
- */
-export type BlockedNameResponse = '' | 'nxdomain' | 'zero'
-
 export interface DnsConfig {
   enabled: boolean
   listen?: AddressAndPort[]
@@ -151,4 +174,36 @@ export interface Hijack {
 export interface QueryLog {
   enabled: boolean
   entries?: number
+}
+export interface RoutingConfig {
+  enabled: boolean
+  exits?: Exit[]
+  default?: string
+  interfaces?: Assignment[]
+}
+export interface Exit {
+  name: string
+  via: Via
+  slot: number
+  ipv6?: IPv6Handling
+  on_failure?: BehaviourWhenTheExitIsDown
+  snat?: boolean
+  probe?: Probe
+}
+export interface Via {
+  kind: ExitForm
+  interface?: string
+  next_hop?: IPAddress6
+  dev?: string
+}
+export interface Probe {
+  target: AddressAndPort2
+  interval?: Duration1
+  timeout?: Duration1
+  failures?: number
+  successes?: number
+}
+export interface Assignment {
+  interface: string
+  exit?: string
 }

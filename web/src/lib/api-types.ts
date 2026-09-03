@@ -25,7 +25,12 @@
 //     generator needs a per-module namespace it does not have today.
 
 import type { Problem } from '@/lib/api'
-import type { DeviceCategory, DevicesConfig } from '@/lib/config-types'
+import type {
+  DeviceCategory,
+  DevicesConfig,
+  ExitForm,
+  RoutingConfig,
+} from '@/lib/config-types'
 
 /** What applying a change will cost (design.md §5.3.3, internal/dhcp Impact). */
 export type Impact = 'none' | 'reload' | 'restart' | 'disruptive'
@@ -365,5 +370,112 @@ export interface NameRow {
 export interface DnsNames {
   names: NameRow[]
   stats?: DnsStats
+  as_of: string
+}
+
+// --- routing ---------------------------------------------------------------
+
+/**
+ * A change to the kernel's routing state — internal/routing changeView.
+ *
+ * A line rather than a file path and a diff, because this module configures the
+ * kernel rather than a backend's config file. The text is the same canonical
+ * form `olr routing show --dry-run` prints and the same one stored in each
+ * nftables rule's comment, so what the screen shows, what the CLI shows and
+ * what `nft list ruleset` shows are one string.
+ */
+export interface RoutingChange {
+  kind: 'add' | 'remove'
+  line: string
+}
+
+/**
+ * Somebody else's `ip rule` — internal/routing ForeignRule.
+ *
+ * Reported rather than hidden (design.md §3.4): a hand-rolled setup that is
+ * visible is one an operator can reason about, and a second owner of the
+ * routing table is something they have to go and resolve elsewhere.
+ */
+export interface ForeignRule {
+  priority: number
+  family: string
+  table: number
+  selector: string
+  has_default: boolean
+}
+
+/** What applying a routing change would do — internal/routing planView. */
+export interface RoutingPlan {
+  changes: RoutingChange[]
+  impact: Impact
+  foreign?: ForeignRule[]
+  reasons?: string[]
+  /**
+   * Set when the change cannot proceed at all. A string rather than a boolean,
+   * because the operator has to find another program's configuration file and
+   * "blocked: true" does not say where to look.
+   */
+  blocked?: string
+  empty: boolean
+  /**
+   * Whether the kernel could be read. Without it a client cannot tell "nothing
+   * to do" from "we could not look", which need different words on screen.
+   */
+  known: boolean
+  diff?: string
+  warnings?: Problem[]
+}
+
+export interface RoutingApplyResult {
+  plan: RoutingPlan
+  steps?: Step[]
+  config: RoutingConfig
+  error?: { message: string; problems?: Problem[] }
+}
+
+/** One exit and what is true of it right now — internal/routing exitStatusView. */
+export interface ExitStatus {
+  name: string
+  via: ExitForm
+
+  /**
+   * `up` and `probed` together: an exit nobody probes reads as up, and saying
+   * so without saying it was never checked would claim knowledge we do not have
+   * (design.md §5.6 — faults must not hide inside a default).
+   */
+  up: boolean
+  probed: boolean
+
+  used_by?: string[]
+
+  /** The kernel resources it holds, published so they can be planned around. */
+  mark: string
+  table: number
+  priority: number
+}
+
+/**
+ * One network's effective exit and where it came from — internal/routing
+ * assignmentStatusView.
+ *
+ * The source is what makes inheritance usable: an effective value with no
+ * visible origin is one nobody can reason about, which is the whole argument
+ * for a property rather than an ordered rule list.
+ */
+export interface AssignmentStatus {
+  interface: string
+  exit: string
+  source: 'default' | 'interface'
+  reason?: string
+}
+
+export interface RoutingStatus {
+  enabled: boolean
+  known: boolean
+  exits: ExitStatus[]
+  assignments: AssignmentStatus[]
+  drifted: boolean
+  foreign?: ForeignRule[]
+  problems?: Problem[]
   as_of: string
 }
