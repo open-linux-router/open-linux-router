@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"sort"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
@@ -145,6 +146,73 @@ func (a Applier) Apply(ctx context.Context, cfg Config, admin netip.Addr) (Apply
 
 	steps, err := a.Kernel.Apply(ctx, desired)
 	return ApplyResult{Plan: plan, Steps: steps}, stored, err
+}
+
+// Usage is one device's traffic, with the exit named rather than marked.
+type Usage struct {
+	Addr netip.Addr
+
+	// Exit is the operator's name for where this traffic went, empty for the
+	// residual — traffic no assignment matched. Unknown is set when the mark
+	// names a slot no exit currently holds, which happens for a moment after an
+	// exit is deleted and for as long as its flows survive.
+	Exit    string
+	Unknown bool
+
+	UpBytes, DownBytes     uint64
+	UpPackets, DownPackets uint64
+}
+
+// Total is the bytes in both directions, which is what a list sorts by.
+func (u Usage) Total() uint64 { return u.UpBytes + u.DownBytes }
+
+// Traffic reads the accounting sets and resolves each mark to an exit name.
+//
+// The resolution is the whole reason this is not just a passthrough: a mark is
+// a number the operator never chose and cannot look up, and §4.5 says the model
+// and the query interface are ours — including for observed things.
+func (a Applier) Traffic(ctx context.Context) ([]Usage, error) {
+	cfg, err := a.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	flows, err := a.Kernel.Traffic(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	byMark := map[uint32]string{}
+	for _, e := range cfg.Exits {
+		byMark[e.Mark()] = e.Name
+	}
+
+	out := make([]Usage, 0, len(flows))
+	for _, f := range flows {
+		u := Usage{
+			Addr:        f.Addr,
+			UpBytes:     f.UpBytes,
+			DownBytes:   f.DownBytes,
+			UpPackets:   f.UpPackets,
+			DownPackets: f.DownPackets,
+		}
+		switch name, ok := byMark[f.Mark]; {
+		case f.Mark == 0:
+			// The residual, and it is a row rather than an omission (§7.3):
+			// per-exit totals only reconcile against the box total if what
+			// matched nothing is visible too.
+		case ok:
+			u.Exit = name
+		default:
+			u.Unknown = true
+		}
+		out = append(out, u)
+	}
+
+	// Biggest first: the question this screen answers is "who is using the
+	// bandwidth", and the answer is at the top.
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Total() > out[j].Total() })
+	return out, nil
 }
 
 // Status is the module's account of itself: what is configured, what is

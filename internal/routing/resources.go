@@ -59,6 +59,30 @@ const (
 	// assignment, so per-exit totals can be reconciled against the box total.
 	// §7.3: show what you cannot account for.
 	UnpolicedCounter = "unpoliced"
+
+	// StatTableName is the accounting table of §7.1.
+	//
+	// A second table rather than another chain in olr_route, because it has a
+	// different lifetime: §7.1 says accounting does not depend on routing, so
+	// turning routing off must not take the byte counters with it.
+	StatTableName = "olr_stat"
+
+	// AccountChain counts forwarded traffic in both directions.
+	AccountChain = "account"
+)
+
+// The accounting sets, one per direction per family (§7.1).
+//
+// Four rather than the document's two, and the difference is IPv6. `inet` is
+// one table but `ipv4_addr` and `ipv6_addr` are different set key types, so a
+// single set cannot hold both — and a v4-only pair would silently account for
+// none of the traffic on a working dual-stack network, which is the same class
+// of quiet omission §5.4 exists to prevent.
+const (
+	StatUp4   = "up4"
+	StatDown4 = "down4"
+	StatUp6   = "up6"
+	StatDown6 = "down6"
 )
 
 // Slot identifies one exit's reservation across all three namespaces.

@@ -8,8 +8,10 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/nftables"
 	"github.com/google/nftables/binaryutil"
@@ -57,6 +59,17 @@ func (k LinuxKernel) Observe(_ context.Context) (Observed, error) {
 		return Observed{}, fmt.Errorf("reading nftables: %w", err)
 	}
 	obs.Lines = append(obs.Lines, nftLines...)
+
+	statConn, err := nftables.New()
+	if err != nil {
+		return Observed{}, fmt.Errorf("reading nftables: %w", err)
+	}
+	statLines, err := k.observeStat(statConn)
+	statConn.CloseLasting()
+	if err != nil {
+		return Observed{}, fmt.Errorf("reading the accounting table: %w", err)
+	}
+	obs.Lines = append(obs.Lines, statLines...)
 
 	ruleLines, foreign, err := k.observeRules()
 	if err != nil {
@@ -166,6 +179,365 @@ func (k LinuxKernel) observeNFT() ([]string, error) {
 	}
 
 	return out, nil
+}
+
+// --- accounting (§7.1) ----------------------------------------------------
+
+// The 32-bit register file, which the kernel numbers separately from the
+// 16-byte NFT_REG_1..4 and which neither google/nftables nor x/sys/unix
+// exports.
+//
+// Concatenation needs these: a concatenated key is a run of 4-byte components,
+// so `address . mark` is written into consecutive 32-bit registers and the
+// dynset is told where the run starts. Using NFT_REG_1 and NFT_REG_2 instead
+// would leave a twelve-byte hole between the two components, because NFT_REG_1
+// is sixteen bytes wide.
+//
+// NFT_REG_1 *aliases* reg32_00 through reg32_03, which is why the family check
+// below can use register 1 and then overwrite it with the key: the comparison
+// has already happened by then.
+const (
+	reg32_00 = 8
+	reg32_01 = 9
+	reg32_04 = 12
+)
+
+// statSetSize bounds each accounting set.
+//
+// An unbounded dynamic set on a router is a memory-growth vector: it gains an
+// element for every source address the box ever forwards for, and a scan of the
+// address space would be free reign. When a set is full the `update` fails and
+// the packet is still forwarded — the chain's policy is accept — so the failure
+// costs accounting for new devices and never connectivity.
+const statSetSize = 65536
+
+// statTimeout ages out an entry that has seen no traffic.
+//
+// This is §7.5's retention window for byte counters, and the reason it exists
+// is §7.4's: IPv6 privacy addresses rotate, so without it a dual-stack network
+// fills the set with addresses no device answers to any more and then stops
+// recording the ones it does. A device that goes quiet for a day loses its
+// running total, which is acceptable because §7.5 says the counters are
+// monotonic-since-load and every consumer of them wants deltas anyway.
+//
+// It is an element *attribute*, not an expression, which matters more than it
+// looks — see readSetCounters.
+const statTimeout = 24 * time.Hour
+
+// observeStat reads back the accounting table's shape.
+//
+// Shape only: the sets' *contents* are traffic, read by Traffic and never
+// compared against intent. A device appearing on the network is not drift.
+func (k LinuxKernel) observeStat(conn *nftables.Conn) ([]string, error) {
+	tables, err := conn.ListTablesOfFamily(nftables.TableFamilyINet)
+	if err != nil {
+		return nil, err
+	}
+	var table *nftables.Table
+	for _, t := range tables {
+		if t.Name == StatTableName {
+			table = t
+			break
+		}
+	}
+	if table == nil {
+		return nil, nil
+	}
+
+	out := []string{fmt.Sprintf("nft table inet %s", StatTableName)}
+
+	chains, err := conn.ListChainsOfTableFamily(nftables.TableFamilyINet)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range chains {
+		if c.Table != nil && c.Table.Name == StatTableName && c.Name == AccountChain {
+			out = append(out, fmt.Sprintf("nft chain %s forward filter", AccountChain))
+		}
+	}
+
+	sets, err := conn.GetSets(table)
+	if err != nil {
+		return nil, err
+	}
+	byName := map[string]bool{}
+	for _, s := range sets {
+		byName[s.Name] = true
+	}
+	// Rendered from the spec rather than from what was read, so a set that is
+	// present under the right name but built wrong is not silently accepted —
+	// it either matches the line we would write or it does not appear.
+	for _, s := range StatSets() {
+		if byName[s.Name] {
+			out = append(out, s.Line())
+		}
+	}
+
+	return out, nil
+}
+
+// applyStat replaces the accounting table, in its own transaction.
+//
+// Separate from applyNFT because the two tables have different lifetimes
+// (§7.1): turning routing off must leave the counters running, and turning
+// accounting off must not disturb a single route.
+func (k LinuxKernel) applyStat(d Desired) error {
+	conn, err := nftables.New()
+	if err != nil {
+		return err
+	}
+	defer conn.CloseLasting()
+
+	tables, err := conn.ListTablesOfFamily(nftables.TableFamilyINet)
+	if err != nil {
+		return err
+	}
+	var existing *nftables.Table
+	for _, t := range tables {
+		if t.Name == StatTableName {
+			existing = t
+			break
+		}
+	}
+
+	if !d.Stat.Enabled {
+		if existing == nil {
+			return nil
+		}
+		conn.DelTable(existing)
+		return conn.Flush()
+	}
+
+	// Recreated wholesale only when it is absent. Unlike olr_route, whose
+	// content changes with the configuration, this table is a constant — and
+	// deleting it on every apply would throw away every byte counted so far,
+	// which is the one thing an operator watching a graph would notice.
+	if existing != nil {
+		return nil
+	}
+
+	table := conn.AddTable(&nftables.Table{
+		Family: nftables.TableFamilyINet,
+		Name:   StatTableName,
+	})
+
+	policy := nftables.ChainPolicyAccept
+	chain := conn.AddChain(&nftables.Chain{
+		Name:  AccountChain,
+		Table: table,
+		Type:  nftables.ChainTypeFilter,
+		// The forward hook, so this counts traffic that crosses the router and
+		// nothing else. §7.4's first limit falls straight out of that and is
+		// worth printing in the UI rather than discovering: two devices on one
+		// network talking to each other never reach here, so a NAS shows 200 MB
+		// when 40 GB was copied to it.
+		Hooknum:  nftables.ChainHookForward,
+		Priority: nftables.ChainPriorityFilter,
+		Policy:   &policy,
+	})
+
+	for _, s := range d.Stat.Sets {
+		addr := nftables.TypeIPAddr
+		if s.V6 {
+			addr = nftables.TypeIP6Addr
+		}
+		set := &nftables.Set{
+			Table:         table,
+			Name:          s.Name,
+			Dynamic:       true,
+			Concatenation: true,
+			Counter:       true,
+			HasTimeout:    true,
+			Timeout:       statTimeout,
+			Size:          statSetSize,
+			KeyType:       nftables.MustConcatSetType(addr, nftables.TypeMark),
+		}
+		if err := conn.AddSet(set, nil); err != nil {
+			return fmt.Errorf("creating set %s: %w", s.Name, err)
+		}
+		conn.AddRule(&nftables.Rule{
+			Table:    table,
+			Chain:    chain,
+			Exprs:    accountSetExprs(s),
+			UserData: comment(s.Line()),
+		})
+	}
+
+	return conn.Flush()
+}
+
+// accountSetExprs is `update @<set> { <addr> . meta mark }` for one direction.
+func accountSetExprs(s StatSet) []expr.Any {
+	proto := byte(unix.NFPROTO_IPV4)
+	offset, length := uint32(12), uint32(4) // ip saddr
+	if s.Down {
+		offset = 16 // ip daddr
+	}
+	if s.V6 {
+		proto, offset, length = unix.NFPROTO_IPV6, 8, 16
+		if s.Down {
+			offset = 24
+		}
+	}
+
+	// The mark's component of the key sits immediately after the address, so a
+	// 16-byte address pushes it from the second 32-bit register to the fifth.
+	markReg := uint32(reg32_01)
+	if s.V6 {
+		markReg = reg32_04
+	}
+
+	return []expr.Any{
+		// Register 1 here, deliberately: it aliases the key registers below,
+		// and the comparison is finished before they are written.
+		&expr.Meta{Key: expr.MetaKeyNFPROTO, Register: 1},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{proto}},
+
+		&expr.Payload{
+			DestRegister: reg32_00,
+			Base:         expr.PayloadBaseNetworkHeader,
+			Offset:       offset,
+			Len:          length,
+		},
+
+		&expr.Meta{Key: expr.MetaKeyMARK, Register: markReg},
+		// Masked to our byte before it becomes part of the key. Without this a
+		// mark bit set by Docker or WireGuard would split one device's traffic
+		// across two elements that look unrelated (§3.2 — always match with the
+		// mask).
+		maskOurMarkBits(markReg),
+
+		&expr.Dynset{
+			SrcRegKey: reg32_00,
+			SetName:   s.Name,
+			Operation: unix.NFT_DYNSET_OP_UPDATE,
+			Timeout:   statTimeout,
+		},
+	}
+}
+
+// Traffic reads the accounting sets.
+//
+// **This is the answer to docs/gateway.md §11 open decision 5** — whether
+// google/nftables can read per-element stateful counters over netlink, rather
+// than only set membership. It can, with one condition that is invisible from
+// the API and load-bearing:
+//
+//	The kernel dumps a single stateful expression under NFTA_SET_ELEM_EXPR and
+//	several under NFTA_SET_ELEM_EXPRESSIONS. google/nftables v0.3.0 *writes*
+//	both but *decodes* only the first. Our elements carry exactly one — the
+//	counter — so they come back on the path the library understands.
+//
+// The consequence to guard: adding a second stateful expression to one of these
+// sets (a quota, say) moves the kernel to the plural attribute and this
+// function silently starts returning zeroes. Not an error, not a parse failure
+// — an empty counter. Anything added here has to be checked against that.
+//
+// Reads are non-destructive: there is no reset in the path, so the counters
+// stay monotonic-since-load and callers can take deltas (§7.5).
+func (k LinuxKernel) Traffic(_ context.Context) ([]Flow, error) {
+	conn, err := nftables.New()
+	if err != nil {
+		return nil, err
+	}
+	defer conn.CloseLasting()
+
+	tables, err := conn.ListTablesOfFamily(nftables.TableFamilyINet)
+	if err != nil {
+		return nil, err
+	}
+	var table *nftables.Table
+	for _, t := range tables {
+		if t.Name == StatTableName {
+			table = t
+			break
+		}
+	}
+	if table == nil {
+		// Accounting is off, or has never been applied. Not an error: the
+		// caller's screen says "nothing is being counted" rather than "reading
+		// failed", and those are different things.
+		return nil, nil
+	}
+
+	sets, err := conn.GetSets(table)
+	if err != nil {
+		return nil, err
+	}
+	byName := map[string]*nftables.Set{}
+	for _, s := range sets {
+		byName[s.Name] = s
+	}
+
+	// Keyed by address and mark so the two directions of one device meet in a
+	// single row.
+	flows := map[string]*Flow{}
+	for _, spec := range StatSets() {
+		set, ok := byName[spec.Name]
+		if !ok {
+			continue
+		}
+		elements, err := conn.GetSetElements(set)
+		if err != nil {
+			return nil, fmt.Errorf("reading set %s: %w", spec.Name, err)
+		}
+		for _, e := range elements {
+			addr, mark, ok := decodeStatKey(e.Key, spec)
+			if !ok {
+				continue
+			}
+			key := addr.String() + "/" + strconv.FormatUint(uint64(mark), 16)
+			f, seen := flows[key]
+			if !seen {
+				f = &Flow{Addr: addr, Mark: mark}
+				flows[key] = f
+			}
+			if e.Counter == nil {
+				// The element exists but carries no counter. Left as zero
+				// rather than dropped: the device is real and saying so with an
+				// empty number is more honest than pretending it was not there.
+				continue
+			}
+			if spec.Down {
+				f.DownBytes, f.DownPackets = e.Counter.Bytes, e.Counter.Packets
+			} else {
+				f.UpBytes, f.UpPackets = e.Counter.Bytes, e.Counter.Packets
+			}
+		}
+	}
+
+	out := make([]Flow, 0, len(flows))
+	for _, f := range flows {
+		out = append(out, *f)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Addr != out[j].Addr {
+			return out[i].Addr.Less(out[j].Addr)
+		}
+		return out[i].Mark < out[j].Mark
+	})
+	return out, nil
+}
+
+// decodeStatKey splits a concatenated `address . mark` element key.
+//
+// Each component is padded to four bytes, which is why a v4 key is eight bytes
+// and not five. The mark is native-endian, as it is everywhere a register holds
+// it; the address is wire order.
+func decodeStatKey(key []byte, spec StatSet) (netip.Addr, uint32, bool) {
+	width := 4
+	if spec.V6 {
+		width = 16
+	}
+	if len(key) < width+4 {
+		return netip.Addr{}, 0, false
+	}
+	addr, ok := netip.AddrFromSlice(key[:width])
+	if !ok {
+		return netip.Addr{}, 0, false
+	}
+	mark := binaryutil.NativeEndian.Uint32(key[width : width+4])
+	return addr.Unmap(), mark & MarkMask, true
 }
 
 // reservedTables are the kernel's own, which are never foreign and never ours.
@@ -452,6 +824,13 @@ func (k LinuxKernel) Apply(ctx context.Context, d Desired) ([]Step, error) {
 	// is a single all-or-nothing netlink batch, so no partial ruleset is ever
 	// visible and there is nothing for a userspace two-phase commit to add.
 	if err := run("write the nftables table", func() error { return k.applyNFT(d) }); err != nil {
+		return steps, err
+	}
+
+	// Its own step and its own transaction, because it has its own lifetime
+	// (§7.1) — and because a failure here must not stop the routing half from
+	// being reported as landed.
+	if err := run("write the accounting table", func() error { return k.applyStat(d) }); err != nil {
 		return steps, err
 	}
 

@@ -34,10 +34,11 @@ func Command() *cobra.Command {
 // Endpoints this module's commands call. Spelled once so a rename cannot leave
 // half the commands pointing at the old path.
 const (
-	configEndpoint = core.APIPrefix + "/" + ModuleName + "/config"
-	planEndpoint   = core.APIPrefix + "/" + ModuleName + "/plan"
-	applyEndpoint  = core.APIPrefix + "/" + ModuleName + "/apply"
-	statusEndpoint = core.APIPrefix + "/" + ModuleName + "/status"
+	configEndpoint  = core.APIPrefix + "/" + ModuleName + "/config"
+	planEndpoint    = core.APIPrefix + "/" + ModuleName + "/plan"
+	applyEndpoint   = core.APIPrefix + "/" + ModuleName + "/apply"
+	statusEndpoint  = core.APIPrefix + "/" + ModuleName + "/status"
+	trafficEndpoint = core.APIPrefix + "/" + ModuleName + "/traffic"
 )
 
 func ctxOf(c *cobra.Command) context.Context {
@@ -67,6 +68,38 @@ func verb(name, short string, build func(*cobra.Command)) *cobra.Command {
 // ---------------------------------------------------------------- show
 
 func showCommand() *cobra.Command {
+	c := showConfigCommand()
+	c.AddCommand(showTrafficCommand())
+	return c
+}
+
+func showTrafficCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "traffic",
+		Short: "Show how much each device has used, and through which way out",
+		Long: "Show how much each device has sent and received.\n\n" +
+			"Counted in the kernel and read on every request — never stored, so the\n" +
+			"numbers start from zero when the router reboots. What they cannot see is\n" +
+			"printed underneath rather than left to be discovered, because every one of\n" +
+			"those limits makes a number smaller than you would expect.",
+		Args: cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if err := cli.ValidateOutput(c); err != nil {
+				return err
+			}
+			var traffic trafficView
+			if err := cli.ClientFor(c).Get(ctxOf(c), trafficEndpoint, &traffic); err != nil {
+				return err
+			}
+			if cli.IsJSON(c) {
+				return cli.JSON(c.OutOrStdout(), traffic)
+			}
+			return writeTrafficText(c.OutOrStdout(), traffic)
+		},
+	}
+}
+
+func showConfigCommand() *cobra.Command {
 	return verb("show", "Show exits and which networks use them", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
@@ -102,8 +135,38 @@ func showCommand() *cobra.Command {
 
 func setCommand() *cobra.Command {
 	c := verb("set", "Choose which exit a network uses", func(*cobra.Command) {})
-	c.AddCommand(setDefaultCommand(), setViaCommand())
+	c.AddCommand(setDefaultCommand(), setViaCommand(), setStatsCommand())
 	return c
+}
+
+// setStatsCommand is §7.5's visible off switch.
+//
+// A subcommand of `set` rather than a flag on `enable`/`disable`, because
+// accounting has its own lifetime: turning routing off leaves it counting, and
+// turning it off leaves routing alone.
+func setStatsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "traffic-counting on|off",
+		Short: "Count how much each device uses",
+		Long: "Turn per-device traffic counting on or off.\n\n" +
+			"Independent of everything else here: with no way out configured it still\n" +
+			"counts, it just has nothing to attribute the traffic to. Turning it off\n" +
+			"discards the running totals, which are only ever held in memory anyway.",
+		Args:      cobra.ExactArgs(1),
+		ValidArgs: []string{"on", "off"},
+		RunE: func(c *cobra.Command, args []string) error {
+			var on bool
+			switch args[0] {
+			case "on":
+				on = true
+			case "off":
+				on = false
+			default:
+				return fmt.Errorf("want on or off, got %q", args[0])
+			}
+			return mutate(c, func(cfg *Config) error { cfg.Stats = &on; return nil })
+		},
+	}
 }
 
 func setDefaultCommand() *cobra.Command {
@@ -238,6 +301,7 @@ func (f *exitFlags) register(c *cobra.Command) {
 		"rewrite the source address of traffic sent to a next hop, so replies come back through this router")
 	c.Flags().StringVar(&f.probe, "probe", "",
 		"health-check target on the far side of the exit, as address:port, e.g. 1.1.1.1:443")
+	// Registered on `set` rather than here; see setStatsCommand.
 	c.Flags().StringVar(&f.interval, "probe-interval", "", "how often to health-check, e.g. 30s")
 	c.Flags().StringVar(&f.timeout, "probe-timeout", "", "how long one health check may take, e.g. 5s")
 }

@@ -33,9 +33,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { ExitDialog } from '@/features/routing/exit-dialog'
 import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/routing/plan-preview'
-import { useRoutingConfig, useRoutingStatus } from '@/features/routing/queries'
+import { useRoutingConfig, useRoutingStatus, useRoutingTraffic } from '@/features/routing/queries'
 import { useRoutingApply } from '@/features/routing/use-apply'
-import type { AssignmentStatus, ExitStatus } from '@/lib/api-types'
+import type { AssignmentStatus, ExitStatus, RoutingTraffic, Usage } from '@/lib/api-types'
 import type { Exit, RoutingConfig } from '@/lib/config-types'
 
 // Sentinel values for the two choices that are not an exit name.
@@ -52,6 +52,7 @@ const DIRECT = ' direct'
 export function RoutingPage() {
   const config = useRoutingConfig()
   const status = useRoutingStatus()
+  const traffic = useRoutingTraffic()
   const applier = useRoutingApply()
 
   const [adding, setAdding] = useState(false)
@@ -237,6 +238,26 @@ export function RoutingPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Usage</CardTitle>
+          <CardDescription>
+            How much each device has sent and received since this router started.
+          </CardDescription>
+          <CardAction>
+            <Switch
+              aria-label="Count how much each device uses"
+              checked={current.stats ?? true}
+              disabled={applier.busy}
+              onCheckedChange={(stats) => change({ ...current, stats })}
+            />
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          <TrafficList traffic={traffic.data} enabled={current.stats ?? true} />
+        </CardContent>
+      </Card>
+
       {status.data?.foreign?.length ? (
         <Card>
           <CardHeader>
@@ -284,6 +305,91 @@ export function RoutingPage() {
       <ConfirmDialog applier={applier} />
     </div>
   )
+}
+
+/**
+ * Who used the bandwidth, and through which way out.
+ *
+ * The limits underneath come from the server rather than being written here, so
+ * the CLI and any agent reading the same endpoint carry the same caveats. They
+ * are shown rather than tucked behind a disclosure because each one explains a
+ * number being *smaller* than expected, and the first question a surprising
+ * number produces is "is this broken?".
+ */
+function TrafficList({ traffic, enabled }: { traffic?: RoutingTraffic; enabled: boolean }) {
+  if (!enabled) {
+    return <ListEmpty>Counting is off, so nothing is being recorded.</ListEmpty>
+  }
+  if (!traffic) {
+    return <Skeleton className="h-24 w-full" />
+  }
+  if (!traffic.counting) {
+    return (
+      <ListEmpty>
+        Counting is on, but this router could not read the counters — so nothing here
+        is real yet.
+      </ListEmpty>
+    )
+  }
+  if (traffic.usage.length === 0) {
+    return (
+      <ListEmpty>
+        Nothing counted yet. Counting starts when the router forwards traffic, and the
+        totals reset when it restarts.
+      </ListEmpty>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <List>
+        {traffic.usage.map((u) => (
+          <ListRow
+            key={`${u.address}/${u.exit}/${u.unknown ?? false}`}
+            title={u.address}
+            subtitle={describeUsageExit(u)}
+            trailing={`${formatBytes(u.up_bytes)} up · ${formatBytes(u.down_bytes)} down`}
+          />
+        ))}
+      </List>
+      {traffic.limits?.length ? (
+        <div className="text-[0.8rem] text-muted-foreground">
+          <p className="font-medium">What these numbers do not include</p>
+          <ul className="mt-1 space-y-1">
+            {traffic.limits.map((l) => (
+              <li key={l} className="flex gap-2">
+                <span aria-hidden>·</span>
+                {l}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function describeUsageExit(u: Usage): string {
+  if (u.unknown) return 'A way out that was removed'
+  // Named rather than left blank, so the row reads as an answer and not a gap.
+  if (!u.exit) return 'Not routed by this router'
+  return `Via ${u.exit}`
+}
+
+/**
+ * Powers of 1024 with the short suffixes, matching every other tool on the box.
+ * A second convention would make two numbers about the same traffic disagree.
+ */
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  const units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB']
+  let value = n / 1024
+  let i = 0
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024
+    i++
+  }
+  return `${value.toFixed(1)} ${units[i]}`
 }
 
 /**

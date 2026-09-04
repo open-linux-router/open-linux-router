@@ -1,7 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { RoutingApplyResult, RoutingPlan, RoutingStatus } from '@/lib/api-types'
+import type {
+  RoutingApplyResult,
+  RoutingPlan,
+  RoutingStatus,
+  RoutingTraffic,
+} from '@/lib/api-types'
 import type { RoutingConfig } from '@/lib/config-types'
 
 // The same polling story as the other modules: EventSource cannot send an
@@ -18,6 +23,7 @@ const OBSERVED_REFETCH_MS = 5000
 export const routingKeys = {
   config: ['routing', 'config'] as const,
   status: ['routing', 'status'] as const,
+  traffic: ['routing', 'traffic'] as const,
 }
 
 export function useRoutingConfig() {
@@ -33,6 +39,20 @@ export function useRoutingStatus() {
     queryFn: () => api.get<RoutingStatus>('/api/routing/status'),
     // Observed state, never cached by the daemon (design.md §4.5), so the only
     // way to stay current is to ask again.
+    refetchInterval: OBSERVED_REFETCH_MS,
+  })
+}
+
+/**
+ * Per-device byte counts, read from the kernel on every request.
+ *
+ * Its own query rather than part of the status one, because it costs a walk of
+ * every device on the network and is wanted at a different rate.
+ */
+export function useRoutingTraffic() {
+  return useQuery({
+    queryKey: routingKeys.traffic,
+    queryFn: () => api.get<RoutingTraffic>('/api/routing/traffic'),
     refetchInterval: OBSERVED_REFETCH_MS,
   })
 }

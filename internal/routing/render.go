@@ -46,6 +46,73 @@ type Desired struct {
 
 	// Sysctls are the per-interface kernel settings this module owns (§5.2).
 	Sysctls []SysctlSpec
+
+	// Stat is the accounting table (§7.1), and it is deliberately outside
+	// Enabled: it is installed whether or not any routing policy is. With no
+	// policy every packet carries mark 0 and the same two rules degrade to
+	// plain per-device totals.
+	Stat StatTable
+}
+
+// StatTable is `inet olr_stat` — per-device *and* per-exit bytes from one
+// structure, in two rules per family (§7.1).
+//
+// The concatenated key is what makes that true: the mark is already on the
+// packet from the classify chain, so keying on `address . mark` costs nothing
+// over keying on the address alone and answers "Living Room TV: 40 GB, of which
+// 38 via Clash" without a second table.
+type StatTable struct {
+	Enabled bool
+
+	// Sets are the four dynamic sets, in a stable order.
+	Sets []StatSet
+}
+
+// StatSet is one direction of one family.
+type StatSet struct {
+	Name string
+
+	// V6 selects the key type, and Down selects which address is the key —
+	// destination rather than source, which is what counts traffic *to* a
+	// device rather than from it.
+	V6   bool
+	Down bool
+}
+
+// StatSets is the fixed set of four. A function rather than a var so a caller
+// cannot mutate the list everything else derives from.
+func StatSets() []StatSet {
+	return []StatSet{
+		{Name: StatUp4, V6: false, Down: false},
+		{Name: StatDown4, V6: false, Down: true},
+		{Name: StatUp6, V6: true, Down: false},
+		{Name: StatDown6, V6: true, Down: true},
+	}
+}
+
+// KeyBytes is the width of one element's key: the address, then the mark, each
+// padded to the 4-byte register the kernel concatenates in.
+func (s StatSet) KeyBytes() int {
+	if s.V6 {
+		return 16 + 4
+	}
+	return 4 + 4
+}
+
+// Line is this set's canonical form.
+func (s StatSet) Line() string {
+	key := "ipv4_addr"
+	if s.V6 {
+		key = "ipv6_addr"
+	}
+	which := "ip saddr"
+	if s.Down {
+		which = "ip daddr"
+	}
+	if s.V6 {
+		which = "ip6 " + strings.TrimPrefix(which, "ip ")
+	}
+	return fmt.Sprintf("nft stat set %s %s . mark from %s", s.Name, key, which)
 }
 
 // NFTable is the `inet olr_route` table (§3.3).
@@ -261,6 +328,14 @@ func (h Health) Down(name string) bool {
 // anything is written).
 func Render(c Config, links LinkView, health Health) Desired {
 	d := Desired{Enabled: c.Enabled}
+
+	// Before the early return, because accounting outlives routing policy
+	// (§7.1). A box with `enabled: false` and stats on still counts bytes; it
+	// just counts them all against mark 0.
+	if c.StatsOrDefault() {
+		d.Stat = StatTable{Enabled: true, Sets: StatSets()}
+	}
+
 	if !c.Enabled {
 		return d
 	}
@@ -572,11 +647,22 @@ func (d Desired) Lines() []string {
 // exists because we made it, so its absence from the desired set means "remove
 // it"; a sysctl somebody else had already set to 0 is not ours to put back.
 func (d Desired) objectLines() []string {
-	if !d.Enabled {
-		return nil
+	var out []string
+
+	// First, and outside the Enabled guard below, because the accounting table
+	// has its own lifetime (§7.1).
+	if d.Stat.Enabled {
+		out = append(out,
+			fmt.Sprintf("nft table inet %s", StatTableName),
+			fmt.Sprintf("nft chain %s forward filter", AccountChain))
+		for _, s := range d.Stat.Sets {
+			out = append(out, s.Line())
+		}
 	}
 
-	var out []string
+	if !d.Enabled {
+		return out
+	}
 
 	out = append(out, fmt.Sprintf("nft table inet %s", TableName))
 	out = append(out, fmt.Sprintf("nft chain %s prerouting mangle", ClassifyChain))

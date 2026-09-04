@@ -182,6 +182,81 @@ func viewStatus(s Status, warnings []Problem, now time.Time) statusView {
 	return v
 }
 
+// usageView is one device's traffic through one exit.
+type usageView struct {
+	Address string `json:"address"`
+
+	// Exit is empty for the residual — traffic no assignment matched — which is
+	// a row and not an omission (§7.3).
+	Exit string `json:"exit"`
+
+	// Unknown marks traffic still carrying a deleted exit's mark.
+	Unknown bool `json:"unknown,omitempty"`
+
+	UpBytes     uint64 `json:"up_bytes"`
+	DownBytes   uint64 `json:"down_bytes"`
+	UpPackets   uint64 `json:"up_packets"`
+	DownPackets uint64 `json:"down_packets"`
+}
+
+// trafficView is the accounting read, with its own limits attached.
+type trafficView struct {
+	// Enabled is intent; Counting says whether the kernel actually has the
+	// table. They differ for the moment between turning it on and applying.
+	Enabled  bool `json:"enabled"`
+	Counting bool `json:"counting"`
+
+	Usage []usageView `json:"usage"`
+
+	// Limits are §7.4's, carried on the response rather than written into a
+	// screen.
+	//
+	// The doc asks for them to be printed in the UI, and putting them here
+	// rather than in the SPA means the CLI and any agent reading this endpoint
+	// get the same caveats — which matters, because every one of them is a
+	// reason a number is *smaller* than somebody expects, and the first
+	// question a surprising number produces is "is this broken?".
+	Limits []string `json:"limits,omitempty"`
+
+	AsOf time.Time `json:"as_of"`
+}
+
+// trafficLimits is what these numbers cannot see (§7.4).
+func trafficLimits() []string {
+	return []string{
+		"Traffic between two devices on the same network never passes through " +
+			"this router, so it is not counted. Copying to a NAS on your own " +
+			"network is the usual surprise.",
+		"A device that changes address starts a new count, and IPv6 privacy " +
+			"addresses rotate on purpose, so one device can appear as several.",
+		"Anything behind a second router is counted as that router.",
+	}
+}
+
+func viewTraffic(cfg Config, usage []Usage, counting bool, now time.Time) trafficView {
+	v := trafficView{
+		Enabled:  cfg.StatsOrDefault(),
+		Counting: counting,
+		Usage:    make([]usageView, 0, len(usage)),
+		AsOf:     now,
+	}
+	if counting {
+		v.Limits = trafficLimits()
+	}
+	for _, u := range usage {
+		v.Usage = append(v.Usage, usageView{
+			Address:     u.Addr.String(),
+			Exit:        u.Exit,
+			Unknown:     u.Unknown,
+			UpBytes:     u.UpBytes,
+			DownBytes:   u.DownBytes,
+			UpPackets:   u.UpPackets,
+			DownPackets: u.DownPackets,
+		})
+	}
+	return v
+}
+
 // markString renders a mark the way it is written everywhere else — hex, eight
 // digits — rather than as a JSON number. A reader comparing it against
 // `nft list ruleset` or `ip rule` output should not have to convert.

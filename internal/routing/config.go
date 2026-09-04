@@ -62,6 +62,20 @@ type Config struct {
 	// as a row the operator could edit would promise a control we do not have.
 	Default string `json:"default,omitempty"`
 
+	// Stats controls per-device and per-exit byte accounting (§7.1).
+	//
+	// Nil means on. It is deliberately **not** governed by Enabled: §7.1 is
+	// explicit that the accounting table does not depend on the routing one —
+	// with no policy installed every packet carries mark 0 and the same
+	// structure degrades to plain per-device totals. So a box that only wants
+	// to know who is using the bandwidth gets that without routing anything.
+	//
+	// A switch exists because §7.5 asks for one. What it turns off is modest
+	// compared to the query log — byte totals in kernel memory, no history and
+	// no names — but "a visible off switch" was decided now rather than after
+	// somebody asks, and this is it.
+	Stats *bool `json:"stats,omitempty"`
+
 	// Interfaces assigns an exit per network — §2.5's first tier of the ladder,
 	// and the only one that ships here.
 	//
@@ -375,6 +389,15 @@ func (e Exit) IPv6OrDefault() IPv6Mode {
 		return IPv6Block
 	}
 	return e.IPv6
+}
+
+// StatsOrDefault resolves the nil pointer: accounting is on unless it was
+// deliberately turned off.
+func (c Config) StatsOrDefault() bool {
+	if c.Stats == nil {
+		return true
+	}
+	return *c.Stats
 }
 
 // Find returns the exit with this name, or false.

@@ -289,11 +289,80 @@ func TestAnExitNobodyUsesIsNotProgrammed(t *testing.T) {
 	}
 }
 
-func TestDisabledRendersNothing(t *testing.T) {
+func TestDisabledRendersNoRoutingPolicy(t *testing.T) {
 	c := testConfig()
 	c.Enabled = false
-	if got := lines(t, c, nil); len(got) != 0 {
-		t.Errorf("disabling should leave the box routing normally, got %s", dump(got))
+	got := lines(t, c, nil)
+
+	for _, prefix := range []string{"rule ", "route ", "nft source", "nft snat", "sysctl "} {
+		if containsPrefix(got, prefix) {
+			t.Errorf("disabling should leave the box routing normally, but found %q: %s",
+				prefix, dump(got))
+		}
+	}
+}
+
+// §7.1: the accounting table does not depend on the routing one. With no policy
+// installed every packet carries mark 0 and the same structure degrades to
+// plain per-device totals — so a box that only wants to know who is using the
+// bandwidth gets that without routing anything.
+func TestAccountingSurvivesRoutingBeingDisabled(t *testing.T) {
+	c := testConfig()
+	c.Enabled = false
+	got := lines(t, c, nil)
+
+	if !contains(got, "nft table inet "+StatTableName) {
+		t.Errorf("the accounting table should still be installed: %s", dump(got))
+	}
+	for _, s := range StatSets() {
+		if !contains(got, s.Line()) {
+			t.Errorf("missing accounting set %q: %s", s.Name, dump(got))
+		}
+	}
+}
+
+func TestAccountingCanBeTurnedOff(t *testing.T) {
+	// §7.5 asks for a visible off switch, and this is it.
+	c := testConfig()
+	off := false
+	c.Stats = &off
+	got := lines(t, c, nil)
+
+	if containsPrefix(got, "nft table inet "+StatTableName) || containsPrefix(got, "nft stat set") {
+		t.Errorf("stats:false should install no accounting at all: %s", dump(got))
+	}
+	// And it must not have taken the routing half with it.
+	if !containsPrefix(got, "route ip table ") {
+		t.Errorf("turning accounting off must not disturb routing: %s", dump(got))
+	}
+}
+
+func TestAccountingIsOnByDefault(t *testing.T) {
+	// A stored document from before this field existed reads as nil, which has
+	// to mean on — otherwise upgrading silently stops counting.
+	var c Config
+	if !c.StatsOrDefault() {
+		t.Error("accounting should default on")
+	}
+	on := true
+	c.Stats = &on
+	if !c.StatsOrDefault() {
+		t.Error("an explicit true should be honoured")
+	}
+}
+
+func TestAccountingKeyWidthsMatchTheKernelPadding(t *testing.T) {
+	// Each concatenated component is padded to the four-byte register the
+	// kernel builds the key in, which is why a v4 key is eight bytes and not
+	// five. decodeStatKey splits on exactly these offsets.
+	for _, s := range StatSets() {
+		want := 8
+		if s.V6 {
+			want = 20
+		}
+		if got := s.KeyBytes(); got != want {
+			t.Errorf("%s key is %d bytes, want %d", s.Name, got, want)
+		}
 	}
 }
 

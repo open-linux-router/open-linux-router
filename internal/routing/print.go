@@ -142,6 +142,81 @@ func writeStatusText(w io.Writer, s statusView) error {
 	return nil
 }
 
+func writeTrafficText(w io.Writer, t trafficView) error {
+	switch {
+	case !t.Enabled:
+		fmt.Fprintln(w, "Traffic counting is off. Turn it on with "+
+			"`olr routing set traffic-counting on`.")
+		return nil
+	case !t.Counting:
+		// Intent and reality disagree, which is a different sentence from "off".
+		fmt.Fprintln(w, "Traffic counting is on, but this router could not read the counters.\n"+
+			"On Linux this usually means olrd is missing CAP_NET_ADMIN.")
+		return nil
+	case len(t.Usage) == 0:
+		fmt.Fprintln(w, "Nothing counted yet. Counting starts when the router forwards traffic,\n"+
+			"and the totals reset when it restarts.")
+	default:
+		tw := table(w)
+		fmt.Fprintln(tw, "DEVICE\tINTERNET VIA\tSENT\tRECEIVED\tTOTAL")
+		for _, u := range t.Usage {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+				u.Address, describeUsageExit(u),
+				humanBytes(u.UpBytes), humanBytes(u.DownBytes),
+				humanBytes(u.UpBytes+u.DownBytes))
+		}
+		if err := tw.Flush(); err != nil {
+			return err
+		}
+	}
+
+	// §7.4 asks for these to be printed rather than left to be discovered.
+	// Every one explains a number being smaller than expected, and the first
+	// question a surprising number produces is "is this broken?".
+	if len(t.Limits) > 0 {
+		fmt.Fprintln(w, "\nWhat these numbers do not include:")
+		for _, l := range t.Limits {
+			fmt.Fprintf(w, "  · %s\n", l)
+		}
+	}
+
+	fmt.Fprintf(w, "\nas of %s\n", t.AsOf.Format("2006-01-02 15:04:05"))
+	return nil
+}
+
+func describeUsageExit(u usageView) string {
+	switch {
+	case u.Unknown:
+		// Distinguished from the residual on purpose: "went somewhere that no
+		// longer exists" and "matched no rule" are different facts.
+		return "a way out that was removed"
+	case u.Exit == "":
+		// §7.3's residual, named rather than left blank so the row reads as an
+		// answer instead of a gap.
+		return "not routed by olr"
+	default:
+		return u.Exit
+	}
+}
+
+// humanBytes renders a count the way an operator reads it.
+//
+// Powers of 1024 with the short suffixes, because that is what every other tool
+// on the box prints and a second convention would make two numbers about the
+// same traffic look different.
+func humanBytes(n uint64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := uint64(unit), 0
+	for v := n / unit; v >= unit && exp < 4; v /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTP"[exp])
+}
+
 func writePlanText(w io.Writer, plan planView, dryRun bool) error {
 	if plan.Blocked != "" {
 		// Printed before anything else and without the diff, because the diff

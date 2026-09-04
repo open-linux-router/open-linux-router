@@ -32,6 +32,15 @@ type Kernel interface {
 	// detection free (design.md §5.4).
 	Observe(ctx context.Context) (Observed, error)
 
+	// Traffic reads the accounting sets (§7.1).
+	//
+	// Separate from Observe because it is asked at a different rate and for a
+	// different reason: Observe answers "does the kernel match intent" on every
+	// plan, while this answers "who used the bandwidth" on a screen somebody is
+	// watching. Folding them together would make every apply pay for a walk of
+	// every device on the network.
+	Traffic(ctx context.Context) ([]Flow, error)
+
 	// Apply programs the desired state, returning what it managed to do.
 	//
 	// It returns steps alongside an error rather than instead of one. There is
@@ -41,6 +50,26 @@ type Kernel interface {
 	// than a silent revert — and on this module a revert would itself be a
 	// routing change, with its own chance of failing.
 	Apply(ctx context.Context, d Desired) ([]Step, error)
+}
+
+// Flow is one device's traffic through one exit, as the kernel counts it.
+//
+// The key is `(address, mark)`, so a device that uses two exits appears twice —
+// which is the point. Mark 0 is traffic no assignment matched, and it is
+// reported rather than dropped: §7.3's residual rule, applied to the place it
+// is easiest to quietly omit.
+type Flow struct {
+	Addr netip.Addr
+
+	// Mark is the exit's fwmark, already masked to our byte. Zero means
+	// unpoliced.
+	Mark uint32
+
+	// Up is what the device sent, Down what it received. Bytes and packets
+	// both, because a count of packets is what distinguishes a device that is
+	// idle from one that is unreachable.
+	UpBytes, UpPackets     uint64
+	DownBytes, DownPackets uint64
 }
 
 // Step is one unit of work and how it went.
@@ -92,6 +121,9 @@ type StaticKernel struct {
 	AllSendRedirects *bool
 	Active           []string
 
+	// Flows is what Traffic returns.
+	Flows []Flow
+
 	// Unknown makes Observe report that the kernel could not be read, which is
 	// what a non-Linux build and an unprivileged container both look like.
 	Unknown bool
@@ -124,6 +156,14 @@ func (k *StaticKernel) Observe(context.Context) (Observed, error) {
 	obs.Active = parseAddrs(k.Active)
 	sort.Strings(obs.Lines)
 	return obs, nil
+}
+
+// Traffic implements Kernel.
+func (k *StaticKernel) Traffic(context.Context) ([]Flow, error) {
+	if k.Unknown {
+		return nil, ErrUnsupported
+	}
+	return append([]Flow(nil), k.Flows...), nil
 }
 
 // Apply implements Kernel.

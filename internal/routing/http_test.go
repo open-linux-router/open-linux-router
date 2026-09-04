@@ -6,12 +6,18 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
+
+// testTime is a fixed instant, so a view's as_of is asserted on rather than
+// raced against.
+func testTime() time.Time { return time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC) }
 
 func newTestStore(t *testing.T) *core.Store {
 	t.Helper()
@@ -329,6 +335,59 @@ func TestWatchIsCalledAfterASuccessfulApply(t *testing.T) {
 	}
 	if len(got.Exits) != 2 {
 		t.Errorf("the prober was not told about the new config: %+v", got)
+	}
+}
+
+func TestTrafficEndpointDegradesRatherThanFailing(t *testing.T) {
+	// A kernel that cannot be read still leaves intent worth showing, and
+	// `counting: false` is what says which half is missing — the same shape
+	// getStatus uses.
+	h, _ := newTestHandler(t, &StaticKernel{Unknown: true})
+	if w := do(t, h, http.MethodPut, "/config", testConfig()); w.Code != http.StatusOK {
+		t.Fatalf("setup failed: %s", w.Body)
+	}
+
+	w := do(t, h, http.MethodGet, "/traffic", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+	tv := decode[trafficView](t, w)
+	if tv.Counting {
+		t.Error("a kernel we could not read is not counting")
+	}
+	if !tv.Enabled {
+		t.Error("intent says accounting is on, which is a different question")
+	}
+	if len(tv.Limits) != 0 {
+		t.Error("nothing is being counted, so there is nothing to caveat")
+	}
+}
+
+func TestTrafficEndpointReportsUsage(t *testing.T) {
+	cfg := testConfig()
+	cfg.Normalize()
+	clash, _ := cfg.Find("Clash")
+
+	k := &StaticKernel{Flows: []Flow{
+		{Addr: netip.MustParseAddr("192.168.1.23"), Mark: clash.Mark(), UpBytes: 10, DownBytes: 90},
+	}}
+	h, _ := newTestHandler(t, k)
+	if w := do(t, h, http.MethodPut, "/config", cfg); w.Code != http.StatusOK {
+		t.Fatalf("setup failed: %s", w.Body)
+	}
+
+	tv := decode[trafficView](t, do(t, h, http.MethodGet, "/traffic", nil))
+	if !tv.Counting || len(tv.Usage) != 1 {
+		t.Fatalf("unexpected response: %+v", tv)
+	}
+	if tv.Usage[0].Exit != "Clash" || tv.Usage[0].DownBytes != 90 {
+		t.Errorf("unexpected row: %+v", tv.Usage[0])
+	}
+	if len(tv.Limits) == 0 {
+		t.Error("§7.4's limits should ride on the response")
+	}
+	if tv.AsOf.IsZero() {
+		t.Error("observed data must be stamped (§4.5)")
 	}
 }
 

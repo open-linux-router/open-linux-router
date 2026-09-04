@@ -479,3 +479,41 @@ export interface RoutingStatus {
   problems?: Problem[]
   as_of: string
 }
+
+/** One device's traffic through one way out — internal/routing usageView. */
+export interface Usage {
+  address: string
+
+  /**
+   * Empty for the residual — traffic no assignment matched. A row rather than
+   * an omission: per-exit totals only reconcile against the box total if what
+   * matched nothing is visible too.
+   */
+  exit: string
+
+  /** Traffic still carrying the mark of an exit that has since been removed. */
+  unknown?: boolean
+
+  up_bytes: number
+  down_bytes: number
+  up_packets: number
+  down_packets: number
+}
+
+/** internal/routing trafficView. */
+export interface RoutingTraffic {
+  /** Intent. `counting` is whether the kernel actually has the table. */
+  enabled: boolean
+  counting: boolean
+
+  usage: Usage[]
+
+  /**
+   * What these numbers cannot see, from the server rather than written into
+   * this app — so the CLI and any agent reading the endpoint get the same
+   * caveats. Every one explains a number being smaller than expected.
+   */
+  limits?: string[]
+
+  as_of: string
+}

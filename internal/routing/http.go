@@ -55,6 +55,11 @@ func (h HTTP) Handler() http.Handler {
 	// Observed. Never stored, always stamped with as_of (§4.5).
 	mux.HandleFunc("GET /status", h.getStatus)
 
+	// Per-device and per-exit bytes, read from the kernel on every request.
+	// Separate from /status because it is asked far more often and costs a walk
+	// of every device on the network.
+	mux.HandleFunc("GET /traffic", h.getTraffic)
+
 	return mux
 }
 
@@ -265,6 +270,29 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	core.WriteJSON(w, http.StatusOK, viewStatus(st, warnings, now))
+}
+
+func (h HTTP) getTraffic(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+
+	cfg, err := h.Applier.Load()
+	if err != nil {
+		core.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	usage, err := h.Applier.Traffic(r.Context())
+	if err != nil {
+		// Degraded rather than fatal, matching getStatus: a kernel we could not
+		// read still leaves intent worth showing, and `counting: false` is what
+		// says which half is missing. A machine that cannot do this at all —
+		// the non-Linux build — is the same answer as one where nothing has
+		// been applied yet, which is correct: neither is counting.
+		core.WriteJSON(w, http.StatusOK, viewTraffic(cfg, nil, false, now))
+		return
+	}
+
+	core.WriteJSON(w, http.StatusOK, viewTraffic(cfg, usage, true, now))
 }
 
 // callerAddr is the address the request came from, for §5.1's lockout check.

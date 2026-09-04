@@ -179,6 +179,7 @@ export interface RoutingConfig {
   enabled: boolean
   exits?: Exit[]
   default?: string
+  stats?: boolean
   interfaces?: Assignment[]
 }
 export interface Exit {

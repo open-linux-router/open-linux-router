@@ -28,6 +28,12 @@ func (unsupportedKernel) Observe(context.Context) (Observed, error) {
 	return Observed{Known: false}, nil
 }
 
+// Traffic refuses. Reporting no flows would read as "nothing used the network",
+// which is a claim rather than an absence of one.
+func (unsupportedKernel) Traffic(context.Context) ([]Flow, error) {
+	return nil, ErrUnsupported
+}
+
 // Apply refuses, rather than silently succeeding.
 func (unsupportedKernel) Apply(context.Context, Desired) ([]Step, error) {
 	return nil, ErrUnsupported
