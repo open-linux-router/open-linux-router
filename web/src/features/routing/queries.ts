@@ -20,6 +20,15 @@ import type { RoutingConfig } from '@/lib/config-types'
 // is only useful if it appears on its own.
 const OBSERVED_REFETCH_MS = 5000
 
+// Byte counts refetch at half that rate, because they are not the same question.
+//
+// An exit going down is worth knowing within seconds: nothing else on screen
+// would say so. A running total is worth knowing whenever the eye lands on it,
+// and producing it costs a walk of every device on the network. Polling both at
+// one interval meant paying for the expensive one at the cadence the cheap one
+// needed.
+const TRAFFIC_REFETCH_MS = 10000
+
 export const routingKeys = {
   config: ['routing', 'config'] as const,
   status: ['routing', 'status'] as const,
@@ -53,7 +62,7 @@ export function useRoutingTraffic() {
   return useQuery({
     queryKey: routingKeys.traffic,
     queryFn: () => api.get<RoutingTraffic>('/api/routing/traffic'),
-    refetchInterval: OBSERVED_REFETCH_MS,
+    refetchInterval: TRAFFIC_REFETCH_MS,
   })
 }
 

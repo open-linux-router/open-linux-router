@@ -349,3 +349,55 @@ func reasonsContain(p Plan, substr string) bool {
 	}
 	return strings.Contains(p.Blocked, substr)
 }
+
+// The upgrade this version has to survive: a box whose accounting table was
+// built by a version that keyed the wrong address. The sets are named the same,
+// so only the rules' canonical lines say the table is stale — and if the plan
+// cannot see that, applying will not fix the box.
+//
+// The old line is spelled out rather than derived, because deriving it from
+// today's code would make the test agree with whatever the code does.
+func TestAStaleAccountingTableIsPlannedForReplacement(t *testing.T) {
+	c := testConfig()
+	c.Normalize()
+
+	// Verbatim what the previous version wrote, set name included. Using a
+	// made-up name here would pass whatever the code did, because any observed
+	// line missing from the desired set reads as a removal — the whole point is
+	// that this is the line a real box actually has.
+	const oldLine = "nft stat set up4 ipv4_addr . mark from ip saddr"
+	obs := Observed{
+		Known: true,
+		Lines: []string{
+			"nft table inet " + StatTableName,
+			"nft chain " + AccountChain + " forward filter",
+			oldLine,
+		},
+	}
+	plan, _, err := BuildPlan(c, testLinks(), nil, obs, netip.Addr{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var removesOld, addsNew bool
+	for _, ch := range plan.Changes {
+		if ch.Line == oldLine {
+			removesOld = true
+		}
+		if ch.Line == StatSets()[0].Line() {
+			addsNew = true
+		}
+	}
+	if !removesOld || !addsNew {
+		t.Errorf("a table keyed the old way should plan as replaced "+
+			"(removes old %v, adds new %v): %+v", removesOld, addsNew, plan.Changes)
+	}
+
+	// And it must not read as disruptive. Rebuilding the counters costs the
+	// running totals, which §7.5 already says do not survive a reboot; it does
+	// not move a single packet, and a dialog that says otherwise here is the
+	// one that trains people to click through the dialog that matters.
+	if plan.Impact == ImpactDisruptive {
+		t.Errorf("replacing the accounting table moves no traffic: %v", plan.Reasons)
+	}
+}

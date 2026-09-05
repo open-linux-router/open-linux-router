@@ -164,3 +164,30 @@ func TestTrafficViewCarriesItsLimits(t *testing.T) {
 		t.Error("counting should be false")
 	}
 }
+
+// §7.3 pointed at ourselves: a full accounting table goes on counting the
+// devices it already holds and silently records no new ones, so "this device
+// uses no data" and "this device is missing" look identical on screen unless
+// the response says how full it is.
+func TestTrafficViewSaysWhenItIsRunningOutOfRoom(t *testing.T) {
+	c := testConfig()
+
+	roomy := viewTraffic(c, []Usage{{Addr: netip.MustParseAddr("192.168.1.5")}}, true, testTime())
+	if roomy.Capacity != StatSetSize {
+		t.Errorf("capacity = %d, want %d", roomy.Capacity, StatSetSize)
+	}
+	if roomy.Held != 1 {
+		t.Errorf("held = %d, want 1", roomy.Held)
+	}
+	if roomy.Saturated() {
+		t.Error("one device should not read as a full table")
+	}
+
+	full := make([]Usage, StatSetSize*9/10)
+	for i := range full {
+		full[i] = Usage{Addr: netip.MustParseAddr("192.168.1.5")}
+	}
+	if !viewTraffic(c, full, true, testTime()).Saturated() {
+		t.Error("a table at nine tenths should say so while the numbers are still mostly right")
+	}
+}

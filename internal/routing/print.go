@@ -170,6 +170,14 @@ func writeTrafficText(w io.Writer, t trafficView) error {
 		}
 	}
 
+	// Above the limits and in its own sentence, because this is not a standing
+	// caveat about what counting can see. It is this box, right now, having run
+	// out of room to count in — and unlike the limits it is actionable.
+	if t.Saturated() {
+		fmt.Fprintf(w, "\nThe accounting table is nearly full (%d of %d entries). Devices "+
+			"seen\nrecently may be missing from this list entirely.\n", t.Held, t.Capacity)
+	}
+
 	// §7.4 asks for these to be printed rather than left to be discovered.
 	// Every one explains a number being smaller than expected, and the first
 	// question a surprising number produces is "is this broken?".

@@ -208,6 +208,26 @@ type trafficView struct {
 
 	Usage []usageView `json:"usage"`
 
+	// Held and Capacity are how full the accounting is, in the same shape
+	// dnsrelay reports its query log.
+	//
+	// Here for the reason §7.3 gives. A full set stops recording *new* devices
+	// while going on counting the ones already in it, which is the failure mode
+	// most likely to be read as "that device uses no data" rather than as "that
+	// device is missing". The cap is generous for a house — roughly one element
+	// per device per exit — so approaching it means something is wrong, and
+	// saying which number cannot be trusted beats serving it flat.
+	//
+	// Held is rows returned and Capacity is the cap on *one* set, so on a
+	// dual-stack network Held counts a device's v4 and v6 rows against a
+	// ceiling each family has to itself. That makes the warning early rather
+	// than late, which is the direction to be wrong in: it fires while the
+	// numbers are still mostly right, and the alternative — a second read to
+	// size each set exactly — would double the cost of the endpoint to sharpen
+	// a threshold nobody should ever reach.
+	Held     int `json:"held"`
+	Capacity int `json:"capacity"`
+
 	// Limits are §7.4's, carried on the response rather than written into a
 	// screen.
 	//
@@ -221,6 +241,16 @@ type trafficView struct {
 	AsOf time.Time `json:"as_of"`
 }
 
+// Saturated reports that the accounting set is close enough to full that rows
+// are probably missing.
+//
+// Nine tenths rather than all of it, because the point is to warn while the
+// number is still mostly right. A set that is exactly full has already been
+// dropping devices for a while.
+func (t trafficView) Saturated() bool {
+	return t.Capacity > 0 && t.Held >= t.Capacity*9/10
+}
+
 // trafficLimits is what these numbers cannot see (§7.4).
 func trafficLimits() []string {
 	return []string{
@@ -230,6 +260,13 @@ func trafficLimits() []string {
 		"A device that changes address starts a new count, and IPv6 privacy " +
 			"addresses rotate on purpose, so one device can appear as several.",
 		"Anything behind a second router is counted as that router.",
+		// The declared cost of keying on the connection's opener (StatSet.Down).
+		// Stated the way an operator would meet it rather than in conntrack
+		// terms: what they will actually see is a public address sitting in a
+		// list of their own devices.
+		"A connection opened from the internet to a device here — a forwarded " +
+			"port — is counted against the address that opened it, so it appears " +
+			"in this list as if it were a device of yours.",
 	}
 }
 
@@ -238,6 +275,8 @@ func viewTraffic(cfg Config, usage []Usage, counting bool, now time.Time) traffi
 		Enabled:  cfg.StatsOrDefault(),
 		Counting: counting,
 		Usage:    make([]usageView, 0, len(usage)),
+		Held:     len(usage),
+		Capacity: StatSetSize,
 		AsOf:     now,
 	}
 	if counting {

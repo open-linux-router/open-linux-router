@@ -202,14 +202,13 @@ const (
 	reg32_04 = 12
 )
 
-// statSetSize bounds each accounting set.
-//
-// An unbounded dynamic set on a router is a memory-growth vector: it gains an
-// element for every source address the box ever forwards for, and a scan of the
-// address space would be free reign. When a set is full the `update` fails and
-// the packet is still forwarded — the chain's policy is accept — so the failure
-// costs accounting for new devices and never connectivity.
-const statSetSize = 65536
+// The conntrack directions, as nft_ct_get_eval stores them for
+// NFT_CT_DIRECTION. Spelled out here because x/sys/unix does not export
+// nf_conntrack_common.h's enum, and they are stable kernel ABI.
+const (
+	ctDirOriginal = 0
+	ctDirReply    = 1
+)
 
 // statTimeout ages out an entry that has seen no traffic.
 //
@@ -246,34 +245,124 @@ func (k LinuxKernel) observeStat(conn *nftables.Conn) ([]string, error) {
 
 	out := []string{fmt.Sprintf("nft table inet %s", StatTableName)}
 
+	chain, err := statChain(conn)
+	if err != nil {
+		return nil, err
+	}
+	if chain == nil {
+		// A table with no accounting chain counts nothing. Reported as the
+		// table alone, which does not match what we would write, so the plan
+		// shows it and applying rebuilds it.
+		return out, nil
+	}
+	out = append(out, fmt.Sprintf("nft chain %s forward filter", AccountChain))
+
+	lines, err := statRuleLines(conn, table, chain)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, lines...)
+
+	return out, nil
+}
+
+// statChain finds the accounting chain, or nil when there is not one.
+//
+// Its own function because both readers need it and because "absent" has to be
+// a value rather than an error: asking the kernel for the rules of a chain that
+// does not exist is an error, and a half-built table is a thing to rebuild, not
+// a thing to fail the status endpoint over.
+func statChain(conn *nftables.Conn) (*nftables.Chain, error) {
 	chains, err := conn.ListChainsOfTableFamily(nftables.TableFamilyINet)
 	if err != nil {
 		return nil, err
 	}
 	for _, c := range chains {
 		if c.Table != nil && c.Table.Name == StatTableName && c.Name == AccountChain {
-			out = append(out, fmt.Sprintf("nft chain %s forward filter", AccountChain))
+			return c, nil
 		}
 	}
+	return nil, nil
+}
 
+// statRuleLines reads the accounting rules' canonical forms back off the rules
+// themselves, from the comment each one carries.
+//
+// Read from userdata rather than rendered from the spec, and that is the whole
+// point of the function. The set *names* have not changed across versions, so a
+// check that only asked "is there a set called dev_down4" would say yes to a
+// table built by a version that fed it the wrong address, and the fix would
+// never reach a box that had already applied once. The comment describes the
+// rule, so a rule that changed shape reads back differently and shows up as
+// drift — which applyStat then rebuilds.
+//
+// A rule whose comment we cannot read at all is reported under its set's name
+// with no detail. That is still a mismatch against the line we would write, so
+// it rebuilds too, which is the safe direction to fail in.
+func statRuleLines(conn *nftables.Conn, table *nftables.Table, chain *nftables.Chain) ([]string, error) {
 	sets, err := conn.GetSets(table)
 	if err != nil {
 		return nil, err
 	}
-	byName := map[string]bool{}
+	present := map[string]bool{}
 	for _, s := range sets {
-		byName[s.Name] = true
+		present[s.Name] = true
 	}
-	// Rendered from the spec rather than from what was read, so a set that is
-	// present under the right name but built wrong is not silently accepted —
-	// it either matches the line we would write or it does not appear.
-	for _, s := range StatSets() {
-		if byName[s.Name] {
-			out = append(out, s.Line())
+
+	rules, err := conn.GetRules(table, chain)
+	if err != nil {
+		return nil, err
+	}
+	comments := map[string]bool{}
+	for _, r := range rules {
+		if line, ok := userdata.GetString(r.UserData, userdata.TypeComment); ok {
+			comments[line] = true
 		}
 	}
 
+	var out []string
+	for _, s := range StatSets() {
+		if !present[s.Name] {
+			continue
+		}
+		if comments[s.Line()] {
+			out = append(out, s.Line())
+			continue
+		}
+		// The set exists but no rule claims to feed it the way this version
+		// would. Named, so the diff says which one.
+		out = append(out, fmt.Sprintf("nft stat set %s built by another version", s.Name))
+	}
 	return out, nil
+}
+
+// statTableMatches reports whether the table on the box is the one this
+// version would build, judged by the same canonical lines the plan diffs.
+//
+// Deliberately the same comparison the plan shows the operator rather than a
+// second, private notion of "close enough": if `olr routing plan` says the
+// accounting table is drifting, applying is what stops it saying so.
+func statTableMatches(conn *nftables.Conn, table *nftables.Table, want StatTable) (bool, error) {
+	chain, err := statChain(conn)
+	if err != nil {
+		return false, err
+	}
+	if chain == nil {
+		return false, nil
+	}
+	have, err := statRuleLines(conn, table, chain)
+	if err != nil {
+		return false, err
+	}
+	if len(have) != len(want.Sets) {
+		return false, nil
+	}
+	for i, s := range want.Sets {
+		if have[i] != s.Line() {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // applyStat replaces the accounting table, in its own transaction.
@@ -308,12 +397,36 @@ func (k LinuxKernel) applyStat(d Desired) error {
 		return conn.Flush()
 	}
 
-	// Recreated wholesale only when it is absent. Unlike olr_route, whose
-	// content changes with the configuration, this table is a constant — and
-	// deleting it on every apply would throw away every byte counted so far,
-	// which is the one thing an operator watching a graph would notice.
+	// Left alone when it is already the table this version would build. Unlike
+	// olr_route, whose content changes with the configuration, this table does
+	// not depend on config at all — and deleting it on every apply would throw
+	// away every byte counted so far, which is the one thing an operator
+	// watching a graph would notice.
+	//
+	// "Already the table this version would build" is the part that has to be
+	// checked rather than assumed. The table is a constant *for a given
+	// version*, not across them, and the earlier version of this function
+	// returned here on the strength of the table merely existing. That is fine
+	// until the rules inside it change, at which point every box that had ever
+	// applied would keep the old ones forever and no amount of upgrading would
+	// fix it. So: compare, and rebuild when it differs.
+	//
+	// Rebuilding resets the counters, once, on the upgrade that changes them.
+	// That is the right trade against carrying wrong numbers indefinitely, and
+	// it is the same event as a reboot, which §7.5 already says these counters
+	// do not survive.
 	if existing != nil {
-		return nil
+		same, err := statTableMatches(conn, existing, d.Stat)
+		if err != nil {
+			return err
+		}
+		if same {
+			return nil
+		}
+		conn.DelTable(existing)
+		if err := conn.Flush(); err != nil {
+			return fmt.Errorf("replacing accounting table: %w", err)
+		}
 	}
 
 	table := conn.AddTable(&nftables.Table{
@@ -349,7 +462,7 @@ func (k LinuxKernel) applyStat(d Desired) error {
 			Counter:       true,
 			HasTimeout:    true,
 			Timeout:       statTimeout,
-			Size:          statSetSize,
+			Size:          StatSetSize,
 			KeyType:       nftables.MustConcatSetType(addr, nftables.TypeMark),
 		}
 		if err := conn.AddSet(set, nil); err != nil {
@@ -367,11 +480,27 @@ func (k LinuxKernel) applyStat(d Desired) error {
 }
 
 // accountSetExprs is `update @<set> { <addr> . meta mark }` for one direction.
+//
+// The conntrack direction is matched *before* the address is loaded, and it is
+// what makes the address mean "the device on our side" rather than "whichever
+// end this packet happens to be addressed to" (StatSet.Down has the full
+// story). Two consequences worth knowing at the call site:
+//
+//   - An untracked packet matches neither rule and is not counted. nft_ct's
+//     evaluation breaks out of the rule when there is no conntrack entry, so
+//     this is a silent omission rather than an error. In practice a router
+//     forwarding anything at all is tracking it — this module's own restore
+//     rule reads `ct mark` on the same packets — and using a ct expression at
+//     all is what pins conntrack up for the family in the first place.
+//   - Exactly one of the two rules matches each packet, where before both did.
+//     The expensive part of this chain is the set update, so that halves it.
 func accountSetExprs(s StatSet) []expr.Any {
 	proto := byte(unix.NFPROTO_IPV4)
 	offset, length := uint32(12), uint32(4) // ip saddr
+	dir := byte(ctDirOriginal)
 	if s.Down {
 		offset = 16 // ip daddr
+		dir = ctDirReply
 	}
 	if s.V6 {
 		proto, offset, length = unix.NFPROTO_IPV6, 8, 16
@@ -389,9 +518,14 @@ func accountSetExprs(s StatSet) []expr.Any {
 
 	return []expr.Any{
 		// Register 1 here, deliberately: it aliases the key registers below,
-		// and the comparison is finished before they are written.
+		// and the comparison is finished before they are written. The same
+		// applies to the direction check that follows it.
 		&expr.Meta{Key: expr.MetaKeyNFPROTO, Register: 1},
 		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{proto}},
+
+		// One byte: nft_ct_get_eval stores the direction with nft_reg_store8.
+		&expr.Ct{Key: expr.CtKeyDIRECTION, Register: 1},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{dir}},
 
 		&expr.Payload{
 			DestRegister: reg32_00,

@@ -352,6 +352,15 @@ function TrafficList({ traffic, enabled }: { traffic?: RoutingTraffic; enabled: 
           />
         ))}
       </List>
+      {traffic.capacity > 0 && traffic.held >= traffic.capacity * 0.9 ? (
+        // Above the limits, and worded as a fact about this router rather than
+        // as a caveat about counting: the limits explain why a number is
+        // smaller than expected, this explains why a whole device is absent.
+        <p className="text-[0.8rem] text-muted-foreground">
+          The accounting table is nearly full ({traffic.held} of {traffic.capacity} entries).
+          Devices seen recently may be missing from this list entirely.
+        </p>
+      ) : null}
       {traffic.limits?.length ? (
         <div className="text-[0.8rem] text-muted-foreground">
           <p className="font-medium">What these numbers do not include</p>

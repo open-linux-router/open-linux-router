@@ -68,14 +68,51 @@ type StatTable struct {
 	Sets []StatSet
 }
 
+// StatSetSize bounds each accounting set.
+//
+// A dynamic set on a router keyed by address is a memory-growth vector, so it
+// is capped. When a set is full the `update` fails and the packet is still
+// forwarded — the chain's policy is accept — so the failure costs accounting
+// for new devices and never connectivity.
+//
+// The number is what it is because of what the key can now be: one element per
+// (device, exit), which is a few hundred in a large house. It was 65536 when
+// the sets could also accumulate one element per *remote* address, and that
+// ceiling was doing real work — see StatSet.Down for why it no longer has to.
+// Traffic reports how full the set is rather than leaving the cap to be
+// discovered.
+const StatSetSize = 8192
+
 // StatSet is one direction of one family.
 type StatSet struct {
 	Name string
 
-	// V6 selects the key type, and Down selects which address is the key —
-	// destination rather than source, which is what counts traffic *to* a
-	// device rather than from it.
-	V6   bool
+	// V6 selects the key type.
+	V6 bool
+
+	// Down selects the reply direction, keyed on the destination address.
+	//
+	// Both halves of that sentence are load-bearing, and the direction is the
+	// half that took a bug to learn. Keying on `ip daddr` alone counts the
+	// wrong thing: on a packet *leaving* for the internet the destination is
+	// the far end, so the set gained an element for every remote address the
+	// house ever contacted — the device rows were right, and beside them sat
+	// one mirrored row per web server, CDN edge and telemetry endpoint. That
+	// cost three things at once: a Usage list half full of addresses nobody
+	// recognises, a set that fills its cap with strangers and then stops
+	// recording new devices, and a full dump of all four sets on every read.
+	//
+	// Matching the conntrack direction first is what makes the address mean
+	// "the device": the original direction is the one the connection was
+	// opened in, so its source is the opener, and the reply direction's
+	// destination is that same opener. Every packet now matches exactly one of
+	// the two rules instead of both, which halves the work on the forward path
+	// as well.
+	//
+	// What it does not fix is a connection opened *from* the far side — a port
+	// forward — where the opener genuinely is the remote address. That is
+	// bounded by the number of forwarded ports rather than by the size of the
+	// internet, and it is declared in the limits the endpoint carries.
 	Down bool
 }
 
@@ -99,20 +136,28 @@ func (s StatSet) KeyBytes() int {
 	return 4 + 4
 }
 
-// Line is this set's canonical form.
+// Line is this set's canonical form, and it doubles as the comment on the rule
+// that feeds it.
+//
+// The direction is *in* the line rather than implied by the set's name, which
+// is what makes an older box's rules visibly different from the ones this
+// version renders. observeStat reads these back off the rules, so a table left
+// behind by a version that keyed the wrong address shows up as drift and gets
+// rebuilt instead of quietly counting the internet forever.
 func (s StatSet) Line() string {
 	key := "ipv4_addr"
 	if s.V6 {
 		key = "ipv6_addr"
 	}
-	which := "ip saddr"
+	which, dir := "ip saddr", "original"
 	if s.Down {
-		which = "ip daddr"
+		which, dir = "ip daddr", "reply"
 	}
 	if s.V6 {
 		which = "ip6 " + strings.TrimPrefix(which, "ip ")
 	}
-	return fmt.Sprintf("nft stat set %s %s . mark from %s", s.Name, key, which)
+	return fmt.Sprintf("nft stat set %s %s . mark from %s where ct direction %s",
+		s.Name, key, which, dir)
 }
 
 // NFTable is the `inet olr_route` table (§3.3).

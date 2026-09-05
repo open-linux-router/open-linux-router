@@ -351,6 +351,42 @@ func TestAccountingIsOnByDefault(t *testing.T) {
 	}
 }
 
+// The bug this pairing exists to prevent: keying the *down* set on `ip daddr`
+// with nothing qualifying it counts the far end of every outbound packet, so
+// the set fills with one row per web server instead of one row per device.
+//
+// Asserted on the canonical line rather than on the expressions, because that
+// line is what an upgraded box compares itself against — see
+// TestAccountingLineDistinguishesTheDirections.
+func TestAccountingKeysTheConnectionOpenerInBothDirections(t *testing.T) {
+	for _, s := range StatSets() {
+		line := s.Line()
+		switch {
+		case s.Down && !strings.Contains(line, "ct direction reply"):
+			t.Errorf("%s keys the destination, so it must match the reply "+
+				"direction or it counts remote addresses: %q", s.Name, line)
+		case !s.Down && !strings.Contains(line, "ct direction original"):
+			t.Errorf("%s keys the source, so it must match the original "+
+				"direction or it counts remote addresses: %q", s.Name, line)
+		}
+	}
+}
+
+// An older box has a table whose rules are shaped differently but whose sets
+// have the same names. The set names alone therefore cannot decide whether it
+// needs rebuilding, and the canonical line is what does — so every one of the
+// four has to be distinct from every other.
+func TestAccountingLineDistinguishesTheDirections(t *testing.T) {
+	seen := map[string]string{}
+	for _, s := range StatSets() {
+		if prev, dup := seen[s.Line()]; dup {
+			t.Errorf("%s and %s render the same line %q, so drift between them "+
+				"would be invisible", prev, s.Name, s.Line())
+		}
+		seen[s.Line()] = s.Name
+	}
+}
+
 func TestAccountingKeyWidthsMatchTheKernelPadding(t *testing.T) {
 	// Each concatenated component is padded to the four-byte register the
 	// kernel builds the key in, which is why a v4 key is eight bytes and not

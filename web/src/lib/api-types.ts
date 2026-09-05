@@ -509,6 +509,15 @@ export interface RoutingTraffic {
   usage: Usage[]
 
   /**
+   * How full the accounting is. A full table stops recording devices it has
+   * not seen before while going on counting the ones it has, so `held` nearing
+   * `capacity` means rows are probably missing — not that nothing is using the
+   * network.
+   */
+  held: number
+  capacity: number
+
+  /**
    * What these numbers cannot see, from the server rather than written into
    * this app — so the CLI and any agent reading the endpoint get the same
    * caveats. Every one explains a number being smaller than expected.

@@ -497,8 +497,8 @@ table inet olr_stat {
   set dev_down { type ipv4_addr . mark ; flags dynamic ; counter ; }
   chain account {
     type filter hook forward priority 0 ; policy accept ;
-    update @dev_up   { ip saddr . meta mark }
-    update @dev_down { ip daddr . meta mark }
+    ct direction original  update @dev_up   { ip saddr . meta mark }
+    ct direction reply     update @dev_down { ip daddr . meta mark }
   }
 }
 ```
@@ -507,6 +507,29 @@ The concatenated key gives per-device **and** per-exit from one structure,
 because the mark is already there from §3.3. *"Living Room TV: 40 GB, of which 38
 via Clash"* costs nothing extra. With no routing installed the mark is 0 and it
 degrades to plain per-device totals, so this table does not depend on that one.
+
+**The direction match is what makes the address mean "a device here."** An
+earlier draft of this section had the two `update` statements unqualified, and
+that version is wrong in a way worth recording, because it looks right: on a
+packet *leaving* for the internet, `ip daddr` is the far end. Unqualified, the
+sets gained an element for every remote address the house ever contacted — the
+device rows were correct, and beside each one sat a mirrored row for a web
+server. Three costs at once: a usage list half full of addresses nobody
+recognises, a set that fills its cap with strangers and then stops recording new
+devices, and a full dump of all four sets on every read of the endpoint.
+
+Matching `ct direction` first fixes it without a table of local prefixes to
+maintain: the original direction is the one the connection was opened in, so its
+source is the opener, and the reply direction's destination is that same opener.
+Both rules key on the device, and each packet now matches exactly one of them
+rather than both — which halves the per-packet work on the forward path.
+
+The declared cost is a connection opened **from** the internet — a forwarded
+port — where the opener really is the remote address, so it lands in the list
+looking like a device. That is bounded by the number of forwarded ports rather
+than by the size of the internet, and §7.4 states it. Untracked packets are not
+counted at all, which is theoretical on a box whose classify chain already reads
+`ct mark` on the same packets.
 
 Live throughput is the delta between samples. Per-flow detail — connection counts
 and who talked to what — comes from **conntrack destroy events**, which hand over
@@ -563,6 +586,13 @@ different class of gap, and it is why the topology rule exists.
 - IPv6 privacy addresses rotate, so per-IP counters fragment across one device.
 - A device that changes address splits its history. Fixed leases mostly fix it.
 - Anything behind a second router counts as one device.
+- **A connection opened from the internet is counted against the address that
+  opened it** (§7.1), so a forwarded port puts a public address in a list of
+  your own devices.
+- **The table has a cap**, and a full one goes on counting the devices it
+  already knows while recording no new ones. That is §7.3's rule pointed at
+  ourselves: the endpoint reports how full it is, because "this device uses no
+  data" and "this device is missing" must not look the same.
 
 ### 7.5 Storage, and a stance
 
