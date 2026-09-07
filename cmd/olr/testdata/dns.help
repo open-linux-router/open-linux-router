@@ -1,0 +1,24 @@
+DNS resolver and policy (olr-dnsd + unbound)
+
+Usage:
+  olr dns [command]
+
+Available Commands:
+  add         Add a policy or a blocked name
+  disable     Disable DNS
+  enable      Enable DNS
+  logs        Show resolver and relay log output
+  rm          Remove a policy or a blocked name
+  set         Change DNS settings
+  show        Show DNS configuration
+  status      Show service state, query counts and drift
+
+Flags:
+  -h, --help   help for dns
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr dns [command] --help" for more information about a command.

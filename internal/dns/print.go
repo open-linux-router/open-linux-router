@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/open-linux-router/open-linux-router/internal/cli"
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
@@ -47,8 +48,7 @@ func writeConfigText(w io.Writer, c Config) error {
 
 func writePoliciesText(w io.Writer, policies []Policy) error {
 	if len(policies) == 0 {
-		fmt.Fprintln(w, "No policies configured; every client may look up anything.")
-		return nil
+		return cli.NoObjects(w, "policies", "Every client may look up anything.")
 	}
 	t := table(w)
 	fmt.Fprintln(t, "POLICY\tCLIENTS\tBLOCKED\tALLOWED\tANSWERS")
@@ -163,8 +163,7 @@ func writeStatsText(w io.Writer, s statsView) error {
 
 func writeQueriesText(w io.Writer, resp queriesResponse) error {
 	if len(resp.Queries) == 0 {
-		fmt.Fprintln(w, "No queries recorded.")
-		return nil
+		return cli.NoneObserved(w, "queries", "")
 	}
 	t := table(w)
 	fmt.Fprintln(t, "TIME\tCLIENT\tNAME\tTYPE\tRESULT\tANSWERS")
@@ -185,8 +184,7 @@ func writeQueriesText(w io.Writer, resp queriesResponse) error {
 
 func writeNamesText(w io.Writer, resp namesResponse) error {
 	if len(resp.Names) == 0 {
-		fmt.Fprintln(w, "No addresses observed.")
-		return nil
+		return cli.NoneObserved(w, "addresses", "")
 	}
 	t := table(w)
 	fmt.Fprintln(t, "CLIENT\tADDRESS\tNAME\tVIA\tEXPIRES")
@@ -209,7 +207,7 @@ func writeNamesText(w io.Writer, resp namesResponse) error {
 // anything happened.
 func writePlanText(w io.Writer, plan planView, dryRun bool) error {
 	if plan.Empty {
-		fmt.Fprintln(w, "Nothing to do; the configuration is already applied.")
+		fmt.Fprintln(w, cli.NothingToDo)
 		return writeWarnings(w, plan.Warnings)
 	}
 

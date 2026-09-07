@@ -1,0 +1,19 @@
+Remove a policy or a blocked name
+
+Usage:
+  olr dns rm [command]
+
+Available Commands:
+  allow       Remove from the exceptions that beat the block list
+  block       Remove from the names this policy refuses
+  policy      Remove a policy
+
+Flags:
+  -h, --help   help for rm
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr dns rm [command] --help" for more information about a command.

@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
 )
 
 func TestVerbPanicsOutsideVocabulary(t *testing.T) {
@@ -40,32 +38,15 @@ func TestHelpSucceeds(t *testing.T) {
 	}
 }
 
-// Every top-level command must be grouped, or cobra files it under an untitled
-// "Additional Commands" heading and the local/API split stops being visible.
-func TestTopLevelCommandsAreGrouped(t *testing.T) {
-	root := NewRoot()
-	root.InitDefaultHelpCmd()
-	root.InitDefaultCompletionCmd()
-
-	for _, c := range root.Commands() {
-		if c.GroupID == "" {
-			t.Errorf("command %q has no GroupID", c.Name())
-		}
-	}
-}
-
-func TestEveryCommandHasShortHelp(t *testing.T) {
-	var walk func(*cobra.Command)
-	walk = func(c *cobra.Command) {
-		if c.Short == "" {
-			t.Errorf("command %q has no Short description", c.CommandPath())
-		}
-		for _, sub := range c.Commands() {
-			walk(sub)
-		}
-	}
-	walk(NewRoot())
-}
+// The tree-shaped conformance rules — grouping, Short style, placeholders, flag
+// types, completion — live in cmd/olr/conformance_test.go, not here.
+//
+// They have to, and the reason is worth recording: NewRoot mounts the
+// operations stubs, `daemon` and `version`, and no modules — those are added by
+// cmd/olr. The versions of those tests that used to live in this file therefore
+// walked a tree containing none of the commands an operator types, and passed
+// for years while the three module surfaces drifted apart. Anything asserting
+// about *the CLI* belongs where the whole CLI is visible.
 
 func TestStubsReportNotImplemented(t *testing.T) {
 	root := NewRoot()

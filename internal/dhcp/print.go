@@ -7,6 +7,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/open-linux-router/open-linux-router/internal/cli"
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
@@ -43,8 +44,7 @@ func writeConfigText(w io.Writer, c Config) error {
 
 func writePoolsText(w io.Writer, pools []Pool) error {
 	if len(pools) == 0 {
-		fmt.Fprintln(w, "No pools configured.")
-		return nil
+		return cli.NoObjects(w, "pools", "Add one with `olr dhcp add pool <interface>`.")
 	}
 	t := table(w)
 	fmt.Fprintln(t, "INTERFACE\tRANGE\tLEASE\tGATEWAY\tDNS\tDOMAIN\tIPv6")
@@ -61,10 +61,51 @@ func writePoolsText(w io.Writer, pools []Pool) error {
 	return t.Flush()
 }
 
+// writePoolText and writeReservationText are the detail halves of docs/cli.md
+// R6's pairs. The tables above drop NTP servers and extra options to fit a
+// terminal; these are where an operator finds out those are set at all.
+
+func writePoolText(w io.Writer, p Pool) error {
+	rows := [][2]string{
+		{"interface", p.Interface},
+		{"range", fmt.Sprintf("%s-%s", p.Start, p.End)},
+		{"lease", fmt.Sprintf("%s", p.LeaseTimeOrDefault())},
+		{"gateway", orRouter(p.Gateway == nil, addrOrEmpty(p.Gateway))},
+		{"dns", orRouter(len(p.DNS) == 0, joinAddrs(p.DNS))},
+		{"ntp", orDash(joinAddrs(p.NTP))},
+		{"domain", orDash(p.Domain)},
+		{"ipv6", fmt.Sprintf("%s", p.RA.OrDefault())},
+	}
+	for _, o := range p.Options {
+		rows = append(rows, [2]string{"option", o.Option + "=" + o.Value})
+	}
+	t := table(w)
+	for _, r := range rows {
+		fmt.Fprintf(t, "%s\t%s\n", r[0], r[1])
+	}
+	return t.Flush()
+}
+
+func writeReservationText(w io.Writer, r Reservation) error {
+	lease := "pool default"
+	if r.LeaseTime > 0 {
+		lease = r.LeaseTime.String()
+	}
+	t := table(w)
+	for _, row := range [][2]string{
+		{"mac", r.MAC},
+		{"address", r.IP.String()},
+		{"hostname", orDash(r.Hostname)},
+		{"lease", lease},
+	} {
+		fmt.Fprintf(t, "%s\t%s\n", row[0], row[1])
+	}
+	return t.Flush()
+}
+
 func writeReservationsText(w io.Writer, reservations []Reservation) error {
 	if len(reservations) == 0 {
-		fmt.Fprintln(w, "No reservations configured.")
-		return nil
+		return cli.NoObjects(w, "reservations", "Add one with `olr dhcp add reservation <mac>`.")
 	}
 	t := table(w)
 	fmt.Fprintln(t, "MAC\tADDRESS\tHOSTNAME\tLEASE")
@@ -80,7 +121,9 @@ func writeReservationsText(w io.Writer, reservations []Reservation) error {
 
 func writeLeasesText(w io.Writer, resp leasesResponse) error {
 	if len(resp.Leases) == 0 {
-		fmt.Fprintln(w, "No leases held.")
+		if err := cli.NoneObserved(w, "leases", ""); err != nil {
+			return err
+		}
 	} else {
 		t := table(w)
 		fmt.Fprintln(t, "ADDRESS\tCLIENT\tHOSTNAME\tEXPIRES")
@@ -200,7 +243,7 @@ func writeStatusText(w io.Writer, status statusResponse, leases leasesResponse) 
 // anything happened.
 func writePlanText(w io.Writer, plan planView, dryRun bool) error {
 	if plan.Empty {
-		fmt.Fprintln(w, "Nothing to do; the configuration is already applied.")
+		fmt.Fprintln(w, cli.NothingToDo)
 		return writeWarnings(w, plan.Warnings)
 	}
 

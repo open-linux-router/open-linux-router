@@ -1,0 +1,19 @@
+Add a policy or a blocked name
+
+Usage:
+  olr dns add [command]
+
+Available Commands:
+  allow       Add to the exceptions that beat the block list
+  block       Add to the names this policy refuses
+  policy      Add or replace a policy
+
+Flags:
+  -h, --help   help for add
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr dns add [command] --help" for more information about a command.

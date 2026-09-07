@@ -83,3 +83,31 @@ func ValidateOutput(cmd *cobra.Command) error {
 			Output(cmd), OutputText, OutputJSON)
 	}
 }
+
+// RejectDryRun refuses --dry-run on a command it cannot mean anything for
+// (docs/cli.md R9).
+//
+// Silently ignoring the flag is strictly worse than refusing it. It is a
+// persistent root flag, so it is accepted everywhere in the tree, and the
+// operator who types it before a change they are unsure about is exactly the
+// one who must not be told nothing.
+func RejectDryRun(cmd *cobra.Command) error {
+	if !DryRun(cmd) {
+		return nil
+	}
+	return fmt.Errorf(
+		"--dry-run does not apply to `%s`: it previews a configuration change, and this command makes none",
+		cmd.CommandPath())
+}
+
+// ReadOnly is the precondition for a command that only reads.
+//
+// Both halves of the R9 contract in one call, so a read command cannot pick up
+// one and forget the other — which is how --output came to be validated in nine
+// places and skipped in four.
+func ReadOnly(cmd *cobra.Command) error {
+	if err := ValidateOutput(cmd); err != nil {
+		return err
+	}
+	return RejectDryRun(cmd)
+}

@@ -1,0 +1,23 @@
+Change DNS settings
+
+Usage:
+  olr dns set [flags]
+
+Flags:
+      --allow-from stringArray    source network permitted to query, repeatable, e.g. 192.168.1.0/24 (empty means the networks listened on)
+      --block-dot                 drop DNS-over-TLS on 853, so clients cannot route around the redirect
+  -h, --help                      help for set
+      --listen stringArray        address to answer queries on, repeatable, e.g. 192.168.1.1:53
+      --mode string               how names are resolved: recurse|forward
+      --query-log                 record answered queries
+      --query-log-entries int     how many answered queries to keep in memory
+      --redirect                  redirect clients that use another resolver back to this one
+      --redirect-on stringArray   interface whose forwarded DNS is redirected, repeatable
+      --tls                       forward over DNS-over-TLS
+      --tls-name string           certificate name the forwarder must present, e.g. cloudflare-dns.com
+      --upstream stringArray      forwarder, repeatable, used with --mode forward, e.g. 1.1.1.1
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

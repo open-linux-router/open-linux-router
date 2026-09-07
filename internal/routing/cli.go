@@ -69,7 +69,57 @@ func verb(name, short string, build func(*cobra.Command)) *cobra.Command {
 
 func showCommand() *cobra.Command {
 	c := showConfigCommand()
-	c.AddCommand(showTrafficCommand())
+	c.AddCommand(showExitsCommand(), showExitCommand(), showTrafficCommand())
+	return c
+}
+
+// showExitsCommand and showExitCommand are the list/detail pair docs/cli.md R6
+// requires. `olr routing show` remains the whole-module view.
+func showExitsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "exits",
+		Short: "List the ways out of this box",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if err := cli.ReadOnly(c); err != nil {
+				return err
+			}
+			cfg, err := loadConfig(c)
+			if err != nil {
+				return err
+			}
+			if cli.IsJSON(c) {
+				return cli.JSON(c.OutOrStdout(), cfg.Exits)
+			}
+			return writeExitsText(c.OutOrStdout(), cfg)
+		},
+	}
+}
+
+func showExitCommand() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "exit <name>",
+		Short: "Show one exit in full",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			if err := cli.ReadOnly(c); err != nil {
+				return err
+			}
+			cfg, err := loadConfig(c)
+			if err != nil {
+				return err
+			}
+			e, ok := cfg.Find(args[0])
+			if !ok {
+				return unknownExit(&cfg, args[0])
+			}
+			if cli.IsJSON(c) {
+				return cli.JSON(c.OutOrStdout(), e)
+			}
+			return writeExitText(c.OutOrStdout(), cfg, e)
+		},
+	}
+	c.ValidArgsFunction = cli.CompleteArgs(exitNames)
 	return c
 }
 
@@ -84,7 +134,7 @@ func showTrafficCommand() *cobra.Command {
 			"those limits makes a number smaller than you would expect.",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
-			if err := cli.ValidateOutput(c); err != nil {
+			if err := cli.ReadOnly(c); err != nil {
 				return err
 			}
 			var traffic trafficView
@@ -170,23 +220,23 @@ func setStatsCommand() *cobra.Command {
 }
 
 func setDefaultCommand() *cobra.Command {
-	var none bool
+	var noExit bool
 
 	c := &cobra.Command{
-		Use:   "default [EXIT]",
+		Use:   "default [<exit>]",
 		Short: "Set the exit everything uses unless something more specific says otherwise",
 		Long: "Set the box-wide exit — the top rung of the ladder.\n\n" +
 			"Every network follows this unless it has been given an exit of its own,\n" +
 			"so `set default Clash` plus one `rm via` for the NAS is how you say\n" +
-			"\"everything through Clash except that\". Use --none to go back to the\n" +
+			"\"everything through Clash except that\". Use --no-exit to go back to the\n" +
 			"box's own internet connection.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
-			if none == (len(args) == 1) {
-				return fmt.Errorf("give an exit name, or --none for the box's own connection")
+			if noExit == (len(args) == 1) {
+				return fmt.Errorf("give an exit name, or --no-exit for the box's own connection")
 			}
 			return mutate(c, func(cfg *Config) error {
-				if none {
+				if noExit {
 					cfg.Default = ""
 					return nil
 				}
@@ -198,18 +248,21 @@ func setDefaultCommand() *cobra.Command {
 			})
 		},
 	}
-	c.Flags().BoolVar(&none, "none", false, "use the box's own internet connection")
+	// --no-exit rather than --none (docs/cli.md R4): the negative flag names the
+	// field it clears, so it reads the same way here as --no-probe does below.
+	c.Flags().BoolVar(&noExit, "no-exit", false, "use the box's own internet connection")
+	c.ValidArgsFunction = cli.CompleteArgs(exitNames)
 	return c
 }
 
 func setViaCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "via NETWORK EXIT",
+	c := &cobra.Command{
+		Use:   "via <network> <exit>",
 		Short: "Send one network's traffic through an exit",
 		Long: "Send one network's traffic through an exit.\n\n" +
-			"NETWORK is an interface name for now; it becomes a network name when the\n" +
-			"link module lands, and the stored configuration will not need changing.\n" +
-			"Use `olr routing rm via NETWORK` to go back to following the box-wide\n" +
+			"The network is an interface name for now; it becomes a network name when\n" +
+			"the link module lands, and the stored configuration will not need changing.\n" +
+			"Use `olr routing rm via <network>` to go back to following the box-wide\n" +
 			"setting.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(c *cobra.Command, args []string) error {
@@ -222,6 +275,10 @@ func setViaCommand() *cobra.Command {
 			})
 		},
 	}
+	// The first positional is an interface name, which this module does not own
+	// a list of until `link` lands; the second is an exit, which it does.
+	c.ValidArgsFunction = cli.CompleteArgs(nil, exitNames)
+	return c
 }
 
 // ---------------------------------------------------------------- add / rm
@@ -242,7 +299,7 @@ func addExitCommand() *cobra.Command {
 	var f exitFlags
 
 	c := &cobra.Command{
-		Use:   "exit NAME",
+		Use:   "exit <name>",
 		Short: "Add or replace an exit",
 		Long: "Add or replace an exit: a way out of this box.\n\n" +
 			"An exit is anything that accepts traffic addressed somewhere else and\n" +
@@ -279,7 +336,9 @@ type exitFlags struct {
 	ipv6      string
 	onFailure string
 	snat      bool
+	noSNAT    bool
 	probe     string
+	noProbe   bool
 	interval  string
 	timeout   string
 }
@@ -297,13 +356,40 @@ func (f *exitFlags) register(c *cobra.Command) {
 		"what happens to IPv6: "+join(IPv6Modes())+" (default block)")
 	c.Flags().StringVar(&f.onFailure, "on-failure", "",
 		"what happens when the health check fails: "+join(FailureModes())+" (default block)")
-	c.Flags().BoolVar(&f.snat, "snat", true,
-		"rewrite the source address of traffic sent to a next hop, so replies come back through this router")
+
+	// A pair, both defaulting false, rather than one flag defaulting true
+	// (docs/cli.md R3). pflag takes no space-separated value for a boolean, so
+	// the old `--snat` default-true spelled its own negation `--snat=false` —
+	// and `--snat false` parsed as the flag plus a second positional, which on
+	// a one-argument command reported an argument-count error that named
+	// neither snat nor the real mistake.
+	c.Flags().BoolVar(&f.snat, "snat", false,
+		"rewrite the source address of traffic sent to a next hop, so replies come back through this router (default)")
+	c.Flags().BoolVar(&f.noSNAT, "no-snat", false,
+		"leave the source address alone; the next hop must already route back to this box")
+	c.MarkFlagsMutuallyExclusive("snat", "no-snat")
+
 	c.Flags().StringVar(&f.probe, "probe", "",
 		"health-check target on the far side of the exit, as address:port, e.g. 1.1.1.1:443")
+	c.Flags().BoolVar(&f.noProbe, "no-probe", false,
+		"stop health-checking this exit")
+	c.MarkFlagsMutuallyExclusive("probe", "no-probe")
+
 	// Registered on `set` rather than here; see setStatsCommand.
 	c.Flags().StringVar(&f.interval, "probe-interval", "", "how often to health-check, e.g. 30s")
 	c.Flags().StringVar(&f.timeout, "probe-timeout", "", "how long one health check may take, e.g. 5s")
+
+	cli.EnumFlag(c, "ipv6", list(IPv6Modes())...)
+	cli.EnumFlag(c, "on-failure", list(FailureModes())...)
+}
+
+// list is join's sibling: the same vocabulary, as values rather than prose.
+func list[T ~string](values []T) []string {
+	out := make([]string, len(values))
+	for i, v := range values {
+		out[i] = string(v)
+	}
+	return out
 }
 
 func (f *exitFlags) apply(c *cobra.Command, e *Exit, existing bool) error {
@@ -357,24 +443,30 @@ func (f *exitFlags) apply(c *cobra.Command, e *Exit, existing bool) error {
 		}
 		e.OnFailure = mode
 	}
-	if changed("snat") {
+	switch {
+	case changed("snat"):
 		snat := f.snat
+		e.SNAT = &snat
+	case changed("no-snat"):
+		snat := !f.noSNAT
 		e.SNAT = &snat
 	}
 
-	if changed("probe") {
-		if strings.TrimSpace(f.probe) == "" {
-			e.Probe = nil
-		} else {
-			target, err := netip.ParseAddrPort(strings.TrimSpace(f.probe))
-			if err != nil {
-				return fmt.Errorf("--probe: %q is not an address:port, e.g. 1.1.1.1:443", f.probe)
-			}
-			if e.Probe == nil {
-				e.Probe = &Probe{}
-			}
-			e.Probe.Target = target
+	switch {
+	case changed("no-probe") && f.noProbe:
+		// An explicit flag rather than `--probe ""` (docs/cli.md R4): an empty
+		// string is what a shell variable that failed to expand looks like, so
+		// the old spelling made "clear the health check" the thing a typo does.
+		e.Probe = nil
+	case changed("probe"):
+		target, err := netip.ParseAddrPort(strings.TrimSpace(f.probe))
+		if err != nil {
+			return fmt.Errorf("--probe: %q is not an address:port, e.g. 1.1.1.1:443", f.probe)
 		}
+		if e.Probe == nil {
+			e.Probe = &Probe{}
+		}
+		e.Probe.Target = target
 	}
 	for _, d := range []struct {
 		flag  string
@@ -403,8 +495,8 @@ func (f *exitFlags) apply(c *cobra.Command, e *Exit, existing bool) error {
 }
 
 func rmExitCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "exit NAME",
+	c := &cobra.Command{
+		Use:   "exit <name>",
 		Short: "Remove an exit",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
@@ -420,11 +512,13 @@ func rmExitCommand() *cobra.Command {
 			})
 		},
 	}
+	c.ValidArgsFunction = cli.CompleteArgs(exitNames)
+	return c
 }
 
 func rmViaCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "via NETWORK",
+	c := &cobra.Command{
+		Use:   "via <network>",
 		Short: "Stop overriding a network's exit, so it follows the box-wide setting",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
@@ -436,6 +530,8 @@ func rmViaCommand() *cobra.Command {
 			})
 		},
 	}
+	c.ValidArgsFunction = cli.CompleteArgs(assignedNetworks)
+	return c
 }
 
 // ---------------------------------------------------------------- lifecycle
@@ -462,7 +558,7 @@ func statusCommand() *cobra.Command {
 	return verb("status", "Show each exit's health, what uses it, and drift", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
-			if err := cli.ValidateOutput(c); err != nil {
+			if err := cli.ReadOnly(c); err != nil {
 				return err
 			}
 			var status statusView
@@ -530,14 +626,44 @@ func mutate(c *cobra.Command, edit func(*Config) error) error {
 
 // unknownExit names the exits that do exist, because "no exit called X" is only
 // half an answer when the reason is usually a typo.
+//
+// The phrasing is cli.UnknownObject's rather than this module's: three modules
+// had four ways to say this, and the operator reading two of them side by side
+// could not tell whether they meant the same thing (docs/cli.md R8).
 func unknownExit(cfg *Config, name string) error {
-	if len(cfg.Exits) == 0 {
-		return fmt.Errorf("there is no exit called %q, and none are configured yet; "+
-			"add one with `olr routing add exit`", name)
+	return cli.UnknownObject("exit", name, "olr routing add exit", names(cfg.Exits))
+}
+
+func names(exits []Exit) []string {
+	out := make([]string, 0, len(exits))
+	for _, e := range exits {
+		out = append(out, e.Name)
 	}
-	names := make([]string, 0, len(cfg.Exits))
-	for _, e := range cfg.Exits {
-		names = append(names, e.Name)
+	return out
+}
+
+// ---------------------------------------------------------------- completion
+
+// exitNames and assignedNetworks answer "which ones are there?" for the shell
+// (docs/cli.md R7). Both read through olrd like every other read, so both go
+// quiet rather than erroring when it is down.
+
+func exitNames(c *cobra.Command) ([]string, error) {
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return nil, err
 	}
-	return fmt.Errorf("there is no exit called %q (have %s)", name, strings.Join(names, ", "))
+	return names(cfg.Exits), nil
+}
+
+func assignedNetworks(c *cobra.Command) ([]string, error) {
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(cfg.Interfaces))
+	for _, a := range cfg.Interfaces {
+		out = append(out, a.Interface)
+	}
+	return out, nil
 }

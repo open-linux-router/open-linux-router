@@ -6,6 +6,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/open-linux-router/open-linux-router/internal/cli"
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
@@ -38,8 +39,7 @@ func writeConfigText(w io.Writer, c Config) error {
 
 func writeExitsText(w io.Writer, c Config) error {
 	if len(c.Exits) == 0 {
-		fmt.Fprintln(w, "No exits configured. Add one with `olr routing add exit`.")
-		return nil
+		return cli.NoObjects(w, "exits", "Add one with `olr routing add exit`.")
 	}
 	t := table(w)
 	fmt.Fprintln(t, "EXIT\tGOES\tIPV6\tIF DOWN\tHEALTH CHECK\tUSED BY\tMARK")
@@ -53,6 +53,30 @@ func writeExitsText(w io.Writer, c Config) error {
 			orDash(strings.Join(c.UsedBy(e.Name), ", ")),
 			markString(e.Mark()),
 		)
+	}
+	return t.Flush()
+}
+
+// writeExitText is the detail half of docs/cli.md R6's pair. The table view
+// above has to fit seven columns on a terminal; this one can afford to answer
+// "what did I actually configure here" without abbreviating.
+func writeExitText(w io.Writer, c Config, e Exit) error {
+	snat := "off"
+	if e.SNATOrDefault() {
+		snat = "on"
+	}
+	t := table(w)
+	for _, row := range [][2]string{
+		{"name", e.Name},
+		{"goes", describeVia(e.Via)},
+		{"ipv6", string(e.IPv6OrDefault())},
+		{"if down", string(e.OnFailure.OrDefault())},
+		{"health check", describeProbe(e.Probe)},
+		{"snat", snat},
+		{"used by", orDash(strings.Join(c.UsedBy(e.Name), ", "))},
+		{"mark", markString(e.Mark())},
+	} {
+		fmt.Fprintf(t, "%s\t%s\n", row[0], row[1])
 	}
 	return t.Flush()
 }
@@ -249,10 +273,12 @@ func writePlanText(w io.Writer, plan planView, dryRun bool) error {
 	}
 
 	switch {
-	case plan.Empty && dryRun:
-		fmt.Fprintln(w, "Nothing to change.")
 	case plan.Empty:
-		fmt.Fprintln(w, "No change.")
+		// One phrasing for both dry run and apply (docs/cli.md R8). This module
+		// had two of its own, and the distinction they drew — "would change
+		// nothing" against "changed nothing" — is not one the operator can act
+		// on differently.
+		fmt.Fprintln(w, cli.NothingToDo)
 	case dryRun:
 		fmt.Fprintf(w, "%s would change (%s)\n",
 			core.Plural(len(plan.Changes), "thing"), plan.Impact)

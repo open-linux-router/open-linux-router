@@ -1,0 +1,18 @@
+Remove a reservation or pool
+
+Usage:
+  olr dhcp rm [command]
+
+Available Commands:
+  pool        Remove an interface's pool
+  reservation Remove a reservation
+
+Flags:
+  -h, --help   help for rm
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr dhcp rm [command] --help" for more information about a command.

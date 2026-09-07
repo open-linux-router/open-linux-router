@@ -112,35 +112,55 @@ func showCommand() *cobra.Command {
 
 	c.AddCommand(
 		showPoliciesCommand(),
+		showPolicyCommand(),
 		showQueriesCommand(),
 		showNamesCommand(),
 	)
 	return c
 }
 
+// showPoliciesCommand and showPolicyCommand were one command taking an optional
+// name (docs/cli.md R6). Splitting them is what lets each describe itself in one
+// line, and what lets the detail half complete its argument — a completer
+// cannot suggest policy names for an argument that may equally well be absent.
+
 func showPoliciesCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "policies [name]",
-		Short: "List policies, or show one in full",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(c *cobra.Command, args []string) error {
-			if err := cli.ValidateOutput(c); err != nil {
+		Use:   "policies",
+		Short: "List policies",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if err := cli.ReadOnly(c); err != nil {
 				return err
 			}
 			cfg, err := loadConfig(c)
 			if err != nil {
 				return err
 			}
-			if len(args) == 0 {
-				if cli.IsJSON(c) {
-					return cli.JSON(c.OutOrStdout(), cfg.Policies)
-				}
-				return writePoliciesText(c.OutOrStdout(), cfg.Policies)
+			if cli.IsJSON(c) {
+				return cli.JSON(c.OutOrStdout(), cfg.Policies)
 			}
+			return writePoliciesText(c.OutOrStdout(), cfg.Policies)
+		},
+	}
+}
 
+func showPolicyCommand() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "policy <name>",
+		Short: "Show one policy in full",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			if err := cli.ReadOnly(c); err != nil {
+				return err
+			}
+			cfg, err := loadConfig(c)
+			if err != nil {
+				return err
+			}
 			p, ok := cfg.Policy(args[0])
 			if !ok {
-				return fmt.Errorf("no policy named %q", args[0])
+				return unknownPolicy(&cfg, args[0])
 			}
 			if cli.IsJSON(c) {
 				return cli.JSON(c.OutOrStdout(), p)
@@ -148,6 +168,8 @@ func showPoliciesCommand() *cobra.Command {
 			return writeNamesListText(c.OutOrStdout(), p)
 		},
 	}
+	c.ValidArgsFunction = cli.CompleteArgs(policyNames)
+	return c
 }
 
 func showQueriesCommand() *cobra.Command {
@@ -161,7 +183,7 @@ func showQueriesCommand() *cobra.Command {
 			"the `since` line in `olr dns status` says when that was.",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
-			if err := cli.ValidateOutput(c); err != nil {
+			if err := cli.ReadOnly(c); err != nil {
 				return err
 			}
 			var resp queriesResponse
@@ -186,7 +208,7 @@ func showNamesCommand() *cobra.Command {
 			"to get there. Entries expire at the record's TTL plus a grace period.",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
-			if err := cli.ValidateOutput(c); err != nil {
+			if err := cli.ReadOnly(c); err != nil {
 				return err
 			}
 			var resp namesResponse
@@ -231,14 +253,14 @@ type configFlags struct {
 }
 
 func (f *configFlags) register(c *cobra.Command) {
-	c.Flags().StringSliceVar(&f.listen, "listen", nil,
-		"addresses to answer queries on, e.g. 192.168.1.1:53 (repeatable)")
-	c.Flags().StringSliceVar(&f.allowFrom, "allow-from", nil,
-		"source networks permitted to query, e.g. 192.168.1.0/24 (repeatable; empty means the networks listened on)")
+	c.Flags().StringArrayVar(&f.listen, "listen", nil,
+		"address to answer queries on, repeatable, e.g. 192.168.1.1:53")
+	c.Flags().StringArrayVar(&f.allowFrom, "allow-from", nil,
+		"source network permitted to query, repeatable, e.g. 192.168.1.0/24 (empty means the networks listened on)")
 	c.Flags().StringVar(&f.mode, "mode", "",
 		"how names are resolved: "+joinUpstreamModes())
-	c.Flags().StringSliceVar(&f.servers, "upstream", nil,
-		"forwarders, used with --mode forward, e.g. 1.1.1.1 (repeatable)")
+	c.Flags().StringArrayVar(&f.servers, "upstream", nil,
+		"forwarder, repeatable, used with --mode forward, e.g. 1.1.1.1")
 	c.Flags().BoolVar(&f.tls, "tls", false, "forward over DNS-over-TLS")
 	c.Flags().StringVar(&f.tlsName, "tls-name", "",
 		"certificate name the forwarder must present, e.g. cloudflare-dns.com")
@@ -247,10 +269,12 @@ func (f *configFlags) register(c *cobra.Command) {
 		"how many answered queries to keep in memory")
 	c.Flags().BoolVar(&f.hijack, "redirect", false,
 		"redirect clients that use another resolver back to this one")
-	c.Flags().StringSliceVar(&f.interfaces, "redirect-on", nil,
-		"interfaces whose forwarded DNS is redirected (repeatable)")
+	c.Flags().StringArrayVar(&f.interfaces, "redirect-on", nil,
+		"interface whose forwarded DNS is redirected, repeatable")
 	c.Flags().BoolVar(&f.blockDoT, "block-dot", false,
 		"drop DNS-over-TLS on 853, so clients cannot route around the redirect")
+
+	cli.EnumFlag(c, "mode", upstreamModeNames()...)
 }
 
 func (f *configFlags) apply(c *cobra.Command, cfg *Config) error {
@@ -344,7 +368,7 @@ func policyCommand(string) *cobra.Command {
 	)
 
 	c := &cobra.Command{
-		Use:   "policy NAME",
+		Use:   "policy <name>",
 		Short: "Add or replace a policy",
 		Long: "Add or replace a policy: a set of clients and what they may look up.\n\n" +
 			"A policy with no --client is the default one, applying to every device no\n" +
@@ -386,31 +410,37 @@ func policyCommand(string) *cobra.Command {
 		},
 	}
 
-	c.Flags().StringSliceVar(&clients, "client", nil,
-		"a network this policy governs, e.g. 192.168.1.50/32 (repeatable; omit for the default policy)")
-	c.Flags().StringSliceVar(&block, "block", nil,
-		"a name to block, covering it and everything under it (repeatable)")
-	c.Flags().StringSliceVar(&allow, "allow", nil,
-		"an exception that beats --block (repeatable)")
+	c.Flags().StringArrayVar(&clients, "client", nil,
+		"a network this policy governs, repeatable, e.g. 192.168.1.50/32 (omit for the default policy)")
+	c.Flags().StringArrayVar(&block, "block", nil,
+		"a name to block, covering it and everything under it, repeatable")
+	c.Flags().StringArrayVar(&allow, "allow", nil,
+		"an exception that beats --block, repeatable")
 	c.Flags().StringVar(&response, "response", "",
 		"what a blocked name answers with: "+joinBlockResponses())
+	cli.EnumFlag(c, "response", blockResponseNames()...)
+	// `add policy` replaces as well as creates, so completing existing names
+	// is a real convenience here rather than a suggestion to collide.
+	c.ValidArgsFunction = cli.CompleteArgs(policyNames)
 	return c
 }
 
 func rmPolicyCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "policy NAME",
+	c := &cobra.Command{
+		Use:   "policy <name>",
 		Short: "Remove a policy",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			return mutate(c, func(cfg *Config) error {
 				if !cfg.RemovePolicy(args[0]) {
-					return fmt.Errorf("no policy named %q", args[0])
+					return unknownPolicy(cfg, args[0])
 				}
 				return nil
 			})
 		},
 	}
+	c.ValidArgsFunction = cli.CompleteArgs(policyNames)
+	return c
 }
 
 // blockCommand and allowCommand edit one list inside a policy, which is the
@@ -428,7 +458,7 @@ func nameListCommand(mode, list string) *cobra.Command {
 	}[list]
 
 	c := &cobra.Command{
-		Use:   list + " NAME...",
+		Use:   list + " <name>...",
 		Short: map[string]string{"add": "Add to the ", "rm": "Remove from the "}[mode] + short,
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
@@ -462,7 +492,33 @@ func nameListCommand(mode, list string) *cobra.Command {
 
 	c.Flags().StringVar(&policy, "policy", "",
 		"which policy to edit (defaults to the only one, or the default policy)")
+	_ = c.RegisterFlagCompletionFunc("policy", cli.CompleteFlag(policyNames))
+	if mode == "rm" {
+		// Removing a name should suggest the names that are there. Adding one
+		// cannot: the whole point is that it is not in the list yet.
+		c.ValidArgsFunction = cli.CompleteEach(namesIn(list))
+	}
 	return c
+}
+
+// namesIn completes from the list the command would edit, resolving the same
+// target policy the edit itself will (see targetPolicy).
+func namesIn(list string) cli.Fetcher {
+	return func(c *cobra.Command) ([]string, error) {
+		cfg, err := loadConfig(c)
+		if err != nil {
+			return nil, err
+		}
+		name, _ := c.Flags().GetString("policy")
+		p, err := targetPolicy(&cfg, name)
+		if err != nil {
+			return nil, err
+		}
+		if list == "allow" {
+			return p.Allow, nil
+		}
+		return p.Block, nil
+	}
 }
 
 // targetPolicy resolves which policy an edit applies to.
@@ -473,7 +529,7 @@ func targetPolicy(cfg *Config, name string) (Policy, error) {
 	if name != "" {
 		p, ok := cfg.Policy(name)
 		if !ok {
-			return Policy{}, fmt.Errorf("no policy named %q", name)
+			return Policy{}, unknownPolicy(cfg, name)
 		}
 		return p, nil
 	}
@@ -532,7 +588,7 @@ func statusCommand() *cobra.Command {
 	return verb("status", "Show service state, query counts and drift", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
-			if err := cli.ValidateOutput(c); err != nil {
+			if err := cli.ReadOnly(c); err != nil {
 				return err
 			}
 			var status statusResponse
@@ -604,6 +660,7 @@ func logsCommand() *cobra.Command {
 	c.Flags().IntVarP(&lines, "lines", "n", 50, "number of lines to show")
 	c.Flags().BoolVarP(&follow, "follow", "f", false, "keep streaming new entries")
 	c.Flags().StringVar(&which, "unit", "", "show one backend only: resolver or relay")
+	cli.EnumFlag(c, "unit", "resolver", "relay")
 	return c
 }
 
@@ -702,18 +759,48 @@ func parsePrefixes(flag string, values []string) ([]netip.Prefix, error) {
 	return out, nil
 }
 
-func joinUpstreamModes() string {
+func joinUpstreamModes() string { return strings.Join(upstreamModeNames(), "|") }
+
+func upstreamModeNames() []string {
 	parts := make([]string, 0, len(UpstreamModes()))
 	for _, m := range UpstreamModes() {
 		parts = append(parts, string(m))
 	}
-	return strings.Join(parts, "|")
+	return parts
 }
 
-func joinBlockResponses() string {
+func joinBlockResponses() string { return strings.Join(blockResponseNames(), "|") }
+
+func blockResponseNames() []string {
 	parts := make([]string, 0, len(BlockResponses()))
 	for _, r := range BlockResponses() {
 		parts = append(parts, string(r))
 	}
-	return strings.Join(parts, "|")
+	return parts
+}
+
+// ------------------------------------------------- unknown objects (R8)
+
+// unknownPolicy shares cli.UnknownObject's phrasing with the other modules, and
+// with it the habit of naming the policies that do exist.
+func unknownPolicy(cfg *Config, name string) error {
+	return cli.UnknownObject("policy", name, "olr dns add policy <name>", policyNameList(cfg))
+}
+
+func policyNameList(cfg *Config) []string {
+	out := make([]string, 0, len(cfg.Policies))
+	for _, p := range cfg.Policies {
+		out = append(out, p.Name)
+	}
+	return out
+}
+
+// ------------------------------------------------- completion (R7)
+
+func policyNames(c *cobra.Command) ([]string, error) {
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return nil, err
+	}
+	return policyNameList(&cfg), nil
 }

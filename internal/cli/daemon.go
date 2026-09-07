@@ -52,6 +52,9 @@ func daemonJob(use, short, done string, run func(context.Context, core.Unit) err
 		Short: short,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := RejectDryRun(cmd); err != nil {
+				return err
+			}
 			unit, ctx, cancel, err := daemonUnit(cmd)
 			if err != nil {
 				return err
@@ -75,7 +78,7 @@ func daemonStatusCommand() *cobra.Command {
 		Short: "Report whether olrd is running",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := ValidateOutput(cmd); err != nil {
+			if err := ReadOnly(cmd); err != nil {
 				return err
 			}
 			unit, ctx, cancel, err := daemonUnit(cmd)

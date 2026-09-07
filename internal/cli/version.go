@@ -15,6 +15,9 @@ func versionCommand() *cobra.Command {
 		GroupID: GroupLocal,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := RejectDryRun(cmd); err != nil {
+				return err
+			}
 			_, err := fmt.Fprintf(cmd.OutOrStdout(), "olr %s\n", buildinfo.String())
 			return err
 		},

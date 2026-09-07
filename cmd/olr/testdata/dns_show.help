@@ -1,0 +1,21 @@
+Show DNS configuration
+
+Usage:
+  olr dns show [flags]
+  olr dns show [command]
+
+Available Commands:
+  names       List the addresses each device resolved, and for what
+  policies    List policies
+  policy      Show one policy in full
+  queries     List recently answered queries
+
+Flags:
+  -h, --help   help for show
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr dns show [command] --help" for more information about a command.

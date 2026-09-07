@@ -89,6 +89,25 @@ func showCommand() *cobra.Command {
 	c := verb("show", "Show DHCP configuration", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
+			if err := cli.ValidateOutput(c); err != nil {
+				return err
+			}
+			// --dry-run on `show` is the drift question: plan stored intent
+			// against reality and print what does not match (design.md §5.4).
+			// This module used to ignore the flag here while the other two
+			// answered it — the same flag, on the same verb, meaning two
+			// different things depending on which module you were in.
+			if cli.DryRun(c) {
+				var plan planView
+				if err := cli.ClientFor(c).Post(ctxOf(c), planEndpoint, nil, &plan); err != nil {
+					return err
+				}
+				if cli.IsJSON(c) {
+					return cli.JSON(c.OutOrStdout(), plan)
+				}
+				return writePlanText(c.OutOrStdout(), plan, true)
+			}
+
 			cfg, err := loadConfig(c)
 			if err != nil {
 				return err
@@ -101,52 +120,135 @@ func showCommand() *cobra.Command {
 	})
 
 	c.AddCommand(
-		&cobra.Command{
-			Use: "pools", Short: "List address pools", Args: cobra.NoArgs,
-			RunE: func(c *cobra.Command, _ []string) error {
-				cfg, err := loadConfig(c)
-				if err != nil {
-					return err
-				}
-				if cli.IsJSON(c) {
-					return cli.JSON(c.OutOrStdout(), cfg.Pools)
-				}
-				return writePoolsText(c.OutOrStdout(), cfg.Pools)
-			},
-		},
-		&cobra.Command{
-			Use: "reservations", Short: "List address reservations", Args: cobra.NoArgs,
-			RunE: func(c *cobra.Command, _ []string) error {
-				cfg, err := loadConfig(c)
-				if err != nil {
-					return err
-				}
-				if cli.IsJSON(c) {
-					return cli.JSON(c.OutOrStdout(), cfg.Reservations)
-				}
-				return writeReservationsText(c.OutOrStdout(), cfg.Reservations)
-			},
-		},
-		&cobra.Command{
-			Use:   "leases",
-			Short: "List current leases",
-			Long: "List the leases dnsmasq is currently holding.\n\n" +
-				"Leases are observed, not configured: they are read from the daemon's\n" +
-				"database and are never stored or revisioned by olr (design.md §6.2).",
-			Args: cobra.NoArgs,
-			RunE: func(c *cobra.Command, _ []string) error {
-				var resp leasesResponse
-				if err := cli.ClientFor(c).Get(ctxOf(c), leasesEndpoint, &resp); err != nil {
-					return err
-				}
-				if cli.IsJSON(c) {
-					return cli.JSON(c.OutOrStdout(), resp)
-				}
-				return writeLeasesText(c.OutOrStdout(), resp)
-			},
-		},
+		showPoolsCommand(),
+		showPoolCommand(),
+		showReservationsCommand(),
+		showReservationCommand(),
+		showLeasesCommand(),
 	)
 	return c
+}
+
+func showPoolsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "pools",
+		Short: "List address pools",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if err := cli.ReadOnly(c); err != nil {
+				return err
+			}
+			cfg, err := loadConfig(c)
+			if err != nil {
+				return err
+			}
+			if cli.IsJSON(c) {
+				return cli.JSON(c.OutOrStdout(), cfg.Pools)
+			}
+			return writePoolsText(c.OutOrStdout(), cfg.Pools)
+		},
+	}
+}
+
+// showPoolCommand and showReservationCommand are the detail halves docs/cli.md
+// R6 requires: this module could list both objects but could not show one.
+func showPoolCommand() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "pool <interface>",
+		Short: "Show one pool in full",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			if err := cli.ReadOnly(c); err != nil {
+				return err
+			}
+			cfg, err := loadConfig(c)
+			if err != nil {
+				return err
+			}
+			p, ok := cfg.Pool(args[0])
+			if !ok {
+				return unknownPool(&cfg, args[0])
+			}
+			if cli.IsJSON(c) {
+				return cli.JSON(c.OutOrStdout(), p)
+			}
+			return writePoolText(c.OutOrStdout(), p)
+		},
+	}
+	c.ValidArgsFunction = cli.CompleteArgs(poolInterfaces)
+	return c
+}
+
+func showReservationsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "reservations",
+		Short: "List address reservations",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if err := cli.ReadOnly(c); err != nil {
+				return err
+			}
+			cfg, err := loadConfig(c)
+			if err != nil {
+				return err
+			}
+			if cli.IsJSON(c) {
+				return cli.JSON(c.OutOrStdout(), cfg.Reservations)
+			}
+			return writeReservationsText(c.OutOrStdout(), cfg.Reservations)
+		},
+	}
+}
+
+func showReservationCommand() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "reservation <mac>",
+		Short: "Show one reservation in full",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			if err := cli.ReadOnly(c); err != nil {
+				return err
+			}
+			cfg, err := loadConfig(c)
+			if err != nil {
+				return err
+			}
+			r, ok := cfg.Reservation(args[0])
+			if !ok {
+				return unknownReservation(&cfg, args[0])
+			}
+			if cli.IsJSON(c) {
+				return cli.JSON(c.OutOrStdout(), r)
+			}
+			return writeReservationText(c.OutOrStdout(), r)
+		},
+	}
+	c.ValidArgsFunction = cli.CompleteArgs(reservationMACs)
+	return c
+}
+
+func showLeasesCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "leases",
+		Short: "List current leases",
+		Long: "List the leases dnsmasq is currently holding.\n\n" +
+			"Leases are observed, not configured: they are read from the daemon's\n" +
+			"database and are never stored or revisioned by olr (design.md §6.2).",
+		Args: cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if err := cli.ReadOnly(c); err != nil {
+				return err
+			}
+			var resp leasesResponse
+			if err := cli.ClientFor(c).Get(ctxOf(c), leasesEndpoint, &resp); err != nil {
+				return err
+			}
+			if cli.IsJSON(c) {
+				return cli.JSON(c.OutOrStdout(), resp)
+			}
+			return writeLeasesText(c.OutOrStdout(), resp)
+		},
+	}
 }
 
 // ---------------------------------------------------------------- set / add
@@ -182,12 +284,21 @@ func (f *poolFlags) register(c *cobra.Command) {
 	c.Flags().StringVar(&f.lease, "lease", "", "lease time, e.g. 12h (default 12h)")
 	c.Flags().StringVar(&f.gateway, "gateway", "", "gateway to advertise (default: the router itself)")
 	c.Flags().BoolVar(&f.noGate, "no-gateway", false, "advertise the router itself as the gateway")
-	c.Flags().StringSliceVar(&f.dns, "dns", nil, "DNS servers to advertise (default: the router itself)")
+	// StringArray, not StringSlice (docs/cli.md R5). Slice splits on commas and
+	// Array does not, and this module shipped one of each with no way to tell
+	// them apart in --help — so a DHCP option whose value contained a comma was
+	// silently cut in half while the address lists beside it were not.
+	c.Flags().StringArrayVar(&f.dns, "dns", nil,
+		"DNS server to advertise, repeatable (default: the router itself)")
 	c.Flags().BoolVar(&f.clearDNS, "no-dns", false, "advertise the router itself as the DNS server")
-	c.Flags().StringSliceVar(&f.ntp, "ntp", nil, "NTP servers to advertise")
+	c.Flags().StringArrayVar(&f.ntp, "ntp", nil, "NTP server to advertise, repeatable")
 	c.Flags().StringVar(&f.domain, "domain", "", "search domain to advertise")
 	c.Flags().StringVar(&f.ra, "ra", "", fmt.Sprintf("IPv6 mode: %s", joinRAModes()))
 	c.Flags().StringArrayVar(&f.options, "option", nil, "extra DHCP option as CODE=VALUE, repeatable")
+
+	c.MarkFlagsMutuallyExclusive("gateway", "no-gateway")
+	c.MarkFlagsMutuallyExclusive("dns", "no-dns")
+	cli.EnumFlag(c, "ra", raModeNames()...)
 }
 
 // apply mutates a pool with only the flags the operator actually gave.
@@ -293,24 +404,34 @@ func poolCommand(mode string) *cobra.Command {
 		},
 	}
 	flags.register(c)
+	if mode == "set" {
+		// Only `set` addresses an existing pool; `add` is naming a new one, and
+		// completing it from what already exists would suggest exactly the
+		// interfaces the command is about to refuse (docs/cli.md R7).
+		c.ValidArgsFunction = cli.CompleteArgs(poolInterfaces)
+	}
 	return c
 }
 
 func reservationCommand() *cobra.Command {
-	var mac, ip, hostname, lease string
+	var ip, hostname, lease string
 
 	c := &cobra.Command{
-		Use:   "reservation",
+		Use:   "reservation <mac>",
 		Short: "Reserve an address for a client",
 		Long: "Reserve an address for a client.\n\n" +
 			"Reserving an address outside the pool's dynamic range is the safer habit:\n" +
 			"it cannot then collide with an address the pool hands out.",
-		Args: cobra.NoArgs,
-		RunE: func(c *cobra.Command, _ []string) error {
+		// The MAC is positional (docs/cli.md R2). It was --mac here while
+		// `rm reservation <mac>` took it positionally, so the two halves of one
+		// object's lifecycle disagreed about what identifies a reservation —
+		// and identity in a flag is identity a shell cannot complete.
+		Args: cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
 			return mutate(c, func(cfg *Config) error {
-				normalized, err := NormalizeMAC(mac)
+				normalized, err := NormalizeMAC(args[0])
 				if err != nil {
-					return fmt.Errorf("--mac: %w", err)
+					return fmt.Errorf("%q: %w", args[0], err)
 				}
 				addr, err := netip.ParseAddr(ip)
 				if err != nil {
@@ -330,11 +451,9 @@ func reservationCommand() *cobra.Command {
 		},
 	}
 
-	c.Flags().StringVar(&mac, "mac", "", "client hardware address (required)")
 	c.Flags().StringVar(&ip, "ip", "", "address to reserve (required)")
 	c.Flags().StringVar(&hostname, "hostname", "", "hostname to assign the client")
 	c.Flags().StringVar(&lease, "lease", "", "lease time for this client")
-	_ = c.MarkFlagRequired("mac")
 	_ = c.MarkFlagRequired("ip")
 	return c
 }
@@ -376,30 +495,37 @@ func extraConfCommand() *cobra.Command {
 func rmCommand() *cobra.Command {
 	c := verb("rm", "Remove a reservation or pool", func(c *cobra.Command) {})
 
-	c.AddCommand(
-		&cobra.Command{
-			Use: "pool <interface>", Short: "Remove an interface's pool", Args: cobra.ExactArgs(1),
-			RunE: func(c *cobra.Command, args []string) error {
-				return mutate(c, func(cfg *Config) error {
-					if !cfg.RemovePool(args[0]) {
-						return fmt.Errorf("%s has no pool", args[0])
-					}
-					return nil
-				})
-			},
+	rmPool := &cobra.Command{
+		Use:   "pool <interface>",
+		Short: "Remove an interface's pool",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			return mutate(c, func(cfg *Config) error {
+				if !cfg.RemovePool(args[0]) {
+					return unknownPool(cfg, args[0])
+				}
+				return nil
+			})
 		},
-		&cobra.Command{
-			Use: "reservation <mac>", Short: "Remove a reservation", Args: cobra.ExactArgs(1),
-			RunE: func(c *cobra.Command, args []string) error {
-				return mutate(c, func(cfg *Config) error {
-					if !cfg.RemoveReservation(args[0]) {
-						return fmt.Errorf("no reservation for %s", args[0])
-					}
-					return nil
-				})
-			},
+	}
+	rmPool.ValidArgsFunction = cli.CompleteArgs(poolInterfaces)
+
+	rmReservation := &cobra.Command{
+		Use:   "reservation <mac>",
+		Short: "Remove a reservation",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			return mutate(c, func(cfg *Config) error {
+				if !cfg.RemoveReservation(args[0]) {
+					return unknownReservation(cfg, args[0])
+				}
+				return nil
+			})
 		},
-	)
+	}
+	rmReservation.ValidArgsFunction = cli.CompleteArgs(reservationMACs)
+
+	c.AddCommand(rmPool, rmReservation)
 	return c
 }
 
@@ -427,7 +553,7 @@ func statusCommand() *cobra.Command {
 	return verb("status", "Show service state, leases and drift", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
-			if err := cli.ValidateOutput(c); err != nil {
+			if err := cli.ReadOnly(c); err != nil {
 				return err
 			}
 			ctx, client := ctxOf(c), cli.ClientFor(c)
@@ -601,13 +727,63 @@ func parseOptions(values []string) ([]Option, error) {
 	return out, nil
 }
 
-func joinRAModes() string {
+func joinRAModes() string { return strings.Join(raModeNames(), "|") }
+
+func raModeNames() []string {
 	modes := RAModes()
 	parts := make([]string, len(modes))
 	for i, m := range modes {
 		parts[i] = string(m)
 	}
-	return strings.Join(parts, "|")
+	return parts
+}
+
+// ------------------------------------------------- unknown objects (R8)
+
+// unknownPool and unknownReservation share cli.UnknownObject's phrasing, and
+// with it the habit of naming what does exist — this module used to say
+// "br-lan has no pool" and leave the operator to go and look.
+
+func unknownPool(cfg *Config, iface string) error {
+	return cli.UnknownObject("pool", iface, "olr dhcp add pool <interface>", poolNames(cfg))
+}
+
+func unknownReservation(cfg *Config, mac string) error {
+	return cli.UnknownObject("reservation", mac, "olr dhcp add reservation <mac>", macNames(cfg))
+}
+
+func poolNames(cfg *Config) []string {
+	out := make([]string, 0, len(cfg.Pools))
+	for _, p := range cfg.Pools {
+		out = append(out, p.Interface)
+	}
+	return out
+}
+
+func macNames(cfg *Config) []string {
+	out := make([]string, 0, len(cfg.Reservations))
+	for _, r := range cfg.Reservations {
+		out = append(out, r.MAC)
+	}
+	return out
+}
+
+// ------------------------------------------------- completion (R7)
+
+func poolInterfaces(c *cobra.Command) ([]string, error) {
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return nil, err
+	}
+	return poolNames(&cfg), nil
+}
+
+func reservationMACs(c *cobra.Command) ([]string, error) {
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return nil, err
+	}
+	return macNames(&cfg), nil
 }
 
 func humanTime(t time.Time) string {
