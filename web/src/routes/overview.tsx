@@ -59,13 +59,6 @@ export function OverviewPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
-        <p className="text-sm text-muted-foreground">
-          Your network, what it is doing, and anything that needs you.
-        </p>
-      </header>
-
       {faults.map((fault) => (
         <Alert key={fault.key} variant={fault.tone === 'bad' ? 'destructive' : 'default'}>
           <AlertTriangle />

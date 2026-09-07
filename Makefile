@@ -138,7 +138,9 @@ web-deps: ## Install the web UI's node modules
 web: ## Build the SPA into internal/webui/assets
 	@# No proxy here on purpose: the npm registry is reachable directly, and
 	@# the SOCKS5 proxy that Go modules need makes npm hang.
-	cd $(WEB) && $(NPM) run build
+	@# OLR_VERSION is the same string the binaries get through -X, so the SPA's
+	@# footer and `olrd -version` cannot disagree about one artifact.
+	cd $(WEB) && OLR_VERSION='$(VERSION)' $(NPM) run build
 	@# vite's emptyOutDir clears the directory, including the placeholder that
 	@# lets `go build` work on a clone with no Node installed.
 	@printf '# Placeholder so //go:embed has a directory on a fresh clone.\n# `make web` fills this with the built SPA; see .gitignore.\n' > $(ASSETS)/.gitkeep

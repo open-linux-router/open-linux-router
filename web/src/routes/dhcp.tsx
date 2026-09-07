@@ -60,13 +60,6 @@ export function DhcpPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">DHCP</h1>
-        <p className="text-sm text-muted-foreground">
-          Devices that join your network get an address from this router.
-        </p>
-      </header>
-
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />

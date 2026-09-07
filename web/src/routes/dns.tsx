@@ -76,14 +76,6 @@ export function DnsPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">DNS</h1>
-        <p className="text-sm text-muted-foreground">
-          Every device on your network looks up names through this router. This
-          is what they asked for, and what they were allowed to reach.
-        </p>
-      </header>
-
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />

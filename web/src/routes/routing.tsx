@@ -78,14 +78,6 @@ export function RoutingPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Gateway</h1>
-        <p className="text-sm text-muted-foreground">
-          Choose how each network reaches the internet. Everything follows one setting unless you
-          change it for a network of its own.
-        </p>
-      </header>
-
       {applier.blocked && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />

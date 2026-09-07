@@ -1,14 +1,27 @@
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
+// What the footer shows. The binaries get this through -X ldflags and there is
+// no endpoint that reports it, so the SPA is stamped the same way, at build
+// time: `make web` passes OLR_VERSION and both halves of the artifact then say
+// the same thing, including the -dev suffix the Makefile adds off-tag. A bare
+// `npm run build` has no Makefile to ask and falls back to the file the
+// Makefile itself derives everything from.
+const version =
+  process.env.OLR_VERSION ??
+  `v${readFileSync(path.resolve(import.meta.dirname, '../VERSION'), 'utf8').trim()}`
+
 // The SPA is built into internal/webui/assets and embedded in olrd
 // (design.md §6.3). Nothing here runs at runtime: the daemon serves static
 // files, so there is no Node and no server-side rendering on the router.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+
+  define: { __APP_VERSION__: JSON.stringify(version) },
 
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, './src') },
