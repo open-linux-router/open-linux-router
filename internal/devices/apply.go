@@ -32,6 +32,11 @@ type Applier struct {
 	// Fixed is the window onto whoever owns fixed addresses. Nil means the list
 	// omits them rather than claiming there are none.
 	Fixed FixedAddressView
+
+	// Networks is the window onto whoever owns the address ranges. Nil means a
+	// device is placed only when a source saw which interface it was on, which
+	// is a smaller answer rather than a wrong one.
+	Networks NetworkView
 }
 
 // Load reads stored intent out of the configuration document.
@@ -98,6 +103,18 @@ func (a Applier) List(ctx context.Context) ([]Resolved, []Problem, error) {
 		}
 	}
 
-	list, joinProblems := Build(cfg, sightings, fixed)
+	var networks []Network
+	if a.Networks != nil {
+		got, err := a.Networks.Networks(ctx)
+		if err != nil {
+			problems = append(problems, Problem{
+				Message: fmt.Sprintf("could not read the address ranges: %v", err),
+			})
+		} else {
+			networks = got
+		}
+	}
+
+	list, joinProblems := Build(cfg, sightings, fixed, networks)
 	return list, append(problems, joinProblems...), nil
 }

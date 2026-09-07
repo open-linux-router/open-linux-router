@@ -1,26 +1,31 @@
-import { Activity, Globe, Laptop, Network, Router, Waypoints } from 'lucide-react'
+import { Activity, Globe, Network, Router, Waypoints } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
 
 import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { TokenButton } from '@/components/layout/token-button'
 import { cn } from '@/lib/utils'
 
+// Four sections: one place to look, three places to change something.
+//
+// This replaced Overview / Devices / Addresses / DNS / Internet, and the naming
+// changed with it. The old rule was to use the word the audience already knows,
+// which is why dhcp's section was called "Addresses" — nobody outside
+// networking says DHCP. That rule was right while this list *was* the front
+// door. It is not any more: the overview answers the everyday questions in
+// plain language, so these three are free to name mechanisms, and the person
+// who goes looking for a section called DHCP is exactly the person who wants
+// DHCP. Three mechanism names in a row also read as one system, where
+// "Addresses / DNS / Internet" read as three different registers.
+//
+// Devices is absent because it is not a section: the device list is the body of
+// the overview. Filing it under DHCP was considered and rejected — the
+// statically-addressed printer has never held a lease, and would have lived on
+// a page named for the protocol that has never seen it.
 const NAV = [
   { to: '/', label: 'Overview', icon: Activity, end: true },
-  // Devices before Addresses: §4.4 makes the device the object an operator
-  // actually goes looking for, and a fixed address is a property of one.
-  { to: '/devices', label: 'Devices', icon: Laptop, end: false },
-  { to: '/dhcp', label: 'Addresses', icon: Network, end: false },
-  // "DNS" and not a translation of it. The rule everywhere else in this app is
-  // to use the word the audience already knows, which is why dhcp's section is
-  // called Addresses — nobody outside networking says "DHCP". The same rule
-  // gives the opposite answer here: "DNS" *is* consumer vocabulary, and
-  // renaming it to Names or Filtering would make a familiar thing unfamiliar.
+  { to: '/gateway', label: 'Gateway', icon: Waypoints, end: false },
+  { to: '/dhcp', label: 'DHCP', icon: Network, end: false },
   { to: '/dns', label: 'DNS', icon: Globe, end: false },
-  // "Internet", not "Routing": the schema word for the object is `exit` and the
-  // engineer's word for the section is routing, but what an operator is here to
-  // decide is how a network reaches the internet (docs/gateway.md §1.3).
-  { to: '/internet', label: 'Internet', icon: Waypoints, end: false },
 ]
 
 export function AppShell() {

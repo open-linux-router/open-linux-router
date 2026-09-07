@@ -107,3 +107,20 @@ func TestARPDefaultsToTheKernelTable(t *testing.T) {
 		t.Errorf("path = %q, want %q", got, ARPPath)
 	}
 }
+
+// The interface is the whole reason this source can place a statically
+// addressed device, so it has to survive parsing.
+func TestARPCarriesTheInterface(t *testing.T) {
+	sightings, _, err := (ARP{Path: "testdata/arp"}).Presence(context.Background())
+	if err != nil {
+		t.Fatalf("Presence: %v", err)
+	}
+	if len(sightings) == 0 {
+		t.Fatal("no sightings")
+	}
+	for _, s := range sightings {
+		if s.Interface == "" {
+			t.Errorf("%s carries no interface", s.MAC)
+		}
+	}
+}

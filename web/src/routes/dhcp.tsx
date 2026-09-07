@@ -31,7 +31,7 @@ import { PlanDiff, PlanReasons, impactHint } from '@/features/dhcp/impact'
 import { useDhcpConfig, useDhcpLeases, useDhcpStatus } from '@/features/dhcp/queries'
 import { ReservationDialog } from '@/features/dhcp/reservation-dialog'
 import { useDhcpApply } from '@/features/dhcp/use-apply'
-import type { DhcpLeases, DhcpStatus, PoolUsage } from '@/lib/api-types'
+import type { DhcpStatus, PoolUsage } from '@/lib/api-types'
 import type { DhcpConfig, Pool, Reservation } from '@/lib/config-types'
 
 export function DhcpPage() {
@@ -61,7 +61,7 @@ export function DhcpPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Addresses</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">DHCP</h1>
         <p className="text-sm text-muted-foreground">
           Devices that join your network get an address from this router.
         </p>
@@ -113,8 +113,6 @@ export function DhcpPage() {
       <PoolsCard config={current} onChange={change} busy={applier.busy} usage={leases.data?.usage} />
 
       <ReservationsCard config={current} onChange={change} busy={applier.busy} />
-
-      <LeasesCard leases={leases.data} />
 
       <AdvancedCard config={current} onChange={change} busy={applier.busy} />
 
@@ -431,65 +429,6 @@ function ReservationsCard({
 
 /* -------------------------------------------------------------------------- */
 
-function LeasesCard({ leases }: { leases?: DhcpLeases }) {
-  if (!leases) return <LeasesSkeleton />
-
-  // Active first, then named before unnamed, then alphabetically. Sorting on
-  // the displayed label alone would file a nameless device under its address
-  // and float it above every named one, since digits sort before letters.
-  const sorted = [...leases.leases].sort(
-    (a, b) =>
-      Number(b.active) - Number(a.active) ||
-      Number(Boolean(b.hostname)) - Number(Boolean(a.hostname)) ||
-      (a.hostname ?? a.ip).localeCompare(b.hostname ?? b.ip, undefined, { numeric: true }),
-  )
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Connected devices</CardTitle>
-        <CardDescription>
-          What is actually on the network right now, not what was configured.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {sorted.length === 0 ? (
-          <ListEmpty>Nothing has asked for an address yet.</ListEmpty>
-        ) : (
-          <List>
-            {sorted.map((l) => (
-              <ListRow
-                key={`${l.ip}-${l.mac ?? ''}`}
-                title={l.hostname ?? l.ip}
-                subtitle={l.hostname ? `${l.ip} · ${l.mac ?? 'no MAC'}` : (l.mac ?? 'no MAC')}
-                trailing={expiryLabel(l.expires, l.active)}
-              />
-            ))}
-          </List>
-        )}
-        <p className="text-xs text-muted-foreground">
-          Read {new Date(leases.as_of).toLocaleTimeString()}.
-        </p>
-      </CardContent>
-    </Card>
-  )
-}
-
-/** Plain wording for a lease clock. An operator wants "how long", not a date. */
-function expiryLabel(expires: string | null, active: boolean): string {
-  if (!active) return 'Not active'
-  if (expires === null) return 'Never expires'
-  const ms = new Date(expires).getTime() - Date.now()
-  if (ms <= 0) return 'Expired'
-  const minutes = Math.round(ms / 60_000)
-  if (minutes < 60) return `${Math.max(1, minutes)} min left`
-  const hours = Math.round(minutes / 60)
-  if (hours < 48) return `${hours}h left`
-  return `${Math.round(hours / 24)} days left`
-}
-
-/* -------------------------------------------------------------------------- */
-
 function AdvancedCard({
   config,
   onChange,
@@ -620,27 +559,3 @@ function PageSkeleton() {
   )
 }
 
-function LeasesSkeleton() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Connected devices</CardTitle>
-        <CardDescription>
-          What is actually on the network right now, not what was configured.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="divide-y overflow-hidden rounded-xl border">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="flex min-h-14 items-center gap-3 px-4 py-2.5">
-              <div className="flex-1 space-y-1.5">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-3 w-48 max-w-full" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}

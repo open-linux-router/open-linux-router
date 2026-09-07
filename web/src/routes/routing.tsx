@@ -37,6 +37,7 @@ import { useRoutingConfig, useRoutingStatus, useRoutingTraffic } from '@/feature
 import { useRoutingApply } from '@/features/routing/use-apply'
 import type { AssignmentStatus, ExitStatus, RoutingTraffic, Usage } from '@/lib/api-types'
 import type { Exit, RoutingConfig } from '@/lib/config-types'
+import { formatBytes } from '@/lib/utils'
 
 // Sentinel values for the two choices that are not an exit name.
 //
@@ -63,7 +64,7 @@ export function RoutingPage() {
     return (
       <Alert variant="destructive">
         <AlertTriangle />
-        <AlertTitle>Could not load the internet settings</AlertTitle>
+        <AlertTitle>Could not load the gateway settings</AlertTitle>
         <AlertDescription>{(config.error as Error).message}</AlertDescription>
       </Alert>
     )
@@ -78,7 +79,7 @@ export function RoutingPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Internet</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Gateway</h1>
         <p className="text-sm text-muted-foreground">
           Choose how each network reaches the internet. Everything follows one setting unless you
           change it for a network of its own.
@@ -383,22 +384,6 @@ function describeUsageExit(u: Usage): string {
   // Named rather than left blank, so the row reads as an answer and not a gap.
   if (!u.exit) return 'Not routed by this router'
   return `Via ${u.exit}`
-}
-
-/**
- * Powers of 1024 with the short suffixes, matching every other tool on the box.
- * A second convention would make two numbers about the same traffic disagree.
- */
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`
-  const units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB']
-  let value = n / 1024
-  let i = 0
-  while (value >= 1024 && i < units.length - 1) {
-    value /= 1024
-    i++
-  }
-  return `${value.toFixed(1)} ${units[i]}`
 }
 
 /**

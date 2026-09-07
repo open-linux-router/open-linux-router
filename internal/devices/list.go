@@ -2,6 +2,7 @@ package devices
 
 import (
 	"context"
+	"net/netip"
 	"slices"
 	"strings"
 )
@@ -25,6 +26,49 @@ import (
 type FixedAddressView interface {
 	// FixedAddresses maps canonical MAC to reserved address.
 	FixedAddresses(ctx context.Context) (map[string]string, error)
+}
+
+// NetworkView is this module's read-only window onto whoever owns the address
+// ranges — today `dhcp`, through its pools. The same one-way arrow as
+// FixedAddressView: this module declares what it needs and never imports dhcp.
+//
+// It exists because the neighbour table is the only source that reports an
+// interface, and it only knows devices it has heard from lately. A device that
+// is merely asleep still holds a lease, and placing it by which range its
+// address falls in is the difference between a map of the household and a map
+// of whatever happens to be awake.
+type NetworkView interface {
+	// Networks returns the ranges served on each interface.
+	Networks(ctx context.Context) ([]Network, error)
+}
+
+// Network is one interface and the range served on it.
+type Network struct {
+	Interface  string
+	Start, End netip.Addr
+}
+
+// Holds reports whether an address falls inside this network's range.
+func (n Network) Holds(addr netip.Addr) bool {
+	if !addr.IsValid() || !n.Start.IsValid() || !n.End.IsValid() {
+		return false
+	}
+	// Compare orders v4 before v6, so without this a v4 address would test as
+	// being inside every v6 range — an answer that is wrong rather than absent.
+	if addr.Is4() != n.Start.Is4() {
+		return false
+	}
+	return addr.Compare(n.Start) >= 0 && addr.Compare(n.End) <= 0
+}
+
+// place returns the first network holding the address.
+func place(addr netip.Addr, networks []Network) (string, bool) {
+	for _, n := range networks {
+		if n.Holds(addr) {
+			return n.Interface, true
+		}
+	}
+	return "", false
 }
 
 // Origin says where a resolved value came from, so a UI can distinguish what it
@@ -82,6 +126,18 @@ type Resolved struct {
 
 	// FixedIP is the reserved address, owned by dhcp, empty if none.
 	FixedIP string
+
+	// Network is which of this router's networks the device is on, and
+	// NetworkOrigin says how we know: OriginObserved when a source saw it there,
+	// OriginDetected when it was placed by which range its address falls in.
+	//
+	// The distinction is the same one Name and Category make, and it matters for
+	// the same reason. Observed is a fact from the kernel; detected is an
+	// inference that a hand-set address outside every pool will quietly fail, so
+	// a map drawn from this must be able to say "we could not place it" rather
+	// than filing it under a plausible network.
+	Network       string
+	NetworkOrigin Origin
 }
 
 // Online reports whether any source considers the device current.
@@ -106,7 +162,7 @@ func (r Resolved) DisplayName() string {
 // Dropping any of those three would lose a real case — the printer named last
 // year that is currently powered off, the guest phone nobody has named, and the
 // reservation made for a device that has not connected yet.
-func Build(cfg Config, sightings []Sighting, fixed map[string]string) ([]Resolved, []Problem) {
+func Build(cfg Config, sightings []Sighting, fixed map[string]string, networks []Network) ([]Resolved, []Problem) {
 	presence, problems := Merge(sightings)
 
 	macs := map[string]bool{}
@@ -122,7 +178,7 @@ func Build(cfg Config, sightings []Sighting, fixed map[string]string) ([]Resolve
 
 	out := make([]Resolved, 0, len(macs))
 	for mac := range macs {
-		out = append(out, resolve(mac, cfg, presence, fixed))
+		out = append(out, resolve(mac, cfg, presence, fixed, networks))
 	}
 
 	// Sorted by the name the operator reads, not by presence. Sorting online
@@ -140,12 +196,35 @@ func Build(cfg Config, sightings []Sighting, fixed map[string]string) ([]Resolve
 }
 
 // resolve applies the resolution order for one device.
-func resolve(mac string, cfg Config, presence map[string]Presence, fixed map[string]string) Resolved {
+func resolve(mac string, cfg Config, presence map[string]Presence, fixed map[string]string, networks []Network) Resolved {
 	r := Resolved{MAC: mac}
 
 	if p, ok := presence[mac]; ok {
 		copied := p
 		r.Presence = &copied
+	}
+
+	// Which network the device is on, preferring what a source actually saw.
+	// The neighbour table only knows devices it has heard from lately, so the
+	// range fallback is what keeps a sleeping phone on the map — and the two are
+	// complementary rather than redundant: ARP is the only thing that can place
+	// a statically-addressed device, whose address sits outside every pool.
+	if r.Presence != nil {
+		switch {
+		case len(r.Presence.Interfaces) > 0:
+			r.Network, r.NetworkOrigin = r.Presence.Interfaces[0], OriginObserved
+		default:
+			for _, ip := range r.Presence.IPs {
+				addr, err := netip.ParseAddr(ip)
+				if err != nil {
+					continue
+				}
+				if name, ok := place(addr, networks); ok {
+					r.Network, r.NetworkOrigin = name, OriginDetected
+					break
+				}
+			}
+		}
 	}
 
 	hostname := ""

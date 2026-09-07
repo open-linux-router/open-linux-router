@@ -1,6 +1,7 @@
 package devices
 
 import (
+	"net/netip"
 	"testing"
 	"time"
 )
@@ -32,7 +33,7 @@ func TestBuildUnionsIdentityPresenceAndReservations(t *testing.T) {
 	sightings := []Sighting{lease("bb:bb:bb:bb:bb:bb", "192.168.1.50", "guest-phone", true)}
 	fixed := map[string]string{"cc:cc:cc:cc:cc:cc": "192.168.1.9"}
 
-	list, problems := Build(cfg, sightings, fixed)
+	list, problems := Build(cfg, sightings, fixed, nil)
 	if len(problems) != 0 {
 		t.Errorf("unexpected problems: %s", problemStrings(problems))
 	}
@@ -76,7 +77,7 @@ func TestBuildOperatorCategoryBeatsDetection(t *testing.T) {
 	}}}
 	sightings := []Sighting{lease("aa:aa:aa:aa:aa:aa", "192.168.1.20", "laserjet-m140we", true)}
 
-	list, _ := Build(cfg, sightings, nil)
+	list, _ := Build(cfg, sightings, nil, nil)
 	got := find(t, list, "aa:aa:aa:aa:aa:aa")
 
 	if got.Category != CategoryServer {
@@ -95,7 +96,7 @@ func TestBuildOperatorCategoryBeatsDetection(t *testing.T) {
 func TestBuildFallsBackToDetection(t *testing.T) {
 	sightings := []Sighting{lease("aa:aa:aa:aa:aa:aa", "192.168.1.20", "Toms-iPhone", true)}
 
-	list, _ := Build(Config{}, sightings, nil)
+	list, _ := Build(Config{}, sightings, nil, nil)
 	got := find(t, list, "aa:aa:aa:aa:aa:aa")
 
 	if got.Category != CategoryPhone {
@@ -109,7 +110,7 @@ func TestBuildFallsBackToDetection(t *testing.T) {
 func TestBuildFallsBackToUnknown(t *testing.T) {
 	sightings := []Sighting{lease("aa:aa:aa:aa:aa:aa", "192.168.1.20", "some-box", true)}
 
-	list, _ := Build(Config{}, sightings, nil)
+	list, _ := Build(Config{}, sightings, nil, nil)
 	got := find(t, list, "aa:aa:aa:aa:aa:aa")
 
 	if got.Category != CategoryUnknown {
@@ -126,7 +127,7 @@ func TestBuildNamePrecedence(t *testing.T) {
 	cfg := Config{Devices: []Device{{MAC: "aa:aa:aa:aa:aa:aa", Name: "Study laptop"}}}
 	sightings := []Sighting{lease("aa:aa:aa:aa:aa:aa", "192.168.1.20", "toms-macbook", true)}
 
-	list, _ := Build(cfg, sightings, nil)
+	list, _ := Build(cfg, sightings, nil, nil)
 	got := find(t, list, "aa:aa:aa:aa:aa:aa")
 
 	if got.Name != "Study laptop" || got.NameOrigin != OriginOperator {
@@ -135,14 +136,14 @@ func TestBuildNamePrecedence(t *testing.T) {
 
 	// Without a stored name, the observed hostname shows through — but marked
 	// as observed, not promoted into intent.
-	list2, _ := Build(Config{}, sightings, nil)
+	list2, _ := Build(Config{}, sightings, nil, nil)
 	got2 := find(t, list2, "aa:aa:aa:aa:aa:aa")
 	if got2.Name != "toms-macbook" || got2.NameOrigin != OriginObserved {
 		t.Errorf("Name = %q (%s), want the hostname marked observed", got2.Name, got2.NameOrigin)
 	}
 
 	// And with neither, the MAC — a device is never nameless on screen.
-	list3, _ := Build(Config{}, []Sighting{arp("dd:dd:dd:dd:dd:dd", "192.168.1.7", true)}, nil)
+	list3, _ := Build(Config{}, []Sighting{arp("dd:dd:dd:dd:dd:dd", "192.168.1.7", true)}, nil, nil)
 	got3 := find(t, list3, "dd:dd:dd:dd:dd:dd")
 	if got3.DisplayName() != "dd:dd:dd:dd:dd:dd" {
 		t.Errorf("DisplayName = %q, want the MAC", got3.DisplayName())
@@ -229,7 +230,7 @@ func TestBuildSortsByNameNotByPresence(t *testing.T) {
 	// Bravo is the only one online; it must not jump to the top.
 	online := []Sighting{lease("bb:bb:bb:bb:bb:bb", "192.168.1.50", "", true)}
 
-	list, _ := Build(cfg, online, nil)
+	list, _ := Build(cfg, online, nil, nil)
 	want := []string{"Alpha", "Bravo", "Charlie"}
 	for i, w := range want {
 		if list[i].Name != w {
@@ -238,7 +239,7 @@ func TestBuildSortsByNameNotByPresence(t *testing.T) {
 	}
 
 	// Taking Bravo offline must not move anything either.
-	offline, _ := Build(cfg, nil, nil)
+	offline, _ := Build(cfg, nil, nil, nil)
 	for i, w := range want {
 		if offline[i].Name != w {
 			t.Errorf("after going offline, position %d = %q, want %q", i, offline[i].Name, w)
@@ -256,9 +257,9 @@ func TestBuildIsDeterministic(t *testing.T) {
 		arp("dd:dd:dd:dd:dd:dd", "192.168.1.4", true),
 	}
 
-	first, _ := Build(cfg, sightings, nil)
+	first, _ := Build(cfg, sightings, nil, nil)
 	for i := 0; i < 20; i++ {
-		again, _ := Build(cfg, sightings, nil)
+		again, _ := Build(cfg, sightings, nil, nil)
 		for j := range first {
 			if first[j].MAC != again[j].MAC {
 				t.Fatalf("iteration %d differs at %d: %q vs %q", i, j, first[j].MAC, again[j].MAC)
@@ -268,7 +269,7 @@ func TestBuildIsDeterministic(t *testing.T) {
 }
 
 func TestBuildEmpty(t *testing.T) {
-	list, problems := Build(Config{}, nil, nil)
+	list, problems := Build(Config{}, nil, nil, nil)
 	if len(list) != 0 {
 		t.Errorf("got %d devices, want an empty list rather than a failure", len(list))
 	}
@@ -283,4 +284,104 @@ func names(list []Resolved) []string {
 		out = append(out, r.DisplayName())
 	}
 	return out
+}
+
+// --- placing a device on a network ------------------------------------------
+
+func netw(iface, start, end string) Network {
+	return Network{
+		Interface: iface,
+		Start:     netip.MustParseAddr(start),
+		End:       netip.MustParseAddr(end),
+	}
+}
+
+// What a source saw beats what an address implies, because a range only ever
+// says where an address *would* come from.
+func TestBuildPrefersTheObservedInterface(t *testing.T) {
+	s := arp("aa:bb:cc:dd:ee:ff", "192.168.1.150", true)
+	s.Interface = "lan0"
+
+	list, _ := Build(Config{}, []Sighting{s}, nil,
+		[]Network{netw("iot0", "192.168.1.100", "192.168.1.200")})
+
+	got := find(t, list, "aa:bb:cc:dd:ee:ff")
+	if got.Network != "lan0" {
+		t.Errorf("Network = %q, want lan0 — the neighbour table saw it there", got.Network)
+	}
+	if got.NetworkOrigin != OriginObserved {
+		t.Errorf("NetworkOrigin = %q, want %q", got.NetworkOrigin, OriginObserved)
+	}
+}
+
+// A lease carries no interface, so an away device can only be placed by range.
+// Getting this wrong empties the map of everything that is asleep.
+func TestBuildPlacesALeaseByItsRange(t *testing.T) {
+	list, _ := Build(Config{}, []Sighting{lease("aa:bb:cc:dd:ee:ff", "192.168.30.142", "tv", false)}, nil,
+		[]Network{
+			netw("lan0", "192.168.1.100", "192.168.1.200"),
+			netw("iot0", "192.168.30.100", "192.168.30.240"),
+		})
+
+	got := find(t, list, "aa:bb:cc:dd:ee:ff")
+	if got.Network != "iot0" {
+		t.Errorf("Network = %q, want iot0", got.Network)
+	}
+	if got.NetworkOrigin != OriginDetected {
+		t.Errorf("NetworkOrigin = %q, want %q — a range is an inference", got.NetworkOrigin, OriginDetected)
+	}
+}
+
+// The reserved printer: its address sits outside every pool by design. Left
+// unplaced rather than filed under the nearest network, because a guess drawn
+// on a map reads exactly like a fact.
+func TestBuildLeavesAnUnplaceableDeviceEmpty(t *testing.T) {
+	list, _ := Build(Config{}, []Sighting{lease("aa:bb:cc:dd:ee:ff", "192.168.1.10", "printer", true)}, nil,
+		[]Network{netw("lan0", "192.168.1.100", "192.168.1.200")})
+
+	got := find(t, list, "aa:bb:cc:dd:ee:ff")
+	if got.Network != "" {
+		t.Errorf("Network = %q, want empty — .10 is outside the pool", got.Network)
+	}
+	if got.NetworkOrigin != OriginNone {
+		t.Errorf("NetworkOrigin = %q, want %q", got.NetworkOrigin, OriginNone)
+	}
+}
+
+// A stored device nothing has ever seen has no address to place it by.
+func TestBuildPlacesNothingWithoutPresence(t *testing.T) {
+	cfg := Config{Devices: []Device{{MAC: "aa:bb:cc:dd:ee:ff", Name: "Spare laptop"}}}
+
+	list, _ := Build(cfg, nil, nil, []Network{netw("lan0", "192.168.1.100", "192.168.1.200")})
+
+	if got := find(t, list, "aa:bb:cc:dd:ee:ff"); got.Network != "" {
+		t.Errorf("Network = %q, want empty", got.Network)
+	}
+}
+
+func TestNetworkHolds(t *testing.T) {
+	n := netw("lan0", "192.168.1.100", "192.168.1.200")
+
+	for _, tc := range []struct {
+		addr string
+		want bool
+	}{
+		{"192.168.1.100", true}, // inclusive at the bottom
+		{"192.168.1.200", true}, // and at the top
+		{"192.168.1.150", true},
+		{"192.168.1.99", false},
+		{"192.168.1.201", false},
+		{"10.0.0.5", false},
+		// netip.Addr.Compare orders v4 before v6, so a v6 range would otherwise
+		// hold every v4 address on the box.
+		{"2001:db8::1", false},
+	} {
+		if got := n.Holds(netip.MustParseAddr(tc.addr)); got != tc.want {
+			t.Errorf("Holds(%s) = %v, want %v", tc.addr, got, tc.want)
+		}
+	}
+
+	if (Network{Interface: "lan0"}).Holds(netip.MustParseAddr("192.168.1.1")) {
+		t.Error("a network with no range should hold nothing")
+	}
 }

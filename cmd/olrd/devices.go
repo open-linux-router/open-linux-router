@@ -13,9 +13,10 @@ import (
 //
 // They live here, in the binary that mounts both, rather than inside either
 // module. That is what keeps design.md §4.1's arrow pointing one way: `devices`
-// declares the interfaces it needs (PresenceSource, FixedAddressView) and never
-// imports `dhcp`, while `dhcp` stays unaware that an inventory exists. The two
-// are introduced at the one place that already knows the whole module list.
+// declares the interfaces it needs (PresenceSource, FixedAddressView,
+// NetworkView) and never imports `dhcp`, while `dhcp` stays unaware that an
+// inventory exists. The two are introduced at the one place that already knows
+// the whole module list.
 
 // dhcpPresence reads the lease database as sightings.
 type dhcpPresence struct {
@@ -82,6 +83,43 @@ func (d dhcpPresence) Presence(_ context.Context) ([]devices.Sighting, []devices
 // §4.1 forbids.
 type dhcpFixedAddresses struct {
 	applier dhcp.Applier
+}
+
+// dhcpNetworks reads the pools as the ranges served on each interface.
+//
+// This is what lets the device list place a device the neighbour table has
+// forgotten — an away phone still holds a lease, and its address still falls
+// inside the pool it came from. Read per request through dhcp's own Load, for
+// the same reason dhcpFixedAddresses is: `dhcp` stays the single owner of the
+// range and no second copy exists to drift.
+//
+// Reservations are deliberately not consulted here. A reserved address normally
+// sits *outside* the pool it belongs beside, so treating one as a range of its
+// own would place a device on evidence no stronger than the operator having
+// typed an address — and ARP already places that device properly whenever it is
+// awake.
+type dhcpNetworks struct {
+	applier dhcp.Applier
+}
+
+func (d dhcpNetworks) Networks(_ context.Context) ([]devices.Network, error) {
+	cfg, err := d.applier.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]devices.Network, 0, len(cfg.Pools))
+	for _, p := range cfg.Pools {
+		if !p.Start.IsValid() || !p.End.IsValid() {
+			continue
+		}
+		out = append(out, devices.Network{
+			Interface: p.Interface,
+			Start:     p.Start,
+			End:       p.End,
+		})
+	}
+	return out, nil
 }
 
 func (d dhcpFixedAddresses) FixedAddresses(_ context.Context) (map[string]string, error) {

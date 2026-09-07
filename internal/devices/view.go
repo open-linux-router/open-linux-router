@@ -62,6 +62,17 @@ type deviceView struct {
 	// FixedIP is the reserved address. Owned by dhcp; joined here so that no
 	// client has to reimplement the join (§11.1).
 	FixedIP string `json:"fixed_ip,omitempty"`
+
+	// Network is which of this router's networks the device is on, and
+	// NetworkOrigin is how we know — "observed" when the neighbour table said
+	// so, "detected" when it was placed by which range its address falls in.
+	//
+	// Empty means it could not be placed, and a client has to render that as its
+	// own answer: a device with a hand-set address outside every range is
+	// somewhere on the network, and filing it under a plausible guess would be
+	// worse than saying we do not know.
+	Network       string `json:"network,omitempty"`
+	NetworkOrigin Origin `json:"network_origin,omitempty"`
 }
 
 func viewDevice(r Resolved) deviceView {
@@ -80,6 +91,8 @@ func viewDevice(r Resolved) deviceView {
 		Online:           r.Online(),
 		Seen:             r.Presence != nil,
 		FixedIP:          r.FixedIP,
+		Network:          r.Network,
+		NetworkOrigin:    r.NetworkOrigin,
 	}
 	if r.Presence != nil {
 		v.IPs = r.Presence.IPs

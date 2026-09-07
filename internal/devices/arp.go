@@ -104,12 +104,20 @@ func (a ARP) Presence(_ context.Context) ([]Sighting, []Problem, error) {
 			continue
 		}
 
-		// Field 5 is the interface the neighbour was seen on. Deliberately not
-		// carried: §4.1 says dependents key off a group, not a kernel interface
-		// name, and surfacing "enp3s0" to an operator would be exactly the
-		// implementation detail groups exist to hide. It becomes interesting
-		// again when `link` can turn it into a network name.
-		ip, rawFlags, mac := fields[0], fields[2], fields[3]
+		// Field 5 is the interface the neighbour was seen on.
+		//
+		// This was deliberately dropped until now, on the grounds that §4.1
+		// makes the group the operator-facing object and "enp3s0" exactly the
+		// implementation detail a group exists to hide. It is carried again
+		// because a map of which network a device is on has no other way to
+		// place a statically-addressed one: an address can be matched against a
+		// pool's range, but a reservation and a hand-set address both sit
+		// outside it — which is precisely the printer this source exists for.
+		//
+		// The name still does not reach an operator raw. It is a key the UI
+		// joins against networks it already names, and it goes back to being an
+		// implementation detail as soon as `link` can name them itself.
+		ip, rawFlags, mac, iface := fields[0], fields[2], fields[3], fields[5]
 
 		// An unresolved entry names no hardware, so there is no device to
 		// report. Skipped silently: it is a normal transient state, not a fault.
@@ -127,10 +135,11 @@ func (a ARP) Presence(_ context.Context) ([]Sighting, []Problem, error) {
 		}
 
 		out = append(out, Sighting{
-			MAC:    mac,
-			IP:     ip,
-			Source: SourceARP,
-			Active: flags&atfCom != 0,
+			MAC:       mac,
+			IP:        ip,
+			Interface: iface,
+			Source:    SourceARP,
+			Active:    flags&atfCom != 0,
 			// No hostname: ARP carries none. Leaving it empty rather than
 			// substituting something keeps Merge's "a lease heard the client's
 			// own name" rule meaningful.

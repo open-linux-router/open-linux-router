@@ -237,6 +237,18 @@ export interface DeviceRow {
 
   /** The reserved address. Owned by dhcp, joined here so no client repeats it. */
   fixed_ip?: string
+
+  /**
+   * Which of this router's networks the device is on, and how we know.
+   *
+   * `observed` is the neighbour table reporting the interface the device
+   * answered on; `detected` is it having been placed by which pool range its
+   * address falls in. Absent means neither could answer — a stored device
+   * nothing has seen, or one whose address sits outside every range — and the
+   * map has to say so rather than file it under a plausible network.
+   */
+  network?: string
+  network_origin?: Origin
 }
 
 export interface DeviceList {

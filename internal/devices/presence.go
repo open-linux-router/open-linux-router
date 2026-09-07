@@ -43,6 +43,12 @@ type Sighting struct {
 	Hostname string
 	Source   Source
 
+	// Interface is the kernel interface the source saw the device on, empty
+	// when the source cannot say. Only ARP can today — a lease file records no
+	// interface — which is why a device the neighbour table has aged out has to
+	// be placed by its address instead. See NetworkView in list.go.
+	Interface string
+
 	// Active means the source considers this current: an unexpired lease, or a
 	// reachable neighbour entry. A stale entry is still reported — it is how
 	// "this was here yesterday" gets on screen — but it is not presence.
@@ -76,6 +82,13 @@ type Presence struct {
 	// moved between pools briefly has two — collapsing that to one field would
 	// mean picking a winner arbitrarily and hiding the interesting case.
 	IPs []string
+
+	// Interfaces is every interface a source saw this device on, deduplicated.
+	// Plural for the reason IPs is plural: a device that moved between networks
+	// legitimately has two, and collapsing that to one would mean picking a
+	// winner arbitrarily. Empty when no source could say, which is the normal
+	// case for a device that is away — its lease outlives its neighbour entry.
+	Interfaces []string
 
 	// Hostname is what the client called itself, when any source heard it.
 	Hostname string
@@ -149,6 +162,10 @@ func Merge(sightings []Sighting) (map[string]Presence, []Problem) {
 			p.IPs = append(p.IPs, ip)
 		}
 
+		if iface := strings.TrimSpace(s.Interface); iface != "" && !slices.Contains(p.Interfaces, iface) {
+			p.Interfaces = append(p.Interfaces, iface)
+		}
+
 		// A DHCP lease heard the client state its own name; ARP never carries
 		// one. So a lease hostname replaces whatever else is there, and any
 		// other source only fills a gap.
@@ -175,6 +192,7 @@ func Merge(sightings []Sighting) (map[string]Presence, []Problem) {
 	// network produce byte-identical JSON and a UI does not repaint for nothing.
 	for mac, p := range out {
 		slices.Sort(p.IPs)
+		slices.Sort(p.Interfaces)
 		slices.Sort(p.Sources)
 		out[mac] = p
 	}
