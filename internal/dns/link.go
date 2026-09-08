@@ -1,28 +1,23 @@
 package dns
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/netip"
-	"os"
 	"sort"
-	"strings"
 )
 
 // LinkView is this module's read-only window onto the link module.
 //
 // design.md §4.1 fixes the direction: dns depends on link, reads link's facts
 // through link, and never keeps its own copy. The interface is declared here,
-// by the consumer, for the two reasons internal/dhcp/link.go gives — it states
+// by the consumer, for the reason internal/dhcp/link.go gives — it states
 // exactly the facts dns needs rather than exposing all of link's surface, and
-// it lets this module be built and tested before link exists.
+// dns imports nothing to get them. cmd/olrd adapts link's neutral Info into it.
 //
-// It is a near-twin of dhcp's, with one method more. dhcp names an interface
-// and asks about it; dns names an *address* and has to find which interface, if
-// any, owns it. Two near-identical stand-ins is a cost worth paying over one
-// shared one, because both die the day link lands and neither should acquire a
-// second consumer in the meantime.
+// It is a near-twin of dhcp's, with one method more, and the extra method is
+// why they are not one type. dhcp names an interface and asks about it; dns
+// names an *address* and has to find which interface, if any, owns it.
 type LinkView interface {
 	// Interface returns what is known about an interface, or
 	// ErrNoSuchInterface.
@@ -121,12 +116,11 @@ func LANPrefixes(links LinkView, listen []netip.AddrPort) []netip.Prefix {
 	return out
 }
 
-// StaticLinks is a LinkView backed by a map.
+// StaticLinks is a LinkView backed by a map, for tests.
 //
-// It is what the tests use, and it is also the honest stand-in until the link
-// module lands: `olr dns` run against a config file needs interface facts from
-// somewhere, and inventing them from the local kernel would be exactly the
-// private copy §4.1 forbids.
+// It used to be a production path too: olrd read a hand-written JSON file into
+// one of these because there was no link module to ask. There is now, and it
+// reads the kernel — so this is the fixture and nothing else.
 type StaticLinks map[string]LinkInfo
 
 // Interface implements LinkView.
@@ -158,26 +152,4 @@ func (s StaticLinks) Interfaces() ([]LinkInfo, error) {
 		out = append(out, info)
 	}
 	return out, nil
-}
-
-// LoadLinks reads interface facts from a JSON file keyed by interface name:
-//
-//	{"br-lan": {"adopted": true, "up": true, "prefixes": ["192.168.1.1/24"]}}
-//
-// Scaffolding with a known expiry date, exactly as internal/dhcp's is. Once the
-// link module exists (milestone 1) it satisfies LinkView directly and this goes
-// away — dns must not grow its own way of discovering interfaces, because a
-// second source for the same fact is the drift §4.1 is structured to prevent.
-func LoadLinks(path string) (StaticLinks, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading interface facts: %w", err)
-	}
-	dec := json.NewDecoder(strings.NewReader(string(data)))
-	dec.DisallowUnknownFields()
-	var links StaticLinks
-	if err := dec.Decode(&links); err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", path, err)
-	}
-	return links, nil
 }

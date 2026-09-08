@@ -31,6 +31,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/devices"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
+	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/mcp"
 	"github.com/open-linux-router/open-linux-router/internal/routing"
 	"github.com/open-linux-router/open-linux-router/internal/webui"
@@ -62,7 +63,7 @@ func run() error {
 	flag.StringVar(&opts.listen, "listen", "",
 		"additional TCP address for the WebUI and remote clients, e.g. 127.0.0.1:8080 (off by default)")
 	flag.StringVar(&opts.links, "links", "",
-		"JSON file of interface facts, until the link module lands")
+		"read interface facts from this JSON file instead of the kernel (development only)")
 	flag.StringVar(&opts.root, "root", "",
 		"prefix every configuration and state path with this directory (development only)")
 	flag.StringVar(&opts.tokenPath, "token-file", core.TokenPath,
@@ -89,15 +90,7 @@ func run() error {
 	// Mounted as a literal list. The set is bounded and known at compile time,
 	// so there is no registry and no Module interface to satisfy (§3.1/§3.2).
 
-	links, err := loadLinks(opts.links)
-	if err != nil {
-		return err
-	}
-	dnsLinks, err := loadDNSLinks(opts.links)
-	if err != nil {
-		return err
-	}
-	routingLinks, err := loadRoutingLinks(opts.links)
+	source, err := interfaceSource(opts.links)
 	if err != nil {
 		return err
 	}
@@ -106,6 +99,8 @@ func run() error {
 	// literally here for the same reason the mounts below are: the set is
 	// bounded and known at compile time (§3.2), and the order it is given in is
 	// the order the document is written in.
+	// `link` comes first because everything else reads it: an interface has to
+	// have been handed over before a pool, a resolver or an exit may name it.
 	// `dhcp` then `dns` is §3.2's own literal list, and it is also the order
 	// they matter in on a box being brought up: addresses first, then names.
 	// `devices` follows both rather than leading them. Its identity half is a
@@ -116,8 +111,17 @@ func run() error {
 	// clients have addresses and names — and because docs/gateway.md §4 has its
 	// domain half depending on `dns` owning :53, not the other way round.
 	store := core.NewStore(core.RootedConfigPath(opts.root),
-		dhcp.ModuleName, dns.ModuleName, devices.ModuleName, routing.ModuleName)
+		link.ModuleName, dhcp.ModuleName, dns.ModuleName, devices.ModuleName, routing.ModuleName)
 	checkStore(store, logger)
+
+	// The three consumers' windows onto link, all backed by one Facts: the
+	// kernel for addresses and state, the document for adoption. Reading both
+	// per request is what keeps §4.5 true — there is no cached copy of either
+	// to go stale while olrd is running.
+	facts := link.Facts{Source: source, Store: store}
+	links := dhcpLinkView{facts: facts}
+	dnsLinks := dnsLinkView{facts: facts}
+	routingLinks := routingLinkView{facts: facts}
 
 	applier, err := dhcp.NewApplierAt(store, links, opts.root)
 	if err != nil {
@@ -133,6 +137,18 @@ func run() error {
 	}
 
 	srv := core.New()
+
+	// `link` is mounted first, matching the store's order and the order a box
+	// is brought up in. It is the only module here that drives nothing: adopting
+	// an interface writes a line of consent and touches neither the kernel nor a
+	// daemon, which is precisely what lets §7 promise that installing olr
+	// changes nothing until you say so.
+	srv.Mount(link.ModuleName, link.HTTP{
+		Applier: link.Applier{Store: store, Source: source},
+		Lock:    srv.ApplyLock(),
+		Events:  srv.Events(),
+	}.Routes(), link.Config{})
+
 	srv.Mount(dhcp.ModuleName, dhcp.HTTP{
 		Applier: applier,
 		Lock:    srv.ApplyLock(),
@@ -368,58 +384,6 @@ func checkStore(store *core.Store, logger *slog.Logger) {
 		logger.Warn("per-module configuration files found; they are read only when the document is absent and can be deleted once it exists",
 			"document", store.Path(), "files", strings.Join(legacy, ", "))
 	}
-}
-
-// loadLinks reads the interface facts the dhcp module validates pools against.
-//
-// A stand-in until the link module lands (§9 milestone 1). Pools are keyed by
-// kernel interface name here; design.md §4.4 keys them by group, so this whole
-// path changes shape when link arrives — it is scaffolding, not a design.
-func loadLinks(path string) (dhcp.LinkView, error) {
-	if path == "" {
-		// No facts means validation cannot check a pool against its subnet.
-		// Empty rather than fatal so olrd starts on a box with no config yet.
-		return dhcp.StaticLinks{}, nil
-	}
-	links, err := dhcp.LoadLinks(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", path, err)
-	}
-	return links, nil
-}
-
-// loadDNSLinks reads the same file again, into the dns module's own view.
-//
-// Twice, rather than once into a shared type, and deliberately: design.md §4.1
-// has each consumer declare the facts it needs, and the two modules do not need
-// the same ones — dhcp names an interface and asks about it, dns names an
-// address and has to find which interface owns it. Both of these stand-ins are
-// deleted the day the link module lands and satisfies both interfaces directly,
-// so a shared abstraction here would be one built for a pair of things with a
-// known expiry date.
-func loadDNSLinks(path string) (dns.LinkView, error) {
-	if path == "" {
-		return dns.StaticLinks{}, nil
-	}
-	links, err := dns.LoadLinks(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", path, err)
-	}
-	return links, nil
-}
-
-// loadRoutingLinks is the third of them, for the third module that needs
-// interface facts and does not need quite the same ones — routing matches
-// traffic on a network's *prefixes*, and checks a next hop against them.
-func loadRoutingLinks(path string) (routing.LinkView, error) {
-	if path == "" {
-		return routing.StaticLinks{}, nil
-	}
-	links, err := routing.LoadLinks(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", path, err)
-	}
-	return links, nil
 }
 
 // startRouting programs stored routing intent and starts the health probes.

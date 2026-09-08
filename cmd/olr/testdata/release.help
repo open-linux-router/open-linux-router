@@ -1,0 +1,17 @@
+Take an interface back from olr.
+
+Nothing on the interface is undone — releasing does not remove an address
+or stop a daemon. What it removes is permission, so any address range,
+resolver or exit still naming this interface will be refused the next
+time it is applied. Remove those first if you mean to stop serving on it.
+
+Usage:
+  olr release <interface> [flags]
+
+Flags:
+  -h, --help   help for release
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

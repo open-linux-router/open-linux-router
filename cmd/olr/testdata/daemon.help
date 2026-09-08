@@ -5,6 +5,7 @@ Usage:
   olr daemon [command]
 
 Available Commands:
+  listen      Serve the web UI on a network address
   restart     Restart olrd
   start       Start olrd
   status      Report whether olrd is running

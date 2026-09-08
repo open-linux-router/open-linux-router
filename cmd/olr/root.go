@@ -6,6 +6,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/cli"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
+	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/routing"
 )
 
@@ -26,9 +27,16 @@ func newRoot() *cobra.Command {
 	// Modules are mounted explicitly. The list is bounded, so it is a literal
 	// list rather than a registry (design.md §3.2).
 	root.AddCommand(
+		link.Command(),
 		dhcp.Command(),
 		dns.Command(),
 		routing.Command(),
 	)
+
+	// `adopt` and `release` are hub-level operations in design.md §6.1's list,
+	// but they write the link module's document, so they are built there and
+	// mounted here. internal/cli stays free of module imports, which is what
+	// keeps `olr --help` a description of the tree rather than of the modules.
+	root.AddCommand(link.OperationCommands()...)
 	return root
 }

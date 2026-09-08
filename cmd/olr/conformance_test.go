@@ -373,10 +373,11 @@ func TestTopLevelCommandsAreGrouped(t *testing.T) {
 func TestHelpIsUnchanged(t *testing.T) {
 	for _, path := range [][]string{
 		{},
+		{"link"}, {"link", "show"}, {"adopt"}, {"release"},
 		{"dhcp"}, {"dhcp", "show"}, {"dhcp", "add"}, {"dhcp", "set"}, {"dhcp", "rm"},
 		{"dns"}, {"dns", "show"}, {"dns", "add"}, {"dns", "set"}, {"dns", "rm"},
 		{"routing"}, {"routing", "show"}, {"routing", "add"}, {"routing", "set"}, {"routing", "rm"},
-		{"daemon"},
+		{"daemon"}, {"daemon", "listen"},
 	} {
 		name := "olr"
 		if len(path) > 0 {

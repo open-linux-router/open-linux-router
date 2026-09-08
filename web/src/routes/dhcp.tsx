@@ -31,6 +31,7 @@ import { PlanDiff, PlanReasons, impactHint } from '@/features/dhcp/impact'
 import { useDhcpConfig, useDhcpLeases, useDhcpStatus } from '@/features/dhcp/queries'
 import { ReservationDialog } from '@/features/dhcp/reservation-dialog'
 import { useDhcpApply } from '@/features/dhcp/use-apply'
+import { InterfacesCard } from '@/features/link/interfaces-card'
 import type { DhcpStatus, PoolUsage } from '@/lib/api-types'
 import type { DhcpConfig, Pool, Reservation } from '@/lib/config-types'
 
@@ -102,6 +103,12 @@ export function DhcpPage() {
         busy={applier.busy}
         onChange={change}
       />
+
+      {/* Above the ranges, because it gates them: a range on an interface
+          nobody handed over is refused by the server, so on a fresh install
+          every field below this card rejects whatever you type until one switch
+          here is on. */}
+      <InterfacesCard dhcp={current} disabled={applier.busy} />
 
       <PoolsCard config={current} onChange={change} busy={applier.busy} usage={leases.data?.usage} />
 

@@ -9,6 +9,7 @@ Usage:
 Modules:
   dhcp        DHCP server (dnsmasq)
   dns         DNS resolver and policy (olr-dnsd + unbound)
+  link        Network interfaces olr has been given
   routing     Exits and which networks use them
 
 Operations:

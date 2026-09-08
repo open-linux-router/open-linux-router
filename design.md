@@ -748,6 +748,16 @@ a second module doubles the hand-written surface.
 
 SPA embedded in the binary, a pure client of the API.
 
+**Reachable only when asked.** `olrd` binds its control socket always and a TCP
+address never, unless `--listen` says otherwise — so a fresh install has a
+working `olr` and a UI nothing can reach. That follows from §7: `apt install`
+must not put an admin port on a LAN uninvited, and a router is exactly the box
+where that matters. The cost is a step nobody guesses, so it is a command rather
+than a documented file edit — `olr daemon listen 0.0.0.0:8080` writes
+`/etc/open-linux-router/olrd.env`, restarts the unit, and prints where the token
+is. Making it *easy* to say yes is a different thing from saying yes on the
+operator's behalf, and only the second one is a surprise.
+
 **Composite tasks must live in core, not the UI.** "Set up a guest network"
 touches `link` (VLAN), `dhcp` (pool), `dns` (scope), `firewall` (isolation),
 `wifi` (SSID). If that orchestration lives in the WebUI, the CLI, the API, and
@@ -815,6 +825,20 @@ nothing.
 - `olr adopt <iface>` — take ownership from NetworkManager/systemd-networkd,
   recording prior state
 - `olr release <iface>` — hand it back
+
+  **Built, in the half that gates the other modules.** `olr adopt` and `olr
+  release` record consent in the `link` section of the document, and `dhcp`,
+  `dns` and `routing` each refuse an interface that is not in it. The other
+  half — actually taking the interface from NetworkManager or
+  systemd-networkd, and recording prior state so `release` can put it back —
+  waits for the `link` module of §9 milestone 1. Until then adopting is
+  permission only: it sets no address, starts no service, and leaves whatever
+  is managing the interface managing it.
+
+  That is a smaller promise than this section makes, and it is the honest one
+  for a box where olr does not yet own addressing. It is also the safer half to
+  ship first: consent that changes nothing cannot disconnect anybody, which is
+  what the first line of this section is about.
 - generated files live under `/etc/open-linux-router/rendered/`, included into
   the real daemons' configs; user files are never hand-edited
 - every generated file carries an ownership header
@@ -913,6 +937,29 @@ What that jump does **not** buy is milestone 1. Pools are still keyed by kernel
 interface name, so the DHCP screen is keyed on something §4.4 says is an
 implementation detail, and it is scaffolding until `link` lands groups. Nothing
 downstream should be built on that key in the meantime.
+
+**A minimal `link` landed early, and it is not milestone 1 either.** It owns one
+field — the list of adopted interface names — plus a kernel reader for the
+observed half. It exists because the adopt-only rule (§3.4, §7) was being
+enforced by three modules against a fact with nowhere to live: `dhcp`, `dns` and
+`routing` each refused an interface nobody had handed over, `olr adopt` was a
+stub, and the flag was reachable only by hand-writing a JSON file that olrd's
+own systemd unit never passed. The result was that a packaged install could not
+configure DHCP at all — every pool failed validation with "no such interface". A
+safety rule nobody can satisfy is not a safety rule.
+
+What it deliberately does not do: it lands no groups, sets no addresses, brings
+no interface up, and takes nothing from NetworkManager. Pools stay keyed by
+kernel interface name, exactly as above, so the retrofit this section warns
+about is neither done nor made harder. Milestone 1 still owes all of it.
+
+Two things about it are worth keeping when the real module arrives. The observed
+half — addresses, up, carrier — is read from the kernel per request and never
+stored, so §4.5 holds by construction rather than by discipline; the file it
+replaced was a second copy that could and did disagree with the machine. And
+adoption is the only *stored* half, which is what makes `olr adopt` a
+one-sentence write that touches nothing on the box — the property §7 needs when
+it promises that installing changes nothing.
 
 ---
 

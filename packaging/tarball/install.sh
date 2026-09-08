@@ -59,6 +59,13 @@ install -m 0644 -D systemd/olr-dns.service "$UNITDIR/olr-dns.service"
 install -m 0644 -D systemd/olr-dnsd.service "$UNITDIR/olr-dnsd.service"
 install -d -m 0755 /etc/open-linux-router
 
+# olrd's arguments, and in practice the one switch that matters: whether the
+# web UI is reachable from the network. Never overwritten — an upgrade must not
+# silently close a UI the operator opened.
+if [ ! -f /etc/open-linux-router/olrd.env ]; then
+	install -m 0644 olrd.env /etc/open-linux-router/olrd.env
+fi
+
 CONF=/etc/open-linux-router/rendered/dhcp/dnsmasq.conf
 if [ "$DNSMASQ" != /usr/sbin/dnsmasq ]; then
 	mkdir -p /etc/systemd/system/olr-dhcp.service.d
@@ -113,6 +120,14 @@ if [ -d /run/systemd/system ]; then
 	echo "olrd is running. The backend units are intentionally left disabled;"
 	echo "each is enabled when you configure its module (\`olr dhcp enable\`,"
 	echo "\`olr dns enable\`)."
+	echo
+	echo "olrd listens on its control socket only, so the web UI is not reachable"
+	echo "from the network yet. To open it:"
+	echo
+	echo "  sudo olr daemon listen 0.0.0.0:8080"
+	echo
+	echo "then browse to http://<this box>:8080 and paste the token from"
+	echo "/etc/open-linux-router/api-token when asked."
 else
 	echo "No running systemd detected; skipped enabling olrd."
 fi

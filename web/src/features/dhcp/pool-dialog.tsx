@@ -19,6 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useInterfaces } from '@/features/link/queries'
+import type { InterfaceRow } from '@/lib/api-types'
 import type { Pool, RouterAdvertisementMode } from '@/lib/config-types'
 
 // The RA vocabulary comes from the published schema (RAMode.JSONSchema in Go),
@@ -62,8 +64,37 @@ export function PoolDialog({
   const [draft, setDraft] = useState<Pool>(initial ?? EMPTY)
   const editing = initial !== undefined
 
+  // Only the interfaces this router has been given: a range on anything else is
+  // refused by the server (design.md §3.4), so offering the rest would be
+  // offering choices that cannot work. The Interfaces card above is where that
+  // set is changed, and the empty state below points at it.
+  const interfaces = useInterfaces()
+  const adopted = (interfaces.data?.interfaces ?? []).filter((i) => i.adopted && !i.loopback)
+  const chosen = adopted.find((i) => i.name === draft.interface)
+
   function field<K extends keyof Pool>(key: K, value: Pool[K]) {
     setDraft((d) => ({ ...d, [key]: value }))
+  }
+
+  /**
+   * Choosing an interface fills in a range that will pass validation.
+   *
+   * The numbers come from the server (internal/link suggestRange), which knows
+   * the subnet and excludes the three addresses a range must not contain — the
+   * network, the broadcast, and the router's own. Deriving them here would be a
+   * second implementation of subnet arithmetic that could disagree with the
+   * validator about what is legal.
+   *
+   * Only ever fills blanks. Re-picking an interface must not silently discard a
+   * range somebody typed.
+   */
+  function chooseInterface(row: InterfaceRow) {
+    setDraft((d) => ({
+      ...d,
+      interface: row.name,
+      start: d.start || row.suggested_start || '',
+      end: d.end || row.suggested_end || '',
+    }))
   }
 
   // Only the fields the server requires are checked here. Everything else —
@@ -93,18 +124,55 @@ export function PoolDialog({
         <div className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="pool-interface">Interface</Label>
-            <Input
-              id="pool-interface"
-              placeholder="lan0"
-              value={draft.interface}
-              disabled={editing}
-              onChange={(e) => field('interface', e.target.value)}
-            />
-            {editing && (
-              <p className="text-xs text-muted-foreground">
-                The interface identifies this range and cannot be changed.
-                Remove and re-add to move it.
+            {editing ? (
+              <>
+                <Input id="pool-interface" value={draft.interface} disabled />
+                <p className="text-xs text-muted-foreground">
+                  The interface identifies this range and cannot be changed.
+                  Remove and re-add to move it.
+                </p>
+              </>
+            ) : adopted.length === 0 ? (
+              <p
+                id="pool-interface"
+                className="rounded-lg border border-dashed px-3 py-4 text-center text-sm text-muted-foreground"
+              >
+                No interface has been given to this router yet. Switch one on
+                under Interfaces above, then come back.
               </p>
+            ) : (
+              <>
+                <Select
+                  value={draft.interface}
+                  onValueChange={(name) => {
+                    const row = adopted.find((i) => i.name === name)
+                    if (row) chooseInterface(row)
+                  }}
+                >
+                  <SelectTrigger id="pool-interface" className="w-full">
+                    <SelectValue placeholder="Choose an interface" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {adopted.map((row) => (
+                      <SelectItem key={row.name} value={row.name}>
+                        <span className="flex flex-col gap-0.5">
+                          <span className="font-mono">{row.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {row.subnet ?? 'no IPv4 address'}
+                          </span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {chosen && (
+                  <p className="text-xs text-muted-foreground">
+                    {chosen.subnet
+                      ? `Network ${chosen.subnet}. This router is ${chosen.address} on it.`
+                      : 'This interface has no IPv4 address, so a range here has no subnet to sit in.'}
+                  </p>
+                )}
+              </>
             )}
           </div>
 
@@ -178,27 +246,44 @@ export function PoolDialog({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="pool-domain">Domain</Label>
+              <Label htmlFor="pool-dns">DNS servers</Label>
               <Input
-                id="pool-domain"
-                placeholder="lan"
-                value={draft.domain ?? ''}
-                onChange={(e) => field('domain', e.target.value || undefined)}
+                id="pool-dns"
+                placeholder="the router itself"
+                value={(draft.dns ?? []).join(', ')}
+                onChange={(e) => field('dns', splitList(e.target.value))}
               />
             </div>
           </div>
 
+          {/* The trap this note exists for.
+
+              Both fields default to "this router", which is right when the box
+              is the gateway and wrong in the deployment people actually start
+              with: an olr box added to an existing network, serving addresses
+              while the old router still carries the traffic. Left blank there,
+              every device is handed a default route to a machine that is not
+              routing and a resolver that is not answering — and the symptom is
+              "the new router broke my internet", which is the worst possible
+              first impression to debug. */}
+          <p className="text-xs text-muted-foreground">
+            Blank means this router
+            {chosen?.address ? ` (${chosen.address})` : ''}. If something else on
+            this network still provides the internet connection, put its address
+            in both — otherwise devices will send their traffic and their name
+            lookups here.
+            <br />
+            DNS servers are comma separated.
+          </p>
+
           <div className="grid gap-2">
-            <Label htmlFor="pool-dns">DNS servers</Label>
+            <Label htmlFor="pool-domain">Domain</Label>
             <Input
-              id="pool-dns"
-              placeholder="the router itself"
-              value={(draft.dns ?? []).join(', ')}
-              onChange={(e) => field('dns', splitList(e.target.value))}
+              id="pool-domain"
+              placeholder="lan"
+              value={draft.domain ?? ''}
+              onChange={(e) => field('domain', e.target.value || undefined)}
             />
-            <p className="text-xs text-muted-foreground">
-              Comma separated. Blank advertises this router.
-            </p>
           </div>
         </div>
 

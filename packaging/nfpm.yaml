@@ -100,6 +100,16 @@ contents:
     file_info:
       mode: 0755
 
+  # olrd's arguments, and in practice the one switch that matters: whether the
+  # web UI is reachable from the network. A config file rather than an edited
+  # unit, so an upgrade cannot silently close a UI the operator opened — which
+  # is exactly what `type: config|noreplace` buys.
+  - src: packaging/olrd.env
+    dst: /etc/open-linux-router/olrd.env
+    type: config|noreplace
+    file_info:
+      mode: 0644
+
 scripts:
   postinstall: packaging/scripts/postinstall.sh
   preremove: packaging/scripts/preremove.sh

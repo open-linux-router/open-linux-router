@@ -22,12 +22,14 @@ func operationCommands() []*cobra.Command {
 		}
 	}
 
+	// `adopt` and `release` are not here. They are real commands now, and they
+	// live in internal/link beside the module they write to — this package
+	// deliberately knows no modules, so cmd/olr mounts them into this group the
+	// same way it mounts each module's tree.
 	return []*cobra.Command{
 		op("status", "Aggregate drift and daemon liveness across modules", cobra.NoArgs),
 		op("diff", "Show drifted or pending configuration, per module", cobra.NoArgs),
 		op("history", "List configuration revisions, per module", cobra.NoArgs),
 		op("rollback", "Roll a module back to an earlier revision", cobra.NoArgs),
-		op("adopt <interface>", "Take ownership of an interface", cobra.ExactArgs(1)),
-		op("release <interface>", "Hand an interface back to the system", cobra.ExactArgs(1)),
 	}
 }

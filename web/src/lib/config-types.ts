@@ -103,6 +103,7 @@ export interface OlrDocument {
   devices?: DevicesConfig
   dhcp?: DhcpConfig
   dns?: DnsConfig
+  link?: LinkConfig
   routing?: RoutingConfig
 }
 export interface DevicesConfig {
@@ -174,6 +175,9 @@ export interface Hijack {
 export interface QueryLog {
   enabled: boolean
   entries?: number
+}
+export interface LinkConfig {
+  adopted?: string[]
 }
 export interface RoutingConfig {
   enabled: boolean

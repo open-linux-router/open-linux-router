@@ -21,6 +21,9 @@ systemctl daemon-reload >/dev/null 2>&1 || true
 # the machine was using.
 systemctl enable olrd.service >/dev/null 2>&1 || true
 
+FIRST_INSTALL=no
+systemctl is-active --quiet olrd.service || FIRST_INSTALL=yes
+
 if systemctl is-active --quiet olrd.service; then
 	# An upgrade. Restarting is safe by design and worth stating: design.md
 	# §3.5's governing invariant is that `systemctl restart olrd` never drops a
@@ -31,6 +34,35 @@ if systemctl is-active --quiet olrd.service; then
 	systemctl restart olrd.service || true
 else
 	systemctl start olrd.service || true
+fi
+
+# What to do next, printed once rather than left in a README nobody has yet.
+#
+# The web UI is the reason this is here. olrd listens on its control socket and
+# nothing else, so a fresh install has a working `olr` and a UI that cannot be
+# reached from anywhere — which looks like a broken package rather than the
+# deliberate choice it is (design.md §7: install alone changes nothing). Saying
+# so, with the one command that changes it, is the difference.
+if [ "$FIRST_INSTALL" = yes ]; then
+	cat <<'EOF'
+
+olrd is running. Nothing else has been changed on this machine — no DHCP
+server, no resolver, no firewall rule.
+
+To open the web UI on your network:
+
+  sudo olr daemon listen 0.0.0.0:8080
+
+Then browse to http://<this box>:8080 and paste the token from
+/etc/open-linux-router/api-token when asked.
+
+Or stay on the command line:
+
+  olr link show interfaces      what this machine has
+  sudo olr adopt <interface>    hand one to olr
+  olr dhcp --help               then serve addresses on it
+
+EOF
 fi
 
 exit 0

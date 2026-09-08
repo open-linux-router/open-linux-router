@@ -1,13 +1,10 @@
 package routing
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/netip"
-	"os"
 	"sort"
-	"strings"
 )
 
 // LinkView is this module's read-only window onto the link module.
@@ -19,10 +16,10 @@ import (
 //
 // The third near-twin of this interface in the tree, after internal/dhcp's and
 // internal/dns's, and the third for the reason internal/dns/link.go states:
-// each names exactly the facts its own module needs, all of them die the day
-// link lands, and none should acquire a second consumer in the meantime. What
-// routing needs and the others do not is the *prefixes* — the classifier
-// matches `ip saddr`, so a network's addresses are the whole input.
+// each names exactly the facts its own module needs, and cmd/olrd adapts link's
+// neutral Info into all three. What routing needs and the others do not is the
+// *prefixes* — the classifier matches `ip saddr`, so a network's addresses are
+// the whole input.
 type LinkView interface {
 	// Interface returns what is known about an interface, or
 	// ErrNoSuchInterface.
@@ -105,12 +102,11 @@ func InterfaceWithPrefixContaining(links LinkView, addr netip.Addr) (LinkInfo, b
 	return LinkInfo{}, false
 }
 
-// StaticLinks is a LinkView backed by a map.
+// StaticLinks is a LinkView backed by a map, for tests.
 //
-// It is what the tests use, and it is also the honest stand-in until the link
-// module lands: routing run against a config file needs interface facts from
-// somewhere, and inventing them from the local kernel would be exactly the
-// private copy design.md §4.1 forbids.
+// It used to be a production path too: olrd read a hand-written JSON file into
+// one of these because there was no link module to ask. There is now, and it
+// reads the kernel — so this is the fixture and nothing else.
 type StaticLinks map[string]LinkInfo
 
 // Interface implements LinkView.
@@ -142,27 +138,4 @@ func (s StaticLinks) Interfaces() ([]LinkInfo, error) {
 		out = append(out, info)
 	}
 	return out, nil
-}
-
-// LoadLinks reads interface facts from a JSON file keyed by interface name:
-//
-//	{"br-lan": {"adopted": true, "up": true, "prefixes": ["192.168.1.1/24"]}}
-//
-// Scaffolding with a known expiry date, shared in shape with internal/dhcp and
-// internal/dns so one file feeds all three. Once the link module exists
-// (design.md milestone 1) it satisfies LinkView directly and this goes away —
-// routing must not grow its own way of discovering interfaces, because a second
-// source for the same fact is exactly the drift §4.1 is structured to prevent.
-func LoadLinks(path string) (StaticLinks, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading interface facts: %w", err)
-	}
-	dec := json.NewDecoder(strings.NewReader(string(data)))
-	dec.DisallowUnknownFields()
-	var links StaticLinks
-	if err := dec.Decode(&links); err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", path, err)
-	}
-	return links, nil
 }

@@ -16,7 +16,18 @@ Wants=network-pre.target
 Type=notify
 NotifyAccess=main
 
-ExecStart=/usr/bin/olrd
+# Where `olr daemon listen` writes, and the only supported way to give olrd
+# arguments. Editing this unit would work too and would be overwritten by the
+# next upgrade, which is the whole reason for the indirection.
+#
+# The leading `-` makes a missing file not an error: the tarball install and a
+# hand-built box may not have one, and olrd's defaults are a working
+# configuration.
+EnvironmentFile=-/etc/open-linux-router/olrd.env
+
+# $OLRD_ARGS unbraced, which systemd word-splits — ${OLRD_ARGS} would pass
+# "--listen 0.0.0.0:8080" as a single argument and olrd would reject it.
+ExecStart=/usr/bin/olrd $OLRD_ARGS
 ExecReload=/bin/kill -HUP $MAINPID
 
 Restart=on-failure

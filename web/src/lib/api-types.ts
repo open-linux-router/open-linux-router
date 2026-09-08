@@ -29,6 +29,7 @@ import type {
   DeviceCategory,
   DevicesConfig,
   ExitForm,
+  LinkConfig,
   RoutingConfig,
 } from '@/lib/config-types'
 
@@ -178,6 +179,78 @@ export interface DhcpLeases {
   usage: PoolUsage[]
   problems?: Problem[]
   as_of: string
+}
+
+// --- link ------------------------------------------------------------------
+
+/**
+ * One row of the interface list (internal/link interfaceView).
+ *
+ * The observed half — addresses, state — is read from the kernel on every
+ * request and never stored, so this is what is true now rather than what was
+ * last written (design.md §4.5).
+ */
+export interface InterfaceRow {
+  name: string
+
+  /** The operator has handed this interface to olr. */
+  adopted: boolean
+
+  /**
+   * The kernel currently has it. False with `adopted` true is the typo case —
+   * a name that was stored and has nothing behind it — and the UI has to say
+   * so rather than showing a row that looks like any other.
+   */
+  present: boolean
+
+  /**
+   * `up` is administrative state, `running` is carrier. Both, because "up with
+   * no cable in it" is the most common reason a freshly configured DHCP server
+   * appears to do nothing, and one boolean cannot say it.
+   */
+  up: boolean
+  running: boolean
+
+  loopback: boolean
+  mac?: string
+
+  /** Every address on the interface, link-local excluded. */
+  prefixes?: string[]
+
+  /**
+   * The first IPv4 prefix split into the two halves an operator reads
+   * separately. Absent when the interface has no IPv4 address — which is
+   * exactly when no address range can be served on it.
+   */
+  address?: string
+  subnet?: string
+
+  /**
+   * A range inside `subnet` excluding the network, broadcast and this
+   * interface's own address. A hint for prefilling a form; dhcp validates any
+   * range independently, so this cannot become a second opinion.
+   */
+  suggested_start?: string
+  suggested_end?: string
+}
+
+export interface InterfaceList {
+  interfaces: InterfaceRow[]
+  problems?: Problem[]
+  as_of: string
+}
+
+/**
+ * The result of storing adoption.
+ *
+ * No `steps`, like devices: one atomic document write, nothing half-finished
+ * to report. The impact is always `none` — adopting an interface changes
+ * nothing on the box by itself.
+ */
+export interface LinkApplyResult {
+  plan: Plan
+  config: LinkConfig
+  error?: { message: string; problems?: Problem[] }
 }
 
 // --- devices ---------------------------------------------------------------

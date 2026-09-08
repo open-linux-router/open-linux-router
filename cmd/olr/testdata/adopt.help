@@ -1,0 +1,19 @@
+Hand an interface to olr, so that it may serve addresses, answer DNS or
+route traffic on it.
+
+Adopting by itself changes nothing on the machine: no address is set, no
+daemon is started, and the interface keeps whatever configuration it
+already had. What it changes is permission — olr refuses to touch an
+interface nobody handed it (design.md §3.4), so this is the step that
+makes `olr dhcp add pool` stop refusing.
+
+Usage:
+  olr adopt <interface> [flags]
+
+Flags:
+  -h, --help   help for adopt
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

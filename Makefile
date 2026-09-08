@@ -192,6 +192,7 @@ tarball: web cross ## Build the static tarballs, for distributions the .deb does
 	  cp $(DIST)/$(DBIN)-linux-$$arch $$stage/$(DBIN); \
 	  cp $(DIST)/$(NBIN)-linux-$$arch $$stage/$(NBIN); \
 	  cp packaging/systemd/*.service $$stage/systemd/; \
+	  cp packaging/olrd.env $$stage/olrd.env; \
 	  cp packaging/tarball/install.sh $$stage/install.sh; \
 	  chmod +x $$stage/install.sh $$stage/$(BIN) $$stage/$(DBIN) $$stage/$(NBIN); \
 	  tar -C $(DIST) -czf $$stage.tar.gz $$(basename $$stage) || exit 1; \

@@ -13,6 +13,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/devices"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
+	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/routing"
 )
 
@@ -31,6 +32,7 @@ import (
 // a module what it serves.
 func moduleRoutes() map[string][]core.Route {
 	return map[string][]core.Route{
+		link.ModuleName:    link.HTTP{}.Routes(),
 		dhcp.ModuleName:    dhcp.HTTP{}.Routes(),
 		dns.ModuleName:     dns.HTTP{}.Routes(),
 		devices.ModuleName: devices.HTTP{}.Routes(),
@@ -209,7 +211,7 @@ func TestMCPImportsNoModule(t *testing.T) {
 		t.Fatal("parsed no packages; this test is not reading internal/mcp")
 	}
 
-	forbidden := []string{"internal/dhcp", "internal/dns", "internal/devices", "internal/routing", "internal/dnsrelay"}
+	forbidden := []string{"internal/link", "internal/dhcp", "internal/dns", "internal/devices", "internal/routing", "internal/dnsrelay"}
 
 	for _, pkg := range pkgs {
 		for path, file := range pkg.Files {
