@@ -31,6 +31,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/devices"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
+	"github.com/open-linux-router/open-linux-router/internal/mcp"
 	"github.com/open-linux-router/open-linux-router/internal/routing"
 	"github.com/open-linux-router/open-linux-router/internal/webui"
 )
@@ -136,13 +137,13 @@ func run() error {
 		Applier: applier,
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
-	}.Handler(), dhcp.Config{})
+	}.Routes(), dhcp.Config{})
 
 	srv.Mount(dns.ModuleName, dns.HTTP{
 		Applier: dnsApplier,
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
-	}.Handler(), dns.Config{})
+	}.Routes(), dns.Config{})
 
 	srv.Mount(devices.ModuleName, devices.HTTP{
 		Applier: devices.Applier{
@@ -159,7 +160,7 @@ func run() error {
 		},
 		Lock:   srv.ApplyLock(),
 		Events: srv.Events(),
-	}.Handler(), devices.Config{})
+	}.Routes(), devices.Config{})
 
 	// `routing` is the one module whose configuration lives in the kernel
 	// rather than in a file some backend reads, so two things follow that the
@@ -188,7 +189,7 @@ func run() error {
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
 		Watch:   func(cfg routing.Config) { prober.Watch(context.Background(), cfg) },
-	}.Handler(), routing.Config{})
+	}.Routes(), routing.Config{})
 
 	// --- routes -----------------------------------------------------------
 	//
@@ -199,6 +200,22 @@ func run() error {
 	top := http.NewServeMux()
 	top.Handle(core.APIPrefix+"/", srv.Handler())
 	top.Handle("/", webui.Handler())
+
+	// The MCP surface (§6.4), composed here for the same reason the SPA is:
+	// core has no business knowing an agent exists, and mcp.New takes the API
+	// handler rather than the server so that it cannot reach past it.
+	//
+	// It is mounted under /api on purpose. ServeMux prefers the more specific
+	// pattern, so this wins over /api/ above with no ordering subtlety, and
+	// sitting inside the prefix means it inherits the authentication both
+	// listeners already apply — the token on TCP, the socket's mode locally.
+	// An MCP endpoint outside /api would be an unauthenticated admin surface.
+	mcpServer, err := mcp.New(srv.Handler())
+	if err != nil {
+		return err
+	}
+	top.Handle(core.APIPrefix+"/mcp", mcpServer)
+	logger.Info("serving MCP", "path", core.APIPrefix+"/mcp", "tools", len(mcpServer.Tools()))
 
 	handler := core.WithLogging(core.WithRecovery(top))
 

@@ -7,17 +7,23 @@ import (
 	"testing"
 )
 
-func testHandler(body string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		WriteJSON(w, http.StatusOK, map[string]string{"path": r.URL.Path, "body": body})
-	})
+func testRoutes(body string) []Route {
+	return []Route{{
+		Method:  http.MethodGet,
+		Path:    "/config",
+		Summary: "Show the " + body + " configuration.",
+		Tool:    "show",
+		Handler: func(w http.ResponseWriter, r *http.Request) {
+			WriteJSON(w, http.StatusOK, map[string]string{"path": r.URL.Path, "body": body})
+		},
+	}}
 }
 
 // A module matches its own routes without repeating its name, so core has to
 // strip the prefix before handing the request over.
 func TestModuleRoutesAreMountedWithThePrefixStripped(t *testing.T) {
 	s := New()
-	s.Mount("dhcp", testHandler("dhcp"), struct{}{})
+	s.Mount("dhcp", testRoutes("dhcp"), struct{}{})
 
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/dhcp/config", nil))
@@ -37,7 +43,7 @@ func TestModuleRoutesAreMountedWithThePrefixStripped(t *testing.T) {
 // A client should never have to parse two error formats.
 func TestUnknownAPIPathUsesTheJSONErrorShape(t *testing.T) {
 	s := New()
-	s.Mount("dhcp", testHandler("dhcp"), struct{}{})
+	s.Mount("dhcp", testRoutes("dhcp"), struct{}{})
 
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/nope", nil))
@@ -70,7 +76,7 @@ func TestCoreDoesNotServeOutsideTheAPIPrefix(t *testing.T) {
 
 func TestSchemaEndpointPublishesBothProjections(t *testing.T) {
 	s := New()
-	s.Mount("test", testHandler("test"), testConfig{})
+	s.Mount("test", testRoutes("test"), testConfig{})
 
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/schema/test", nil))
@@ -104,8 +110,8 @@ func TestUnknownModuleSchemaIs404(t *testing.T) {
 
 func TestModulesEndpointListsMountedModules(t *testing.T) {
 	s := New()
-	s.Mount("dns", testHandler("dns"), struct{}{})
-	s.Mount("dhcp", testHandler("dhcp"), struct{}{})
+	s.Mount("dns", testRoutes("dns"), struct{}{})
+	s.Mount("dhcp", testRoutes("dhcp"), struct{}{})
 
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/modules", nil))
@@ -129,17 +135,17 @@ func TestMountPanicsOnProgrammingErrors(t *testing.T) {
 		name  string
 		mount func(*Server)
 	}{
-		{"empty name", func(s *Server) { s.Mount("", testHandler("x"), struct{}{}) }},
-		{"path separator", func(s *Server) { s.Mount("a/b", testHandler("x"), struct{}{}) }},
-		{"uppercase", func(s *Server) { s.Mount("Dhcp", testHandler("x"), struct{}{}) }},
-		{"nil handler", func(s *Server) { s.Mount("dhcp", nil, struct{}{}) }},
+		{"empty name", func(s *Server) { s.Mount("", testRoutes("x"), struct{}{}) }},
+		{"path separator", func(s *Server) { s.Mount("a/b", testRoutes("x"), struct{}{}) }},
+		{"uppercase", func(s *Server) { s.Mount("Dhcp", testRoutes("x"), struct{}{}) }},
+		{"no routes", func(s *Server) { s.Mount("dhcp", nil, struct{}{}) }},
 		{"duplicate", func(s *Server) {
-			s.Mount("dhcp", testHandler("x"), struct{}{})
-			s.Mount("dhcp", testHandler("y"), struct{}{})
+			s.Mount("dhcp", testRoutes("x"), struct{}{})
+			s.Mount("dhcp", testRoutes("y"), struct{}{})
 		}},
 		{"after the handler is built", func(s *Server) {
 			s.Handler()
-			s.Mount("dhcp", testHandler("x"), struct{}{})
+			s.Mount("dhcp", testRoutes("x"), struct{}{})
 		}},
 	}
 
@@ -157,7 +163,7 @@ func TestMountPanicsOnProgrammingErrors(t *testing.T) {
 
 func TestHandlerIsStable(t *testing.T) {
 	s := New()
-	s.Mount("dhcp", testHandler("dhcp"), struct{}{})
+	s.Mount("dhcp", testRoutes("dhcp"), struct{}{})
 	if s.Handler() != s.Handler() {
 		t.Error("Handler returned a different handler on the second call")
 	}

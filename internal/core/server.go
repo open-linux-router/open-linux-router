@@ -39,6 +39,12 @@ type module struct {
 	name    string
 	handler http.Handler
 
+	// routes is the module's surface, declared as data (route.go). The handler
+	// above is built from it rather than given alongside it, so a module
+	// cannot serve a route it did not declare — which is what lets the MCP
+	// server generate a tool per route and trust the list.
+	routes []Route
+
 	// schema is a zero value of the module's config struct. It is the single
 	// source for the REST body, the UI form, and the MCP tool definition
 	// (design.md §3.2 rule 3) — reflected, never hand-written.
@@ -63,14 +69,22 @@ func (s *Server) Events() *Events { return s.events }
 // Mount registers a module's routes under /api/<name>/ and its config struct
 // for schema reflection.
 //
-// The handler is mounted with the prefix stripped, so a module matches its own
+// The routes are mounted with the prefix stripped, so a module matches its own
 // routes as `GET /config` rather than repeating its own name in every pattern.
 //
-// It panics on a bad or duplicate name, and on mounting after the handler has
-// been built. Modules are a bounded literal list in cmd/olrd (§3.2), so these
-// are startup-time programming errors, not runtime conditions — the same
-// reasoning as cli.Verb panicking on a verb outside the vocabulary.
-func (s *Server) Mount(name string, h http.Handler, schema any) {
+// A module hands over its route *table* rather than a finished handler, and the
+// handler is built here. That is what makes the published surface trustworthy:
+// with a handler and a table given separately, the two could disagree and
+// nothing would notice until an agent called a tool for a route that was never
+// mounted. There is only one list, and it is both the description and the thing
+// that serves.
+//
+// It panics on a bad or duplicate name, on an empty route table, and on
+// mounting after the handler has been built. Modules are a bounded literal list
+// in cmd/olrd (§3.2), so these are startup-time programming errors, not runtime
+// conditions — the same reasoning as cli.Verb panicking on a verb outside the
+// vocabulary.
+func (s *Server) Mount(name string, routes []Route, schema any) {
 	if s.handler != nil {
 		panic("core: Mount after Handler; modules are mounted once at startup")
 	}
@@ -80,11 +94,16 @@ func (s *Server) Mount(name string, h http.Handler, schema any) {
 	if _, dup := s.byName[name]; dup {
 		panic(fmt.Sprintf("core: module %q mounted twice", name))
 	}
-	if h == nil {
-		panic(fmt.Sprintf("core: module %q mounted with a nil handler", name))
+	if len(routes) == 0 {
+		panic(fmt.Sprintf("core: module %q mounted with no routes", name))
 	}
 
-	m := &module{name: name, handler: h, schema: schema}
+	m := &module{
+		name:    name,
+		handler: RouteTable(routes),
+		routes:  routes,
+		schema:  schema,
+	}
 	s.modules = append(s.modules, m)
 	s.byName[name] = m
 }
@@ -110,11 +129,12 @@ func (s *Server) Handler() http.Handler {
 
 	mux := http.NewServeMux()
 
-	// Core's own routes. Kept to the three things §3 says core is: what exists,
-	// what shape it has, and what just changed.
+	// Core's own routes. Kept to the things §3 says core is: what exists, what
+	// shape it has, what you may call, and what just changed.
 	mux.HandleFunc("GET "+APIPrefix+"/modules", s.handleModules)
 	mux.HandleFunc("GET "+APIPrefix+"/schema", s.handleSchema)
 	mux.HandleFunc("GET "+APIPrefix+"/schema/{module}", s.handleModuleSchema)
+	mux.HandleFunc("GET "+APIPrefix+"/routes", s.handleRoutes)
 	mux.Handle("GET "+APIPrefix+"/events", s.events.Handler())
 
 	for _, m := range s.modules {
@@ -147,6 +167,61 @@ func (s *Server) handleSchema(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out[m.name] = p
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"modules": out})
+}
+
+// Routes returns every mounted module's routes, keyed by module.
+//
+// The path each route answers on is the module prefix plus its own Path; what
+// is returned here is the module-relative form the module declared, because
+// that is what the module owns. Callers that need the absolute path join it
+// with APIPrefix and the module name, as handleRoutes does.
+func (s *Server) Routes() map[string][]Route {
+	out := make(map[string][]Route, len(s.modules))
+	for _, m := range s.modules {
+		out[m.name] = m.routes
+	}
+	return out
+}
+
+// handleRoutes publishes the surface: what a client may call, on what path,
+// with what body and parameters.
+//
+// This is the read counterpart to /schema, and it exists for the same reason.
+// /schema says what a config document looks like; without this, a generated
+// client still has to be told by hand which routes exist to send one to.
+// design.md §6.4's "MCP tools generated from the same schema" needs both halves,
+// and §9 milestone 5's OpenAPI document is a join of exactly these two.
+//
+// Paths are absolute here, unlike the module-relative form modules declare,
+// because a client wants the URL it can call rather than one it has to assemble.
+func (s *Server) handleRoutes(w http.ResponseWriter, r *http.Request) {
+	type routeView struct {
+		Method   string       `json:"method"`
+		Path     string       `json:"path"`
+		Summary  string       `json:"summary"`
+		Tool     string       `json:"tool,omitempty"`
+		Body     BodyShape    `json:"body,omitempty"`
+		Query    []QueryParam `json:"query,omitempty"`
+		Mutating bool         `json:"mutating,omitempty"`
+	}
+
+	out := make(map[string][]routeView, len(s.modules))
+	for _, m := range s.modules {
+		views := make([]routeView, 0, len(m.routes))
+		for _, rt := range m.routes {
+			views = append(views, routeView{
+				Method:   rt.Method,
+				Path:     APIPrefix + "/" + m.name + rt.Path,
+				Summary:  rt.Summary,
+				Tool:     rt.Tool,
+				Body:     rt.Body,
+				Query:    rt.Query,
+				Mutating: rt.Mutating,
+			})
+		}
+		out[m.name] = views
 	}
 	WriteJSON(w, http.StatusOK, map[string]any{"modules": out})
 }

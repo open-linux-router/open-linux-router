@@ -32,27 +32,63 @@ type HTTP struct {
 	Events *core.Events
 }
 
-// Handler returns the module's routes. Core mounts this with the /api/dhcp
-// prefix stripped, so the patterns here do not repeat the module's own name.
-func (h HTTP) Handler() http.Handler {
-	mux := http.NewServeMux()
+// Routes is the module's surface, declared as data so that it can be
+// enumerated rather than only served (core.Route).
+//
+// Core mounts these with the /api/dhcp prefix stripped, so the patterns here do
+// not repeat the module's own name.
+func (h HTTP) Routes() []core.Route {
+	return []core.Route{
+		// Intent.
+		{
+			Method: "GET", Path: "/config", Tool: "show config",
+			Summary: "Show the stored DHCP configuration: pools, reservations and options.",
+			Handler: h.getConfig,
+		},
+		{
+			Method: "PUT", Path: "/config",
+			Summary:  "Replace the whole DHCP configuration.",
+			Body:     core.BodyFull,
+			Mutating: true,
+			Handler:  h.putConfig,
+		},
+		{
+			Method: "PATCH", Path: "/config",
+			Summary:  "Change named DHCP fields and leave the rest alone.",
+			Body:     core.BodyRelaxed,
+			Mutating: true,
+			Handler:  h.patchConfig,
+		},
 
-	// Intent.
-	mux.HandleFunc("GET /config", h.getConfig)
-	mux.HandleFunc("PUT /config", h.putConfig)
-	mux.HandleFunc("PATCH /config", h.patchConfig)
+		// Dry run. A POST because it takes a body, not because it changes
+		// anything — this is the HTTP spelling of `olr --dry-run` (§5.1), and
+		// it is what lets an agent propose a change for a human to review
+		// (§6.4). An empty body plans the stored intent, which is the drift
+		// check (§5.4).
+		{
+			Method: "POST", Path: "/plan", Tool: "show plan",
+			Summary: "Show what a DHCP change would do without doing it. " +
+				"An empty body plans the stored configuration, which answers whether the box has drifted.",
+			Body:    core.BodyRelaxed,
+			Handler: h.postPlan,
+		},
 
-	// Dry run. A POST because it takes a body, not because it changes
-	// anything — this is the HTTP spelling of `olr --dry-run` (§5.1), and it
-	// is what lets an agent propose a change for a human to review (§6.4).
-	mux.HandleFunc("POST /plan", h.postPlan)
-
-	// Observed. Never stored, never revisioned, always stamped (§4.5).
-	mux.HandleFunc("GET /status", h.getStatus)
-	mux.HandleFunc("GET /leases", h.getLeases)
-
-	return mux
+		// Observed. Never stored, never revisioned, always stamped (§4.5).
+		{
+			Method: "GET", Path: "/status", Tool: "status",
+			Summary: "Show whether DHCP is running, and whether the box still matches the stored configuration.",
+			Handler: h.getStatus,
+		},
+		{
+			Method: "GET", Path: "/leases", Tool: "show leases",
+			Summary: "List current DHCP leases: which address each client holds and until when.",
+			Handler: h.getLeases,
+		},
+	}
 }
+
+// Handler returns the module's routes.
+func (h HTTP) Handler() http.Handler { return core.RouteTable(h.Routes()) }
 
 // --- intent ---------------------------------------------------------------
 
@@ -206,7 +242,18 @@ func (h HTTP) postPlan(w http.ResponseWriter, r *http.Request) {
 
 	plan, err := h.plan(r, cfg)
 	if err != nil {
-		core.WriteError(w, http.StatusUnprocessableEntity, err.Error(),
+		// The message summarises and the problems carry the detail — never
+		// both. A validation error renders every problem into its own text, so
+		// passing it here as well as in problems() reported each one twice: to
+		// the operator through `olr`, and to an agent through MCP, since both
+		// render the envelope with core.ErrorBody.String. Everywhere else in
+		// this module and in dns, devices and routing already passes a fixed
+		// summary; this is the same sentence they use.
+		message := err.Error()
+		if len(plan.Validation.Errors) > 0 {
+			message = "invalid dhcp configuration"
+		}
+		core.WriteError(w, http.StatusUnprocessableEntity, message,
 			problems(plan.Validation.Errors)...)
 		return
 	}

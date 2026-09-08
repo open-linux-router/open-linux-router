@@ -28,29 +28,59 @@ type HTTP struct {
 	Events *core.Events
 }
 
-// Handler returns the module's routes. Core mounts this with the /api/devices
-// prefix stripped.
-func (h HTTP) Handler() http.Handler {
-	mux := http.NewServeMux()
+// Routes is the module's surface, declared as data so that it can be
+// enumerated rather than only served (core.Route).
+//
+// Core mounts these with the /api/devices prefix stripped.
+func (h HTTP) Routes() []core.Route {
+	return []core.Route{
+		// Intent.
+		{
+			Method: "GET", Path: "/config", Tool: "show config",
+			Summary: "Show the stored device inventory: names, categories and owners.",
+			Handler: h.getConfig,
+		},
+		{
+			Method: "PUT", Path: "/config",
+			Summary:  "Replace the whole device inventory.",
+			Body:     core.BodyFull,
+			Mutating: true,
+			Handler:  h.putConfig,
+		},
+		{
+			Method: "PATCH", Path: "/config",
+			Summary:  "Change named device fields and leave the rest alone.",
+			Body:     core.BodyRelaxed,
+			Mutating: true,
+			Handler:  h.patchConfig,
+		},
 
-	// Intent.
-	mux.HandleFunc("GET /config", h.getConfig)
-	mux.HandleFunc("PUT /config", h.putConfig)
-	mux.HandleFunc("PATCH /config", h.patchConfig)
+		// Dry run. A POST because it takes a body, not because it changes
+		// anything.
+		{
+			Method: "POST", Path: "/plan", Tool: "show plan",
+			Summary: "Show what a change to the device inventory would do without doing it.",
+			Body:    core.BodyRelaxed,
+			Handler: h.postPlan,
+		},
 
-	// Dry run. A POST because it takes a body, not because it changes anything.
-	mux.HandleFunc("POST /plan", h.postPlan)
-
-	// The join. Observed half never stored, always stamped (§4.5).
-	//
-	// There is deliberately no /categories route: the vocabulary already
-	// reaches every client through the published schema (schema.go), and a
-	// second endpoint serving the same list would be the second source that
-	// eventually disagrees with the first.
-	mux.HandleFunc("GET /list", h.getList)
-
-	return mux
+		// The join. Observed half never stored, always stamped (§4.5).
+		//
+		// There is deliberately no /categories route: the vocabulary already
+		// reaches every client through the published schema (schema.go), and a
+		// second endpoint serving the same list would be the second source that
+		// eventually disagrees with the first.
+		{
+			Method: "GET", Path: "/list", Tool: "show list",
+			Summary: "List every device known on the network, joining stored identity to observed presence: " +
+				"who is here now, what address they hold, and when they were last seen.",
+			Handler: h.getList,
+		},
+	}
 }
+
+// Handler returns the module's routes.
+func (h HTTP) Handler() http.Handler { return core.RouteTable(h.Routes()) }
 
 // --- intent ---------------------------------------------------------------
 

@@ -783,6 +783,28 @@ MCP tools generated from the same schema. Skills shipped as markdown in-repo.
 Because plans are pure and diffs are inspectable, an agent can propose a change,
 a human can review the diff, and it applies without a bespoke code path.
 
+**Built, read-only, at `POST /api/mcp`.** See `docs/mcp.md`. Three things about
+it are worth stating here because they changed this section's assumptions.
+
+*"Generated from the same schema" needed a second half.* The schema says what a
+config document looks like; it does not say which routes exist to send one to,
+and `http.ServeMux` cannot be asked. Modules now declare their surface as data
+(`core.Route`), core builds the handler *from* that table rather than beside it,
+and `/api/routes` publishes it. A module cannot serve a route it did not
+declare, which is what makes the list safe to generate from — and it is the
+OpenAPI document of §9 milestone 5, joined to `/schema`.
+
+*The MCP server is an API client structurally, not by convention.*
+`internal/mcp` takes an `http.Handler` and imports no module, so a tool call
+cannot skip validation, the §3.6 lock, or the change event. The import graph
+enforces it; a test fails the build otherwise.
+
+*Writes wait for §6.2's gate.* "An agent proposes, a human reviews the diff" needs
+the disruptive refusal, and only `routing` implements it — `dhcp`, `dns` and
+`devices` still apply on the first request. Until they do not, publishing a write
+tool would mean an agent could drop the LAN with nothing to show the approving
+human that it would. The read and plan tools are the half that works today.
+
 ---
 
 ## 7. Adoption and reversibility
@@ -872,6 +894,10 @@ be the released artefact.
    The inventory did move earlier: identity landed with the device list, which
    is what unblocked the §11.1 fixed-address surface.
 5. **Make it programmable.** OpenAPI publication, MCP server, skills.
+   Partly done: the MCP server reads (§6.4, `docs/mcp.md`), and `/api/routes`
+   plus `/api/schema` are the two halves an OpenAPI document is a join of.
+   Still owed: writes, which wait on §6.2's disruptive gate reaching `dhcp`,
+   `dns` and `devices`; the document itself; skills.
 6. **Then:** `qos`, `vpn`, `routing`, `wifi`.
 
 **Order taken so far, and why it departs from the list.** `olrd`, the core

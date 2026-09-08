@@ -75,21 +75,13 @@ type APIError struct {
 	Problems []core.Problem
 }
 
+// Error renders the refusal the way core renders it, rather than the way this
+// package would choose to. The MCP server hands an agent the same string from
+// the same bytes (core.ErrorBody.String), and an operator comparing what `olr`
+// told them against what the agent was told should be reading one account of
+// one refusal, not two renderings that happen to agree today.
 func (e *APIError) Error() string {
-	if len(e.Problems) == 0 {
-		return e.Message
-	}
-	var b strings.Builder
-	b.WriteString(e.Message)
-	for _, p := range e.Problems {
-		b.WriteString("\n  ")
-		if p.Path != "" {
-			b.WriteString(p.Path)
-			b.WriteString(": ")
-		}
-		b.WriteString(p.Message)
-	}
-	return b.String()
+	return core.ErrorBody{Message: e.Message, Problems: e.Problems}.String()
 }
 
 // Get reads a resource into out.

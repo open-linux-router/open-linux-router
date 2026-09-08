@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // One JSON shape for every response and one for every error, decided here so
@@ -32,6 +33,31 @@ type Problem struct {
 type ErrorBody struct {
 	Message  string    `json:"message"`
 	Problems []Problem `json:"problems,omitempty"`
+}
+
+// String renders the envelope as one human-readable message with its addressed
+// problems indented beneath it.
+//
+// It lives here, and not in each client, because the phrasing is part of the
+// contract rather than presentation. `olr` prints this under a failed command,
+// and an agent reads it as the text of a failed tool call; if the two rendered
+// the same bytes differently, an operator comparing what the CLI told them
+// against what the agent was told would be reading two accounts of one refusal.
+func (e ErrorBody) String() string {
+	if len(e.Problems) == 0 {
+		return e.Message
+	}
+	var b strings.Builder
+	b.WriteString(e.Message)
+	for _, p := range e.Problems {
+		b.WriteString("\n  ")
+		if p.Path != "" {
+			b.WriteString(p.Path)
+			b.WriteString(": ")
+		}
+		b.WriteString(p.Message)
+	}
+	return b.String()
 }
 
 // WriteJSON writes v with the given status.

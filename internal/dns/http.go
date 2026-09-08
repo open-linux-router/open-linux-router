@@ -35,34 +35,84 @@ type HTTP struct {
 	Events *core.Events
 }
 
-// Handler returns the module's routes. Core mounts this with the /api/dns
-// prefix stripped, so the patterns here do not repeat the module's own name.
-func (h HTTP) Handler() http.Handler {
-	mux := http.NewServeMux()
+// Routes is the module's surface, declared as data so that it can be
+// enumerated rather than only served (core.Route).
+//
+// Core mounts these with the /api/dns prefix stripped, so the patterns here do
+// not repeat the module's own name.
+func (h HTTP) Routes() []core.Route {
+	// The limit both observed routes take; see readLimit. Declared once
+	// because it means the same thing on both, and a generated surface that
+	// described it two ways would be describing two parameters.
+	limit := []core.QueryParam{{
+		Name: "limit", Type: "integer",
+		Summary: "Return at most this many of the most recent entries.",
+	}}
 
-	// Intent.
-	mux.HandleFunc("GET /config", h.getConfig)
-	mux.HandleFunc("PUT /config", h.putConfig)
-	mux.HandleFunc("PATCH /config", h.patchConfig)
+	return []core.Route{
+		// Intent.
+		{
+			Method: "GET", Path: "/config", Tool: "show config",
+			Summary: "Show the stored DNS configuration: upstreams, blocking policies and local names.",
+			Handler: h.getConfig,
+		},
+		{
+			Method: "PUT", Path: "/config",
+			Summary:  "Replace the whole DNS configuration.",
+			Body:     core.BodyFull,
+			Mutating: true,
+			Handler:  h.putConfig,
+		},
+		{
+			Method: "PATCH", Path: "/config",
+			Summary:  "Change named DNS fields and leave the rest alone.",
+			Body:     core.BodyRelaxed,
+			Mutating: true,
+			Handler:  h.patchConfig,
+		},
 
-	// Dry run. A POST because it takes a body, not because it changes
-	// anything — this is the HTTP spelling of `olr --dry-run` (§5.1), and it
-	// is what lets an agent propose a change for a human to review (§6.4).
-	mux.HandleFunc("POST /plan", h.postPlan)
+		// Dry run. A POST because it takes a body, not because it changes
+		// anything — this is the HTTP spelling of `olr --dry-run` (§5.1), and
+		// it is what lets an agent propose a change for a human to review
+		// (§6.4).
+		{
+			Method: "POST", Path: "/plan", Tool: "show plan",
+			Summary: "Show what a DNS change would do without doing it. " +
+				"An empty body plans the stored configuration, which answers whether the box has drifted.",
+			Body:    core.BodyRelaxed,
+			Handler: h.postPlan,
+		},
 
-	// Observed. Never stored, never revisioned, always stamped (§4.5).
-	//
-	// /queries and /names are read through the relay's socket on every
-	// request. They are the reason to own :53 at all — the resolver leg buys
-	// nothing that can be seen without them.
-	//
-	// /queries and /names take an optional ?limit=; see readLimit.
-	mux.HandleFunc("GET /status", h.getStatus)
-	mux.HandleFunc("GET /queries", h.getQueries)
-	mux.HandleFunc("GET /names", h.getNames)
-
-	return mux
+		// Observed. Never stored, never revisioned, always stamped (§4.5).
+		//
+		// /queries and /names are read through the relay's socket on every
+		// request. They are the reason to own :53 at all — the resolver leg
+		// buys nothing that can be seen without them.
+		{
+			Method: "GET", Path: "/status", Tool: "status",
+			Summary: "Show whether the DNS units are running, which upstream is in use, " +
+				"and whether the box still matches the stored configuration.",
+			Handler: h.getStatus,
+		},
+		{
+			Method: "GET", Path: "/queries", Tool: "show queries",
+			Summary: "List recent DNS queries: who asked, for what name, and whether the answer was blocked. " +
+				"This is the record of what the network actually looked up.",
+			Query:   limit,
+			Handler: h.getQueries,
+		},
+		{
+			Method: "GET", Path: "/names", Tool: "show names",
+			Summary: "List the name-to-address mapping observed from answers, which is how a bare IP " +
+				"seen elsewhere on the box can be traced back to the domain it belongs to.",
+			Query:   limit,
+			Handler: h.getNames,
+		},
+	}
 }
+
+// Handler returns the module's routes.
+func (h HTTP) Handler() http.Handler { return core.RouteTable(h.Routes()) }
 
 // --- intent ---------------------------------------------------------------
 
@@ -216,7 +266,14 @@ func (h HTTP) postPlan(w http.ResponseWriter, r *http.Request) {
 
 	plan, err := h.Applier.Plan(r.Context(), cfg)
 	if err != nil {
-		core.WriteError(w, http.StatusUnprocessableEntity, err.Error(),
+		// Summary in the message, detail in the problems, never both — see the
+		// same guard in internal/dhcp's postPlan for why reporting each problem
+		// twice was invisible until a second client rendered the envelope.
+		message := err.Error()
+		if len(plan.Validation.Errors) > 0 {
+			message = "invalid dns configuration"
+		}
+		core.WriteError(w, http.StatusUnprocessableEntity, message,
 			problems(plan.Validation.Errors)...)
 		return
 	}

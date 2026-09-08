@@ -37,54 +37,141 @@ type HTTP struct {
 	Watch func(Config)
 }
 
-// Handler returns the module's routes. Core mounts this with the /api/routing
-// prefix stripped.
-func (h HTTP) Handler() http.Handler {
-	mux := http.NewServeMux()
+// Routes is the module's surface, declared as data so that it can be
+// enumerated rather than only served (core.Route).
+//
+// Core mounts these with the /api/routing prefix stripped.
+func (h HTTP) Routes() []core.Route {
+	// The gate every mutating route on this module carries (§6.2): ask first
+	// with dry_run, go ahead with a disruptive plan only with confirm. This is
+	// the module that already implements it; dhcp, dns and devices still owe
+	// it.
+	gate := []core.QueryParam{
+		{
+			Name: "dry_run", Type: "boolean",
+			Summary: "Answer with the plan and change nothing.",
+		},
+		{
+			Name: "confirm", Type: "boolean",
+			Summary: "Go ahead even if the plan is disruptive. Without this a disruptive change is refused, and the plan is returned instead.",
+		},
+	}
 
-	// Intent, whole document. Still the way to restore a backup or make several
-	// changes at once; the routes below are additions, not replacements.
-	mux.HandleFunc("GET /config", h.getConfig)
-	mux.HandleFunc("PUT /config", h.putConfig)
-	mux.HandleFunc("PATCH /config", h.patchConfig)
+	return []core.Route{
+		// Intent, whole document. Still the way to restore a backup or make
+		// several changes at once; the routes below are additions, not
+		// replacements.
+		{
+			Method: "GET", Path: "/config", Tool: "show config",
+			Summary: "Show the stored routing configuration: exits, per-network assignments and defaults.",
+			Handler: h.getConfig,
+		},
+		{
+			Method: "PUT", Path: "/config",
+			Summary:  "Replace the whole routing configuration.",
+			Body:     core.BodyFull,
+			Query:    gate,
+			Mutating: true,
+			Handler:  h.putConfig,
+		},
+		{
+			Method: "PATCH", Path: "/config",
+			Summary: "Change named scalar routing fields — enabled, default, stats — and leave the rest alone. " +
+				"Cannot edit exits or assignments; use the item routes for those.",
+			Body:     core.BodyRelaxed,
+			Query:    gate,
+			Mutating: true,
+			Handler:  h.patchConfig,
+		},
 
-	// Intent, one item at a time.
-	//
-	// These exist because of RFC 7386's one surprising rule: a merge patch
-	// replaces an array wholesale rather than merging into it. So `enabled`,
-	// `default` and `stats` are perfectly well served by PATCH above and get no
-	// route here, while `exits` and `interfaces` cannot be — a PATCH that meant
-	// to edit one exit would take the others' traffic with it.
-	//
-	// The deeper reason is that without them the *edit* happens in the client:
-	// every caller loads the document, splices the list itself, and sends the
-	// whole thing back. That is two requests where the lock only covers the
-	// second, and it is a rule — Config.Rename's cascade, Upsert keeping an
-	// exit's slot — reimplemented once per client. Here it is one request under
-	// one lock, calling the one implementation in config.go.
-	mux.HandleFunc("PUT /exits/{name}", h.putExit)
-	mux.HandleFunc("DELETE /exits/{name}", h.deleteExit)
-	mux.HandleFunc("PUT /assignments/{interface}", h.putAssignment)
-	mux.HandleFunc("DELETE /assignments/{interface}", h.deleteAssignment)
+		// Intent, one item at a time.
+		//
+		// These exist because of RFC 7386's one surprising rule: a merge patch
+		// replaces an array wholesale rather than merging into it. So
+		// `enabled`, `default` and `stats` are perfectly well served by PATCH
+		// above and get no route here, while `exits` and `interfaces` cannot be
+		// — a PATCH that meant to edit one exit would take the others' traffic
+		// with it.
+		//
+		// The deeper reason is that without them the *edit* happens in the
+		// client: every caller loads the document, splices the list itself, and
+		// sends the whole thing back. That is two requests where the lock only
+		// covers the second, and it is a rule — Config.Rename's cascade, Upsert
+		// keeping an exit's slot — reimplemented once per client. Here it is one
+		// request under one lock, calling the one implementation in config.go.
+		{
+			Method: "PUT", Path: "/exits/{name}",
+			Summary:  "Create or replace one exit, leaving every other exit alone.",
+			Query:    gate,
+			Mutating: true,
+			Handler:  h.putExit,
+		},
+		{
+			Method: "DELETE", Path: "/exits/{name}",
+			Summary:  "Remove one exit, and with it every assignment that pointed at it.",
+			Query:    gate,
+			Mutating: true,
+			Handler:  h.deleteExit,
+		},
+		{
+			Method: "PUT", Path: "/assignments/{interface}",
+			Summary:  "Send one network's traffic out a named exit.",
+			Query:    gate,
+			Mutating: true,
+			Handler:  h.putAssignment,
+		},
+		{
+			Method: "DELETE", Path: "/assignments/{interface}",
+			Summary:  "Stop routing one network out its own exit, returning it to the default.",
+			Query:    gate,
+			Mutating: true,
+			Handler:  h.deleteAssignment,
+		},
 
-	// Dry run. A POST because it takes a body, not because it changes anything.
-	mux.HandleFunc("POST /plan", h.postPlan)
+		// Dry run. A POST because it takes a body, not because it changes
+		// anything.
+		{
+			Method: "POST", Path: "/plan", Tool: "show plan",
+			Summary: "Show what a routing change would do without doing it. " +
+				"An empty body plans the stored configuration, which answers whether the kernel has drifted.",
+			Body:    core.BodyRelaxed,
+			Handler: h.postPlan,
+		},
 
-	// Re-apply stored intent without changing it. This is the repair path
-	// design.md §5.3.2 asks for in place of rollback: if an apply failed
-	// halfway, or somebody ran `ip rule del` by hand, this finishes the job.
-	mux.HandleFunc("POST /apply", h.postApply)
+		// Re-apply stored intent without changing it. This is the repair path
+		// design.md §5.3.2 asks for in place of rollback: if an apply failed
+		// halfway, or somebody ran `ip rule del` by hand, this finishes the
+		// job.
+		{
+			Method: "POST", Path: "/apply",
+			Summary: "Re-program the kernel from the stored routing configuration, changing no intent. " +
+				"This is the repair path for a half-applied change or rules removed by hand.",
+			Mutating: true,
+			Handler:  h.postApply,
+		},
 
-	// Observed. Never stored, always stamped with as_of (§4.5).
-	mux.HandleFunc("GET /status", h.getStatus)
+		// Observed. Never stored, always stamped with as_of (§4.5).
+		{
+			Method: "GET", Path: "/status", Tool: "status",
+			Summary: "Show each exit's health, what the kernel is actually holding, " +
+				"and whether it still matches the stored configuration.",
+			Handler: h.getStatus,
+		},
 
-	// Per-device and per-exit bytes, read from the kernel on every request.
-	// Separate from /status because it is asked far more often and costs a walk
-	// of every device on the network.
-	mux.HandleFunc("GET /traffic", h.getTraffic)
-
-	return mux
+		// Per-device and per-exit bytes, read from the kernel on every request.
+		// Separate from /status because it is asked far more often and costs a
+		// walk of every device on the network.
+		{
+			Method: "GET", Path: "/traffic", Tool: "show traffic",
+			Summary: "Show bytes counted per device and per exit, read from the kernel. " +
+				"Reports counting:false rather than failing when the counters cannot be read.",
+			Handler: h.getTraffic,
+		},
+	}
 }
+
+// Handler returns the module's routes.
+func (h HTTP) Handler() http.Handler { return core.RouteTable(h.Routes()) }
 
 // --- intent ---------------------------------------------------------------
 
