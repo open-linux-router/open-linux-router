@@ -116,4 +116,15 @@ export const api = {
   put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
   patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
+  delete: <T>(path: string) => request<T>('DELETE', path),
+
+  /**
+   * One request whose method is decided by the caller.
+   *
+   * For a surface that describes a change as data rather than as a call — the
+   * routing screen builds `{method, path, body}` values so that a change can be
+   * held, shown to the operator, and then sent again with `confirm=true`
+   * unchanged. Replaying a change is only simple if the change is a value.
+   */
+  send: <T>(method: string, path: string, body?: unknown) => request<T>(method, path, body),
 }

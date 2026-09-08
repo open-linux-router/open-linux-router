@@ -33,7 +33,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { ExitDialog } from '@/features/routing/exit-dialog'
 import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/routing/plan-preview'
-import { useRoutingConfig, useRoutingStatus, useRoutingTraffic } from '@/features/routing/queries'
+import {
+  routingChange,
+  useRoutingConfig,
+  useRoutingStatus,
+  useRoutingTraffic,
+  type RoutingChange,
+} from '@/features/routing/queries'
 import { useRoutingApply } from '@/features/routing/use-apply'
 import type { AssignmentStatus, ExitStatus, RoutingTraffic, Usage } from '@/lib/api-types'
 import type { Exit, RoutingConfig } from '@/lib/config-types'
@@ -73,8 +79,17 @@ export function RoutingPage() {
   const current = config.data
   const exits = current.exits ?? []
 
-  /** Every edit is a whole new config sent through the same path. */
-  const change = (next: RoutingConfig) => applier.submit(next)
+  /**
+   * Every edit names the one thing it changes and sends that.
+   *
+   * This used to build a whole new config here and PUT it — which meant this
+   * file carried its own copy of rules that already existed in Go, and got one
+   * of them wrong: renaming an exit spliced the exits array and left `default`
+   * and every assignment pointing at a name that no longer existed. Naming the
+   * item instead puts Config.Rename, Config.Upsert and the slot they preserve
+   * back where they belong.
+   */
+  const change = (c: RoutingChange) => applier.submit(c)
 
   return (
     <div className="space-y-6">
@@ -159,7 +174,7 @@ export function RoutingPage() {
               aria-label="Apply these settings"
               checked={current.enabled}
               disabled={applier.busy}
-              onCheckedChange={(enabled) => change({ ...current, enabled })}
+              onCheckedChange={(enabled) => change(routingChange.settings({ enabled }))}
             />
           </CardAction>
         </CardHeader>
@@ -167,7 +182,9 @@ export function RoutingPage() {
           <Select
             value={current.default || DIRECT}
             disabled={applier.busy}
-            onValueChange={(v) => change({ ...current, default: !v || v === DIRECT ? '' : v })}
+            onValueChange={(v) =>
+              change(routingChange.settings({ default: !v || v === DIRECT ? '' : v }))
+            }
           >
             <SelectTrigger className="w-full sm:w-72">
               {/* The trigger shows the raw value unless it is given a label,
@@ -242,7 +259,7 @@ export function RoutingPage() {
               aria-label="Count how much each device uses"
               checked={current.stats ?? true}
               disabled={applier.busy}
-              onCheckedChange={(stats) => change({ ...current, stats })}
+              onCheckedChange={(stats) => change(routingChange.settings({ stats }))}
             />
           </CardAction>
         </CardHeader>
@@ -275,22 +292,21 @@ export function RoutingPage() {
       <ExitDialog
         open={adding}
         onOpenChange={setAdding}
-        onSubmit={(exit) => change({ ...current, exits: [...exits, exit] })}
+        onSubmit={(exit) => change(routingChange.saveExit(exit.name, exit))}
       />
       {editing && (
         <ExitDialog
           open
           onOpenChange={(open) => !open && setEditing(null)}
           initial={editing}
-          onSubmit={(exit) =>
-            change({
-              ...current,
-              exits: exits.map((e) => (e.name === editing.name ? exit : e)),
-            })
-          }
+          // The path carries the name this exit had; the body carries what it
+          // should become. When those differ it is a rename, and the daemon
+          // moves `default` and every assignment along with it — which is why
+          // the name field can be edited here at all.
+          onSubmit={(exit) => change(routingChange.saveExit(editing.name, exit))}
           onRemove={() => {
             setEditing(null)
-            change({ ...current, exits: exits.filter((e) => e.name !== editing.name) })
+            change(routingChange.removeExit(editing.name))
           }}
         />
       )}
@@ -395,7 +411,7 @@ function NetworkList({
   config: RoutingConfig
   status?: AssignmentStatus[]
   busy: boolean
-  onChange: (next: RoutingConfig) => void
+  onChange: (change: RoutingChange) => void
 }) {
   const assignments = config.interfaces ?? []
   const exits = config.exits ?? []
@@ -409,11 +425,11 @@ function NetworkList({
   }
 
   function set(iface: string, value: string | null) {
+    // An empty exit is a real value, not a missing one: it records "this network
+    // explicitly follows the box-wide setting". Dropping the row entirely is a
+    // different statement, and there is a DELETE for it.
     const exit = !value || value === INHERIT ? '' : value
-    onChange({
-      ...config,
-      interfaces: assignments.map((a) => (a.interface === iface ? { ...a, exit } : a)),
-    })
+    onChange(routingChange.assign(iface, exit))
   }
 
   // Not a List: these rows carry an interactive control, and List's trailing

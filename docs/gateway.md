@@ -623,6 +623,74 @@ ISP-supplied router cannot say.
 
 ---
 
+## 8a. The write surface: one request per change
+
+Every change names the one thing it changes, and the daemon does the whole
+read-modify-write under the global apply lock (design.md §3.6).
+
+| | |
+|---|---|
+| `PUT /api/routing/exits/{name}` | add, replace — or **rename**, when the body's `name` differs from the path's |
+| `DELETE /api/routing/exits/{name}` | remove |
+| `PUT /api/routing/assignments/{interface}` | body `{"exit": "…"}`; `""` means *explicitly follows the box-wide setting* |
+| `DELETE /api/routing/assignments/{interface}` | stop overriding, so the row goes back to having no opinion |
+| `PATCH /api/routing/config` | `enabled`, `default`, `stats` |
+| `PUT /api/routing/config` | the whole document — restoring a backup, or several changes at once |
+
+**Why lists get their own routes and scalars do not.** A merge patch (RFC 7386)
+merges an object key by key but replaces an array *wholesale*, so `enabled`,
+`default` and `stats` are served perfectly well by `PATCH` while `exits` and
+`interfaces` cannot be — a patch meaning to edit one exit would take the others'
+traffic with it.
+
+The deeper reason is that without item routes the *edit* happens in the client.
+Every caller would load the document, splice the list itself, and send the whole
+thing back: two requests where the lock covers only the second, and one rule —
+`Config.Rename`'s cascade, `Config.Upsert` keeping an exit's slot — reimplemented
+once per client. Renaming is the case that proves it. An exit's name is
+referenced by `default` and by every assignment, so a rename is a change in three
+places; a client that splices the array changes one and leaves the other two
+naming an exit that is no longer there.
+
+### Dry run, and the one interruption
+
+Two query parameters, and they are independent.
+
+- **`?dry_run=true`** — plan and answer, write nothing. The response is a plan,
+  the same shape `POST /plan` returns, so one question has one answer whichever
+  route it was asked down. This is what `olr --dry-run` uses.
+- **`?confirm=true`** — go ahead with a change that would move traffic that is
+  currently flowing. Without it, such a change is **not applied**: the daemon
+  answers `409` with the plan, and the caller decides. This is design.md §5.1 and
+  §5.3.3 resolved as *instant, except when it would disconnect you* — and it
+  costs a second round trip only in the case that earns one.
+
+`olr` sends `confirm=true` on every change. §5.1 gives the CLI no staged commit,
+so a command that answered "this would be disruptive, run it again" would be one
+by another name; `--dry-run` is how you look first. The WebUI does not, because
+it has somebody to ask.
+
+`POST /apply` is exempt. It re-programs intent already stored — and already
+confirmed when it was stored — so there is no new decision to put to anyone.
+Gating it would mean a box whose rules somebody flushed needs an extra flag to be
+repaired, and that is the box that most needs repairing.
+
+### 409 means two things
+
+Both are refusals that wrote nothing, and the body tells them apart:
+
+- `plan.blocked` is set — §6's refusal. Another program owns the routing table.
+  Not a decision the operator can make here; they have to go and resolve it in
+  that program's configuration.
+- `plan.impact` is `disruptive` — the confirm gate above. Repeat with
+  `confirm=true`.
+
+A second status code was considered and rejected: a client has to read the plan
+in either case to say anything useful on screen, so the code would not save it
+any work.
+
+---
+
 ## 9. Scope
 
 | | | |

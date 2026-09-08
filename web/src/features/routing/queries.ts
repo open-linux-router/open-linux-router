@@ -1,12 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type {
-  RoutingApplyResult,
-  RoutingPlan,
-  RoutingStatus,
-  RoutingTraffic,
-} from '@/lib/api-types'
+import type { RoutingApplyResult, RoutingStatus, RoutingTraffic } from '@/lib/api-types'
 import type { RoutingConfig } from '@/lib/config-types'
 
 // The same polling story as the other modules: EventSource cannot send an
@@ -67,24 +62,72 @@ export function useRoutingTraffic() {
 }
 
 /**
- * Asks what a config would do without doing it.
+ * One change, described the way the API names it.
  *
- * The API's dry run (design.md §5.1), and on this module it earns its round
- * trip twice over: it is what lets the UI say "this would disconnect you from
- * the router" before rather than after.
+ * A value rather than a call, because a change has to survive being held: when
+ * the daemon answers 409 because the change would move traffic that is flowing,
+ * the page shows the plan and then sends *the same change* again with
+ * `confirm=true`. Replaying is only simple if the change is data.
  */
-export function useRoutingPlanPreview() {
-  return useMutation({
-    mutationFn: (config: RoutingConfig) => api.post<RoutingPlan>('/api/routing/plan', config),
-  })
+export interface RoutingChange {
+  method: 'PUT' | 'DELETE' | 'PATCH'
+  path: string
+  body?: unknown
 }
 
-export function useApplyRoutingConfig() {
+const base = '/api/routing'
+const seg = (s: string) => encodeURIComponent(s)
+
+/**
+ * The changes this screen can make, each naming the thing it changes.
+ *
+ * The split is not arbitrary. RFC 7386 merges an object key by key but replaces
+ * an array wholesale, so the scalars go through PATCH and the lists get a route
+ * per item. It is also what keeps the rules on the daemon's side: `saveExit`
+ * posts the new exit to the *old* name's path, and renaming every reference
+ * along with it is Config.Rename's job, not this file's.
+ */
+export const routingChange = {
+  saveExit: (name: string, exit: unknown): RoutingChange => ({
+    method: 'PUT',
+    path: `${base}/exits/${seg(name)}`,
+    body: exit,
+  }),
+  removeExit: (name: string): RoutingChange => ({
+    method: 'DELETE',
+    path: `${base}/exits/${seg(name)}`,
+  }),
+  assign: (iface: string, exit: string): RoutingChange => ({
+    method: 'PUT',
+    path: `${base}/assignments/${seg(iface)}`,
+    body: { exit },
+  }),
+  settings: (fields: Partial<RoutingConfig>): RoutingChange => ({
+    method: 'PATCH',
+    path: `${base}/config`,
+    body: fields,
+  }),
+}
+
+/**
+ * Sends one change, optionally already confirmed.
+ *
+ * There is no separate preview call. The daemon plans before it writes and
+ * refuses on its own when the plan is disruptive, so the round trip that used to
+ * be spent asking is only spent when the answer is "ask the operator" — which on
+ * this screen is the one answer worth waiting for. Every other edit lands first
+ * time.
+ */
+export function useApplyRoutingChange() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (config: RoutingConfig) =>
-      api.put<RoutingApplyResult>('/api/routing/config', config),
+    mutationFn: ({ change, confirm }: { change: RoutingChange; confirm?: boolean }) =>
+      api.send<RoutingApplyResult>(
+        change.method,
+        confirm ? `${change.path}?confirm=true` : change.path,
+        change.body,
+      ),
     onSettled: () => {
       // Invalidated on failure too. A partial apply changed the kernel, so
       // every observed answer is stale whether or not the call succeeded.

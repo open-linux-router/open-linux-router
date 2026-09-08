@@ -124,6 +124,17 @@ func (a Applier) Apply(ctx context.Context, cfg Config, admin netip.Addr) (Apply
 	if err != nil {
 		return ApplyResult{Plan: plan}, cfg, err
 	}
+	return a.ApplyPlanned(ctx, cfg, plan, desired)
+}
+
+// ApplyPlanned programs a plan that has already been built.
+//
+// Split out of Apply for the caller that has to look at the plan before deciding
+// whether to act on it — the HTTP layer refuses a `disruptive` change that was
+// not confirmed (§5.3.3), and it can only know that by planning first. Without
+// this split, acting on that decision would mean reading the kernel a second
+// time, and the second read could disagree with the one the operator was shown.
+func (a Applier) ApplyPlanned(ctx context.Context, cfg Config, plan Plan, desired Desired) (ApplyResult, Config, error) {
 	if plan.Blocked != "" {
 		// §6: detect and refuse. We do not rewrite somebody else's config file
 		// and we do not silently work around them, because the failure mode of

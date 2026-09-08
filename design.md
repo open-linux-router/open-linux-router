@@ -704,6 +704,25 @@ Verb drift across modules is invisible in review and obvious at startup.
 from the config structs. Read surface includes **observed resources** (leases,
 WAN state, stations) declared alongside config but never stored or revisioned.
 
+**Lists get a route per item; scalars do not.** A merge patch (RFC 7386) merges
+an object key by key but replaces an array wholesale, so `PATCH /config` serves
+a scalar field correctly and cannot serve a list at all — a patch meaning to edit
+one pool, policy or exit would drop the others. That is the whole test for
+whether a module needs `PUT`/`DELETE` on `…/exits/{name}` and the like.
+
+It matters more than a spelling. Without item routes the *edit itself* happens in
+the client: every caller loads the document, splices the list, and sends the whole
+thing back. That is two requests where the apply lock covers only the second —
+§3.6's lock cannot close a window that spans two requests — and it is one rule
+reimplemented per client, because only a Go client can call the module's own
+methods. `internal/routing` is the worked example; the other modules still owe it.
+
+**One request, and the plan decides whether it lands.** A mutating route plans
+before it writes. `?dry_run=true` answers with the plan and writes nothing;
+without `?confirm=true` a `disruptive` plan is refused with `409` and the plan,
+so §5.3.3's warning costs a second round trip only in the case that earns one.
+Everything else applies on the first.
+
 **Two listeners, authenticated differently, because they are different things.**
 The unix socket is the local admin path and its access control is the socket's
 mode and group — filesystem permissions *are* its authentication, and a token

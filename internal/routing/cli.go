@@ -3,7 +3,9 @@ package routing
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/netip"
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -214,7 +216,7 @@ func setStatsCommand() *cobra.Command {
 			default:
 				return fmt.Errorf("want on or off, got %q", args[0])
 			}
-			return mutate(c, func(cfg *Config) error { cfg.Stats = &on; return nil })
+			return patchConfig(c, map[string]any{"stats": on})
 		},
 	}
 }
@@ -235,17 +237,15 @@ func setDefaultCommand() *cobra.Command {
 			if noExit == (len(args) == 1) {
 				return fmt.Errorf("give an exit name, or --no-exit for the box's own connection")
 			}
-			return mutate(c, func(cfg *Config) error {
-				if noExit {
-					cfg.Default = ""
-					return nil
-				}
-				if _, ok := cfg.Find(args[0]); !ok {
-					return unknownExit(cfg, args[0])
-				}
-				cfg.Default = args[0]
-				return nil
-			})
+			// No check here that the exit exists. Validate does it on the
+			// daemon's side against the document it is about to write, and says
+			// which exits there are — checking first would be the same rule in a
+			// worse place, and one the WebUI would still not get.
+			name := ""
+			if !noExit {
+				name = args[0]
+			}
+			return patchConfig(c, map[string]any{"default": name})
 		},
 	}
 	// --no-exit rather than --none (docs/cli.md R4): the negative flag names the
@@ -266,13 +266,10 @@ func setViaCommand() *cobra.Command {
 			"setting.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(c *cobra.Command, args []string) error {
-			return mutate(c, func(cfg *Config) error {
-				if _, ok := cfg.Find(args[1]); !ok {
-					return unknownExit(cfg, args[1])
-				}
-				cfg.SetAssignment(args[0], args[1])
-				return nil
-			})
+			// As with `set default`, naming an exit that does not exist is
+			// Validate's answer to give, not this one's.
+			return send(c, http.MethodPut, assignmentEndpoint(args[0]),
+				assignmentBody{Exit: args[1]})
 		},
 	}
 	// The first positional is an interface name, which this module does not own
@@ -313,15 +310,22 @@ func addExitCommand() *cobra.Command {
 			"not know about it. Point tun2socks at it and use the interface that makes.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
-			return mutate(c, func(cfg *Config) error {
-				e, existing := cfg.Find(args[0])
-				e.Name = args[0]
-				if err := f.apply(c, &e, existing); err != nil {
-					return err
-				}
-				cfg.Upsert(e)
-				return nil
-			})
+			// The one command here that still reads before it writes, because
+			// the flags are a patch: `--probe` alone means "keep everything
+			// else", and f.apply needs the current exit to keep it onto. Only
+			// the flags are resolved here — Upsert, the slot it preserves, and
+			// the rename cascade all still happen on the daemon's side, under
+			// the lock, in the single request below.
+			cfg, err := loadConfig(c)
+			if err != nil {
+				return err
+			}
+			e, existing := cfg.Find(args[0])
+			e.Name = args[0]
+			if err := f.apply(c, &e, existing); err != nil {
+				return err
+			}
+			return send(c, http.MethodPut, exitEndpoint(args[0]), e)
 		},
 	}
 	f.register(c)
@@ -500,16 +504,11 @@ func rmExitCommand() *cobra.Command {
 		Short: "Remove an exit",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
-			return mutate(c, func(cfg *Config) error {
-				if !cfg.Remove(args[0]) {
-					return unknownExit(cfg, args[0])
-				}
-				// Deliberately not cleaning up references. A network still
-				// pointing at the deleted exit is a validation error naming
-				// both ends, which beats silently re-pointing somebody's phones
-				// at the modem because an exit was removed in another window.
-				return nil
-			})
+			// References to the name are deliberately not cleaned up; see the
+			// route's own comment. A network still pointing at the deleted exit
+			// is a validation error naming both ends, which beats silently
+			// re-pointing somebody's phones at the modem.
+			return send(c, http.MethodDelete, exitEndpoint(args[0]), nil)
 		},
 	}
 	c.ValidArgsFunction = cli.CompleteArgs(exitNames)
@@ -522,12 +521,7 @@ func rmViaCommand() *cobra.Command {
 		Short: "Stop overriding a network's exit, so it follows the box-wide setting",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
-			return mutate(c, func(cfg *Config) error {
-				if !cfg.RemoveAssignment(args[0]) {
-					return fmt.Errorf("%q has no exit of its own", args[0])
-				}
-				return nil
-			})
+			return send(c, http.MethodDelete, assignmentEndpoint(args[0]), nil)
 		},
 	}
 	c.ValidArgsFunction = cli.CompleteArgs(assignedNetworks)
@@ -540,7 +534,7 @@ func enableCommand() *cobra.Command {
 	return verb("enable", "Apply routing policy", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
-			return mutate(c, func(cfg *Config) error { cfg.Enabled = true; return nil })
+			return patchConfig(c, map[string]any{"enabled": true})
 		}
 	})
 }
@@ -549,7 +543,7 @@ func disableCommand() *cobra.Command {
 	return verb("disable", "Remove routing policy, leaving the box routing normally", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
-			return mutate(c, func(cfg *Config) error { cfg.Enabled = false; return nil })
+			return patchConfig(c, map[string]any{"enabled": false})
 		}
 	})
 }
@@ -575,25 +569,27 @@ func statusCommand() *cobra.Command {
 
 // ---------------------------------------------------------------- plumbing
 
-// mutate is the shape every change shares: load, edit, plan, then apply unless
-// asked not to.
+// send is the shape every change shares: one request naming the thing to change,
+// then print what it did.
+//
+// It is one request and not three. This used to read the whole config, edit it
+// here, and put it back — which meant the rule being applied lived in this
+// process, so the WebUI had to carry its own copy, and the apply lock only
+// covered the write half of a read-modify-write. Now the daemon does all three
+// steps under the lock and this only says which change it wants.
 //
 // Applying happens on return, with no staged commit (design.md §5.1), so the
 // diff and the impact are printed either way — the operator sees what happened
-// rather than only that something did.
-func mutate(c *cobra.Command, edit func(*Config) error) error {
+// rather than only that something did. That is also why every request here
+// carries confirm=true: the disruptive gate exists for the WebUI, which can put
+// the question to somebody and wait. A command that returned "this would be
+// disruptive, run it again" would be a staged commit by another name, and §5.1
+// says this surface does not have one. `--dry-run` is how you look first.
+func send(c *cobra.Command, method, path string, body any) error {
 	if err := cli.ValidateOutput(c); err != nil {
 		return err
 	}
 	ctx, client := ctxOf(c), cli.ClientFor(c)
-
-	cfg, err := loadConfig(c)
-	if err != nil {
-		return err
-	}
-	if err := edit(&cfg); err != nil {
-		return err
-	}
 
 	// A dry run asks what would happen and stops. On this module that question
 	// is worth more than on most: the difference between an edit nobody
@@ -601,7 +597,7 @@ func mutate(c *cobra.Command, edit func(*Config) error) error {
 	// single line of the plan (§5.1's lockout row).
 	if cli.DryRun(c) {
 		var plan planView
-		if err := client.Post(ctx, planEndpoint, cfg, &plan); err != nil {
+		if err := client.Do(ctx, method, path+"?dry_run=true", body, &plan); err != nil {
 			return err
 		}
 		if cli.IsJSON(c) {
@@ -611,7 +607,7 @@ func mutate(c *cobra.Command, edit func(*Config) error) error {
 	}
 
 	var result applyResponse
-	if err := client.Put(ctx, configEndpoint, cfg, &result); err != nil {
+	if err := client.Do(ctx, method, path+"?confirm=true", body, &result); err != nil {
 		// Report what landed before returning the failure: there is no
 		// rollback, so which steps completed is the operator's starting point
 		// (design.md §5.3.2).
@@ -622,6 +618,24 @@ func mutate(c *cobra.Command, edit func(*Config) error) error {
 		return cli.JSON(c.OutOrStdout(), result)
 	}
 	return writePlanText(c.OutOrStdout(), result.Plan, false)
+}
+
+// patchConfig changes named scalar fields and leaves the rest alone.
+//
+// Scalars only, and that is the whole division: RFC 7386 merges an object key by
+// key but replaces an array wholesale, so `enabled`, `default` and `stats` are
+// served correctly here while `exits` and `interfaces` need the item routes.
+func patchConfig(c *cobra.Command, fields map[string]any) error {
+	return send(c, http.MethodPatch, configEndpoint, fields)
+}
+
+// exitEndpoint and assignmentEndpoint name one item.
+func exitEndpoint(name string) string {
+	return core.APIPrefix + "/" + ModuleName + "/exits/" + url.PathEscape(name)
+}
+
+func assignmentEndpoint(iface string) string {
+	return core.APIPrefix + "/" + ModuleName + "/assignments/" + url.PathEscape(iface)
 }
 
 // unknownExit names the exits that do exist, because "no exit called X" is only
