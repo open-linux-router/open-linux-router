@@ -1,6 +1,6 @@
 # The MCP surface
 
-Status: **the rules below are enforced by `cmd/olrd/conformance_test.go` and
+Status: **the rules below are enforced by `internal/daemon/conformance_test.go` and
 `internal/mcp/mcp_test.go`.** A route or tool that breaks one fails the build.
 Section references are to `design.md` unless prefixed `cli:` or `dns:`.
 
@@ -75,7 +75,7 @@ avoid, and it would silently drop what that implementation does not model. The
 `$defs` that `internal/dhcp`'s pools rely on are a live example.
 
 The body is nested rather than spread across the top level because a route may
-have both a body and parameters — every mutating route on `routing` already
+have both a body and parameters — every mutating route on `gateway` already
 carries `dry_run` and `confirm` — and a config field named `confirm` would
 otherwise be the same argument as the query parameter named `confirm`.
 
@@ -92,7 +92,7 @@ for omitting the others (§10).
 
     olr dhcp show leases     →  dhcp_show_leases
     olr dns  show queries    →  dns_show_queries
-    olr routing status       →  routing_status
+    olr gateway status       →  gateway_status
 
 Same argument as `docs/cli.md`'s: verb drift is invisible in review, and MCP is
 the one surface nobody reads by hand, so it is where a "get" or a "fetch" would
@@ -116,7 +116,7 @@ and an exception has to be argued for in the test.
 
 The second half is the increment boundary. §6.2 says a mutating route plans
 before it writes and refuses a `disruptive` plan without `?confirm=true`, and
-only `internal/routing` implements it; `dhcp`, `dns` and `devices` apply on the
+only `internal/gateway` implements it; `dhcp`, `dns` and `devices` apply on the
 first request. Publishing a write today would hand an agent a tool that can drop
 the LAN with nothing between the model and the change but a tool name in an
 approval dialog — and the human approving it cannot see from `dhcp_set_config`

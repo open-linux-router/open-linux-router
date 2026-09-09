@@ -376,8 +376,8 @@ func TestHelpIsUnchanged(t *testing.T) {
 		{"link"}, {"link", "show"}, {"adopt"}, {"release"},
 		{"dhcp"}, {"dhcp", "show"}, {"dhcp", "add"}, {"dhcp", "set"}, {"dhcp", "rm"},
 		{"dns"}, {"dns", "show"}, {"dns", "add"}, {"dns", "set"}, {"dns", "rm"},
-		{"routing"}, {"routing", "show"}, {"routing", "add"}, {"routing", "set"}, {"routing", "rm"},
-		{"daemon"}, {"daemon", "listen"},
+		{"gateway"}, {"gateway", "show"}, {"gateway", "add"}, {"gateway", "set"}, {"gateway", "rm"},
+		{"listen"}, {"status"},
 	} {
 		name := "olr"
 		if len(path) > 0 {

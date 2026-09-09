@@ -22,7 +22,7 @@ import (
 // Bodies are nested under one key rather than spread across the top level, and
 // the alternative is worth naming because it looks tidier: a plan tool whose
 // arguments *are* the config document. That breaks the moment a route has both
-// a body and a parameter — every mutating route on `routing` already carries
+// a body and a parameter — every mutating route on `gateway` already carries
 // dry_run and confirm — because a config field called "confirm" and the query
 // parameter called "confirm" would then be the same argument. Nesting costs one
 // level of JSON and removes the whole class.

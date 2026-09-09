@@ -15,7 +15,7 @@ import (
 // promise that "install alone changes nothing" needs, and why applying here is
 // one atomic document write with an impact of none.
 //
-// What adoption *does* is unlock the other modules: `dhcp`, `dns` and `routing`
+// What adoption *does* is unlock the other modules: `dhcp`, `dns` and `gateway`
 // each refuse an interface nobody handed them. So the visible effect of an
 // adopt is that a form somewhere else stops rejecting you, and the visible
 // effect of a release is that a pool on that interface stops validating. That

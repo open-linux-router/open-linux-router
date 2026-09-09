@@ -7,7 +7,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/link"
-	"github.com/open-linux-router/open-linux-router/internal/routing"
+	"github.com/open-linux-router/open-linux-router/internal/gateway"
 )
 
 // newRoot builds the command tree an operator actually gets.
@@ -30,7 +30,7 @@ func newRoot() *cobra.Command {
 		link.Command(),
 		dhcp.Command(),
 		dns.Command(),
-		routing.Command(),
+		gateway.Command(),
 	)
 
 	// `adopt` and `release` are hub-level operations in design.md §6.1's list,

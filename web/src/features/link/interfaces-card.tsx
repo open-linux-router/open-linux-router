@@ -35,7 +35,7 @@ import { cn } from '@/lib/utils'
  * way to grant.
  *
  * It lives on the DHCP page rather than in a section of its own. Adoption is
- * read by dns and routing too, so a case could be made for either — but this is
+ * read by dns and gateway too, so a case could be made for either — but this is
  * the page where it is *needed first*, and a fifth nav entry for one switch per
  * interface would be a section that is visited once and then never again.
  */

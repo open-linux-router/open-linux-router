@@ -139,7 +139,7 @@ Five rules. No abstraction, no registry, no codegen framework.
 Modules are mounted explicitly — the list is bounded, so it is a literal list:
 
 ```go
-// cmd/olrd/main.go
+// internal/daemon/daemon.go
 core.Mount("link",     link.Handler(),     link.Schema)
 core.Mount("dial",     dial.Handler(),     dial.Schema)
 core.Mount("dhcp",     dhcp.Handler(),     dhcp.Schema)
@@ -223,7 +223,7 @@ not ours at all.
    ├─ dns       → unbound  ──────────── 1  not ours to write
    ├─ dial      → pppd / dhcpcd ─────── 0–1 per WAN
    ├─ wifi      → hostapd  ──────────── 1 per radio (later)
-   └─ routing   → bird     ──────────── 1 (later)
+   └─ gateway   → bird     ──────────── 1 (later)
 
   transient:   olr guard expire   armed only during the §5.5 window
                dhcp-script        per lease event, forked by dnsmasq
@@ -239,8 +239,15 @@ server** — it is the controller that renders config and reloads the backend.
 
 Which gives a decidable test for where any new code goes:
 
-**Does it have to keep running while `olrd` is stopped?** Yes → its own binary
+**Does it have to keep running while `olrd` is stopped?** Yes → its own process
 and its own unit. No → a package inside `olrd`.
+
+*Process*, not *binary*, and the distinction is load-bearing rather than
+pedantic. Every role ships in one executable — `olr`, which dispatches
+`olr internal daemon` and `olr internal dns-relay` for the unit files to invoke
+— so the file count says nothing about the process count. What this rule asks
+for is an address space `systemctl restart olrd` cannot reach into, and two
+units running one binary give exactly that.
 
 The test discriminates correctly on the awkward cases. The netlink watcher that
 feeds §6.3's live UI runs continuously inside `olrd`, and that is fine: if
@@ -272,8 +279,8 @@ supervised by systemd.
 
 **Backends are separate processes even when we write them.** The rule is not
 "reuse the distro"; it is stronger, and survives us writing our own
-implementation. If `olr-dhcpd` ever exists it is a binary and a unit, never
-a goroutine, because:
+implementation. If `olr-dhcpd` ever exists it is a process and a unit — one
+more `olr internal …` entry point — never a goroutine, because:
 
 - **A goroutine server means building a process supervisor inside `olrd`** —
   restart policy, backoff, liveness — which is precisely what §3.4 refuses to
@@ -373,7 +380,7 @@ Bounded list. Not expected to grow much. The object they all key off is the
 | | `dns` | unbound — **DNS only** | ✅ |
 | | `firewall` | nftables `olr_filter`, `olr_nat` — zones, rules, NAT, forwards | ✅ |
 | | `qos` | tc — CAKE / fq_codel, per-device shaping | |
-| | `routing` | static + policy routes; later bird (BGP/OSPF) | |
+| | `gateway` | static + policy routes; later bird (BGP/OSPF) | |
 | | `vpn` | wireguard — remote access, site-to-site | |
 | | `wifi` | hostapd — only if the box has radios | |
 | **Operational** | `system` | hostname, time, admin users, updates, backup, logs | ✅ |
@@ -392,12 +399,12 @@ names, and they do not restate a subnet `link` already owns.
 link ──┬─→ dial ──┬─→ dns      (upstream resolvers)
        │          ├─→ qos      (WAN iface + rate)
        │          ├─→ firewall (NAT egress iface)
-       │          └─→ routing  (default route, PD prefix)
+       │          └─→ gateway  (default route, PD prefix)
        ├─→ dhcp ──┬─→ dns      (lease hostnames, one-way publish)
        │          ├─→ devices  (leases as presence; identity flows the other way)
        │          └─→ qos
        ├─→ firewall
-       ├─→ routing
+       ├─→ gateway
        └─→ wifi
 ```
 
@@ -576,7 +583,7 @@ Two things were hiding under the word "health":
 
 - **drift** — applies to every module, derived as above
 - **is the backend alive** — only backend-backed modules (`dhcp`, `dns`,
-  `dial`, `wifi`, dynamic `routing`); mostly a systemd query (§3.5)
+  `dial`, `wifi`, dynamic `gateway`); mostly a systemd query (§3.5)
 
 ### 5.5 Lockout guard
 
@@ -681,18 +688,25 @@ olr diff                          pending/drifted, per module
 olr history | rollback            per-module revisions
 olr adopt <iface> | release       take/hand back interface ownership
 
-olr daemon start | stop | status  manage olrd itself — see below
+olr start | stop | restart        manage the service itself — see below
+olr listen <addr>                 open the web UI on the network
 ```
 
 The command tree is registered in Go, so `olr --help` is truthful with `olrd`
 stopped and there is no schema to fetch, cache, or invalidate.
 
 **Two tiers.** Most of `olr` is a client of `olrd` on equal footing with the
-WebUI and MCP (§1). But `olr daemon …` manages `olrd` itself, so it cannot be
-one — starting a daemon cannot be an HTTP call to that daemon, and `status` has
-to answer when it is wedged. Those commands talk to systemd directly and are
-grouped separately in `--help`. The "equal clients" rule in §1 governs
+WebUI and MCP (§1). But `olr start`, `olr stop`, `olr restart` and `olr listen`
+manage `olrd` itself, so they cannot be — starting a daemon cannot be an HTTP
+call to that daemon, and `status` has to answer when it is wedged. Those
+commands talk to systemd directly. The "equal clients" rule in §1 governs
 *configuration*; daemon lifecycle is not configuration.
+
+The tier is marked by the `Service:` heading in `--help`, not by a word in the
+command path. They lived under an `olr daemon` group until the group was
+flattened away: an operator has one program installed and thinks of it as one
+program, so `olr start` is what they reach for. Grouping carries the boundary
+as well as a prefix did, and asks nobody to learn the word "daemon" first.
 
 The shared verb vocabulary (§3.2 rule 4) is enforced in code, not documented:
 constructing a command with a verb outside the vocabulary panics at startup.
@@ -715,7 +729,7 @@ the client: every caller loads the document, splices the list, and sends the who
 thing back. That is two requests where the apply lock covers only the second —
 §3.6's lock cannot close a window that spans two requests — and it is one rule
 reimplemented per client, because only a Go client can call the module's own
-methods. `internal/routing` is the worked example; the other modules still owe it.
+methods. `internal/gateway` is the worked example; the other modules still owe it.
 
 **One request, and the plan decides whether it lands.** A mutating route plans
 before it writes. `?dry_run=true` answers with the plan and writes nothing;
@@ -753,7 +767,7 @@ address never, unless `--listen` says otherwise — so a fresh install has a
 working `olr` and a UI nothing can reach. That follows from §7: `apt install`
 must not put an admin port on a LAN uninvited, and a router is exactly the box
 where that matters. The cost is a step nobody guesses, so it is a command rather
-than a documented file edit — `olr daemon listen 0.0.0.0:8080` writes
+than a documented file edit — `olr listen 0.0.0.0:8080` writes
 `/etc/open-linux-router/olrd.env`, restarts the unit, and prints where the token
 is. Making it *easy* to say yes is a different thing from saying yes on the
 operator's behalf, and only the second one is a surprise.
@@ -810,7 +824,7 @@ cannot skip validation, the §3.6 lock, or the change event. The import graph
 enforces it; a test fails the build otherwise.
 
 *Writes wait for §6.2's gate.* "An agent proposes, a human reviews the diff" needs
-the disruptive refusal, and only `routing` implements it — `dhcp`, `dns` and
+the disruptive refusal, and only `gateway` implements it — `dhcp`, `dns` and
 `devices` still apply on the first request. Until they do not, publishing a write
 tool would mean an agent could drop the LAN with nothing to show the approving
 human that it would. The read and plan tools are the half that works today.
@@ -828,7 +842,7 @@ nothing.
 
   **Built, in the half that gates the other modules.** `olr adopt` and `olr
   release` record consent in the `link` section of the document, and `dhcp`,
-  `dns` and `routing` each refuse an interface that is not in it. The other
+  `dns` and `gateway` each refuse an interface that is not in it. The other
   half — actually taking the interface from NetworkManager or
   systemd-networkd, and recording prior state so `release` can put it back —
   waits for the `link` module of §9 milestone 1. Until then adopting is
@@ -850,7 +864,7 @@ nothing.
 - **Debian 13 (trixie)** primary, amd64 + arm64. Own apt repo.
 - Ubuntu LTS next. Any systemd + nftables distro as a secondary goal.
 - `open-linux-router` (core + v1 modules) with optional
-  `olr-module-{qos,vpn,wifi,routing}` splits, since selective install is a real
+  `olr-module-{qos,vpn,wifi,gateway}` splits, since selective install is a real
   payoff of package-level over image-level.
 
 **Stack:** Go for core and modules — static binary, good netlink/nftables
@@ -922,7 +936,7 @@ be the released artefact.
    plus `/api/schema` are the two halves an OpenAPI document is a join of.
    Still owed: writes, which wait on §6.2's disruptive gate reaching `dhcp`,
    `dns` and `devices`; the document itself; skills.
-6. **Then:** `qos`, `vpn`, `routing`, `wifi`.
+6. **Then:** `qos`, `vpn`, `gateway`, `wifi`.
 
 **Order taken so far, and why it departs from the list.** `olrd`, the core
 control plane and the WebUI shell landed before milestone 1, against a single
@@ -942,7 +956,7 @@ downstream should be built on that key in the meantime.
 field — the list of adopted interface names — plus a kernel reader for the
 observed half. It exists because the adopt-only rule (§3.4, §7) was being
 enforced by three modules against a fact with nowhere to live: `dhcp`, `dns` and
-`routing` each refused an interface nobody had handed over, `olr adopt` was a
+`gateway` each refused an interface nobody had handed over, `olr adopt` was a
 stub, and the flag was reachable only by hand-writing a JSON file that olrd's
 own systemd unit never passed. The result was that a packaged install could not
 configure DHCP at all — every pool failed validation with "no such interface". A
@@ -1013,7 +1027,7 @@ it promises that installing changes nothing.
 
   Presence stays read-through and arrives via a consumer-declared interface, the
   way `dhcp` reads `link` through `LinkView`: `devices` never imports `dhcp`, and
-  the lease adapter is wired in `cmd/olrd`. What was going to be the `clients`
+  the lease adapter is wired in `internal/daemon`. What was going to be the `clients`
   module — conntrack, wifi stations — becomes further presence sources behind
   that same interface rather than a second module with a second name for one
   object.
@@ -1077,8 +1091,11 @@ it promises that installing changes nothing.
   runtime. Alternative considered and rejected: fetch-and-cache, which would let
   `olr` drive a newer or remote daemon but makes `olr --help` depend on the
   daemon being reachable. See §6.1.
-- **CLI is two-tier.** `olr daemon …` is below the API, everything else is a
-  client of it (§6.1). §1's "equal clients" governs configuration, not lifecycle.
+- **CLI is two-tier.** The `Service:` commands — `start`, `stop`, `restart`,
+  `listen` — are below the API; everything else is a client of it (§6.1). §1's
+  "equal clients" governs configuration, not lifecycle. The tier used to be a
+  command prefix (`olr daemon …`) and is now a heading, which changed where it
+  is visible and nothing about what it is.
 - **Process model: one resident `olrd`; modules in, backends out** (§3.5).
   Settled by the invariant that restarting `olrd` must never disturb traffic.
   Two alternatives were considered and rejected:
@@ -1093,7 +1110,7 @@ it promises that installing changes nothing.
     handles worst. It also makes `inactive` the healthy state in
     `systemctl status`, adds a second unit, and adds an idle timeout with no
     principled value. Keeping `olrd` resident also preserves §6.1's two-tier
-    rationale unchanged, since `olr daemon start` remains a real operation.
+    rationale unchanged, since `olr start` remains a real operation.
 - **`olrd` is a control plane, not a worker.** It may cache only what is derived
   and cheap to rebuild — the reflected schema, the route table, the OpenAPI
   document. Never config, never observed state, never revision history. The test:
@@ -1106,9 +1123,11 @@ it promises that installing changes nothing.
   window. Viable only because apply never waits for convergence — it renders,
   reloads and returns, leaving "is the WAN actually up" to observed state.
 - **Vocabulary: `daemon` is `olrd`, `backend` is what it drives** (§4.2). The
-  document previously used "daemon" for both, which made `olr daemon status`
-  read ambiguously against "is dnsmasq alive" — two different questions with
-  two different answers.
+  document previously used "daemon" for both, which made the old
+  `olr daemon status` read ambiguously against "is dnsmasq alive" — two
+  different questions with two different answers. The word survives in this
+  document and in the code, where the distinction is load-bearing; it no longer
+  appears in the CLI, where it only ever asked the operator to care.
 - **Config format: JSON.** Round-trips through the same struct tags as the REST
   body and the reflected schema, so there is no second dialect and no mapping
   layer. TOML would be friendlier to read and was rejected for that duplication.

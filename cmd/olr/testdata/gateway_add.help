@@ -1,0 +1,17 @@
+Add an exit
+
+Usage:
+  olr gateway add [command]
+
+Available Commands:
+  exit        Add or replace an exit
+
+Flags:
+  -h, --help   help for add
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr gateway add [command] --help" for more information about a command.

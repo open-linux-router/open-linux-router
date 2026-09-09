@@ -15,7 +15,7 @@
 // not.
 //
 // The import graph is what enforces this, not a convention, and
-// cmd/olrd/conformance_test.go fails the build if a module import appears here.
+// internal/daemon/conformance_test.go fails the build if a module import appears here.
 //
 // # Nothing here is a list of routes
 //
@@ -95,7 +95,7 @@ type Server struct {
 // surface this cannot enumerate is one no client could have called anyway.
 //
 // An error here is a programming error rather than a runtime condition — the
-// schema and the route table are both static — so cmd/olrd treats it as fatal.
+// schema and the route table are both static — so internal/daemon treats it as fatal.
 // Finding out at boot beats finding out when an agent first connects.
 func New(api http.Handler) (*Server, error) {
 	if api == nil {

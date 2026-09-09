@@ -25,7 +25,7 @@ olr <module> <verb> [<object>] [<name>] [flags]
 
   olr dhcp show pools
   olr dhcp add reservation <mac> --ip 192.168.1.50
-  olr routing set via <network> <exit>
+  olr gateway set via <network> <exit>
   olr dns rm block <name>...
 ```
 
@@ -64,7 +64,7 @@ the vocabulary, and hiding them behind a placeholder means `--help` no longer
 says what may be typed.
 
 Three styles were in use — `<interface>` in dhcp, bare `NAME` in dns and
-routing, `[name]` in one dns command — and the bare form is the one worth
+gateway, `[name]` in one dns command — and the bare form is the one worth
 losing. In `--help`, `via NETWORK EXIT` renders as three words of the same
 weight, and nothing tells the reader that the first is a subcommand and the
 other two are things they must supply. Angle brackets are the man-page
@@ -144,8 +144,8 @@ mechanism for clearing a field is also the mechanism by which a typo silently
 clears it.
 
 ```
-olr routing set default --no-exit          was --none
-olr routing add exit <name> --no-probe     was --probe ""
+olr gateway set default --no-exit          was --none
+olr gateway add exit <name> --no-probe     was --probe ""
 olr dhcp set pool <if> --no-gateway        unchanged
 ```
 
@@ -180,7 +180,7 @@ be registered anywhere in the tree.
 > `show <object> <name>` shows one in full.**
 
 Three shapes were in use. dhcp had lists but no way to see a single pool; dns
-had `show policies [name]`, one command doing both jobs; routing had neither,
+had `show policies [name]`, one command doing both jobs; gateway had neither,
 only a whole-module `show`.
 
 `policies [name]` is the interesting failure. It cannot be completed sensibly —
@@ -234,7 +234,7 @@ subtrees.
 | partial failure | `What was done before the failure:` then the steps |
 
 The unknown-object template is the one worth centralising. Four phrasings were
-in use across three modules, mixing `%s` and `%q`, and only routing's listed the
+in use across three modules, mixing `%s` and `%q`, and only gateway's listed the
 candidates that do exist — which is the half of the answer that matters, because
 the reason an operator lands here is almost always a typo rather than a genuine
 absence. `cli.UnknownObject` is that function, and it is now the only way to
@@ -275,8 +275,8 @@ change and exit without applying it". Its three legitimate meanings:
 | `show` | plan stored intent against reality — the drift question (§5.4) |
 | anything else | **error** |
 
-The third row is the change. `--dry-run` was silently ignored by `olr daemon
-start`, `olr version`, and every dhcp read command. Silently ignoring it is
+The third row is the change. `--dry-run` was silently ignored by `olr start`,
+`olr version`, and every dhcp read command. Silently ignoring it is
 strictly worse than rejecting it, because the operator who types it before a
 disruptive change is the operator who most needs to be told it did not apply.
 
@@ -344,7 +344,7 @@ changes, and `olr.json` never sees them.
 ## 13. Open
 
 1. **`set` has two shapes and this document does not pick one.** dhcp and
-   routing use `set` as a pure group (`set pool <if> --…`); dns uses it as a
+   gateway use `set` as a pure group (`set pool <if> --…`); dns uses it as a
    leaf with eleven flags (`set --mode … --upstream …`). Both are internally
    consistent, and the split tracks a real difference — dns's settings are a
    module-wide singleton with no object to name. But eleven flags on one command

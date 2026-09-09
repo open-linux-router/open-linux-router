@@ -9,7 +9,7 @@
 // docs/dns.md §5 spends its length on.
 //
 // So this package is driven the way dnsmasq is driven: a rendered config file
-// and a signal. internal/dns renders the files; cmd/olr-dnsd reads them. There
+// and a signal. internal/dns renders the files; internal/dnsd reads them. There
 // is deliberately no RPC back to olrd — §3.5's corollary is that a private
 // channel would cost the backend its ability to be run and debugged on its own,
 // which is exactly what makes a resolver diagnosable at 2am.

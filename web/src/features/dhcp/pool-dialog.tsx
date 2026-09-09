@@ -263,7 +263,7 @@ export function PoolDialog({
               with: an olr box added to an existing network, serving addresses
               while the old router still carries the traffic. Left blank there,
               every device is handed a default route to a machine that is not
-              routing and a resolver that is not answering — and the symptom is
+              gateway and a resolver that is not answering — and the symptom is
               "the new router broke my internet", which is the worst possible
               first impression to debug. */}
           <p className="text-xs text-muted-foreground">

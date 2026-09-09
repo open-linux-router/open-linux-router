@@ -1,7 +1,7 @@
 # `dns` module design
 
 Status: **§6's v1 row is built.** `internal/dns` is the module, `internal/dnsrelay`
-and `cmd/olr-dnsd` are the relay, and the packaging carries `olr-dns.service`
+and `internal/dnsd` are the relay, and the packaging carries `olr-dns.service`
 (unbound, on loopback:5353) and `olr-dnsd.service` (ours, on :53). Section
 references are to `design.md`.
 
@@ -384,9 +384,13 @@ above stays manageable.**
 
 > **Built, and it was never open:** `design.md` §3.5 had already decided this.
 > "Backends are separate processes even when we write them… if `olr-dhcpd` ever
-> exists it is a binary and a unit, never a goroutine", and its test — *does it
+> exists it is a process and a unit, never a goroutine", and its test — *does it
 > have to keep running while `olrd` is stopped?* — DNS fails plainly. So the
-> relay is `cmd/olr-dnsd`, `Type=notify`, `Restart=always`.
+> relay is `internal/dnsd`, `Type=notify`, `Restart=always`.
+>
+> It shares an executable with `olrd` and does not share an address space: one
+> `olr` binary carries every role, and `olr-dnsd.service` invokes it as
+> `olr internal dns-relay`. §3.5 asks for the second, never the first.
 >
 > One correction to the paragraph above: it is *not* configured by reading from
 > `olrd` over a socket. §3.5's corollary is that we drive our own backend the way
@@ -421,7 +425,7 @@ only and access-control by source, or we have shipped an amplifier.
 ## 7. Open
 
 1. ~~**Separate process or inside `olrd`** (§5).~~ **Closed** — `design.md` §3.5
-   had already decided it. `cmd/olr-dnsd`, its own unit, `Restart=always`,
+   had already decided it. `internal/dnsd`, its own unit, `Restart=always`,
    driven by rendered files and a signal.
 2. **SNAT toward next-hop exits, or a dedicated segment for the proxy box**
    (§2.1). Determines whether byte accounting sees both directions.

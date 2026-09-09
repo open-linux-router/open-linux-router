@@ -9,7 +9,7 @@ drives them through systemd, and puts one schema behind a CLI, a REST API, an
 MCP server and a web UI. The box stays a normal Linux machine: nothing outside
 olr's declared scope is touched, and `apt remove` gives it back.
 
-**Status: early.** DHCP, DNS and routing are built; interface adoption is
+**Status: early.** DHCP, DNS and the gateway are built; interface adoption is
 minimal (see below); firewall, NAT and Wi-Fi are not written yet. If you want a
 finished router today, this is not one — but a box serving DHCP for a household
 works, and that is the path documented in
@@ -41,7 +41,7 @@ you reach over SSH must not be able to disconnect you from it.
 `olr` command talks to — and does not listen on the network until told to:
 
 ```sh
-sudo olr daemon listen 0.0.0.0:8080
+sudo olr listen 0.0.0.0:8080
 ```
 
 Then browse to `http://<this box>:8080`. It will ask for a token, which `olrd`
@@ -51,8 +51,8 @@ generated on first start:
 sudo cat /etc/open-linux-router/api-token
 ```
 
-To close it again, `sudo olr daemon listen --off`. For a box you would rather
-not expose at all, `olr daemon listen 127.0.0.1:8080` and reach it over an SSH
+To close it again, `sudo olr listen --off`. For a box you would rather
+not expose at all, `olr listen 127.0.0.1:8080` and reach it over an SSH
 tunnel — loopback needs no token.
 
 ## Or stay on the command line
@@ -97,7 +97,7 @@ while both DHCP servers are running.
 ## Building
 
 ```sh
-make all      # SPA + binaries
+make all      # SPA + binary
 make check    # vet + tests
 make package  # .deb for amd64 and arm64
 ```

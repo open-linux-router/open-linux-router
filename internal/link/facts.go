@@ -27,7 +27,7 @@ import (
 // The three consumer modules each declare their own copy of this error
 // (internal/dhcp/link.go and friends). That is not duplication to remove: they
 // declare the *facts they need* rather than importing ours, which is what keeps
-// design.md §4.1's arrow pointing one way. The adapters in cmd/olrd translate.
+// design.md §4.1's arrow pointing one way. The adapters in internal/daemon translate.
 var ErrNoSuchInterface = errors.New("no such interface")
 
 // Info is one interface as the rest of olr sees it.

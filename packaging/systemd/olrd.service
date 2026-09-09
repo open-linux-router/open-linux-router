@@ -27,7 +27,7 @@ EnvironmentFile=-/etc/open-linux-router/olrd.env
 
 # $OLRD_ARGS unbraced, which systemd word-splits — ${OLRD_ARGS} would pass
 # "--listen 0.0.0.0:8080" as a single argument and olrd would reject it.
-ExecStart=/usr/bin/olrd $OLRD_ARGS
+ExecStart=/usr/bin/olr internal daemon $OLRD_ARGS
 ExecReload=/bin/kill -HUP $MAINPID
 
 Restart=on-failure

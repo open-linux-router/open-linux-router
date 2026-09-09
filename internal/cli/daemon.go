@@ -25,31 +25,41 @@ const DaemonUnit = "olrd.service"
 // situation these commands exist for.
 const daemonTimeout = 30 * time.Second
 
-// daemonCommand groups the commands that manage olrd itself.
+// serviceCommands are the commands that manage olrd itself.
 //
-// This is the one place the CLI is not an API client. `olr daemon start` cannot
-// be an HTTP call to the thing it is starting, and `olr daemon status` has to
-// answer truthfully when olrd is wedged. These talk to systemd directly.
-func daemonCommand() *cobra.Command {
-	c := &cobra.Command{
-		Use:     "daemon",
-		Short:   "Manage the olrd service itself",
-		Long:    "Commands that manage olrd. Unlike the rest of olr, these do not go\nthrough olrd's API — they work when it is stopped or unresponsive.",
-		GroupID: GroupLocal,
-	}
-
-	c.AddCommand(
-		daemonJob("start", "Start olrd", "started",
+// This is the one place the CLI is not an API client. `olr start` cannot be an
+// HTTP call to the thing it is starting, and `olr status` has to answer
+// truthfully when olrd is wedged. These talk to systemd directly, and
+// design.md §6.1 calls that the lower of the CLI's two tiers.
+//
+// They sit at the top level rather than under an `olr daemon` group, and the
+// tier survives the move: it is marked by the `Service:` heading in `olr
+// --help` instead of by a word in the command path. What the group bought was
+// never the boundary — it was the word "daemon" in front of an operator who
+// has one program installed and reasonably thinks of it as one program.
+func serviceCommands() []*cobra.Command {
+	return []*cobra.Command{
+		daemonJob("start", "Start olr", "started", "",
 			func(ctx context.Context, u core.Unit) error { return u.Start(ctx) }),
-		daemonJob("stop", "Stop olrd", "stopped",
-			func(ctx context.Context, u core.Unit) error { return u.Stop(ctx) }),
-		daemonJob("restart", "Restart olrd", "restarted",
-			func(ctx context.Context, u core.Unit) error { return u.Restart(ctx) }),
-		daemonStatusCommand(),
-		daemonListenCommand(),
-	)
 
-	return c
+		// The note is not decoration. design.md §3.5 guarantees that stopping
+		// the control plane never touches the data plane, so this command does
+		// markedly less than "stop" sounds like it does: leases keep being
+		// handed out and names keep resolving. Under `olr daemon stop` the
+		// scope was at least visible in the command. At the top level the only
+		// place left to say it is here.
+		daemonJob("stop", "Stop olr", "stopped",
+			"The network keeps running — DHCP is still handing out leases and DNS is\n"+
+				"still resolving. Stopping the control plane never interrupts them.\n\n"+
+				"  olr dhcp disable    stop handing out leases\n"+
+				"  olr dns disable     give port 53 back\n",
+			func(ctx context.Context, u core.Unit) error { return u.Stop(ctx) }),
+
+		daemonJob("restart", "Restart olr", "restarted", "",
+			func(ctx context.Context, u core.Unit) error { return u.Restart(ctx) }),
+
+		daemonListenCommand(),
+	}
 }
 
 // EnvPath is the file olrd's unit reads its arguments from.
@@ -74,24 +84,25 @@ func daemonListenCommand() *cobra.Command {
 	var off bool
 
 	c := &cobra.Command{
-		Use:   "listen <address>",
-		Short: "Serve the web UI on a network address",
-		Long: "Open olrd's web UI on an address, by writing " + EnvPath + " and\n" +
-			"restarting olrd.\n\n" +
-			"olrd always serves its control socket, which is what `olr` talks to. It\n" +
-			"listens on the network only when told to, so this is the step that makes\n" +
-			"the web UI reachable from another machine.\n\n" +
-			"Anything that is not a loopback address requires a token, which olrd\n" +
-			"generates on first start into " + core.TokenPath + ". The UI asks\n" +
-			"for it on first use.\n\n" +
+		Use:     "listen <address>",
+		Short:   "Serve the web UI on a network address",
+		GroupID: GroupService,
+		Long: "Open the web UI on an address, by writing " + EnvPath + " and\n" +
+			"restarting the service.\n\n" +
+			"olr always serves its control socket, which is what the command line\n" +
+			"talks to. It listens on the network only when told to, so this is the\n" +
+			"step that makes the web UI reachable from another machine.\n\n" +
+			"Anything that is not a loopback address requires a token, generated on\n" +
+			"first start into " + core.TokenPath + ". The UI asks for it on\n" +
+			"first use.\n\n" +
 			"Examples:\n" +
-			"  olr daemon listen 0.0.0.0:8080   reachable from your network\n" +
-			"  olr daemon listen 127.0.0.1:8080 this box only, for an ssh tunnel\n" +
-			"  olr daemon listen --off          stop listening on the network",
+			"  olr listen 0.0.0.0:8080   reachable from your network\n" +
+			"  olr listen 127.0.0.1:8080 this box only, for an ssh tunnel\n" +
+			"  olr listen --off          stop listening on the network",
 		Args: func(c *cobra.Command, args []string) error {
 			// The address is required unless --off, which is a shape cobra has
 			// no built-in validator for. Spelled out rather than declared as
-			// MaximumNArgs(1), so that a bare `olr daemon listen` says what is
+			// MaximumNArgs(1), so that a bare `olr listen` says what is
 			// missing instead of failing later with an empty address.
 			if off {
 				return cobra.NoArgs(c, args)
@@ -246,11 +257,14 @@ func reportListening(w io.Writer, address string) error {
 	return err
 }
 
-func daemonJob(use, short, done string, run func(context.Context, core.Unit) error) *cobra.Command {
+// daemonJob builds one lifecycle command. note, when non-empty, is printed
+// after the result to say what the command did *not* do.
+func daemonJob(use, short, done, note string, run func(context.Context, core.Unit) error) *cobra.Command {
 	return &cobra.Command{
-		Use:   use,
-		Short: short,
-		Args:  cobra.NoArgs,
+		Use:     use,
+		Short:   short,
+		GroupID: GroupService,
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := RejectDryRun(cmd); err != nil {
 				return err
@@ -267,16 +281,39 @@ func daemonJob(use, short, done string, run func(context.Context, core.Unit) err
 			// core.Unit waits for systemd's job result rather than returning
 			// once the job is queued, so saying it is done is honest.
 			fmt.Fprintf(cmd.OutOrStdout(), "%s %s\n", DaemonUnit, done)
+			if note != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "\n%s", note)
+			}
 			return nil
 		},
 	}
 }
 
-func daemonStatusCommand() *cobra.Command {
+// statusCommand answers "is olr running", and is the top-level `olr status`.
+//
+// It was two commands until the `daemon` group was flattened: a stub `olr
+// status` in operations.go promising "aggregate drift and daemon liveness
+// across modules", and a working `olr daemon status` that reported the
+// liveness half. Merging them keeps the working half and drops the promise,
+// rather than the other way round.
+//
+// The drift half is still per-module — `olr dhcp status` and its siblings —
+// and aggregating it here is design.md §6.1's eventual shape. When that
+// arrives it extends this command; it does not need a different one.
+//
+// GroupOperations, not GroupService: it fans out across modules, which is what
+// that group means. It lives in this file because what it can answer today is
+// a systemd query, and because it must keep answering when olrd is wedged —
+// the same reason the lifecycle commands are not API clients.
+func statusCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "status",
-		Short: "Report whether olrd is running",
-		Args:  cobra.NoArgs,
+		Use:     "status",
+		Short:   "Report whether olr is running",
+		Long: "Report whether the olr service is running.\n\n" +
+			"Configuration drift is reported per module for now:\n" +
+			"  olr dhcp status\n  olr dns status\n  olr gateway status",
+		GroupID: GroupOperations,
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := ReadOnly(cmd); err != nil {
 				return err

@@ -122,7 +122,7 @@ export const api = {
    * One request whose method is decided by the caller.
    *
    * For a surface that describes a change as data rather than as a call — the
-   * routing screen builds `{method, path, body}` values so that a change can be
+   * gateway screen builds `{method, path, body}` values so that a change can be
    * held, shown to the operator, and then sent again with `confirm=true`
    * unchanged. Replaying a change is only simple if the change is a value.
    */

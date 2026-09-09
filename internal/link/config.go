@@ -7,7 +7,7 @@
 // keys off. This is not that module. It owns exactly one field — the list of
 // adopted interface names — and it exists because the adopt-only rule (§3.4,
 // §7) was being enforced by three modules against a fact that had nowhere to
-// live: `dhcp`, `dns` and `routing` all refuse an interface the operator did
+// live: `dhcp`, `dns` and `gateway` all refuse an interface the operator did
 // not hand over, `olr adopt` was a stub, and the flag was reachable only by
 // hand-writing a JSON file that olrd was never told to read. A safety rule
 // nobody can satisfy is not a safety rule.

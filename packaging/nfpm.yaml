@@ -52,24 +52,16 @@ contents:
   # environment variables in top-level fields unconditionally, but in contents
   # only for entries that ask — so without it, the source path stays literal and
   # nfpm fails looking for a file named `dist/olr-linux-${ARCH}`.
+  #
+  # One binary for all three roles. The units below invoke it as
+  # `olr internal daemon` and `olr internal dns-relay`, so the relay is still a
+  # process of its own with a sandbox of its own — which is the whole of what
+  # design.md §3.5 requires of it. It has to keep answering while olrd is
+  # stopped, and it parses unauthenticated packets from every device on the
+  # LAN, so it must not share an *address space* with the admin API. Sharing an
+  # executable is not sharing one.
   - src: dist/olr-linux-${ARCH}
     dst: /usr/bin/olr
-    expand: true
-    file_info:
-      mode: 0755
-
-  - src: dist/olrd-linux-${ARCH}
-    dst: /usr/bin/olrd
-    expand: true
-    file_info:
-      mode: 0755
-
-  # The DNS relay. A binary and a unit, never a goroutine inside olrd
-  # (design.md §3.5): it has to keep answering while olrd is stopped, and it
-  # parses unauthenticated packets from every device on the LAN, so it must not
-  # share an address space with the admin API.
-  - src: dist/olr-dnsd-linux-${ARCH}
-    dst: /usr/bin/olr-dnsd
     expand: true
     file_info:
       mode: 0755

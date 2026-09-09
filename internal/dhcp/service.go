@@ -7,8 +7,9 @@ import (
 // The module's window onto the supervised daemon.
 //
 // The systemd driving itself lives in core, which design.md §3.3 makes
-// responsible for "systemd unit management for backends". `olr daemon` needs
-// exactly the same mechanism for olrd's own unit, and two copies of it would
+// responsible for "systemd unit management for backends". The service
+// commands need exactly the same mechanism for olrd's own unit, and two
+// copies of it would
 // drift. What stays here is the module's vocabulary: inside dhcp the supervised
 // thing is a *service*, and §4.2 is emphatic that a module is not its backend.
 //

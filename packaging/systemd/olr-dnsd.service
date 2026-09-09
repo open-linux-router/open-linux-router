@@ -17,7 +17,7 @@ Wants=olr-dns.service
 Type=notify
 NotifyAccess=main
 
-ExecStart=/usr/bin/olr-dnsd
+ExecStart=/usr/bin/olr internal dns-relay
 
 # The nftables redirect, loaded once the relay is listening and torn down when
 # it stops. Tying its lifetime to this unit is the whole point of putting it

@@ -15,7 +15,7 @@ import (
 //
 // The interface is declared here, by the consumer, and stays that way now that
 // `link` exists: it states exactly the four facts dhcp needs instead of
-// exposing all of link's surface, and dhcp still imports nothing. cmd/olrd
+// exposing all of link's surface, and dhcp still imports nothing. internal/daemon
 // adapts link's neutral Info into this. Three near-identical LinkInfo structs
 // across dhcp, dns and routing is the cost, and the thing it buys is that the
 // day one of them needs an MTU, the other two do not grow a field they never

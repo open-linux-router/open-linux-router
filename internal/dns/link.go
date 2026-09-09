@@ -13,7 +13,7 @@ import (
 // through link, and never keeps its own copy. The interface is declared here,
 // by the consumer, for the reason internal/dhcp/link.go gives — it states
 // exactly the facts dns needs rather than exposing all of link's surface, and
-// dns imports nothing to get them. cmd/olrd adapts link's neutral Info into it.
+// dns imports nothing to get them. internal/daemon adapts link's neutral Info into it.
 //
 // It is a near-twin of dhcp's, with one method more, and the extra method is
 // why they are not one type. dhcp names an interface and asks about it; dns

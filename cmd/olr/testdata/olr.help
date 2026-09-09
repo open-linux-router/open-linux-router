@@ -1,7 +1,7 @@
 olr controls a Linux box running open-linux-router.
 
-Most commands are clients of olrd over its control socket. The commands
-under `olr daemon` manage olrd itself and work without it running.
+Most commands talk to the olr service over its control socket. The ones
+under Service manage that service itself, and work without it running.
 
 Usage:
   olr [command]
@@ -9,8 +9,8 @@ Usage:
 Modules:
   dhcp        DHCP server (dnsmasq)
   dns         DNS resolver and policy (olr-dnsd + unbound)
+  gateway     Exits and which networks use them
   link        Network interfaces olr has been given
-  routing     Exits and which networks use them
 
 Operations:
   adopt       Take ownership of an interface
@@ -18,11 +18,16 @@ Operations:
   history     List configuration revisions, per module
   release     Hand an interface back to the system
   rollback    Roll a module back to an earlier revision
-  status      Aggregate drift and daemon liveness across modules
+  status      Report whether olr is running
 
-Local (work with olrd stopped):
+Service:
+  listen      Serve the web UI on a network address
+  restart     Restart olr
+  start       Start olr
+  stop        Stop olr
+
+Other:
   completion  Generate the autocompletion script for the specified shell
-  daemon      Manage the olrd service itself
   help        Help about any command
   version     Print version information
 

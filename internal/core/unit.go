@@ -11,8 +11,9 @@ import (
 //
 // Two callers want it for different reasons and the distinction is §4.2's:
 // a *module* drives its backend's unit (dhcp → olr-dhcp.service), while
-// `olr daemon` drives olrd's own. Same mechanism, and the vocabulary is worth
-// keeping straight — "daemon" is olrd, "backend" is what it drives.
+// `olr start` and its siblings drive olrd's own. Same mechanism, and the
+// vocabulary is worth keeping straight in here — "daemon" is olrd, "backend"
+// is what it drives — even though the CLI no longer says either word.
 
 // Unit is a window onto one systemd unit.
 //

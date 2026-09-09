@@ -63,7 +63,7 @@ func TestUnknownAPIPathUsesTheJSONErrorShape(t *testing.T) {
 }
 
 // Core serves /api and nothing else; the SPA is composed alongside it by
-// cmd/olrd, so core must not answer for it.
+// internal/daemon, so core must not answer for it.
 func TestCoreDoesNotServeOutsideTheAPIPrefix(t *testing.T) {
 	s := New()
 	w := httptest.NewRecorder()

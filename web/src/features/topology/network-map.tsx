@@ -122,7 +122,7 @@ function buildGroups(
   exits?: ExitStatus[],
   pools?: Pool[],
 ): Group[] {
-  // Networks are the union of what routing knows and what dhcp serves: one with
+  // Networks are the union of what gateway knows and what dhcp serves: one with
   // a pool but no assignment has no way out chosen yet, one with an assignment
   // but no pool is served statically, and the intersection would drop both.
   const names = new Set<string>()

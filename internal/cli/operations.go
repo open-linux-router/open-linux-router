@@ -26,8 +26,13 @@ func operationCommands() []*cobra.Command {
 	// live in internal/link beside the module they write to — this package
 	// deliberately knows no modules, so cmd/olr mounts them into this group the
 	// same way it mounts each module's tree.
+	//
+	// `status` is not here either, and for a different reason: it stopped being
+	// a stub. It used to promise "aggregate drift and daemon liveness across
+	// modules" and do neither, while `olr daemon status` quietly did the
+	// liveness half. Flattening the daemon group merged the two, so the real
+	// one lives in daemon.go beside the systemd query it is built on.
 	return []*cobra.Command{
-		op("status", "Aggregate drift and daemon liveness across modules", cobra.NoArgs),
 		op("diff", "Show drifted or pending configuration, per module", cobra.NoArgs),
 		op("history", "List configuration revisions, per module", cobra.NoArgs),
 		op("rollback", "Roll a module back to an earlier revision", cobra.NoArgs),

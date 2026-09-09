@@ -104,7 +104,7 @@ export interface OlrDocument {
   dhcp?: DhcpConfig
   dns?: DnsConfig
   link?: LinkConfig
-  routing?: RoutingConfig
+  gateway?: GatewayConfig
 }
 export interface DevicesConfig {
   devices?: Device[]
@@ -179,7 +179,7 @@ export interface QueryLog {
 export interface LinkConfig {
   adopted?: string[]
 }
-export interface RoutingConfig {
+export interface GatewayConfig {
   enabled: boolean
   exits?: Exit[]
   default?: string

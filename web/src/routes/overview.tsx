@@ -11,14 +11,14 @@ import { useDeviceList } from '@/features/devices/queries'
 import { useDhcpConfig, useDhcpStatus } from '@/features/dhcp/queries'
 import { useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
-import { useRoutingStatus, useRoutingTraffic } from '@/features/routing/queries'
+import { useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { NetworkMap } from '@/features/topology/network-map'
 import type {
   DeviceRow,
   DhcpStatus,
   DnsStatus,
-  RoutingStatus,
-  RoutingTraffic,
+  GatewayStatus,
+  GatewayTraffic,
 } from '@/lib/api-types'
 import { cn, formatBytes } from '@/lib/utils'
 
@@ -49,13 +49,13 @@ export function OverviewPage() {
   const dhcp = useDhcpStatus()
   const dhcpConfig = useDhcpConfig()
   const dns = useDnsStatus()
-  const routing = useRoutingStatus()
-  const traffic = useRoutingTraffic()
+  const gateway = useGatewayStatus()
+  const traffic = useGatewayTraffic()
 
   const actions = useDeviceActions()
   const [filter, setFilter] = useState('')
 
-  const faults = collectFaults(dhcp.data, dns.data, routing.data)
+  const faults = collectFaults(dhcp.data, dns.data, gateway.data)
 
   return (
     <div className="space-y-6">
@@ -81,7 +81,7 @@ export function OverviewPage() {
       <Stats
         devices={devices.data?.devices}
         dns={dns.data}
-        routing={routing.data}
+        gateway={gateway.data}
         traffic={traffic.data}
       />
 
@@ -119,8 +119,8 @@ export function OverviewPage() {
 
           <NetworkMap
             devices={devices.data?.devices ?? []}
-            assignments={routing.data?.assignments}
-            exits={routing.data?.exits}
+            assignments={gateway.data?.assignments}
+            exits={gateway.data?.exits}
             pools={dhcpConfig.data?.pools}
             pending={devices.isPending}
             filter={filter}
@@ -152,10 +152,10 @@ interface Fault {
  * "Office VPN is not responding" still has to be told that work0 is cut off by
  * it, because that is the part they will act on.
  */
-function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, routing?: RoutingStatus): Fault[] {
+function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStatus): Fault[] {
   const out: Fault[] = []
 
-  for (const exit of routing?.exits ?? []) {
+  for (const exit of gateway?.exits ?? []) {
     // Never probed is not the same as up (§5.6), and an exit nobody checks must
     // not be reported as broken either.
     if (!exit.probed || exit.up) continue
@@ -172,12 +172,12 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, routing?: RoutingStat
     })
   }
 
-  if (routing && !routing.known) {
+  if (gateway && !gateway.known) {
     out.push({
-      key: 'routing-unknown',
+      key: 'gateway-unknown',
       title: 'The gateway settings are saved but not in force',
       detail:
-        'This router could not read its own routing configuration, so nothing on the gateway screen is actually running. On Linux this usually means the daemon lacks permission to change routing.',
+        'This router could not read its own gateway configuration, so nothing on the gateway screen is actually running. On Linux this usually means the daemon lacks permission to change routing.',
       tone: 'bad',
       to: '/gateway',
       action: 'Open Gateway',
@@ -226,7 +226,7 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, routing?: RoutingStat
   const drifted: { name: string; to: string }[] = []
   if (dhcp?.drifted && !dhcp.drift_error) drifted.push({ name: 'DHCP', to: '/dhcp' })
   if (dns?.drifted && !dns.drift_error) drifted.push({ name: 'DNS', to: '/dns' })
-  if (routing?.drifted) drifted.push({ name: 'The gateway', to: '/gateway' })
+  if (gateway?.drifted) drifted.push({ name: 'The gateway', to: '/gateway' })
   for (const d of drifted) {
     out.push({
       key: `drift-${d.name}`,
@@ -247,16 +247,16 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, routing?: RoutingStat
 function Stats({
   devices,
   dns,
-  routing,
+  gateway,
   traffic,
 }: {
   devices?: DeviceRow[]
   dns?: DnsStatus
-  routing?: RoutingStatus
-  traffic?: RoutingTraffic
+  gateway?: GatewayStatus
+  traffic?: GatewayTraffic
 }) {
   const here = devices?.filter((d) => d.online).length
-  const probed = (routing?.exits ?? []).filter((e) => e.probed)
+  const probed = (gateway?.exits ?? []).filter((e) => e.probed)
   const working = probed.filter((e) => e.up).length
   const moved = traffic?.usage.reduce((sum, u) => sum + u.up_bytes + u.down_bytes, 0)
 
@@ -281,7 +281,7 @@ function Stats({
         label="Ways out working"
         // "0 of 0" reads as broken on a box with nothing to probe, so an
         // unprobed set says so rather than showing a ratio nobody measured.
-        value={routing ? (probed.length === 0 ? '—' : `${working} of ${probed.length}`) : undefined}
+        value={gateway ? (probed.length === 0 ? '—' : `${working} of ${probed.length}`) : undefined}
         hint={probed.length === 0 ? 'none being checked' : undefined}
         tone={probed.length > 0 && working < probed.length ? 'text-destructive' : undefined}
       />

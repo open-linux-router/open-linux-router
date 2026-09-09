@@ -1,0 +1,27 @@
+Open the web UI on an address, by writing /etc/open-linux-router/olrd.env and
+restarting the service.
+
+olr always serves its control socket, which is what the command line
+talks to. It listens on the network only when told to, so this is the
+step that makes the web UI reachable from another machine.
+
+Anything that is not a loopback address requires a token, generated on
+first start into /etc/open-linux-router/api-token. The UI asks for it on
+first use.
+
+Examples:
+  olr listen 0.0.0.0:8080   reachable from your network
+  olr listen 127.0.0.1:8080 this box only, for an ssh tunnel
+  olr listen --off          stop listening on the network
+
+Usage:
+  olr listen <address> [flags]
+
+Flags:
+  -h, --help   help for listen
+      --off    stop listening on the network
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

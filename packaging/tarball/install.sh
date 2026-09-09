@@ -50,9 +50,9 @@ if [ -z "$NFT" ]; then
 	echo "which needs your distribution's nftables package." >&2
 fi
 
+# One binary, three roles: the units invoke it as `olr internal daemon` and
+# `olr internal dns-relay`.
 install -m 0755 -D olr "$PREFIX/bin/olr"
-install -m 0755 -D olrd "$PREFIX/bin/olrd"
-install -m 0755 -D olr-dnsd "$PREFIX/bin/olr-dnsd"
 install -m 0644 -D systemd/olrd.service "$UNITDIR/olrd.service"
 install -m 0644 -D systemd/olr-dhcp.service "$UNITDIR/olr-dhcp.service"
 install -m 0644 -D systemd/olr-dns.service "$UNITDIR/olr-dns.service"
@@ -124,7 +124,7 @@ if [ -d /run/systemd/system ]; then
 	echo "olrd listens on its control socket only, so the web UI is not reachable"
 	echo "from the network yet. To open it:"
 	echo
-	echo "  sudo olr daemon listen 0.0.0.0:8080"
+	echo "  sudo olr listen 0.0.0.0:8080"
 	echo
 	echo "then browse to http://<this box>:8080 and paste the token from"
 	echo "/etc/open-linux-router/api-token when asked."

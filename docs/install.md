@@ -36,13 +36,13 @@ This starts `olrd` and changes nothing else — no DHCP server, no resolver, no
 firewall rule. Check it came up:
 
 ```sh
-olr daemon status
+olr status
 ```
 
 ## 2. Open the web UI
 
 ```sh
-sudo olr daemon listen 0.0.0.0:8080
+sudo olr listen 0.0.0.0:8080
 sudo cat /etc/open-linux-router/api-token
 ```
 
@@ -197,6 +197,6 @@ stop a daemon it did not start.
 certainly pointing at this box instead of your real router. `olr dhcp show pool
 enp1s0` shows what is being advertised.
 
-**The web UI cannot be reached.** `olr daemon listen` with no listener set is off
+**The web UI cannot be reached.** `olr listen` with no listener set is off
 by default; re-run step 2. If it is set, check nothing between you and the box is
 filtering the port.

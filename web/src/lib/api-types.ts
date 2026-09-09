@@ -30,7 +30,7 @@ import type {
   DevicesConfig,
   ExitForm,
   LinkConfig,
-  RoutingConfig,
+  GatewayConfig,
 } from '@/lib/config-types'
 
 /** What applying a change will cost (design.md §5.3.3, internal/dhcp Impact). */
@@ -458,28 +458,28 @@ export interface DnsNames {
   as_of: string
 }
 
-// --- routing ---------------------------------------------------------------
+// --- gateway ---------------------------------------------------------------
 
 /**
- * A change to the kernel's routing state — internal/routing changeView.
+ * A change to the kernel's gateway state — internal/gateway changeView.
  *
  * A line rather than a file path and a diff, because this module configures the
  * kernel rather than a backend's config file. The text is the same canonical
- * form `olr routing show --dry-run` prints and the same one stored in each
+ * form `olr gateway show --dry-run` prints and the same one stored in each
  * nftables rule's comment, so what the screen shows, what the CLI shows and
  * what `nft list ruleset` shows are one string.
  */
-export interface RoutingChange {
+export interface GatewayChange {
   kind: 'add' | 'remove'
   line: string
 }
 
 /**
- * Somebody else's `ip rule` — internal/routing ForeignRule.
+ * Somebody else's `ip rule` — internal/gateway ForeignRule.
  *
  * Reported rather than hidden (design.md §3.4): a hand-rolled setup that is
  * visible is one an operator can reason about, and a second owner of the
- * routing table is something they have to go and resolve elsewhere.
+ * gateway table is something they have to go and resolve elsewhere.
  */
 export interface ForeignRule {
   priority: number
@@ -489,9 +489,9 @@ export interface ForeignRule {
   has_default: boolean
 }
 
-/** What applying a routing change would do — internal/routing planView. */
-export interface RoutingPlan {
-  changes: RoutingChange[]
+/** What applying a gateway change would do — internal/gateway planView. */
+export interface GatewayPlan {
+  changes: GatewayChange[]
   impact: Impact
   foreign?: ForeignRule[]
   reasons?: string[]
@@ -511,14 +511,14 @@ export interface RoutingPlan {
   warnings?: Problem[]
 }
 
-export interface RoutingApplyResult {
-  plan: RoutingPlan
+export interface GatewayApplyResult {
+  plan: GatewayPlan
   steps?: Step[]
-  config: RoutingConfig
+  config: GatewayConfig
   error?: { message: string; problems?: Problem[] }
 }
 
-/** One exit and what is true of it right now — internal/routing exitStatusView. */
+/** One exit and what is true of it right now — internal/gateway exitStatusView. */
 export interface ExitStatus {
   name: string
   via: ExitForm
@@ -540,7 +540,7 @@ export interface ExitStatus {
 }
 
 /**
- * One network's effective exit and where it came from — internal/routing
+ * One network's effective exit and where it came from — internal/gateway
  * assignmentStatusView.
  *
  * The source is what makes inheritance usable: an effective value with no
@@ -554,7 +554,7 @@ export interface AssignmentStatus {
   reason?: string
 }
 
-export interface RoutingStatus {
+export interface GatewayStatus {
   enabled: boolean
   known: boolean
   exits: ExitStatus[]
@@ -565,7 +565,7 @@ export interface RoutingStatus {
   as_of: string
 }
 
-/** One device's traffic through one way out — internal/routing usageView. */
+/** One device's traffic through one way out — internal/gateway usageView. */
 export interface Usage {
   address: string
 
@@ -585,8 +585,8 @@ export interface Usage {
   down_packets: number
 }
 
-/** internal/routing trafficView. */
-export interface RoutingTraffic {
+/** internal/gateway trafficView. */
+export interface GatewayTraffic {
   /** Intent. `counting` is whether the kernel actually has the table. */
   enabled: boolean
   counting: boolean

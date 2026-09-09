@@ -20,8 +20,8 @@ import (
 // The CLI's connection to olrd.
 //
 // design.md §6.1 makes this the shape of the whole tool: everything except
-// `olr daemon …` is a client of olrd's API, on equal footing with the WebUI and
-// the MCP server. That is not an aesthetic preference. A module command that
+// the `Service:` commands is a client of olrd's API, on equal footing with the
+// WebUI and the MCP server. That is not an aesthetic preference. A module command that
 // reached the system directly would be a *second* writer — with its own idea of
 // the apply lock, its own copy of the validation rules, and no way to publish
 // the change event the UI listens for. The lock argument alone settles it: §3.6
@@ -176,7 +176,7 @@ func (c *Client) dialError(err error) error {
 	if errors.As(err, &opErr) || errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf(
 			"cannot reach olrd on %s: %w\n"+
-				"Check it is running with `olr daemon status`, and start it with `olr daemon start`",
+				"Check it is running with `olr status`, and start it with `olr start`",
 			c.socket, err)
 	}
 	return err

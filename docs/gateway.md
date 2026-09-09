@@ -1,8 +1,10 @@
-# `routing` module design — exits and traffic assignment
+# `gateway` module design — exits and traffic assignment
 
-Status: **design only**. Nothing here is built. `internal/routing` does not
-exist. Section references are to `design.md` unless prefixed `dns:`, which means
-`docs/dns.md`.
+Status: **built.** `internal/gateway` is the module. It was called `routing`
+until v0.1.1 — the box as a whole is the router, and this is the part of it
+that forwards traffic, alongside `dhcp` and `dns`. The document keeps the file
+name it was written under. Section references are to `design.md` unless
+prefixed `dns:`, which means `docs/dns.md`.
 
 This is the document `docs/dns.md` calls §12. The two were designed together and
 have to be read together: this one decides where a packet goes, that one decides
@@ -630,12 +632,12 @@ read-modify-write under the global apply lock (design.md §3.6).
 
 | | |
 |---|---|
-| `PUT /api/routing/exits/{name}` | add, replace — or **rename**, when the body's `name` differs from the path's |
-| `DELETE /api/routing/exits/{name}` | remove |
-| `PUT /api/routing/assignments/{interface}` | body `{"exit": "…"}`; `""` means *explicitly follows the box-wide setting* |
-| `DELETE /api/routing/assignments/{interface}` | stop overriding, so the row goes back to having no opinion |
-| `PATCH /api/routing/config` | `enabled`, `default`, `stats` |
-| `PUT /api/routing/config` | the whole document — restoring a backup, or several changes at once |
+| `PUT /api/gateway/exits/{name}` | add, replace — or **rename**, when the body's `name` differs from the path's |
+| `DELETE /api/gateway/exits/{name}` | remove |
+| `PUT /api/gateway/assignments/{interface}` | body `{"exit": "…"}`; `""` means *explicitly follows the box-wide setting* |
+| `DELETE /api/gateway/assignments/{interface}` | stop overriding, so the row goes back to having no opinion |
+| `PATCH /api/gateway/config` | `enabled`, `default`, `stats` |
+| `PUT /api/gateway/config` | the whole document — restoring a backup, or several changes at once |
 
 **Why lists get their own routes and scalars do not.** A merge patch (RFC 7386)
 merges an object key by key but replaces an array *wholesale*, so `enabled`,

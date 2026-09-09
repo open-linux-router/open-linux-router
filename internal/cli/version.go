@@ -12,7 +12,7 @@ func versionCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "version",
 		Short:   "Print version information",
-		GroupID: GroupLocal,
+		GroupID: GroupOther,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := RejectDryRun(cmd); err != nil {

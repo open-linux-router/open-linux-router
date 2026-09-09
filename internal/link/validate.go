@@ -64,7 +64,7 @@ func (r Result) Err() error {
 //
 // What is deliberately *not* checked here is whether releasing an interface
 // breaks another module — whether a pool, a resolver or an exit still names it.
-// Answering that would mean importing `dhcp`, `dns` and `routing`, inverting
+// Answering that would mean importing `dhcp`, `dns` and `gateway`, inverting
 // §4.1's arrow and making this module depend on every module that depends on
 // it. Those three already refuse an unadopted interface with a message naming
 // their own field, which is where the complaint belongs; the UI warns before

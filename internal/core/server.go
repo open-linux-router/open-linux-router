@@ -81,7 +81,7 @@ func (s *Server) Events() *Events { return s.events }
 //
 // It panics on a bad or duplicate name, on an empty route table, and on
 // mounting after the handler has been built. Modules are a bounded literal list
-// in cmd/olrd (§3.2), so these are startup-time programming errors, not runtime
+// in internal/daemon (§3.2), so these are startup-time programming errors, not runtime
 // conditions — the same reasoning as cli.Verb panicking on a verb outside the
 // vocabulary.
 func (s *Server) Mount(name string, routes []Route, schema any) {
@@ -119,7 +119,7 @@ func (s *Server) Modules() []string {
 }
 
 // Handler returns the API handler. It serves /api/... and nothing else; the
-// WebUI is composed alongside it by cmd/olrd rather than being core's concern.
+// WebUI is composed alongside it by internal/daemon rather than being core's concern.
 //
 // Calling it freezes the module list.
 func (s *Server) Handler() http.Handler {

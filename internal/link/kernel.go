@@ -50,7 +50,7 @@ type Interface struct {
 	// Link-local addresses are excluded: fe80::/10 and 169.254.0.0/16 are
 	// present on essentially every interface and are never the subnet an
 	// operator means. Including them would put an identical fe80::/64 on every
-	// row of the interface list, and would hand `routing` a source prefix that
+	// row of the interface list, and would hand `gateway` a source prefix that
 	// matches every network on the box at once.
 	Prefixes []netip.Prefix
 }

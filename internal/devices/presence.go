@@ -17,7 +17,7 @@ import (
 // internal/dhcp/link.go: it states exactly the facts this module needs instead
 // of exposing all of another module's surface, and it lets the module be built
 // and tested before those sources exist. It also keeps `devices` from importing
-// `dhcp` — the lease adapter is wired in cmd/olrd, so the dependency is one
+// `dhcp` — the lease adapter is wired in internal/daemon, so the dependency is one
 // interface pointing the way the DAG (§4.1) says it should.
 
 // Source names where a sighting came from. It reaches the UI, because "this

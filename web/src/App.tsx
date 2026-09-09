@@ -6,7 +6,7 @@ import { AuthGate } from '@/components/layout/auth-gate'
 import { DhcpPage } from '@/routes/dhcp'
 import { DnsPage } from '@/routes/dns'
 import { OverviewPage } from '@/routes/overview'
-import { RoutingPage } from '@/routes/routing'
+import { GatewayPage } from '@/routes/gateway'
 
 export function App() {
   return (
@@ -14,7 +14,7 @@ export function App() {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<OverviewPage />} />
-          <Route path="gateway" element={<RoutingPage />} />
+          <Route path="gateway" element={<GatewayPage />} />
           <Route path="dhcp" element={<DhcpPage />} />
           <Route path="dns" element={<DnsPage />} />
 

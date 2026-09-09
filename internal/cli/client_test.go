@@ -141,7 +141,7 @@ func TestClientExplainsAnUnreachableDaemon(t *testing.T) {
 	if err == nil {
 		t.Fatal("connecting to a socket that does not exist succeeded")
 	}
-	if !strings.Contains(err.Error(), "olr daemon start") {
+	if !strings.Contains(err.Error(), "olr start") {
 		t.Errorf("error does not say how to fix it: %v", err)
 	}
 }

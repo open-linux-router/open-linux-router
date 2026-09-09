@@ -30,8 +30,8 @@ import (
 // process doing the applying.
 //
 // The visible consequence is that these commands need olrd running. That is
-// consistent with §6.1's two tiers — `olr daemon …` is the tier that works with
-// olrd stopped, and it is grouped separately for exactly this reason.
+// consistent with §6.1's two tiers — the `Service:` commands are the tier that
+// works with olrd stopped, and they are grouped separately for that reason.
 
 // Command returns the module's command tree. Mounted explicitly by cmd/olr.
 func Command() *cobra.Command {

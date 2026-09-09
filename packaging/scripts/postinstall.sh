@@ -51,7 +51,7 @@ server, no resolver, no firewall rule.
 
 To open the web UI on your network:
 
-  sudo olr daemon listen 0.0.0.0:8080
+  sudo olr listen 0.0.0.0:8080
 
 Then browse to http://<this box>:8080 and paste the token from
 /etc/open-linux-router/api-token when asked.

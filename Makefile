@@ -5,16 +5,16 @@ DIST    := dist
 WEB     := web
 ASSETS  := internal/webui/assets
 
-# Three binaries: the CLI, the resident control plane, and the DNS relay
-# (design.md §3.5). The relay is its own binary rather than a goroutine because
-# it has to keep answering while olrd is stopped — that section gives the test,
-# and DNS fails it.
+# One binary, three roles. The CLI, the resident control plane and the DNS
+# relay all build from ./cmd/olr, which dispatches `olr internal daemon` and
+# `olr internal dns-relay` before cobra is given the arguments.
+#
+# Still three *processes*: design.md §3.5 asks that anything which must keep
+# answering while olrd is stopped get its own unit, and the units invoke this
+# one binary under different subcommands. Merging changed what gets installed,
+# not what runs — the relay is no more a goroutine in olrd than it ever was.
 BIN     := olr
 PKG     := ./cmd/olr
-DBIN    := olrd
-DPKG    := ./cmd/olrd
-NBIN    := olr-dnsd
-NPKG    := ./cmd/olr-dnsd
 
 # The version lives in one file, VERSION, and everything else is derived from
 # it: what the binaries report, what dpkg sorts on, the tarball names,
@@ -110,20 +110,14 @@ tidy: ## Tidy modules, keeping the go.mod floor at 1.23
 	$(GO) mod edit -go=1.23
 
 .PHONY: build
-build: ## Build olr, olrd and olr-dnsd for the host (does not rebuild the web UI)
+build: ## Build olr for the host (does not rebuild the web UI)
 	$(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN) $(PKG)
-	$(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(DIST)/$(DBIN) $(DPKG)
-	$(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(DIST)/$(NBIN) $(NPKG)
 
 .PHONY: cross
-cross: ## Build every binary for linux/amd64 and linux/arm64
-	for arch in amd64 arm64; do \
+cross: ## Build olr for linux/amd64 and linux/arm64
+	for arch in $(ARCHES); do \
 	  GOOS=linux GOARCH=$$arch $(GO) build -trimpath -ldflags '$(LDFLAGS)' \
 	    -o $(DIST)/$(BIN)-linux-$$arch $(PKG) || exit 1; \
-	  GOOS=linux GOARCH=$$arch $(GO) build -trimpath -ldflags '$(LDFLAGS)' \
-	    -o $(DIST)/$(DBIN)-linux-$$arch $(DPKG) || exit 1; \
-	  GOOS=linux GOARCH=$$arch $(GO) build -trimpath -ldflags '$(LDFLAGS)' \
-	    -o $(DIST)/$(NBIN)-linux-$$arch $(NPKG) || exit 1; \
 	done
 
 .PHONY: web-deps
@@ -150,12 +144,12 @@ types: ## Regenerate the SPA's config types from olrd's schema (needs olrd runni
 	cd $(WEB) && node scripts/gen-types.mjs http://$(DEV_LISTEN)
 
 .PHONY: all
-all: web build ## Build the SPA and both binaries
+all: web build ## Build the SPA and the binary
 
 .PHONY: dev
 dev: build ## Run olrd against a scratch root, for `npm run dev` to proxy to
 	@mkdir -p $(DEV_ROOT)
-	$(DIST)/$(DBIN) \
+	$(DIST)/$(BIN) internal daemon \
 	  --socket $(DEV_SOCKET) \
 	  --listen $(DEV_LISTEN) \
 	  --no-auth \
@@ -195,12 +189,10 @@ tarball: web cross ## Build the static tarballs, for distributions the .deb does
 	  stage=$(DIST)/olr-$(PKGVERSION)-linux-$$arch; \
 	  rm -rf $$stage && mkdir -p $$stage/systemd; \
 	  cp $(DIST)/$(BIN)-linux-$$arch $$stage/$(BIN); \
-	  cp $(DIST)/$(DBIN)-linux-$$arch $$stage/$(DBIN); \
-	  cp $(DIST)/$(NBIN)-linux-$$arch $$stage/$(NBIN); \
 	  cp packaging/systemd/*.service $$stage/systemd/; \
 	  cp packaging/olrd.env $$stage/olrd.env; \
 	  cp packaging/tarball/install.sh $$stage/install.sh; \
-	  chmod +x $$stage/install.sh $$stage/$(BIN) $$stage/$(DBIN) $$stage/$(NBIN); \
+	  chmod +x $$stage/install.sh $$stage/$(BIN); \
 	  tar -C $(DIST) -czf $$stage.tar.gz $$(basename $$stage) || exit 1; \
 	  rm -rf $$stage; \
 	done
