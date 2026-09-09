@@ -1,110 +1,145 @@
 # open-linux-router
 
-Router software for personal, homelab and small-org networks, installed as a
-package on an ordinary Linux box rather than flashed as a system image.
+Router software for personal, homelab and small-org networks — installed as a
+package on an ordinary Linux box, not flashed as a system image.
 
-olr does not reimplement DHCP, DNS or packet filtering. It renders configuration
-for the daemons a router is already made of — dnsmasq, unbound, nftables —
-drives them through systemd, and puts one schema behind a CLI, a REST API, an
-MCP server and a web UI. The box stays a normal Linux machine: nothing outside
-olr's declared scope is touched, and `apt remove` gives it back.
+`apt install`, and the Debian machine you already have becomes a router with a
+web UI, a CLI, a REST API and an MCP server, all speaking to the same
+configuration. It stays a normal Linux machine the whole time.
 
-**Status: early.** DHCP, DNS and the gateway are built; interface adoption is
-minimal (see below); firewall, NAT and Wi-Fi are not written yet. If you want a
-finished router today, this is not one — but a box serving DHCP for a household
-works, and that is the path documented in
+**Status: early.** DHCP, DNS, devices and the gateway are built. Interface
+handling is deliberately minimal so far — olr adopts the NICs you give it, but
+does not yet create bridges, VLANs or addresses. Firewall, NAT and Wi-Fi are not
+written at all. If you want a finished router today, this is not one — but a box
+serving DHCP and DNS for a household works, and that is the path documented in
 [docs/install.md](docs/install.md).
 
 ---
 
-## Install
+## What it believes
+
+**A package, not an operating system.** No custom ISO, no reformatting, no
+image to flash. You keep your distro, your packages, your SSH keys — and
+`apt remove` gives the box back.
+
+**Drive the daemons; don't reimplement them.** dnsmasq, unbound and nftables
+have decades of correctness in them that nobody should rewrite. olr renders
+their configuration, supervises them through systemd, and puts one schema in
+front. It is a control plane, not a network stack.
+
+**Nothing happens until you say so.** Installing olr starts a control plane and
+changes *nothing else* — no DHCP server appears, no resolver takes port 53, no
+interface is touched. You hand olr an interface explicitly (`olr adopt`) before
+any module will serve on it. Installing a router's control plane on a box you
+reach over SSH must never be able to disconnect you from it.
+
+**Hide complexity, never capability.** The default surface speaks your
+vocabulary — networks, devices, fixed addresses — not the daemon's. But every
+module also has a declared escape hatch that passes raw backend config through,
+versioned and single-source like everything else. We make the common 95%
+pleasant. We do not hide Linux.
+
+**One schema, four surfaces.** Each module's config is a Go struct; the JSON
+Schema derived from it generates the CLI flags, the REST body, the web form and
+the MCP tool definition. The web UI is not privileged — it is one client of the
+same HTTP API the CLI and your agent use.
+
+**Never store a fact twice.** olr keeps your *intent*. The kernel keeps the
+interfaces, dnsmasq keeps the leases, nftables keeps the rules. Nothing is
+cached, so nothing can drift.
+
+**Linux is the extension surface.** Need something we don't ship? You don't
+write an olr plugin — you `apt install` it, drop in a systemd unit, or add your
+own nftables table. The distro is a better plugin system than any API we could
+design, and our job is to stay out of its way.
+
+## What's underneath
+
+Five modules ship today. Each one owns a slice of configuration and hands the
+actual work to something that already does it well:
+
+| Module | What you configure | What actually does the work |
+|---|---|---|
+| **`link`** | Which interfaces olr is allowed to touch | Kernel **netlink**, read live per request. Drives nothing — adoption is consent, not configuration. |
+| **`dhcp`** | Pools, fixed addresses, options, leases | **dnsmasq**, in a unit of its own (`olr-dhcp.service`) reading a config olr renders. Never the distro's instance. |
+| **`dns`** | Upstreams, local names, blocking policies | **unbound** recursing on loopback, behind a small relay of ours (`olr-dnsd.service`) that owns `:53`, applies policy on the fast path, and observes on a tee. |
+| **`devices`** | Device names, categories, the inventory | No daemon. dnsmasq's lease database joined with the kernel's **ARP table**, so the statically-addressed printer shows up too. |
+| **`gateway`** | Exits, and which network uses which | **nftables** and the kernel's **policy routing database**, programmed directly over netlink — no rule files, no `nft` shell-outs. |
+
+All of it is one binary. `olr` is the command you type, the control plane
+systemd runs, and the DNS relay behind port 53 — separate units and separate
+sandboxes, one executable. Under it sits the Go standard library plus a short
+list of direct dependencies: [`google/nftables`](https://github.com/google/nftables)
+and [`vishvananda/netlink`](https://github.com/vishvananda/netlink) for the
+kernel, [`coreos/go-systemd`](https://github.com/coreos/go-systemd) for
+supervision over D-Bus, [`spf13/cobra`](https://github.com/spf13/cobra) for the
+CLI, and [`invopop/jsonschema`](https://github.com/invopop/jsonschema) for the
+schema reflection everything else is generated from. Keeping that list short is
+a deliberate constraint, not an accident. There is no database and no message
+bus — configuration is one JSON file. `olrd` spawns no subprocesses at all,
+which is what makes its systemd sandbox nearly free.
+
+Not written yet: firewall and NAT (nftables), Wi-Fi (hostapd), VPN (WireGuard),
+QoS (tc), WAN dialling (pppd/dhcpcd).
+
+## Getting started
 
 Debian 13 (trixie) and Ubuntu are the tested targets; anything with systemd and
-nftables should work.
+nftables should work. For distributions the `.deb` doesn't cover there's a
+tarball with an `install.sh` that checks the same things by hand.
 
 ```sh
 sudo apt install ./olr_<version>_<arch>.deb
 ```
 
 apt resolves `dnsmasq-base`, `unbound` and `nftables` before any of olr's code
-runs. For distributions the `.deb` does not cover there is a tarball with an
-`install.sh` that checks the same things by hand.
+runs. This starts the control plane and touches nothing else on the machine.
 
-Installing starts `olrd`, the control plane, **and changes nothing else**. No
-DHCP server appears, no resolver takes over port 53, no interface is
-reconfigured. That is deliberate: installing a router's control plane on a box
-you reach over SSH must not be able to disconnect you from it.
+Hand it an interface, then give that interface a job:
 
-## Open the web UI
+```sh
+olr link show interfaces                                          # what this box has
+sudo olr adopt enp1s0                                             # grant permission
+sudo olr dhcp add pool enp1s0 --range 192.168.1.100-192.168.1.200
+sudo olr dhcp enable
+olr dhcp show leases                                              # who took an address
+```
 
-`olrd` serves its control socket at `/run/olr/olrd.sock` — which is what the
-`olr` command talks to — and does not listen on the network until told to:
+`olr adopt` is the step people miss. Every module refuses to serve on an
+interface nobody handed it. Adopting sets no address and starts no service — it
+only grants permission.
+
+For the web UI, tell olr to listen. By default it answers only on its control
+socket at `/run/olr/olrd.sock`, which is what the `olr` command talks to:
 
 ```sh
 sudo olr listen 0.0.0.0:8080
+sudo cat /etc/open-linux-router/api-token   # the UI will ask for this
 ```
 
-Then browse to `http://<this box>:8080`. It will ask for a token, which `olrd`
-generated on first start:
+Then browse to `http://<this box>:8080`, and `sudo olr listen --off` when you're
+done. For a box you'd rather not expose, listen on `127.0.0.1:8080` and reach it
+over an SSH tunnel — loopback needs no token.
 
-```sh
-sudo cat /etc/open-linux-router/api-token
-```
-
-To close it again, `sudo olr listen --off`. For a box you would rather
-not expose at all, `olr listen 127.0.0.1:8080` and reach it over an SSH
-tunnel — loopback needs no token.
-
-## Or stay on the command line
-
-Everything the UI does goes through the same HTTP API, so the CLI is not a
-lesser surface:
-
-```sh
-olr link show interfaces        # what this machine has
-sudo olr adopt enp1s0           # hand one to olr
-olr dhcp add pool enp1s0 --range 192.168.1.100-192.168.1.200
-olr dhcp enable
-olr dhcp show leases            # who took an address
-```
-
-`olr adopt` is the step people miss. olr refuses to serve anything on an
-interface nobody handed it, so every module will reject an interface until it
-has been adopted. Adopting by itself does nothing to the machine — it sets no
-address and starts no service. It grants permission.
-
-## Serving DHCP for an existing network
-
-The most useful thing this can do today: leave your existing router in place
-doing the routing, and move DHCP onto a Linux box so you get a real device list,
-fixed addresses that are easy to edit, and a config file you can read.
-
+**The most useful thing this can do today:** leave your existing router in place
+doing the routing, and move DHCP onto a Linux box — so you get a real device
+list, fixed addresses that are easy to edit, and a config file you can read.
 [docs/install.md](docs/install.md) walks through it, including the two things
-that go wrong — pointing the gateway and DNS at the right box, and the overlap
-while both DHCP servers are running.
+that go wrong.
 
-## Documentation
+---
 
-| | |
+| Docs | |
 |---|---|
 | [docs/install.md](docs/install.md) | Getting a box serving DHCP for a real network |
 | [docs/cli.md](docs/cli.md) | `olr` command conventions, enforced by tests |
-| [docs/dns.md](docs/dns.md) | What the DNS module does and refuses to do |
+| [docs/dns.md](docs/dns.md) | What the DNS module does, and refuses to do |
 | [docs/gateway.md](docs/gateway.md) | Exits, and which networks use them |
 | [docs/mcp.md](docs/mcp.md) | The agent surface |
 | [design.md](design.md) | Architecture, and the decisions behind it |
 
-## Building
+Building: `make all` (SPA + binary), `make check` (vet + tests), `make package`
+(`.deb` for amd64 and arm64). Go builds without Node — a binary built that way
+serves an explanatory page instead of the UI. `make web` needs Node 24.
 
-```sh
-make all      # SPA + binary
-make check    # vet + tests
-make package  # .deb for amd64 and arm64
-```
-
-Go builds without Node installed — a binary built that way serves an
-explanatory page instead of the UI. `make web` needs Node 24.
-
-## Licence
-
-MIT.
+MIT licensed.
