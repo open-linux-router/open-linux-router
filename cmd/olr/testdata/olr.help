@@ -21,6 +21,8 @@ Operations:
   status      Report whether olr is running
 
 Service:
+  disable     Stop olr, and stop it starting at boot
+  enable      Run olr on this box, now and after every reboot
   listen      Serve the web UI on a network address
   restart     Restart olr
   start       Start olr

@@ -1,0 +1,18 @@
+Stop the olr service and remove it from boot.
+
+The unit files stay where they are, so `olr enable` brings it back
+without reinstalling anything. Configuration and state are untouched.
+
+Backends keep serving: stopping the control plane never interrupts
+DHCP or DNS. Use `olr dhcp disable` and `olr dns disable` for those.
+
+Usage:
+  olr disable [flags]
+
+Flags:
+  -h, --help   help for disable
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

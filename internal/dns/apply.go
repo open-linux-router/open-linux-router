@@ -497,10 +497,9 @@ func (a Applier) checkInstalled(ctx context.Context, unit string) error {
 	case !status.Installed:
 		return fmt.Errorf(
 			"%s is not installed, so there is no DNS server for olr to drive.\n"+
-				"The unit ships with olr; a missing one means the package is incomplete or was "+
-				"installed by unpacking the binaries alone.\n"+
-				"Reinstall the package, or copy the unit from packaging/systemd and run "+
-				"`systemctl daemon-reload`",
+				"The unit ships inside olr and is written out by `olr enable`; a missing "+
+				"one means the binary was copied into place without it.\n"+
+				"Run `sudo olr enable` to write the units, or reinstall the package",
 			status.Unit)
 	}
 	return nil

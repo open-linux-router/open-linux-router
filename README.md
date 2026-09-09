@@ -85,8 +85,7 @@ QoS (tc), WAN dialling (pppd/dhcpcd).
 ## Getting started
 
 Debian 13 (trixie) and Ubuntu are the tested targets; anything with systemd and
-nftables should work. For distributions the `.deb` doesn't cover there's a
-tarball with an `install.sh` that checks the same things by hand.
+nftables should work.
 
 ```sh
 sudo apt install ./olr_<version>_<arch>.deb
@@ -94,6 +93,21 @@ sudo apt install ./olr_<version>_<arch>.deb
 
 apt resolves `dnsmasq-base`, `unbound` and `nftables` before any of olr's code
 runs. This starts the control plane and touches nothing else on the machine.
+
+For anything the `.deb` doesn't cover, the tarball holds a single binary that
+installs itself — install dnsmasq and unbound with your own package manager
+first, since there is nothing here to resolve them for you:
+
+```sh
+tar xzf olr-<version>-linux-<arch>.tar.gz
+sudo ./olr enable
+```
+
+`olr enable` writes the systemd units, puts the binary in `/usr/local/bin`,
+corrects the units' paths if your distribution doesn't keep dnsmasq where
+Debian does, and starts the service. It prints every file it writes, and
+`--dry-run` shows the list without touching anything. `olr disable` undoes the
+boot entry and leaves the files in place.
 
 Hand it an interface, then give that interface a job:
 

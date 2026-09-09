@@ -71,13 +71,13 @@ contents:
   # alone deliberately — each module enables its own when its configuration says
   # that service is on, and enabling them here would start a DHCP server and
   # take over :53 on a box where nobody asked for either.
-  - src: packaging/systemd/olrd.service
+  - src: internal/packaging/systemd/olrd.service
     dst: /lib/systemd/system/olrd.service
-  - src: packaging/systemd/olr-dhcp.service
+  - src: internal/packaging/systemd/olr-dhcp.service
     dst: /lib/systemd/system/olr-dhcp.service
-  - src: packaging/systemd/olr-dns.service
+  - src: internal/packaging/systemd/olr-dns.service
     dst: /lib/systemd/system/olr-dns.service
-  - src: packaging/systemd/olr-dnsd.service
+  - src: internal/packaging/systemd/olr-dnsd.service
     dst: /lib/systemd/system/olr-dnsd.service
 
   # The configuration document lives here. Created empty: an absent document
@@ -91,7 +91,7 @@ contents:
   # web UI is reachable from the network. A config file rather than an edited
   # unit, so an upgrade cannot silently close a UI the operator opened — which
   # is exactly what `type: config|noreplace` buys.
-  - src: packaging/olrd.env
+  - src: internal/packaging/olrd.env
     dst: /etc/open-linux-router/olrd.env
     type: config|noreplace
     file_info:

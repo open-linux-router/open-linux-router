@@ -317,7 +317,7 @@ func TestApplyRefusesToDriveAnUninstalledUnit(t *testing.T) {
 	if err == nil {
 		t.Fatal("apply succeeded against a unit that is not installed")
 	}
-	if !strings.Contains(err.Error(), "Reinstall the package") {
+	if !strings.Contains(err.Error(), "olr enable") {
 		t.Errorf("the error does not say how to fix it: %v", err)
 	}
 }

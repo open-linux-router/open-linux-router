@@ -181,19 +181,21 @@ package: web cross ## Build the .deb for every architecture
 	@ls -1 $(DIST)/*.deb 2>/dev/null || true
 
 .PHONY: tarball
-tarball: web cross ## Build the static tarballs, for distributions the .deb does not cover
-	@# The fallback path, and it is a fallback: without a package manager
-	@# nothing resolves the dnsmasq dependency, so install.sh has to look for it
-	@# by hand and write a unit drop-in when the path is not Debian's.
+tarball: web cross ## Build the single-binary tarballs, for what the .deb does not cover
+	@# One file inside, and nothing else. systemd needs unit files on disk, but
+	@# they no longer travel beside the binary: internal/packaging embeds them
+	@# and `olr enable` writes them out. So this archive is the binary and its
+	@# own installer at once, and `tar xzf` leaves exactly `olr` behind.
+	@#
+	@# Still a .tar.gz rather than a bare binary because the Go executable
+	@# compresses better than three to one, and the only cost is one command
+	@# the reader was going to type anyway.
 	for arch in $(ARCHES); do \
-	  stage=$(DIST)/olr-$(PKGVERSION)-linux-$$arch; \
-	  rm -rf $$stage && mkdir -p $$stage/systemd; \
+	  stage=$(DIST)/tarball-$$arch; \
+	  rm -rf $$stage && mkdir -p $$stage; \
 	  cp $(DIST)/$(BIN)-linux-$$arch $$stage/$(BIN); \
-	  cp packaging/systemd/*.service $$stage/systemd/; \
-	  cp packaging/olrd.env $$stage/olrd.env; \
-	  cp packaging/tarball/install.sh $$stage/install.sh; \
-	  chmod +x $$stage/install.sh $$stage/$(BIN); \
-	  tar -C $(DIST) -czf $$stage.tar.gz $$(basename $$stage) || exit 1; \
+	  chmod +x $$stage/$(BIN); \
+	  tar -C $$stage -czf $(DIST)/olr-$(PKGVERSION)-linux-$$arch.tar.gz $(BIN) || exit 1; \
 	  rm -rf $$stage; \
 	done
 	@ls -1 $(DIST)/*.tar.gz 2>/dev/null || true

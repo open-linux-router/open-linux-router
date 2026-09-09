@@ -377,7 +377,7 @@ func TestHelpIsUnchanged(t *testing.T) {
 		{"dhcp"}, {"dhcp", "show"}, {"dhcp", "add"}, {"dhcp", "set"}, {"dhcp", "rm"},
 		{"dns"}, {"dns", "show"}, {"dns", "add"}, {"dns", "set"}, {"dns", "rm"},
 		{"gateway"}, {"gateway", "show"}, {"gateway", "add"}, {"gateway", "set"}, {"gateway", "rm"},
-		{"listen"}, {"status"},
+		{"listen"}, {"status"}, {"enable"}, {"disable"},
 	} {
 		name := "olr"
 		if len(path) > 0 {

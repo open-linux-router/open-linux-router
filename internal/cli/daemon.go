@@ -58,6 +58,14 @@ func serviceCommands() []*cobra.Command {
 		daemonJob("restart", "Restart olr", "restarted", "",
 			func(ctx context.Context, u core.Unit) error { return u.Restart(ctx) }),
 
+		// enable/disable are the pair start/stop are not: core.Unit is explicit
+		// that Start is "run now" and Enable is "run after the next reboot
+		// too", and conflating them is how a router comes back from a power cut
+		// doing nothing. On a box installed from the tarball, enable is also
+		// what puts the unit files there at all — see enable.go.
+		enableCommand(),
+		disableCommand(),
+
 		daemonListenCommand(),
 	}
 }

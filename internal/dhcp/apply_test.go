@@ -227,7 +227,7 @@ func TestApplyRefusesWhenTheUnitIsNotInstalled(t *testing.T) {
 	if !strings.Contains(err.Error(), "not installed") {
 		t.Errorf("error does not name the cause: %v", err)
 	}
-	if !strings.Contains(err.Error(), "Reinstall") {
+	if !strings.Contains(err.Error(), "olr enable") {
 		t.Errorf("error does not name the fix: %v", err)
 	}
 	if len(svc.calls) != 0 {

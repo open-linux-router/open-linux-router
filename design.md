@@ -900,6 +900,26 @@ works on a clone with no npm installed, and a binary built that way serves an
 explanatory page instead of a UI. Nothing about the router's runtime depends on
 this column.
 
+**The binary carries its own installation.** `internal/packaging` embeds the
+four unit files and `olrd.env`, and `olr enable` writes them out, so the
+standalone download is one file rather than a directory of parts. systemd reads
+units from disk and offers no way around that — the question was never whether
+they land on disk, only who puts them there.
+
+The `.deb` still installs them as real files rather than calling `olr enable`
+from its postinstall, because dpkg has to *own* them: otherwise `apt remove`
+leaves four units behind pointing at a binary that is gone. So there is one copy
+in the repo with two consumers — `packaging/nfpm.yaml` names those paths, and
+the embed reads them — and a test asserts the two lists match, since a unit
+added to one and forgotten in the other surfaces months later as a missing
+service.
+
+`olr enable` executes no subprocesses either. §3.6's constraint is on `olrd`,
+but the mechanism it forced — systemd over D-Bus, in `core.Unit` — is already
+there, and `Enable` ends with the daemon-reload that makes the units just
+written visible to the manager. A second mechanism would only be a second thing
+to keep correct.
+
 **The version is a file, not a tag.** `VERSION` at the repo root holds a bare
 number — `0.1.0`, no leading `v` — and the Makefile derives everything else from
 it: what `olr version` prints, what dpkg sorts on, what the tarballs are
