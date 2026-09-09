@@ -888,7 +888,7 @@ this column.
 
 **The version is a file, not a tag.** `VERSION` at the repo root holds a bare
 number — `0.1.0`, no leading `v` — and the Makefile derives everything else from
-it: what `olr version` prints, what dpkg and apk sort on, what the tarballs are
+it: what `olr version` prints, what dpkg sorts on, what the tarballs are
 called, what a release publishes. A tag records only *which commit claims that
 number*, so cutting a release is a reviewable commit followed by a matching
 `v0.1.0` tag, and CI refuses to publish when the two disagree (`make

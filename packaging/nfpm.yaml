@@ -39,18 +39,13 @@ depends:
   # without nftables is not a configuration worth optimising the package for.
   - nftables
 
-overrides:
-  apk:
-    depends:
-      # Alpine has no split base package.
-      - dnsmasq
-      - unbound
-      - nftables
-  rpm:
-    depends:
-      - dnsmasq
-      - unbound
-      - nftables
+# No `overrides:` block, because deb is the only format built from this file.
+# nfpm will also emit .apk and .rpm, and once did, each with its own dependency
+# names — but the dependency list was the only part anyone ported. Everything
+# below is a systemd unit, and postinstall.sh returns at its first line when
+# /run/systemd is missing, so the Alpine package installed three binaries and
+# left nothing able to start them. Shipping it read as support for a platform
+# that had none. The tarball covers those boxes honestly instead.
 
 contents:
   # `expand: true` is required for ${ARCH} to mean anything here. nfpm expands

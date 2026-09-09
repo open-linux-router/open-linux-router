@@ -84,8 +84,8 @@ jobs:
       # Both numbers come from the Makefile, which reads them from the VERSION
       # file — asking make is what keeps a release from being versioned by a
       # different rule than a developer's `make package`. VERSION is what the
-      # binary reports (internal/buildinfo); PKGVERSION is what dpkg and apk
-      # sort on, and they want a bare number with no leading v.
+      # binary reports (internal/buildinfo); PKGVERSION is what dpkg sorts on,
+      # and it wants a bare number with no leading v.
       - name: Resolve version
         id: version
         run: |
@@ -120,10 +120,10 @@ jobs:
       # Bare names in the file, so `sha256sum -c SHA256SUMS` works in whatever
       # directory someone downloaded the assets into.
       - name: Checksum
-        run: cd dist && sha256sum *.deb *.apk *.tar.gz > SHA256SUMS
+        run: cd dist && sha256sum *.deb *.tar.gz > SHA256SUMS
 
       - name: Show what was built
-        run: ls -lh dist/*.deb dist/*.apk dist/*.tar.gz dist/SHA256SUMS
+        run: ls -lh dist/*.deb dist/*.tar.gz dist/SHA256SUMS
 
       - name: Upload artefacts
         if: github.ref_type != 'tag'
@@ -132,7 +132,6 @@ jobs:
           name: olr-${{ steps.version.outputs.version }}
           path: |
             dist/*.deb
-            dist/*.apk
             dist/*.tar.gz
             dist/SHA256SUMS
           if-no-files-found: error
@@ -155,4 +154,4 @@ jobs:
             --title "$TAG" \
             --generate-notes \
             $prerelease \
-            dist/*.deb dist/*.apk dist/*.tar.gz dist/SHA256SUMS
+            dist/*.deb dist/*.tar.gz dist/SHA256SUMS

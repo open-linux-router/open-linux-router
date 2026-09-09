@@ -99,7 +99,7 @@ while both DHCP servers are running.
 ```sh
 make all      # SPA + binaries
 make check    # vet + tests
-make package  # .deb and .apk for amd64 and arm64
+make package  # .deb for amd64 and arm64
 ```
 
 Go builds without Node installed — a binary built that way serves an

@@ -17,11 +17,11 @@ NBIN    := olr-dnsd
 NPKG    := ./cmd/olr-dnsd
 
 # The version lives in one file, VERSION, and everything else is derived from
-# it: what the binaries report, what dpkg and apk sort on, the tarball names,
+# it: what the binaries report, what dpkg sorts on, the tarball names,
 # and what the release publishes. Bumping it is a reviewable commit, and the
 # tag that follows only records which commit claims that number — so a clone
 # with no tags fetched gives the same answer CI does. PKGVERSION is the bare
-# form because dpkg and apk sort on it, and they want a number with no v.
+# form because dpkg sorts on it, and it wants a number with no v.
 PKGVERSION ?= $(shell tr -d '[:space:]' < VERSION)
 
 # Set by the release workflow from the pushed tag; empty for a local check.
@@ -72,7 +72,7 @@ version: ## Print the version this build stamps in
 	@echo '$(VERSION)'
 
 .PHONY: pkgversion
-pkgversion: ## Print the bare version, as dpkg, apk and the tarballs want it
+pkgversion: ## Print the bare version, as dpkg and the tarballs want it
 	@echo '$(PKGVERSION)'
 
 .PHONY: version-check
@@ -164,21 +164,27 @@ dev: build ## Run olrd against a scratch root, for `npm run dev` to proxy to
 	  --log-level debug
 
 .PHONY: package
-package: web cross ## Build .deb and .apk for every architecture
+package: web cross ## Build the .deb for every architecture
 	@# The dependency on dnsmasq is declared in the package rather than checked
 	@# in Go: apt resolves it before any of our code runs.
+	@#
+	@# One format, because Debian and Ubuntu are the only packaged targets.
+	@# nfpm can emit .apk and .rpm from the same file and used to, but nothing
+	@# else in the package was ever ported: every unit here is a systemd unit,
+	@# and postinstall.sh returns at its first line when /run/systemd is absent.
+	@# On Alpine that .apk installed the binaries and left nothing able to run
+	@# them, which reads as support without being it. Whatever the .deb does
+	@# not cover takes the tarball instead — a plain binary makes no promise.
 	@command -v nfpm >/dev/null 2>&1 || { \
 	  echo "nfpm not found. Install it with:"; \
 	  echo "  go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest"; \
 	  exit 1; }
 	@mkdir -p $(DIST)
 	for arch in $(ARCHES); do \
-	  for packager in deb apk; do \
-	    ARCH=$$arch VERSION=$(PKGVERSION) \
-	      nfpm package -f packaging/nfpm.yaml -p $$packager -t $(DIST) || exit 1; \
-	  done; \
+	  ARCH=$$arch VERSION=$(PKGVERSION) \
+	    nfpm package -f packaging/nfpm.yaml -p deb -t $(DIST) || exit 1; \
 	done
-	@ls -1 $(DIST)/*.deb $(DIST)/*.apk 2>/dev/null || true
+	@ls -1 $(DIST)/*.deb 2>/dev/null || true
 
 .PHONY: tarball
 tarball: web cross ## Build the static tarballs, for distributions the .deb does not cover
