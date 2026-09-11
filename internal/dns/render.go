@@ -370,6 +370,8 @@ server:
 		fmt.Fprintf(&s, "    private-address: %s\n", p)
 	}
 
+	renderLocalNames(&s, c)
+
 	if err := b.renderForward(&s, c.Upstream); err != nil {
 		return nil, err
 	}
@@ -386,6 +388,60 @@ server:
 	}
 
 	return []byte(s.String()), nil
+}
+
+// renderLocalNames writes the names this resolver answers itself.
+//
+// unbound does this rather than olr's own relay, and the relay is not touched
+// at all. The edges that make a home-made implementation subtly wrong are
+// exactly the ones unbound already has right: a name with only an A must answer
+// NODATA and not NXDOMAIN when asked for AAAA, or a client concludes the name
+// does not exist and stops asking for either. Writing that ourselves would be
+// the module taking on a backend's job for no gain (design.md §3.5).
+//
+// This lands in unbound.conf, which is not reloadable, so adding a name
+// restarts the resolver and flushes its cache. That is ImpactRestart and not
+// ImpactDisruptive — plan.go's vocabulary is explicit that a bounce costs
+// milliseconds because DNS clients retry unprompted. It is still the one thing
+// to revisit if naming devices becomes a daily activity: a separate included
+// file would make it a reload, at the cost of a mechanism nothing else needs.
+func renderLocalNames(s *strings.Builder, c Config) {
+	if len(c.Hosts) == 0 {
+		return
+	}
+
+	domain := c.LocalDomainOrDefault()
+	fmt.Fprintf(s, `
+    # Names this network answers for itself.
+    #
+    # "static" means unbound answers the whole zone and never forwards any of
+    # it. Both halves matter: a name we publish is answered without asking
+    # anybody, and a name under it that we do not publish gets an authoritative
+    # NXDOMAIN instead of leaking what the devices in this house are called to
+    # whichever resolver is upstream.
+    local-zone: "%s." static
+`, domain)
+
+	for _, h := range c.Hosts {
+		fqdn := c.FQDN(h.Name) + "."
+		for _, a := range h.Addrs {
+			rrtype := "A"
+			if a.Is6() {
+				rrtype = "AAAA"
+			}
+			fmt.Fprintf(s, "    local-data: %q\n",
+				fmt.Sprintf("%s IN %s %s", fqdn, rrtype, a))
+
+			// Reverse only for addresses on a private network. A name pointed
+			// at a public address is legitimate — validate warns and allows it
+			// — but claiming its PTR would make this box authoritative for a
+			// reverse name it does not own, and the override would be invisible
+			// to whoever later wondered why that address resolves oddly.
+			if a.IsPrivate() {
+				fmt.Fprintf(s, "    local-data-ptr: %q\n", fmt.Sprintf("%s %s", a, fqdn))
+			}
+		}
+	}
 }
 
 func (b Backend) renderForward(s *strings.Builder, u Upstream) error {

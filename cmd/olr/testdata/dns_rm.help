@@ -1,4 +1,4 @@
-Remove a policy or a blocked name
+Remove a policy, a blocked name or a local name
 
 Usage:
   olr dns rm [command]
@@ -6,6 +6,7 @@ Usage:
 Available Commands:
   allow       Remove from the exceptions that beat the block list
   block       Remove from the names this policy refuses
+  host        Remove a local name
   policy      Remove a policy
 
 Flags:

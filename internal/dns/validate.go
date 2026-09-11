@@ -76,6 +76,7 @@ func Validate(c Config, links LinkView) Result {
 	validateListen(&r, c, links)
 	validateAllowFrom(&r, c, links)
 	validateUpstream(&r, c)
+	validateHosts(&r, c, links)
 	validatePolicies(&r, c)
 	validateHijack(&r, c, links)
 	validateQueryLog(&r, c)
@@ -239,6 +240,145 @@ func validateUpstream(r *Result, c Config) {
 					"itself", srv.Addr())
 		}
 	}
+}
+
+// validateHosts checks the names this resolver would answer itself.
+//
+// The stakes here are lower than for the rest of the module — a bad host entry
+// costs one name, not the building's internet — so this leans on warnings where
+// the other rules refuse. The exception is the local domain, which is
+// house-wide: get it wrong and every local name is wrong at once.
+func validateHosts(r *Result, c Config, links LinkView) {
+	domain := c.LocalDomainOrDefault()
+	switch err := checkName(domain); {
+	case err != nil:
+		r.errorf("local_domain", "%q is not a valid domain name: %v", c.LocalDomain, err)
+		return
+	case domain == "local":
+		// Not a warning. mDNS owns this, every Apple and most Android devices
+		// resolve it by multicast without asking us, and the result is a name
+		// that works on some devices and not others with nothing on this box
+		// to explain why.
+		r.errorf("local_domain",
+			"local belongs to mDNS, so half the network would resolve these names by "+
+				"multicast and never ask this resolver. Use %s, internal, or a subdomain of a "+
+				"domain you own", DefaultLocalDomain)
+		return
+	case !strings.Contains(domain, ".") && domain != "internal":
+		r.warnf("local_domain",
+			"%s is a single label that nobody has reserved, so it may one day be delegated on "+
+				"the internet and every name under it would start resolving somewhere else. "+
+				"%s and internal cannot be", domain, DefaultLocalDomain)
+	}
+
+	if len(c.Hosts) == 0 {
+		return
+	}
+
+	// Every prefix on an adopted interface, and deliberately not
+	// LANPrefixes(links, c.Listen): that derives the networks from the listen
+	// addresses, so a resolver listening only on IPv4 would have no v6 prefix
+	// to compare against and would warn about every AAAA host it was given.
+	// Which family we answer *on* says nothing about which family a device here
+	// can be reached at.
+	//
+	// Empty when link knows nothing yet, in which case the check below simply
+	// does not run.
+	lan := adoptedPrefixes(links)
+
+	seen := map[string]int{}
+	for i, h := range c.Hosts {
+		path := fmt.Sprintf("hosts[%d]", i)
+
+		switch {
+		case h.Name == "":
+			r.errorf(path+".name", "required")
+		case h.Name == domain:
+			r.errorf(path+".name",
+				"%s is the local domain itself, not a name under it", domain)
+		case checkHostName(h.Name) != nil:
+			r.errorf(path+".name", "%q: %v", h.Name, checkHostName(h.Name))
+		case len(c.FQDN(h.Name)) > MaxNameLen:
+			r.errorf(path+".name", "%s is longer than %d characters", c.FQDN(h.Name), MaxNameLen)
+		}
+		if prev, dup := seen[h.Name]; dup {
+			r.errorf(path+".name", "%s is already defined by hosts[%d]", h.Name, prev)
+		}
+		seen[h.Name] = i
+
+		if len(h.Addrs) == 0 {
+			r.errorf(path+".addresses",
+				"%s has no address, so the name would exist and answer nothing", h.Name)
+		}
+		for j, a := range h.Addrs {
+			apath := fmt.Sprintf("%s.addresses[%d]", path, j)
+			switch {
+			case !a.IsValid():
+				r.errorf(apath, "invalid address")
+			case a.IsUnspecified():
+				r.errorf(apath, "%s is not an address anything can be reached at", a)
+			case a.IsMulticast():
+				r.errorf(apath, "%s is a multicast address", a)
+			case len(lan) > 0 && !containsAddr(lan, a):
+				// A warning and not an error: pointing a local name at
+				// something off this network is unusual but legitimate, and the
+				// operator may be naming a host across a VPN. A typo'd octet
+				// looks exactly the same from here, which is why it is worth
+				// saying at all.
+				r.warnf(apath,
+					"%s is not on any network this resolver serves, so %s would answer with an "+
+						"address most clients here cannot reach", a, c.FQDN(h.Name))
+			}
+		}
+	}
+}
+
+// adoptedPrefixes lists every network on an interface the operator handed us.
+//
+// A link module that cannot be read yields nothing rather than an error: this
+// backs a warning, and an unreadable LinkView is already reported by the rules
+// that need it to decide something.
+func adoptedPrefixes(links LinkView) []netip.Prefix {
+	infos, err := links.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var out []netip.Prefix
+	for _, info := range infos {
+		if !info.Adopted {
+			continue
+		}
+		out = append(out, info.Prefixes...)
+	}
+	return out
+}
+
+// containsAddr reports whether any prefix covers addr.
+func containsAddr(prefixes []netip.Prefix, addr netip.Addr) bool {
+	for _, p := range prefixes {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkHostName is checkName plus the one rule a name somebody will type into a
+// browser needs and a blocklist pattern does not.
+//
+// checkName is deliberately lenient about underscores because they appear in
+// real names on the internet. A host name is different: an underscore is not
+// legal in one, and clients disagree about whether to accept it anyway — so
+// `sony_tv` would resolve here and fail in some browsers, which is the worst of
+// both outcomes and lands a long way from the field that caused it.
+func checkHostName(n string) error {
+	if err := checkName(n); err != nil {
+		return err
+	}
+	if strings.Contains(n, "_") {
+		return errors.New("contains an underscore, which is not legal in a host name")
+	}
+	return nil
 }
 
 // validatePolicies checks what clients may look up.

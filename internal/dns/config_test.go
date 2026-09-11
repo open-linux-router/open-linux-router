@@ -284,3 +284,85 @@ func TestVocabularyDefaults(t *testing.T) {
 		t.Error("an unknown value was accepted as valid")
 	}
 }
+
+// Typing the name in full is what an operator does when they have just been
+// told what the TV is called. Both spellings have to be one entry, or the diff
+// churns between them forever.
+func TestHostNamesAreStoredRelativeToTheLocalDomain(t *testing.T) {
+	c := Config{LocalDomain: "Home.Arpa."}
+	c.SetHost(Host{Name: "sony-tv.home.arpa.", Addrs: []netip.Addr{netip.MustParseAddr("192.168.1.50")}})
+	c.SetHost(Host{Name: "SONY-TV", Addrs: []netip.Addr{netip.MustParseAddr("192.168.1.51")}})
+
+	if len(c.Hosts) != 1 {
+		t.Fatalf("the same name stored twice: %+v", c.Hosts)
+	}
+	if c.Hosts[0].Name != "sony-tv" {
+		t.Errorf("stored name = %q, want the relative form", c.Hosts[0].Name)
+	}
+	if got := c.Hosts[0].Addrs[0].String(); got != "192.168.1.51" {
+		t.Errorf("the second write did not replace the first: %s", got)
+	}
+	if got := c.FQDN(c.Hosts[0].Name); got != "sony-tv.home.arpa" {
+		t.Errorf("FQDN = %q", got)
+	}
+	if _, ok := c.Host("sony-tv.home.arpa"); !ok {
+		t.Error("a name given in full did not find the entry stored relative")
+	}
+}
+
+func TestLocalDomainDefaults(t *testing.T) {
+	if got := (Config{}).LocalDomainOrDefault(); got != DefaultLocalDomain {
+		t.Errorf("LocalDomainOrDefault() = %q, want %q", got, DefaultLocalDomain)
+	}
+	if got := (Config{LocalDomain: "internal"}).LocalDomainOrDefault(); got != "internal" {
+		t.Errorf("LocalDomainOrDefault() = %q", got)
+	}
+}
+
+func TestRemoveHost(t *testing.T) {
+	c := Config{}
+	c.SetHost(Host{Name: "nas", Addrs: []netip.Addr{netip.MustParseAddr("192.168.1.10")}})
+
+	// In full, against an entry stored relative: the same normalisation has to
+	// apply on the way out as on the way in.
+	if !c.RemoveHost("nas." + DefaultLocalDomain) {
+		t.Fatal("RemoveHost did not find a name given in full")
+	}
+	if len(c.Hosts) != 0 {
+		t.Errorf("host survived removal: %+v", c.Hosts)
+	}
+	if c.RemoveHost("nas") {
+		t.Error("RemoveHost reported removing something that was not there")
+	}
+}
+
+// Render clones before normalising, so a shallow copy would let rendering
+// reorder the caller's addresses underneath them.
+func TestCloneCopiesHostAddresses(t *testing.T) {
+	c := Config{Hosts: []Host{{Name: "nas", Addrs: []netip.Addr{netip.MustParseAddr("192.168.1.10")}}}}
+	clone := c.Clone()
+	clone.Hosts[0].Addrs[0] = netip.MustParseAddr("10.0.0.1")
+
+	if c.Hosts[0].Addrs[0].String() != "192.168.1.10" {
+		t.Error("Clone shared the address slice with the original")
+	}
+}
+
+func TestNormalizeSortsAndDeduplicatesHosts(t *testing.T) {
+	c := Config{Hosts: []Host{
+		{Name: "tv", Addrs: []netip.Addr{
+			netip.MustParseAddr("192.168.1.50"),
+			netip.MustParseAddr("fd00::50"),
+			netip.MustParseAddr("192.168.1.50"),
+		}},
+		{Name: "nas", Addrs: []netip.Addr{netip.MustParseAddr("192.168.1.10")}},
+	}}
+	c.Normalize()
+
+	if c.Hosts[0].Name != "nas" || c.Hosts[1].Name != "tv" {
+		t.Errorf("hosts are not in canonical order: %+v", c.Hosts)
+	}
+	if len(c.Hosts[1].Addrs) != 2 {
+		t.Errorf("duplicate address survived: %v", c.Hosts[1].Addrs)
+	}
+}

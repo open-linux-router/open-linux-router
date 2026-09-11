@@ -1,4 +1,4 @@
-Add a policy or a blocked name
+Add a policy, a blocked name or a local name
 
 Usage:
   olr dns add [command]
@@ -6,6 +6,7 @@ Usage:
 Available Commands:
   allow       Add to the exceptions that beat the block list
   block       Add to the names this policy refuses
+  host        Add or replace a local name
   policy      Add or replace a policy
 
 Flags:

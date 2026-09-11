@@ -70,6 +70,10 @@ export type UpstreamMode = '' | 'recurse' | 'forward'
  */
 export type AddressAndPort1 = string
 /**
+ * An IPv4 or IPv6 address, such as 192.168.1.1 or 2001:db8::1.
+ */
+export type IPAddress6 = string
+/**
  * An address and prefix length in CIDR form, such as 192.168.1.0/24.
  */
 export type IPPrefix1 = string
@@ -81,7 +85,7 @@ export type BlockedNameResponse = '' | 'nxdomain' | 'zero'
  * How this exit delivers traffic. interface sends it out a device — a WireGuard or Tailscale interface, a PPPoE session, a proxy's TUN. next_hop hands it to another box on the network, such as the modem or a machine running a proxy. blocked refuses it, so applications fail immediately and visibly rather than hanging.
  */
 export type ExitForm = 'interface' | 'next_hop' | 'blocked'
-export type IPAddress6 = string
+export type IPAddress7 = string
 /**
  * What happens to IPv6 traffic from sources assigned to this exit. via carries it through the exit, which needs the exit to actually have IPv6. block refuses it, so clients fall back to IPv4 immediately. direct lets it take the box's normal path, which leaks every site with an AAAA record around the exit. Empty means block.
  */
@@ -103,8 +107,8 @@ export interface OlrDocument {
   devices?: DevicesConfig
   dhcp?: DhcpConfig
   dns?: DnsConfig
-  link?: LinkConfig
   gateway?: GatewayConfig
+  link?: LinkConfig
 }
 export interface DevicesConfig {
   devices?: Device[]
@@ -149,6 +153,8 @@ export interface DnsConfig {
   listen?: AddressAndPort[]
   allow_from?: IPPrefix[]
   upstream: Upstream
+  local_domain?: string
+  hosts?: Host[]
   policies?: Policy[]
   hijack: Hijack
   query_log: QueryLog
@@ -159,6 +165,10 @@ export interface Upstream {
   servers?: AddressAndPort1[]
   tls?: boolean
   tls_name?: string
+}
+export interface Host {
+  name: string
+  addresses: IPAddress6[]
 }
 export interface Policy {
   name: string
@@ -175,9 +185,6 @@ export interface Hijack {
 export interface QueryLog {
   enabled: boolean
   entries?: number
-}
-export interface LinkConfig {
-  adopted?: string[]
 }
 export interface GatewayConfig {
   enabled: boolean
@@ -198,7 +205,7 @@ export interface Exit {
 export interface Via {
   kind: ExitForm
   interface?: string
-  next_hop?: IPAddress6
+  next_hop?: IPAddress7
   dev?: string
 }
 export interface Probe {
@@ -211,4 +218,7 @@ export interface Probe {
 export interface Assignment {
   interface: string
   exit?: string
+}
+export interface LinkConfig {
+  adopted?: string[]
 }

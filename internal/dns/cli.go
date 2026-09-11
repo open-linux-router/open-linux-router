@@ -113,6 +113,7 @@ func showCommand() *cobra.Command {
 	c.AddCommand(
 		showPoliciesCommand(),
 		showPolicyCommand(),
+		showHostsCommand(),
 		showQueriesCommand(),
 		showNamesCommand(),
 	)
@@ -170,6 +171,38 @@ func showPolicyCommand() *cobra.Command {
 	}
 	c.ValidArgsFunction = cli.CompleteArgs(policyNames)
 	return c
+}
+
+// showHostsCommand lists what this resolver answers for itself.
+//
+// Deliberately a different word from `show names`, which is the observed list —
+// what the devices here looked up. Hosts are the other direction: what this
+// network answers when something looks *it* up. Two words for two things beats
+// one word an operator has to disambiguate by column heading.
+func showHostsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "hosts",
+		Short: "List the local names this resolver answers",
+		Long: "List the names this resolver answers itself.\n\n" +
+			"Each is published under the local domain, so a host named sony-tv is\n" +
+			"reachable as sony-tv.home.arpa from anywhere on this network. The bare\n" +
+			"name works too on clients that were handed the domain as their DHCP\n" +
+			"search domain — see `olr dhcp set --domain`.",
+		Args: cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if err := cli.ReadOnly(c); err != nil {
+				return err
+			}
+			cfg, err := loadConfig(c)
+			if err != nil {
+				return err
+			}
+			if cli.IsJSON(c) {
+				return cli.JSON(c.OutOrStdout(), cfg.Hosts)
+			}
+			return writeHostsText(c.OutOrStdout(), cfg)
+		},
+	}
 }
 
 func showQueriesCommand() *cobra.Command {
@@ -239,17 +272,18 @@ func setCommand() *cobra.Command {
 }
 
 type configFlags struct {
-	listen     []string
-	allowFrom  []string
-	mode       string
-	servers    []string
-	tls        bool
-	tlsName    string
-	queryLog   bool
-	logEntries int
-	hijack     bool
-	interfaces []string
-	blockDoT   bool
+	listen      []string
+	allowFrom   []string
+	mode        string
+	servers     []string
+	tls         bool
+	tlsName     string
+	queryLog    bool
+	logEntries  int
+	hijack      bool
+	interfaces  []string
+	blockDoT    bool
+	localDomain string
 }
 
 func (f *configFlags) register(c *cobra.Command) {
@@ -273,6 +307,8 @@ func (f *configFlags) register(c *cobra.Command) {
 		"interface whose forwarded DNS is redirected, repeatable")
 	c.Flags().BoolVar(&f.blockDoT, "block-dot", false,
 		"drop DNS-over-TLS on 853, so clients cannot route around the redirect")
+	c.Flags().StringVar(&f.localDomain, "local-domain", "",
+		"suffix local names are published under, e.g. "+DefaultLocalDomain)
 
 	cli.EnumFlag(c, "mode", upstreamModeNames()...)
 }
@@ -341,21 +377,89 @@ func (f *configFlags) apply(c *cobra.Command, cfg *Config) error {
 	if changed("block-dot") {
 		cfg.Hijack.BlockDoT = f.blockDoT
 	}
+	if changed("local-domain") {
+		// Normalize here and not only on the way out: hosts are stored relative
+		// to this value, so every later Host lookup in this same edit compares
+		// against the canonical form of what was just typed.
+		cfg.LocalDomain = f.localDomain
+		cfg.Normalize()
+	}
 	return nil
 }
 
 // ---------------------------------------------------------------- add / rm
 
 func addCommand() *cobra.Command {
-	c := verb("add", "Add a policy or a blocked name", func(c *cobra.Command) {})
-	c.AddCommand(policyCommand("add"), blockCommand("add"), allowCommand("add"))
+	c := verb("add", "Add a policy, a blocked name or a local name", func(c *cobra.Command) {})
+	c.AddCommand(policyCommand("add"), blockCommand("add"), allowCommand("add"), addHostCommand())
 	return c
 }
 
 func rmCommand() *cobra.Command {
-	c := verb("rm", "Remove a policy or a blocked name", func(c *cobra.Command) {})
-	c.AddCommand(rmPolicyCommand(), blockCommand("rm"), allowCommand("rm"))
+	c := verb("rm", "Remove a policy, a blocked name or a local name", func(c *cobra.Command) {})
+	c.AddCommand(rmPolicyCommand(), blockCommand("rm"), allowCommand("rm"), rmHostCommand())
 	return c
+}
+
+// addHostCommand names one device.
+//
+// The address is an argument rather than a flag because it is not optional and
+// never will be: a host with no address is a name that exists and answers
+// nothing, which validate refuses. Repeating it gives one name both families.
+func addHostCommand() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "host <name> <address>...",
+		Short: "Add or replace a local name",
+		Long: "Add or replace a name this resolver answers itself.\n\n" +
+			"The name is relative to the local domain: `add host sony-tv 192.168.1.50`\n" +
+			"publishes sony-tv.home.arpa. Writing it out in full works too and means the\n" +
+			"same entry. Give the address twice to publish both an IPv4 and an IPv6 one.\n\n" +
+			"This replaces an existing entry outright rather than adding to it, so the\n" +
+			"addresses given are the addresses the name will have.",
+		Args: cobra.MinimumNArgs(2),
+		RunE: func(c *cobra.Command, args []string) error {
+			return mutate(c, func(cfg *Config) error { return addHost(cfg, args) })
+		},
+	}
+	// Replacing is as normal as creating here, so completing the names that
+	// exist is a convenience rather than an invitation to collide.
+	c.ValidArgsFunction = cli.CompleteArgs(hostNames)
+	return c
+}
+
+func rmHostCommand() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "host <name>",
+		Short: "Remove a local name",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			return mutate(c, func(cfg *Config) error { return removeHost(cfg, args[0]) })
+		},
+	}
+	c.ValidArgsFunction = cli.CompleteArgs(hostNames)
+	return c
+}
+
+// addHost is the edit itself, lifted out of RunE so it can be tested without a
+// daemon to talk to — the same shape targetPolicy has, for the same reason.
+func addHost(cfg *Config, args []string) error {
+	h := Host{Name: args[0]}
+	for _, raw := range args[1:] {
+		addr, err := netip.ParseAddr(raw)
+		if err != nil {
+			return fmt.Errorf("%q is not an IP address", raw)
+		}
+		h.Addrs = append(h.Addrs, addr)
+	}
+	cfg.SetHost(h)
+	return nil
+}
+
+func removeHost(cfg *Config, name string) error {
+	if !cfg.RemoveHost(name) {
+		return unknownHost(cfg, name)
+	}
+	return nil
 }
 
 // policyCommand creates or replaces a policy.
@@ -795,6 +899,18 @@ func policyNameList(cfg *Config) []string {
 	return out
 }
 
+func unknownHost(cfg *Config, name string) error {
+	return cli.UnknownObject("local name", name, "olr dns add host <name> <address>", hostNameList(cfg))
+}
+
+func hostNameList(cfg *Config) []string {
+	out := make([]string, 0, len(cfg.Hosts))
+	for _, h := range cfg.Hosts {
+		out = append(out, h.Name)
+	}
+	return out
+}
+
 // ------------------------------------------------- completion (R7)
 
 func policyNames(c *cobra.Command) ([]string, error) {
@@ -803,4 +919,12 @@ func policyNames(c *cobra.Command) ([]string, error) {
 		return nil, err
 	}
 	return policyNameList(&cfg), nil
+}
+
+func hostNames(c *cobra.Command) ([]string, error) {
+	cfg, err := loadConfig(c)
+	if err != nil {
+		return nil, err
+	}
+	return hostNameList(&cfg), nil
 }

@@ -31,6 +31,7 @@ func writeConfigText(w io.Writer, c Config) error {
 	fmt.Fprintf(w, "resolving by:  %s\n", describeUpstream(c.Upstream))
 	fmt.Fprintf(w, "redirect:      %s\n", describeHijack(c.Hijack))
 	fmt.Fprintf(w, "query log:     %s\n", describeQueryLog(c.QueryLog))
+	fmt.Fprintf(w, "local names:   %s\n", describeHosts(c))
 
 	fmt.Fprintln(w)
 	if err := writePoliciesText(w, c.Policies); err != nil {
@@ -65,6 +66,36 @@ func writePoliciesText(w io.Writer, policies []Policy) error {
 			core.Plural(len(p.Allow), "exception"),
 			p.Response.OrDefault(),
 		)
+	}
+	return t.Flush()
+}
+
+// describeHosts is the one-line summary on `olr dns show`. It names the domain
+// even when there are no hosts, because that is the question an operator is
+// actually asking the first time: what do I put after the name.
+func describeHosts(c Config) string {
+	if len(c.Hosts) == 0 {
+		return "none, under " + c.LocalDomainOrDefault()
+	}
+	return fmt.Sprintf("%s under %s", core.Plural(len(c.Hosts), "name"), c.LocalDomainOrDefault())
+}
+
+func writeHostsText(w io.Writer, c Config) error {
+	if len(c.Hosts) == 0 {
+		return cli.NoObjects(w, "local names",
+			"Devices here are reachable by address only. `olr dns add host <name> <address>`.")
+	}
+	t := table(w)
+	fmt.Fprintln(t, "NAME\tANSWERS")
+	for _, h := range c.Hosts {
+		// The full name rather than the stored relative one: the operator is
+		// about to type this into a browser, and the thing that works there is
+		// the qualified form.
+		addrs := make([]string, 0, len(h.Addrs))
+		for _, a := range h.Addrs {
+			addrs = append(addrs, a.String())
+		}
+		fmt.Fprintf(t, "%s\t%s\n", c.FQDN(h.Name), orDash(strings.Join(addrs, ", ")))
 	}
 	return t.Flush()
 }

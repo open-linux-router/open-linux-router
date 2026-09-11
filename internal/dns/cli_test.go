@@ -201,3 +201,79 @@ func TestUnsetFlagsLeaveTheConfigAlone(t *testing.T) {
 		t.Errorf("the flag that was set did not take: %v", cfg.AllowFrom)
 	}
 }
+
+func TestSettingTheLocalDomainCanonicalisesIt(t *testing.T) {
+	cfg := Config{Hosts: []Host{{Name: "nas", Addrs: []netip.Addr{netip.MustParseAddr("192.168.1.10")}}}}
+	applyFlags(t, &cfg, map[string]string{"local-domain": "Internal."})
+
+	if cfg.LocalDomain != "internal" {
+		t.Errorf("local domain = %q, want the canonical form", cfg.LocalDomain)
+	}
+	// Names are stored relative, so moving the domain moves everything under
+	// it rather than stranding the existing entries.
+	if got := cfg.FQDN(cfg.Hosts[0].Name); got != "nas.internal" {
+		t.Errorf("FQDN after the move = %q", got)
+	}
+}
+
+// A name is the thing an operator types; an address is the thing they look up
+// once. The flag-free shape is what makes `add host sony-tv 192.168.1.50` read
+// like the sentence it is.
+func TestAddHostTakesNameThenAddresses(t *testing.T) {
+	cfg := Config{}
+
+	for _, args := range [][]string{
+		{"sony-tv", "192.168.1.50", "fd00::50"},
+		{"nas.home.arpa", "192.168.1.10"},
+	} {
+		if err := addHost(&cfg, args); err != nil {
+			t.Fatalf("add host %v: %v", args, err)
+		}
+	}
+
+	if len(cfg.Hosts) != 2 {
+		t.Fatalf("hosts = %+v", cfg.Hosts)
+	}
+	tv, ok := cfg.Host("sony-tv")
+	if !ok || len(tv.Addrs) != 2 {
+		t.Errorf("sony-tv = %+v, %v", tv, ok)
+	}
+	if _, ok := cfg.Host("nas"); !ok {
+		t.Error("a name given in full was not stored relative to the local domain")
+	}
+}
+
+func TestAddHostRejectsSomethingThatIsNotAnAddress(t *testing.T) {
+	cfg := Config{}
+	err := addHost(&cfg, []string{"sony-tv", "192.168.1.500"})
+	if err == nil {
+		t.Fatal("a bad address was accepted")
+	}
+	if !strings.Contains(err.Error(), "192.168.1.500") {
+		t.Errorf("the error does not say what was wrong: %v", err)
+	}
+}
+
+// Removing a name that is not there has to say so, and say what is, or the
+// operator is guessing at spelling.
+func TestRemoveUnknownHostListsWhatThereIs(t *testing.T) {
+	cfg := Config{}
+	if err := addHost(&cfg, []string{"sony-tv", "192.168.1.50"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := removeHost(&cfg, "sonytv")
+	if err == nil {
+		t.Fatal("removing a name that does not exist succeeded")
+	}
+	if !strings.Contains(err.Error(), "sony-tv") {
+		t.Errorf("the error does not list the names that exist: %v", err)
+	}
+
+	if err := removeHost(&cfg, "sony-tv.home.arpa"); err != nil {
+		t.Errorf("removing by the full name failed: %v", err)
+	}
+	if len(cfg.Hosts) != 0 {
+		t.Errorf("hosts = %+v", cfg.Hosts)
+	}
+}

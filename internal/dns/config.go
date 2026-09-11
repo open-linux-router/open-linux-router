@@ -66,6 +66,14 @@ type Config struct {
 	// Upstream is how names actually get resolved.
 	Upstream Upstream `json:"upstream"`
 
+	// LocalDomain is the suffix Hosts are published under. Empty means
+	// DefaultLocalDomain.
+	LocalDomain string `json:"local_domain,omitempty"`
+
+	// Hosts are names this resolver answers itself, so a device on this network
+	// can be reached by name rather than by an address somebody has to remember.
+	Hosts []Host `json:"hosts,omitempty"`
+
 	// Policies decide what a given client is allowed to look up. A policy with
 	// no Clients is the default one, applying to everybody not matched by
 	// another.
@@ -140,6 +148,42 @@ func (m UpstreamMode) OrDefault() UpstreamMode {
 		return ModeRecurse
 	}
 	return m
+}
+
+// DefaultLocalDomain is the suffix local names live under when none is set.
+//
+// home.arpa is the name reserved for exactly this (RFC 8375). Two properties
+// earn it the default over the .lan everybody types: it is an insecure
+// delegation, so a validating resolver will not call our answers bogus, and it
+// can never be delegated to somebody else — a house that named itself .lan and
+// woke up to find the string sold as a gTLD would have every local name
+// silently start resolving somewhere on the internet. ICANN's `.internal` is
+// reserved for the same purpose and is the friendlier thing to type; it is not
+// the default only because home.arpa has the RFC behind it.
+//
+// Deliberately not `.local`, which belongs to mDNS. Publishing it here would
+// put unicast DNS and multicast discovery in disagreement about the same name,
+// and the winner would vary by client.
+const DefaultLocalDomain = "home.arpa"
+
+// Host is one name this resolver answers itself.
+//
+// The address is stated rather than looked up. dhcp knows it already for a
+// reservation, and design.md §4.1 fixes the direction that fact would travel —
+// but that subscription is a change to both modules, where this is the half
+// that has to exist either way: a printer with a static address speaks no DHCP
+// and would otherwise have no way into the local namespace at all.
+type Host struct {
+	// Name is relative to the enclosing config's LocalDomain: "sony-tv", not
+	// "sony-tv.home.arpa". Normalize strips the suffix if it was typed, so both
+	// spellings are one entry rather than two that diff against each other
+	// forever.
+	Name string `json:"name"`
+
+	// Addrs are what the name answers with. Both families are allowed on one
+	// host, and that is the usual case rather than an exotic one: a client that
+	// asks for AAAA first must get the same machine back.
+	Addrs []netip.Addr `json:"addresses"`
 }
 
 // Policy is what one set of clients may look up.
@@ -301,6 +345,54 @@ func (c *Config) RemovePolicy(name string) bool {
 	return true
 }
 
+// LocalDomainOrDefault resolves the empty string.
+func (c Config) LocalDomainOrDefault() string {
+	if c.LocalDomain == "" {
+		return DefaultLocalDomain
+	}
+	return c.LocalDomain
+}
+
+// FQDN qualifies a stored host name with the local domain.
+//
+// One function rather than string concatenation at each call site, because the
+// renderer, the validator and the CLI all have to agree on the answer — and the
+// renderer's version needs the trailing dot that the other two must not show.
+func (c Config) FQDN(name string) string { return name + "." + c.LocalDomainOrDefault() }
+
+// Host returns a host by name, which may be given relative or in full.
+func (c Config) Host(name string) (Host, bool) {
+	name = normalizeHostName(name, c.LocalDomainOrDefault())
+	i := slices.IndexFunc(c.Hosts, func(h Host) bool { return h.Name == name })
+	if i < 0 {
+		return Host{}, false
+	}
+	return c.Hosts[i], true
+}
+
+// SetHost adds or replaces a host, keyed by name.
+func (c *Config) SetHost(h Host) {
+	h.Name = normalizeHostName(h.Name, c.LocalDomainOrDefault())
+	if i := slices.IndexFunc(c.Hosts, func(e Host) bool { return e.Name == h.Name }); i >= 0 {
+		c.Hosts[i] = h
+		c.Normalize()
+		return
+	}
+	c.Hosts = append(c.Hosts, h)
+	c.Normalize()
+}
+
+// RemoveHost drops a host by name, reporting whether there was one.
+func (c *Config) RemoveHost(name string) bool {
+	name = normalizeHostName(name, c.LocalDomainOrDefault())
+	i := slices.IndexFunc(c.Hosts, func(h Host) bool { return h.Name == name })
+	if i < 0 {
+		return false
+	}
+	c.Hosts = slices.Delete(c.Hosts, i, i+1)
+	return true
+}
+
 // RedirectTarget resolves where hijacked :53 is sent for one address family.
 //
 // Per family, because a v4-only redirect on a dual-stack network leaks every
@@ -329,6 +421,27 @@ func NormalizeName(s string) string {
 	return n
 }
 
+// NormalizeDomain canonicalises a domain name for storage: lowercased, with the
+// trailing root dot and any leading or trailing separator removed.
+func NormalizeDomain(s string) string {
+	return strings.Trim(strings.ToLower(strings.TrimSpace(s)), ".")
+}
+
+// normalizeHostName reduces a host name to the form it is stored in: relative
+// to the local domain, lowercased, no trailing dot.
+//
+// The suffix is stripped rather than rejected because typing the name in full
+// is the obvious thing to do — an operator who has just been told the TV is
+// sony-tv.home.arpa will paste that back — and storing it verbatim would
+// publish sony-tv.home.arpa.home.arpa.
+func normalizeHostName(name, domain string) string {
+	n := NormalizeDomain(name)
+	if domain != "" {
+		n = strings.TrimSuffix(n, "."+domain)
+	}
+	return n
+}
+
 // Normalize puts the config in canonical form.
 //
 // Everything downstream depends on this. Rendering is deterministic only if the
@@ -344,6 +457,17 @@ func (c *Config) Normalize() {
 	slices.SortStableFunc(c.Listen, compareAddrPort)
 	slices.SortStableFunc(c.AllowFrom, comparePrefix)
 	c.AllowFrom = slices.CompactFunc(c.AllowFrom, func(a, b netip.Prefix) bool { return a == b })
+
+	// Before the hosts, which are stored relative to it.
+	c.LocalDomain = NormalizeDomain(c.LocalDomain)
+	domain := c.LocalDomainOrDefault()
+	for i := range c.Hosts {
+		h := &c.Hosts[i]
+		h.Name = normalizeHostName(h.Name, domain)
+		slices.SortStableFunc(h.Addrs, func(a, b netip.Addr) int { return a.Compare(b) })
+		h.Addrs = slices.CompactFunc(h.Addrs, func(a, b netip.Addr) bool { return a == b })
+	}
+	slices.SortStableFunc(c.Hosts, func(a, b Host) int { return strings.Compare(a.Name, b.Name) })
 
 	for i := range c.Policies {
 		p := &c.Policies[i]
@@ -415,6 +539,14 @@ func (c Config) Clone() Config {
 	}
 	if len(c.Policies) == 0 {
 		out.Policies = nil
+	}
+	out.Hosts = make([]Host, len(c.Hosts))
+	for i, h := range c.Hosts {
+		h.Addrs = slices.Clone(h.Addrs)
+		out.Hosts[i] = h
+	}
+	if len(c.Hosts) == 0 {
+		out.Hosts = nil
 	}
 	return out
 }

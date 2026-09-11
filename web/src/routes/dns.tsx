@@ -35,13 +35,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { ActivityCard } from '@/features/dns/activity'
+import { HostDialog, qualify, relative } from '@/features/dns/host-dialog'
 import { PlanDiff, PlanReasons, impactHint } from '@/features/dns/impact'
 import { PolicyDialog } from '@/features/dns/policy-dialog'
 import { useDnsConfig, useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, RESOLVER_UNIT, UnitLabel, serviceOf } from '@/features/dns/units'
 import { useDnsApply } from '@/features/dns/use-apply'
 import type { DnsStatus } from '@/lib/api-types'
-import type { DnsConfig, Policy, UpstreamMode } from '@/lib/config-types'
+import type { DnsConfig, Host, Policy, UpstreamMode } from '@/lib/config-types'
 
 /**
  * DNS is a top-level section, beside Addresses rather than under it, so this
@@ -121,6 +122,8 @@ export function DnsPage() {
       <ActivityCard config={current} busy={applier.busy} onChange={change} />
 
       <BlockingCard config={current} onChange={change} busy={applier.busy} />
+
+      <LocalNamesCard config={current} onChange={change} busy={applier.busy} />
 
       <ResolvingCard config={current} onChange={change} busy={applier.busy} />
 
@@ -408,6 +411,120 @@ function BlockingCard({
         key={editing?.name ?? 'new'}
         open={open}
         onOpenChange={setOpen}
+        initial={editing}
+        onSubmit={upsert}
+        onRemove={editing ? () => remove(editing.name) : undefined}
+      />
+    </Card>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+
+/** The suffix local names get when none is configured — DefaultLocalDomain in Go. */
+const DEFAULT_LOCAL_DOMAIN = 'home.arpa'
+
+function LocalNamesCard({
+  config,
+  onChange,
+  busy,
+}: {
+  config: DnsConfig
+  onChange: (next: DnsConfig) => void
+  busy: boolean
+}) {
+  const [editing, setEditing] = useState<Host | undefined>(undefined)
+  const [open, setOpen] = useState(false)
+  const hosts = config.hosts ?? []
+  const domain = config.local_domain || DEFAULT_LOCAL_DOMAIN
+
+  function upsert(host: Host) {
+    // Stored relative, so pasting a name in full replaces the entry that is
+    // already there rather than adding a second one the server would refuse.
+    const name = relative(host.name, domain)
+    const rest = hosts.filter((h) => h.name !== name)
+    onChange({ ...config, hosts: [...rest, { ...host, name }] })
+  }
+
+  function remove(name: string) {
+    onChange({ ...config, hosts: hosts.filter((h) => h.name !== name) })
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Local names</CardTitle>
+        <CardDescription>
+          Names this network answers for itself, so you can reach a device by
+          name instead of by an address that DHCP may move.
+        </CardDescription>
+        <CardAction>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              setEditing(undefined)
+              setOpen(true)
+            }}
+          >
+            <Plus className="size-4" aria-hidden /> Add
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {hosts.length === 0 ? (
+          <ListEmpty>
+            No names yet. Devices here are reachable by address only.
+          </ListEmpty>
+        ) : (
+          <List>
+            {hosts.map((h) => (
+              <ListRow
+                key={h.name}
+                // The qualified name, not the stored relative one: this is the
+                // string somebody is about to type into a browser.
+                title={qualify(h.name, domain)}
+                subtitle={h.addresses.join(', ')}
+                onSelect={
+                  busy
+                    ? undefined
+                    : () => {
+                        setEditing(h)
+                        setOpen(true)
+                      }
+                }
+              />
+            ))}
+          </List>
+        )}
+
+        <EditableField
+          id="dns-local-domain"
+          label="Published under"
+          busy={busy}
+          placeholder={DEFAULT_LOCAL_DOMAIN}
+          stored={config.local_domain ?? ''}
+          hint={
+            <>
+              Every name above gets this suffix. Leave it empty for{' '}
+              <span className="font-mono">{DEFAULT_LOCAL_DOMAIN}</span>, which is
+              reserved for exactly this and can never be sold as a real domain.
+              The bare name works too on devices handed this as their search
+              domain — that is the <span className="font-mono">domain</span>{' '}
+              field on the network's DHCP settings.
+            </>
+          }
+          onSave={(value) =>
+            onChange({ ...config, local_domain: value.trim() || undefined })
+          }
+        />
+      </CardContent>
+
+      <HostDialog
+        key={editing?.name ?? 'new'}
+        open={open}
+        onOpenChange={setOpen}
+        domain={domain}
         initial={editing}
         onSubmit={upsert}
         onRemove={editing ? () => remove(editing.name) : undefined}

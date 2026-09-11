@@ -387,3 +387,122 @@ func TestCheckName(t *testing.T) {
 		}
 	}
 }
+
+func hostConfig(hosts ...Host) Config {
+	c := validConfig()
+	c.Hosts = hosts
+	c.Normalize()
+	return c
+}
+
+func TestValidateLocalDomain(t *testing.T) {
+	tests := []struct {
+		name     string
+		domain   string
+		wantErr  bool
+		wantWarn bool
+	}{
+		{name: "the default is fine", domain: ""},
+		{name: "home.arpa", domain: "home.arpa"},
+		{name: "internal is reserved too", domain: "internal"},
+		{name: "a subdomain of one you own", domain: "lan.example.com"},
+		// mDNS owns .local. Publishing it here resolves on some devices and not
+		// others, with nothing on this box to explain the difference.
+		{name: "local belongs to mDNS", domain: "local", wantErr: true},
+		{name: "not a name at all", domain: "http://nas", wantErr: true},
+		// Not reserved by anybody, so it may one day be delegated and every
+		// name under it would start resolving on the internet.
+		{name: "an unreserved single label", domain: "lan", wantWarn: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := validConfig()
+			c.LocalDomain = tt.domain
+			c.Normalize()
+			res := Validate(c, testLinks())
+
+			if got := hasProblem(res.Errors, "local_domain"); got != tt.wantErr {
+				t.Errorf("error = %v, want %v (%v)", got, tt.wantErr, res.Errors)
+			}
+			if got := hasProblem(res.Warnings, "local_domain"); got != tt.wantWarn {
+				t.Errorf("warning = %v, want %v (%v)", got, tt.wantWarn, res.Warnings)
+			}
+		})
+	}
+}
+
+func TestValidateHosts(t *testing.T) {
+	addr := func(s string) []netip.Addr { return []netip.Addr{netip.MustParseAddr(s)} }
+
+	tests := []struct {
+		name  string
+		hosts []Host
+		want  bool
+	}{
+		{name: "a name and an address on the LAN",
+			hosts: []Host{{Name: "sony-tv", Addrs: addr("192.168.1.50")}}},
+		{name: "both families on one name",
+			hosts: []Host{{Name: "nas", Addrs: []netip.Addr{
+				netip.MustParseAddr("192.168.1.10"), netip.MustParseAddr("fd00::10")}}}},
+		{name: "a name several labels deep",
+			hosts: []Host{{Name: "tv.living-room", Addrs: addr("192.168.1.50")}}},
+
+		{name: "no name", hosts: []Host{{Addrs: addr("192.168.1.50")}}, want: true},
+		{name: "no address", hosts: []Host{{Name: "sony-tv"}}, want: true},
+		{name: "an underscore no browser agrees about",
+			hosts: []Host{{Name: "sony_tv", Addrs: addr("192.168.1.50")}}, want: true},
+		{name: "the unspecified address",
+			hosts: []Host{{Name: "sony-tv", Addrs: addr("0.0.0.0")}}, want: true},
+		{name: "the local domain itself",
+			hosts: []Host{{Name: DefaultLocalDomain, Addrs: addr("192.168.1.50")}}, want: true},
+		{name: "the same name twice", hosts: []Host{
+			{Name: "sony-tv", Addrs: addr("192.168.1.50")},
+			{Name: "sony-tv", Addrs: addr("192.168.1.51")},
+		}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Not through hostConfig: Normalize would collapse the duplicate
+			// case before the rule that catches it ever runs.
+			c := validConfig()
+			c.Hosts = tt.hosts
+			res := Validate(c, testLinks())
+
+			if got := hasProblem(res.Errors, "hosts["); got != tt.want {
+				t.Errorf("error = %v, want %v (%v)", got, tt.want, res.Errors)
+			}
+		})
+	}
+}
+
+// A local name pointing off this network is legal — it may be a host across a
+// VPN — and it is also exactly what a typo'd octet looks like. Warn, do not
+// refuse.
+func TestValidateWarnsAboutAnAddressOffTheNetworkItServes(t *testing.T) {
+	c := hostConfig(Host{Name: "nas", Addrs: []netip.Addr{netip.MustParseAddr("10.9.9.9")}})
+	res := Validate(c, testLinks())
+
+	if !res.OK() {
+		t.Errorf("an off-LAN address was refused: %v", errorPaths(res))
+	}
+	if !hasProblem(res.Warnings, "hosts[0].addresses[0]") {
+		t.Errorf("no warning for an address off every served network: %v", res.Warnings)
+	}
+}
+
+func TestValidateAcceptsHostsOnEveryServedFamily(t *testing.T) {
+	c := hostConfig(Host{Name: "nas", Addrs: []netip.Addr{
+		netip.MustParseAddr("192.168.1.10"),
+		netip.MustParseAddr("fd00::10"),
+	}})
+	res := Validate(c, testLinks())
+
+	if !res.OK() {
+		t.Fatalf("rejected: %v", errorPaths(res))
+	}
+	if hasProblem(res.Warnings, "hosts[") {
+		t.Errorf("warned about addresses on the served networks: %v", res.Warnings)
+	}
+}

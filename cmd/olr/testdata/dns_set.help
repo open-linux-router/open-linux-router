@@ -8,6 +8,7 @@ Flags:
       --block-dot                 drop DNS-over-TLS on 853, so clients cannot route around the redirect
   -h, --help                      help for set
       --listen stringArray        address to answer queries on, repeatable, e.g. 192.168.1.1:53
+      --local-domain string       suffix local names are published under, e.g. home.arpa
       --mode string               how names are resolved: recurse|forward
       --query-log                 record answered queries
       --query-log-entries int     how many answered queries to keep in memory

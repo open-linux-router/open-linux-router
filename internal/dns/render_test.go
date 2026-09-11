@@ -355,3 +355,75 @@ func TestUnitForClassifiesStrayFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderLocalNames(t *testing.T) {
+	b := testBackend(t)
+	cfg := validConfig()
+	cfg.Hosts = []Host{
+		{Name: "sony-tv", Addrs: []netip.Addr{
+			netip.MustParseAddr("192.168.1.50"), netip.MustParseAddr("fd00::50")}},
+	}
+	cfg.Normalize()
+
+	got := renderDirectives(t, b, cfg, b.Paths.UnboundConf)
+
+	// static, not transparent: a name under the local domain that we do not
+	// publish must get an authoritative NXDOMAIN here rather than be forwarded,
+	// or the names of the devices in this house leak to whoever is upstream.
+	for _, want := range []string{
+		`local-zone: "home.arpa." static`,
+		`local-data: "sony-tv.home.arpa. IN A 192.168.1.50"`,
+		`local-data: "sony-tv.home.arpa. IN AAAA fd00::50"`,
+		`local-data-ptr: "192.168.1.50 sony-tv.home.arpa."`,
+		`local-data-ptr: "fd00::50 sony-tv.home.arpa."`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered unbound.conf is missing %s\n%s", want, got)
+		}
+	}
+}
+
+// Nothing configured should render nothing. A bare local-zone would make the
+// default domain NXDOMAIN for a box whose operator never asked for local names.
+func TestRenderWithoutHostsRendersNoLocalZone(t *testing.T) {
+	b := testBackend(t)
+	if got := renderDirectives(t, b, validConfig(), b.Paths.UnboundConf); strings.Contains(got, "local-zone") {
+		t.Errorf("a config with no hosts rendered a local zone:\n%s", got)
+	}
+}
+
+// Claiming the PTR for a public address would make this box authoritative for a
+// reverse name it does not own, and the override would be invisible to whoever
+// later wondered why that address resolves oddly.
+func TestRenderClaimsReverseOnlyForPrivateAddresses(t *testing.T) {
+	b := testBackend(t)
+	cfg := validConfig()
+	cfg.Hosts = []Host{{Name: "vpn", Addrs: []netip.Addr{netip.MustParseAddr("203.0.113.9")}}}
+	cfg.Normalize()
+
+	got := renderDirectives(t, b, cfg, b.Paths.UnboundConf)
+
+	if !strings.Contains(got, `local-data: "vpn.home.arpa. IN A 203.0.113.9"`) {
+		t.Errorf("the forward record was not rendered:\n%s", got)
+	}
+	if strings.Contains(got, "local-data-ptr") {
+		t.Errorf("claimed the reverse of a public address:\n%s", got)
+	}
+}
+
+func TestRenderLocalNamesUnderACustomDomain(t *testing.T) {
+	b := testBackend(t)
+	cfg := validConfig()
+	cfg.LocalDomain = "internal"
+	cfg.Hosts = []Host{{Name: "nas", Addrs: []netip.Addr{netip.MustParseAddr("192.168.1.10")}}}
+	cfg.Normalize()
+
+	got := renderDirectives(t, b, cfg, b.Paths.UnboundConf)
+
+	if !strings.Contains(got, `local-zone: "internal." static`) {
+		t.Errorf("the zone did not follow the configured domain:\n%s", got)
+	}
+	if !strings.Contains(got, `local-data: "nas.internal. IN A 192.168.1.10"`) {
+		t.Errorf("the record did not follow the configured domain:\n%s", got)
+	}
+}

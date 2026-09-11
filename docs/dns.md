@@ -353,6 +353,49 @@ A socket rather than a state file because the alternative is a line per query
 appended to disk, and a great many olr boxes boot from an SD card. It also
 leaves §7.5 genuinely open instead of quietly answering it.
 
+### 4.6 Local names live in unbound, not in the relay
+
+A device on this network should be reachable by name. `hosts` in the module
+config is a name and its addresses; each is published under `local_domain`,
+default `home.arpa`, and the set renders into unbound's config as a
+`local-zone ... static` with one `local-data` per address.
+
+**unbound and not the relay, which is the opposite of where blocking went**
+(§4.4). Blocking had to move because it is *per client*, and every query reaches
+unbound from 127.0.0.1, so the relay is the only thing that still knows who
+asked. A local name is the same answer for everybody, so that argument does not
+apply — and what is left is a list of edges unbound already has right and we
+would have to get right again. The sharpest: a name with only an A record must
+answer **NODATA** and not NXDOMAIN when asked for AAAA, or the client concludes
+the name does not exist and stops asking for either family. Writing that in the
+relay would be §3.5's mistake, the module taking on a backend's job for no gain.
+
+Three choices inside that, each with a reason:
+
+- **`static`, not `transparent`.** A name under the local domain that we do not
+  publish gets an authoritative NXDOMAIN rather than being forwarded. Both
+  halves matter: local names resolve without asking anybody, and the names of
+  the devices in a house do not leak to whichever resolver is upstream.
+- **Reverse only for private addresses.** `local-data-ptr` is rendered when the
+  address is RFC 1918 or ULA. Pointing a local name at a public address is
+  legitimate — it may be a host across a VPN — but claiming its PTR would make
+  this box authoritative for a reverse name it does not own, and the override
+  would be invisible to whoever later wondered why that address resolves oddly.
+- **Names are stored relative to the domain.** `sony-tv`, not
+  `sony-tv.home.arpa`. Typing it in full is what an operator does, so both
+  spellings normalise to one entry rather than two that diff against each other
+  forever, and changing the domain moves every name under it at once.
+
+This is not the authoritative service §6 rules out permanently. There is no zone
+to transfer, no delegation pointing here, and nothing off this network can ask:
+it is a local override on the resolver a household already runs, which is what
+`local-zone` is for.
+
+**The bare name is a DHCP fact, not a DNS one.** `sony-tv:5006` works only on a
+client that was handed the domain as its search domain — DHCP option 15, which
+is `domain` on the pool in `internal/dhcp`. `sony-tv.home.arpa:5006` works
+everywhere. olr cannot make the short form universal and does not pretend to.
+
 ---
 
 ## 5. The risk, which is availability
@@ -414,6 +457,7 @@ only and access-control by source, or we have shipped an amplifier.
 | **v1** | resolver leg: DNAT hijack of forwarded `:53`, upstream = unbound, per-group policy | built; policy keys off client prefixes until `link` lands groups |
 | | passthrough relay with tee, query log, domain→IP map | the observability case is the whole reason to own :53 |
 | | per-client blocking, DoT `:853` drop | built **in the relay**, not in unbound views — §4.4; the block is what protects everything else |
+| | local names under a local domain | built **in unbound**, not the relay — §4.6, which is the same question answered the other way |
 | **v2** | per-client upstream selection (proxy vs direct) | needs §2.1's return-path answer first |
 | | DoH `:443` blocklist, TCP and UDP | ongoing maintenance, not a one-off |
 | **Never** | recursion, DNSSEC validation, our own cache | the moment this process needs a cache, it is a design change and not a refactor |
@@ -465,6 +509,25 @@ what we do not cover instead of implying coverage we do not have.
   honest but not the same as covering it. A client resolving over IPv6 on a
   dual-stack network bypasses the redirect entirely — the same failure the
   routing model records for a v4-only exit.
+- **A local name and a DHCP reservation are typed separately.** `design.md`
+  §4.1 fixes the direction — `dhcp` publishes lease hostnames, `dns`
+  subscribes — and that half is not built. `Reservation.Hostname` exists and
+  goes no further than dnsmasq, which cannot publish it either because
+  `internal/dhcp` renders `port=0`. So naming a reserved device means writing
+  the address in both modules, and changing the reservation's address leaves the
+  name pointing at the old one with nothing to say so. §4.6's `hosts` is the
+  half that has to exist regardless: a statically addressed printer speaks no
+  DHCP and has no other way into the local namespace.
+- **Nothing re-applies `dns` when `dhcp` changes**, which is what the
+  subscription above will have to answer before it can be wired. Modules apply
+  independently and `core.Events` is a notification bus and not a data channel,
+  so a cross-module apply is a mechanism that does not exist yet rather than a
+  call somebody forgot to make.
+- **Adding a local name restarts unbound.** It lands in `unbound.conf`, which is
+  not reloadable, so the plan is `ImpactRestart` — milliseconds, and the cache
+  flushed. Acceptable for the field it is, and the one thing to revisit if
+  naming devices turns out to be a weekly activity: a separate included file
+  would make it a reload, at the cost of a mechanism nothing else needs.
 - **Policies key off client prefixes, not groups.** `link` has not landed, so
   this is the same stand-in `internal/dhcp` makes by keying pools off kernel
   interface names, and it changes shape at the same time.

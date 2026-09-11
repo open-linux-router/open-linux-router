@@ -4,11 +4,11 @@ Usage:
   olr dns [command]
 
 Available Commands:
-  add         Add a policy or a blocked name
+  add         Add a policy, a blocked name or a local name
   disable     Disable DNS
   enable      Enable DNS
   logs        Show resolver and relay log output
-  rm          Remove a policy or a blocked name
+  rm          Remove a policy, a blocked name or a local name
   set         Change DNS settings
   show        Show DNS configuration
   status      Show service state, query counts and drift
