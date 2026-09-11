@@ -20,7 +20,7 @@ func TestNoDropInsWhenEverythingIsWhereTheUnitsExpect(t *testing.T) {
 	}
 }
 
-// Arch and Alpine put all three in /usr/bin.
+// Arch and Alpine put all of these in /usr/bin.
 func TestDropInsCorrectEveryPathOnANonDebianLayout(t *testing.T) {
 	got := DropIns(Tools{
 		Dnsmasq:          "/usr/bin/dnsmasq",
@@ -28,15 +28,17 @@ func TestDropInsCorrectEveryPathOnANonDebianLayout(t *testing.T) {
 		UnboundCheckconf: "/usr/bin/unbound-checkconf",
 		UnboundAnchor:    "/usr/bin/unbound-anchor",
 		Nft:              "/usr/bin/nft",
+		Caddy:            "/usr/bin/caddy",
 	})
-	if len(got) != 3 {
-		t.Fatalf("got %d drop-ins, want 3: %+v", len(got), got)
+	if len(got) != 4 {
+		t.Fatalf("got %d drop-ins, want 4: %+v", len(got), got)
 	}
 
 	want := map[string]string{
 		"/etc/systemd/system/olr-dhcp.service.d/10-path.conf":  "/usr/bin/dnsmasq",
 		"/etc/systemd/system/olr-dns.service.d/10-path.conf":   "/usr/bin/unbound",
 		"/etc/systemd/system/olr-dnsd.service.d/10-path.conf":  "/usr/bin/nft",
+		"/etc/systemd/system/olr-caddy.service.d/10-path.conf": "/usr/bin/caddy",
 	}
 	for _, d := range got {
 		bin, ok := want[d.Path]
@@ -112,6 +114,37 @@ func TestNoRelayDropInWhenNftIsAbsent(t *testing.T) {
 	for _, d := range DropIns(Tools{Dnsmasq: "/usr/bin/dnsmasq"}) {
 		if strings.Contains(d.Path, "olr-dnsd") {
 			t.Errorf("wrote a relay drop-in with no nft on the box: %s", d.Path)
+		}
+	}
+}
+
+// The proxy is the one tool here that a working box may legitimately not have,
+// so its absence must produce no drop-in rather than one naming an empty path.
+func TestNoProxyMeansNoProxyDropIn(t *testing.T) {
+	for _, d := range DropIns(Tools{Dnsmasq: DebianDnsmasq, Unbound: DebianUnbound, Nft: DebianNft}) {
+		if strings.Contains(d.Path, "olr-caddy") {
+			t.Fatalf("wrote a drop-in for a proxy that is not installed:\n%s", d.Data)
+		}
+	}
+}
+
+// A reload that Caddy skips is a reload that did not happen. --force is what
+// makes the "nobody notices" rung of the impact ladder true after a change olr
+// considered cosmetic, or a recovery from a hand-edited running state.
+func TestProxyDropInKeepsReloadForced(t *testing.T) {
+	got := DropIns(Tools{Caddy: "/usr/bin/caddy"})
+	if len(got) != 1 {
+		t.Fatalf("got %d drop-ins, want 1", len(got))
+	}
+	body := string(got[0].Data)
+	if !strings.Contains(body, "reload") || !strings.Contains(body, "--force") {
+		t.Errorf("the drop-in must keep the forced reload:\n%s", body)
+	}
+	// Both directives cleared before being set, or the unit runs the shipped
+	// path as well as this one.
+	for _, directive := range []string{"ExecStart=\n", "ExecReload=\n"} {
+		if !strings.Contains(body, directive) {
+			t.Errorf("%q is not cleared before being reassigned:\n%s", directive, body)
 		}
 	}
 }

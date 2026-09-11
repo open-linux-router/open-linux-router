@@ -1,0 +1,139 @@
+[Unit]
+Description=open-linux-router HTTPS ingress (Caddy)
+Documentation=https://caddyserver.com/docs/
+After=network-online.target olr-dnsd.service
+Wants=network-online.target
+
+# Wants, not Requires, and the reason is specific rather than habitual: this
+# proxy has to reach a DNS provider's API and an ACME server to get a
+# certificate, so it genuinely wants the network up — but a resolver that is
+# momentarily down should not stop it serving names whose certificate it already
+# holds. Ordering without coupling, as olr-dnsd does with olr-dns.
+
+# Deliberately no Conflicts=caddy.service.
+#
+# This is a second, separate Caddy, with its own unit name, its own config path
+# and — usually — its own binary (docs/ingress.md §5.5). The distro's
+# caddy.service and /etc/caddy belong to whatever the operator installed Caddy
+# for, and taking them over would be squatting shared state (design.md §3.4).
+# If both are running they will fight over :443, which is the operator's to
+# resolve and ours to report: `olr ingress status` names the holder.
+
+[Service]
+# notify, which Caddy supports natively. It matters more here than it looks:
+# with Type=simple, systemd reports the start job done the moment the process is
+# forked, which is before Caddy has read a Caddyfile or bound a listener. The
+# apply path watches the unit for a settle window precisely because of that
+# gap, and Type=notify closes most of it.
+Type=notify
+
+# The binary olr does not ship.
+#
+# olr drives whichever Caddy the operator supplied and looks for it here first
+# (docs/ingress.md §5). A binary found somewhere else instead gets a drop-in
+# from `olr enable` rather than an edited unit — an edited unit is overwritten
+# by the next upgrade and a drop-in is not:
+#
+#   /etc/systemd/system/olr-caddy.service.d/10-path.conf
+#     [Service]
+#     ExecStart=
+#     ExecStart=/usr/bin/caddy run --config … --adapter caddyfile
+#
+# --adapter caddyfile on every invocation: the file is named Caddyfile but does
+# not sit in a directory Caddy would infer that from, and a Caddyfile parsed as
+# JSON fails in a way that reads like a syntax error in our renderer.
+ExecStart=/usr/lib/open-linux-router/caddy run --config /etc/open-linux-router/rendered/ingress/Caddyfile --adapter caddyfile
+
+# reload, not SIGHUP, and --force.
+#
+# This is the whole reason the module's impact ladder has a "reload" rung that
+# promises nobody notices: `caddy reload` swaps the configuration while keeping
+# the listeners, so requests in flight finish. Restarting instead would drop
+# every connection through the proxy, which is somebody's upload or somebody's
+# video call rather than a DHCP request that will be retried.
+#
+# --force because Caddy skips a reload whose config is byte-identical to the
+# running one. Without it, a reload after a change olr considered cosmetic would
+# be a silent no-op — and more to the point, a reload issued to recover from a
+# hand-edited running state would do nothing at all.
+ExecReload=/usr/lib/open-linux-router/caddy reload --config /etc/open-linux-router/rendered/ingress/Caddyfile --adapter caddyfile --force
+
+# The DNS provider credential, kept out of the Caddyfile so that the file olr
+# shows an operator — in `olr ingress plan`, in a diff, in a bug report — never
+# contains it (docs/ingress.md §4.1).
+#
+# systemd reads this as PID 1, before dropping privileges, so mode 0600 owned by
+# root is both readable here and unreadable by the service itself. That is the
+# property that makes the split worth having rather than decorative.
+#
+# The leading `-` covers the window before the module has ever been applied: the
+# file does not exist yet, and a unit that refuses to start for a credential
+# nobody has configured is a worse first impression than one that starts and
+# reports that no certificate can be obtained.
+EnvironmentFile=-/etc/open-linux-router/rendered/ingress/caddy.env
+
+Restart=on-failure
+RestartSec=5
+
+# on-failure and five seconds, unlike olr-dnsd's always/two.
+#
+# The asymmetry is deliberate. The relay is stateless and its clients retry
+# unprompted, so coming back fast beats staying down to be diagnosed. This
+# process talks to a certificate authority that rate-limits, and a crash loop
+# against Let's Encrypt is how an operator loses issuance for a week. Slower,
+# and only on failure.
+
+# Binding :80 and :443 is the only privilege this process gets. It does not keep
+# a root identity to do it.
+DynamicUser=yes
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+# No MemoryDenyWriteExecute=, unlike the other units here.
+#
+# Not an oversight and not laziness: the Go runtime this binary is built with
+# allocates executable pages, and olr's own units get away with the restriction
+# only because they are built the way they are. Imposing it on a binary we did
+# not build would fail at start with a SIGSYS and no useful message — the worst
+# possible way to learn that a hardening flag was aspirational.
+
+# AF_NETLINK alongside the obvious three. Go's resolver and its interface
+# enumeration both use netlink, and leaving it out produces a proxy that starts,
+# binds, and then cannot resolve the ACME server — which looks like a network
+# fault rather than a sandbox one and is miserable to track down.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+
+# Certificate storage: the ACME account key and the certificates themselves.
+#
+# StateDirectory= rather than ReadWritePaths=, for the reason olr-dns records:
+# systemd refuses to start a unit whose ReadWritePaths= target does not exist,
+# and at boot this can legitimately run before olr has ever applied anything.
+# StateDirectory= makes systemd create it, and with DynamicUser=yes own it
+# correctly.
+#
+# **This directory is not scratch.** Deleting it discards the ACME account key
+# and every certificate, and the next start re-issues from the authority — with
+# that authority's rate limits waiting. It survives package upgrades on purpose.
+StateDirectory=open-linux-router/ingress
+StateDirectoryMode=0700
+
+# Caddy stores under $XDG_DATA_HOME/caddy. Pointed at the state directory
+# because DynamicUser leaves no meaningful home to fall back on, and the default
+# would otherwise land certificates somewhere neither olr nor the operator would
+# think to look.
+Environment=XDG_DATA_HOME=/var/lib/open-linux-router/ingress
+
+[Install]
+WantedBy=multi-user.target

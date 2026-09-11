@@ -79,6 +79,8 @@ contents:
     dst: /lib/systemd/system/olr-dns.service
   - src: internal/packaging/systemd/olr-dnsd.service
     dst: /lib/systemd/system/olr-dnsd.service
+  - src: internal/packaging/systemd/olr-caddy.service
+    dst: /lib/systemd/system/olr-caddy.service
 
   # The configuration document lives here. Created empty: an absent document
   # means "never configured", which is what a fresh install is.

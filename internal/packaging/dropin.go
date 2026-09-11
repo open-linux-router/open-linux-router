@@ -11,14 +11,21 @@ import (
 // and anything else gets a drop-in rather than an edited unit — an edited unit
 // is overwritten by the next upgrade, and a drop-in is not.
 const (
-	DebianDnsmasq  = "/usr/sbin/dnsmasq"
-	DebianUnbound  = "/usr/sbin/unbound"
-	DebianNft      = "/usr/sbin/nft"
+	DebianDnsmasq = "/usr/sbin/dnsmasq"
+	DebianUnbound = "/usr/sbin/unbound"
+	DebianNft     = "/usr/sbin/nft"
+
+	// OLRCaddy is where olr looks for a proxy binary first, and so what the
+	// shipped unit names. Unlike the three above, this is not a distribution's
+	// path — olr ships no proxy (docs/ingress.md §5), so this is simply where
+	// an operator is told to put the one they built or downloaded.
+	OLRCaddy = "/usr/lib/open-linux-router/caddy"
 
 	dhcpConf    = "/etc/open-linux-router/rendered/dhcp/dnsmasq.conf"
 	dnsConf     = "/etc/open-linux-router/rendered/dns/unbound.conf"
 	dnsAnchor   = "/var/lib/open-linux-router/dns/root.key"
 	dnsHijack   = "/etc/open-linux-router/rendered/dns/hijack.nft"
+	ingressConf = "/etc/open-linux-router/rendered/ingress/Caddyfile"
 	dropInName  = "10-path.conf"
 	dropInDir   = "/etc/systemd/system"
 	dropInBlurb = "# Written by `olr enable`: %s is not at the path this unit assumes.\n"
@@ -32,6 +39,13 @@ type Tools struct {
 	UnboundCheckconf string
 	UnboundAnchor    string
 	Nft              string
+
+	// Caddy is the proxy binary, and is the one entry here that is allowed to
+	// be empty on a working box. The other four are backends olr requires; this
+	// one is only needed once somebody publishes a service, and refusing to
+	// install over its absence would make every router carry a dependency most
+	// of them will never use.
+	Caddy string
 }
 
 // DropIn is one systemd drop-in: a directory beside a unit, and one file in it.
@@ -57,6 +71,9 @@ func DropIns(t Tools) []DropIn {
 		out = append(out, *d)
 	}
 	if d := relayDropIn(t); d != nil {
+		out = append(out, *d)
+	}
+	if d := ingressDropIn(t); d != nil {
 		out = append(out, *d)
 	}
 	return out
@@ -120,6 +137,29 @@ func relayDropIn(t Tools) *DropIn {
 	b.WriteString("ExecStopPost=\n")
 	fmt.Fprintf(&b, "ExecStopPost=+-%s delete table inet olr-dns\n", t.Nft)
 	return dropIn("olr-dnsd.service", b.String())
+}
+
+// ingressDropIn points the proxy unit at a binary that is not where olr looks
+// first — in practice, a distribution's `caddy` on PATH.
+//
+// Worth noting what this drop-in cannot fix: a packaged Caddy has no DNS
+// provider modules, so it will run and serve and then fail to obtain a
+// certificate. Writing the drop-in anyway is right — the operator may have put
+// their own build on PATH — and the failure that remains is reported by Caddy
+// itself at issuance rather than guessed at here.
+func ingressDropIn(t Tools) *DropIn {
+	if t.Caddy == "" || t.Caddy == OLRCaddy {
+		return nil
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, dropInBlurb, "the proxy")
+	b.WriteString("[Service]\n")
+	// Cleared before being set: assigning to an Exec* directive appends.
+	b.WriteString("ExecStart=\n")
+	fmt.Fprintf(&b, "ExecStart=%s run --config %s --adapter caddyfile\n", t.Caddy, ingressConf)
+	b.WriteString("ExecReload=\n")
+	fmt.Fprintf(&b, "ExecReload=%s reload --config %s --adapter caddyfile --force\n", t.Caddy, ingressConf)
+	return dropIn("olr-caddy.service", b.String())
 }
 
 func dropIn(unit, body string) *DropIn {

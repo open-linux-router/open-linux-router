@@ -352,6 +352,13 @@ mostly that message, deliberately.
   distro package's, so a box already running Caddy has nothing to resolve. This
   is not optional politeness; it is the difference between working and not on
   any box that has ever served a web page.
+- The shipped unit names the first path. A binary found anywhere else gets a
+  **drop-in** from `olr enable`, never an edited unit — an edited unit is
+  overwritten by the next upgrade and a drop-in is not. This is the same
+  mechanism `dhcp` and `dns` use for a non-Debian layout.
+- Reloads are `caddy reload --force`. Without `--force` Caddy skips a reload
+  whose configuration matches what it is already running, which would make a
+  reload issued to recover from a hand-edited running state do nothing at all.
 - **`status` reports which binary was found**, because a box can have two and
   "which providers are available" is meaningless without saying which one was
   asked.
@@ -492,6 +499,7 @@ The boundary §2 said had to be drawn here.
 | | `:80` → `:443` redirect, LAN-only bind, port preflight | §6 |
 | | certificate expiry and renewal state in `status` | §8; the one clock-dependent thing we own |
 | | `raw_caddyfile` escape hatch | §7.3 |
+| | `olr-caddy.service`, and a drop-in when the binary is elsewhere | §5.5 |
 | | names answered by `dns`'s existing local zone | §3 — no work, it is already there |
 | **v2** | publishing the WebUI itself | §6 |
 | | shipping a proxy build, so there is no download step | §5.6 — deferred, not rejected |

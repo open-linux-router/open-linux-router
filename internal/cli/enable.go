@@ -323,6 +323,11 @@ func findTools() (packaging.Tools, error) {
 		UnboundCheckconf: look("unbound-checkconf"),
 		UnboundAnchor:    look("unbound-anchor"),
 		Nft:              look("nft"),
+		// Not required, and deliberately not checked below. A router with no
+		// published services never needs a proxy, so its absence is not a
+		// reason to refuse to enable olr — `olr ingress` says what is missing
+		// and how to get it, at the moment somebody actually wants it.
+		Caddy: look("caddy"),
 	}
 
 	if t.Dnsmasq == "" {
