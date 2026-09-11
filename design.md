@@ -378,7 +378,7 @@ Bounded list. Not expected to grow much. The object they all key off is the
 | | `devices` | **device identity** (§4.4); joins presence from leases + ARP | ✅ |
 | **Services** | `dhcp` | dnsmasq — DHCPv4, DHCPv6 **and RA** (§4.2) | ✅ |
 | | `dns` | unbound — **DNS only** | ✅ |
-| | `firewall` | nftables `olr_filter`, `olr_nat` — zones, rules, NAT, forwards | ✅ |
+| | `firewall` | nftables `olr_filter`, `olr_nat` — zones, rules, NAT, forwards. **Part built:** `olr_nat` and port forwarding only; no zones, no rules, no filtering policy (docs/firewall.md) | ✅ |
 | | `qos` | tc — CAKE / fq_codel, per-device shaping | |
 | | `gateway` | static + policy routes; later bird (BGP/OSPF) | |
 | | `vpn` | wireguard — remote access, site-to-site | |

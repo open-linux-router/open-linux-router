@@ -35,9 +35,10 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/devices"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
+	"github.com/open-linux-router/open-linux-router/internal/firewall"
+	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/mcp"
-	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/webui"
 )
 
@@ -128,8 +129,13 @@ func run(args []string) error {
 	// `gateway` sits after them all, because an exit is only useful once
 	// clients have addresses and names — and because docs/gateway.md §4 has its
 	// domain half depending on `dns` owning :53, not the other way round.
+	// `firewall` is last, and reads as a pair with `gateway`: one decides where
+	// traffic leaving here goes, the other decides what arriving here is allowed
+	// in to. docs/firewall.md §6 records the one place they meet — a forwarded
+	// connection's reply must not be handed to an exit.
 	store := core.NewStore(core.RootedConfigPath(opts.root),
-		link.ModuleName, dhcp.ModuleName, dns.ModuleName, devices.ModuleName, gateway.ModuleName)
+		link.ModuleName, dhcp.ModuleName, dns.ModuleName, devices.ModuleName,
+		gateway.ModuleName, firewall.ModuleName)
 	checkStore(store, logger)
 
 	// The three consumers' windows onto link, all backed by one Facts: the
@@ -140,6 +146,7 @@ func run(args []string) error {
 	links := dhcpLinkView{facts: facts}
 	dnsLinks := dnsLinkView{facts: facts}
 	gatewayLinks := gatewayLinkView{facts: facts}
+	firewallLinks := firewallLinkView{facts: facts}
 
 	applier, err := dhcp.NewApplierAt(store, links, opts.root)
 	if err != nil {
@@ -225,6 +232,23 @@ func run(args []string) error {
 		Watch:   func(cfg gateway.Config) { prober.Watch(context.Background(), cfg) },
 	}.Routes(), gateway.Config{})
 
+	// `firewall` is the second module whose configuration lives in the kernel
+	// rather than in a file some backend reads, so it is applied at startup for
+	// the same reason `gateway` is (below). It has no prober: a forward has no
+	// far end whose liveness could be measured, and the counter on each rule is
+	// what answers the question a probe would have.
+	firewallApplier := firewall.Applier{
+		Kernel: firewall.NewKernel(),
+		Links:  firewallLinks,
+		Store:  store,
+	}
+
+	srv.Mount(firewall.ModuleName, firewall.HTTP{
+		Applier: firewallApplier,
+		Lock:    srv.ApplyLock(),
+		Events:  srv.Events(),
+	}.Routes(), firewall.Config{})
+
 	// --- routes -----------------------------------------------------------
 	//
 	// The API and the SPA are composed here rather than inside core, which has
@@ -258,21 +282,22 @@ func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Routing is put back into the kernel here, and it is the only module that
-	// needs this.
+	// Routing and forwarding are put back into the kernel here, and they are the
+	// only two modules that need this.
 	//
 	// dnsmasq and unbound read files that survive a reboot; nftables rules,
 	// `ip rule` entries and route tables do not, so without this a box would
-	// come back up with its configuration intact and none of it in force. It is
-	// idempotent by construction — the plan against an already-correct kernel
-	// is empty and nothing is written — which is what keeps design.md §3.5's
-	// invariant true: `systemctl restart olrd` re-runs this and disturbs no
-	// traffic.
+	// come back up with its configuration intact and none of it in force. Both
+	// are idempotent by construction — the plan against an already-correct
+	// kernel is empty and nothing is written — which is what keeps design.md
+	// §3.5's invariant true: `systemctl restart olrd` re-runs them and disturbs
+	// no traffic.
 	//
-	// It never fails the start. A box whose routing cannot be programmed is
+	// Neither ever fails the start. A box whose routing cannot be programmed is
 	// exactly the box whose API has to come up, because the API is how it gets
 	// fixed.
 	startGateway(ctx, gatewayApplier, prober, logger)
+	startFirewall(ctx, firewallApplier, logger)
 
 	var listeners []net.Listener
 
@@ -432,6 +457,33 @@ func startGateway(ctx context.Context, a gateway.Applier, prober *gateway.Prober
 	}
 
 	prober.Watch(ctx, cfg)
+}
+
+// startFirewall programs stored port forwards.
+//
+// Simpler than startGateway because there is nothing to refuse and nothing to
+// watch: this module never blocks on another program owning its table — a
+// foreign filter is reported, not treated as a conflict (docs/firewall.md §5.2)
+// — and it has no prober to start afterwards.
+func startFirewall(ctx context.Context, a firewall.Applier, logger *slog.Logger) {
+	cfg, err := a.Load()
+	if err != nil {
+		logger.Error("firewall configuration could not be read; nothing was programmed",
+			"error", err)
+		return
+	}
+	if cfg.Empty() && !cfg.Enabled {
+		return
+	}
+
+	result, _, err := a.Apply(ctx, cfg)
+	switch {
+	case err != nil:
+		logger.Error("port forwards could not be applied", "error", err,
+			"steps", len(result.Steps))
+	case !result.Plan.Empty():
+		logger.Info("port forwards applied", "changes", len(result.Plan.Changes))
+	}
 }
 
 // reapplyGateway re-programs the kernel after an exit changed health.

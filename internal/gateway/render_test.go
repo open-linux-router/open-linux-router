@@ -150,13 +150,37 @@ func TestClassifyRulesMatchTheNetworksOwnPrefixes(t *testing.T) {
 
 	got := lines(t, c, nil)
 
-	if !contains(got, sprintf("nft source ip 192.168.1.0/24 mark %#08x from br-lan via Clash", clash.Mark())) {
+	if !contains(got, sprintf("nft source ip 192.168.1.0/24 mark %#08x from br-lan via Clash unless dnat", clash.Mark())) {
 		t.Errorf("missing the classify rule for br-lan: %s", dump(got))
 	}
 	// The prefix is masked, so a link reporting 192.168.1.1/24 classifies the
 	// whole subnet rather than one address.
 	if containsPrefix(got, "nft source ip 192.168.1.1/24") {
 		t.Errorf("prefix was not masked: %s", dump(got))
+	}
+}
+
+// §3.5's DNAT guard, and the reason it is asserted on the *text* rather than on
+// the expression list: the canonical line is what a box's rules are compared
+// against, so a kernel still holding the older, unguarded rules has to read back
+// as drift. If this string stopped being part of the line, the fix would live in
+// the binary and never reach a box that had already applied once.
+//
+// What it prevents is in docs/firewall.md §6: without it, the reply leg of a
+// port-forwarded connection matches the source rule — conntrack has not restored
+// the original destination yet — and is sent out the exit, so port forwarding
+// silently fails on every box that has one.
+func TestClassifyRulesExcludeDNATedConnections(t *testing.T) {
+	c := testConfig()
+	c.Normalize()
+
+	for _, line := range lines(t, c, nil) {
+		if !strings.HasPrefix(line, "nft source ") {
+			continue
+		}
+		if !strings.HasSuffix(line, " unless dnat") {
+			t.Errorf("classify rule does not exclude DNATed connections: %q", line)
+		}
 	}
 }
 

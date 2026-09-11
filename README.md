@@ -9,10 +9,12 @@ configuration. It stays a normal Linux machine the whole time.
 
 **Status: early.** DHCP, DNS, devices and the gateway are built. Interface
 handling is deliberately minimal so far — olr adopts the NICs you give it, but
-does not yet create bridges, VLANs or addresses. Firewall, NAT and Wi-Fi are not
-written at all. If you want a finished router today, this is not one — but a box
-serving DHCP and DNS for a household works, and that is the path documented in
-[docs/install.md](docs/install.md).
+does not yet create bridges, VLANs or addresses. The firewall module holds
+**port forwarding and nothing else** — no zones, no rules, no filtering policy —
+so olr decides what is redirected *into* your network and not what is allowed
+through this box. Wi-Fi is not written at all. If you want a finished router
+today, this is not one — but a box serving DHCP and DNS for a household works,
+and that is the path documented in [docs/install.md](docs/install.md).
 
 ---
 
@@ -65,6 +67,7 @@ actual work to something that already does it well:
 | **`dns`** | Upstreams, local names, blocking policies | **unbound** recursing on loopback, behind a small relay of ours (`olr-dnsd.service`) that owns `:53`, applies policy on the fast path, and observes on a tee. |
 | **`devices`** | Device names, categories, the inventory | No daemon. dnsmasq's lease database joined with the kernel's **ARP table**, so the statically-addressed printer shows up too. |
 | **`gateway`** | Exits, and which network uses which | **nftables** and the kernel's **policy routing database**, programmed directly over netlink — no rule files, no `nft` shell-outs. |
+| **`firewall`** | Port forwards, and nothing else yet | **nftables**, one `olr_nat` table over netlink. Named for what §4 gives it eventually; today it has no zones, rules or filtering policy. |
 
 All of it is one binary. `olr` is the command you type, the control plane
 systemd runs, and the DNS relay behind port 53 — separate units and separate
@@ -79,8 +82,9 @@ a deliberate constraint, not an accident. There is no database and no message
 bus — configuration is one JSON file. `olrd` spawns no subprocesses at all,
 which is what makes its systemd sandbox nearly free.
 
-Not written yet: firewall and NAT (nftables), Wi-Fi (hostapd), VPN (WireGuard),
-QoS (tc), WAN dialling (pppd/dhcpcd).
+Not written yet: firewall *filtering* — zones and rules, the other half of the
+firewall module — Wi-Fi (hostapd), VPN (WireGuard), QoS (tc), WAN dialling
+(pppd/dhcpcd).
 
 ## Getting started
 
@@ -149,6 +153,7 @@ that go wrong.
 | [docs/cli.md](docs/cli.md) | `olr` command conventions, enforced by tests |
 | [docs/dns.md](docs/dns.md) | What the DNS module does, and refuses to do |
 | [docs/gateway.md](docs/gateway.md) | Exits, and which networks use them |
+| [docs/firewall.md](docs/firewall.md) | Port forwarding, and why there is no filtering yet |
 | [docs/mcp.md](docs/mcp.md) | The agent surface |
 | [design.md](design.md) | Architecture, and the decisions behind it |
 

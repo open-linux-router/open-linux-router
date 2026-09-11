@@ -333,8 +333,15 @@ type SysctlSpec struct {
 // name is bounded at 15 characters, a prefix at 43, and MaxNameLen caps the
 // exit. Validate rejects control characters in a name, so this is always one
 // line.
+//
+// **`unless dnat` is part of the text on purpose.** It names §3.5's guard —
+// this rule does not apply to the reply leg of a port-forwarded connection —
+// and it is in the canonical form rather than only in the expression list so
+// that a box still holding the older rules reads back as drift and gets them
+// replaced. Without it the fix would land in the binary and never reach a
+// kernel that had already been programmed.
 func (s SourceRule) Line() string {
-	return fmt.Sprintf("nft source %s %s mark %#08x from %s via %s",
+	return fmt.Sprintf("nft source %s %s mark %#08x from %s via %s unless dnat",
 		family(s.Prefix.Addr().Is6()), s.Prefix, s.Mark, s.Interface, s.Exit)
 }
 

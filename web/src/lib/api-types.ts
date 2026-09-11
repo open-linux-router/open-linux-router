@@ -29,7 +29,9 @@ import type {
   DeviceCategory,
   DevicesConfig,
   ExitForm,
+  FirewallConfig,
   LinkConfig,
+  Protocol,
   GatewayConfig,
 } from '@/lib/config-types'
 
@@ -609,5 +611,98 @@ export interface GatewayTraffic {
    */
   limits?: string[]
 
+  as_of: string
+}
+
+// --- firewall --------------------------------------------------------------
+
+/**
+ * A change to the kernel's NAT table — internal/firewall changeView.
+ *
+ * A line rather than a file path and a diff, for the same reason gateway's is:
+ * this module configures the kernel rather than a backend's config file. The
+ * text is the same canonical form `olr firewall show --dry-run` prints and the
+ * same one stored in each nftables rule's comment, so what the screen shows,
+ * what the CLI shows and what `nft list table inet olr_nat` shows are one
+ * string.
+ */
+export interface FirewallChangeLine {
+  kind: 'add' | 'remove'
+  line: string
+}
+
+/**
+ * Somebody else's chain on the forward hook — internal/firewall ForeignFilter.
+ *
+ * Reported rather than hidden (design.md §3.4), and — unlike gateway's
+ * ForeignRule — it never blocks the change. In nftables a drop is final, so olr
+ * cannot override one; but the foreign chain may also be accepting exactly this
+ * traffic in a rule olr cannot evaluate, so refusing would block a legitimate
+ * setup on a guess (docs/firewall.md §5.2).
+ */
+export interface ForeignFilter {
+  table: string
+  family: string
+  chain: string
+  policy: string
+}
+
+/** What applying a firewall change would do — internal/firewall planView. */
+export interface FirewallPlan {
+  changes: FirewallChangeLine[]
+  impact: Impact
+  foreign?: ForeignFilter[]
+  reasons?: string[]
+  empty: boolean
+  /**
+   * Whether the kernel could be read. Without it a client cannot tell "nothing
+   * to do" from "we could not look", which need different words on screen.
+   */
+  known: boolean
+  diff?: string
+  warnings?: Problem[]
+}
+
+export interface FirewallApplyResult {
+  plan: FirewallPlan
+  steps?: Step[]
+  config: FirewallConfig
+  error?: { message: string; problems?: Problem[] }
+}
+
+/** One forward and what is true of it right now — internal/firewall forwardStatusView. */
+export interface ForwardStatus {
+  name: string
+  in: string
+  protocol: Protocol
+  port: string
+  to: string
+  hairpin: boolean
+
+  /**
+   * `counted` and the totals together. A forward nobody could count reads as
+   * zero, and saying so without saying it was never measured would claim
+   * knowledge we do not have (design.md §5.6 — faults must not hide inside a
+   * default). The two states also point in opposite directions when a port does
+   * not work: "nothing arrived" points outward at the ISP or somebody else's
+   * filter, "not counted" points at this box.
+   */
+  counted: boolean
+
+  /**
+   * Since the table was last built, not since boot: any change to this module
+   * rebuilds it and resets these (docs/firewall.md §3.6).
+   */
+  packets: number
+  bytes: number
+}
+
+export interface FirewallStatus {
+  enabled: boolean
+  known: boolean
+  forwards: ForwardStatus[]
+  drifted: boolean
+  foreign?: ForeignFilter[]
+  problems?: Problem[]
   as_of: string
 }

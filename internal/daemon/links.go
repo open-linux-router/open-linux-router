@@ -5,24 +5,25 @@ import (
 
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
-	"github.com/open-linux-router/open-linux-router/internal/link"
+	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
+	"github.com/open-linux-router/open-linux-router/internal/link"
 )
 
-// Adapters joining the link module to the three modules that read it.
+// Adapters joining the link module to the four modules that read it.
 //
-// They live here, in the binary that mounts all four, for the reason
-// devices.go gives about its own: it keeps design.md §4.1's arrow pointing one
-// way. Each of `dhcp`, `dns` and `gateway` declares the interface facts it
-// needs as its own LinkView and never imports `link`; `link` stays unaware that
-// anything consumes it. The four are introduced at the one place that already
-// knows the whole module list.
+// They live here, in the binary that mounts them all, for the reason devices.go
+// gives about its own: it keeps design.md §4.1's arrow pointing one way. Each of
+// `dhcp`, `dns`, `gateway` and `firewall` declares the interface facts it needs
+// as its own LinkView and never imports `link`; `link` stays unaware that
+// anything consumes it. They are introduced at the one place that already knows
+// the whole module list.
 //
-// The three LinkInfo structs happen to have identical fields today, so these
-// read as three copies of one conversion. They are not one type for the same
-// reason the interfaces are three: the day `gateway` needs an MTU is the day
-// the other two should not grow a field they do not use, and collapsing them
-// now would make that change a four-module edit instead of a one-module one.
+// The four LinkInfo structs happen to have identical fields today, so these read
+// as four copies of one conversion. They are not one type for the same reason
+// the interfaces are four: the day `gateway` needs an MTU is the day the others
+// should not grow a field they do not use, and collapsing them now would make
+// that change a five-module edit instead of a one-module one.
 //
 // This replaced three separate readers of a hand-written `--links` file. That
 // file was a second copy of what the kernel already knows, with nothing keeping
@@ -105,6 +106,44 @@ func (l gatewayLinkView) Interfaces() ([]gateway.LinkInfo, error) {
 	out := make([]gateway.LinkInfo, 0, len(all))
 	for _, info := range all {
 		out = append(out, gateway.LinkInfo{
+			Name:     info.Name,
+			Adopted:  info.Adopted,
+			Up:       info.Up,
+			Prefixes: info.Prefixes,
+		})
+	}
+	return out, nil
+}
+
+// firewallLinkView is the firewall module's window onto link.
+//
+// What it uses the prefixes for is different from what gateway does with them:
+// gateway matches a source range to classify it, while firewall needs to know
+// which of its own networks hold a forward's destination, because that is the
+// set whose replies would otherwise bypass the router (docs/firewall.md §4).
+type firewallLinkView struct{ facts link.Facts }
+
+func (l firewallLinkView) Interface(name string) (firewall.LinkInfo, error) {
+	info, err := l.facts.Interface(name)
+	if err != nil {
+		return firewall.LinkInfo{}, fmt.Errorf("%q: %w", name, firewall.ErrNoSuchInterface)
+	}
+	return firewall.LinkInfo{
+		Name:     info.Name,
+		Adopted:  info.Adopted,
+		Up:       info.Up,
+		Prefixes: info.Prefixes,
+	}, nil
+}
+
+func (l firewallLinkView) Interfaces() ([]firewall.LinkInfo, error) {
+	all, err := l.facts.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]firewall.LinkInfo, 0, len(all))
+	for _, info := range all {
+		out = append(out, firewall.LinkInfo{
 			Name:     info.Name,
 			Adopted:  info.Adopted,
 			Up:       info.Up,

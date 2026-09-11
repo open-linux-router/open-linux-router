@@ -279,6 +279,44 @@ exit. If that is ever wanted, it needs a `type route hook output` chain, which
 re-runs the routing decision after the mark changes — and it needs the exclusion
 above written by hand.
 
+### 3.5.1 Translated connections are not ours to classify
+
+`fib daddr type != local` is not a sufficient guard on its own, and the case it
+misses is not exotic — it is **every port forward on a box that also has an
+exit**, which is to say the two features silently did not work together until
+`firewall` landed and this was fixed.
+
+Follow the reply leg of a forwarded connection. The inbound `SYN` is addressed to
+the router, so `fib daddr type != local` is false and it is correctly left
+unmarked. The server's `SYN/ACK` is a different matter: conntrack does not
+restore the original destination until postrouting, so in prerouting it is a
+packet from `192.168.1.10` to somewhere on the internet — indistinguishable from
+an ordinary LAN machine dialling out, and duly marked for that network's exit.
+The connection dies half-open.
+
+So the classify rules carry a fourth guard:
+
+```
+ct status & 0x20 (IPS_DST_NAT) == 0
+```
+
+> **A connection whose destination we rewrote is not one we choose an exit for.**
+
+The semantics are general rather than a courtesy to one module: the reply leg of
+any DNATed connection belongs to whoever originated the translation, and its path
+is already decided by the conntrack entry.
+
+**The declared cost.** Traffic DNATed by *somebody else's* table — a Docker
+published port, a hand-written rule — also loses its exit assignment. That is a
+behaviour change for a setup mixing the two, and it is the correct direction to
+be wrong in: an unassigned connection takes the box's normal path and works,
+while the alternative breaks it.
+
+The guard is part of each rule's canonical text (`… unless dnat`) and not only of
+its expression list, so a box still holding the older rules reads back as drift
+and has them replaced on the next apply. `docs/firewall.md` §6 has the full
+trace.
+
 ### 3.6 The TPROXY form
 
 For a proxy on this box, the packet is never routed:

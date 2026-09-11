@@ -1,21 +1,26 @@
-import { Activity, Globe, Network, Router, Waypoints } from 'lucide-react'
+import { Activity, Globe, Network, Router, ShieldCheck, Waypoints } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 
 import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { TokenButton } from '@/components/layout/token-button'
 import { cn } from '@/lib/utils'
 
-// Four sections: one place to look, three places to change something.
+// Five sections: one place to look, four places to change something.
 //
 // This replaced Overview / Devices / Addresses / DNS / Internet, and the naming
 // changed with it. The old rule was to use the word the audience already knows,
 // which is why dhcp's section was called "Addresses" — nobody outside
 // networking says DHCP. That rule was right while this list *was* the front
 // door. It is not any more: the overview answers the everyday questions in
-// plain language, so these three are free to name mechanisms, and the person
+// plain language, so the rest are free to name mechanisms, and the person
 // who goes looking for a section called DHCP is exactly the person who wants
-// DHCP. Three mechanism names in a row also read as one system, where
+// DHCP. Mechanism names in a row also read as one system, where
 // "Addresses / DNS / Internet" read as three different registers.
+//
+// Firewall is the exception that proves the rule, and it is named for what it
+// will be rather than what it is: today it holds port forwarding and no
+// filtering at all (docs/firewall.md). The blurb carries the whole feature in
+// one sentence, which is what stops somebody opening it expecting rules.
 //
 // Devices is absent because it is not a section: the device list is the body of
 // the overview. Filing it under DHCP was considered and rejected — the
@@ -56,6 +61,14 @@ const NAV = [
     end: false,
     blurb:
       'Every device on your network looks up names through this router. This is what they asked for, and what they were allowed to reach.',
+  },
+  {
+    to: '/firewall',
+    label: 'Firewall',
+    icon: ShieldCheck,
+    end: false,
+    blurb:
+      'Let something on the internet reach one device on your network. Nothing gets in unless you put it here.',
   },
 ]
 

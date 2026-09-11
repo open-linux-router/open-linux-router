@@ -1,0 +1,23 @@
+Let something on the internet reach one device here
+
+Usage:
+  olr firewall [command]
+
+Available Commands:
+  add         Forward a port in from outside
+  disable     Remove the port forwards, keeping them configured
+  enable      Apply the port forwards
+  rm          Stop forwarding a port
+  set         Change a port forward
+  show        Show what is forwarded in from outside
+  status      Show whether anything has arrived through each forward
+
+Flags:
+  -h, --help   help for firewall
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr firewall [command] --help" for more information about a command.

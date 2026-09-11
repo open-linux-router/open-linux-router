@@ -11,3 +11,11 @@ func UDPPortInUse(uint64) (bool, error) { return false, nil }
 
 // TCPPortInUse always reports no conflict off Linux.
 func TCPPortInUse(uint64) (bool, error) { return false, nil }
+
+// ListeningTCPPorts reports nothing off Linux, for the same reason: there is no
+// procfs to read, and the module that asks is warning about a port this build
+// could not forward anyway.
+func ListeningTCPPorts() ([]uint16, error) { return nil, nil }
+
+// ListeningUDPPorts reports nothing off Linux.
+func ListeningUDPPorts() ([]uint16, error) { return nil, nil }

@@ -1333,12 +1333,26 @@ func restoreExprs(e ExitRule) []expr.Any {
 	}
 }
 
+// ctStatusDstNAT is IPS_DST_NAT from nf_conntrack_common.h — bit 5, set on a
+// conntrack entry whose destination has been rewritten.
+//
+// Spelled out here because x/sys/unix does not export that header's flags, and
+// they are stable kernel ABI.
+const ctStatusDstNAT uint32 = 0x20
+
 // sourceExprs classifies a new flow by where it came from.
 //
-// Three guards, each earning its place:
+// Four guards, each earning its place:
 //
 //   - `meta mark & MarkMask == 0` skips anything the restore rules already
 //     decided, so a running connection is never reclassified mid-flight.
+//   - `ct status & IPS_DST_NAT == 0` skips the reply leg of a connection
+//     somebody port-forwarded (§3.5). Without it, port forwarding silently does
+//     not work on any box that also has an exit: conntrack does not restore the
+//     original source address until postrouting, so in prerouting the server's
+//     reply looks exactly like an ordinary LAN machine opening an outbound
+//     connection, and the policy route sends it into the proxy. The connection
+//     dies half-open. See docs/firewall.md §6 for the full trace.
 //   - `fib daddr type != local` is what makes this **forward-only** (§3.5).
 //     Traffic addressed to the router itself is not forwarded, so classifying it
 //     would send the box's own replies out an exit. It is also, incidentally,
@@ -1362,6 +1376,21 @@ func sourceExprs(s SourceRule) []expr.Any {
 	return []expr.Any{
 		&expr.Meta{Key: expr.MetaKeyMARK, Register: 1},
 		maskOurMarkBits(1),
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: markBytes(0)},
+
+		// The DNAT guard. Semantically general rather than a back door for
+		// internal/firewall: a connection whose destination we rewrote belongs
+		// to whoever originated the translation, and its path is decided by the
+		// conntrack entry rather than by our source rules.
+		//
+		// The declared cost is that traffic DNATed by *somebody else's* table —
+		// a Docker published port, a hand-written rule — also loses its exit
+		// assignment. That is the correct direction to be wrong in: an
+		// unassigned connection takes the box's normal path and works, while the
+		// alternative breaks it.
+		&expr.Ct{Register: 1, Key: expr.CtKeySTATUS},
+		&expr.Bitwise{SourceRegister: 1, DestRegister: 1, Len: 4,
+			Mask: markBytes(ctStatusDstNAT), Xor: markBytes(0)},
 		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: markBytes(0)},
 
 		&expr.Meta{Key: expr.MetaKeyNFPROTO, Register: 1},

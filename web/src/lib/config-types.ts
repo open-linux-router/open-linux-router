@@ -82,6 +82,15 @@ export type IPPrefix1 = string
  */
 export type BlockedNameResponse = '' | 'nxdomain' | 'zero'
 /**
+ * Which kind of traffic this forward carries. tcp covers web, SSH and most services. udp covers games, voice and VPNs. both carries each, as two rules sharing one counter. Empty means tcp.
+ */
+export type Protocol = '' | 'tcp' | 'udp' | 'both'
+/**
+ * A port, such as 8080, or an inclusive range, such as 30000-30010. A range is forwarded to the identical range inside; only a single port may be remapped to a different one.
+ */
+export type PortOrPortRange = string
+export type AddressAndPort2 = string
+/**
  * How this exit delivers traffic. interface sends it out a device — a WireGuard or Tailscale interface, a PPPoE session, a proxy's TUN. next_hop hands it to another box on the network, such as the modem or a machine running a proxy. blocked refuses it, so applications fail immediately and visibly rather than hanging.
  */
 export type ExitForm = 'interface' | 'next_hop' | 'blocked'
@@ -94,7 +103,7 @@ export type IPv6Handling = '' | 'via' | 'block' | 'direct'
  * What happens to assigned traffic when the health check fails. block stops it, so the problem is visible and diagnosable. direct sends it out the box's normal path instead, which silently leaks exactly the traffic that was meant to be routed. Empty means block.
  */
 export type BehaviourWhenTheExitIsDown = '' | 'block' | 'direct'
-export type AddressAndPort2 = string
+export type AddressAndPort3 = string
 /**
  * A duration with a unit, such as 30s, 5s or 1m30s. Units are ns, us, ms, s, m and h.
  */
@@ -107,6 +116,7 @@ export interface OlrDocument {
   devices?: DevicesConfig
   dhcp?: DhcpConfig
   dns?: DnsConfig
+  firewall?: FirewallConfig
   gateway?: GatewayConfig
   link?: LinkConfig
 }
@@ -186,6 +196,19 @@ export interface QueryLog {
   enabled: boolean
   entries?: number
 }
+export interface FirewallConfig {
+  enabled: boolean
+  forwards?: Forward[]
+}
+export interface Forward {
+  name: string
+  in: string
+  protocol?: Protocol
+  port: PortOrPortRange
+  to: AddressAndPort2
+  hairpin?: boolean
+  slot: number
+}
 export interface GatewayConfig {
   enabled: boolean
   exits?: Exit[]
@@ -209,7 +232,7 @@ export interface Via {
   dev?: string
 }
 export interface Probe {
-  target: AddressAndPort2
+  target: AddressAndPort3
   interval?: Duration1
   timeout?: Duration1
   failures?: number

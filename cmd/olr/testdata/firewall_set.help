@@ -1,0 +1,17 @@
+Change a port forward
+
+Usage:
+  olr firewall set [command]
+
+Available Commands:
+  forward     Change an existing port forward
+
+Flags:
+  -h, --help   help for set
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr firewall set [command] --help" for more information about a command.
