@@ -10,14 +10,14 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// Unit is the systemd unit for the bundled proxy.
+// UnitName is the systemd unit for the bundled proxy.
 //
 // Not `caddy.service`. The binary we ship is our build (docs/ingress.md §5.2),
 // and a box that already runs the distro's Caddy must keep running it — unit
 // name, binary path and config path all differ from the packaged ones, so there
 // is nothing for the two installs to fight over. This is the difference between
 // working and not on any machine that has ever served a web page.
-const Unit = "olr-caddy.service"
+const UnitName = "olr-caddy.service"
 
 // TokenEnv is the environment variable the Caddyfile reads the provider
 // credential from.
@@ -121,6 +121,16 @@ func NewCaddy(p Paths) Caddy { return Caddy{Paths: p, Source: core.ConfigPath} }
 // WithSource names the intent file in generated headers.
 func (c Caddy) WithSource(path string) Caddy { c.Source = path; return c }
 
+// Name is the backend's own name, for `status` and `logs`.
+//
+// It belongs there and nowhere on the common path, per design.md §1's corollary
+// that the name of the backend we drive is an implementation detail. An operator
+// publishing a service should not have to know a thing called Caddy exists.
+func (Caddy) Name() string { return "caddy" }
+
+// Unit is the systemd unit that runs it.
+func (Caddy) Unit() string { return UnitName }
+
 // Render turns intent into files.
 //
 // Addresses are resolved here rather than stored, so the rendered file is a
@@ -192,14 +202,14 @@ func Canonical(data []byte) string {
 
 func (c Caddy) env(cfg Config) string {
 	var b strings.Builder
-	b.WriteString(c.header("environment for " + Unit))
+	b.WriteString(c.header("environment for " + UnitName))
 	fmt.Fprintf(&b, "%s=%s\n", TokenEnv, cfg.Certificate.Token)
 	return b.String()
 }
 
 func (c Caddy) caddyfile(cfg Config, domain string, devices DeviceView) (string, error) {
 	var b strings.Builder
-	b.WriteString(c.header("Caddyfile for " + Unit))
+	b.WriteString(c.header("Caddyfile for " + UnitName))
 
 	c.globals(&b, cfg)
 

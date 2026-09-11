@@ -306,8 +306,33 @@ func (c Config) Redacted() Config {
 // for the real value and gives away nothing about it.
 const RedactedToken = "********"
 
+// MarshalConfig encodes a config for the store, normalising first so that two
+// equivalent configs produce identical bytes.
+func MarshalConfig(c Config) ([]byte, error) {
+	c.Normalize()
+	return json.Marshal(c)
+}
+
+// UnmarshalConfig parses a config, rejecting unknown fields.
+//
+// Strictness is deliberate: a typo'd key that is silently ignored produces a
+// router that is quietly not doing what its config says. Here that means a
+// service the operator believes is published and is not, or — worse — a
+// `provider_token` misspelled into oblivion while the old credential keeps
+// working until it is rotated.
+func UnmarshalConfig(data []byte) (Config, error) {
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	dec.DisallowUnknownFields()
+	var c Config
+	if err := dec.Decode(&c); err != nil {
+		return Config{}, fmt.Errorf("%s configuration: %w", ModuleName, err)
+	}
+	c.Normalize()
+	return c, nil
+}
+
 // FromDocument reads this module's section out of the store's document.
-func FromDocument(d *core.Document) (Config, error) {
+func FromDocument(d core.Document) (Config, error) {
 	raw, ok := d.Raw(ModuleName)
 	if !ok {
 		return Config{}, nil
