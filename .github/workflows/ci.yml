@@ -27,9 +27,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # go-version-file, not a literal: this builds at the 1.23 floor go.mod
-      # declares, which is what turns design.md §8's "nothing needs a newer
-      # language version" from a comment into something CI enforces.
+      # go-version-file, not a literal: this builds at whatever floor go.mod
+      # declares, so design.md §8's pinned floor is what CI enforces and the
+      # two cannot drift apart. Raising the floor is one edit, not three.
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod

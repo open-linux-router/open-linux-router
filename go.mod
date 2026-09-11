@@ -1,6 +1,6 @@
 module github.com/open-linux-router/open-linux-router
 
-go 1.23
+go 1.27
 
 require (
 	github.com/coreos/go-systemd/v22 v22.7.0

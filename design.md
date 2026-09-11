@@ -873,7 +873,7 @@ in the binary.
 
 | | Choice | Note |
 |---|---|---|
-| Language | Go, `go.mod` floor **1.23** | `CGO_ENABLED=0`; nothing needs a newer language version |
+| Language | Go, `go.mod` floor **1.27** | `CGO_ENABLED=0`; the floor is the current release, not the oldest that compiles |
 | HTTP | stdlib `net/http` + 1.22 `ServeMux` | core is thin (§3); a framework would leak into the API contract |
 | CLI | `spf13/cobra` | static tree, §6.1 |
 | Schema | `invopop/jsonschema`, draft 2020-12 | OpenAPI 3.1 is a superset, so one dialect serves REST, MCP, and UI |
@@ -884,6 +884,17 @@ in the binary.
 | `.deb` | `nfpm` | single binary, cross-arch, no Ruby |
 
 Six direct dependencies for v1. For a router that is a feature.
+
+**The floor is a decision, not a residue.** It sat at 1.23 for as long as
+nothing needed more, and the note in the table said exactly that. Tracking the
+current release instead is a different stance, and it costs something worth
+naming: a clone built with `GOTOOLCHAIN=local` on an older toolchain now
+refuses rather than downgrades, so rebuilding olr needs either a current Go or
+the default `GOTOOLCHAIN=auto` that fetches one. What it buys is that the
+language version stops being the thing that vetoes a dependency on its own —
+which is a reason to weigh a dependency, never the whole of one. `make tidy`
+still pins the directive afterwards, because a floor that drifts upward every
+time a test-only dependency is refreshed is not a floor.
 
 The SPA is a separate budget, spent where the product is judged (§1, "UX first"):
 

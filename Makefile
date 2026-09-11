@@ -99,15 +99,17 @@ deps: ## Download modules
 	 $(GO) mod download
 
 .PHONY: tidy
-tidy: ## Tidy modules, keeping the go.mod floor at 1.23
+tidy: ## Tidy modules, keeping the go.mod floor at 1.27
 	@# `go mod tidy` raises the go directive to whatever the newest dependency
-	@# asks for. design.md §8 pins the floor at 1.23 — "nothing needs a newer
-	@# language version" — so it is restored here rather than drifting upward
-	@# every time a test-only dependency is refreshed.
+	@# asks for. design.md §8 pins the floor deliberately, so it is restored
+	@# here rather than drifting upward every time a test-only dependency is
+	@# refreshed. The number moves when we decide it moves, not when a
+	@# refreshed dependency decides for us — which is the whole point of the
+	@# line, and is why it survives the floor itself changing.
 	@HTTPS_PROXY="$$(git config --global http.proxy)" \
 	 HTTP_PROXY="$$(git config --global http.proxy)" \
 	 $(GO) mod tidy
-	$(GO) mod edit -go=1.23
+	$(GO) mod edit -go=1.27
 
 .PHONY: build
 build: ## Build olr for the host (does not rebuild the web UI)
