@@ -378,6 +378,7 @@ func TestHelpIsUnchanged(t *testing.T) {
 		{"dns"}, {"dns", "show"}, {"dns", "add"}, {"dns", "set"}, {"dns", "rm"},
 		{"gateway"}, {"gateway", "show"}, {"gateway", "add"}, {"gateway", "set"}, {"gateway", "rm"},
 		{"firewall"}, {"firewall", "show"}, {"firewall", "add"}, {"firewall", "set"}, {"firewall", "rm"},
+		{"ingress"}, {"ingress", "show"}, {"ingress", "add"}, {"ingress", "set"}, {"ingress", "rm"},
 		{"listen"}, {"status"}, {"enable"}, {"disable"},
 	} {
 		name := "olr"

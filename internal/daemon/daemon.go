@@ -37,6 +37,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
+	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/mcp"
 	"github.com/open-linux-router/open-linux-router/internal/webui"
@@ -129,13 +130,16 @@ func run(args []string) error {
 	// `gateway` sits after them all, because an exit is only useful once
 	// clients have addresses and names — and because docs/gateway.md §4 has its
 	// domain half depending on `dns` owning :53, not the other way round.
-	// `firewall` is last, and reads as a pair with `gateway`: one decides where
-	// traffic leaving here goes, the other decides what arriving here is allowed
-	// in to. docs/firewall.md §6 records the one place they meet — a forwarded
+	// `firewall` reads as a pair with `gateway`: one decides where traffic
+	// leaving here goes, the other decides what arriving here is allowed in to.
+	// docs/firewall.md §6 records the one place they meet — a forwarded
 	// connection's reply must not be handed to an exit.
+	// `ingress` is last and is the only one that is not networking at all
+	// (docs/ingress.md §2). It reads `dns` for the suffix it publishes under and
+	// `devices` for what to point at, so it cannot come up before either.
 	store := core.NewStore(core.RootedConfigPath(opts.root),
 		link.ModuleName, dhcp.ModuleName, dns.ModuleName, devices.ModuleName,
-		gateway.ModuleName, firewall.ModuleName)
+		gateway.ModuleName, firewall.ModuleName, ingress.ModuleName)
 	checkStore(store, logger)
 
 	// The three consumers' windows onto link, all backed by one Facts: the
@@ -186,21 +190,26 @@ func run(args []string) error {
 		Events:  srv.Events(),
 	}.Routes(), dns.Config{})
 
-	srv.Mount(devices.ModuleName, devices.HTTP{
-		Applier: devices.Applier{
-			Store: store,
-			// Two presence sources, and the pair is the point: leases know
-			// about anything that asked for an address, ARP sees the
-			// statically-addressed printer that never did (§10 decision 7).
-			Presence: []devices.PresenceSource{
-				dhcpPresence{applier: applier},
-				devices.ARP{},
-			},
-			Fixed:    dhcpFixedAddresses{applier: applier},
-			Networks: dhcpNetworks{applier: applier},
+	// Hoisted out of the Mount call because `ingress` reads devices through it
+	// too. One Applier, so both surfaces answer from the same join rather than
+	// from two that could drift.
+	devicesApplier := devices.Applier{
+		Store: store,
+		// Two presence sources, and the pair is the point: leases know about
+		// anything that asked for an address, ARP sees the statically-addressed
+		// printer that never did (§10 decision 7).
+		Presence: []devices.PresenceSource{
+			dhcpPresence{applier: applier},
+			devices.ARP{},
 		},
-		Lock:   srv.ApplyLock(),
-		Events: srv.Events(),
+		Fixed:    dhcpFixedAddresses{applier: applier},
+		Networks: dhcpNetworks{applier: applier},
+	}
+
+	srv.Mount(devices.ModuleName, devices.HTTP{
+		Applier: devicesApplier,
+		Lock:    srv.ApplyLock(),
+		Events:  srv.Events(),
 	}.Routes(), devices.Config{})
 
 	// `gateway` is the one module whose configuration lives in the kernel
@@ -248,6 +257,21 @@ func run(args []string) error {
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
 	}.Routes(), firewall.Config{})
+
+	// `ingress` is mounted last, matching the store's order. Its two views are
+	// adapted in ingress.go for the same reason the dhcp↔devices ones are: the
+	// module declares what it needs and imports neither of the modules that
+	// answer, so §4.1's arrows keep pointing one way.
+	ingressApplier, err := ingress.NewApplierAt(store,
+		ingressDNS{applier: dnsApplier}, ingressDevices{applier: devicesApplier}, opts.root)
+	if err != nil {
+		return fmt.Errorf("initialising ingress: %w", err)
+	}
+	srv.Mount(ingress.ModuleName, ingress.HTTP{
+		Applier: ingressApplier,
+		Lock:    srv.ApplyLock(),
+		Events:  srv.Events(),
+	}.Routes(), ingress.Config{})
 
 	// --- routes -----------------------------------------------------------
 	//

@@ -1,102 +1,144 @@
 package ingress
 
 import (
-	"errors"
-	"fmt"
-	"net/netip"
+	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// This module's read-only windows onto the two modules it depends on.
+// The API's own shapes for things the module models internally.
 //
-// Declared here by the consumer, and adapted in internal/daemon, which is the
-// pattern dhcp uses for LinkView: `ingress` imports neither `dns` nor
-// `devices`, states exactly the facts it needs, and never keeps a copy of
-// either (design.md §4.1). Both edges are new to the §4.1 DAG and both point
-// the same way every other edge does — at the module that owns the fact.
+// design.md §4.5: the model and the query interface are ours, always. These
+// types exist so that "what the HTTP API returns" is a deliberate decision
+// rather than a side effect of which fields happened to be exported.
 
-// DNSView is the window onto the `dns` module.
+// planView is a Plan with the diffs included.
 //
-// There is exactly one fact here and it is load-bearing: the suffix this
-// network answers for. Published names live under it, the wildcard certificate
-// covers it, and the whole reason this module has no `domain` field of its own
-// is that asking for it here cannot drift from what the resolver actually
-// serves.
-type DNSView interface {
-	// LocalDomain returns the suffix local names live under — `dns`'s
-	// LocalDomain, resolved through its own default.
-	LocalDomain() string
+// Plan omits file contents from JSON because a rendered config is long and the
+// CLI does not always want them. The UI does: §5.3.3's impact classification is
+// only actionable next to the lines that caused it.
+//
+// The credential is not a special case here, and deliberately so — Change.Diff
+// already withholds a secret file's contents, so this type cannot leak one by
+// forgetting to. Putting the rule in the renderer of the diff rather than in
+// each consumer is what makes "every surface" true rather than aspirational.
+type planView struct {
+	Backend string        `json:"backend"`
+	Changes []changeView  `json:"changes"`
+	Action  ServiceAction `json:"action"`
+	Impact  Impact        `json:"impact"`
 
-	// Hosts returns the local names `dns` already answers for, relative to the
-	// local domain.
-	//
-	// Read for one reason: to refuse a published service whose name is already
-	// a device's. The two live in one namespace, and `dns` wins — it answers
-	// the device's address directly and the request never reaches the proxy at
-	// all. Nothing errors, nothing logs, the service is simply unreachable and
-	// the Caddyfile looks perfectly correct while it happens. That is the
-	// shape of bug worth spending an interface method to make impossible.
-	Hosts() []string
+	// Enable, when non-nil, is the boot-time state the unit will be moved to.
+	Enable *bool `json:"enable,omitempty"`
+
+	// Reasons explains the impact in the operator's terms — which published
+	// names stop answering, and whether connections are dropped.
+	Reasons []string `json:"reasons,omitempty"`
+
+	// Empty is the drift answer (§5.4), precomputed so a client does not have
+	// to reimplement what counts as "no change".
+	Empty bool `json:"empty"`
+
+	// Warnings are findings that did not block the change.
+	Warnings []core.Problem `json:"warnings,omitempty"`
 }
 
-// DeviceView is the window onto the `devices` module.
-//
-// Address resolution is read-through per request rather than cached, for the
-// same reason dhcp reads link per request: a cached address is a copy, and a
-// copy of something that changes is drift waiting for a lease to expire.
-type DeviceView interface {
-	// Device returns what is known about a device, or ErrNoSuchDevice.
-	Device(name string) (DeviceInfo, error)
+type changeView struct {
+	Path   string     `json:"path"`
+	Kind   ChangeKind `json:"kind"`
+	Impact Impact     `json:"impact"`
+	Secret bool       `json:"secret,omitempty"`
+	Diff   string     `json:"diff"`
 }
 
-// DeviceInfo is the subset of a device's state that publishing depends on.
-type DeviceInfo struct {
-	// Name is the device's name in the `devices` module.
-	Name string `json:"name,omitempty"`
-
-	// Addr is where the device is right now.
-	Addr netip.Addr `json:"address,omitempty"`
-
-	// Fixed reports whether Addr is a fixed address owned by `dhcp`, as
-	// opposed to whatever the device happens to hold from a dynamic pool.
-	//
-	// This is the difference between a published service that keeps working and
-	// one that quietly proxies to a stranger's laptop after a lease turns over,
-	// so validate.go refuses the dynamic case rather than warning about it.
-	// docs/ingress.md §1.2 has the argument, and §5.6's rule that automatic
-	// behaviour is declared rather than inferred is why the answer is a refusal
-	// carrying a remedy instead of olr silently pinning the address itself.
-	Fixed bool `json:"fixed"`
-}
-
-// ErrNoSuchDevice is returned by DeviceView.Device for an unknown name.
-var ErrNoSuchDevice = errors.New("no such device")
-
-// StaticDNS is a DNSView backed by literal values, for tests.
-type StaticDNS struct {
-	Domain    string
-	HostNames []string
-}
-
-// LocalDomain implements DNSView.
-func (s StaticDNS) LocalDomain() string { return s.Domain }
-
-// Hosts implements DNSView.
-func (s StaticDNS) Hosts() []string { return s.HostNames }
-
-// StaticDevices is a DeviceView backed by a map, for tests.
-//
-// The validation rules are the largest thing in this module and none of them
-// need a network to exercise, which is what §5.3.1 is for.
-type StaticDevices map[string]DeviceInfo
-
-// Device implements DeviceView.
-func (s StaticDevices) Device(name string) (DeviceInfo, error) {
-	info, ok := s[name]
-	if !ok {
-		return DeviceInfo{}, fmt.Errorf("%q: %w", name, ErrNoSuchDevice)
+func viewPlan(p Plan) planView {
+	v := planView{
+		Backend:  p.Backend,
+		Changes:  make([]changeView, 0, len(p.Changes)),
+		Action:   p.Action,
+		Impact:   p.Impact,
+		Enable:   p.Enable,
+		Reasons:  p.Reasons,
+		Empty:    p.Empty(),
+		Warnings: problems(p.Validation.Warnings),
 	}
-	if info.Name == "" {
-		info.Name = name
+	for _, c := range p.Changes {
+		v.Changes = append(v.Changes, changeView{
+			Path:   c.Path,
+			Kind:   c.Kind,
+			Impact: c.Impact,
+			Secret: c.Secret,
+			Diff:   c.Diff(),
+		})
 	}
-	return info, nil
+	return v
 }
+
+// serviceView is one published service as the API reports it, with the parts
+// the operator did not type filled in.
+//
+// The resolved address is included because it is the single most useful thing
+// when a published name returns 502, and it is not in the config: the config
+// names a device, and where that device is belongs to another module (§4.1).
+// Reporting it here is reading it, not copying it.
+type serviceView struct {
+	Name string `json:"name"`
+
+	// URL is the whole point of the module, so it is rendered rather than left
+	// for a client to assemble out of a name and a domain it would have to
+	// fetch separately.
+	URL string `json:"url"`
+
+	Device string `json:"device,omitempty"`
+	Host   string `json:"host,omitempty"`
+	Port   uint16 `json:"port"`
+	Scheme Scheme `json:"scheme"`
+
+	// Upstream is where a request actually goes right now.
+	Upstream string `json:"upstream,omitempty"`
+
+	// UpstreamError explains an upstream that could not be resolved, rather
+	// than reporting an empty string and letting it read as "not configured".
+	UpstreamError string `json:"upstream_error,omitempty"`
+}
+
+func viewService(s Service, domain string, devices DeviceView) serviceView {
+	v := serviceView{
+		Name:   s.Name,
+		URL:    "https://" + qualify(s.Name, domain),
+		Device: s.Upstream.Device,
+		Host:   s.Upstream.Host,
+		Port:   s.Upstream.Port,
+		Scheme: s.Upstream.Scheme.OrDefault(),
+	}
+
+	if s.Upstream.Device == "" {
+		v.Upstream = s.Upstream.Target("")
+		return v
+	}
+	info, err := devices.Device(s.Upstream.Device)
+	switch {
+	case err != nil:
+		v.UpstreamError = err.Error()
+	case !info.Addr.IsValid():
+		v.UpstreamError = "the device has not been seen on the network"
+	default:
+		v.Upstream = s.Upstream.Target(info.Addr.String())
+	}
+	return v
+}
+
+func problems(in []Problem) []core.Problem {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]core.Problem, 0, len(in))
+	for _, p := range in {
+		out = append(out, core.Problem{Path: p.Path, Message: p.Message})
+	}
+	return out
+}
+
+// stamp is the freshness every observed reply carries (§4.5), so no surface can
+// imply a currency it does not have.
+func stamp() time.Time { return time.Now() }

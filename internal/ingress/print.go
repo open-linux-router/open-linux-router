@@ -1,0 +1,335 @@
+package ingress
+
+import (
+	"fmt"
+	"io"
+	"strings"
+	"text/tabwriter"
+
+	"github.com/open-linux-router/open-linux-router/internal/cli"
+	"github.com/open-linux-router/open-linux-router/internal/core"
+)
+
+// Text output for humans; -o json is the machine-readable surface. Both come
+// from the same structs, so the two never disagree about what exists.
+
+func table(w io.Writer) *tabwriter.Writer {
+	return tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+}
+
+func writeConfigText(w io.Writer, c Config) error {
+	state := "disabled"
+	if c.Enabled {
+		state = "enabled"
+	}
+	fmt.Fprintf(w, "Ingress is %s\n", state)
+
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "certificate:\n")
+	fmt.Fprintf(w, "  provider  %s\n", orDash(c.Certificate.Provider))
+	// The stored value is `********` here, because this came from the API and
+	// the API redacts. Printing "set" rather than the mask says the same thing
+	// without inviting anyone to think eight asterisks is the credential.
+	fmt.Fprintf(w, "  token     %s\n", tokenState(c.Certificate.Token))
+	fmt.Fprintf(w, "  contact   %s\n", orDash(c.Certificate.Email))
+	fmt.Fprintf(w, "  resolvers %s\n", strings.Join(c.Certificate.ResolversOrDefault(), " "))
+
+	fmt.Fprintln(w)
+	if err := writeServicesText(w, servicesOf(c), ""); err != nil {
+		return err
+	}
+
+	if c.ExtraConf != "" {
+		fmt.Fprintf(w, "\nextra Caddyfile configuration:\n")
+		for _, line := range strings.Split(c.ExtraConf, "\n") {
+			fmt.Fprintf(w, "  %s\n", line)
+		}
+	}
+	return nil
+}
+
+func tokenState(token string) string {
+	switch token {
+	case "":
+		return "not set"
+	default:
+		return "set"
+	}
+}
+
+// servicesOf renders config services without a device view, for the places that
+// have the config but not the daemon's resolution of it.
+func servicesOf(c Config) []serviceView {
+	out := make([]serviceView, 0, len(c.Services))
+	for _, s := range c.Services {
+		out = append(out, serviceView{
+			Name:   s.Name,
+			Device: s.Upstream.Device,
+			Host:   s.Upstream.Host,
+			Port:   s.Upstream.Port,
+			Scheme: s.Upstream.Scheme.OrDefault(),
+		})
+	}
+	return out
+}
+
+func writeServicesText(w io.Writer, services []serviceView, domain string) error {
+	if len(services) == 0 {
+		return cli.NoObjects(w, "published services",
+			"Publish one with `olr ingress add <name> --device <device> --port <port>`.")
+	}
+
+	t := table(w)
+	fmt.Fprintln(t, "NAME\tURL\tTARGET\tGOES TO")
+	for _, s := range services {
+		fmt.Fprintf(t, "%s\t%s\t%s\t%s\n",
+			s.Name, orDash(s.URL), target(s), goesTo(s))
+	}
+	return t.Flush()
+}
+
+// target is what the operator typed; goesTo is where it currently resolves.
+// Two columns rather than one, because "the NUC" and "192.168.1.50:3000" answer
+// different questions and the second is the one that is wrong when a published
+// name returns 502.
+func target(s serviceView) string {
+	name := s.Host
+	if s.Device != "" {
+		name = s.Device
+	}
+	if s.Scheme == SchemeHTTPS {
+		return fmt.Sprintf("%s:%d (https)", name, s.Port)
+	}
+	return fmt.Sprintf("%s:%d", name, s.Port)
+}
+
+func goesTo(s serviceView) string {
+	if s.UpstreamError != "" {
+		return "— " + s.UpstreamError
+	}
+	return orDash(s.Upstream)
+}
+
+func writeServiceText(w io.Writer, s serviceView) error {
+	t := table(w)
+	fmt.Fprintf(t, "name\t%s\n", s.Name)
+	fmt.Fprintf(t, "url\t%s\n", orDash(s.URL))
+	if s.Device != "" {
+		fmt.Fprintf(t, "device\t%s\n", s.Device)
+	} else {
+		fmt.Fprintf(t, "host\t%s\n", s.Host)
+	}
+	fmt.Fprintf(t, "port\t%d\n", s.Port)
+	fmt.Fprintf(t, "scheme\t%s\n", s.Scheme)
+	fmt.Fprintf(t, "goes to\t%s\n", goesTo(s))
+	return t.Flush()
+}
+
+func writeStatusText(w io.Writer, s statusResponse) error {
+	state := "disabled"
+	if s.Enabled {
+		state = "enabled"
+	}
+	fmt.Fprintf(w, "Ingress is %s", state)
+	if s.Domain != "" {
+		fmt.Fprintf(w, ", publishing under *.%s", s.Domain)
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "%s published\n", core.Plural(s.Published, "service"))
+
+	fmt.Fprintln(w)
+	switch {
+	case s.ServiceError != "":
+		fmt.Fprintf(w, "proxy:       unknown (%s)\n", s.ServiceError)
+	case s.Service == nil:
+		fmt.Fprintf(w, "proxy:       unknown\n")
+	default:
+		fmt.Fprintf(w, "proxy:       %s\n", unitLine(*s.Service))
+	}
+
+	writeCertText(w, s)
+
+	switch {
+	case s.DriftError != "":
+		fmt.Fprintf(w, "config:      unknown (%s)\n", s.DriftError)
+	case s.Drifted:
+		fmt.Fprintf(w, "config:      drifted — the box no longer matches what olr stored\n")
+	default:
+		fmt.Fprintf(w, "config:      matches\n")
+	}
+
+	// Warnings last and unindented, because they are the part that needs
+	// acting on and the rest is context for them.
+	for _, warning := range s.CertWarnings {
+		fmt.Fprintf(w, "\n! %s\n", warning)
+	}
+
+	if s.Drifted && s.Drift != nil {
+		fmt.Fprintln(w)
+		return writePlanText(w, *s.Drift, true)
+	}
+	return nil
+}
+
+// writeCertText is the clock-dependent line (docs/ingress.md §8).
+//
+// It prints even when everything is fine, which is the point: the failure this
+// guards against is one where nothing looks wrong, so a line that only appears
+// when it is already too late would be a line nobody has learned to read.
+func writeCertText(w io.Writer, s statusResponse) {
+	switch {
+	case s.CertError != "":
+		fmt.Fprintf(w, "certificate: unknown (%s)\n", s.CertError)
+	case !s.Certificate.Found:
+		fmt.Fprintf(w, "certificate: none yet\n")
+	case s.Certificate.ExpiresIn <= 0:
+		fmt.Fprintf(w, "certificate: EXPIRED\n")
+	default:
+		note := ""
+		if s.Certificate.RenewalOverdue {
+			note = "  (renewal overdue)"
+		}
+		fmt.Fprintf(w, "certificate: valid for %s%s\n",
+			core.Plural(s.Certificate.ExpiresInDays, "day"), note)
+	}
+}
+
+func unitLine(s ProxyStatus) string {
+	switch {
+	case !s.Installed:
+		return "not installed"
+	case s.Active && s.Enabled:
+		return "running, starts at boot"
+	case s.Active:
+		return "running, but will not start at boot"
+	case s.Enabled:
+		return "stopped, but set to start at boot"
+	default:
+		return "stopped"
+	}
+}
+
+func writePlanText(w io.Writer, plan planView, dryRun bool) error {
+	if plan.Empty {
+		fmt.Fprintln(w, cli.NothingToDo)
+		return writeWarnings(w, plan.Warnings)
+	}
+
+	verb := map[bool]string{true: "would change", false: "changed"}[dryRun]
+	fmt.Fprintf(w, "%s %s:\n", core.Plural(len(plan.Changes), "file"), verb)
+	for _, c := range plan.Changes {
+		fmt.Fprintf(w, "  %-6s %s\n", c.Kind, c.Path)
+	}
+
+	if plan.Action != ActionNone {
+		fmt.Fprintf(w, "\nservice: %s\n", describeAction(plan.Action, dryRun))
+	}
+	if plan.Enable != nil {
+		fmt.Fprintf(w, "boot:    %s\n", describeEnable(*plan.Enable, dryRun))
+	}
+	fmt.Fprintf(w, "impact:  %s\n", plan.Impact)
+	for _, reason := range plan.Reasons {
+		fmt.Fprintf(w, "         %s\n", reason)
+	}
+
+	if dryRun {
+		fmt.Fprintln(w)
+		for _, c := range plan.Changes {
+			fmt.Fprintln(w, c.Diff)
+		}
+	}
+
+	return writeWarnings(w, plan.Warnings)
+}
+
+func describeAction(a ServiceAction, dryRun bool) string {
+	would := map[bool]string{true: "would be ", false: ""}[dryRun]
+	switch a {
+	case ActionStart:
+		return would + "started"
+	case ActionStop:
+		return would + "stopped"
+	case ActionReload:
+		// Said explicitly because it is the reassuring half of the ladder and
+		// an operator deciding whether to press enter deserves to know.
+		return would + "reloaded, without dropping connections"
+	case ActionRestart:
+		return would + "restarted, dropping connections in flight"
+	}
+	return string(a)
+}
+
+func describeEnable(enable, dryRun bool) string {
+	would := map[bool]string{true: "would ", false: ""}[dryRun]
+	if enable {
+		return would + "start at boot"
+	}
+	return would + "not start at boot"
+}
+
+func writeWarnings(w io.Writer, warnings []core.Problem) error {
+	if len(warnings) == 0 {
+		return nil
+	}
+	fmt.Fprintf(w, "\n%s:\n", core.Plural(len(warnings), "warning"))
+	for _, p := range warnings {
+		fmt.Fprintf(w, "  %s\n", problemText(p))
+	}
+	return nil
+}
+
+// writeStepsText reports which steps landed before a failure. There is no
+// rollback (design.md §5.3.2), so this is the operator's starting point for
+// finishing the job.
+func writeStepsText(w io.Writer, steps []Step) {
+	if len(steps) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "steps attempted:")
+	for _, s := range steps {
+		mark := "ok  "
+		switch {
+		case s.Skipped:
+			mark = "skip"
+		case !s.Done:
+			mark = "FAIL"
+		}
+		fmt.Fprintf(w, "  %s %s\n", mark, s.Description)
+		if s.Error != "" {
+			fmt.Fprintf(w, "       %s\n", s.Error)
+		}
+	}
+}
+
+func writeProvidersText(w io.Writer, providers []string) error {
+	t := table(w)
+	// Three to a row: the list is long enough that one per line is a screenful
+	// and short enough that a table is overkill.
+	for i, p := range providers {
+		fmt.Fprintf(t, "%s", p)
+		if i%3 == 2 || i == len(providers)-1 {
+			fmt.Fprintln(t)
+		} else {
+			fmt.Fprint(t, "\t")
+		}
+	}
+	if err := t.Flush(); err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "\n%s, compiled into this build.\n", core.Plural(len(providers), "provider"))
+	return nil
+}
+
+func problemText(p core.Problem) string {
+	if p.Path == "" {
+		return p.Message
+	}
+	return p.Path + ": " + p.Message
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
+}

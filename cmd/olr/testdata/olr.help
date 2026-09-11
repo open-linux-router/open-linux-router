@@ -11,6 +11,7 @@ Modules:
   dns         DNS resolver and policy (olr-dnsd + unbound)
   firewall    Let something on the internet reach one device here
   gateway     Exits and which networks use them
+  ingress     Publish internal services at https:// names
   link        Network interfaces olr has been given
 
 Operations:

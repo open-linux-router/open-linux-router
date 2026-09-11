@@ -1,0 +1,20 @@
+Show ingress configuration
+
+Usage:
+  olr ingress show [flags]
+  olr ingress show [command]
+
+Available Commands:
+  providers   List the DNS providers certificates can be obtained through
+  service     Show one published service in full
+  services    List published services
+
+Flags:
+  -h, --help   help for show
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr ingress show [command] --help" for more information about a command.

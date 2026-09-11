@@ -8,6 +8,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
+	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 )
 
@@ -33,6 +34,7 @@ func newRoot() *cobra.Command {
 		dns.Command(),
 		gateway.Command(),
 		firewall.Command(),
+		ingress.Command(),
 	)
 
 	// `adopt` and `release` are hub-level operations in design.md §6.1's list,

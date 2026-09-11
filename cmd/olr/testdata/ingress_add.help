@@ -1,0 +1,27 @@
+Publish an internal service so it is reachable at
+https://<name>.<your local domain>.
+
+The certificate and the name's answer are already arranged — one
+wildcard certificate covers every published name, and the dns module
+already serves the suffix. So this takes a name and a target, and
+nothing else.
+
+Examples:
+  olr ingress add grafana --device nuc --port 3000
+  olr ingress add nas --device synology --port 5001 --scheme https
+  olr ingress add hello --host 127.0.0.1 --port 8000
+
+Usage:
+  olr ingress add <name> [flags]
+
+Flags:
+      --device olr devices list   device to publish, by its name in olr devices list
+  -h, --help                      help for add
+      --host string               address or hostname to publish, for a target that is not a device
+      --port uint16               port the service listens on
+      --scheme string             how to reach it: http, https (default http)
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

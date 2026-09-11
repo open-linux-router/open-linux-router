@@ -1,0 +1,15 @@
+Stop publishing a service.
+
+The name stops answering immediately, which olr reports as a
+disruptive change: anyone with the URL open loses it.
+
+Usage:
+  olr ingress rm <name> [flags]
+
+Flags:
+  -h, --help   help for rm
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
