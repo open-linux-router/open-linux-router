@@ -1,0 +1,341 @@
+package ingress
+
+import (
+	"errors"
+	"fmt"
+	"net/netip"
+	"slices"
+	"strconv"
+	"strings"
+)
+
+// Validation is the highest-value mechanism in the apply story (design.md
+// §5.3.1), and it carries more weight here than in most modules because of what
+// a bad apply costs: a Caddyfile that Caddy rejects takes down *every*
+// published service at once, not the one being edited (docs/ingress.md §7.1).
+//
+// It is pure — no files, no network, no root — so the whole rule set is
+// table-tested and `olr ingress` can check a config on a laptop.
+
+// Problem is one validation finding, addressed by a JSON-ish path so a UI can
+// attach it to the field that caused it.
+type Problem struct {
+	Path    string
+	Message string
+}
+
+func (p Problem) String() string {
+	if p.Path == "" {
+		return p.Message
+	}
+	return p.Path + ": " + p.Message
+}
+
+// Result separates the fatal from the merely suspect.
+type Result struct {
+	Errors   []Problem
+	Warnings []Problem
+}
+
+func (r *Result) errorf(path, format string, args ...any) {
+	r.Errors = append(r.Errors, Problem{Path: path, Message: fmt.Sprintf(format, args...)})
+}
+
+func (r *Result) warnf(path, format string, args ...any) {
+	r.Warnings = append(r.Warnings, Problem{Path: path, Message: fmt.Sprintf(format, args...)})
+}
+
+// OK reports whether the config can be applied.
+func (r Result) OK() bool { return len(r.Errors) == 0 }
+
+// Err collapses the errors into one, or nil.
+func (r Result) Err() error {
+	if r.OK() {
+		return nil
+	}
+	msgs := make([]error, len(r.Errors))
+	for i, p := range r.Errors {
+		msgs[i] = errors.New(p.String())
+	}
+	return fmt.Errorf("invalid ingress configuration:\n  %w", errors.Join(msgs...))
+}
+
+// unissuableSuffixes are domains no public CA will ever issue a certificate
+// for, because nobody can prove they own them.
+//
+// This is the error an operator hits first and it has to explain itself, not
+// just refuse. `home.arpa` is `dns`'s own default (dns.DefaultLocalDomain), so
+// a box that has never had its local domain set lands here on the very first
+// attempt to publish anything — which makes this message the module's
+// introduction to most people who use it.
+var unissuableSuffixes = []string{
+	"arpa", "local", "localhost", "internal", "lan", "home", "intranet",
+	"private", "corp", "test", "invalid", "example", "onion",
+}
+
+// Validate checks a config against itself and against the two modules whose
+// facts it depends on.
+func Validate(c Config, dns DNSView, devices DeviceView) Result {
+	var r Result
+
+	domain := strings.ToLower(strings.TrimSuffix(dns.LocalDomain(), "."))
+	validateDomain(&r, c, domain)
+
+	if c.Enabled && len(c.Services) == 0 {
+		r.warnf("services", "ingress is enabled but nothing is published, so the proxy will answer every name with a closed connection")
+	}
+
+	validateCertificate(&r, c)
+	validateServices(&r, c, domain, dns, devices)
+	validateExtraConf(&r, c.ExtraConf)
+
+	return r
+}
+
+// validateDomain checks the suffix this module inherits from `dns`.
+//
+// Nothing here is addressed by a path into *our* config, because the field is
+// not ours — it is `dns.local_domain`, and §4.1 is why we read it rather than
+// hold it. The message therefore has to name the other module's field, since
+// that is where the operator has to go to fix it.
+func validateDomain(r *Result, c Config, domain string) {
+	if !c.Enabled {
+		return
+	}
+
+	if domain == "" {
+		r.errorf("", "the dns module has no local domain, so there is no suffix to publish under; set one with `olr dns set --local-domain <your domain>`")
+		return
+	}
+
+	if !strings.Contains(domain, ".") {
+		r.errorf("", "the dns module's local domain %q is a single label; a certificate needs a registrable domain such as home.example.com (`olr dns set --local-domain`)", domain)
+		return
+	}
+
+	// The check is on the final label rather than the whole suffix, because
+	// `home.arpa`, `foo.arpa` and a bare `arpa` all fail for the same reason
+	// and an operator who invented their own should get the same explanation.
+	labels := strings.Split(domain, ".")
+	if tld := labels[len(labels)-1]; slices.Contains(unissuableSuffixes, tld) {
+		r.errorf("", "no certificate authority will issue for %q: .%s is reserved and cannot be proved to belong to anyone. "+
+			"Publishing over HTTPS needs a domain you actually own — set it with `olr dns set --local-domain <your domain>`, "+
+			"and note that this renames every device's local name too", domain, tld)
+	}
+}
+
+func validateCertificate(r *Result, c Config) {
+	if !c.Enabled {
+		return
+	}
+
+	switch {
+	case c.Certificate.Provider == "":
+		r.errorf("certificate.provider", "required: the DNS provider hosting your domain, so the ACME challenge record can be written (see `olr ingress providers`)")
+	case !slices.Contains(Providers(), c.Certificate.Provider):
+		r.errorf("certificate.provider", "unknown provider %q; run `olr ingress providers` for the list compiled into this build", c.Certificate.Provider)
+	}
+
+	if c.Certificate.Token == "" {
+		r.errorf("certificate.provider_token", "required: an API credential for the DNS provider. Scope it to the single zone if the provider allows it")
+	}
+
+	for i, s := range c.Certificate.Resolvers {
+		path := fmt.Sprintf("certificate.resolvers[%d]", i)
+		if _, err := netip.ParseAddr(s); err == nil {
+			continue
+		}
+		if host, port, err := splitHostPort(s); err == nil {
+			if _, err := netip.ParseAddr(host); err == nil && port != "" {
+				continue
+			}
+		}
+		r.errorf(path, "%q is not an IP address; the propagation check must not depend on name resolution it is trying to establish", s)
+	}
+}
+
+func validateServices(r *Result, c Config, domain string, dns DNSView, devices DeviceView) {
+	// `dns` wins any collision, silently — see DNSView.Hosts.
+	published := map[string]bool{}
+	for _, h := range dns.Hosts() {
+		published[normalizeName(h, domain)] = true
+	}
+
+	seen := map[string]int{}
+	for i, s := range c.Services {
+		path := fmt.Sprintf("services[%d]", i)
+
+		if s.Name == "" {
+			r.errorf(path+".name", "required")
+			continue
+		}
+		if first, dup := seen[s.Name]; dup {
+			r.errorf(path+".name", "%q is already published at services[%d]", s.Name, first)
+			continue
+		}
+		seen[s.Name] = i
+
+		validateName(r, path, s.Name, domain)
+
+		if published[s.Name] {
+			r.errorf(path+".name", "the dns module already answers %q with a device's own address, so a request for it would never reach the proxy. "+
+				"Rename the service, or remove the name with `olr dns rm host %s`", qualify(s.Name, domain), s.Name)
+		}
+
+		validateUpstream(r, path+".upstream", s.Upstream, devices)
+	}
+}
+
+// validateName enforces what the wildcard certificate can actually cover.
+//
+// The subtle half is the dot. One certificate for `*.home.example.com` is what
+// makes publishing a service free of any certificate step at all (§1), and a
+// wildcard matches **exactly one label**: it covers `grafana.home.example.com`
+// and does not cover `grafana.lab.home.example.com`. A nested name would
+// therefore render into a perfectly valid Caddyfile and then fail TLS at the
+// first request, which is a long way from where the mistake was made.
+func validateName(r *Result, path, name, domain string) {
+	if strings.Contains(name, ".") {
+		r.errorf(path+".name", "%q has more than one label; the wildcard certificate covers %s and nothing deeper, "+
+			"so a nested name would serve a certificate no browser accepts", name, qualify("*", domain))
+		return
+	}
+	if name == "*" {
+		r.errorf(path+".name", "a service needs its own name; the wildcard is what serves all of them")
+		return
+	}
+	if len(name) > 63 {
+		r.errorf(path+".name", "a DNS label may not exceed 63 characters")
+	}
+	for _, c := range name {
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' {
+			continue
+		}
+		r.errorf(path+".name", "%q contains %q; a name may use letters, digits and hyphens", name, string(c))
+		return
+	}
+	if strings.HasPrefix(name, "-") || strings.HasSuffix(name, "-") {
+		r.errorf(path+".name", "%q may not begin or end with a hyphen", name)
+	}
+}
+
+func validateUpstream(r *Result, path string, u Upstream, devices DeviceView) {
+	switch {
+	case u.Device == "" && u.Host == "":
+		r.errorf(path, "required: either a device to publish, or a literal host for something that is not a device")
+	case u.Device != "" && u.Host != "":
+		r.errorf(path, "device and host are alternatives; set one")
+	case u.Device != "":
+		validateDeviceUpstream(r, path, u, devices)
+	default:
+		validateHostUpstream(r, path, u)
+	}
+
+	if u.Port == 0 {
+		r.errorf(path+".port", "required: a device has an address, never a port somebody meant")
+	}
+	if !u.Scheme.Valid() {
+		r.errorf(path+".scheme", "unknown scheme %q (want %v)", u.Scheme, Schemes())
+	}
+}
+
+// validateDeviceUpstream is where docs/ingress.md §1.2 is enforced.
+//
+// A device holding a dynamic address is refused rather than warned about,
+// which is a stronger stance than this codebase usually takes. The reason is
+// what the failure looks like: the config keeps working for days or weeks, and
+// then a lease turns over and the published name proxies to whatever machine
+// took the address — a guest's phone, with someone's Grafana on the other side
+// of it. A warning is not proportionate to landing there by default.
+//
+// The refusal carries the remedy, per §5.6: olr does not pin the address on the
+// operator's behalf, because reserving an address is a change to another
+// module's config and inferring it is exactly what that rule forbids.
+func validateDeviceUpstream(r *Result, path string, u Upstream, devices DeviceView) {
+	info, err := devices.Device(u.Device)
+	if errors.Is(err, ErrNoSuchDevice) {
+		r.errorf(path+".device", "no device named %q; `olr devices list` shows what this network knows about", u.Device)
+		return
+	}
+	if err != nil {
+		r.errorf(path+".device", "%v", err)
+		return
+	}
+
+	if !info.Fixed {
+		r.errorf(path+".device", "%q has no fixed address, so publishing it would proxy to whatever machine holds its address at the time. "+
+			"Give it one first: `olr dhcp add reservation --device %s`", u.Device, u.Device)
+		return
+	}
+	if !info.Addr.IsValid() {
+		r.errorf(path+".device", "%q has a fixed address reserved but has never been seen on the network", u.Device)
+	}
+}
+
+func validateHostUpstream(r *Result, path string, u Upstream) {
+	host := u.Host
+	if addr, err := netip.ParseAddr(host); err == nil {
+		if addr.IsUnspecified() {
+			r.errorf(path+".host", "%q is not a destination", host)
+		}
+		return
+	}
+	if strings.ContainsAny(host, " \t/:") {
+		r.errorf(path+".host", "%q is neither an address nor a hostname; the port belongs in the port field", host)
+		return
+	}
+	// A bare hostname is allowed and resolved by Caddy at dial time. Worth a
+	// remark rather than a refusal: it works, and it reintroduces the
+	// dependency on name resolution that using a device was meant to remove.
+	r.warnf(path+".host", "%q is resolved at connection time, so this service depends on that name continuing to resolve; a device is the stabler form", host)
+}
+
+// ownedDirectives are the Caddyfile directives this module renders itself.
+//
+// The escape hatch is additive by design (design.md §3.2 rule 5). Letting it
+// restate one of these would let the rendered file contradict the config that
+// produced it, which defeats the single-source rule the hatch exists to
+// preserve. The check is textual and therefore approximate — Caddyfile is
+// nested and we are not parsing it — so it errs toward allowing, and the
+// authoritative check is `caddy validate` before apply (§7.1).
+var ownedDirectives = map[string]string{
+	"tls":   "certificates come from the certificate section, so that one wildcard covers every published name",
+	"email": "set from certificate.acme_email",
+}
+
+func validateExtraConf(r *Result, extra string) {
+	if strings.TrimSpace(extra) == "" {
+		return
+	}
+	for i, line := range strings.Split(extra, "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) == 0 || strings.HasPrefix(fields[0], "#") {
+			continue
+		}
+		if why, owned := ownedDirectives[fields[0]]; owned {
+			r.errorf("raw_caddyfile", "line %d sets %q, which this module renders: %s", i+1, fields[0], why)
+		}
+	}
+}
+
+// splitHostPort is net.SplitHostPort without pulling in net for one call, and
+// without its acceptance of an empty port.
+func splitHostPort(s string) (host, port string, err error) {
+	i := strings.LastIndex(s, ":")
+	if i < 0 {
+		return "", "", errors.New("no port")
+	}
+	host, port = strings.TrimSuffix(strings.TrimPrefix(s[:i], "["), "]"), s[i+1:]
+	if _, err := strconv.ParseUint(port, 10, 16); err != nil {
+		return "", "", err
+	}
+	return host, port, nil
+}
+
+// qualify renders a stored name as the operator sees it.
+func qualify(name, domain string) string {
+	if domain == "" {
+		return name
+	}
+	return name + "." + domain
+}

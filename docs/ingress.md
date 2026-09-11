@@ -1,13 +1,22 @@
 # `ingress` module design
 
-Status: **not built.** This document is the argument, not a record of code.
-Section references are to `design.md` unless prefixed.
+Status: **partly built.** `internal/ingress` holds the config, the validator and
+the renderer, with tests. Plan, apply, the HTTP and CLI surfaces, the daemon
+mount and the packaging are not written. Bare section references are to this
+document; references to `design.md` name it.
 
 Five things were decided before this was written, and the rest of the document
 is mostly their consequences: the backend is **Caddy**; it is **bundled, not
 embedded, and not taken from the distro**; Caddy **owns :80 and :443**; the
 first-boot path stays **IP + port**; and certificates are Caddy's own job rather
 than a separate ACME client's.
+
+Building it changed §3 outright. This document treated the local name as
+something we might one day have to ask the `dns` module for; `dns` had already
+shipped it, and the consequence is that this module holds no domain of its own
+and needs no public address record at all. §3 is rewritten and §11.2 is closed.
+The same work turned up **§4.2**, which is the most expensive failure in the
+file and was nowhere in the first draft.
 
 One thing was *not* decided and is the largest question here: whether olr should
 have this module at all. §2 is that argument, and it is a positioning question
@@ -29,13 +38,13 @@ per service. So the object the operator creates has two fields:
 
 | Field | Example | |
 |---|---|---|
-| `name` | `grafana` | the label under the module's domain |
+| `name` | `grafana` | the label under the network's local domain |
 | `upstream` | NUC : 3000 | where the request goes |
 
 Everything else is derived and never asked:
 
 - the certificate — one wildcard covers every name that will ever exist
-- the DNS record — likewise, one wildcard
+- the name's answer — `dns` already serves this suffix (§3)
 - the Caddyfile stanza
 - the `:80` → `:443` redirect
 
@@ -43,17 +52,30 @@ That is the whole claim of this module. **Adding a service is one name and one
 target**, because the expensive parts were paid once when the module was
 enabled.
 
+One constraint rides along with the wildcard and has to be enforced at write
+time, because its symptom appears a long way from its cause. **A wildcard
+covers exactly one label.** `*.home.example.com` covers
+`grafana.home.example.com` and does not cover `grafana.lab.home.example.com`, so
+a nested name renders into a syntactically perfect Caddyfile and then fails TLS
+at the first request. The validator refuses the dot.
+
 ### 1.1 Module-level config, set once
 
-`domain`, the DNS provider and its credential, and an ACME contact address.
-Three fields, entered at enable time, never revisited.
+The DNS provider and its credential, and an ACME contact address. Entered at
+enable time, never revisited.
+
+**Not the domain.** Published names live under the same suffix as every other
+name this network answers for, and that suffix is `dns.LocalDomain` — a fact
+the `dns` module owns. `design.md` §4.1 forbids the copy, so it is read through
+a view and this module has no field to drift from it. §3 is the whole of that
+argument.
 
 ### 1.2 The upstream is a device, not an address
 
-Per §4.1 a module reads another module's facts through that module's API and
-never keeps a copy. The upstream should therefore reference a **device**
-(`devices` owns identity, §4.4) plus a port — not an IP address copied into our
-config where it will rot.
+Per `design.md` §4.1 a module reads another module's facts through that
+module's API and never keeps a copy. The upstream should therefore reference a
+**device** (`devices` owns identity, `design.md` §4.4) plus a port — not an IP
+address copied into our config where it will rot.
 
 This surfaces a constraint the operator has to be told about rather than
 discover:
@@ -62,10 +84,21 @@ discover:
 > from a DHCP pool can move, and the rendered stanza then points at whatever
 > took its place.
 
-`dhcp` already owns fixed addresses. So selecting a device with no fixed address
-must **offer to create one** as part of publishing, not render a stanza that
-works today and silently proxies to a stranger's laptop next week. This is a
-concrete instance of §5.6 — automatic behaviour declared, never inferred.
+`dhcp` already owns fixed addresses. So selecting a device with no fixed
+address is **refused, carrying the command that fixes it**, rather than
+rendered into a stanza that works today and proxies to a stranger's laptop next
+week.
+
+Refusal rather than a warning, because of how that failure is distributed in
+time: the config is correct for days, and then a lease turns over and a
+published name starts answering with somebody else's machine. Nothing about
+that moment points back at the decision that caused it. A warning is not
+proportionate to landing there by default.
+
+And a refusal rather than olr quietly reserving the address itself, because
+that would be inferring a change to *another module's* configuration —
+precisely what `design.md` §5.6 forbids. The remedy is named in the error and
+the operator runs it.
 
 A raw `host:port` form stays available for targets that are not devices: a
 container on the router itself, `127.0.0.1:3000`, something behind another
@@ -99,41 +132,50 @@ document or it will not be drawn at all. §9 draws it.
 
 ---
 
-## 3. The name has to resolve, and that is not free
+## 3. The name already resolves
 
-`https://grafana.home.example.com` requires a client on the LAN to receive the
-router's private address for that name. Two ways, and v1 takes the cheap one.
+This section originally weighed a public wildcard `A` record against a local
+override we would have to ask the `dns` module to build, and left the choice
+open. Both halves were wrong, because the second one already exists.
 
-### 3.1 A public wildcard record (v1)
+`dns` owns a **local domain** and a set of **local names**, and renders them as
+an unbound `local-zone "<domain>." static` zone — this box answers the whole
+suffix itself and forwards none of it. That is how a device is reachable by
+name rather than by an address somebody memorised. So there is no override to
+build and nothing to ask for: a published service is one more name in a
+namespace that is already served.
 
-`*.home.example.com A 192.168.1.2`, in the operator's real public DNS. Works
-from every resolver, needs no split horizon, and needs **no code in olr at
-all** — we document it and stay out of it.
+### 3.1 What that makes true
 
-What it costs, stated plainly:
+- **This module has no domain.** The suffix is `dns.LocalDomain`, read through
+  a view per `design.md` §4.1. The whole class of "the certificate is for one
+  domain and the resolver serves another" bug cannot be expressed.
+- **No private address is ever published.** The earlier draft's topology
+  disclosure was a cost of a design we are not using. Nothing about the inside
+  of this network appears in public DNS.
+- **The public zone is used for exactly one thing: proving the domain is
+  yours.** A `_acme-challenge` `TXT` record, written by the provider API,
+  removed after issuance. No `A` record, no `CNAME`, nothing an outsider can
+  learn an address from.
+- **`ingress → dns` is a real edge** in `design.md` §4.1's DAG, and it points
+  the way every other edge does — at the module that owns the fact.
 
-- Anyone can query it and learn your internal addressing. This is topology
-  disclosure, not access — the address is unroutable from outside — but it is
-  disclosure.
-- The name stops working the moment you leave the LAN. For internal-only
-  services that is correct behaviour, and it will still surprise people.
+### 3.2 What it costs, which is a real constraint
 
-A non-obvious reassurance worth writing down: **this does not interfere with
-DNS-01.** ACME validates via a `TXT` record and does not care that the `A`
-record points somewhere unroutable. The two uses of the zone are independent.
+The local domain becomes one decision for the whole box. Setting it to a domain
+you own — which §4 requires, since no CA will issue for `home.arpa` — **renames
+every device's local name at the same time**. That is a defensible outcome and
+possibly a nicer one, but it is not a change confined to this module, and the
+error that demands it has to say so rather than presenting itself as a small
+correction.
 
-### 3.2 A local override in the relay (v2)
-
-`dnsrelay` answers the configured suffix itself, and no public record exists.
-Better on disclosure, and it works for operators who own no public domain.
-
-It is also not ours to decide. `dns.md` §6 lists *authoritative service, zone
-transfers* under **Never**, permanently. A wildcard override for one
-operator-declared suffix is a long way from zone service — but it is the same
-direction, and the `dns` module owns that call. It also adds an edge to §4.1's
-DAG (`ingress → dns`) that does not otherwise exist.
-
-Left open (§11). v1 does not need it.
+`local-zone ... static` also means the box answers the *entire* suffix
+authoritatively. A name under it that is hosted publicly — a blog at
+`www.home.example.com` on somebody else's server — is unreachable from inside
+this network, and will return a confident NXDOMAIN rather than a timeout. This
+is worth knowing before choosing which domain to hand over; delegating a
+subdomain you use for nothing else is the cheap way to avoid the question
+entirely. It is also the mechanism behind §4.2, which is worse.
 
 ---
 
@@ -155,10 +197,18 @@ service involves no certificate step whatsoever.
 
 ### 4.1 The token has no proper home, and we should say so
 
-olr has no secrets store. The provider credential will land in a rendered file
-— the Caddyfile or an environment file the unit reads — mode `0600`, owned by
-root. That is the same trust boundary as every other secret on the box, and it
-is not nothing: **anyone with root on the router can edit your DNS zone.**
+olr has no secrets store. The provider credential lives in the config document
+like any other field and is rendered into an **environment file** the unit
+reads, mode `0600`, owned by root — never into the Caddyfile. That split is not
+fastidiousness: the Caddyfile is the file an operator reads when something is
+wrong, the file `olr ingress plan` diffs into a terminal, and the file that ends
+up pasted into a forum post. The credential is in none of those because it was
+never written there. The rendered secret is additionally marked so that every
+surface which displays a file — the plan diff, the drift report, the logs —
+withholds its contents while still comparing them byte for byte.
+
+That leaves the real boundary, which is not nothing: **anyone with root on the
+router can edit your DNS zone.**
 
 Two mitigations that cost nothing and belong in the setup copy:
 
@@ -170,6 +220,39 @@ Two mitigations that cost nothing and belong in the setup copy:
 
 This is a stopgap and the document should keep calling it one, rather than
 implying a key-management story that does not exist.
+
+### 4.2 Our own resolver will refuse to see the challenge record
+
+This is the most expensive thing in the document and it was not in the first
+draft. It comes straight out of §3: `dns` serves the local suffix as a
+`local-zone ... static` zone, so **this box answers the whole suffix
+authoritatively and forwards none of it.**
+
+Now follow an issuance. Caddy asks the provider API to create
+`_acme-challenge.home.example.com TXT …` in the *public* zone. The record is
+created. Caddy then checks that it has propagated — and asks the system
+resolver, which on this box is olr's own, which is authoritative for
+`home.example.com`, which has no such record, and which therefore returns a
+confident **NXDOMAIN**.
+
+The record exists. The CA can see it. We cannot, and never will:
+
+- issuance blocks on a propagation check that can never succeed;
+- nothing is misconfigured — `dns` is doing precisely what it is for;
+- the Caddyfile is correct, the token is correct, the zone is correct;
+- and the symptom is "certificates just don't work", with no failing component
+  to find.
+
+The fix is one line and the module must never render the file without it:
+**pin the propagation check to public resolvers.** Two of them, from different
+operators, so that one being down does not stall a renewal. This is the single
+lookup on the box that must not use the box's own resolver, and it is stated
+here because the next person to touch the renderer will otherwise see a
+hardcoded pair of public IPs and reasonably try to remove them.
+
+It leaks nothing worth protecting: the only names asked are `_acme-challenge`
+records the operator is deliberately publishing, which the CA is about to query
+from the outside anyway.
 
 ---
 
@@ -183,7 +266,7 @@ These are routinely conflated and their costs have nothing in common:
 |---|---|---|
 | `olrd` dependency count | hundreds of modules against a README that counts six as a feature | **unchanged** |
 | `olrd` binary size | several times its current size | **unchanged** |
-| §3.5 (backends run in their own unit) | violated | **respected** |
+| `design.md` §3.5 (backends run in their own unit) | violated | **respected** |
 | A cert-renewal panic | takes DHCP and the API down with it | takes the proxy down |
 
 Every objection to putting Caddy in the control plane is an objection to
@@ -275,9 +358,9 @@ nicety, it is opt-in, and it changes nothing above.
 
 ## 7. Mechanism
 
-Intent in `/etc/open-linux-router/ingress.json` (§3.2 rule 1); a rendered
-Caddyfile; a unit we supervise over D-Bus. Nothing novel — the point is that it
-is the same shape as `dhcp` and `dns`.
+Intent in `/etc/open-linux-router/ingress.json` (`design.md` §3.2 rule 1); a
+rendered Caddyfile; a unit we supervise over D-Bus. Nothing novel — the point
+is that it is the same shape as `dhcp` and `dns`.
 
 ### 7.1 Reload, not restart, and validate before either
 
@@ -290,8 +373,8 @@ Two ways this differs from dnsmasq and both matter:
 - **A bad config takes down every service at once**, not just the one being
   edited. So the render must be run through `caddy validate` *before* it is
   applied, and a failure must be reported as a rejected change rather than a
-  dead proxy. This is the `plan`/`validate` step §3.2 already expects, with
-  unusually high stakes.
+  dead proxy. This is the `plan`/`validate` step `design.md` §3.2 already
+  expects, with unusually high stakes.
 
 ### 7.2 We do not use Caddy's admin API
 
@@ -300,12 +383,26 @@ it is tempting. It is rejected in §10: config that lives only in a running
 process is not revisioned, not readable over SSH during an outage, and not
 single-source. File plus reload keeps this module identical to every other one.
 
+Having rejected it, the renderer also turns it **off**. An endpoint we have
+decided never to use is not a feature left available for later; it is an
+unauthenticated local control surface kept for nobody's benefit.
+
+### 7.2a Comments are not changes
+
+Most of the rendered Caddyfile is explanation — the ownership header, and the
+reasoning around the `tls` block in particular. Drift detection compares what we
+render against what is on disk, so without normalising comments away, **rewording
+a sentence in a future olr release would mark every deployed box as drifted and
+schedule a proxy reload.** Here that means dropping every connection through it,
+for a comment nobody read. The file is still rewritten; it just stops being a
+reason to signal the daemon.
+
 ### 7.3 Escape hatch
 
-`ingress.raw_caddyfile`, per §3.2 rule 5 — passed through verbatim, declared in
-our config, rendered by us. Caddy can do vastly more than publish an internal
-service, and the answer to all of it is this field plus the documentation of a
-tool we did not write.
+`ingress.raw_caddyfile`, per `design.md` §3.2 rule 5 — passed through verbatim,
+declared in our config, rendered by us. Caddy can do vastly more than publish
+an internal service, and the answer to all of it is this field plus the
+documentation of a tool we did not write.
 
 ---
 
@@ -327,10 +424,15 @@ being visible. By the time symptoms appear the cause is a month old.
 | Upstream device down | 502 | Distinguish *configured but unreachable* from *not configured* |
 | Upstream address moved | Stanza proxies to whoever took the address | Prevented at write time by §1.2, not detected after |
 | `:80`/`:443` taken | Unit fails to start | Caught at preflight (§6), by the process name |
+| Issuance blocked by our own resolver | Nothing ever gets a certificate, with no failing component | Prevented by §4.2's pinned resolvers; it must not be possible to render the file without them |
+| A published name is also a device's name | **Silent.** `dns` answers with the device's own address and the request never reaches the proxy. The Caddyfile is correct the whole time | Prevented at write time — the two live in one namespace and the resolver wins |
 
 The first row is the one that will actually bite people, and it is why
 certificate expiry deserves a place in the module's status output rather than
-being left to Caddy's logs.
+being left to Caddy's logs. The last two share a shape worth naming: **both are
+invisible at the layer where they are configured**, and both are cheap to
+refuse at write time and near-impossible to diagnose afterwards. That is the
+argument for spending validation on them rather than status.
 
 ---
 
@@ -344,9 +446,8 @@ The boundary §2 said had to be drawn here.
 | | `:80` → `:443` redirect, LAN-only bind, port preflight | §6 |
 | | certificate expiry and renewal state in `status` | §8; the one clock-dependent thing we own |
 | | `raw_caddyfile` escape hatch | §7.3 |
-| | public wildcard `A` record, **documented not managed** | §3.1 |
-| **v2** | local DNS override, so no public record is needed | §3.2, needs the `dns` module's decision |
-| | publishing the WebUI itself | §6 |
+| | names answered by `dns`'s existing local zone | §3 — no work, it is already there |
+| **v2** | publishing the WebUI itself | §6 |
 | | per-service access control by group or device | the thing a router can do here that a standalone Caddy cannot — and the only entry on this list that justifies the module living in olr rather than in a README |
 | **Never** | serving static files, PHP, a general web server | escape hatch, permanently |
 | | **exposing a published service to the internet** | that is a port forward: `firewall`'s object, `firewall`'s risk conversation, and it must not become a side effect of publishing something internally |
@@ -375,6 +476,11 @@ The boundary §2 said had to be drawn here.
 - **Naming this module `proxy` or `gateway`.** Both words are taken and mean
   the opposite direction of travel — `gateway.md` uses them for egress and for
   the operator's mihomo/clash box. A third word was needed.
+- **A Caddy site block per published name**, which is the obvious rendering and
+  reads better. Each block would request its own certificate, which is exactly
+  the per-service certificate step §1 promises does not exist. One wildcard site
+  block with a host matcher per service keeps that promise. The rendered file is
+  slightly less readable and no name is ever requested.
 
 ---
 
@@ -383,17 +489,24 @@ The boundary §2 said had to be drawn here.
 1. **Should olr have this module at all** (§2). The positioning question, and
    the only one on this list that can cancel the others. It is not a technical
    decision and should not be settled by a technical argument.
-2. **Local DNS override versus a public wildcard record** (§3.2). Needs the
-   `dns` module's call on how far from "never authoritative" this sits, and adds
-   an `ingress → dns` edge to the §4.1 DAG.
-3. **Where the DNS provider token lives** (§4.1). A rendered `0600` file is the
-   answer for now, and it is the first time olr has held a credential for a
-   third-party account. If a secrets story is ever going to exist, this is the
-   workload that starts it.
-4. **The `devices` dependency** (§1.2). Referencing a device is right by §4.1
-   but pulls `ingress → devices`, and forces the fixed-address interaction at
-   write time. Confirm that the offer-to-create-one flow is acceptable rather
-   than a refusal.
+2. ~~**Local DNS override versus a public wildcard record.**~~ **Closed by
+   discovery, not by decision** — `dns` already answers the local suffix from a
+   static zone, so the override this asked for was built before the question was
+   written. §3 is rewritten around it: no domain field here, no public address
+   record anywhere, and the `ingress → dns` edge is real and points the right
+   way. What survives is not a choice but a consequence, recorded as §3.2: the
+   local domain is one decision for the whole box, and changing it renames every
+   device.
+3. **Where the DNS provider token lives** (§4.1). A rendered `0600` environment
+   file is the answer for now, and it is the first time olr has held a
+   credential for a third-party account. If a secrets story is ever going to
+   exist, this is the workload that starts it.
+4. **The `devices` dependency** (§1.2). Referencing a device is right by
+   `design.md` §4.1 but pulls `ingress → devices`, and forces the interaction at
+   write time. **Built as a refusal carrying the remedy**, not as an offer — a
+   dynamic address is refused with the `olr dhcp` command that fixes it,
+   because `design.md` §5.6 forbids inferring a change to another module's
+   config. Confirm that is the wanted shape before the UI is built on it.
 5. **Ordering.** `dial`, `firewall` and `system` are unbuilt — `internal/` has
    `link`, `dhcp`, `dns`, `devices` and `gateway`. Publishing services before
    the box has a firewall is hard to defend, and §9's "never expose to the
@@ -401,3 +514,11 @@ The boundary §2 said had to be drawn here.
 6. **Who watches Caddy releases, and how fast** (§5.3). The obligation is
    accepted in principle; the cadence is not defined, and an undefined cadence
    is how this becomes a stale bundled binary two years from now.
+7. **The provider list is a second copy, and the packaging has to close it.**
+   §5.4 compiles in the whole `caddy-dns` set, but the validator and the
+   published schema enum need that set as Go data — `Validate` is pure and the
+   schema is built by reflection, so neither can ask the binary. The
+   authoritative answer is `caddy list-modules`, and the build must compare the
+   two and **fail on a mismatch**. Until it does, the failure mode is the worst
+   available: a provider the operator picks from our own enum, accepted by our
+   own validator, and rejected at runtime by a Caddy that never had it.
