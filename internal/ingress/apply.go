@@ -14,14 +14,6 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// Binary is the bundled proxy.
-//
-// Not `/usr/bin/caddy`. docs/ingress.md §5.2 ships our own xcaddy build because
-// no official package carries DNS providers, and §5.4 requires that it coexist
-// with a distro Caddy the operator may already be running — different path,
-// different unit, different config, nothing to fight over.
-const Binary = "/usr/lib/open-linux-router/caddy"
-
 // Applier turns intent into a running proxy.
 //
 // There is no rollback (design.md §5.2/§5.3.2). If a multi-step change fails
@@ -53,6 +45,13 @@ type Applier struct {
 	// against it. Nil means RunConfigCheck.
 	CheckConfig ConfigChecker
 
+	// Locate finds the proxy binary. Nil means FindBinary.
+	//
+	// Injectable for the reason PortCheck is: left to the real thing, every
+	// test in this package would pass or fail depending on whether the build
+	// machine happens to have a `caddy` on its PATH.
+	Locate func() (string, error)
+
 	// Settle is how long apply watches a started backend before believing it.
 	// Zero means DefaultSettle; negative means check once and return.
 	Settle time.Duration
@@ -66,15 +65,15 @@ type Applier struct {
 // the check would have had to create.
 type ConfigChecker func(ctx context.Context, confPath string, env []string) error
 
-// ErrNoChecker reports that the proxy binary is not present, so a config could
-// not be checked.
+// ErrNoChecker reports that no proxy binary was available, so a rendered config
+// could not be checked.
 //
 // Tolerated in the same way and for the same reason as ErrNoServiceManager: on a
-// machine with no backend installed, "we could not tell" must not be reported as
-// "your configuration is broken". Where it matters — a box that is about to
-// actually start the proxy — the missing binary surfaces as a failed unit with
-// its own clear message.
-var ErrNoChecker = errors.New("the proxy binary is not installed")
+// machine with no backend, "we could not tell" must not be reported as "your
+// configuration is broken". Where it matters — a box about to actually start the
+// proxy — the missing binary is refused separately, by ErrBinaryMissing, which
+// says how to get one.
+var ErrNoChecker = errors.New("no proxy binary to check the configuration with")
 
 // DefaultSettle is the post-apply observation window.
 //
@@ -102,6 +101,13 @@ func (a Applier) portCheck() func() ([]uint64, error) {
 	return PortConflict
 }
 
+func (a Applier) locate() func() (string, error) {
+	if a.Locate != nil {
+		return a.Locate
+	}
+	return FindBinary
+}
+
 func (a Applier) configChecker() ConfigChecker {
 	if a.CheckConfig != nil {
 		return a.CheckConfig
@@ -116,15 +122,20 @@ func (a Applier) configChecker() ConfigChecker {
 // down **every** published service at once, not the one being edited. Validating
 // before the file reaches its final path turns that into a refused change.
 func RunConfigCheck(ctx context.Context, confPath string, env []string) error {
-	if _, err := os.Stat(Binary); err != nil {
+	binary, err := FindBinary()
+	if err != nil {
 		return ErrNoChecker
 	}
-	cmd := exec.CommandContext(ctx, Binary, "validate", "--adapter", "caddyfile", "--config", confPath)
+	cmd := exec.CommandContext(ctx, binary, "validate", "--adapter", "caddyfile", "--config", confPath)
 	cmd.Env = append(os.Environ(), env...)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		return nil
 	}
+	// A provider the operator's binary was not built with lands here, and it is
+	// the one rejection worth anticipating in words. Caddy reports it as an
+	// unrecognised subdirective, which is accurate and does not mention the
+	// thing that would actually help.
 	// Caddy's own message, trimmed but not reworded. It names the line, and we
 	// have nothing better to say about a file we generated than what the thing
 	// that has to read it said about it.
@@ -132,7 +143,12 @@ func RunConfigCheck(ctx context.Context, confPath string, env []string) error {
 	if msg == "" {
 		return fmt.Errorf("the rendered Caddyfile was rejected: %w", err)
 	}
-	return fmt.Errorf("the rendered Caddyfile was rejected:\n%s", msg)
+	hint := ""
+	if strings.Contains(msg, "dns") {
+		hint = fmt.Sprintf("\n\n%s was not built with that DNS provider. "+
+			"`olr ingress show providers` lists what it has", binary)
+	}
+	return fmt.Errorf("the rendered Caddyfile was rejected:\n%s%s", msg, hint)
 }
 
 // NewApplierAt wires up the Caddy backend, with every rendered path relocated
@@ -352,6 +368,20 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 	// olr-caddy.service not found" from D-Bus names neither the cause nor the
 	// fix, and no amount of re-applying resolves a packaging problem.
 	if plan.Action != ActionNone || plan.Enable != nil {
+		// The binary before the unit, because it is the more likely of the two
+		// to be missing and the one whose absence olr can do something about
+		// explaining. A unit that exists with no binary behind it fails at
+		// start with an exec error naming a path and nothing else.
+		if desired.Enabled {
+			if err := run("check a proxy binary is available", func() error {
+				if _, err := a.locate()(); err != nil {
+					return ErrBinaryMissing()
+				}
+				return nil
+			}); err != nil {
+				return result, err
+			}
+		}
 		if err := run("check "+a.Backend.Unit()+" is installed", func() error {
 			return a.checkInstalled(ctx)
 		}); err != nil {
@@ -471,7 +501,8 @@ func (a Applier) checkInstalled(ctx context.Context) error {
 	case !status.Installed:
 		return fmt.Errorf(
 			"%s is not installed, so there is no proxy for olr to drive.\n"+
-				"The bundled proxy ships in its own package: `sudo apt install open-linux-router-caddy`",
+				"The unit ships inside olr and is written out by `olr enable`; a missing one\n"+
+				"means the binary was copied into place without it. Run `sudo olr enable`",
 			status.Unit)
 	}
 	return nil

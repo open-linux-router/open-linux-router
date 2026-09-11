@@ -139,6 +139,14 @@ func writeStatusText(w io.Writer, s statusResponse) error {
 
 	fmt.Fprintln(w)
 	switch {
+	case s.BinaryError != "":
+		// First, because nothing below it can be true without a proxy, and the
+		// message is the one that tells an operator how to get one.
+		fmt.Fprintf(w, "proxy:       not installed\n\n%s\n\n", s.BinaryError)
+	case s.Binary != "":
+		fmt.Fprintf(w, "binary:      %s\n", s.Binary)
+	}
+	switch {
 	case s.ServiceError != "":
 		fmt.Fprintf(w, "proxy:       unknown (%s)\n", s.ServiceError)
 	case s.Service == nil:
@@ -316,7 +324,7 @@ func writeProvidersText(w io.Writer, providers []string) error {
 	if err := t.Flush(); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "\n%s, compiled into this build.\n", core.Plural(len(providers), "provider"))
+	fmt.Fprintf(w, "\n%s.\n", core.Plural(len(providers), "provider"))
 	return nil
 }
 

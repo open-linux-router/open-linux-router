@@ -1,54 +1,69 @@
 package ingress
 
-import "slices"
+import (
+	"context"
+	"fmt"
+	"os/exec"
+	"sort"
+	"strings"
+)
 
-// The DNS providers this build can write an ACME challenge record through.
+// Which DNS providers are available is a property of the operator's binary, so
+// it is asked rather than declared.
 //
-// This list is a *build-time* fact and that is the uncomfortable part of the
-// module. Caddy has no runtime plugin loading — providers are compiled in — so
-// no official Caddy package carries any of them, which is why docs/ingress.md
-// §5.2 has us shipping our own build at all.
+// This file used to hold a hand-written list, and that list was a defect with a
+// note attached: the legal set is whatever the proxy binary was linked with, so
+// anything written down here was a second copy that could disagree with it. The
+// copy is gone. `caddy list-modules` reports what a binary actually has, and no
+// other answer is authoritative.
 //
-// Having accepted that, §5.4 takes the other half of the decision: compile in
-// the whole `caddy-dns` set rather than a curated subset. A curated subset
-// turns "my provider is not supported" into a feature request that cannot be
-// answered without a release, and binary size is much the cheaper side of that
-// trade.
+// The consequence runs backwards through the module and is worth stating once,
+// because three other files got smaller because of it:
 //
-// The names are Caddy's own module identifiers, not ours: they appear verbatim
-// in the rendered `dns <provider>` directive.
+//   - the config schema publishes no enum (schema.go), because the set is not
+//     known at reflection time and a stale enum is worse than none;
+//   - Validate does not check the provider name (validate.go), because it is
+//     pure by design and cannot run a subprocess; and
+//   - the real check is the one that was already there — `caddy validate` on
+//     the rendered file (apply.go), which rejects `dns <provider>` outright when
+//     that module is not linked, in the binary's own words.
 //
-// **This list has a second copy, and that is a defect to close rather than a
-// fact to live with.** The authoritative set is whatever the packaging's xcaddy
-// invocation actually linked, and the binary can be asked — `caddy
-// list-modules` prints its `dns.providers.*`. It cannot be asked from here,
-// because Validate is pure by design (validate.go) and the schema's enum is
-// built at reflection time with no binary in reach. So the list is static, and
-// the packaging must carry a check that compares it against `caddy
-// list-modules` and fails the build on a mismatch. Without that check the
-// failure mode is the worst kind: a provider the operator selects from our own
-// published enum, accepted by our own validator, and then rejected at runtime
-// by a Caddy that never had it.
-var providers = []string{
-	"acmedns", "alidns", "autodns", "azure", "bunny", "civo", "cloudflare",
-	"cloudns", "ddnss", "desec", "digitalocean", "directadmin", "dnsimple",
-	"dnsmadeeasy", "dnspod", "dnsupdate", "domainnameshop", "duckdns", "dynu",
-	"dynv6", "easydns", "exoscale", "gandi", "gcore", "glesys", "godaddy",
-	"googleclouddns", "he", "hetzner", "hexonet", "infomaniak", "inwx", "ionos",
-	"leaseweb", "linode", "loopia", "luadns", "mailinabox", "metaname",
-	"mythicbeasts", "namecheap", "namedotcom", "namesilo", "netcup", "netlify",
-	"nfsn", "njalla", "openstack-designate", "ovh", "porkbun", "powerdns",
-	"rfc2136", "route53", "scaleway", "selectel", "tencentcloud", "transip",
-	"vercel", "vultr", "westcn", "zonomi",
+// So the check moved from a place that could be wrong to a place that cannot.
+
+// providerPrefix is how Caddy names a DNS provider module.
+const providerPrefix = "dns.providers."
+
+// ListProviders asks a proxy binary which DNS providers it was built with.
+func ListProviders(ctx context.Context, binary string) ([]string, error) {
+	if binary == "" {
+		return nil, ErrNoBinary
+	}
+	out, err := exec.CommandContext(ctx, binary, "list-modules").Output()
+	if err != nil {
+		return nil, fmt.Errorf("asking %s which DNS providers it has: %w", binary, err)
+	}
+	return parseProviders(string(out)), nil
 }
 
-// Providers returns the supported provider identifiers, sorted and unique.
+// parseProviders pulls the provider names out of `caddy list-modules` output.
 //
-// Exposed as a function rather than the slice so that no caller can append to
-// the list the validator checks against, and so that `olr ingress providers`,
-// the validator and the schema's enum have one source (design.md §3.2 rule 3).
-func Providers() []string {
-	out := slices.Clone(providers)
-	slices.Sort(out)
-	return slices.Compact(out)
+// The command prints one module per line, plus headings and a trailing summary.
+// Taking the first field of lines carrying the prefix ignores all of that
+// without having to model any of it, and a format change costs an empty list
+// rather than a wrong one.
+func parseProviders(out string) []string {
+	var names []string
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		name, ok := strings.CutPrefix(fields[0], providerPrefix)
+		if !ok || name == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

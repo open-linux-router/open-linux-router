@@ -97,7 +97,6 @@ func TestValidateCertificate(t *testing.T) {
 		want string
 	}{
 		{"no provider", func(c *Config) { c.Certificate.Provider = "" }, "certificate.provider", "required"},
-		{"unknown provider", func(c *Config) { c.Certificate.Provider = "nope" }, "certificate.provider", "unknown provider"},
 		{"no token", func(c *Config) { c.Certificate.Token = "" }, "certificate.provider_token", "required"},
 		{"named resolver", func(c *Config) { c.Certificate.Resolvers = []string{"dns.example.com"} },
 			"certificate.resolvers[0]", "not an IP address"},
@@ -108,6 +107,17 @@ func TestValidateCertificate(t *testing.T) {
 			tc.edit(&c)
 			findError(t, Validate(c, goodDNS(), goodDevices()), tc.path, tc.want)
 		})
+	}
+}
+
+// The provider name is deliberately not checked here. Whether the binary has
+// that module is a question about a file on disk, and this layer is pure — the
+// real check is `caddy validate` on the rendered file, before it is applied.
+func TestValidateDoesNotJudgeTheProviderName(t *testing.T) {
+	c := good()
+	c.Certificate.Provider = "something-only-their-build-has"
+	if r := Validate(c, goodDNS(), goodDevices()); !r.OK() {
+		t.Fatalf("expected valid, got %v", r.Errors)
 	}
 }
 

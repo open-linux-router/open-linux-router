@@ -231,7 +231,11 @@ func setCommand() *cobra.Command {
 
 		c.MarkFlagsMutuallyExclusive("token", "token-file")
 		c.MarkFlagsMutuallyExclusive("raw-caddyfile", "no-raw-caddyfile")
-		cli.EnumFlag(c, "provider", Providers()...)
+		// Completed from the running proxy rather than from a fixed list: what
+		// is legal depends on how the operator's binary was built, and a shell
+		// completion that offers a name the binary lacks is a worse lie than no
+		// completion at all.
+		_ = c.RegisterFlagCompletionFunc("provider", cli.CompleteFlag(providerNames))
 
 		c.RunE = func(c *cobra.Command, _ []string) error {
 			if c.Flags().NFlag() == 0 {
@@ -556,6 +560,14 @@ func serviceNames(c *cobra.Command) ([]string, error) {
 		out = append(out, s.Name)
 	}
 	return out, nil
+}
+
+func providerNames(c *cobra.Command) ([]string, error) {
+	var resp providersResponse
+	if err := cli.ClientFor(c).Get(ctxOf(c), providersEndpoint, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Providers, nil
 }
 
 func schemeNames() []string {

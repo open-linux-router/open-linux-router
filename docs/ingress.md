@@ -6,10 +6,17 @@ mount and the packaging are not written. Bare section references are to this
 document; references to `design.md` name it.
 
 Five things were decided before this was written, and the rest of the document
-is mostly their consequences: the backend is **Caddy**; it is **bundled, not
-embedded, and not taken from the distro**; Caddy **owns :80 and :443**; the
+is mostly their consequences: the backend is **Caddy**; it **runs as its own
+binary and unit, never inside `olrd`**; Caddy **owns :80 and :443**; the
 first-boot path stays **IP + port**; and certificates are Caddy's own job rather
 than a separate ACME client's.
+
+**§5 has since reversed on where the binary comes from.** It said we would ship
+one; olr now drives whichever the operator supplies, the same way every other
+module treats its backend. What changed the answer was not the packaging effort
+but the provider list — a shipped build makes the set of available DNS providers
+a fact we assert in three places, and asking the binary makes it a fact we read.
+§11.6 and §11.7 close as a result.
 
 Building it changed §3 outright. This document treated the local name as
 something we might one day have to ask the `dns` module for; `dns` had already
@@ -256,68 +263,107 @@ from the outside anyway.
 
 ---
 
-## 5. The backend: Caddy, bundled
+## 5. The backend: Caddy, supplied by the operator
 
-### 5.1 Bundled is not embedded
+olr does not ship a proxy. It drives the one that is on the box, which is the
+same relationship `dhcp` has with dnsmasq and `dns` has with unbound.
 
-These are routinely conflated and their costs have nothing in common:
+That sounds unremarkable and is a reversal. This section used to say **bundled**,
+and the argument for bundling was sound as far as it went; what follows is why
+it stopped going far enough.
 
-| | Embedded (Caddy as a Go library, inside `olrd`) | **Bundled** (our build, its own binary and unit) |
-|---|---|---|
-| `olrd` dependency count | hundreds of modules against a README that counts six as a feature | **unchanged** |
-| `olrd` binary size | several times its current size | **unchanged** |
-| `design.md` §3.5 (backends run in their own unit) | violated | **respected** |
-| A cert-renewal panic | takes DHCP and the API down with it | takes the proxy down |
-
-Every objection to putting Caddy in the control plane is an objection to
-embedding. None of them apply to shipping a separately built binary. So the
-process model is the same one `dhcp` has with dnsmasq — render config, manage a
-unit, signal a reload — and the only thing that differs is where the binary came
-from.
-
-### 5.2 Why our build and not a packaged one
+### 5.1 Why this module nearly became the exception
 
 No official Caddy package includes DNS providers — not Debian's, and not
-Caddy's own apt repository. This is architectural rather than an oversight:
-providers are compiled-in modules and Caddy has no runtime plugin loading, so
-there is no official build that has them. `xcaddy` is the supported mechanism
-and using it is not going off-road.
+Caddy's own apt repository. That is architectural rather than an oversight:
+providers are compiled-in modules and Caddy has no runtime plugin loading. And
+DNS-01 is the only challenge that works for a name which does not resolve from
+the internet (§4). So *somebody* has to produce a binary with the right module
+in it, and for a while the answer was us.
 
-The alternative — a separate ACME client (lego, certbot) obtaining the wildcard
-and Caddy reading the files via `tls <cert> <key>` — was seriously considered
-and rejected in §10. It keeps a stock Caddy at the price of two backends, two
-rendered configs, a certificate handoff with its own permissions and
-reload-on-renew race, and a renewal status we would assemble ourselves out of
-another tool's exit codes. That is three pieces of new plumbing bought with the
-one piece we were trying to avoid.
+### 5.2 What bundling would have cost
 
-### 5.3 What bundling actually costs
-
-One thing, and it is ongoing rather than one-off:
+Two things, and only the second one is fatal.
 
 > **Security updates become our obligation.** When Caddy patches a
 > vulnerability, `apt` updates the distro's copy and does nothing for ours. Our
 > users are patched when we cut a release.
 
-This is the real price and it should be written into the project's commitments,
-not discovered during an incident. The mitigation is mechanical — a CI job that
-watches Caddy releases and opens a rebuild — but it is a standing job that did
-not exist before this module.
+That one is merely expensive — a standing CI job and a promise to keep. The
+second is structural:
 
-### 5.4 Packaging shape
+> **The provider list becomes a fact we assert rather than one we read.**
 
-- **Its own package**, `open-linux-router-caddy`, with the main package
-  declaring `Recommends:` rather than `Depends:`. The obligation in §5.3 is then
-  visible and declinable rather than silently inherited by every install.
-- **Installed to `/usr/lib/open-linux-router/caddy`**, supervised as
-  `olr-caddy.service`, configured under `/etc/open-linux-router/`. Path, unit
-  name and config path all differ from the distro package's, so a box that
-  already has `caddy` installed has no conflict to resolve. This is not
-  optional politeness; it is the difference between working and not on any box
-  that has ever run a web server.
-- **Compile in the whole `caddy-dns` provider set**, not a curated subset. A
-  curated subset turns "my DNS provider isn't supported" into a feature request
-  that requires a release. Binary size is the cheaper side of that trade.
+A bundled build fixes the provider set at our build time. Everything downstream
+then has to *restate* that set — the validator, the schema's enum, the CLI's
+completion — and every restatement is a copy that can disagree with the binary.
+The failure that produces is the worst available: a provider the operator picks
+from our own published list, accepted by our own validator, and then rejected at
+runtime by a Caddy that never had it. The earlier draft's answer was a build-time
+check comparing our list against `caddy list-modules`, which is a real fix for a
+problem that did not need to exist.
+
+### 5.3 What supplying it buys
+
+Both costs go away, and the second one goes away *by construction*:
+
+- **The binary is authoritative and is simply asked.** `caddy list-modules` says
+  what it has. There is no list in olr to be stale — `olr ingress show
+  providers` is a question, the config schema publishes no enum, and shell
+  completion is fetched rather than compiled in.
+- **The validator got smaller and more honest.** It checks that a provider was
+  named; it does not judge the name. Whether that module exists is a question
+  about a file on disk, and the validator is pure by design. The real check was
+  already in the apply path — `caddy validate` on the rendered file, which
+  rejects an unlinked `dns <provider>` before anything is written, in the
+  binary's own words.
+- **CVEs are the operator's distro's problem again**, like every other backend.
+- **The module stops being special.** olr drives backends; it does not package
+  them.
+
+### 5.4 What it costs, which is a real barrier
+
+The operator has to obtain a Caddy with their DNS provider compiled in. That is
+a step "`apt install` turns this box into a router" (§1 of `design.md`) does not
+otherwise have, and it is the honest price of this section.
+
+It is smaller than it sounds, and the difference is entirely in whether we say
+so at the right moment:
+
+- <https://caddyserver.com/download> builds one with the providers ticked. No Go
+  toolchain, no command line — a download.
+- `xcaddy build --with github.com/caddy-dns/<provider>` for anyone who prefers it.
+
+**So every failure along this path owes the operator both of those sentences.**
+A missing binary is not "olr-caddy.service failed"; it is a refusal that names
+the path olr looked in, says why no packaged Caddy will do, and gives the two
+ways to get one. That message is the feature. `internal/ingress/binary.go` is
+mostly that message, deliberately.
+
+### 5.5 Where it goes, and living beside a distro Caddy
+
+- Looked for at **`/usr/lib/open-linux-router/caddy`** first, then `caddy` on
+  `PATH`. A binary at the first path is unambiguously one an operator put there
+  for olr; the `PATH` fallback will usually be the distro's package, which works
+  for everything except obtaining a certificate — and fails at that with Caddy's
+  own message rather than a guess of ours.
+- Supervised as **`olr-caddy.service`**, configured under
+  `/etc/open-linux-router/`. Unit name and config path both differ from the
+  distro package's, so a box already running Caddy has nothing to resolve. This
+  is not optional politeness; it is the difference between working and not on
+  any box that has ever served a web page.
+- **`status` reports which binary was found**, because a box can have two and
+  "which providers are available" is meaningless without saying which one was
+  asked.
+
+### 5.6 Bundling is not refuted, only deferred
+
+Nothing above says a shipped binary is wrong — it says it is not worth its
+second cost *yet*. If this module is ever expected to work with no steps at all,
+the way back is open, and the thing that would make it affordable is the same
+thing that makes it wanted: a build we run often enough that the provider list
+and the CVE queue are already somebody's routine. §9 keeps it as a v2 row rather
+than a rejected idea.
 
 ---
 
@@ -448,6 +494,7 @@ The boundary §2 said had to be drawn here.
 | | `raw_caddyfile` escape hatch | §7.3 |
 | | names answered by `dns`'s existing local zone | §3 — no work, it is already there |
 | **v2** | publishing the WebUI itself | §6 |
+| | shipping a proxy build, so there is no download step | §5.6 — deferred, not rejected |
 | | per-service access control by group or device | the thing a router can do here that a standalone Caddy cannot — and the only entry on this list that justifies the module living in olr rather than in a README |
 | **Never** | serving static files, PHP, a general web server | escape hatch, permanently |
 | | **exposing a published service to the internet** | that is a port forward: `firewall`'s object, `firewall`'s risk conversation, and it must not become a side effect of publishing something internally |
@@ -461,11 +508,15 @@ The boundary §2 said had to be drawn here.
   none of them were costs of bundling; the objection was aimed at the wrong
   target.
 - **A distro or official-repo Caddy, with `lego` obtaining the certificate.**
-  §5.2. Preserves "we only wrap packages the distro ships" at the cost of two
-  backends, two configs, a certificate handoff and a renewal status we would
-  reconstruct from another tool. The separation of failure domains it buys is
-  real but is not worth three new moving parts, and Caddy's certificate
-  automation is the most mature part of Caddy.
+  Preserves a stock Caddy at the cost of two backends, two configs, a
+  certificate handoff and a renewal status we would reconstruct from another
+  tool. The separation of failure domains it buys is real but is not worth three
+  new moving parts, and Caddy's certificate automation is the most mature part
+  of Caddy. Note this is *not* what §5 now does: we still use one Caddy doing
+  its own ACME — it is simply not one we built.
+- **Shipping our own xcaddy build** (§5.2). Rejected on the second cost rather
+  than the first: the CVE queue was affordable, and a fixed provider list was
+  not. It is deferred rather than refuted — §5.6.
 - **`caddy add-package` / `caddy upgrade --plugin`.** Fetches a rebuilt binary
   from a third-party build service at runtime and replaces itself in place —
   which `apt` will then overwrite on the next upgrade. Unverified whether it
@@ -511,14 +562,21 @@ The boundary §2 said had to be drawn here.
    `link`, `dhcp`, `dns`, `devices` and `gateway`. Publishing services before
    the box has a firewall is hard to defend, and §9's "never expose to the
    internet" row is a promise that `firewall` is what actually keeps.
-6. **Who watches Caddy releases, and how fast** (§5.3). The obligation is
-   accepted in principle; the cadence is not defined, and an undefined cadence
-   is how this becomes a stale bundled binary two years from now.
-7. **The provider list is a second copy, and the packaging has to close it.**
-   §5.4 compiles in the whole `caddy-dns` set, but the validator and the
-   published schema enum need that set as Go data — `Validate` is pure and the
-   schema is built by reflection, so neither can ask the binary. The
-   authoritative answer is `caddy list-modules`, and the build must compare the
-   two and **fail on a mismatch**. Until it does, the failure mode is the worst
-   available: a provider the operator picks from our own enum, accepted by our
-   own validator, and rejected at runtime by a Caddy that never had it.
+6. ~~**Who watches Caddy releases, and how fast.**~~ **Closed by not taking the
+   obligation.** olr ships no proxy, so Caddy's security updates are the
+   operator's distro's problem, as every other backend's already were. It
+   reopens the day §5.6 is taken.
+7. ~~**The provider list is a second copy.**~~ **Closed by deletion, which is
+   the only clean way a question like this closes.** It asked how to keep our
+   list in step with the binary's; §5 removed our list. `caddy list-modules` is
+   asked directly, the schema publishes no enum, completion is fetched, and the
+   validator no longer judges a provider name it cannot verify. This is the
+   argument that actually decided §5 — the packaging burden was the visible
+   cost and this was the load-bearing one.
+
+8. **Nobody has run this against a real Caddy.** The renderer, the validator,
+   the planner and the apply path are unit-tested against fakes; `caddy
+   validate` on our rendered Caddyfile, `caddy list-modules` parsing against
+   real output, and a certificate actually issuing have not been exercised. The
+   parser is written to cost an empty list rather than a wrong one if the output
+   format differs, which is a hedge and not a substitute.

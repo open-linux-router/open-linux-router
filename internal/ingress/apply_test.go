@@ -91,6 +91,9 @@ func testApplier(t *testing.T) (Applier, *fakeProxy) {
 		// rather than the absence of a proxy binary. The refusal path has its
 		// own test below.
 		CheckConfig: func(context.Context, string, []string) error { return nil },
+		// Pinned for the same reason PortCheck is: otherwise every test here
+		// would depend on whether the build machine has a caddy on its PATH.
+		Locate: func() (string, error) { return "/fake/caddy", nil },
 		// Check the unit once rather than watching it for the default window.
 		Settle: -1,
 	}, proxy
@@ -356,8 +359,8 @@ func TestApplyRefusesAnUninstalledUnit(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected a refusal\n%s", steps(result))
 	}
-	if !strings.Contains(err.Error(), "open-linux-router-caddy") {
-		t.Errorf("the error must name the package that provides the proxy, got %v", err)
+	if !strings.Contains(err.Error(), "olr enable") {
+		t.Errorf("the error must name the command that writes the unit, got %v", err)
 	}
 }
 
@@ -439,5 +442,66 @@ func TestDisablingKeepsTheConfiguration(t *testing.T) {
 func TestUnmarshalConfigRejectsUnknownFields(t *testing.T) {
 	if _, err := UnmarshalConfig([]byte(`{"enabled":true,"provider_tokn":"x"}`)); err == nil {
 		t.Fatal("a misspelled credential key must not be silently ignored")
+	}
+}
+
+// olr ships no proxy, so "there isn't one" is a first-class refusal with the
+// instructions attached rather than an exec error at start time.
+func TestApplyRefusesWhenThereIsNoProxyBinary(t *testing.T) {
+	a, proxy := testApplier(t)
+	a.Locate = func() (string, error) { return "", ErrNoBinary }
+
+	result, err := a.Apply(context.Background(), good())
+	if err == nil {
+		t.Fatalf("expected a refusal\n%s", steps(result))
+	}
+	for _, want := range []string{"caddyserver.com/download", "xcaddy", SearchPath[0]} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal must mention %q, got:\n%v", want, err)
+		}
+	}
+	if len(proxy.calls) != 0 {
+		t.Errorf("nothing should have been asked of systemd: %v", proxy.calls)
+	}
+}
+
+// Disabling must not need a proxy: an operator whose binary is gone still has to
+// be able to turn the module off.
+func TestApplyWithoutABinaryCanStillDisable(t *testing.T) {
+	a, _ := testApplier(t)
+	ctx := context.Background()
+	if _, err := a.Apply(ctx, good()); err != nil {
+		t.Fatalf("first apply: %v", err)
+	}
+
+	a.Locate = func() (string, error) { return "", ErrNoBinary }
+	desired := good()
+	desired.Enabled = false
+	if result, err := a.Apply(ctx, desired); err != nil {
+		t.Fatalf("disabling must not require a proxy: %v\n%s", err, steps(result))
+	}
+}
+
+func TestParseProvidersReadsListModules(t *testing.T) {
+	out := `
+Standard modules: 118
+
+dns.providers.cloudflare
+dns.providers.route53
+http.handlers.reverse_proxy
+tls.issuance.acme
+
+  Non-standard modules: 2
+`
+	got := parseProviders(out)
+	if len(got) != 2 || got[0] != "cloudflare" || got[1] != "route53" {
+		t.Fatalf("got %v, want [cloudflare route53]", got)
+	}
+}
+
+// A format change must cost an empty list, never a wrong one.
+func TestParseProvidersIgnoresEverythingElse(t *testing.T) {
+	if got := parseProviders("total nonsense\nhttp.handlers.file_server\n"); got != nil {
+		t.Fatalf("got %v, want nothing", got)
 	}
 }

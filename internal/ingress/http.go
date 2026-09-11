@@ -283,6 +283,12 @@ type statusResponse struct {
 	Service      *ProxyStatus `json:"service,omitempty"`
 	ServiceError string       `json:"service_error,omitempty"`
 
+	// Binary is the proxy olr found, and BinaryError says why it found none.
+	// olr ships no proxy (binary.go), so "is one present" is a first-class part
+	// of this module's health rather than something to discover at apply time.
+	Binary      string `json:"binary,omitempty"`
+	BinaryError string `json:"binary_error,omitempty"`
+
 	// Certificate is the clock-dependent half of health (docs/ingress.md §8).
 	// Reported beside the service state and never folded into it: a proxy that
 	// is running perfectly while its renewals fail is exactly the situation
@@ -308,6 +314,12 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 	resp.Enabled = cfg.Enabled
 	resp.Published = len(cfg.Services)
 	resp.Domain = strings.ToLower(strings.TrimSuffix(h.Applier.DNS.LocalDomain(), "."))
+
+	if binary, err := FindBinary(); err != nil {
+		resp.BinaryError = ErrBinaryMissing().Error()
+	} else {
+		resp.Binary = binary
+	}
 
 	// Each half of health is reported independently and neither can suppress
 	// the other (§5.4).
@@ -392,9 +404,29 @@ func (h HTTP) getServices(w http.ResponseWriter, r *http.Request) {
 }
 
 type providersResponse struct {
+	// Binary is which proxy answered. Reported because a box can have more than
+	// one Caddy on it — the distro's and the operator's — and "which providers
+	// are available" is meaningless without saying which binary was asked.
+	Binary    string   `json:"binary,omitempty"`
 	Providers []string `json:"providers"`
 }
 
-func (h HTTP) getProviders(w http.ResponseWriter, _ *http.Request) {
-	core.WriteJSON(w, http.StatusOK, providersResponse{Providers: Providers()})
+// getProviders asks the operator's binary what it was built with.
+//
+// There is no list of our own to fall back on, on purpose (providers.go). A
+// missing binary is a 503 rather than an empty list: an empty list reads as
+// "your proxy supports nothing", which is a different and much more alarming
+// statement than "there is no proxy here yet", and only one of them is true.
+func (h HTTP) getProviders(w http.ResponseWriter, r *http.Request) {
+	binary, err := FindBinary()
+	if err != nil {
+		core.WriteError(w, http.StatusServiceUnavailable, ErrBinaryMissing().Error())
+		return
+	}
+	providers, err := ListProviders(r.Context(), binary)
+	if err != nil {
+		core.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	core.WriteJSON(w, http.StatusOK, providersResponse{Binary: binary, Providers: providers})
 }

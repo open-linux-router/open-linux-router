@@ -39,27 +39,25 @@ func (Scheme) JSONSchema() *jsonschema.Schema {
 	}
 }
 
-// providerSchema is the DNS provider enum.
+// providerSchema describes the DNS provider field, and publishes **no enum**.
 //
-// Not a method, because the field is a plain string rather than a named type —
-// and it is a plain string on purpose. The legal set is a *build-time* fact
-// (providers.go): it is whatever the packaging's xcaddy invocation linked, so
-// giving it a Go type would imply a closed vocabulary that the compiler could
-// check, and nothing here can check it. The enum is published so a UI can offer
-// a list; the build is what has to guarantee the list is true.
+// The legal set is whatever the operator's proxy binary was built with
+// (providers.go), which is not knowable at reflection time. An enum here could
+// therefore only ever be a guess, and a guess that a form renders as a closed
+// dropdown is worse than no list at all: it would offer names the binary does
+// not have and hide the one it does.
+//
+// The live list is a request away — GET /api/ingress/providers, or `olr ingress
+// show providers` — and a form that wants a dropdown should fetch it.
 func providerSchema() *jsonschema.Schema {
-	values := make([]any, 0, len(Providers()))
-	for _, p := range Providers() {
-		values = append(values, p)
-	}
 	return &jsonschema.Schema{
 		Type:  "string",
 		Title: "DNS provider",
 		Description: "Who hosts the DNS for your domain. olr writes a temporary " +
 			"record through their API to prove the domain is yours, which is the " +
 			"only way to get a certificate for a name that does not resolve from " +
-			"the internet.",
-		Enum: values,
+			"the internet. The names your proxy supports are listed by " +
+			"`olr ingress show providers`.",
 	}
 }
 

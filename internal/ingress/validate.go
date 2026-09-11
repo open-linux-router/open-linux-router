@@ -129,11 +129,13 @@ func validateCertificate(r *Result, c Config) {
 		return
 	}
 
-	switch {
-	case c.Certificate.Provider == "":
-		r.errorf("certificate.provider", "required: the DNS provider hosting your domain, so the ACME challenge record can be written (see `olr ingress providers`)")
-	case !slices.Contains(Providers(), c.Certificate.Provider):
-		r.errorf("certificate.provider", "unknown provider %q; run `olr ingress providers` for the list compiled into this build", c.Certificate.Provider)
+	// Presence only. Whether the name is one the proxy binary actually has is a
+	// question about a file on disk, and Validate is pure (see the header) — so
+	// it is asked where it can be answered, by `caddy validate` on the rendered
+	// file before it is applied. Guessing here with a list of our own is what
+	// providers.go exists to explain we no longer do.
+	if c.Certificate.Provider == "" {
+		r.errorf("certificate.provider", "required: the DNS provider hosting your domain, so the ACME challenge record can be written (see `olr ingress show providers`)")
 	}
 
 	if c.Certificate.Token == "" {
