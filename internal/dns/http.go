@@ -202,7 +202,7 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 	// Validated before the lock is taken. Validation is pure (§5.3.1), so
 	// holding the lock to do it would only make a bad request slow down a good
 	// one, and a 422 is more useful than a plan that cannot be applied.
-	if res := Validate(cfg, h.Applier.Links); !res.OK() {
+	if res := Validate(cfg, h.Applier.Links, h.Applier.Reservations); !res.OK() {
 		core.WriteError(w, http.StatusUnprocessableEntity,
 			"invalid dns configuration", problems(res.Errors)...)
 		return

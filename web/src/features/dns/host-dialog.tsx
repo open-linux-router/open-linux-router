@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useDhcpConfig } from '@/features/dhcp/queries'
 import type { Host } from '@/lib/config-types'
 
 const EMPTY: Host = { name: '', addresses: [] }
@@ -28,6 +29,7 @@ export function HostDialog({
   open,
   onOpenChange,
   domain,
+  taken,
   initial,
   onSubmit,
   onRemove,
@@ -36,6 +38,8 @@ export function HostDialog({
   onOpenChange: (open: boolean) => void
   /** The suffix names are published under, for the preview line. */
   domain: string
+  /** Names already published, so a device is only suggested once. */
+  taken: string[]
   /** Undefined when adding. */
   initial?: Host
   onSubmit: (host: Host) => void
@@ -45,6 +49,20 @@ export function HostDialog({
   const editing = initial !== undefined
 
   const name = draft.name.trim()
+
+  // Reserved devices that have a name and are not published yet.
+  //
+  // The join is done here, in the client, on purpose. A reservation and a local
+  // name are two modules' configuration and there is no cross-module
+  // transaction (design.md §5.3.1) — picking one of these fills two fields in
+  // and still writes one module. olrd storing one from the other is the door
+  // that stays shut; internal/dns/dhcp.go says why.
+  const dhcp = useDhcpConfig()
+  const suggestions = editing
+    ? []
+    : (dhcp.data?.reservations ?? [])
+        .filter((r) => r.hostname && !taken.includes(relative(r.hostname, domain)))
+        .slice(0, 6)
 
   // Only what the server requires. Whether the name is well-formed, whether the
   // address is on a network this box serves, whether two hosts collide — all of
@@ -92,6 +110,32 @@ export function HostDialog({
               )}
             </p>
           </div>
+
+          {suggestions.length > 0 && (
+            <div className="grid gap-2">
+              <Label>Reserved devices</Label>
+              <div className="flex flex-wrap gap-2">
+                {suggestions.map((r) => (
+                  <Button
+                    key={r.mac}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setDraft({ name: r.hostname ?? '', addresses: [r.ip] })
+                    }
+                  >
+                    {r.hostname}
+                    <span className="text-muted-foreground">{r.ip}</span>
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                These already have a fixed address from DHCP. Picking one fills
+                both fields in so the address is not typed twice.
+              </p>
+            </div>
+          )}
 
           <div className="grid gap-2">
             <Label htmlFor="host-addresses">Address</Label>

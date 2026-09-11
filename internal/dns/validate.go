@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 )
 
@@ -70,13 +71,13 @@ const MaxPolicyNameLen = 64
 //
 // It is pure: no files, no netlink, no root. That is what lets the entire rule
 // set be table-tested and lets `olr dns` check a config on a laptop.
-func Validate(c Config, links LinkView) Result {
+func Validate(c Config, links LinkView, reservations ReservationView) Result {
 	var r Result
 
 	validateListen(&r, c, links)
 	validateAllowFrom(&r, c, links)
 	validateUpstream(&r, c)
-	validateHosts(&r, c, links)
+	validateHosts(&r, c, links, reservations)
 	validatePolicies(&r, c)
 	validateHijack(&r, c, links)
 	validateQueryLog(&r, c)
@@ -248,7 +249,7 @@ func validateUpstream(r *Result, c Config) {
 // costs one name, not the building's internet — so this leans on warnings where
 // the other rules refuse. The exception is the local domain, which is
 // house-wide: get it wrong and every local name is wrong at once.
-func validateHosts(r *Result, c Config, links LinkView) {
+func validateHosts(r *Result, c Config, links LinkView, reservations ReservationView) {
 	domain := c.LocalDomainOrDefault()
 	switch err := checkName(domain); {
 	case err != nil:
@@ -330,7 +331,54 @@ func validateHosts(r *Result, c Config, links LinkView) {
 						"address most clients here cannot reach", a, c.FQDN(h.Name))
 			}
 		}
+
+		checkAgainstReservation(r, c, h, path, reservations)
 	}
+}
+
+// checkAgainstReservation reports a local name and a DHCP reservation
+// disagreeing about where a device is.
+//
+// This is the whole return on the subscription described in dhcp.go, and it is
+// worth spelling out what it catches. An operator reserves 192.168.1.50 for the
+// TV and publishes sony-tv pointing at it. Months later they renumber the
+// reservation. DHCP moves the TV; the name goes on answering the old address;
+// nothing anywhere says so, and the symptom is a page that will not load on a
+// network where everything else works.
+//
+// Matching is by name and not by address, because the name is what the operator
+// typed in both places and the address is the thing that moved. Reservations
+// without a hostname are the majority and match nothing.
+func checkAgainstReservation(r *Result, c Config, h Host, path string, view ReservationView) {
+	domain := c.LocalDomainOrDefault()
+	for _, res := range reservationsFor(view) {
+		if res.Hostname == "" || normalizeHostName(res.Hostname, domain) != h.Name {
+			continue
+		}
+		if !res.IP.IsValid() || slices.Contains(h.Addrs, res.IP) {
+			continue
+		}
+		// A warning, firmly. Both values are things the operator typed on
+		// purpose, and there is a real configuration — a name deliberately
+		// pointing somewhere other than the device's own address — that this
+		// would otherwise forbid. Refusing would also mean a dhcp edit could
+		// make the dns config unappliable, which is the cross-module coupling
+		// this design is built to avoid.
+		r.warnf(path+".addresses",
+			"%s answers %s, but the DHCP reservation for %s hands that device %s. "+
+				"One of the two has moved",
+			c.FQDN(h.Name), joinAddrs(h.Addrs), res.MAC, res.IP)
+		return
+	}
+}
+
+// joinAddrs renders a host's addresses for a message.
+func joinAddrs(addrs []netip.Addr) string {
+	out := make([]string, 0, len(addrs))
+	for _, a := range addrs {
+		out = append(out, a.String())
+	}
+	return strings.Join(out, ", ")
 }
 
 // adoptedPrefixes lists every network on an interface the operator handed us.

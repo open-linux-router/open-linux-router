@@ -525,6 +525,7 @@ function LocalNamesCard({
         open={open}
         onOpenChange={setOpen}
         domain={domain}
+        taken={hosts.map((h) => h.name)}
         initial={editing}
         onSubmit={upsert}
         onRemove={editing ? () => remove(editing.name) : undefined}

@@ -396,6 +396,41 @@ client that was handed the domain as its search domain — DHCP option 15, which
 is `domain` on the pool in `internal/dhcp`. `sony-tv.home.arpa:5006` works
 everywhere. olr cannot make the short form universal and does not pretend to.
 
+### 4.7 `dhcp` is subscribed to for a warning, and nothing else
+
+`design.md` §4.1 names `dhcp`↔`dns` as the cycle that has to be broken by
+inverting one side, and fixes which: `dhcp` publishes, `dns` subscribes. The
+subscription exists — `ReservationView` in `internal/dns/dhcp.go`, adapted in
+`internal/daemon` the same way the three `LinkView`s are — and it reaches
+`Validate` only. It cannot change a rendered byte.
+
+That restriction is the design, not an unfinished edge. Two things break if a
+local name is *rendered* from a reservation:
+
+- **Drift stops meaning anything.** Rendered bytes are what drift is measured
+  against (§5.4). A reservation edit would leave this module drifted until
+  somebody applied it, and drift is supposed to mean a human edited the box.
+- **The apply promise breaks.** Every mutating route in olr is one request whose
+  plan decides whether it lands (§5.3.3). Re-applying `dns` when `dhcp` applies
+  means a dhcp request restarts the resolver without the dhcp plan ever saying
+  so — exactly the surprise that promise exists to prevent. And `core.Events` is
+  a notification bus, not a data channel, so there is no cross-module apply to
+  reach for anyway.
+
+What the subscription buys instead is the one failure that is otherwise silent:
+the reservation was renumbered, DHCP moved the device, and the name goes on
+answering where it used to be. That is a warning on the name, naming both
+addresses, and it costs nothing — an unreadable dhcp config costs the check and
+not the config.
+
+**Not typing the address twice is the client's job**, which is where a
+cross-module convenience belongs when there is no cross-module transaction.
+`olr dns add host sony-tv` with no address reads dhcp's config over the API and
+takes it from the matching reservation; the WebUI offers the reserved devices
+that are not published yet and fills both fields from one. Two modules' config,
+two writes, each with its own plan — and the join in the one place that is
+allowed to know about both.
+
 ---
 
 ## 5. The risk, which is availability
@@ -458,6 +493,7 @@ only and access-control by source, or we have shipped an amplifier.
 | | passthrough relay with tee, query log, domain→IP map | the observability case is the whole reason to own :53 |
 | | per-client blocking, DoT `:853` drop | built **in the relay**, not in unbound views — §4.4; the block is what protects everything else |
 | | local names under a local domain | built **in unbound**, not the relay — §4.6, which is the same question answered the other way |
+| | `dhcp` reservations read for a cross-check | §4.7 — the subscription design.md §4.1 asked for, restricted to validation so it cannot drift |
 | **v2** | per-client upstream selection (proxy vs direct) | needs §2.1's return-path answer first |
 | | DoH `:443` blocklist, TCP and UDP | ongoing maintenance, not a one-off |
 | **Never** | recursion, DNSSEC validation, our own cache | the moment this process needs a cache, it is a design change and not a refactor |
@@ -509,20 +545,12 @@ what we do not cover instead of implying coverage we do not have.
   honest but not the same as covering it. A client resolving over IPv6 on a
   dual-stack network bypasses the redirect entirely — the same failure the
   routing model records for a v4-only exit.
-- **A local name and a DHCP reservation are typed separately.** `design.md`
-  §4.1 fixes the direction — `dhcp` publishes lease hostnames, `dns`
-  subscribes — and that half is not built. `Reservation.Hostname` exists and
-  goes no further than dnsmasq, which cannot publish it either because
-  `internal/dhcp` renders `port=0`. So naming a reserved device means writing
-  the address in both modules, and changing the reservation's address leaves the
-  name pointing at the old one with nothing to say so. §4.6's `hosts` is the
-  half that has to exist regardless: a statically addressed printer speaks no
-  DHCP and has no other way into the local namespace.
-- **Nothing re-applies `dns` when `dhcp` changes**, which is what the
-  subscription above will have to answer before it can be wired. Modules apply
-  independently and `core.Events` is a notification bus and not a data channel,
-  so a cross-module apply is a mechanism that does not exist yet rather than a
-  call somebody forgot to make.
+- **A local name and a DHCP reservation remain two stored facts**, by the
+  decision in §4.7 rather than by omission. They are told apart when they
+  disagree and filled in together when they are created, and nothing keeps them
+  in step after that. A reservation renumbered from a script, with nobody
+  looking at a plan afterwards, still leaves the name answering the old address
+  until the next time anything validates.
 - **Adding a local name restarts unbound.** It lands in `unbound.conf`, which is
   not reloadable, so the plan is `ImpactRestart` — milliseconds, and the cache
   flushed. Acceptable for the field it is, and the one thing to revisit if

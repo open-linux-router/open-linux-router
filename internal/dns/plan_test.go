@@ -30,7 +30,7 @@ func observedFor(t *testing.T, b Backend, c Config, running bool) Observed {
 
 func planFor(t *testing.T, b Backend, cfg Config, obs Observed) Plan {
 	t.Helper()
-	plan, err := BuildPlan(b, cfg, testLinks(), obs, time.Now())
+	plan, err := BuildPlan(b, cfg, testLinks(), nil, obs, time.Now())
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}
@@ -313,7 +313,7 @@ func TestBuildPlanRefusesAnInvalidConfig(t *testing.T) {
 	bad := validConfig()
 	bad.Listen = nil
 
-	if _, err := BuildPlan(b, bad, testLinks(), Observed{}, time.Now()); err == nil {
+	if _, err := BuildPlan(b, bad, testLinks(), nil, Observed{}, time.Now()); err == nil {
 		t.Fatal("planning succeeded against a config that cannot be applied")
 	}
 }

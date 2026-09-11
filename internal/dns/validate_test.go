@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"errors"
 	"net/netip"
 	"strings"
 	"testing"
@@ -50,7 +51,7 @@ func hasProblem(problems []Problem, pathPrefix string) bool {
 }
 
 func TestValidateAcceptsAMinimalConfig(t *testing.T) {
-	if res := Validate(validConfig(), testLinks()); !res.OK() {
+	if res := Validate(validConfig(), testLinks(), nil); !res.OK() {
 		t.Errorf("a minimal valid config was rejected: %v", errorPaths(res))
 	}
 }
@@ -120,7 +121,7 @@ func TestValidateListen(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := validConfig()
 			tc.edit(&cfg)
-			res := Validate(cfg, testLinks())
+			res := Validate(cfg, testLinks(), nil)
 			if tc.wantErr == "" {
 				if !res.OK() {
 					t.Errorf("unexpected errors: %v", errorPaths(res))
@@ -141,7 +142,7 @@ func TestValidateRefusesAnOpenResolver(t *testing.T) {
 	for _, open := range []string{"0.0.0.0/0", "::/0"} {
 		cfg := validConfig()
 		cfg.AllowFrom = []netip.Prefix{netip.MustParsePrefix(open)}
-		res := Validate(cfg, testLinks())
+		res := Validate(cfg, testLinks(), nil)
 		if !hasProblem(res.Errors, "allow_from[0]") {
 			t.Errorf("%s was accepted as an allowed source: %v", open, errorPaths(res))
 			continue
@@ -158,13 +159,13 @@ func TestValidateRefusesAnOpenResolver(t *testing.T) {
 func TestValidateEmptyAllowFromIsDerived(t *testing.T) {
 	cfg := validConfig()
 	cfg.AllowFrom = nil
-	if res := Validate(cfg, testLinks()); !res.OK() {
+	if res := Validate(cfg, testLinks(), nil); !res.OK() {
 		t.Errorf("an empty allow_from with a derivable network was rejected: %v", errorPaths(res))
 	}
 
 	// Loopback is on no interface link knows about, so nothing can be derived.
 	cfg.Listen = []netip.AddrPort{netip.MustParseAddrPort("127.0.0.1:53")}
-	if res := Validate(cfg, testLinks()); !hasProblem(res.Errors, "allow_from") {
+	if res := Validate(cfg, testLinks(), nil); !hasProblem(res.Errors, "allow_from") {
 		t.Errorf("a config that would answer nobody was accepted: %v", errorPaths(res))
 	}
 }
@@ -173,7 +174,7 @@ func TestValidateUpstream(t *testing.T) {
 	t.Run("forwarding with no servers", func(t *testing.T) {
 		cfg := validConfig()
 		cfg.Upstream.Mode = ModeForward
-		if res := Validate(cfg, testLinks()); !hasProblem(res.Errors, "upstream.servers") {
+		if res := Validate(cfg, testLinks(), nil); !hasProblem(res.Errors, "upstream.servers") {
 			t.Errorf("want an error, got %v", errorPaths(res))
 		}
 	})
@@ -184,7 +185,7 @@ func TestValidateUpstream(t *testing.T) {
 			Mode:    ModeForward,
 			Servers: []netip.AddrPort{netip.MustParseAddrPort("192.168.1.1:53")},
 		}
-		if res := Validate(cfg, testLinks()); !hasProblem(res.Errors, "upstream.servers[0]") {
+		if res := Validate(cfg, testLinks(), nil); !hasProblem(res.Errors, "upstream.servers[0]") {
 			t.Errorf("a forwarding loop was accepted: %v", errorPaths(res))
 		}
 	})
@@ -196,7 +197,7 @@ func TestValidateUpstream(t *testing.T) {
 			Servers: []netip.AddrPort{netip.MustParseAddrPort("1.1.1.1:853")},
 			TLS:     true,
 		}
-		res := Validate(cfg, testLinks())
+		res := Validate(cfg, testLinks(), nil)
 		if !res.OK() {
 			t.Fatalf("this should warn, not fail: %v", errorPaths(res))
 		}
@@ -208,7 +209,7 @@ func TestValidateUpstream(t *testing.T) {
 	t.Run("servers listed but unused warns", func(t *testing.T) {
 		cfg := validConfig()
 		cfg.Upstream = Upstream{Servers: []netip.AddrPort{netip.MustParseAddrPort("1.1.1.1:53")}}
-		res := Validate(cfg, testLinks())
+		res := Validate(cfg, testLinks(), nil)
 		if !hasProblem(res.Warnings, "upstream.servers") {
 			t.Error("forwarders under the recursing default were accepted silently")
 		}
@@ -221,7 +222,7 @@ func TestValidatePolicies(t *testing.T) {
 		// be in, which is not a thing an operator can reason about.
 		cfg := validConfig()
 		cfg.Policies = []Policy{{Name: "a"}, {Name: "b"}}
-		if res := Validate(cfg, testLinks()); !hasProblem(res.Errors, "policies[1].clients") {
+		if res := Validate(cfg, testLinks(), nil); !hasProblem(res.Errors, "policies[1].clients") {
 			t.Errorf("two default policies were accepted: %v", errorPaths(res))
 		}
 	})
@@ -232,7 +233,7 @@ func TestValidatePolicies(t *testing.T) {
 			{Name: "kids", Clients: []netip.Prefix{netip.MustParsePrefix("192.168.1.50/32")}},
 			{Name: "kids", Clients: []netip.Prefix{netip.MustParsePrefix("192.168.1.51/32")}},
 		}
-		if res := Validate(cfg, testLinks()); !hasProblem(res.Errors, "policies[1].name") {
+		if res := Validate(cfg, testLinks(), nil); !hasProblem(res.Errors, "policies[1].name") {
 			t.Errorf("a duplicate policy name was accepted: %v", errorPaths(res))
 		}
 	})
@@ -245,7 +246,7 @@ func TestValidatePolicies(t *testing.T) {
 			{Name: "a", Clients: []netip.Prefix{netip.MustParsePrefix("192.168.1.50/32")}},
 			{Name: "b", Clients: []netip.Prefix{netip.MustParsePrefix("192.168.1.50/32")}},
 		}
-		res := Validate(cfg, testLinks())
+		res := Validate(cfg, testLinks(), nil)
 		if !hasProblem(res.Errors, "policies[1].clients[0]") {
 			t.Errorf("an ambiguous client claim was accepted: %v", errorPaths(res))
 		}
@@ -256,7 +257,7 @@ func TestValidatePolicies(t *testing.T) {
 		// than a typo.
 		cfg := validConfig()
 		cfg.Policies = []Policy{{Name: "../../etc/passwd"}}
-		if res := Validate(cfg, testLinks()); !hasProblem(res.Errors, "policies[0].name") {
+		if res := Validate(cfg, testLinks(), nil); !hasProblem(res.Errors, "policies[0].name") {
 			t.Errorf("a path was accepted as a policy name: %v", errorPaths(res))
 		}
 	})
@@ -266,7 +267,7 @@ func TestValidatePolicies(t *testing.T) {
 		cfg := validConfig()
 		cfg.Policies = []Policy{{Name: "kids", Block: []string{"https://example.com/ads"}}}
 		cfg.Normalize()
-		if res := Validate(cfg, testLinks()); !hasProblem(res.Errors, "policies[0].block[0]") {
+		if res := Validate(cfg, testLinks(), nil); !hasProblem(res.Errors, "policies[0].block[0]") {
 			t.Errorf("a URL was accepted as a domain: %v", errorPaths(res))
 		}
 	})
@@ -276,7 +277,7 @@ func TestValidatePolicies(t *testing.T) {
 		cfg.Policies = []Policy{{
 			Name: "kids", Block: []string{"example.com"}, Allow: []string{"example.com"},
 		}}
-		res := Validate(cfg, testLinks())
+		res := Validate(cfg, testLinks(), nil)
 		if !res.OK() {
 			t.Fatalf("this should warn, not fail: %v", errorPaths(res))
 		}
@@ -290,7 +291,7 @@ func TestValidatePolicies(t *testing.T) {
 		// clients that ask us, and nothing makes them.
 		cfg := validConfig()
 		cfg.Policies = []Policy{{Name: "kids", Block: []string{"example.com"}}}
-		res := Validate(cfg, testLinks())
+		res := Validate(cfg, testLinks(), nil)
 		if !hasProblem(res.Warnings, "hijack.enabled") {
 			t.Error("no warning that the blocklist is advisory")
 		}
@@ -303,7 +304,7 @@ func TestValidateHijack(t *testing.T) {
 		// of an empty list.
 		cfg := validConfig()
 		cfg.Hijack = Hijack{Enabled: true}
-		if res := Validate(cfg, testLinks()); !hasProblem(res.Errors, "hijack.interfaces") {
+		if res := Validate(cfg, testLinks(), nil); !hasProblem(res.Errors, "hijack.interfaces") {
 			t.Errorf("want an error, got %v", errorPaths(res))
 		}
 	})
@@ -311,7 +312,7 @@ func TestValidateHijack(t *testing.T) {
 	t.Run("an unadopted interface", func(t *testing.T) {
 		cfg := validConfig()
 		cfg.Hijack = Hijack{Enabled: true, Interfaces: []string{"guest0"}}
-		if res := Validate(cfg, testLinks()); !hasProblem(res.Errors, "hijack.interfaces[0]") {
+		if res := Validate(cfg, testLinks(), nil); !hasProblem(res.Errors, "hijack.interfaces[0]") {
 			t.Errorf("want an error, got %v", errorPaths(res))
 		}
 	})
@@ -319,7 +320,7 @@ func TestValidateHijack(t *testing.T) {
 	t.Run("an unknown interface", func(t *testing.T) {
 		cfg := validConfig()
 		cfg.Hijack = Hijack{Enabled: true, Interfaces: []string{"nope0"}}
-		if res := Validate(cfg, testLinks()); !hasProblem(res.Errors, "hijack.interfaces[0]") {
+		if res := Validate(cfg, testLinks(), nil); !hasProblem(res.Errors, "hijack.interfaces[0]") {
 			t.Errorf("want an error, got %v", errorPaths(res))
 		}
 	})
@@ -329,7 +330,7 @@ func TestValidateHijack(t *testing.T) {
 		// expensive work pointless.
 		cfg := validConfig()
 		cfg.Hijack = Hijack{Enabled: true, Interfaces: []string{"lan0"}}
-		res := Validate(cfg, testLinks())
+		res := Validate(cfg, testLinks(), nil)
 		if !res.OK() {
 			t.Fatalf("this should warn, not fail: %v", errorPaths(res))
 		}
@@ -341,7 +342,7 @@ func TestValidateHijack(t *testing.T) {
 	t.Run("v4 only warns about the v6 gap", func(t *testing.T) {
 		cfg := validConfig()
 		cfg.Hijack = Hijack{Enabled: true, Interfaces: []string{"lan0"}, BlockDoT: true}
-		res := Validate(cfg, testLinks())
+		res := Validate(cfg, testLinks(), nil)
 		if !hasProblem(res.Warnings, "listen") {
 			t.Error("no warning that IPv6 queries bypass the redirect")
 		}
@@ -360,7 +361,7 @@ func TestValidateExtraConf(t *testing.T) {
 	} {
 		cfg := validConfig()
 		cfg.ExtraConf = denied
-		res := Validate(cfg, testLinks())
+		res := Validate(cfg, testLinks(), nil)
 		if len(res.Errors) == 0 {
 			t.Errorf("%q was accepted in the escape hatch", denied)
 		}
@@ -370,7 +371,7 @@ func TestValidateExtraConf(t *testing.T) {
 	// whole promise of the hatch.
 	cfg := validConfig()
 	cfg.ExtraConf = "# a comment\nserver:\n  msg-cache-size: 8m\n"
-	if res := Validate(cfg, testLinks()); !res.OK() {
+	if res := Validate(cfg, testLinks(), nil); !res.OK() {
 		t.Errorf("a legitimate escape-hatch setting was rejected: %v", errorPaths(res))
 	}
 }
@@ -420,7 +421,7 @@ func TestValidateLocalDomain(t *testing.T) {
 			c := validConfig()
 			c.LocalDomain = tt.domain
 			c.Normalize()
-			res := Validate(c, testLinks())
+			res := Validate(c, testLinks(), nil)
 
 			if got := hasProblem(res.Errors, "local_domain"); got != tt.wantErr {
 				t.Errorf("error = %v, want %v (%v)", got, tt.wantErr, res.Errors)
@@ -468,7 +469,7 @@ func TestValidateHosts(t *testing.T) {
 			// case before the rule that catches it ever runs.
 			c := validConfig()
 			c.Hosts = tt.hosts
-			res := Validate(c, testLinks())
+			res := Validate(c, testLinks(), nil)
 
 			if got := hasProblem(res.Errors, "hosts["); got != tt.want {
 				t.Errorf("error = %v, want %v (%v)", got, tt.want, res.Errors)
@@ -482,7 +483,7 @@ func TestValidateHosts(t *testing.T) {
 // refuse.
 func TestValidateWarnsAboutAnAddressOffTheNetworkItServes(t *testing.T) {
 	c := hostConfig(Host{Name: "nas", Addrs: []netip.Addr{netip.MustParseAddr("10.9.9.9")}})
-	res := Validate(c, testLinks())
+	res := Validate(c, testLinks(), nil)
 
 	if !res.OK() {
 		t.Errorf("an off-LAN address was refused: %v", errorPaths(res))
@@ -497,12 +498,120 @@ func TestValidateAcceptsHostsOnEveryServedFamily(t *testing.T) {
 		netip.MustParseAddr("192.168.1.10"),
 		netip.MustParseAddr("fd00::10"),
 	}})
-	res := Validate(c, testLinks())
+	res := Validate(c, testLinks(), nil)
 
 	if !res.OK() {
 		t.Fatalf("rejected: %v", errorPaths(res))
 	}
 	if hasProblem(res.Warnings, "hosts[") {
 		t.Errorf("warned about addresses on the served networks: %v", res.Warnings)
+	}
+}
+
+// staticReservations is a ReservationView backed by a slice, for tests.
+type staticReservations []Reservation
+
+func (s staticReservations) Reservations() ([]Reservation, error) { return s, nil }
+
+// failingReservations stands for a dhcp config that cannot be read.
+type failingReservations struct{}
+
+func (failingReservations) Reservations() ([]Reservation, error) {
+	return nil, errors.New("cannot read the configuration document")
+}
+
+// The failure this cross-check exists for: the reservation was renumbered, DHCP
+// moved the device, and the name goes on answering where it used to be.
+func TestValidateWarnsWhenANameAndItsReservationDisagree(t *testing.T) {
+	c := hostConfig(Host{Name: "sony-tv", Addrs: []netip.Addr{netip.MustParseAddr("192.168.1.50")}})
+	view := staticReservations{
+		{MAC: "aa:bb:cc:dd:ee:ff", IP: netip.MustParseAddr("192.168.1.51"), Hostname: "sony-tv"},
+	}
+
+	res := Validate(c, testLinks(), view)
+
+	// A warning and not an error, deliberately: both values were typed on
+	// purpose, and refusing would let a dhcp edit make the dns config
+	// unappliable — the coupling this design exists to avoid.
+	if !res.OK() {
+		t.Errorf("a disagreement was refused rather than reported: %v", errorPaths(res))
+	}
+	if !hasProblem(res.Warnings, "hosts[0].addresses") {
+		t.Fatalf("no warning: %v", res.Warnings)
+	}
+	// The message has to carry both addresses, or it sends the operator hunting
+	// through two modules to find out which one moved.
+	msg := res.Warnings[len(res.Warnings)-1].Message
+	for _, want := range []string{"192.168.1.50", "192.168.1.51", "aa:bb:cc:dd:ee:ff"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("the warning does not mention %q: %s", want, msg)
+		}
+	}
+}
+
+func TestValidateAcceptsANameThatMatchesItsReservation(t *testing.T) {
+	tests := []struct {
+		name  string
+		hosts []Host
+		view  staticReservations
+	}{
+		{
+			name:  "the same address",
+			hosts: []Host{{Name: "sony-tv", Addrs: []netip.Addr{netip.MustParseAddr("192.168.1.50")}}},
+			view:  staticReservations{{MAC: "aa:bb:cc:dd:ee:ff", IP: netip.MustParseAddr("192.168.1.50"), Hostname: "sony-tv"}},
+		},
+		{
+			// One name, both families. The reservation only knows about the v4
+			// one, and that is a match rather than a disagreement.
+			name: "among several addresses",
+			hosts: []Host{{Name: "nas", Addrs: []netip.Addr{
+				netip.MustParseAddr("192.168.1.10"), netip.MustParseAddr("fd00::10")}}},
+			view: staticReservations{{MAC: "aa:bb:cc:dd:ee:01", IP: netip.MustParseAddr("192.168.1.10"), Hostname: "nas"}},
+		},
+		{
+			// Written in full on the dhcp side. Both spellings are the same
+			// name, or the check would fire on a config that is correct.
+			name:  "a reservation hostname written in full",
+			hosts: []Host{{Name: "nas", Addrs: []netip.Addr{netip.MustParseAddr("192.168.1.10")}}},
+			view:  staticReservations{{MAC: "aa:bb:cc:dd:ee:01", IP: netip.MustParseAddr("192.168.1.10"), Hostname: "NAS.home.arpa."}},
+		},
+		{
+			// Most reservations have no name at all, and they must match
+			// nothing rather than everything.
+			name:  "a nameless reservation at a different address",
+			hosts: []Host{{Name: "sony-tv", Addrs: []netip.Addr{netip.MustParseAddr("192.168.1.50")}}},
+			view:  staticReservations{{MAC: "aa:bb:cc:dd:ee:02", IP: netip.MustParseAddr("192.168.1.99")}},
+		},
+		{
+			name:  "a reservation for some other device",
+			hosts: []Host{{Name: "sony-tv", Addrs: []netip.Addr{netip.MustParseAddr("192.168.1.50")}}},
+			view:  staticReservations{{MAC: "aa:bb:cc:dd:ee:03", IP: netip.MustParseAddr("192.168.1.99"), Hostname: "printer"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := Validate(hostConfig(tt.hosts...), testLinks(), tt.view)
+			if hasProblem(res.Warnings, "hosts[0].addresses") {
+				t.Errorf("warned about a config that agrees: %v", res.Warnings)
+			}
+		})
+	}
+}
+
+// A dhcp module that cannot be read costs the cross-check and nothing else. It
+// must not fail the dns config, which would let one module's broken document
+// block edits to another's.
+func TestValidateSurvivesAnUnreadableDhcpConfig(t *testing.T) {
+	c := hostConfig(Host{Name: "sony-tv", Addrs: []netip.Addr{netip.MustParseAddr("192.168.1.50")}})
+
+	for _, view := range []ReservationView{nil, failingReservations{}} {
+		res := Validate(c, testLinks(), view)
+		if !res.OK() {
+			t.Errorf("%T: refused: %v", view, errorPaths(res))
+		}
+		if hasProblem(res.Warnings, "hosts[0].addresses") {
+			t.Errorf("%T: warned with nothing to compare against: %v", view, res.Warnings)
+		}
 	}
 }

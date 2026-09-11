@@ -48,6 +48,13 @@ const (
 	statusEndpoint  = core.APIPrefix + "/" + ModuleName + "/status"
 	queriesEndpoint = core.APIPrefix + "/" + ModuleName + "/queries"
 	namesEndpoint   = core.APIPrefix + "/" + ModuleName + "/names"
+
+	// The one endpoint here that belongs to another module. Reading dhcp's
+	// stored intent is what lets `add host` fill in an address the operator has
+	// already typed once; see addHostCommand for why the join lives in the
+	// client. Spelled literally rather than imported from internal/dhcp, which
+	// would make this module depend on that one for a string.
+	dhcpConfigEndpoint = core.APIPrefix + "/dhcp/config"
 )
 
 // ctxOf is the request context, falling back to Background for a command
@@ -403,21 +410,39 @@ func rmCommand() *cobra.Command {
 
 // addHostCommand names one device.
 //
-// The address is an argument rather than a flag because it is not optional and
-// never will be: a host with no address is a name that exists and answers
-// nothing, which validate refuses. Repeating it gives one name both families.
+// The address is an argument rather than a flag because it is usually not
+// optional: a host with no address is a name that exists and answers nothing,
+// which validate refuses. Repeating it gives one name both families.
+//
+// It may be left out for a device that already has a DHCP reservation with this
+// hostname, in which case the address comes from there. That join happens here,
+// in the client, and deliberately not in olrd: a reservation and a local name
+// are two modules' config, there is no cross-module transaction (§5.3.1), and
+// the CLI is an API client that can perfectly well read one and write the other
+// (§6.1). What it must not become is olrd *storing* one from the other — see
+// internal/dns/dhcp.go for why that direction stays closed.
 func addHostCommand() *cobra.Command {
 	c := &cobra.Command{
-		Use:   "host <name> <address>...",
+		Use:   "host <name> [<address>]...",
 		Short: "Add or replace a local name",
 		Long: "Add or replace a name this resolver answers itself.\n\n" +
 			"The name is relative to the local domain: `add host sony-tv 192.168.1.50`\n" +
 			"publishes sony-tv.home.arpa. Writing it out in full works too and means the\n" +
 			"same entry. Give the address twice to publish both an IPv4 and an IPv6 one.\n\n" +
+			"Leave the address out for a device that already has a DHCP reservation under\n" +
+			"this name, and it is taken from there — `olr dhcp add reservation` once, then\n" +
+			"`olr dns add host sony-tv`.\n\n" +
 			"This replaces an existing entry outright rather than adding to it, so the\n" +
 			"addresses given are the addresses the name will have.",
-		Args: cobra.MinimumNArgs(2),
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				addr, err := reservedAddress(c, args[0])
+				if err != nil {
+					return err
+				}
+				args = append(args, addr)
+			}
 			return mutate(c, func(cfg *Config) error { return addHost(cfg, args) })
 		},
 	}
@@ -438,6 +463,36 @@ func rmHostCommand() *cobra.Command {
 	}
 	c.ValidArgsFunction = cli.CompleteArgs(hostNames)
 	return c
+}
+
+// reservedAddress finds the address DHCP already hands the device with this
+// hostname.
+//
+// Matched on the name the operator typed in both places. The error names the
+// alternative rather than just refusing, because "no address given" with no
+// further help is a dead end for somebody who does not yet know the two
+// commands are related.
+func reservedAddress(c *cobra.Command, name string) (string, error) {
+	var dhcpCfg struct {
+		Reservations []struct {
+			MAC      string `json:"mac"`
+			IP       string `json:"ip"`
+			Hostname string `json:"hostname"`
+		} `json:"reservations"`
+	}
+	if err := cli.ClientFor(c).Get(ctxOf(c), dhcpConfigEndpoint, &dhcpCfg); err != nil {
+		return "", fmt.Errorf("no address given, and the DHCP configuration could not be read to find one: %w", err)
+	}
+
+	want := strings.ToLower(strings.Trim(strings.TrimSpace(name), "."))
+	for _, r := range dhcpCfg.Reservations {
+		if strings.ToLower(r.Hostname) == want && r.IP != "" {
+			return r.IP, nil
+		}
+	}
+	return "", fmt.Errorf(
+		"no address given, and no DHCP reservation is named %q to take one from. "+
+			"Give the address, or reserve one first with `olr dhcp add reservation`", name)
 }
 
 // addHost is the edit itself, lifted out of RunE so it can be tested without a

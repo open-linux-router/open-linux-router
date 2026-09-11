@@ -145,7 +145,7 @@ func run(args []string) error {
 	if err != nil {
 		return fmt.Errorf("initialising dhcp: %w", err)
 	}
-	dnsApplier, err := dns.NewApplierAt(store, dnsLinks, opts.root)
+	dnsApplier, err := dns.NewApplierAt(store, dnsLinks, dnsReservations{applier: applier}, opts.root)
 	if err != nil {
 		return fmt.Errorf("initialising dns: %w", err)
 	}

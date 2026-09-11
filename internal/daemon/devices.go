@@ -7,6 +7,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/devices"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
+	"github.com/open-linux-router/open-linux-router/internal/dns"
 )
 
 // Adapters joining the dhcp module to the devices module.
@@ -140,6 +141,39 @@ func (d dhcpFixedAddresses) FixedAddresses(_ context.Context) (map[string]string
 		if r.IP.IsValid() {
 			out[mac] = r.IP.String()
 		}
+	}
+	return out, nil
+}
+
+// dnsReservations reads reservations as the dns module's cross-check.
+//
+// The same one-way arrow and the same per-request read as dhcpFixedAddresses
+// above, joining the other pair design.md §4.1 names: `dhcp` publishes, `dns`
+// subscribes. What dns does with it is narrower than what devices does —
+// internal/dns/dhcp.go is emphatic that this feeds validation and never the
+// renderer, so that a reservation edit cannot leave the resolver looking
+// drifted.
+type dnsReservations struct {
+	applier dhcp.Applier
+}
+
+func (d dnsReservations) Reservations() ([]dns.Reservation, error) {
+	cfg, err := d.applier.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]dns.Reservation, 0, len(cfg.Reservations))
+	for _, r := range cfg.Reservations {
+		mac, err := core.NormalizeMAC(r.MAC)
+		if err != nil {
+			// A hand-edited file, since validation rejects these on the way in.
+			// Skipped rather than failing the list, for the reason
+			// dhcpFixedAddresses gives: the complaint belongs on dhcp's own
+			// surface, not attached to somebody else's config.
+			continue
+		}
+		out = append(out, dns.Reservation{MAC: mac, IP: r.IP, Hostname: r.Hostname})
 	}
 	return out, nil
 }

@@ -225,8 +225,8 @@ func (p Plan) nothingToDo() bool { return len(p.Changes) == 0 && len(p.Services)
 // It validates first and returns the error rather than planning against a config
 // that cannot be applied — the whole value of validation is that it happens
 // before anything is written (design.md §5.3.1).
-func BuildPlan(b Backend, desired Config, links LinkView, obs Observed, now time.Time) (Plan, error) {
-	result := Validate(desired, links)
+func BuildPlan(b Backend, desired Config, links LinkView, reservations ReservationView, obs Observed, now time.Time) (Plan, error) {
+	result := Validate(desired, links, reservations)
 	if err := result.Err(); err != nil {
 		return Plan{Validation: result}, err
 	}

@@ -29,6 +29,11 @@ type Applier struct {
 	// Links is the window onto the link module.
 	Links LinkView
 
+	// Reservations is the window onto the dhcp module's fixed addresses. Nil is
+	// legitimate and costs one validation warning — see dhcp.go, which is also
+	// where the reason it never reaches the renderer is written down.
+	Reservations ReservationView
+
 	// Resolver supervises unbound; Relay supervises our own olr-dnsd.
 	//
 	// Two, because this module drives two daemons and they fail differently. A
@@ -107,7 +112,7 @@ func (a Applier) service(unit string) (Service, error) {
 // An empty root is the real system. See RootedPaths for why a non-empty one
 // exists — it is the development escape hatch, not a supported deployment
 // layout. The store is passed in already rooted, because core owns that path.
-func NewApplierAt(store *core.Store, links LinkView, root string) (Applier, error) {
+func NewApplierAt(store *core.Store, links LinkView, reservations ReservationView, root string) (Applier, error) {
 	paths := RootedPaths(root)
 	backend := NewBackend(paths).WithSource(store.Path())
 
@@ -121,13 +126,14 @@ func NewApplierAt(store *core.Store, links LinkView, root string) (Applier, erro
 	}
 
 	return Applier{
-		Backend:  backend,
-		Links:    links,
-		Resolver: resolver,
-		Relay:    relay,
-		Paths:    paths,
-		Store:    store,
-		Observer: NewObserver(paths.ObserveSocket),
+		Backend:      backend,
+		Links:        links,
+		Reservations: reservations,
+		Resolver:     resolver,
+		Relay:        relay,
+		Paths:        paths,
+		Store:        store,
+		Observer:     NewObserver(paths.ObserveSocket),
 	}, nil
 }
 
@@ -238,7 +244,7 @@ func (a Applier) Plan(ctx context.Context, desired Config) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	return BuildPlan(a.Backend, desired, a.Links, obs, time.Now())
+	return BuildPlan(a.Backend, desired, a.Links, a.Reservations, obs, time.Now())
 }
 
 // Drift reports what has changed underneath stored intent.
@@ -262,7 +268,7 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	plan, err := BuildPlan(a.Backend, desired, a.Links, obs, time.Now())
+	plan, err := BuildPlan(a.Backend, desired, a.Links, a.Reservations, obs, time.Now())
 	if err != nil {
 		return ApplyResult{Plan: plan}, err
 	}
