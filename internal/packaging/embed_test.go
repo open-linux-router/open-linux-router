@@ -41,7 +41,7 @@ func TestTheDebAndTheBinaryShipTheSameFiles(t *testing.T) {
 		}
 	}
 
-	units, err := Units()
+	units, err := Units(PackagedOLR)
 	if err != nil {
 		t.Fatalf("Units: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestTheDebAndTheBinaryShipTheSameFiles(t *testing.T) {
 // olrd.service is what `olr enable` enables, so Units must lead with it — the
 // backends are enabled by their own modules, not here (design.md §3.4).
 func TestUnitsLeadWithTheControlPlane(t *testing.T) {
-	units, err := Units()
+	units, err := Units(PackagedOLR)
 	if err != nil {
 		t.Fatalf("Units: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestUnitsLeadWithTheControlPlane(t *testing.T) {
 }
 
 func TestEveryEmbeddedUnitHasContent(t *testing.T) {
-	units, err := Units()
+	units, err := Units(PackagedOLR)
 	if err != nil {
 		t.Fatalf("Units: %v", err)
 	}

@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"strings"
 )
 
 //go:embed systemd/*.service olrd.env
@@ -56,7 +57,10 @@ type Unit struct {
 // are enabled by their own modules when their configuration says the service
 // is on (design.md §3.4), because enabling them here would put a DHCP server
 // on the network and take over :53 on a box where nobody asked for either.
-func Units() ([]Unit, error) {
+// olrPath is where this box's olr binary actually is. The shipped units name
+// PackagedOLR, which is true for the .deb and false for every other way of
+// installing, so the ExecStart lines naming it are rewritten on the way out.
+func Units(olrPath string) ([]Unit, error) {
 	entries, err := fs.ReadDir(files, "systemd")
 	if err != nil {
 		return nil, fmt.Errorf("reading embedded units: %w", err)
@@ -68,7 +72,7 @@ func Units() ([]Unit, error) {
 		if err != nil {
 			return nil, fmt.Errorf("reading embedded unit %s: %w", e.Name(), err)
 		}
-		out = append(out, Unit{Name: e.Name(), Data: data})
+		out = append(out, Unit{Name: e.Name(), Data: retargetOLR(data, olrPath)})
 	}
 
 	sort.Slice(out, func(i, j int) bool {
@@ -83,6 +87,57 @@ func Units() ([]Unit, error) {
 // PrimaryUnit is olr's own service — the control plane, and the one unit
 // `olr enable` enables.
 const PrimaryUnit = "olrd.service"
+
+// PackagedOLR is the path the shipped unit files name, and where the .deb puts
+// the binary. nfpm.yaml installs to exactly this path; embed_test.go asserts
+// the units agree, so this constant cannot drift away from either.
+const PackagedOLR = "/usr/bin/olr"
+
+// retargetOLR rewrites the Exec lines that name the olr binary.
+//
+// The bug: two units — olrd.service and olr-dnsd.service — hardcode
+// PackagedOLR, while `olr enable` installs the binary to /usr/local/bin,
+// because /usr/bin belongs to dpkg and writing there corrupts the next
+// `apt upgrade`. So every tarball install wrote units pointing at a file that
+// was never created, systemd failed with 203/EXEC, and olrd sat in an
+// auto-restart loop. The .deb path hid it completely: dpkg puts the binary
+// exactly where the unit says, so the two only disagree on the install path
+// that has no package manager to keep them in step.
+//
+// Rewritten into the unit rather than overridden by a drop-in, which is the
+// opposite of what DropIns does for dnsmasq and unbound — and deliberately so.
+// Those correct *another package's* unit, which apt owns and will overwrite, so
+// the override has to survive outside it. This corrects our own unit, and a
+// drop-in here would be actively harmful: it would pin /usr/local/bin/olr
+// permanently, so a box that later installed the .deb would upgrade the binary
+// at /usr/bin/olr while systemd kept executing the stale one beside it, with
+// nothing on the box saying why the new version never took effect. Rendering
+// the path in is self-healing instead — dpkg replaces the unit and the binary
+// together, and a later `olr enable` re-renders whatever is true then.
+func retargetOLR(unit []byte, olrPath string) []byte {
+	if olrPath == "" || olrPath == PackagedOLR {
+		return unit
+	}
+
+	lines := strings.Split(string(unit), "\n")
+	for i, line := range lines {
+		key, value, ok := strings.Cut(line, "=")
+		// Only Exec* directives, and only when the binary is the first word:
+		// a blind string replace would also rewrite the path where it appears
+		// inside a comment, and comments here explain the packaged layout.
+		if !ok || !strings.HasPrefix(key, "Exec") {
+			continue
+		}
+		// systemd allows `+`, `-`, `!` and `:` prefixes on an Exec value.
+		prefix := value[:len(value)-len(strings.TrimLeft(value, "+-!:@"))]
+		rest := value[len(prefix):]
+		if rest != PackagedOLR && !strings.HasPrefix(rest, PackagedOLR+" ") {
+			continue
+		}
+		lines[i] = key + "=" + prefix + olrPath + rest[len(PackagedOLR):]
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
 
 // Env returns the default contents of olrd.env.
 //

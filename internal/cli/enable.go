@@ -49,10 +49,12 @@ func enableCommand() *cobra.Command {
 		Short:   "Run olr on this box, now and after every reboot",
 		GroupID: GroupService,
 		Long: "Set this machine up to run olr, and start it.\n\n" +
-			"Writes the systemd units to " + packaging.UnitDir + ", creates\n" +
-			packaging.EnvPath + " if it does not exist, corrects the units'\n" +
-			"paths when dnsmasq or unbound live somewhere other than Debian puts\n" +
-			"them, and enables the service so it survives a reboot.\n\n" +
+			"Copies this binary to " + InstallDir + " if it is not already on a\n" +
+			"system path, writes the systemd units to " + packaging.UnitDir + " naming\n" +
+			"wherever the binary ended up, creates " + packaging.EnvPath + " if it\n" +
+			"does not exist, corrects the units' paths when dnsmasq or unbound live\n" +
+			"somewhere other than Debian puts them, and enables the service so it\n" +
+			"survives a reboot.\n\n" +
 			"Only the control plane is enabled. No DHCP server appears and no\n" +
 			"resolver takes over port 53 — each module enables its own backend\n" +
 			"when you configure it.\n\n" +
@@ -232,7 +234,11 @@ func (w write) apply() (bool, error) {
 func enablePlan(tools packaging.Tools) ([]write, error) {
 	var plan []write
 
-	self, err := selfInstall()
+	// Where the binary will be when systemd looks for it, decided before the
+	// units are rendered rather than after. These two used to be settled
+	// independently — selfInstall chose /usr/local/bin and the units said
+	// /usr/bin — and nothing in between compared them.
+	olrPath, self, err := selfInstall()
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +246,7 @@ func enablePlan(tools packaging.Tools) ([]write, error) {
 		plan = append(plan, *self)
 	}
 
-	units, err := packaging.Units()
+	units, err := packaging.Units(olrPath)
 	if err != nil {
 		return nil, err
 	}
@@ -275,8 +281,13 @@ func enablePlan(tools packaging.Tools) ([]write, error) {
 	return plan, nil
 }
 
-// selfInstall copies the running binary onto a system path, unless it is
-// already running from one.
+// selfInstall reports where the binary will live, and the copy that puts it
+// there when it is not there already.
+//
+// The path is returned, not just implied, because the units have to name it.
+// Returning only the write was the whole bug: the caller could see *that* a
+// copy would happen without learning *where*, so the units kept their packaged
+// guess and systemd went looking for a file nothing had written.
 //
 // The units name an absolute path, so a binary left in a download directory
 // would give systemd an ExecStart that stops working the moment somebody
@@ -284,29 +295,31 @@ func enablePlan(tools packaging.Tools) ([]write, error) {
 // anywhere else: it renames into place, and renaming over a *running*
 // executable works where writing to it fails with ETXTBSY. That is what lets
 // `olr enable` double as the upgrade path.
-func selfInstall() (*write, error) {
+func selfInstall() (string, *write, error) {
 	exe, err := os.Executable()
 	if err != nil {
-		return nil, fmt.Errorf("finding this binary: %w", err)
+		return "", nil, fmt.Errorf("finding this binary: %w", err)
 	}
 	exe, err = filepath.EvalSymlinks(exe)
 	if err != nil {
-		return nil, fmt.Errorf("resolving %s: %w", exe, err)
+		return "", nil, fmt.Errorf("resolving %s: %w", exe, err)
 	}
 
 	dir := filepath.Dir(exe)
 	// Already installed: /usr/local/bin by this command, or /usr/bin by the
-	// .deb, whose copy is dpkg's to manage and not ours to overwrite.
+	// .deb, whose copy is dpkg's to manage and not ours to overwrite. Running
+	// from one of these means the path systemd should use is this one.
 	if dir == InstallDir || dir == "/usr/bin" || dir == "/bin" || dir == "/usr/sbin" {
-		return nil, nil
+		return exe, nil, nil
 	}
 
 	data, err := os.ReadFile(exe)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", exe, err)
+		return "", nil, fmt.Errorf("reading %s: %w", exe, err)
 	}
-	return &write{
-		path: filepath.Join(InstallDir, "olr"),
+	installed := filepath.Join(InstallDir, "olr")
+	return installed, &write{
+		path: installed,
 		data: data,
 		mode: 0o755,
 		note: "  (copied from " + exe + ")",
