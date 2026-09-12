@@ -397,12 +397,20 @@ conversation attached — see §9.
 > it.
 
 This is `design.md` §5.5's lockout guard in a new costume, and worse than the
-original because the breaking configuration is one the operator typed. First
-boot is already IP + port (`olr listen 0.0.0.0:8080` plus a token, per
-`docs/install.md`), so nothing needs to change — what needs to change is that
-listener's *status*, from "a step during setup" to **a permanent recovery
-path**. Written down here because the temptation to retire it once a nice domain
-exists is obvious, and will recur.
+original because the breaking configuration is one the operator typed. What
+needs to change is that listener's *status*, from "a step during setup" to **a
+permanent recovery path**. Written down here because the temptation to retire it
+once a nice domain exists is obvious, and will recur.
+
+This paragraph used to describe first boot as "`olr listen 0.0.0.0:8080` plus a
+token, per `docs/install.md`", and concluded that nothing needed to change.
+Neither half survived a real install. The token went in v0.1.6, because the page
+that asks for it could not load while it was enforced; and `olr listen` stops
+being a step at all under `docs/system.md` — olrd listens on `:8080` from the
+moment it is installed. The recovery-path argument gets *stronger* for it: the
+listener is no longer something the operator might or might not have switched on
+before ingress broke, it is simply always there, which is what a recovery path
+has to be.
 
 The WebUI **may** be published through Caddy — `router.<domain>` →
 `127.0.0.1:8080` — as an ordinary entry with no special case in core. That is a

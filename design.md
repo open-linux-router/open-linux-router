@@ -769,16 +769,44 @@ Everything else applies on the first.
 The unix socket is the local admin path and its access control is the socket's
 mode and group — filesystem permissions *are* its authentication, and a token
 would add nothing a local caller has not already proven. TCP has no such
-property and is always authenticated. Wrapping both in one scheme would break
-`olr` over the socket for no gain.
+property. Wrapping both in one scheme would break `olr` over the socket for no
+gain.
 
-Until `auth` exists (§10 open decision 1) the TCP scheme is a **single bearer
-token** in `/etc/open-linux-router/api-token`, generated on first start. This is
-a floor, not a design: it is real authentication and one file, and it
-deliberately does not imitate a session, a role, or an identity that `auth`
-would then have to contradict. An unauthenticated listener is available only for
-development and refuses to bind anything but loopback — an open admin API on a
-router's LAN address is not a convenience.
+**The TCP rule is `docs/system.md` §3, and it is about capability rather than
+credentials:**
+
+> An unclaimed box cannot be configured over the network.
+
+Until an administrator has recorded how they want to reach this box, TCP serves
+the SPA and the single route that records that choice, and answers `409` for
+every other API route. Afterwards it requires what they chose — a password, or
+deliberately none.
+
+This paragraph used to say something else, and the old text is worth keeping
+rather than overwriting, because its instinct is still load-bearing. It said the
+TCP scheme was a **single bearer token** in `/etc/open-linux-router/api-token`,
+that an unauthenticated listener existed only for development, and that it
+refused to bind anything but loopback, because "an open admin API on a router's
+LAN address is not a convenience".
+
+The instinct was right and the mechanism was wrong, in a way only a real box
+showed. The token could not be *entered*: `BearerAuth` wrapped the whole mux
+including `/`, so a browser got a JSON authentication error and never loaded the
+page that asks for the token. The documented flow was impossible from a browser
+for as long as it was documented. Meanwhile the loopback restriction meant the
+only honest options on a LAN were a credential nobody could supply, or nothing.
+
+What replaces it keeps the instinct exactly — an open admin API on a LAN is
+still not a convenience — by making the open state **useless** rather than
+making it loopback-only. A box nobody has claimed cannot be configured over TCP
+at all, so the interval between `apt install` and a human decision is not an
+exposure. `docs/system.md` carries the full argument, the source-range rule for
+who may claim, and what it deliberately does not defend against.
+
+`auth` therefore lands in `system` as its `access` slice (§10 #1), and is
+deliberately not a user model: one box, one optional password, no accounts and
+no roles, shaped so that a later identity model replaces it rather than
+inheriting from it.
 
 **Observed resources are not schema-published yet, and that is a gap.** Config
 structs are reflected; the read and plan shapes are not, so a typed client has
@@ -862,7 +890,22 @@ human that it would. The read and plan tools are the half that works today.
 ## 7. Adoption and reversibility
 
 **Installing the package must never break your SSH.** Install alone changes
-nothing.
+nothing — with one clause, added once a first install was watched rather than
+imagined: **install serves olr's own UI on olr's own port, and changes nothing
+else.** No interface, no other daemon, no shared port, no route, no resolver, no
+DHCP server.
+
+The clause is not a weakening. Opening `:8080` was never able to disconnect an
+SSH session, and the reason to require a command for it turned out to be an
+over-application of this section to the one surface it does not govern: the
+management interface is not shared state the box was already using, so "do not
+touch what is already running" has nothing to say about it. Every comparable
+management UI — Cockpit, Proxmox, Home Assistant, Grafana — listens on install,
+and none of them is thereby a bad citizen.
+
+What makes it safe rather than merely convenient is `docs/system.md` §3: an
+unclaimed box cannot be configured over the network, so serving the page costs
+nothing that could be taken advantage of before its owner arrives.
 
 - `olr adopt <iface>` — take ownership from NetworkManager/systemd-networkd,
   recording prior state
@@ -1042,6 +1085,11 @@ it promises that installing changes nothing.
    `firewall` (zones/rules/NAT/forwards), `devices` (inventory, blocking,
    parental), `auth` (who may log into olr, folded into `system`).
    Confirm this matches the intent.
+
+   **The `auth` third is answered: `docs/system.md`.** It lands in `system` as
+   the `access` slice, exactly as assumed here, and is scoped to one box with
+   one optional password — no accounts, no roles. The rest of the split is
+   still an assumption awaiting confirmation.
 2. **Immediate apply** (§5.1) — assumed yes; confirm.
 3. **Single box or multi-node?** v1 is single box either way. But if managing
    APs/switches is the destination, the schema needs a node dimension now
