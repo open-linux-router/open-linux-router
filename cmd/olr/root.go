@@ -5,6 +5,7 @@ import (
 
 	"github.com/open-linux-router/open-linux-router/internal/cli"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
+	"github.com/open-linux-router/open-linux-router/internal/dial"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
@@ -30,6 +31,7 @@ func newRoot() *cobra.Command {
 	// list rather than a registry (design.md §3.2).
 	root.AddCommand(
 		link.Command(),
+		dial.Command(),
 		dhcp.Command(),
 		dns.Command(),
 		gateway.Command(),

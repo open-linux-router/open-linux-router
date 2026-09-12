@@ -34,6 +34,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/devices"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
+	"github.com/open-linux-router/open-linux-router/internal/dial"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
@@ -121,6 +122,11 @@ func run(args []string) error {
 	// the order the document is written in.
 	// `link` comes first because everything else reads it: an interface has to
 	// have been handed over before a pool, a resolver or an exit may name it.
+	// `dial` follows it and precedes everything else, because it is the other
+	// foundation module: it owns the uplink, and an uplink is the one thing on a
+	// router that exists before any service does. That it currently contains only
+	// dynamic DNS is a fact about how much of it is built, not about where it
+	// sits (internal/dial's package comment).
 	// `dhcp` then `dns` is §3.2's own literal list, and it is also the order
 	// they matter in on a box being brought up: addresses first, then names.
 	// `devices` follows both rather than leading them. Its identity half is a
@@ -138,19 +144,21 @@ func run(args []string) error {
 	// (docs/ingress.md §2). It reads `dns` for the suffix it publishes under and
 	// `devices` for what to point at, so it cannot come up before either.
 	store := core.NewStore(core.RootedConfigPath(opts.root),
-		link.ModuleName, dhcp.ModuleName, dns.ModuleName, devices.ModuleName,
-		gateway.ModuleName, firewall.ModuleName, ingress.ModuleName)
+		link.ModuleName, dial.ModuleName, dhcp.ModuleName, dns.ModuleName,
+		devices.ModuleName, gateway.ModuleName, firewall.ModuleName,
+		ingress.ModuleName)
 	checkStore(store, logger)
 
-	// The three consumers' windows onto link, all backed by one Facts: the
-	// kernel for addresses and state, the document for adoption. Reading both
-	// per request is what keeps §4.5 true — there is no cached copy of either
-	// to go stale while olrd is running.
+	// The consumers' windows onto link, all backed by one Facts: the kernel for
+	// addresses and state, the document for adoption. Reading both per request
+	// is what keeps §4.5 true — there is no cached copy of either to go stale
+	// while olrd is running.
 	facts := link.Facts{Source: source, Store: store}
 	links := dhcpLinkView{facts: facts}
 	dnsLinks := dnsLinkView{facts: facts}
 	gatewayLinks := gatewayLinkView{facts: facts}
 	firewallLinks := firewallLinkView{facts: facts}
+	dialLinks := dialLinkView{facts: facts}
 
 	applier, err := dhcp.NewApplierAt(store, links, opts.root)
 	if err != nil {
@@ -177,6 +185,27 @@ func run(args []string) error {
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
 	}.Routes(), link.Config{})
+
+	// `dial` is mounted second, matching the store's order. Like `link` it drives
+	// no unit and renders no file, and like `gateway` it has a background loop
+	// inside olrd — the publisher, which re-reads each uplink address on a timer
+	// and calls a DNS provider only when one moved (docs/ddns.md §6).
+	//
+	// The loop is reached through two function fields rather than held by the
+	// module, exactly as the prober is below: it belongs to the process, so an
+	// Applier that owned one could not be built by a test.
+	publisher := dial.NewPublisher()
+	publisher.Log = logger
+	publisher.Links = dialLinks
+	dialApplier := dial.Applier{Store: store, Links: dialLinks}
+
+	srv.Mount(dial.ModuleName, dial.HTTP{
+		Applier: dialApplier,
+		Lock:    srv.ApplyLock(),
+		Events:  srv.Events(),
+		Watch:   func(cfg dial.Config) { publisher.Watch(context.Background(), cfg) },
+		States:  publisher.States,
+	}.Routes(), dial.Config{})
 
 	srv.Mount(dhcp.ModuleName, dhcp.HTTP{
 		Applier: applier,
@@ -322,6 +351,7 @@ func run(args []string) error {
 	// fixed.
 	startGateway(ctx, gatewayApplier, prober, logger)
 	startFirewall(ctx, firewallApplier, logger)
+	startDial(ctx, dialApplier, publisher, logger)
 
 	var listeners []net.Listener
 
@@ -508,6 +538,28 @@ func startFirewall(ctx context.Context, a firewall.Applier, logger *slog.Logger)
 	case !result.Plan.Empty():
 		logger.Info("port forwards applied", "changes", len(result.Plan.Changes))
 	}
+}
+
+// startDial hands the stored records to the publisher.
+//
+// Nothing is programmed here and nothing can fail: unlike gateway and firewall
+// there is no kernel state to restore, because this module's effect lives at a
+// third party rather than on the box. What starting does is begin checking, and
+// the first check of every record publishes — the address cache is in memory and
+// a restart empties it (docs/ddns.md §6), which is also how a record somebody
+// changed by hand at the provider gets repaired.
+func startDial(ctx context.Context, a dial.Applier, publisher *dial.Publisher, logger *slog.Logger) {
+	cfg, err := a.Load()
+	if err != nil {
+		logger.Error("dial configuration could not be read; no name will be kept current",
+			"error", err)
+		return
+	}
+	if cfg.Empty() {
+		return
+	}
+	publisher.Watch(ctx, cfg)
+	logger.Info("keeping names current", "records", len(cfg.Records))
 }
 
 // reapplyGateway re-programs the kernel after an exit changed health.

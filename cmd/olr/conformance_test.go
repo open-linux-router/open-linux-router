@@ -374,6 +374,7 @@ func TestHelpIsUnchanged(t *testing.T) {
 	for _, path := range [][]string{
 		{},
 		{"link"}, {"link", "show"}, {"adopt"}, {"release"},
+		{"dial"}, {"dial", "show"}, {"dial", "add"}, {"dial", "set"}, {"dial", "rm"},
 		{"dhcp"}, {"dhcp", "show"}, {"dhcp", "add"}, {"dhcp", "set"}, {"dhcp", "rm"},
 		{"dns"}, {"dns", "show"}, {"dns", "add"}, {"dns", "set"}, {"dns", "rm"},
 		{"gateway"}, {"gateway", "show"}, {"gateway", "add"}, {"gateway", "set"}, {"gateway", "rm"},

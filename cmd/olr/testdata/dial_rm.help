@@ -1,0 +1,17 @@
+Stop updating a name.
+
+The name is not removed from your DNS. It keeps resolving to whatever
+was last published and simply stops being refreshed, so it goes stale
+the next time your address changes. Delete it at your provider if you
+want it gone.
+
+Usage:
+  olr dial rm <name> [flags]
+
+Flags:
+  -h, --help   help for rm
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

@@ -8,6 +8,7 @@ Usage:
 
 Modules:
   dhcp        DHCP server (dnsmasq)
+  dial        Keep a public name pointing at this router
   dns         DNS resolver and policy (olr-dnsd + unbound)
   firewall    Let something on the internet reach one device here
   gateway     Exits and which networks use them

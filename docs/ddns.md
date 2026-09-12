@@ -1,9 +1,10 @@
 # `ddns` design — publishing a changing address
 
-Status: **not built.** This is the selection and the shape, written before the
-code so the expensive decisions are arguable while they are still cheap. Bare
-section references are to this document; references to `design.md` name it, and
-`ingress:` means `docs/ingress.md`.
+Status: **built**, as the first and so far only contents of `internal/dial`.
+This was written before the code so the expensive decisions were arguable while
+they were still cheap; §11 records what building it changed and what is still
+missing. Bare section references are to this document; references to `design.md`
+name it, and `ingress:` means `docs/ingress.md`.
 
 Three things were decided before this was written and the rest is mostly their
 consequences: the feature belongs to **`dial`**, the provider implementations
@@ -335,10 +336,75 @@ the code is vendored.
    default means the feature does not work out of the box. Neither is obviously
    right and the choice should be made deliberately rather than by whichever
    URL gets typed into the code first.
-4. **Does `dial` exist before this does?** If DDNS is wanted before `dial`
-   lands, the only honest options are to wait or to build the smallest piece of
-   `dial` that owns an uplink address — not to put it somewhere else and move it
-   later.
+4. ~~**Does `dial` exist before this does?**~~ **Closed — it does now.** The
+   second option was taken: `internal/dial` is the smallest piece of the module
+   that owns an uplink address, and it contains this feature and nothing else.
+   It invents no uplink object, because the reference topology (dns:§1) has no
+   WAN uplink at all and a `dial.uplink` field would be empty on the deployment
+   we lead with — the same refusal `link` makes about a primary key, for the
+   same reason. The cost is that the module's name runs ahead of its contents,
+   which is stated in its package comment rather than hidden.
+
+---
+
+## 11. What building it changed, and what is still missing
+
+### 11.1 Where the code differs from what is written above
+
+- **A record carries two credential fields, not one.** §5 says "the credential"
+  throughout, because Cloudflare's is one value. Alibaba Cloud and Tencent
+  Cloud — two of the four providers v1 ships — authenticate with a key *pair*,
+  so `Record` has `provider_key_id` beside `provider_token`. Nothing else in §5
+  changes: both halves are ordinary data in `dial`'s section, and the secret
+  half is redacted everywhere.
+- **The callback URL is redacted too.** It does not look like a credential and
+  for this provider it is one: DuckDNS, Dynu and most DynDNS v2 endpoints put
+  the token in the query string. It costs an operator the ability to read back
+  what they typed, which is what they already cannot do with a token.
+- **A name carries a `zone` field.** Every provider addresses a record as
+  zone-plus-the-labels-below-it. The split is derived with the public suffix
+  list, as ddns-go does; the field is the override for the zones that list
+  cannot know about. Getting it wrong produces "no such zone", which reads like
+  a credential problem and is not one.
+- **More than one record of the same name and type is refused.** Upstream
+  updates every match, which silently collapses a round-robin somebody else set
+  up. §8 says this is not a DNS control panel, and this is where that line
+  falls.
+
+### 11.2 Known gaps
+
+Stated here rather than left to be discovered, per the rule that we document
+what we do not cover instead of implying coverage we do not have.
+
+- **Not verified end to end.** Each provider is tested against an `httptest`
+  server asserting the exact request it builds — including both signature
+  recipes — and the schedule, the backoff and the CGNAT verdict are unit-tested
+  with an injected clock. The whole path has been exercised against a local
+  reflector and a local callback endpoint. **No real provider account has been
+  used**, so a wrong field name or a changed API at Cloudflare, Alibaba Cloud or
+  Tencent Cloud would show up first for whoever tries it.
+- **The reflector is bound by interface, not by exit.** §3.3 asks for the
+  question to be asked through the exit whose address is published.
+  `gateway.DialThrough` does exactly that with `SO_MARK`, and `dial` cannot call
+  it: `dial` is foundation, `gateway` is a service module, and design.md §4.1
+  forbids the arrow. v1 uses `SO_BINDTODEVICE`, which is what §3.3 specifies
+  anyway; per-exit binding waits for a fact subscription in the legal direction.
+- **The rotation check does not exist.** §5 and §9 #1 leave a `status` check for
+  two modules holding different tokens for one provider. It has a home now that
+  `dial` exists, and it is not built — so an operator who rotates a Cloudflare
+  token in `ingress` and not here still learns about it when DDNS breaks.
+- **Nothing offers the token `ingress` already has.** §5's "do not make somebody
+  type it twice" is unimplemented; the setup path presents an empty field.
+- **AAAA is not published**, by §9 #2 rather than by omission. The record type
+  is a constant, so nothing in the schema or the CLI offers a choice that the
+  validator would then refuse.
+- **No default reflector**, by §9 #3, which is still open. The field is required
+  and the error says why rather than leaving the absence looking like an
+  oversight.
+- **There is no `enable`/`disable`.** Pausing means removing the record, and
+  removing a record leaves the name at the provider pointing at whatever was
+  last published. Worth revisiting if anybody wants to stop publishing for a
+  week without retyping a credential.
 
 ---
 

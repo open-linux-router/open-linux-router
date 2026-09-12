@@ -4,26 +4,27 @@ import (
 	"fmt"
 
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
+	"github.com/open-linux-router/open-linux-router/internal/dial"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 )
 
-// Adapters joining the link module to the four modules that read it.
+// Adapters joining the link module to the five modules that read it.
 //
 // They live here, in the binary that mounts them all, for the reason devices.go
 // gives about its own: it keeps design.md §4.1's arrow pointing one way. Each of
-// `dhcp`, `dns`, `gateway` and `firewall` declares the interface facts it needs
-// as its own LinkView and never imports `link`; `link` stays unaware that
-// anything consumes it. They are introduced at the one place that already knows
-// the whole module list.
+// `dhcp`, `dns`, `gateway`, `firewall` and `dial` declares the interface facts
+// it needs as its own LinkView and never imports `link`; `link` stays unaware
+// that anything consumes it. They are introduced at the one place that already
+// knows the whole module list.
 //
-// The four LinkInfo structs happen to have identical fields today, so these read
-// as four copies of one conversion. They are not one type for the same reason
-// the interfaces are four: the day `gateway` needs an MTU is the day the others
+// The five LinkInfo structs happen to have identical fields today, so these read
+// as five copies of one conversion. They are not one type for the same reason
+// the interfaces are five: the day `gateway` needs an MTU is the day the others
 // should not grow a field they do not use, and collapsing them now would make
-// that change a five-module edit instead of a one-module one.
+// that change a six-module edit instead of a one-module one.
 //
 // This replaced three separate readers of a hand-written `--links` file. That
 // file was a second copy of what the kernel already knows, with nothing keeping
@@ -144,6 +145,43 @@ func (l firewallLinkView) Interfaces() ([]firewall.LinkInfo, error) {
 	out := make([]firewall.LinkInfo, 0, len(all))
 	for _, info := range all {
 		out = append(out, firewall.LinkInfo{
+			Name:     info.Name,
+			Adopted:  info.Adopted,
+			Up:       info.Up,
+			Prefixes: info.Prefixes,
+		})
+	}
+	return out, nil
+}
+
+// dialLinkView is the dial module's window onto link.
+//
+// The narrowest use of these facts in the tree: `dial` reads an uplink's address
+// to publish it, and checks adoption because reading an address off an interface
+// nobody handed over is exactly the surprise design.md §3.4 exists to prevent.
+type dialLinkView struct{ facts link.Facts }
+
+func (l dialLinkView) Interface(name string) (dial.LinkInfo, error) {
+	info, err := l.facts.Interface(name)
+	if err != nil {
+		return dial.LinkInfo{}, fmt.Errorf("%q: %w", name, dial.ErrNoSuchInterface)
+	}
+	return dial.LinkInfo{
+		Name:     info.Name,
+		Adopted:  info.Adopted,
+		Up:       info.Up,
+		Prefixes: info.Prefixes,
+	}, nil
+}
+
+func (l dialLinkView) Interfaces() ([]dial.LinkInfo, error) {
+	all, err := l.facts.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dial.LinkInfo, 0, len(all))
+	for _, info := range all {
+		out = append(out, dial.LinkInfo{
 			Name:     info.Name,
 			Adopted:  info.Adopted,
 			Up:       info.Up,

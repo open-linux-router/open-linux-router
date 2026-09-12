@@ -1,0 +1,27 @@
+Change one of the names olr keeps current.
+
+Only the fields you name are changed. The credential is left alone
+unless you pass --token or --token-file, so changing the interval does
+not mean retyping it.
+
+Usage:
+  olr dial set <name> [flags]
+
+Flags:
+  -h, --help                help for set
+      --interface string    the uplink: the interface whose address is published, or the one a reflector is asked through
+      --interval string     how often to check the address, with a unit (default 5m0s)
+      --key-id string       the non-secret half of the credential: an AccessKey ID at Alibaba Cloud, a SecretId at Tencent Cloud
+      --no-reflector        read the address off the interface instead of asking an endpoint
+      --provider string     DNS provider hosting the name (see olr dial show providers)
+      --reflector string    ask this endpoint what address the internet sees, instead of reading the interface
+      --token string        the provider credential. Prefer --token-file: a value here is recorded in your shell history
+      --token-file string   read the provider credential from a file, or from standard input when given -
+      --ttl int             the published record's time to live in seconds (default the provider's own)
+      --url string          for the callback provider: the URL to request, with #{ip} where the address goes
+      --zone string         registered domain the name sits in, when olr cannot work it out from the name itself
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

@@ -12,6 +12,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/devices"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
+	"github.com/open-linux-router/open-linux-router/internal/dial"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
@@ -35,6 +36,7 @@ import (
 func moduleRoutes() map[string][]core.Route {
 	return map[string][]core.Route{
 		link.ModuleName:     link.HTTP{}.Routes(),
+		dial.ModuleName:     dial.HTTP{}.Routes(),
 		dhcp.ModuleName:     dhcp.HTTP{}.Routes(),
 		dns.ModuleName:      dns.HTTP{}.Routes(),
 		devices.ModuleName:  devices.HTTP{}.Routes(),
