@@ -31,8 +31,9 @@ type Applier struct {
 	// Paths is the on-disk layout.
 	Paths Paths
 	// Store is core's configuration document, which owns this module's intent
-	// alongside every other module's. Revision history will attach here rather
-	// than in the module (design.md §10 open decision 5).
+	// alongside every other module's. Revision history, if it is ever built,
+	// attaches here rather than in the module — as numbered JSON snapshots on
+	// disk, since design.md §10 #5 closed as no database.
 	Store *core.Store
 
 	// PortCheck reports whether something already holds the DHCP server port.

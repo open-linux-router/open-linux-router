@@ -637,8 +637,18 @@ different class of gap, and it is why the topology rule exists.
 ### 7.5 Storage, and a stance
 
 Counters are monotonic-since-load; everything anyone wants is deltas over time.
-This is the second workload voting in §10 open decision 5, alongside dns:§7.5's
-query log — and they should be decided together rather than separately.
+
+This was the second workload voting in §10 open decision 5, alongside
+dns:§7.5's query log, and the vote is over: **there is no store.** The counters
+are read from nftables when somebody asks, `statTimeout` ages them out in the
+kernel, and olr keeps no copy. The decision and its price are recorded at §10
+#5 — the price being that "traffic today" is answerable and "traffic last
+month" does not exist.
+
+The privacy paragraph below is most of why. Bounded retention over a fixed set
+of devices is fixed-size data, and fixed-size data does not need a database; the
+feature that would have needed one is the feature this section already refuses
+to build.
 
 A per-device domain history is a record of everyone in the building's browsing,
 on a box in the hallway. Default retention window, a visible off switch, and

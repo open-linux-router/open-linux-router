@@ -204,6 +204,34 @@ a feature; pretending we are the only actor is a bug.
 | a plugin runtime | apt + systemd units |
 | DHCP / DNS / routing implementations | dnsmasq, unbound, bird |
 
+**Everything is data, and the data is the operator's.** olr has no secrets
+store and is not going to grow one. A DNS provider API token is data, the same
+as an adopted interface name or a DHCP reservation, and it lives in the config
+document beside them.
+
+The alternative was considered when `ingress` became the first module to hold a
+third-party credential, and it loses on the property §10 #5 exists to protect. A
+secrets sidecar turns backup from *one file you can read* into a file plus a
+second thing that can be restored separately and one day will not be, and a
+reference (`provider_token_ref` pointing at an entry elsewhere) introduces a
+broken-link failure that a literal value cannot have. Neither cost buys anything
+on a single-admin box whose control plane already runs as root.
+
+Two things follow, and the first is not yet true:
+
+- **The document has to be protectable.** "The operator keeps their own data
+  safe" is only a real sentence if they can. Today it is not: `core.Store`
+  writes `olr.json` `0644` and re-applies that mode on every save, so an
+  operator who tightens it has it loosened again by their next change. That is
+  a defect against this rule, not a qualification of it. Nothing reads the file
+  unprivileged — `olrd` runs as root and the CLI is an API client over the
+  `0660` socket — so nothing stands in the way of fixing it.
+- **Redaction stays, and is a different concern.** A token must not appear in
+  `plan` output, a `show`, or a log line, because those get screenshotted and
+  pasted into issues. That is about not broadcasting the operator's data on
+  their behalf and has nothing to do with file modes; "no secrets store" does
+  not mean "print it anywhere".
+
 ### 3.5 Process model
 
 How many processes are **ours**, and what is allowed to live inside them. The
@@ -1021,24 +1049,53 @@ it promises that installing changes nothing.
 4. **Wi-Fi on-box or bring-your-own AP?** On-box hostapd is a driver and
    regulatory rabbit hole. Assuming wired router + separate APs on a VLAN trunk
    is far cheaper and matches most homelab setups.
-5. **Revision storage.** Numbered snapshots under
-   `/etc/open-linux-router/revisions/<module>/`, a git repo in
-   `/etc/open-linux-router`, or **SQLite** in `/var/lib`? Git gives
-   `history`/`rollback` and real diffs nearly free, at the cost of a git
-   dependency in the control plane and odd behaviour if a user pokes at it.
-   SQLite is the newest candidate and the strongest on mechanics — atomic,
-   indexed, no second process, and it answers `history` without walking a
-   directory. Its cost is size, not correctness: `CGO_ENABLED=0` is
-   non-negotiable (§8), so it would have to be `modernc.org/sqlite`, which is
-   transpiled C and roughly ten megabytes of binary against a document that
-   counts six direct dependencies as a feature.
+5. ~~**Revision storage.**~~ **Closed — no database, and the question had two
+   workloads wrongly bundled into it.**
 
-   Whichever wins, **intent stays a JSON file** (§3.2 rule 1). The store holds
-   past copies, never the live one: "SSH in and read the config" is the recovery
-   path on a router, and a database is the wrong thing to meet at that moment.
-   The same store is the natural home for the throughput history §6.3 needs,
-   which is the one genuine query workload in the product and may end up
-   deciding this.
+   It asked which store should hold config revisions *and* the throughput
+   history §6.3 needs, on the assumption that one store should serve both.
+   They have nothing in common. Revisions are a few thousand small documents
+   whose whole value is diffing them; statistics are fixed-cardinality numeric
+   series whose whole value is downsampling them. Bundling the two is what made
+   a database look necessary, and separating them is most of the answer.
+
+   **Statistics are not stored. They are read from what the backends already
+   count.** nftables keeps per-device and per-exit byte counters and ages them
+   out in the kernel (gateway:§7.5, `statTimeout`); dnsmasq keeps the lease
+   file; the relay keeps a fixed-size in-memory ring of answered queries. olr
+   keeps no history of its own, and the numbers it reports are the ones the
+   software underneath it is already keeping.
+
+   **The deciding argument is flash wear, not size.** Size was measured and is
+   affordable: against a 2.0 MB empty binary, `modernc.org/sqlite` costs 6.7 MB
+   and 26 modules, `go.etcd.io/bbolt` 0.9 MB and 16. What is not affordable is
+   writing continuously — a line per DNS query appended to disk is a hardware
+   lifetime cost on the many olr boxes that boot from an SD card, and that
+   argument lives in `internal/dnsrelay/log.go` where it was found rather than
+   in any document until now.
+
+   **The privacy stance had already decided it.** gateway:§7.5 commits to a
+   default retention window, a visible off switch and per-device exclusion.
+   Bounded retention over fixed cardinality is fixed-size storage. The thing
+   that would genuinely require a query engine — unbounded raw events answering
+   ad-hoc questions — is the thing that section already refuses to build.
+
+   **What this costs, stated: there are no historical graphs.** "Traffic today"
+   is answerable and "traffic last month" is not. Kernel counters survive an
+   `olrd` restart and not a reboot, so the window is really "since the box came
+   up", bounded above by `statTimeout`. A router UI that shows a month of
+   throughput is a thing we are choosing not to have, and if that choice is
+   wrong this is the entry to reopen.
+
+   If `history`/`rollback` is built, it is numbered JSON snapshots on disk —
+   the cheapest of the three original candidates and the only one that needs no
+   dependency. **Intent stays a JSON file** either way (§3.2 rule 1): "SSH in
+   and read the config" is the recovery path on a router, and a database is the
+   wrong thing to meet at that moment.
+
+   Reopen this if a feature needs to query raw events — "every DNS query from
+   that device last Tuesday" is a query engine's job and nothing here will fake
+   it.
 6. **Does creating a network default DHCP on?** Leaning yes — a LAN without
    DHCP is the unusual case, and §5.1 immediate-apply makes it cheap to undo.
 7. **What is a group, exactly?** (§4.4) Its field set is now the most

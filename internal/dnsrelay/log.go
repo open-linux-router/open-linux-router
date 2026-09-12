@@ -4,11 +4,15 @@ import "sync"
 
 // QueryLog is a fixed-size ring of answered queries.
 //
-// In memory, and lost on restart. Where the query log should eventually live is
-// genuinely open (docs/dns.md §7.5) — it is one of two workloads voting in
-// design.md §10's storage decision — and keeping it here pre-decides nothing.
-// It also avoids the alternative's real cost: a line per query appended to disk
-// is continuous flash wear on the many olr boxes that will boot from an SD card.
+// In memory, and lost on restart — and that is the answer rather than a
+// placeholder. It was one of two workloads voting in design.md §10's storage
+// decision, which closed as no store at all (§10 #5, docs/dns.md §7.5).
+//
+// The argument that decided it started here: a line per query appended to disk
+// is continuous flash wear on the many olr boxes that will boot from an SD
+// card. That is a hardware lifetime cost rather than a performance one, it
+// generalises past this log, and it is now written down in design.md §10 #5
+// rather than living only in this comment.
 //
 // The ring is what bounds the memory. A busy house does tens of queries a
 // second, so an unbounded log is a slow leak that presents as the resolver

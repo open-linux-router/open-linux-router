@@ -240,16 +240,31 @@ reasoning rather than the list:
 > anything written down here was a second copy that could disagree with it. The
 > copy is gone.
 
-A credential is not a list, and it cannot be resolved by asking a binary. But
-the same objection applies with more force, because a second copy of a *secret*
-does not merely disagree — it has to be rotated twice and will not be. So the
-provider credential should become a shared object owned by one module and
-referenced by both, in the way design.md §4.4 does it for group and device. That
-is a design.md-level decision rather than this document's, and it is §9 #1.
+A credential is not a list, and it cannot be resolved by asking a binary. The
+obvious move from there is a shared object — one owner, both modules
+referencing it, the way design.md §4.4 does it for group and device.
 
-Until it is made, this document assumes DDNS holds its own credential and
-carries the same two obligations ingress:§4.1 states: redacted on every surface,
-never written into a file we would show somebody.
+**That move was considered and refused**, and the refusal is design.md §3.4's
+*everything is data* rule. A credential is not a special kind of field; it is a
+field. A shared one would mean either a secrets sidecar, which turns backup into
+two things that can be restored separately, or a reference by name, which adds a
+broken-link failure that a literal value cannot have. Both are real costs and
+neither buys anything on a single-admin box.
+
+So **DDNS holds its own token**, as ordinary data, in `dial`'s section of the
+config document. What is left of the problem is not architectural:
+
+- **Do not make somebody type it twice.** If `ingress` already holds a token for
+  the same provider, the setup path offers it rather than presenting an empty
+  field.
+- **Rotation is the failure that matters.** Two copies, one updated: DDNS breaks
+  within minutes and visibly, certificate renewal breaks in thirty days and
+  silently, and the silent one is the one that takes every published service's
+  HTTPS with it. `status` notices when two modules hold different tokens for the
+  same provider and says so. That is a check, not a schema.
+
+Both copies carry the obligations ingress:§4.1 states: redacted on every
+surface, never written into a file we would show somebody.
 
 ---
 
@@ -305,9 +320,11 @@ the code is vendored.
 
 ## 9. Open
 
-1. **Is the DNS provider credential a shared object?** (§5) It is the only
-   question here that affects another module, and the answer decides whether
-   DDNS reuses `ingress`'s token or holds its own. Belongs in design.md §10.
+1. ~~**Is the DNS provider credential a shared object?**~~ **Closed — no.** (§5)
+   design.md §3.4 says everything is data and there is no secrets store, so DDNS
+   holds its own token. What survives is a `status` check for two modules
+   holding different tokens for one provider, which is where the rotation
+   failure shows up.
 2. **What does an AAAA mean on a router?** With a delegated prefix the
    interesting address is usually a *device's*, not the router's — the NAS, not
    the gateway — because there is no NAT to forward through. That turns one

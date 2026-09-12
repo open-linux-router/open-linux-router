@@ -520,11 +520,18 @@ only and access-control by source, or we have shipped an amplifier.
    blocking moved into the relay (§4.4) and unbound is rendered with no views at
    all, so this only matters again if v2's per-client upstream selection is
    attempted inside unbound rather than with a second resolver process.
-5. **Where the query log lives.** It is a second workload voting in §10's
-   revision-storage decision, and the larger of the two. v1 keeps it in the
-   relay's memory and serves it over a socket (§4.5), which bounds the memory
-   and pre-decides nothing — the log starts empty after a restart, and the API
-   says so rather than implying a history it lacks.
+5. ~~**Where the query log lives.**~~ **Closed — it stays where it is.** It was
+   the larger of two workloads voting in §10's revision-storage decision, and
+   that decision came back "no store at all" (§10 #5). So the ring in the
+   relay's memory, served over a socket (§4.5), is not a placeholder any more:
+   it is the answer. The log starts empty after a restart and the API says so
+   rather than implying a history it lacks.
+
+   The argument that decided it came from this module and was only ever written
+   in `internal/dnsrelay/log.go`: **a line per query appended to disk is
+   continuous flash wear on the many olr boxes that boot from an SD card.** It
+   is now recorded at §10 #5 too, because it generalises past the query log and
+   was too load-bearing to live in one comment.
 
 ---
 
