@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -470,25 +472,95 @@ func warnDistroBackends(parent context.Context, out io.Writer) {
 	}
 }
 
-// reportEnabled says what to do next, which is the step nobody guesses.
+// reportEnabled says what to do next, which is now a link rather than a step.
+//
+// It used to print `sudo olr listen 0.0.0.0:8080` and tell the operator to cat
+// a token file. Both are gone: the listener is on by default and the UI asks
+// its one setup question itself. What is left is the address — and printing the
+// box's real addresses rather than `<this box>` is most of the value, because
+// the person reading this is in an SSH session and does not necessarily know
+// which of their interfaces is the one a laptop can reach.
 func reportEnabled(w io.Writer) error {
-	_, err := fmt.Fprintf(w, `
-olr is running, and nothing else on this machine has changed. No DHCP
-server, no resolver, no firewall rule — each module starts its backend
-when you configure it.
+	if _, err := fmt.Fprint(w, "\nolr is running, and nothing else on this machine has changed."+
+		" No DHCP\nserver, no resolver, no firewall rule \u2014 each module starts its backend\n"+
+		"when you configure it.\n\nOpen the web UI to finish setting up:\n\n"); err != nil {
+		return err
+	}
+	for _, u := range webURLs() {
+		if _, err := fmt.Fprintf(w, "  %s\n", u); err != nil {
+			return err
+		}
+	}
 
-To open the web UI on your network:
-
-  sudo olr listen 0.0.0.0:8080
-
-Then browse to http://<this box>:8080 and paste the token from
-%s when asked.
-
+	_, err := fmt.Fprint(w, `
 Or stay on the command line:
 
+  sudo olr claim --no-password  set this box up
   olr link show interfaces      what this machine has
   sudo olr adopt <interface>    hand one to olr
   olr dhcp --help               then serve addresses on it
-`, core.TokenPath)
+`)
 	return err
+}
+
+// webURLs lists the addresses the UI can be reached on, best-effort.
+//
+// Reads the interfaces directly rather than asking olrd, because this runs
+// during `olr enable` \u2014 before the daemon it is about to start is up, which is
+// the one code path where "ask the API" is circular.
+//
+// Loopback is skipped unless it is all there is. Somebody who has just
+// installed a router wants the address their laptop can use, and leading with
+// 127.0.0.1 teaches them to open a URL that works only on the machine they are
+// not browsing from.
+func webURLs() []string {
+	_, port, err := net.SplitHostPort(core.DefaultListen)
+	if err != nil {
+		port = "8080"
+	}
+
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return []string{"http://<this box>:" + port}
+	}
+
+	var routable, loopback []string
+	for _, a := range addrs {
+		prefix, perr := netip.ParsePrefix(a.String())
+		if perr != nil {
+			continue
+		}
+		ip := prefix.Addr()
+		switch {
+		case ip.IsLoopback():
+			loopback = append(loopback, webURL(ip, port))
+		case ip.IsLinkLocalUnicast(), ip.IsMulticast(), ip.IsUnspecified():
+			// A link-local v6 address needs a zone identifier to be typed into
+			// a browser, so printing one is an invitation to a URL that fails.
+		default:
+			routable = append(routable, webURL(ip, port))
+		}
+	}
+	if len(routable) == 0 {
+		return loopback
+	}
+	return routable
+}
+
+func webURL(ip netip.Addr, port string) string {
+	return "http://" + net.JoinHostPort(ip.Unmap().String(), port)
+}
+
+// PrintWebURLs writes the web UI's addresses, one per line, indented.
+//
+// The .deb's postinstall calls this through `olr internal urls`. Exported so
+// that the package which knows how to answer the question is the only one that
+// answers it — see the entry point's comment in cmd/olr/main.go.
+func PrintWebURLs(w io.Writer) int {
+	for _, u := range webURLs() {
+		if _, err := fmt.Fprintf(w, "  %s\n", u); err != nil {
+			return 1
+		}
+	}
+	return 0
 }

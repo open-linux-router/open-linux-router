@@ -18,6 +18,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
+	"github.com/open-linux-router/open-linux-router/internal/system"
 )
 
 // Rules the API surface holds to, in the form docs/cli.md argues for: executable
@@ -35,6 +36,7 @@ import (
 // a module what it serves.
 func moduleRoutes() map[string][]core.Route {
 	return map[string][]core.Route{
+		system.ModuleName:   system.HTTP{}.Routes(),
 		link.ModuleName:     link.HTTP{}.Routes(),
 		dial.ModuleName:     dial.HTTP{}.Routes(),
 		dhcp.ModuleName:     dhcp.HTTP{}.Routes(),

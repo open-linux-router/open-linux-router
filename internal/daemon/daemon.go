@@ -41,6 +41,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/mcp"
+	"github.com/open-linux-router/open-linux-router/internal/system"
 	"github.com/open-linux-router/open-linux-router/internal/webui"
 )
 
@@ -85,8 +86,21 @@ func parseOptions(args []string, onError flag.ErrorHandling) (options, error) {
 	fs := flag.NewFlagSet("olr internal daemon", onError)
 	fs.StringVar(&opts.socket, "socket", core.DefaultSocket,
 		"unix socket to serve the API on")
-	fs.StringVar(&opts.listen, "listen", "",
-		"additional TCP address for the WebUI and remote clients, e.g. 127.0.0.1:8080 (off by default)")
+	// On by default, which it was not until docs/system.md §1.
+	//
+	// The command that used to be required — `olr listen 0.0.0.0:8080` — was the
+	// last wall on the first-install path: the UI did not exist until you ran
+	// something nobody told you about. Every comparable management surface
+	// listens on install, and design.md §7's "install alone changes nothing" was
+	// an over-application of a rule about *shared* state to the one surface it
+	// does not govern.
+	//
+	// What makes it safe is not this flag but gateUnclaimed: an unclaimed box
+	// cannot be configured over the network, so serving the page before its
+	// owner arrives costs nothing that can be used. `--listen ""` still turns
+	// the listener off entirely, and `olr listen` still moves it.
+	fs.StringVar(&opts.listen, "listen", core.DefaultListen,
+		"TCP address for the WebUI and remote clients; empty turns it off")
 	fs.StringVar(&opts.links, "links", "",
 		"read interface facts from this JSON file instead of the kernel (development only)")
 	fs.StringVar(&opts.root, "root", "",
@@ -199,6 +213,16 @@ func run(args []string) error {
 	// an interface writes a line of consent and touches neither the kernel nor a
 	// daemon, which is precisely what lets §7 promise that installing olr
 	// changes nothing until you say so.
+	// `system` is mounted first, ahead of even `link`, because it is the module
+	// that decides whether any of the others may be reached over the network at
+	// all (docs/system.md §3). It drives no daemon and renders no file — the
+	// thinnest module in the tree, and structurally so.
+	srv.Mount(system.ModuleName, system.HTTP{
+		Applier: system.Applier{Store: store},
+		Lock:    srv.ApplyLock(),
+		Events:  srv.Events(),
+	}.Routes(), system.Config{})
+
 	srv.Mount(link.ModuleName, link.HTTP{
 		Applier: link.Applier{Store: store, Source: source},
 		Lock:    srv.ApplyLock(),
@@ -382,7 +406,7 @@ func run(args []string) error {
 	logger.Info("listening", "socket", opts.socket, "auth", "socket permissions")
 
 	if opts.listen != "" {
-		tcp, authed, err := tcpListener(opts, handler, logger)
+		tcp, authed, err := tcpListener(opts, system.Applier{Store: store}, handler, logger)
 		if err != nil {
 			unix.Close()
 			return err
@@ -431,6 +455,85 @@ type tcpServer struct {
 	listener net.Listener
 }
 
+// The two API routes an unclaimed box answers over TCP.
+//
+// claimPath is how the state stops being unclaimed. accessPath is how the SPA
+// finds out which screen to draw — without it the UI would have to infer
+// "unclaimed" from a 409 on some unrelated route, and a box that cannot say
+// what is wrong with it sends the operator back to reading JSON, which is
+// where this whole line of work started. It answers two booleans and
+// deliberately nothing else (system.AccessView), so serving it early costs no
+// secret.
+const (
+	claimPath  = core.APIPrefix + "/system/access/claim"
+	accessPath = core.APIPrefix + "/system/access"
+)
+
+// openWhileUnclaimed reports whether a request may proceed on an unclaimed box.
+func openWhileUnclaimed(r *http.Request) bool {
+	switch {
+	case !strings.HasPrefix(r.URL.Path, core.APIPrefix):
+		return true // the SPA and its assets
+	case r.URL.Path == claimPath && r.Method == http.MethodPost:
+		return true
+	case r.URL.Path == accessPath && r.Method == http.MethodGet:
+		return true
+	default:
+		return false
+	}
+}
+
+// gateUnclaimed refuses to configure a box nobody has claimed.
+//
+// docs/system.md §3, and the reason olrd can listen from the moment it is
+// installed:
+//
+//	An unclaimed box cannot be configured over the network.
+//
+// The SPA is always served, because it is the thing that offers the choice and
+// it is not a secret. The claim route is always served, because it is how the
+// state stops being unclaimed. Everything else under /api answers 409 until
+// somebody has decided.
+//
+// **This lives here rather than in the UI on purpose.** A scanner does not load
+// the SPA; it posts to /api/dhcp/config. Putting the rule in the onboarding
+// screen would be a lock on the front door of a building with no walls.
+//
+// Only the TCP listener is wrapped. The unix socket is untouched, for the
+// reason §6.2 gives about it being authenticated by its file mode: somebody
+// with root on the box does not have to claim it in a browser to run `olr`, and
+// `olr claim` exists for the operator who never opens one.
+//
+// The state is read per request rather than cached. It changes at most once in
+// a box's life, so caching buys nothing, and a stale cache would mean either a
+// claimed box still refusing work or an unclaimed one accepting it.
+func gateUnclaimed(applier system.Applier, top http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if openWhileUnclaimed(r) {
+			top.ServeHTTP(w, r)
+			return
+		}
+
+		cfg, err := applier.Load()
+		if err != nil {
+			// Fail closed. A box whose configuration cannot be read is not one
+			// to accept configuration changes for, and the operator's way in is
+			// the socket, which this never touches.
+			core.WriteError(w, http.StatusServiceUnavailable,
+				"cannot read the configuration to check whether this box has been set up: "+err.Error())
+			return
+		}
+		if cfg.Claimed() {
+			top.ServeHTTP(w, r)
+			return
+		}
+
+		core.WriteError(w, http.StatusConflict,
+			"this router has not been set up yet. Open it in a browser to finish, "+
+				"or run `sudo olr claim` on the box")
+	})
+}
+
 // authenticateAPI puts the token in front of the API and nothing else.
 //
 // The bug this fixes is one level of mounting. BearerAuth used to wrap the
@@ -459,8 +562,15 @@ func authenticateAPI(token string, top http.Handler) http.Handler {
 
 // tcpListener builds the TCP half, which is the only surface that needs
 // authenticating.
-func tcpListener(opts options, handler http.Handler, logger *slog.Logger) (tcpServer, string, error) {
+func tcpListener(opts options, access system.Applier, handler http.Handler, logger *slog.Logger) (tcpServer, string, error) {
 	authed := "none"
+
+	// The gate is outermost and unconditional, so that no combination of flags
+	// can produce a listener that configures an unclaimed box. It wraps the
+	// token check rather than the reverse for the same reason the token check
+	// stopped wrapping the SPA: the claim route has to be reachable by somebody
+	// who has no credential, because getting one is what claiming is for.
+	handler = gateUnclaimed(access, handler)
 
 	if opts.auth {
 		token, err := core.LoadOrCreateToken(opts.tokenPath)
@@ -469,13 +579,16 @@ func tcpListener(opts options, handler http.Handler, logger *slog.Logger) (tcpSe
 		}
 		handler = authenticateAPI(token, handler)
 		authed = "bearer token"
-	} else if !core.IsLoopback(opts.listen) {
-		// Stated every start, not once at setup. Opening this listener is
-		// already an explicit act — olrd serves only its unix socket until
-		// somebody runs `olr listen` — but "explicit once, months ago" and
-		// "currently true" are different things, and the journal is where
-		// somebody looks when they are asking which.
-		logger.Warn("the web UI is reachable from the network and requires no password",
+	} else if cfg, err := access.Load(); err == nil && !cfg.Claimed() {
+		logger.Info("this box has not been set up yet; the web UI will ask",
+			"address", opts.listen)
+	} else if err == nil && !cfg.RequiresPassword() {
+		// Stated every start. The operator chose this — an absent password is a
+		// recorded decision now, not an oversight (docs/system.md §2) — but
+		// "chosen once, months ago" and "still true" are different questions,
+		// and the journal is where somebody looks when they are asking the
+		// second one.
+		logger.Warn("the web UI requires no password",
 			"address", opts.listen,
 			"note", "anyone who can reach this address can configure this router")
 	}

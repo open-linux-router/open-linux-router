@@ -102,7 +102,8 @@ func TestTheListenerIsUnauthenticatedUnlessAuthIsRequested(t *testing.T) {
 	// Port 0 so the kernel picks a free one; this asserts on the reported mode,
 	// not on reaching the socket.
 	for _, listen := range []string{"127.0.0.1:0", "0.0.0.0:0"} {
-		srv, authed, err := tcpListener(options{listen: listen}, stub(), logger)
+		srv, authed, err := tcpListener(
+			options{listen: listen}, newApplier(t, claimed), stub(), logger)
 		if err != nil {
 			t.Fatalf("tcpListener(%q): %v", listen, err)
 		}

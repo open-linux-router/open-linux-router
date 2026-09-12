@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/open-linux-router/open-linux-router/internal/cli"
 	"github.com/open-linux-router/open-linux-router/internal/daemon"
 	"github.com/open-linux-router/open-linux-router/internal/dnsd"
 )
@@ -50,6 +51,15 @@ func dispatchInternal(args []string) (code int, handled bool) {
 		return daemon.Main(rest[1:]), true
 	case rest[0] == "dns-relay":
 		return dnsd.Main(rest[1:]), true
+	case rest[0] == "urls":
+		// Not a process, unlike its two neighbours, and here anyway: the .deb's
+		// postinstall has to print the URLs the web UI answers on, and the
+		// alternative is a shell pipeline parsing ip(8) in a maintainer script.
+		// `olr enable` already works this out for the tarball path, so putting
+		// it here is what keeps one answer to "which URLs reach this box"
+		// rather than two that drift. Hidden for the same reason as the others:
+		// there is no reason for an operator to type it.
+		return cli.PrintWebURLs(os.Stdout), true
 	default:
 		fmt.Fprintf(os.Stderr, "olr internal: no entry point named %q\n\n%s\n", rest[0], internalUsage)
 		return 2, true
@@ -61,5 +71,6 @@ starts these; there is no reason to type one:
 
   olr internal daemon      the control plane          (olrd.service)
   olr internal dns-relay   the DNS relay on :53       (olr-dnsd.service)
+  olr internal urls        the web UI's addresses     (the .deb's postinstall)
 
 To manage the services themselves, use olr start, olr stop or olr status.`

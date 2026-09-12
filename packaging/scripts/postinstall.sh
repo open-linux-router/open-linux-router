@@ -36,31 +36,35 @@ else
 	systemctl start olrd.service || true
 fi
 
-# What to do next, printed once rather than left in a README nobody has yet.
+# Where to go next, printed once rather than left in a README nobody has yet.
 #
-# The web UI is the reason this is here. olrd listens on its control socket and
-# nothing else, so a fresh install has a working `olr` and a UI that cannot be
-# reached from anywhere — which looks like a broken package rather than the
-# deliberate choice it is (design.md §7: install alone changes nothing). Saying
-# so, with the one command that changes it, is the difference.
+# This used to print `sudo olr listen 0.0.0.0:8080` and point at a token file,
+# because olrd served only its control socket and the UI was unreachable until
+# somebody ran that command. Both are gone. olrd listens on :8080 from this
+# moment (docs/system.md §1), and what makes that safe is not a credential but a
+# capability: an unclaimed box refuses to be configured over the network until
+# somebody opens the page and says how they want to reach it.
+#
+# The addresses come from `olr` rather than from a shell pipeline parsing ip(8).
+# The binary already has to answer this for `olr enable`, and two
+# implementations of "which URLs reach this box" would drift.
 if [ "$FIRST_INSTALL" = yes ]; then
 	cat <<'EOF'
 
 olrd is running. Nothing else has been changed on this machine — no DHCP
 server, no resolver, no firewall rule.
 
-To open the web UI on your network:
+Open the web UI to finish setting up:
 
-  sudo olr listen 0.0.0.0:8080
-
-Then browse to http://<this box>:8080 and paste the token from
-/etc/open-linux-router/api-token when asked.
+EOF
+	olr internal urls 2>/dev/null || echo "  http://<this box>:8080"
+	cat <<'EOF'
 
 Or stay on the command line:
 
+  sudo olr claim --no-password  set this box up
   olr link show interfaces      what this machine has
   sudo olr adopt <interface>    hand one to olr
-  olr dhcp --help               then serve addresses on it
 
 EOF
 fi

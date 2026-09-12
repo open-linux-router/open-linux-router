@@ -7,24 +7,38 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SetupScreen } from '@/components/layout/setup-screen'
 import { ApiError, api, setToken } from '@/lib/api'
 
+/** What GET /api/system/access answers. */
+interface AccessView {
+  claimed: boolean
+  password_set: boolean
+}
+
 /**
- * Asks for the API token when olrd rejects us, and otherwise gets out of the way.
+ * Decides which of three screens the box gets: set up, log in, or the app.
  *
- * The probe is GET /api/modules — the cheapest authenticated endpoint that
- * exists on every deployment. Over the unix socket, or with --no-auth on
- * loopback, it succeeds without a token and this component renders nothing of
- * its own.
+ * The order matters and is not arbitrary. **Claim is asked first**, because an
+ * unclaimed box answers 409 for every route except this one — probing anything
+ * else would report "conflict" for a box whose actual state is "brand new", and
+ * the operator would be reading a status code instead of a sentence. GET
+ * /api/system/access is served even while unclaimed for exactly this reason
+ * (internal/daemon, openWhileUnclaimed).
+ *
+ * The token prompt stays for boxes started with --auth, and it works now: the
+ * SPA is no longer served from behind the credential it collects, which is the
+ * bug that made this component unreachable for its whole existence before
+ * v0.1.6.
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const probe = useQuery({
-    queryKey: ['modules'],
-    queryFn: () => api.get<{ modules: string[] }>('/api/modules'),
+  const access = useQuery({
+    queryKey: ['system', 'access'],
+    queryFn: () => api.get<AccessView>('/api/system/access'),
     retry: (count, error) => !(error instanceof ApiError && error.unauthorized) && count < 2,
   })
 
-  if (probe.isPending) {
+  if (access.isPending) {
     return (
       <div className="mx-auto max-w-6xl space-y-4 p-6">
         <Skeleton className="h-14 w-full" />
@@ -33,8 +47,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (probe.error instanceof ApiError && probe.error.unauthorized) {
+  // A box with --auth turns even this away until a token is set, so the token
+  // prompt comes before the claim screen can be considered.
+  if (access.error instanceof ApiError && access.error.unauthorized) {
     return <TokenPrompt />
+  }
+
+  if (access.data && !access.data.claimed) {
+    return <SetupScreen />
   }
 
   return <>{children}</>

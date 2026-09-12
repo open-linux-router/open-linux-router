@@ -14,9 +14,11 @@ Modules:
   gateway     Exits and which networks use them
   ingress     Publish internal services at https:// names
   link        Network interfaces olr has been given
+  system      Show how this router may be reached
 
 Operations:
   adopt       Take ownership of an interface
+  claim       Set this router up for the first time
   diff        Show drifted or pending configuration, per module
   history     List configuration revisions, per module
   release     Hand an interface back to the system

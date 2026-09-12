@@ -14,12 +14,29 @@ import (
 // The two are not equivalent and are not meant to be. The socket is the local
 // admin path: it is reachable only by whoever can open a file in /run/olr, so
 // filesystem permissions *are* its authentication and no token is involved. TCP
-// has no such property and is always authenticated (see auth.go).
+// has no such property, and what governs it is docs/system.md §3 — an unclaimed
+// box cannot be configured over the network — enforced in internal/daemon.
 
 // DefaultSocket matches cli.DefaultSocket. Duplicated as a constant rather than
 // imported because core must not depend on the CLI; the socket_test asserts
 // they agree.
 const DefaultSocket = "/run/olr/olrd.sock"
+
+// DefaultListen is where the web UI answers on a box nobody has configured.
+//
+// All interfaces, because at install time no interface has been adopted, so
+// "only the LAN ones" would resolve to none and the UI would be unreachable on
+// exactly the box that needs it most. docs/ingress.md §6 also makes this
+// address the permanent recovery path for a broken ingress, which is an
+// argument for it being always present rather than conditional.
+//
+// :8080 rather than a quieter port: it is already in README.md,
+// docs/install.md, docs/ingress.md §6 and every operator's notes, and it is the
+// documented way back in when :443 is broken. The cost is that :8080 is the
+// most contended port on Linux — a box already serving something there will
+// fail to bind, which the preflight reports by naming the holding process, and
+// `olr listen <addr>:<port>` moves.
+const DefaultListen = "0.0.0.0:8080"
 
 // SocketMode is the unix socket's permission bits.
 //

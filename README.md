@@ -29,11 +29,17 @@ have decades of correctness in them that nobody should rewrite. olr renders
 their configuration, supervises them through systemd, and puts one schema in
 front. It is a control plane, not a network stack.
 
-**Nothing happens until you say so.** Installing olr starts a control plane and
-changes *nothing else* — no DHCP server appears, no resolver takes port 53, no
-interface is touched. You hand olr an interface explicitly (`olr adopt`) before
-any module will serve on it. Installing a router's control plane on a box you
-reach over SSH must never be able to disconnect you from it.
+**Nothing happens until you say so.** Installing olr starts a control plane,
+serves its own web UI, and changes *nothing else* — no DHCP server appears, no
+resolver takes port 53, no interface is touched. You hand olr an interface
+explicitly (`olr adopt`) before any module will serve on it. Installing a
+router's control plane on a box you reach over SSH must never be able to
+disconnect you from it.
+
+The UI is there immediately because a box nobody has set up **refuses to be
+configured over the network** — so there is nothing to reach through it before
+you arrive. That's the one thing that makes the convenience safe, and it's
+[docs/system.md](docs/system.md).
 
 **Hide complexity, never capability.** The default surface speaks your
 vocabulary — networks, devices, fixed addresses — not the daemon's. But every
@@ -133,25 +139,25 @@ olr dhcp show leases                                              # who took an 
 interface nobody handed it. Adopting sets no address and starts no service — it
 only grants permission.
 
-For the web UI, tell olr to listen. By default it answers only on its control
-socket at `/run/olr/olrd.sock`, which is what the `olr` command talks to:
+The web UI is already open — installing printed its address — and the first
+screen asks one question. **A box nobody has set up refuses to be configured
+over the network:** the page loads, and every other request is turned away until
+somebody says how they want to reach it. That's what lets the UI be there from
+the first second without leaving an unprotected admin API on your LAN.
 
-```sh
-sudo olr listen 0.0.0.0:8080
-```
+Answering it records that **there is no password**, which means anyone who can
+reach this router on your network can configure it. That's the right default on
+a home network and the wrong one anywhere else. `sudo olr claim --no-password`
+does the same from a shell, `olr system show` says where you stand, and
+`sudo olr listen --off` closes the listener entirely.
 
-Then browse to `http://<this box>:8080` and you're in — **there is no password.**
-Opening the listener is the decision; having made it, anyone who can reach that
-address can configure this router. That's the right default on a home network
-and the wrong one on a network you don't control, so `sudo olr listen --off`
-closes it again, and `127.0.0.1:8080` plus an SSH tunnel keeps it to people who
-can already log into the box.
+Claiming works once, and only from your own network or the box itself — so olr
+on a machine with a public address isn't set up by whoever finds the port first.
 
-To require a token instead, add `--auth` to `OLRD_ARGS` in
-`/etc/open-linux-router/olrd.env`. olrd generates one on first start, you read
-it with `sudo cat /etc/open-linux-router/api-token`, and the UI asks for it.
-A real login — users, not a shared secret — belongs to the unbuilt `system`
-module.
+Requiring a password instead needs a login screen, and lands with it. A real
+login — users, not a shared secret — belongs to the `system` module proper; see
+[docs/system.md](docs/system.md) for the whole model and what it deliberately
+isn't.
 
 **The most useful thing this can do today:** leave your existing router in place
 doing the routing, and move DHCP onto a Linux box — so you get a real device
@@ -164,6 +170,7 @@ that go wrong.
 | Docs | |
 |---|---|
 | [docs/install.md](docs/install.md) | Getting a box serving DHCP for a real network |
+| [docs/system.md](docs/system.md) | First install, and who may configure the box |
 | [docs/cli.md](docs/cli.md) | `olr` command conventions, enforced by tests |
 | [docs/dns.md](docs/dns.md) | What the DNS module does, and refuses to do |
 | [docs/gateway.md](docs/gateway.md) | Exits, and which networks use them |

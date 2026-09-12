@@ -32,23 +32,34 @@ Throughout, the example network is `192.168.1.0/24`, the existing router is
 sudo apt install ./olr_<version>_<arch>.deb
 ```
 
-This starts `olrd` and changes nothing else — no DHCP server, no resolver, no
-firewall rule. Check it came up:
+This starts `olrd`, serves its web UI, and changes nothing else — no DHCP
+server, no resolver, no firewall rule, no interface touched. It prints the
+address to open:
 
-```sh
-olr status
+```
+Open the web UI to finish setting up:
+
+  http://192.168.1.2:8080
 ```
 
-## 2. Open the web UI
+## 2. Set the router up
 
-```sh
-sudo olr listen 0.0.0.0:8080
-```
+Browse to that address. The first screen asks one question, because **a box
+nobody has set up refuses to be configured over the network** — the page loads
+and every other request is turned away. That is what makes it safe for the UI to
+be open from the moment you installed it.
 
-Browse to `http://192.168.1.2:8080`. There is no password — anyone who can reach
-that address can configure this router, which is why olr does not open the
-listener until you ask it to. Add `--auth` to `OLRD_ARGS` in
-`/etc/open-linux-router/olrd.env` to require a token instead.
+Clicking through records that **there is no password**: anyone who can reach this
+router on your network will be able to configure it. That is usually what you
+want on a home network and not what you want anywhere else. Requiring a password
+instead arrives with the login screen in the next release.
+
+If you only ever reach this box over SSH, `sudo olr claim --no-password` does
+the same thing, and `olr system show` says where you stand.
+
+Setting up from a machine *outside* your own network is refused on purpose, so
+that a box with a routable address is not claimed by whoever finds the port
+first.
 
 The rest of this document gives both the UI and the CLI; they are the same API.
 

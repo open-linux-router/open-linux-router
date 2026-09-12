@@ -11,6 +11,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
+	"github.com/open-linux-router/open-linux-router/internal/system"
 )
 
 // newRoot builds the command tree an operator actually gets.
@@ -30,6 +31,7 @@ func newRoot() *cobra.Command {
 	// Modules are mounted explicitly. The list is bounded, so it is a literal
 	// list rather than a registry (design.md §3.2).
 	root.AddCommand(
+		system.Command(),
 		link.Command(),
 		dial.Command(),
 		dhcp.Command(),
@@ -44,5 +46,6 @@ func newRoot() *cobra.Command {
 	// mounted here. internal/cli stays free of module imports, which is what
 	// keeps `olr --help` a description of the tree rather than of the modules.
 	root.AddCommand(link.OperationCommands()...)
+	root.AddCommand(system.OperationCommands()...)
 	return root
 }
