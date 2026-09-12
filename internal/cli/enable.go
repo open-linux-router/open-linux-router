@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -89,20 +90,31 @@ func runEnable(cmd *cobra.Command) error {
 	out := cmd.OutOrStdout()
 	dry := DryRun(cmd)
 
-	tools, err := findTools()
-	if err != nil {
-		return err
-	}
-	if tools.Nft == "" {
-		fmt.Fprintf(out, "warning: nft is not on PATH. Everything works except the DNS\n"+
-			"redirect (`olr dns set --redirect`), which needs your nftables package.\n\n")
-	}
-
+	// Root first, before anything is looked up. Ordering is the whole point:
+	// finding the backends needs no privilege but reports on the *invoking*
+	// user's environment, so running without sudo used to produce a confident
+	// and wrong sentence about dnsmasq instead of the one true reason the
+	// command could not proceed. The first failure an operator sees should be
+	// the real one.
 	if !dry {
 		if os.Geteuid() != 0 {
 			return errors.New("olr enable writes to " + packaging.UnitDir + " and needs root; try sudo")
 		}
 	}
+
+	tools, err := findTools()
+	if err != nil {
+		return err
+	}
+	if tools.Nft == "" {
+		fmt.Fprintf(out, "warning: nft was not found on $PATH or in %s. Everything works\n"+
+			"except the DNS redirect (`olr dns set --redirect`), which needs your\n"+
+			"nftables package.\n\n", strings.Join(sbinDirs, ", "))
+	}
+
+	// Read-only, so it runs on the --dry-run path too: "what would this do"
+	// should include "and what is already in the way".
+	warnDistroBackends(cmd.Context(), out)
 
 	plan, err := enablePlan(tools)
 	if err != nil {
@@ -301,6 +313,33 @@ func selfInstall() (*write, error) {
 	}, nil
 }
 
+// sbinDirs are searched for a backend that $PATH does not have.
+//
+// $PATH alone was a real bug, not a theoretical one. dnsmasq, unbound and nft
+// are daemons, Debian puts daemons in /usr/sbin, and /usr/sbin is not on an
+// ordinary user's PATH there. So `./olr enable` told operators with dnsmasq
+// installed *and running* that dnsmasq was not installed, and sent them to
+// install it a second time. packaging.DebianDnsmasq — one import away — has
+// said /usr/sbin all along.
+//
+// Searched after $PATH, never before: an operator with their own build earlier
+// on PATH means it.
+var sbinDirs = []string{"/usr/local/sbin", "/usr/sbin", "/sbin"}
+
+// lookTool finds a backend binary, or returns "".
+func lookTool(name string) string {
+	if path, err := exec.LookPath(name); err == nil {
+		return path
+	}
+	for _, dir := range sbinDirs {
+		path := filepath.Join(dir, name)
+		if info, err := os.Stat(path); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
+			return path
+		}
+	}
+	return ""
+}
+
 // findTools locates the backends, and refuses when the two that are not
 // optional are missing.
 //
@@ -309,36 +348,113 @@ func selfInstall() (*write, error) {
 // equivalent — and it fails before writing anything, because a box with units
 // installed and no dnsmasq is a worse place to stop than a box with neither.
 func findTools() (packaging.Tools, error) {
-	look := func(name string) string {
-		path, err := exec.LookPath(name)
-		if err != nil {
-			return ""
-		}
-		return path
-	}
-
 	t := packaging.Tools{
-		Dnsmasq:          look("dnsmasq"),
-		Unbound:          look("unbound"),
-		UnboundCheckconf: look("unbound-checkconf"),
-		UnboundAnchor:    look("unbound-anchor"),
-		Nft:              look("nft"),
+		Dnsmasq:          lookTool("dnsmasq"),
+		Unbound:          lookTool("unbound"),
+		UnboundCheckconf: lookTool("unbound-checkconf"),
+		UnboundAnchor:    lookTool("unbound-anchor"),
+		Nft:              lookTool("nft"),
 		// Not required, and deliberately not checked below. A router with no
 		// published services never needs a proxy, so its absence is not a
 		// reason to refuse to enable olr — `olr ingress` says what is missing
 		// and how to get it, at the moment somebody actually wants it.
-		Caddy: look("caddy"),
+		Caddy: lookTool("caddy"),
 	}
 
 	if t.Dnsmasq == "" {
-		return t, errors.New("dnsmasq is not on PATH.\n" +
-			"olr does not implement DHCP itself; install your distribution's dnsmasq package first")
+		// dnsmasq-base is named, and the difference explained, because `apt
+		// install dnsmasq` is what everybody types and it is the wrong answer:
+		// the full package ships a dnsmasq.service that binds :53 the moment it
+		// is installed, and olr will not fight another daemon for a port. The
+		// .deb has depended on dnsmasq-base since the beginning; this is the
+		// path where nobody gets to read that dependency.
+		return t, missingTool("dnsmasq", "dnsmasq-base",
+			"olr does not implement DHCP itself.",
+			"dnsmasq-base rather than dnsmasq: the full package also ships a system\n"+
+				"dnsmasq service that binds :53 as soon as it is installed. olr runs its\n"+
+				"own instance from its own unit, and refuses to start when something else\n"+
+				"already holds the port.")
 	}
 	if t.Unbound == "" || t.UnboundCheckconf == "" {
-		return t, errors.New("unbound is not on PATH.\n" +
-			"olr does not resolve names itself; install your distribution's unbound package first")
+		return t, missingTool("unbound", "unbound",
+			"olr does not resolve names itself.",
+			"Debian enables its own unbound.service on install, listening on\n"+
+				"127.0.0.1:53. olr runs a separate instance and owns :53 through its relay,\n"+
+				"so disable that one before turning DNS on:\n"+
+				"  sudo systemctl disable --now unbound.service")
 	}
 	return t, nil
+}
+
+// missingTool says what was not found, where we looked, and what to install.
+//
+// Naming the directories searched is the part worth keeping. "not on PATH" is a
+// claim about the operator's shell that they cannot check without knowing which
+// PATH we meant, and it was wrong often enough to be worth never saying again.
+func missingTool(name, pkg, why, note string) error {
+	return fmt.Errorf("%s was not found.\nLooked on $PATH and in %s.\n\n%s On Debian and Ubuntu:\n\n"+
+		"  sudo apt install %s\n\n%s",
+		name, strings.Join(sbinDirs, ", "), why, pkg, note)
+}
+
+// distroBackends are the units a distribution ships for the daemons olr drives.
+//
+// olr starts its own instances from its own units (internal/dhcp/render.go and
+// internal/dns/render.go both say why), so the distro's are not upgrades of
+// ours or ours of theirs — they are a second daemon competing for one port. The
+// module preflights catch that at the moment a module is turned on, which is
+// correct but late: by then the operator has configured a pool or an upstream
+// and is expecting it to work. `olr enable` is already looking these binaries
+// up, so it can see the collision coming and say so while nothing is at stake.
+var distroBackends = []struct {
+	unit   string
+	holds  string
+	advice string
+}{
+	{"dnsmasq.service", "UDP/67 and :53",
+		"  sudo systemctl disable --now dnsmasq.service"},
+	{"unbound.service", ":53",
+		"  sudo systemctl disable --now unbound.service"},
+	// Not disabled, ever: this box resolves through it, so stopping it takes
+	// name resolution away from the machine you are typing on until olr's relay
+	// is up. It is told to give up the socket instead.
+	{"systemd-resolved.service", ":53",
+		"  # do not disable this one — the box resolves through it\n" +
+			"  # set DNSStubListener=no in /etc/systemd/resolved.conf, then:\n" +
+			"  sudo systemctl restart systemd-resolved"},
+}
+
+// warnDistroBackends reports the distribution's own daemons, if any are live.
+//
+// Best-effort and never fatal. `olr enable` starts no backend, so none of this
+// is a conflict yet, and refusing to install over a daemon that is doing its job
+// today would be exactly the machine-wide interference design.md §3.4 forbids.
+func warnDistroBackends(parent context.Context, out io.Writer) {
+	ctx, cancel := context.WithTimeout(parent, daemonTimeout)
+	defer cancel()
+
+	for _, b := range distroBackends {
+		unit, err := core.NewUnit(b.unit)
+		if err != nil {
+			return // no service manager to ask; nothing to warn about
+		}
+		status, err := unit.Status(ctx)
+		if err != nil || !status.Installed || (!status.Active && !status.Enabled) {
+			continue
+		}
+
+		state := "enabled at boot"
+		if status.Active {
+			state = "running"
+			if status.Enabled {
+				state = "running and enabled at boot"
+			}
+		}
+		fmt.Fprintf(out, "warning: %s is %s, and holds %s.\n"+
+			"olr runs its own instance rather than taking that one over, and will\n"+
+			"refuse to start while the port is held. Before turning the module on:\n%s\n\n",
+			b.unit, state, b.holds, b.advice)
+	}
 }
 
 // reportEnabled says what to do next, which is the step nobody guesses.

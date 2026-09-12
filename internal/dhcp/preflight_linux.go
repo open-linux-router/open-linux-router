@@ -3,13 +3,8 @@
 package dhcp
 
 import (
-	"fmt"
-
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
-
-// dhcpServerPort is the UDP port a DHCPv4 server listens on.
-const dhcpServerPort = 67
 
 // PortConflict reports whether something already holds the DHCP server port.
 //
@@ -21,15 +16,6 @@ const dhcpServerPort = 67
 //
 // The procfs scan itself is core's, because the dns module needs the identical
 // check for :53 and a second copy is a second place to fix a parsing bug. What
-// stays here is the port and the refusal text: only this module can name
-// dnsmasq and the command that finds the incumbent.
+// stays in this module is the port, and the refusal text in preflight.go: only
+// this module can name dnsmasq and say what to do about it.
 func PortConflict() (bool, error) { return core.UDPPortInUse(dhcpServerPort) }
-
-// ErrPortInUse explains a refused start.
-func ErrPortInUse() error {
-	return fmt.Errorf(
-		"UDP/%d is already in use, so another DHCP server is running on this box.\n"+
-			"olr runs its own dnsmasq instance and will not stop somebody else's daemon.\n"+
-			"Find the holder with `ss -lunp sport = :%d` and stop it, or leave DHCP to it",
-		dhcpServerPort, dhcpServerPort)
-}

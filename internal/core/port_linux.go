@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,6 +34,105 @@ func UDPPortInUse(port uint64) (bool, error) {
 // either address family.
 func TCPPortInUse(port uint64) (bool, error) {
 	return anyPortListedIn([]string{"/proc/net/tcp", "/proc/net/tcp6"}, port)
+}
+
+// UDPPortHolder and TCPPortHolder name the process holding a port.
+//
+// The Holder type and its rendering live in portholder.go, outside this file's
+// build tag: only the lookup needs procfs.
+//
+// Best-effort, and deliberately errorless: every caller is building an error
+// message about a conflict it has already detected, and a lookup that failed
+// must degrade to a vaguer sentence rather than replace a real diagnosis with a
+// complaint about procfs. Not-found and could-not-tell are the same answer here
+// because the caller does the same thing with both.
+//
+// Finding the pid behind a socket means matching its inode against every
+// process's open descriptors, which only root may read for other users'
+// processes. That is olrd, which is where these messages are built.
+func UDPPortHolder(port uint64) (Holder, bool) {
+	return portHolder(procRoot, []string{"/proc/net/udp", "/proc/net/udp6"}, port)
+}
+
+func TCPPortHolder(port uint64) (Holder, bool) {
+	return portHolder(procRoot, []string{"/proc/net/tcp", "/proc/net/tcp6"}, port)
+}
+
+// procRoot is a variable only so the tests can point the walk at a fixture.
+var procRoot = "/proc"
+
+// inodeField is the socket inode's column in /proc/net/{tcp,udp}. The columns
+// before it are fixed across every kernel that has this file; new ones are
+// appended after, which is why this counts from the left.
+const inodeField = 9
+
+func portHolder(root string, netFiles []string, port uint64) (Holder, bool) {
+	inodes := map[string]bool{}
+	for _, path := range netFiles {
+		// A read error is one more way of not knowing who holds the port.
+		_ = eachPortRow(path, func(fields []string, listening uint64) {
+			if listening == port && len(fields) > inodeField {
+				inodes[fields[inodeField]] = true
+			}
+		})
+	}
+	if len(inodes) == 0 {
+		return Holder{}, false
+	}
+	return holderOf(root, inodes)
+}
+
+// holderOf finds the first process with one of these socket inodes open.
+//
+// First, not all: two processes sharing a listening socket (a forking daemon,
+// or systemd socket activation) are one answer to the operator's question, and
+// listing both would suggest a complication that is not there.
+func holderOf(root string, inodes map[string]bool) (Holder, bool) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return Holder{}, false
+	}
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue // /proc has plenty that is not a process
+		}
+		fdDir := filepath.Join(root, e.Name(), "fd")
+		fds, err := os.ReadDir(fdDir)
+		if err != nil {
+			// Not ours to read, or the process exited mid-walk. Both are
+			// ordinary; neither is worth abandoning the search for.
+			continue
+		}
+		for _, fd := range fds {
+			target, err := os.Readlink(filepath.Join(fdDir, fd.Name()))
+			if err != nil {
+				continue
+			}
+			inode, ok := strings.CutPrefix(target, "socket:[")
+			if !ok {
+				continue
+			}
+			inode, ok = strings.CutSuffix(inode, "]")
+			if !ok || !inodes[inode] {
+				continue
+			}
+			return Holder{
+				PID:  pid,
+				Name: procField(root, e.Name(), "comm"),
+				Unit: unitOf(procField(root, e.Name(), "cgroup")),
+			}, true
+		}
+	}
+	return Holder{}, false
+}
+
+func procField(root, pid, name string) string {
+	data, err := os.ReadFile(filepath.Join(root, pid, name))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
 }
 
 func anyPortListedIn(paths []string, port uint64) (bool, error) {

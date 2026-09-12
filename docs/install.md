@@ -187,9 +187,12 @@ new joining the network will get an address.
 that the interface is up with a cable in it — `olr link show interfaces` says
 both. Then `olr dhcp status`, then `journalctl -u olr-dhcp -n 50`.
 
-**olr refuses to start the server.** Something already holds UDP/67 on this box.
-`ss -lunp sport = :67` names it. olr runs its own dnsmasq instance and will not
-stop a daemon it did not start.
+**olr refuses to start the server.** Something already holds UDP/67 on this box,
+and the refusal names it — process, pid and systemd unit — along with the
+command that stands it down. olr runs its own dnsmasq instance and will not stop
+a daemon it did not start. The usual culprit is your distribution's own dnsmasq:
+`apt install dnsmasq` installs a service alongside the binary, where
+`dnsmasq-base` is just the binary olr drives.
 
 **A range is refused as "not adopted".** Step 3.
 

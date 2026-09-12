@@ -28,21 +28,69 @@ func PortConflict() (bool, error) {
 	return core.TCPPortInUse(DNSPort)
 }
 
-// ErrPortInUse explains a refused start.
+// ErrPortInUse explains a refused start, naming the holder when it can find it.
 //
-// It names systemd-resolved because that is nearly always the answer, and
-// because the fix is not obvious: the service has to be told to stop listening,
-// not merely stopped, or it comes back at the next boot and DNS breaks then
-// instead — at the least convenient possible moment.
+// This used to assert that the holder was systemd-resolved — "nearly always the
+// answer" — and tell the operator to set DNSStubListener=no. That advice is
+// exactly right for systemd-resolved and useless for anything else, and on an
+// olr box the incumbent is frequently *dnsmasq*: our own documentation says to
+// install dnsmasq, `apt install dnsmasq` gets the full Debian package rather
+// than dnsmasq-base, and that package ships a service which binds :53 on
+// install. Sending that operator to edit resolved.conf costs them an afternoon.
+//
+// So the holder is looked up and named, and the advice follows from what was
+// found. The guess survives only as the fallback, and now says it is one.
 func ErrPortInUse() error {
-	return fmt.Errorf(
-		"port %d is already in use, so something else on this box is serving DNS.\n"+
-			"olr runs its own resolver and will not stop somebody else's daemon.\n"+
-			"On a systemd distribution this is almost always systemd-resolved. "+
+	holder, found := core.UDPPortHolder(DNSPort)
+	if !found {
+		holder, found = core.TCPPortHolder(DNSPort)
+	}
+	return portInUseError(holder, found)
+}
+
+// portInUseError is the message, given what the lookup found. Separated so the
+// branches can be tested without a box that happens to have :53 taken.
+func portInUseError(holder core.Holder, found bool) error {
+	const preamble = "port %d is already in use, so something else on this box is serving DNS.\n" +
+		"olr runs its own resolver and will not stop somebody else's daemon.\n"
+
+	if !found {
+		return fmt.Errorf(preamble+
 			"Find the holder with `ss -lunp sport = :%[1]d` and `ss -ltnp sport = :%[1]d`.\n"+
-			"To hand DNS to olr, set DNSStubListener=no in /etc/systemd/resolved.conf "+
-			"and restart systemd-resolved — stopping it alone will not survive a reboot",
-		DNSPort)
+			"If it is systemd-resolved, set DNSStubListener=no in /etc/systemd/resolved.conf "+
+			"and restart it — stopping it alone will not survive a reboot",
+			DNSPort)
+	}
+
+	switch {
+	// systemd-resolved is the one holder that must not simply be disabled: it
+	// is what the rest of the box resolves through, so stopping it leaves this
+	// machine unable to resolve anything until olr's relay is up. Telling it to
+	// give up the socket while it keeps running is the correct move, and it is
+	// not a thing anybody guesses.
+	case holder.Unit == "systemd-resolved.service":
+		return fmt.Errorf(preamble+
+			"It is held by %s.\n"+
+			"Set DNSStubListener=no in /etc/systemd/resolved.conf and restart it:\n"+
+			"  sudo systemctl restart systemd-resolved\n"+
+			"Stopping it instead would work now and undo itself at the next boot",
+			DNSPort, holder)
+
+	case holder.Unit != "":
+		return fmt.Errorf(preamble+
+			"It is held by %s.\n"+
+			"To hand DNS to olr:\n"+
+			"  sudo systemctl disable --now %s\n"+
+			"`disable --now` rather than `stop`: a stopped unit returns at the next "+
+			"boot, and olr's relay then fails to start when nobody is watching",
+			DNSPort, holder, holder.Unit)
+
+	default:
+		return fmt.Errorf(preamble+
+			"It is held by %s, which is not running under a systemd unit — stop it "+
+			"however it was started, or move olr's relay with `olr dns set --listen`",
+			DNSPort, holder)
+	}
 }
 
 // ListensOnDefaultPort reports whether any listen address uses port 53.

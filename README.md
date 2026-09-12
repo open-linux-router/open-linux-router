@@ -99,13 +99,19 @@ apt resolves `dnsmasq-base`, `unbound` and `nftables` before any of olr's code
 runs. This starts the control plane and touches nothing else on the machine.
 
 For anything the `.deb` doesn't cover, the tarball holds a single binary that
-installs itself — install dnsmasq and unbound with your own package manager
-first, since there is nothing here to resolve them for you:
+installs itself. There is no package manager involved here to resolve the
+backends, so install them first — on Debian and Ubuntu:
 
 ```sh
+sudo apt install dnsmasq-base unbound nftables
 tar xzf olr-<version>-linux-<arch>.tar.gz
 sudo ./olr enable
 ```
+
+`dnsmasq-base`, not `dnsmasq`: the full package also ships a system dnsmasq
+service that binds `:53` as soon as it's installed, and olr runs its own
+instance rather than taking somebody else's daemon over. If you already have
+the full package, `olr enable` will say so and tell you how to stand it down.
 
 `olr enable` writes the systemd units, puts the binary in `/usr/local/bin`,
 corrects the units' paths if your distribution doesn't keep dnsmasq where
