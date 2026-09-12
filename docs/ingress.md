@@ -1,9 +1,10 @@
 # `ingress` module design
 
-Status: **partly built.** `internal/ingress` holds the config, the validator and
-the renderer, with tests. Plan, apply, the HTTP and CLI surfaces, the daemon
-mount and the packaging are not written. Bare section references are to this
-document; references to `design.md` name it.
+Status: **built, unproven.** `internal/ingress` is the module, the proxy runs as
+`olr-caddy.service`, and there is a WebUI page. What has not happened is a
+certificate: §11.8 records exactly how far a real Caddy has been driven and
+where that stops. Bare section references are to this document; references to
+`design.md` name it.
 
 Five things were decided before this was written, and the rest of the document
 is mostly their consequences: the backend is **Caddy**; it **runs as its own
@@ -582,9 +583,27 @@ The boundary §2 said had to be drawn here.
    argument that actually decided §5 — the packaging burden was the visible
    cost and this was the load-bearing one.
 
-8. **Nobody has run this against a real Caddy.** The renderer, the validator,
-   the planner and the apply path are unit-tested against fakes; `caddy
-   validate` on our rendered Caddyfile, `caddy list-modules` parsing against
-   real output, and a certificate actually issuing have not been exercised. The
-   parser is written to cost an empty list rather than a wrong one if the output
-   format differs, which is a hedge and not a substitute.
+8. **Mostly run against a real Caddy now; one thing is not.** Verified against
+   caddy v2.9.1: `caddy validate` accepts the rendered Caddyfile in full — the
+   wildcard site block, `admin off`, `tls { resolvers … }`, the per-service
+   `host` matcher, `handle`, `abort`, and the `transport http { tls
+   tls_insecure_skip_verify }` form for an https upstream — and the output of
+   `caddy list-modules` parses as expected. The refusal path was exercised for real,
+   not simulated: the check ran, rejected the config for the right reason, wrote
+   nothing to the live path and asked systemd for nothing.
+
+   Two things came out of doing it, both now fixed and neither predictable from
+   reading: Caddy prefixes its complaint with a JSON log line, and names the
+   temporary file the check was given rather than the file an operator can open.
+
+   **What remains unverified is the part that needs a provider module**: the
+   `dns <provider>` line itself, and therefore an actual issuance. A stock Caddy
+   has none (§5.4), so this cannot be exercised without building one — which is
+   the operator's step by design. Everything up to that line is now known to
+   parse.
+
+9. **The UI has not been used against a working certificate either.** The page,
+   both dialogs and the confirmation gate render and behave on a real daemon,
+   and the disruptive-409 path is covered by `http_test.go` rather than by hand.
+   What no one has seen is the screen with a valid certificate on it: every
+   state below "issued" has been looked at, and the ordinary one has not.

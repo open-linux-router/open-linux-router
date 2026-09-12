@@ -1,4 +1,4 @@
-import { Activity, Globe, Network, Router, ShieldCheck, Waypoints } from 'lucide-react'
+import { Activity, Globe, Link2, Network, Router, ShieldCheck, Waypoints } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 
 import { ThemeToggle } from '@/components/layout/theme-toggle'
@@ -26,6 +26,15 @@ import { cn } from '@/lib/utils'
 // the overview. Filing it under DHCP was considered and rejected — the
 // statically-addressed printer has never held a lease, and would have lived on
 // a page named for the protocol that has never seen it.
+//
+// Ingress is the second exception, and for the opposite reason to Firewall's:
+// the mechanism name is jargon borrowed from Kubernetes, and most people running
+// a house network have never met it. It is kept anyway, because every other
+// label here is exactly its module's name and `olr ingress` is the command —
+// breaking that one-to-one mapping costs more than the word costs. "Services"
+// was the alternative and is worse: on a Linux box that word already means
+// systemd units, which is the thing this page is not about. The blurb carries
+// the whole meaning, as Firewall's does.
 //
 // This table is now the only description of a section anywhere. It renders in
 // three places — the top bar, the tab bar, and the page's own title — because
@@ -69,6 +78,14 @@ const NAV = [
     end: false,
     blurb:
       'Let something on the internet reach one device on your network. Nothing gets in unless you put it here.',
+  },
+  {
+    to: '/ingress',
+    label: 'Ingress',
+    icon: Link2,
+    end: false,
+    blurb:
+      'Reach the things running on your network at a proper https:// address, instead of an IP and a port number you have to remember.',
   },
 ]
 

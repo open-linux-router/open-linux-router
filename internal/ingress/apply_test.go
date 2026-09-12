@@ -501,7 +501,32 @@ tls.issuance.acme
 
 // A format change must cost an empty list, never a wrong one.
 func TestParseProvidersIgnoresEverythingElse(t *testing.T) {
-	if got := parseProviders("total nonsense\nhttp.handlers.file_server\n"); got != nil {
+	if got := parseProviders("total nonsense\nhttp.handlers.file_server\n"); len(got) != 0 {
 		t.Fatalf("got %v, want nothing", got)
+	}
+}
+
+// The state a stock Caddy is actually in, and the one this path has to explain
+// rather than render as an empty dropdown. Verified against a real caddy v2.9.1:
+// 127 modules, no DNS providers.
+func TestAStockBuildHasNoProviders(t *testing.T) {
+	stock := parseProviders("http.handlers.reverse_proxy\ntls.issuance.acme\nhttp.encoders.gzip\n")
+	if HasProviders(stock) {
+		t.Fatalf("got %v, want none", stock)
+	}
+	// An empty slice rather than nil, so the API answers [] and not null.
+	if stock == nil {
+		t.Error("parseProviders must not return nil; null reads as a missing field")
+	}
+
+	err := ErrNoProviders("/usr/bin/caddy")
+	for _, want := range []string{"/usr/bin/caddy", "compiled in", "caddyserver.com/download", "xcaddy"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the explanation must mention %q, got:\n%v", want, err)
+		}
+	}
+	// It must not read as "no proxy found" to somebody looking at one.
+	if strings.Contains(err.Error(), "no proxy binary found") {
+		t.Error("a wrong build is not a missing binary; the remedies differ")
 	}
 }

@@ -108,6 +108,26 @@ export type AddressAndPort3 = string
  * A duration with a unit, such as 30s, 5s or 1m30s. Units are ns, us, ms, s, m and h.
  */
 export type Duration1 = string
+/**
+ * Who hosts the DNS for your domain. olr writes a temporary record through their API to prove the domain is yours, which is the only way to get a certificate for a name that does not resolve from the internet. The names your proxy supports are listed by `olr ingress show providers`.
+ */
+export type DNSProvider = string
+/**
+ * An API credential for the DNS provider. Scope it to this one zone if the provider allows it: it is stored on the router and can change your DNS. It is never shown again after it is set.
+ */
+export type ProviderAPIToken = string
+/**
+ * Optional. Used by the certificate authority to warn you before a certificate expires.
+ */
+export type ContactAddress = string
+/**
+ * Public DNS servers used only to confirm the challenge record has published. This must not be this router: olr answers your local domain authoritatively, so asking it would return "no such record" forever. Leave empty for sensible defaults.
+ */
+export type PropagationCheckResolvers = string[]
+/**
+ * How olr speaks to the service being published. http is almost always right: the connection runs over your own LAN to a device you named, and the HTTPS a browser sees is terminated here. Use https only when the service refuses plain HTTP — many NAS and hypervisor UIs do — in which case its own certificate is not checked, because those are self-signed and demanding a valid one would make the case this option exists for impossible. Empty means http.
+ */
+export type UpstreamScheme = '' | 'http' | 'https'
 
 /**
  * The whole box's configuration, one property per module — the shape of /etc/open-linux-router/olr.json.
@@ -118,6 +138,7 @@ export interface OlrDocument {
   dns?: DnsConfig
   firewall?: FirewallConfig
   gateway?: GatewayConfig
+  ingress?: IngressConfig
   link?: LinkConfig
 }
 export interface DevicesConfig {
@@ -241,6 +262,31 @@ export interface Probe {
 export interface Assignment {
   interface: string
   exit?: string
+}
+export interface IngressConfig {
+  enabled: boolean
+  certificate: Certificate
+  services?: Service[]
+  raw_caddyfile?: string
+}
+/**
+ * How the one wildcard certificate that serves every published name is obtained.
+ */
+export interface Certificate {
+  provider?: DNSProvider
+  provider_token?: ProviderAPIToken
+  acme_email?: ContactAddress
+  resolvers?: PropagationCheckResolvers
+}
+export interface Service {
+  name: string
+  upstream: UpstreamIngress
+}
+export interface UpstreamIngress {
+  device?: string
+  host?: string
+  port: number
+  scheme?: UpstreamScheme
 }
 export interface LinkConfig {
   adopted?: string[]

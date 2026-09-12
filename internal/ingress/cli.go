@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -43,12 +44,22 @@ func Command() *cobra.Command {
 // Endpoints this module's commands call. Spelled once so a rename cannot leave
 // half the commands pointing at the old path.
 const (
-	configEndpoint    = core.APIPrefix + "/" + ModuleName + "/config"
-	planEndpoint      = core.APIPrefix + "/" + ModuleName + "/plan"
-	statusEndpoint    = core.APIPrefix + "/" + ModuleName + "/status"
-	servicesEndpoint  = core.APIPrefix + "/" + ModuleName + "/services"
-	providersEndpoint = core.APIPrefix + "/" + ModuleName + "/providers"
+	base              = core.APIPrefix + "/" + ModuleName
+	configEndpoint    = base + "/config"
+	planEndpoint      = base + "/plan"
+	statusEndpoint    = base + "/status"
+	servicesEndpoint  = base + "/services"
+	providersEndpoint = base + "/providers"
 )
+
+// serviceEndpoint is the item route for one published service.
+//
+// Escaped, because a name arrives from an operator's argument and reaches a URL
+// path. Publishing a service called `../config` should fail as a validation
+// error, not as a request to somewhere else.
+func serviceEndpoint(name string) string {
+	return servicesEndpoint + "/" + url.PathEscape(name)
+}
 
 func ctxOf(c *cobra.Command) context.Context {
 	if ctx := c.Context(); ctx != nil {
@@ -247,27 +258,35 @@ func setCommand() *cobra.Command {
 				return err
 			}
 
-			return mutate(c, func(cfg *Config) error {
-				if c.Flags().Changed("provider") {
-					cfg.Certificate.Provider = provider
-				}
-				if secret != "" {
-					cfg.Certificate.Token = secret
-				}
-				if c.Flags().Changed("email") {
-					cfg.Certificate.Email = email
-				}
-				if c.Flags().Changed("resolver") {
-					cfg.Certificate.Resolvers = resolvers
-				}
-				if c.Flags().Changed("raw-caddyfile") {
-					cfg.ExtraConf = raw
-				}
-				if clearRaw {
-					cfg.ExtraConf = ""
-				}
-				return nil
-			})
+			// A merge patch of only what was asked for. `certificate` is an
+			// object so RFC 7386 merges into it key by key, which is exactly
+			// what "change the provider and leave the credential alone" needs —
+			// and why the services list gets item routes instead (http.go).
+			cert := map[string]any{}
+			if c.Flags().Changed("provider") {
+				cert["provider"] = provider
+			}
+			if secret != "" {
+				cert["provider_token"] = secret
+			}
+			if c.Flags().Changed("email") {
+				cert["acme_email"] = email
+			}
+			if c.Flags().Changed("resolver") {
+				cert["resolvers"] = resolvers
+			}
+
+			patch := map[string]any{}
+			if len(cert) > 0 {
+				patch["certificate"] = cert
+			}
+			if c.Flags().Changed("raw-caddyfile") {
+				patch["raw_caddyfile"] = raw
+			}
+			if clearRaw {
+				patch["raw_caddyfile"] = ""
+			}
+			return send(c, "PATCH", configEndpoint, patch)
 		}
 	})
 }
@@ -298,22 +317,6 @@ func readToken(c *cobra.Command, token, tokenFile string) (string, error) {
 		}
 		return strings.TrimSpace(string(data)), nil
 	}
-}
-
-// currentDomain asks olrd for the suffix published names live under.
-//
-// Needed client-side for one reason: an operator may type either `grafana` or
-// `grafana.home.example.com` and mean the same service, and reducing those two
-// spellings to one requires knowing the suffix. Getting it wrong would not be
-// silent — the validator refuses a nested name — but "grafana.home.example.com
-// has more than one label" is a baffling thing to be told about a name you just
-// read off your own browser's address bar.
-func currentDomain(c *cobra.Command) (string, error) {
-	resp, err := loadServices(c)
-	if err != nil {
-		return "", err
-	}
-	return resp.Domain, nil
 }
 
 // ---------------------------------------------------------------- add / rm
@@ -368,22 +371,13 @@ func addCommand() *cobra.Command {
 			"  olr ingress add hello --host 127.0.0.1 --port 8000"
 		flags.register(c)
 		c.RunE = func(c *cobra.Command, args []string) error {
-			domain, err := currentDomain(c)
-			if err != nil {
-				return err
-			}
-			return mutate(c, func(cfg *Config) error {
-				name := args[0]
-				if _, exists := cfg.Service(name, domain); exists {
-					return fmt.Errorf("%q is already published; remove it first, or edit it with `olr ingress add` after `olr ingress rm`", name)
-				}
-				s := Service{Name: name}
-				flags.apply(&s.Upstream, c)
-				// Every other check is the validator's, server-side, so the CLI
-				// and the UI refuse identical things for identical reasons.
-				cfg.SetService(s, domain)
-				return nil
-			})
+			// One request to the item route, not load-splice-save. The daemon
+			// holds the lock across the whole edit that way, and the rule that
+			// reduces `grafana` and `grafana.home.example.com` to one entry lives
+			// there rather than here (http.go).
+			s := Service{Name: args[0]}
+			flags.apply(&s.Upstream, c)
+			return send(c, "PUT", serviceEndpoint(args[0]), s)
 		}
 	})
 	return c
@@ -397,16 +391,7 @@ func rmCommand() *cobra.Command {
 			"The name stops answering immediately, which olr reports as a\n" +
 			"disruptive change: anyone with the URL open loses it."
 		c.RunE = func(c *cobra.Command, args []string) error {
-			domain, err := currentDomain(c)
-			if err != nil {
-				return err
-			}
-			return mutate(c, func(cfg *Config) error {
-				if !cfg.RemoveService(args[0], domain) {
-					return unknownService(servicesOf(*cfg), args[0])
-				}
-				return nil
-			})
+			return send(c, "DELETE", serviceEndpoint(args[0]), nil)
 		}
 	})
 	c.ValidArgsFunction = cli.CompleteArgs(serviceNames)
@@ -473,7 +458,7 @@ func enableCommand() *cobra.Command {
 	return verb("enable", "Start publishing services", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
-			return mutate(c, func(cfg *Config) error { cfg.Enabled = true; return nil })
+			return send(c, "PATCH", configEndpoint, map[string]any{"enabled": true})
 		}
 	})
 }
@@ -484,40 +469,36 @@ func disableCommand() *cobra.Command {
 		c.Long = "Stop the proxy. Every published name stops answering, and the\n" +
 			"configuration is kept so that enabling again needs no retyping."
 		c.RunE = func(c *cobra.Command, _ []string) error {
-			return mutate(c, func(cfg *Config) error { cfg.Enabled = false; return nil })
+			return send(c, "PATCH", configEndpoint, map[string]any{"enabled": false})
 		}
 	})
 }
 
 // ---------------------------------------------------------------- shared
 
-// mutate is read-modify-write against olrd.
+// send is the shape every change shares: one request naming the thing to
+// change, then print what it did.
 //
-// The window between the GET and the PUT is real, and it is the same window the
-// WebUI has; closing it belongs in core, as a revision the write is conditional
-// on, rather than in a lock this process holds and olrd cannot see.
+// Applying happens on return, with no staged commit (design.md §5.1), so the
+// diff and the impact are printed either way. That is also why every request
+// here carries confirm=true: the disruptive gate exists for the WebUI, which can
+// put the question to somebody and wait. A command that returned "this would be
+// disruptive, run it again" would be a staged commit by another name, and §5.1
+// says this surface does not have one. `--dry-run` is how you look first.
 //
-// One thing specific to this module: the config that comes back from the GET has
-// its credential redacted, and it goes back out that way. The API treats the
-// mask as "unchanged" (http.go), which is what lets every edit here be a full
-// document write without any of them having to know a secret exists.
-func mutate(c *cobra.Command, edit func(*Config) error) error {
+// One thing specific to this module: nothing here has to know a credential
+// exists. `olr ingress set --token-file` sends the value it read; every other
+// command sends a patch that does not mention the field, and RFC 7386 leaves an
+// unmentioned key alone.
+func send(c *cobra.Command, method, path string, body any) error {
 	if err := cli.ValidateOutput(c); err != nil {
 		return err
 	}
 	ctx, client := ctxOf(c), cli.ClientFor(c)
 
-	cfg, err := loadConfig(c)
-	if err != nil {
-		return err
-	}
-	if err := edit(&cfg); err != nil {
-		return err
-	}
-
 	if cli.DryRun(c) {
 		var plan planView
-		if err := client.Post(ctx, planEndpoint, cfg, &plan); err != nil {
+		if err := client.Do(ctx, method, path+"?dry_run=true", body, &plan); err != nil {
 			return err
 		}
 		if cli.IsJSON(c) {
@@ -527,9 +508,10 @@ func mutate(c *cobra.Command, edit func(*Config) error) error {
 	}
 
 	var result applyResponse
-	if err := client.Put(ctx, configEndpoint, cfg, &result); err != nil {
+	if err := client.Do(ctx, method, path+"?confirm=true", body, &result); err != nil {
 		// Report what landed before returning the failure: there is no
-		// rollback, so which steps completed is the operator's starting point.
+		// rollback, so which steps completed is the operator's starting point
+		// (design.md §5.3.2).
 		writeStepsText(c.ErrOrStderr(), result.Steps)
 		return err
 	}

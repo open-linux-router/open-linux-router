@@ -6,6 +6,7 @@ import { AuthGate } from '@/components/layout/auth-gate'
 import { DhcpPage } from '@/routes/dhcp'
 import { DnsPage } from '@/routes/dns'
 import { FirewallPage } from '@/routes/firewall'
+import { IngressPage } from '@/routes/ingress'
 import { OverviewPage } from '@/routes/overview'
 import { GatewayPage } from '@/routes/gateway'
 
@@ -19,6 +20,7 @@ export function App() {
           <Route path="dhcp" element={<DhcpPage />} />
           <Route path="dns" element={<DnsPage />} />
           <Route path="firewall" element={<FirewallPage />} />
+          <Route path="ingress" element={<IngressPage />} />
 
           {/* The two addresses that moved. Redirected rather than deleted: a
               bookmark or a link in someone's notes should land where the thing

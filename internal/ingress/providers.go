@@ -52,7 +52,7 @@ func ListProviders(ctx context.Context, binary string) ([]string, error) {
 // without having to model any of it, and a format change costs an empty list
 // rather than a wrong one.
 func parseProviders(out string) []string {
-	var names []string
+	names := []string{}
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
 		if len(fields) == 0 {
@@ -67,3 +67,10 @@ func parseProviders(out string) []string {
 	sort.Strings(names)
 	return names
 }
+
+// HasProviders reports whether a binary can obtain a certificate at all.
+//
+// Its own function because "found a proxy" and "found a proxy that can do the
+// job" are different answers, and on this path the second is the one that is
+// usually false — see ErrNoProviders.
+func HasProviders(providers []string) bool { return len(providers) > 0 }

@@ -132,23 +132,46 @@ func RunConfigCheck(ctx context.Context, confPath string, env []string) error {
 	if err == nil {
 		return nil
 	}
-	// A provider the operator's binary was not built with lands here, and it is
-	// the one rejection worth anticipating in words. Caddy reports it as an
-	// unrecognised subdirective, which is accurate and does not mention the
-	// thing that would actually help.
-	// Caddy's own message, trimmed but not reworded. It names the line, and we
-	// have nothing better to say about a file we generated than what the thing
-	// that has to read it said about it.
-	msg := strings.TrimSpace(string(out))
+	// Caddy's own words, filtered but not reworded. It names the directive and
+	// the line, and we have nothing better to say about a file we generated than
+	// what the thing that has to read it said about it.
+	msg := caddyComplaint(out)
 	if msg == "" {
 		return fmt.Errorf("the rendered Caddyfile was rejected: %w", err)
 	}
+	// A provider the binary was not built with is the rejection worth
+	// anticipating in words: Caddy reports it as an unregistered module, which is
+	// accurate and does not mention the thing that would actually help. The
+	// phrase matched here was taken from a real caddy's output, not guessed —
+	// `module not registered: dns.providers.<name>`.
 	hint := ""
-	if strings.Contains(msg, "dns") {
+	if strings.Contains(msg, providerPrefix) {
 		hint = fmt.Sprintf("\n\n%s was not built with that DNS provider. "+
 			"`olr ingress show providers` lists what it has", binary)
 	}
 	return fmt.Errorf("the rendered Caddyfile was rejected:\n%s%s", msg, hint)
+}
+
+// caddyComplaint reduces `caddy validate` output to the part about the config.
+//
+// Caddy logs to stderr in JSON and then prints its actual complaint in plain
+// text, so the raw output opens with a line like
+// `{"level":"info","msg":"using config from file",…}` that tells an operator
+// nothing. Dropping anything shaped like a log record leaves the sentence naming
+// the directive and the line, which is the whole of what is useful.
+//
+// Found by running it rather than reasoned about: the noise was the first thing
+// visible the first time a real Caddy rejected a real rendered file.
+func caddyComplaint(out []byte) string {
+	var kept []string
+	for _, line := range strings.Split(string(out), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "{") {
+			continue
+		}
+		kept = append(kept, trimmed)
+	}
+	return strings.Join(kept, "\n")
 }
 
 // NewApplierAt wires up the Caddy backend, with every rendered path relocated
@@ -275,7 +298,18 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 	if err != nil {
 		return ApplyResult{Plan: plan}, err
 	}
+	return a.ApplyPlanned(ctx, desired, plan)
+}
 
+// ApplyPlanned applies a plan that has already been built and looked at.
+//
+// Split out of Apply for the HTTP surface, which has to do something between the
+// two halves: a disruptive plan is *held* and returned for confirmation rather
+// than applied (http.go). Re-planning after that decision would be a second
+// observation, so the plan the operator agreed to would not be the plan that
+// lands — and "a published name stops answering" is exactly the kind of thing
+// that must not change shape between being shown and being done.
+func (a Applier) ApplyPlanned(ctx context.Context, desired Config, plan Plan) (ApplyResult, error) {
 	result := ApplyResult{Plan: plan}
 	run := func(description string, fn func() error) error {
 		err := fn()
@@ -484,7 +518,16 @@ func (a Applier) checkRendered(ctx context.Context, rendered Rendered, desired C
 	// through the rendered env file, which may not be on disk yet and whose
 	// contents we would rather not have in a second place.
 	env := []string{TokenEnv + "=" + desired.Certificate.Token}
-	return a.configChecker()(ctx, tmp.Name(), env)
+	err = a.configChecker()(ctx, tmp.Name(), env)
+
+	// Caddy names the file it was given, and the file it was given is a
+	// temporary the operator cannot open — while the *line number* beside it is
+	// the most useful thing in the message. Rewriting the path keeps the number
+	// pointing somewhere real.
+	if err != nil && strings.Contains(err.Error(), tmp.Name()) {
+		return errors.New(strings.ReplaceAll(err.Error(), tmp.Name(), a.Paths.Conf))
+	}
+	return err
 }
 
 // checkInstalled refuses to drive a unit whose file is not on the box.

@@ -27,6 +27,8 @@
 import type { Problem } from '@/lib/api'
 import type {
   DeviceCategory,
+  IngressConfig,
+  UpstreamScheme,
   DevicesConfig,
   ExitForm,
   FirewallConfig,
@@ -53,6 +55,14 @@ export interface Change {
    * wrong one is the bug this field exists to prevent.
    */
   unit?: string
+  /**
+   * Whether this file's contents are withheld. Set by ingress alone, on the file
+   * holding the DNS provider credential: the change is reported and compared
+   * byte for byte, and only its *display* is suppressed. A diff viewer must not
+   * decide on its own what is safe to render — `diff` already contains a
+   * placeholder rather than the bytes, so nothing here has to remember.
+   */
+  secret?: boolean
   diff: string
 }
 
@@ -115,6 +125,13 @@ export interface Step {
   description: string
   done: boolean
   error?: string
+  /**
+   * The step could not be attempted rather than having failed — ingress checking
+   * a rendered config with no proxy binary to check it with. `done` stays true
+   * because nothing is outstanding, so a reader that only looks at `done` is not
+   * misled about the outcome, only about whether a check happened.
+   */
+  skipped?: boolean
 }
 
 /**
@@ -705,4 +722,96 @@ export interface FirewallStatus {
   foreign?: ForeignFilter[]
   problems?: Problem[]
   as_of: string
+}
+
+// --- ingress --------------------------------------------------------------
+
+/**
+ * What the ingress plan carries. The same shape as `Plan` — one backend, files
+ * on disk, a unit to signal — so the shared renderer in features/plan serves it
+ * unchanged.
+ */
+export type IngressPlan = Plan
+
+/**
+ * One published service, joined with where it currently points.
+ *
+ * `upstream` is not in the config: the config names a device, and where that
+ * device is belongs to another module (design.md §4.1). It is read per request,
+ * which is why it can be absent with `upstream_error` set while the service
+ * itself is perfectly well configured.
+ */
+export interface IngressServiceView {
+  name: string
+  /** Rendered by the daemon rather than assembled here, so the client does not
+   *  have to fetch the local domain to know what a service's address is. */
+  url: string
+  device?: string
+  host?: string
+  port: number
+  scheme: UpstreamScheme
+  upstream?: string
+  upstream_error?: string
+}
+
+export interface IngressServices {
+  services: IngressServiceView[]
+  domain?: string
+  as_of: string
+}
+
+/** The certificate this module's whole clock-dependent half hangs off. */
+export interface IngressCertState {
+  found: boolean
+  certificate?: {
+    path: string
+    names: string[]
+    issued_at: string
+    expires_at: string
+  }
+  expires_in_days?: number
+  /**
+   * The certificate should already have been replaced and was not — so renewal
+   * has been failing quietly, and there is still time to fix it. This is the
+   * field the module exists to be able to set: everything about this failure
+   * looks fine until it suddenly does not.
+   */
+  renewal_overdue: boolean
+}
+
+export interface IngressStatus {
+  enabled: boolean
+  /** The suffix published names live under, owned by the dns module. */
+  domain?: string
+  service?: UnitStatus
+  service_error?: string
+  /**
+   * The proxy olr found, and why it found none. olr ships no proxy, so "is one
+   * present" is part of this module's health rather than something to discover
+   * when an apply fails.
+   */
+  binary?: string
+  binary_error?: string
+  certificate: IngressCertState
+  certificate_error?: string
+  certificate_warnings?: string[]
+  published: number
+  drifted: boolean
+  drift?: IngressPlan
+  drift_error?: string
+  as_of: string
+}
+
+export interface IngressApplyResult {
+  plan: IngressPlan
+  steps?: Step[]
+  error?: { message: string; problems?: Problem[] }
+  /** What is stored now, redacted. Present on the refusal path especially: it
+   *  says the document did not move. */
+  config?: IngressConfig
+}
+
+export interface IngressProviders {
+  binary?: string
+  providers: string[]
 }
