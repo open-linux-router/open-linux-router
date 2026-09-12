@@ -50,7 +50,7 @@ type options struct {
 	links     string
 	root      string
 	tokenPath string
-	noAuth    bool
+	auth      bool
 	logLevel  string
 	version   bool
 }
@@ -69,14 +69,20 @@ func Main(args []string) int {
 	return 0
 }
 
-func run(args []string) error {
+// parseOptions turns olrd's arguments into options.
+//
+// Split out of run so that what the flags mean can be tested without starting a
+// daemon — which matters most for the ones whose meaning has changed, where the
+// question is not "does it parse" but "does an old argument still do something
+// sensible".
+func parseOptions(args []string, onError flag.ErrorHandling) (options, error) {
 	var opts options
 
 	// A FlagSet of our own, not the package-level CommandLine: `olr` owns
 	// os.Args, and this process is reached through a subcommand, so the flags
 	// to parse are the ones after it rather than all of them. ExitOnError
 	// keeps the behaviour a bad flag used to get from flag.Parse().
-	fs := flag.NewFlagSet("olr internal daemon", flag.ExitOnError)
+	fs := flag.NewFlagSet("olr internal daemon", onError)
 	fs.StringVar(&opts.socket, "socket", core.DefaultSocket,
 		"unix socket to serve the API on")
 	fs.StringVar(&opts.listen, "listen", "",
@@ -87,11 +93,24 @@ func run(args []string) error {
 		"prefix every configuration and state path with this directory (development only)")
 	fs.StringVar(&opts.tokenPath, "token-file", core.TokenPath,
 		"file holding the API token for the TCP listener")
-	fs.BoolVar(&opts.noAuth, "no-auth", false,
-		"serve the TCP listener without a token (loopback addresses only)")
+	fs.BoolVar(&opts.auth, "auth", false,
+		"require the API token on the TCP listener (off by default)")
+	// Accepted and ignored. It named the default-on inverse of --auth, and a box
+	// upgrading with it still in OLRD_ARGS must not fail to start over a flag
+	// that now describes the default. OLRD_ARGS is a file operators edit by
+	// hand, so an unknown-flag exit here is an outage during an upgrade.
+	fs.Bool("no-auth", false, "deprecated: the TCP listener is unauthenticated unless --auth")
 	fs.StringVar(&opts.logLevel, "log-level", "info", "debug|info|warn|error")
 	fs.BoolVar(&opts.version, "version", false, "print version and exit")
 	if err := fs.Parse(args); err != nil {
+		return opts, err
+	}
+	return opts, nil
+}
+
+func run(args []string) error {
+	opts, err := parseOptions(args, flag.ExitOnError)
+	if err != nil {
 		return err
 	}
 
@@ -100,9 +119,9 @@ func run(args []string) error {
 		return nil
 	}
 
-	logger, err := newLogger(opts.logLevel)
-	if err != nil {
-		return err
+	logger, newErr := newLogger(opts.logLevel)
+	if newErr != nil {
+		return newErr
 	}
 	slog.SetDefault(logger)
 
@@ -412,27 +431,53 @@ type tcpServer struct {
 	listener net.Listener
 }
 
+// authenticateAPI puts the token in front of the API and nothing else.
+//
+// The bug this fixes is one level of mounting. BearerAuth used to wrap the
+// whole mux, which includes `/` — the SPA itself. So a browser pointed at the
+// listener was answered with `{"error":{"message":"missing or invalid API
+// token; see /etc/open-linux-router/api-token"}}` as raw JSON, and never loaded
+// the JavaScript. The SPA has had a working token prompt the whole time
+// (web/src/components/layout/auth-gate.tsx probes /api/modules and asks on a
+// 401), and it could not run, because the page carrying it was behind the thing
+// it existed to collect. The documented flow — "browse to the UI and paste the
+// token when asked" — was unreachable from a browser.
+//
+// Static assets are not secrets: the SPA is the same bundle for every
+// installation and holds no configuration. What must be authenticated is the
+// API, and that is exactly what is wrapped here.
+func authenticateAPI(token string, top http.Handler) http.Handler {
+	authed := core.BearerAuth(token, top)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == core.APIPrefix || strings.HasPrefix(r.URL.Path, core.APIPrefix+"/") {
+			authed.ServeHTTP(w, r)
+			return
+		}
+		top.ServeHTTP(w, r)
+	})
+}
+
 // tcpListener builds the TCP half, which is the only surface that needs
 // authenticating.
 func tcpListener(opts options, handler http.Handler, logger *slog.Logger) (tcpServer, string, error) {
-	authed := "bearer token"
+	authed := "none"
 
-	if opts.noAuth {
-		// The one guard that makes --no-auth defensible: it cannot be reached
-		// from the network. An unauthenticated admin API on a router's LAN
-		// address is not a development convenience, it is a vulnerability.
-		if !core.IsLoopback(opts.listen) {
-			return tcpServer{}, "", fmt.Errorf(
-				"--no-auth requires a loopback --listen address, got %q", opts.listen)
-		}
-		logger.Warn("serving without authentication", "address", opts.listen)
-		authed = "none"
-	} else {
+	if opts.auth {
 		token, err := core.LoadOrCreateToken(opts.tokenPath)
 		if err != nil {
 			return tcpServer{}, "", err
 		}
-		handler = core.BearerAuth(token, handler)
+		handler = authenticateAPI(token, handler)
+		authed = "bearer token"
+	} else if !core.IsLoopback(opts.listen) {
+		// Stated every start, not once at setup. Opening this listener is
+		// already an explicit act — olrd serves only its unix socket until
+		// somebody runs `olr listen` — but "explicit once, months ago" and
+		// "currently true" are different things, and the journal is where
+		// somebody looks when they are asking which.
+		logger.Warn("the web UI is reachable from the network and requires no password",
+			"address", opts.listen,
+			"note", "anyone who can reach this address can configure this router")
 	}
 
 	l, err := core.ListenTCP(opts.listen)

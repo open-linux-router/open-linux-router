@@ -138,12 +138,20 @@ socket at `/run/olr/olrd.sock`, which is what the `olr` command talks to:
 
 ```sh
 sudo olr listen 0.0.0.0:8080
-sudo cat /etc/open-linux-router/api-token   # the UI will ask for this
 ```
 
-Then browse to `http://<this box>:8080`, and `sudo olr listen --off` when you're
-done. For a box you'd rather not expose, listen on `127.0.0.1:8080` and reach it
-over an SSH tunnel — loopback needs no token.
+Then browse to `http://<this box>:8080` and you're in — **there is no password.**
+Opening the listener is the decision; having made it, anyone who can reach that
+address can configure this router. That's the right default on a home network
+and the wrong one on a network you don't control, so `sudo olr listen --off`
+closes it again, and `127.0.0.1:8080` plus an SSH tunnel keeps it to people who
+can already log into the box.
+
+To require a token instead, add `--auth` to `OLRD_ARGS` in
+`/etc/open-linux-router/olrd.env`. olrd generates one on first start, you read
+it with `sudo cat /etc/open-linux-router/api-token`, and the UI asks for it.
+A real login — users, not a shared secret — belongs to the unbuilt `system`
+module.
 
 **The most useful thing this can do today:** leave your existing router in place
 doing the routing, and move DHCP onto a Linux box — so you get a real device

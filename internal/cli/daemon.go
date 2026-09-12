@@ -100,9 +100,9 @@ func daemonListenCommand() *cobra.Command {
 			"olr always serves its control socket, which is what the command line\n" +
 			"talks to. It listens on the network only when told to, so this is the\n" +
 			"step that makes the web UI reachable from another machine.\n\n" +
-			"Anything that is not a loopback address requires a token, generated on\n" +
-			"first start into " + core.TokenPath + ". The UI asks for it on\n" +
-			"first use.\n\n" +
+			"There is no password. Anyone who can reach the address you choose can\n" +
+			"configure this router, which is why nothing is open until you run this.\n" +
+			"To require a token instead, add --auth to OLRD_ARGS in\n" + EnvPath + ".\n\n" +
 			"Examples:\n" +
 			"  olr listen 0.0.0.0:8080   reachable from your network\n" +
 			"  olr listen 127.0.0.1:8080 this box only, for an ssh tunnel\n" +
@@ -228,11 +228,14 @@ func writeEnvFile(body string) error {
 	return nil
 }
 
-// reportListening says what to do next, including where the token is.
+// reportListening says what to do next, which is now only "open this".
 //
-// The token is the step people get stuck on: the UI loads, asks for something,
-// and the answer is in a file nobody mentioned. Saying it here, at the moment
-// the URL is printed, is the cheapest place to close that gap.
+// It used to end by telling the operator to read a token out of a file. That
+// instruction was doubly wrong: the UI could never ask for the token (the page
+// itself was behind the check), and the token is no longer required by default
+// anyway. What replaces it is the honest sentence — this address has no
+// password on it — because the operator is the only one who can decide whether
+// that is acceptable on their network, and they can only decide it if we say so.
 func reportListening(w io.Writer, address string) error {
 	if address == "" {
 		_, err := fmt.Fprintf(w,
@@ -255,13 +258,15 @@ func reportListening(w io.Writer, address string) error {
 	}
 	if core.IsLoopback(address) {
 		_, err := fmt.Fprintf(w,
-			"\nThis is a loopback address, so no token is needed — but it is only\n"+
-				"reachable from this box. From elsewhere:\n"+
+			"\nThis is a loopback address, so it is only reachable from this box.\n"+
+				"From elsewhere:\n"+
 				"  ssh -L %s:%s <this box>\n", port, address)
 		return err
 	}
 	_, err := fmt.Fprintf(w,
-		"\nIt will ask for an API token. Read it with:\n  sudo cat %s\n", core.TokenPath)
+		"\nThere is no password on it: anyone who can reach %s can\n"+
+			"configure this router. That is fine on a network you trust and not\n"+
+			"otherwise — `olr listen --off` closes it again.\n", shown)
 	return err
 }
 

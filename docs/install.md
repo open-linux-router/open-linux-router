@@ -43,11 +43,14 @@ olr status
 
 ```sh
 sudo olr listen 0.0.0.0:8080
-sudo cat /etc/open-linux-router/api-token
 ```
 
-Browse to `http://192.168.1.2:8080` and paste the token when asked. The rest of
-this document gives both the UI and the CLI; they are the same API.
+Browse to `http://192.168.1.2:8080`. There is no password — anyone who can reach
+that address can configure this router, which is why olr does not open the
+listener until you ask it to. Add `--auth` to `OLRD_ARGS` in
+`/etc/open-linux-router/olrd.env` to require a token instead.
+
+The rest of this document gives both the UI and the CLI; they are the same API.
 
 ## 3. Hand the interface to olr
 
@@ -162,7 +165,7 @@ this box has to be added by hand.
 |---|---|
 | `/etc/open-linux-router/olr.json` | everything you configured, one file |
 | `/etc/open-linux-router/olrd.env` | whether the web UI listens, and on what |
-| `/etc/open-linux-router/api-token` | the web UI's token |
+| `/etc/open-linux-router/api-token` | the API token, used only with `--auth` |
 | `/etc/open-linux-router/rendered/` | what olr generated for dnsmasq — never edit |
 | `/var/lib/open-linux-router/dhcp/` | the lease database |
 | `journalctl -u olrd -u olr-dhcp` | logs; olr keeps no log files of its own |

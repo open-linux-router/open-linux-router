@@ -30,6 +30,14 @@ export function TokenButton() {
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState('')
 
+  // Hidden unless a token is actually in use. olrd serves the API without one
+  // unless it was started with --auth, which is the common case, and a key icon
+  // in the header of a UI that never asked for a credential reads as "you have
+  // missed a setup step" — the same confusion that made the raw 401 JSON so
+  // bad. The first token is set by AuthGate, which appears on a real 401; this
+  // button exists to change or clear one that is already there.
+  if (getToken() === null) return null
+
   function save() {
     setToken(value.trim() || null)
     setOpen(false)

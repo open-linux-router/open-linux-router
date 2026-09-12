@@ -5,9 +5,10 @@ olr always serves its control socket, which is what the command line
 talks to. It listens on the network only when told to, so this is the
 step that makes the web UI reachable from another machine.
 
-Anything that is not a loopback address requires a token, generated on
-first start into /etc/open-linux-router/api-token. The UI asks for it on
-first use.
+There is no password. Anyone who can reach the address you choose can
+configure this router, which is why nothing is open until you run this.
+To require a token instead, add --auth to OLRD_ARGS in
+/etc/open-linux-router/olrd.env.
 
 Examples:
   olr listen 0.0.0.0:8080   reachable from your network
