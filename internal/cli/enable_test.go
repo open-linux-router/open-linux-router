@@ -1,10 +1,16 @@
 package cli
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 // The bug: dnsmasq, unbound and nft live in /usr/sbin on Debian, and /usr/sbin
@@ -101,5 +107,73 @@ func TestDistroBackendsCarryAdvice(t *testing.T) {
 		if !strings.Contains(b.advice, "disable --now "+b.unit) {
 			t.Errorf("%s advice does not disable it:\n%s", b.unit, b.advice)
 		}
+	}
+}
+
+// fakeUnit records which systemd verb it was sent.
+type fakeUnit struct {
+	active    bool
+	statusErr error
+	calls     []string
+	core.Unit // nil: any method this test does not exercise panics rather than lying
+}
+
+func (f *fakeUnit) Status(context.Context) (core.UnitStatus, error) {
+	f.calls = append(f.calls, "status")
+	return core.UnitStatus{Active: f.active}, f.statusErr
+}
+func (f *fakeUnit) Start(context.Context) error   { f.calls = append(f.calls, "start"); return nil }
+func (f *fakeUnit) Restart(context.Context) error { f.calls = append(f.calls, "restart"); return nil }
+
+// The upgrade bug, as an operator met it: `olr enable` copied a new binary in,
+// rewrote the units, printed "started olrd.service" — and left the old process
+// running, because Start on a running unit is a no-op. The new CLI then talked
+// to the old daemon and reported `no such endpoint` for a route that had just
+// been added, and a browser was still answered by the code the upgrade replaced.
+func TestEnableRestartsADaemonThatIsAlreadyRunning(t *testing.T) {
+	unit := &fakeUnit{active: true}
+	var out bytes.Buffer
+
+	if err := startOrRestart(context.Background(), unit, &out); err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Contains(unit.calls, "restart") {
+		t.Errorf("calls = %v; a running olrd must be restarted or the upgrade does not take effect",
+			unit.calls)
+	}
+	if slices.Contains(unit.calls, "start") {
+		t.Errorf("calls = %v; Start on a running unit is the no-op that hid this", unit.calls)
+	}
+	if !strings.Contains(out.String(), "restarted") {
+		t.Errorf("output does not say what happened:\n%s", out.String())
+	}
+}
+
+func TestEnableStartsADaemonThatIsNotRunning(t *testing.T) {
+	unit := &fakeUnit{active: false}
+	var out bytes.Buffer
+
+	if err := startOrRestart(context.Background(), unit, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(unit.calls, "start") {
+		t.Errorf("calls = %v; a stopped olrd must be started", unit.calls)
+	}
+	if slices.Contains(unit.calls, "restart") {
+		t.Errorf("calls = %v; restarting a stopped unit is not what was asked", unit.calls)
+	}
+}
+
+// A box with no systemd to ask still has to end up with a running daemon.
+func TestEnableStartsWhenTheStatusCannotBeRead(t *testing.T) {
+	unit := &fakeUnit{active: true, statusErr: errors.New("no service manager")}
+	var out bytes.Buffer
+
+	if err := startOrRestart(context.Background(), unit, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(unit.calls, "start") {
+		t.Errorf("calls = %v; an unreadable status must still bring the unit up", unit.calls)
 	}
 }

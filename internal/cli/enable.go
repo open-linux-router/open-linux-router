@@ -166,10 +166,29 @@ func runEnable(cmd *cobra.Command) error {
 	}
 	fmt.Fprintf(out, "enabled %s\n", packaging.PrimaryUnit)
 
-	if err := unit.Start(ctx); err != nil {
-		return fmt.Errorf("starting %s: %w", packaging.PrimaryUnit, err)
+	// Restart when it is already running, rather than Start.
+	//
+	// This is the bug that made `olr enable` useless as an upgrade: Start on a
+	// running unit is a no-op, so the new binary and the new units landed on
+	// disk and the *old* process kept serving. The operator saw "started
+	// olrd.service", a version that had just been installed, and behaviour from
+	// the version before it — which surfaced as `olr claim` reporting
+	// `no such endpoint` against a daemon that genuinely did not have the route
+	// yet, and as a browser still being answered by pre-v0.1.6 code.
+	//
+	// selfInstall's comment has claimed since it was written that renaming over
+	// a running executable "is what lets `olr enable` double as the upgrade
+	// path". It only ever got the binary there; nothing made systemd exec it.
+	//
+	// The .deb has always done this correctly — packaging/scripts/postinstall.sh
+	// restarts when olrd is already active — so this is the standalone path
+	// catching up with the packaged one, and the reason it is safe is the same
+	// one recorded there: design.md §3.5 requires that restarting olrd never
+	// drops a packet, expires a lease or breaks a session, because the backends
+	// are separate units that keep serving throughout.
+	if err := startOrRestart(ctx, unit, out); err != nil {
+		return err
 	}
-	fmt.Fprintf(out, "started %s\n", packaging.PrimaryUnit)
 
 	return reportEnabled(out)
 }
@@ -563,4 +582,30 @@ func PrintWebURLs(w io.Writer) int {
 		}
 	}
 	return 0
+}
+
+// startOrRestart brings the unit up, restarting it when it is already running.
+//
+// Split out of runEnable so the decision can be tested against a fake unit: the
+// bug it fixes was invisible in every test because nothing here could observe
+// which of the two systemd verbs was sent.
+func startOrRestart(ctx context.Context, unit core.Unit, out io.Writer) error {
+	status, err := unit.Status(ctx)
+	if err == nil && status.Active {
+		if err := unit.Restart(ctx); err != nil {
+			return fmt.Errorf("restarting %s: %w", packaging.PrimaryUnit, err)
+		}
+		fmt.Fprintf(out, "restarted %s  (it was already running, so this is the upgrade)\n",
+			packaging.PrimaryUnit)
+		return nil
+	}
+
+	// Not running, or we could not ask. Starting is right in the first case and
+	// the safer guess in the second: on a stopped box it is what is needed, and
+	// on a running one it is the no-op this used to do unconditionally.
+	if err := unit.Start(ctx); err != nil {
+		return fmt.Errorf("starting %s: %w", packaging.PrimaryUnit, err)
+	}
+	fmt.Fprintf(out, "started %s\n", packaging.PrimaryUnit)
+	return nil
 }
