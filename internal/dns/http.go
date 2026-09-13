@@ -199,6 +199,12 @@ type applyResponse struct {
 }
 
 func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
+	// Turning DNS on without saying where it answers is answered rather than
+	// refused, and the answer is written into what gets stored — see
+	// WithDerivedListen. This is the only write path in the module (the CLI and
+	// MCP are both clients of it), so filling here fills for every surface.
+	cfg, derived := cfg.WithDerivedListen(h.Applier.Links)
+
 	// Validated before the lock is taken. Validation is pure (§5.3.1), so
 	// holding the lock to do it would only make a bad request slow down a good
 	// one, and a 422 is more useful than a plan that cannot be applied.
@@ -231,6 +237,7 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 	}
 
 	resp := applyResponse{Plan: viewPlan(result.Plan), Steps: result.Steps}
+	resp.Plan.Derived = derived
 	if applyErr != nil {
 		resp.Error = &core.ErrorBody{Message: applyErr.Error()}
 		core.WriteJSON(w, http.StatusInternalServerError, resp)
@@ -253,11 +260,20 @@ func (h HTTP) postPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var cfg Config
+	var (
+		cfg     Config
+		derived []string
+	)
 	if len(bytes.TrimSpace(data)) == 0 {
+		// The drift check, and deliberately not derived: drift asks whether the
+		// *stored* intent still describes the box. Filling a blank in here
+		// would invent a change nobody saved and report it as drift.
 		cfg, err = h.Applier.Load()
 	} else {
 		cfg, err = UnmarshalConfig(data)
+		if err == nil {
+			cfg, derived = cfg.WithDerivedListen(h.Applier.Links)
+		}
 	}
 	if err != nil {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
@@ -277,7 +293,9 @@ func (h HTTP) postPlan(w http.ResponseWriter, r *http.Request) {
 			problems(plan.Validation.Errors)...)
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, viewPlan(plan))
+	view := viewPlan(plan)
+	view.Derived = derived
+	core.WriteJSON(w, http.StatusOK, view)
 }
 
 // --- observed -------------------------------------------------------------

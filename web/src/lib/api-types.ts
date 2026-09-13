@@ -118,6 +118,17 @@ export interface ServicePlan {
  */
 export interface DnsPlan extends PlanCore {
   services: ServicePlan[]
+
+  /**
+   * What the module filled in for a caller who did not say — today, the address
+   * DNS will answer on when it is switched on for the first time (internal/dns
+   * derive.go). One line each, already written for a human.
+   *
+   * A change olr made on the operator's behalf has to be visible in the same
+   * breath as the change they asked for (design.md §5.6), which for a switch
+   * means the toast that confirms it.
+   */
+  derived?: string[]
 }
 
 /** One unit of work and how it went. */

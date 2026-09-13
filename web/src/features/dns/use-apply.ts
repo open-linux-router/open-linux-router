@@ -112,6 +112,14 @@ function list(services: ServicePlan[]): string {
  * and a restart of the thing the whole house resolves through.
  */
 function describe(plan: DnsPlan): string {
+  // Ahead of everything else, because it is the part nobody asked for. Turning
+  // DNS on for the first time now chooses where it answers, and a switch that
+  // quietly decided something has to say what it decided — "Applied — DNS
+  // started" would leave an operator to find the address in a settings page.
+  if (plan.derived?.length) {
+    return `DNS on — ${plan.derived.join(', ')}`
+  }
+
   const acting = plan.services.filter((s) => s.action !== 'none')
 
   if (acting.some((s) => s.action === 'stop')) {

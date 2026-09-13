@@ -237,6 +237,18 @@ func writeNamesText(w io.Writer, resp namesResponse) error {
 // questions and conflating them is how an operator ends up unsure whether
 // anything happened.
 func writePlanText(w io.Writer, plan planView, dryRun bool) error {
+	// First, above the file list: this is the part the operator did not ask
+	// for. `olr dns enable` on a fresh box now chooses an address, and a
+	// command that quietly decided something has to lead with it rather than
+	// bury it under a diff.
+	for _, line := range plan.Derived {
+		if dryRun {
+			fmt.Fprintf(w, "would be %s\n", line)
+			continue
+		}
+		fmt.Fprintln(w, line)
+	}
+
 	if plan.Empty {
 		fmt.Fprintln(w, cli.NothingToDo)
 		return writeWarnings(w, plan.Warnings)

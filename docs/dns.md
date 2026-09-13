@@ -431,6 +431,36 @@ that are not published yet and fills both fields from one. Two modules' config,
 two writes, each with its own plan — and the join in the one place that is
 allowed to know about both.
 
+### 4.8 Turning it on chooses where it answers
+
+An empty `listen` with `enabled: true` is refused by validation, and correctly:
+a relay that answers nowhere is an outage wearing the costume of a working
+configuration. But it was also the *first* thing a new box did. The switch on a
+fresh install turned DNS on, the write came back 422, and the message named a
+field the operator had never opened.
+
+The router already knew the answer. So the write path fills it in
+(`WithDerivedListen`): every private address on an interface the operator has
+adopted, port 53, and the addresses it chose are **stored in intent** and
+reported back — `derived` on the plan, which the CLI prints and the WebUI puts
+in the toast that confirms the switch.
+
+Three parts of that are load-bearing:
+
+- **Once, at the write.** Not resolved at runtime from whatever is adopted
+  today, because §5.4's drift check is "plan the stored intent against reality"
+  and intent that means *the current interfaces* cannot be planned against
+  anything.
+- **Private addresses only, not every adopted one.** The WAN gets adopted too —
+  `gateway` and `firewall` need it — and a derivation that took its address
+  would stand up an open resolver on the public side of somebody's box by
+  default. §5 calls that an amplifier, and arriving at it helpfully is the worst
+  way to arrive at it.
+- **Nothing adopted stays an error**, with a different message. The missing
+  thing there is an interface, not a setting, and "set the listen address"
+  would send that operator to type one that is then refused for being on
+  something unadopted.
+
 ---
 
 ## 5. The risk, which is availability

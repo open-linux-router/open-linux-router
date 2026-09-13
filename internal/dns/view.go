@@ -38,6 +38,16 @@ type planView struct {
 	// with `json:"-"` internally; they are the whole point of a preview, so
 	// they are surfaced here.
 	Warnings []core.Problem `json:"warnings,omitempty"`
+
+	// Derived is what the module filled in for a caller who did not say — one
+	// line per decision, in the operator's words ("answering DNS on
+	// 192.168.1.91:53 (lan0)").
+	//
+	// Published rather than done quietly, which is the condition design.md §5.6
+	// attaches to behaviour olr supplies by itself: a switch that turns DNS on
+	// and also chooses an address has to say so, on the CLI and in the UI, in
+	// the same breath as confirming the change.
+	Derived []string `json:"derived,omitempty"`
 }
 
 type changeView struct {

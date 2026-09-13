@@ -90,6 +90,20 @@ func Validate(c Config, links LinkView, reservations ReservationView) Result {
 func validateListen(r *Result, c Config, links LinkView) {
 	if len(c.Listen) == 0 {
 		if c.Enabled {
+			// A write path reaching here has already been through
+			// WithDerivedListen and come back empty-handed, so the operator is
+			// not missing a setting in the ordinary case — they are missing an
+			// interface, and saying "set the listen address" would send them to
+			// type one that is then refused for being on something unadopted.
+			//
+			// The two cases are separated because the fix is different and
+			// neither message is any use for the other.
+			if !anyAdopted(links) {
+				r.errorf("listen",
+					"this router has not been given an interface yet, so there is no address for "+
+						"DNS to answer on. Hand it the interface facing your network first")
+				return
+			}
 			r.errorf("listen",
 				"DNS is enabled but no listen address is configured, so nothing would answer. "+
 					"Set it to the router's address on the network it serves")

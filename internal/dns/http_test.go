@@ -120,6 +120,63 @@ func TestPatchChangesOneFieldAndReplacesArrays(t *testing.T) {
 	}
 }
 
+// The first switch on a fresh box: turn DNS on, say nothing else.
+//
+// This used to be a 422 with a message about a field the operator had never
+// opened. It is now a 200 that says which address it chose, and the choice is
+// stored — so `GET /config` afterwards shows an address somebody can read and
+// change, not a blank that would be re-derived differently tomorrow.
+func TestEnablingDnsChoosesWhereToAnswer(t *testing.T) {
+	h, _, _ := testHTTP(t)
+
+	w := do(t, h, http.MethodPatch, "/config", `{"enabled":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("PATCH status = %d, want 200; body %s", w.Code, w.Body)
+	}
+
+	var applied applyResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &applied); err != nil {
+		t.Fatal(err)
+	}
+	if len(applied.Plan.Derived) == 0 {
+		t.Error("chose an address without saying so")
+	} else if !strings.Contains(applied.Plan.Derived[0], "192.168.1.1:53") {
+		t.Errorf("derived %q, want the router's own LAN address", applied.Plan.Derived[0])
+	}
+
+	var stored Config
+	if err := json.Unmarshal(do(t, h, http.MethodGet, "/config", "").Body.Bytes(), &stored); err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.Listen) == 0 {
+		t.Fatal("the derived address was not stored, so it is not intent")
+	}
+	if stored.Listen[0] != netip.MustParseAddrPort("192.168.1.1:53") {
+		t.Errorf("stored listen = %v", stored.Listen)
+	}
+}
+
+// The preview has to agree with the apply, or the confirm dialog is describing
+// a different change from the one the button makes.
+func TestPlanFillsInTheSameAddressAsApply(t *testing.T) {
+	h, _, _ := testHTTP(t)
+
+	w := do(t, h, http.MethodPost, "/plan", `{"enabled":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST /plan status = %d, body %s", w.Code, w.Body)
+	}
+	var plan planView
+	if err := json.Unmarshal(w.Body.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Derived) == 0 {
+		t.Fatal("the preview did not report the address it would choose")
+	}
+	if plan.Empty {
+		t.Error("turning DNS on previewed as no change at all")
+	}
+}
+
 func TestPatchRejectsAnEmptyBody(t *testing.T) {
 	h, _, _ := testHTTP(t)
 	if w := do(t, h, http.MethodPatch, "/config", ""); w.Code != http.StatusBadRequest {
