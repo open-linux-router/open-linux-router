@@ -1,6 +1,7 @@
 import { AlertTriangle, ExternalLink, Plus, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 
+import { StatusStrip } from '@/components/layout/status-strip'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,7 +24,6 @@ import {
 import { Disclosure } from '@/components/ui/disclosure'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
 import { CertificateDialog } from '@/features/ingress/certificate-dialog'
 import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/ingress/impact'
 import {
@@ -129,30 +129,34 @@ export function IngressPage() {
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Published services</CardTitle>
-          <CardDescription>
-            Something on your network, reachable at a proper https:// address instead of an IP and a
-            port number.
-          </CardDescription>
-          <CardAction>
-            <Switch
-              aria-label="Serve these addresses"
-              checked={current.enabled}
-              disabled={applier.busy}
-              onCheckedChange={(enabled) => change(ingressChange.settings({ enabled }))}
-            />
-          </CardAction>
-        </CardHeader>
-        {!current.enabled && (
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              These addresses are saved but switched off, so none of them answers.
-            </p>
-          </CardContent>
-        )}
-      </Card>
+      <StatusStrip
+        headline={
+          !current.enabled
+            ? 'Off'
+            : services.length === 0
+              ? 'Nothing published yet'
+              : `Serving ${services.length} address${services.length === 1 ? '' : 'es'}`
+        }
+        detail={
+          current.enabled
+            ? 'Something on your network, reachable at a proper https:// address instead of an IP and a port number.'
+            : 'These addresses are saved but switched off, so none of them answers.'
+        }
+        dot={
+          !current.enabled
+            ? 'bg-muted-foreground/40'
+            : status.data?.binary_error
+              ? 'bg-destructive'
+              : 'bg-success'
+        }
+        control={{
+          id: 'ingress-enabled',
+          label: 'Serve these addresses',
+          checked: current.enabled,
+          busy: applier.busy,
+          onChange: (enabled) => change(ingressChange.settings({ enabled })),
+        }}
+      />
 
       <CertificateCard
         status={status.data}

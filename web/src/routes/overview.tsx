@@ -12,6 +12,7 @@ import { useDhcpConfig, useDhcpStatus } from '@/features/dhcp/queries'
 import { useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
 import { useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
+import { FirstRun } from '@/features/setup/first-run'
 import { NetworkMap } from '@/features/topology/network-map'
 import type {
   DeviceRow,
@@ -59,6 +60,11 @@ export function OverviewPage() {
 
   return (
     <div className="space-y-6">
+      {/* Above the faults, and above the counters, on exactly the boxes where
+          all three are empty. It renders nothing once the router is doing
+          something. */}
+      <FirstRun />
+
       {faults.map((fault) => (
         <Alert key={fault.key} variant={fault.tone === 'bad' ? 'destructive' : 'default'}>
           <AlertTriangle />
@@ -177,7 +183,7 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
       key: 'gateway-unknown',
       title: 'The gateway settings are saved but not in force',
       detail:
-        'This router could not read its own gateway configuration, so nothing on the gateway screen is actually running. On Linux this usually means the daemon lacks permission to change routing.',
+        'Nothing on the gateway screen is actually running. On Linux this usually means the daemon lacks permission to change routing.',
       tone: 'bad',
       to: '/gateway',
       action: 'Open Gateway',
@@ -190,7 +196,7 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
       key: 'dns-down',
       title: 'Nothing is answering DNS',
       detail:
-        'DNS is turned on but the server is stopped, so no device here can look up a name. To the people using them it looks like the internet is down.',
+        'DNS is on and the server is stopped. To the people using this network it looks like the internet is down.',
       tone: 'bad',
       to: '/dns',
       action: 'Open DNS',
@@ -202,7 +208,7 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
       key: 'dhcp-down',
       title: 'Addresses are not being handed out',
       detail:
-        'DHCP is turned on but the server is stopped. Devices already here keep their address until it expires; anything joining now gets none.',
+        'DHCP is on and the server is stopped. Devices here keep their address until it expires; anything joining now gets none.',
       tone: 'bad',
       to: '/dhcp',
       action: 'Open DHCP',
@@ -223,16 +229,23 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
     })
   }
 
+  // Only for a module that is switched on, and that is not a way of hiding
+  // drift. A disabled module's rendered files differing from its intent has no
+  // consequence — nothing is running, and enabling rewrites them on the way —
+  // whereas on a box that has never applied anything it is *always* true, which
+  // is how a brand-new install came to greet its owner with two warnings that
+  // something had changed the configuration behind their back. Nothing had.
+  // The section's own page still shows it, where the claim is narrower.
   const drifted: { name: string; to: string }[] = []
-  if (dhcp?.drifted && !dhcp.drift_error) drifted.push({ name: 'DHCP', to: '/dhcp' })
-  if (dns?.drifted && !dns.drift_error) drifted.push({ name: 'DNS', to: '/dns' })
+  if (dhcp?.enabled && dhcp.drifted && !dhcp.drift_error) drifted.push({ name: 'DHCP', to: '/dhcp' })
+  if (dns?.enabled && dns.drifted && !dns.drift_error) drifted.push({ name: 'DNS', to: '/dns' })
   if (gateway?.drifted) drifted.push({ name: 'The gateway', to: '/gateway' })
   for (const d of drifted) {
     out.push({
       key: `drift-${d.name}`,
       title: `${d.name} is not doing what its settings say`,
       detail:
-        'Something changed it outside olr, or a change was never applied. Saving any change on that screen puts it back.',
+        'Something changed it outside olr. Saving any change on that screen puts it back.',
       tone: 'warn',
       to: d.to,
       action: 'Take a look',

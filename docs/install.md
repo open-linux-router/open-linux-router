@@ -65,7 +65,8 @@ The rest of this document gives both the UI and the CLI; they are the same API.
 
 ## 3. Hand the interface to olr
 
-**Web UI:** DHCP → Interfaces → switch on `enp1s0`.
+**Web UI:** DHCP → Interfaces → switch on `enp1s0`. (A box with nothing
+adopted says so on the Overview, and that link goes to the same page.)
 
 **CLI:**
 

@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -27,17 +27,16 @@ import { cn } from '@/lib/utils'
 /**
  * Which interfaces this router has been given.
  *
- * This is the first thing on the page for a reason: olr refuses to serve
- * anything on an interface nobody handed it (design.md §3.4), so on a fresh
- * install every other card on this screen will reject whatever you type until
- * one row here is switched on. Before this card existed that refusal arrived as
- * a validation error on a form field, naming a permission the UI gave you no
- * way to grant.
+ * olr refuses to serve anything on an interface nobody handed it (design.md
+ * §3.4), so on a fresh install every range and every resolver is rejected until
+ * one row here is switched on. Before this existed, that refusal arrived as a
+ * validation error on a form field, naming a permission the UI gave you no way
+ * to grant — and the DHCP and DNS landing pages now say so *before* the switch
+ * is touched, linking here.
  *
- * It lives on the DHCP page rather than in a section of its own. Adoption is
- * read by dns and gateway too, so a case could be made for either — but this is
- * the page where it is *needed first*, and a fifth nav entry for one switch per
- * interface would be a section that is visited once and then never again.
+ * The title and the explanation are the sub-page's (routes/dhcp/interfaces),
+ * not this component's: it is the whole body of that page, and a card heading
+ * under the page heading would say "Interfaces" twice.
  */
 export function InterfacesCard({
   dhcp,
@@ -109,15 +108,6 @@ export function InterfacesCard({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Interfaces</CardTitle>
-        <CardDescription>
-          Hand an interface to this router before serving addresses on it.
-          Switching one on changes nothing by itself — no address is set and no
-          service is started.
-        </CardDescription>
-      </CardHeader>
-
       <CardContent className="space-y-3">
         {interfaces.isPending && <Skeleton className="h-32 w-full rounded-xl" />}
 

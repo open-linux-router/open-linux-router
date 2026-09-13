@@ -1,4 +1,5 @@
 import { ChevronRight } from 'lucide-react'
+import { Link } from 'react-router'
 
 import { cn } from '@/lib/utils'
 
@@ -37,6 +38,7 @@ function ListRow({
   leading,
   trailing,
   onSelect,
+  to,
   className,
   ...props
 }: Omit<React.ComponentProps<'li'>, 'title' | 'onSelect'> & {
@@ -51,6 +53,13 @@ function ListRow({
   /** Quiet supporting value, right-aligned. Stands down on narrow screens. */
   trailing?: React.ReactNode
   onSelect?: () => void
+  /**
+   * Where the row goes, for a row that is a way into a page rather than an
+   * editor for a thing. Same target size and chevron as `onSelect` — the
+   * difference the operator can feel is the back button, which is exactly why a
+   * settings group is a link and a pool is a dialog.
+   */
+  to?: string
 }) {
   const body = (
     <>
@@ -67,17 +76,22 @@ function ListRow({
     </>
   )
 
+  // min-h-14 is 56px, so the row clears the 44px minimum on its own.
+  const interactive =
+    'flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent/60 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring'
+  const chevron = <ChevronRight className="size-4 shrink-0 text-muted-foreground/60" aria-hidden />
+
   return (
     <li data-slot="list-row" className={cn('bg-card', className)} {...props}>
-      {onSelect ? (
-        <button
-          type="button"
-          onClick={onSelect}
-          // min-h-14 is 56px, so the row clears the 44px minimum on its own.
-          className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent/60 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
-        >
+      {to ? (
+        <Link to={to} className={interactive}>
           {body}
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground/60" aria-hidden />
+          {chevron}
+        </Link>
+      ) : onSelect ? (
+        <button type="button" onClick={onSelect} className={interactive}>
+          {body}
+          {chevron}
         </button>
       ) : (
         <div className="flex min-h-14 items-center gap-3 px-4 py-2.5">{body}</div>

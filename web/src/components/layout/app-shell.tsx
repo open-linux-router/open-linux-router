@@ -1,100 +1,16 @@
-import { Activity, Globe, Link2, Network, Router, ShieldCheck, Waypoints } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 
+import { BRAND_ICON, SECTIONS, sectionOf } from '@/components/layout/sections'
 import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { TokenButton } from '@/components/layout/token-button'
 import { cn } from '@/lib/utils'
-
-// Five sections: one place to look, four places to change something.
-//
-// This replaced Overview / Devices / Addresses / DNS / Internet, and the naming
-// changed with it. The old rule was to use the word the audience already knows,
-// which is why dhcp's section was called "Addresses" — nobody outside
-// networking says DHCP. That rule was right while this list *was* the front
-// door. It is not any more: the overview answers the everyday questions in
-// plain language, so the rest are free to name mechanisms, and the person
-// who goes looking for a section called DHCP is exactly the person who wants
-// DHCP. Mechanism names in a row also read as one system, where
-// "Addresses / DNS / Internet" read as three different registers.
-//
-// Firewall is the exception that proves the rule, and it is named for what it
-// will be rather than what it is: today it holds port forwarding and no
-// filtering at all (docs/firewall.md). The blurb carries the whole feature in
-// one sentence, which is what stops somebody opening it expecting rules.
-//
-// Devices is absent because it is not a section: the device list is the body of
-// the overview. Filing it under DHCP was considered and rejected — the
-// statically-addressed printer has never held a lease, and would have lived on
-// a page named for the protocol that has never seen it.
-//
-// Ingress is the second exception, and for the opposite reason to Firewall's:
-// the mechanism name is jargon borrowed from Kubernetes, and most people running
-// a house network have never met it. It is kept anyway, because every other
-// label here is exactly its module's name and `olr ingress` is the command —
-// breaking that one-to-one mapping costs more than the word costs. "Services"
-// was the alternative and is worse: on a Linux box that word already means
-// systemd units, which is the thing this page is not about. The blurb carries
-// the whole meaning, as Firewall's does.
-//
-// This table is now the only description of a section anywhere. It renders in
-// three places — the top bar, the tab bar, and the page's own title — because
-// `blurb` moved here out of the four route files, where the same heading markup
-// had been written four times and could drift four ways.
-const NAV = [
-  {
-    to: '/',
-    label: 'Overview',
-    icon: Activity,
-    end: true,
-    blurb: 'Your network, what it is doing, and anything that needs you.',
-  },
-  {
-    to: '/gateway',
-    label: 'Gateway',
-    icon: Waypoints,
-    end: false,
-    blurb:
-      'Choose how each network reaches the internet. Everything follows one setting unless you change it for a network of its own.',
-  },
-  {
-    to: '/dhcp',
-    label: 'DHCP',
-    icon: Network,
-    end: false,
-    blurb: 'Devices that join your network get an address from this router.',
-  },
-  {
-    to: '/dns',
-    label: 'DNS',
-    icon: Globe,
-    end: false,
-    blurb:
-      'Every device on your network looks up names through this router. This is what they asked for, and what they were allowed to reach.',
-  },
-  {
-    to: '/firewall',
-    label: 'Firewall',
-    icon: ShieldCheck,
-    end: false,
-    blurb:
-      'Let something on the internet reach one device on your network. Nothing gets in unless you put it here.',
-  },
-  {
-    to: '/ingress',
-    label: 'Ingress',
-    icon: Link2,
-    end: false,
-    blurb:
-      'Reach the things running on your network at a proper https:// address, instead of an IP and a port number you have to remember.',
-  },
-]
 
 export function AppShell() {
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
       <header className="sticky top-0 z-20 border-b bg-background/75 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-2.5 px-4">
-          <Router className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+          <BRAND_ICON className="size-5 shrink-0 text-muted-foreground" aria-hidden />
           <span className="font-semibold tracking-tight">Router</span>
 
           <DesktopNav />
@@ -134,7 +50,7 @@ function DesktopNav() {
   return (
     <nav className="ml-4 hidden sm:block" aria-label="Sections">
       <ul className="flex items-center gap-1">
-        {NAV.map(({ to, label, end }) => (
+        {SECTIONS.map(({ to, label, end }) => (
           <li key={to}>
             <NavLink
               to={to}
@@ -170,8 +86,11 @@ function DesktopNav() {
  */
 function PageHeader() {
   const { pathname } = useLocation()
-  const section = NAV.find(({ to, end }) => (end ? pathname === to : pathname.startsWith(to)))
-  if (!section) return null
+  const section = sectionOf(pathname)
+  // Only on a section's own landing page. A sub-page renders its own header,
+  // with the back link and the explanation for the setting it holds, and two
+  // stacked titles would say "DNS / Blocking" in two different type scales.
+  if (!section || pathname !== section.to) return null
 
   return (
     <header>
@@ -225,7 +144,7 @@ function MobileTabBar() {
       className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/92 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl sm:hidden"
     >
       <ul className="flex">
-        {NAV.map(({ to, label, icon: Icon, end }) => (
+        {SECTIONS.map(({ to, label, icon: Icon, end }) => (
           <li key={to} className="flex-1">
             <NavLink
               to={to}
