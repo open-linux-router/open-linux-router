@@ -269,7 +269,8 @@ function DeviceTile({
     <>
       <DeviceIcon
         category={device.category}
-        vendor={device.vendor_key}
+        vendor={device.vendor}
+        vendorKey={device.vendor_key}
         online={device.online}
         size="sm"
       />

@@ -200,39 +200,89 @@ export const GLYPHS: Record<DeviceCategory, LucideIcon> = {
  * A picture of the right *kind of thing* beats one of the right *brand*: an
  * operator scanning a list is looking for their printer, not for Brother.
  *
- * Rung 2 is also the one that earns the whole mechanism. A network with DHCP
- * off announces no hostnames, so nothing is categorised and every row collapses
- * onto rung 4 — the identical grey box, six times over. A vendor is the only
- * thing known about those devices, and it is enough to tell them apart.
- *
  * Undefined rather than a fallback image, so the caller has to decide what to
  * show; that decision is what keeps an unillustrated device looking intentional
  * rather than broken. See DeviceIcon.
+ *
+ * `vendorMarked` says the caller has a vendor mark it would rather show than the
+ * anonymous `unknown` photograph. Without it this function has a hole that is
+ * easy to miss and was: `unknown` *is* registered in IMAGES, so an uncategorised
+ * device returns the grey box at rung 3 and never reaches the caller's fallback
+ * at all. Six devices from six different makers came out as six identical
+ * boxes, which is the exact screen this whole mechanism exists to fix.
  *
  * Per-model artwork (ICONS.md tier 2) would sit above all of these. It has no
  * assets and no key vocabulary yet, so it is not wired in — adding it means one
  * more rung at the top and nothing else.
  */
-export function deviceIcon(category: DeviceCategory, vendor?: VendorKey): string | undefined {
+export function deviceIcon(
+  category: DeviceCategory,
+  vendor?: VendorKey,
+  vendorMarked = false,
+): string | undefined {
+  // 'unknown' and '' are both "nobody has said" — see Category in
+  // internal/devices/category.go, where the two differ in provenance but not in
+  // how much either tells a picture.
+  const uncategorised = category === 'unknown' || category === ''
+
   if (vendor) {
     const both = IMAGES[`${vendor}/${category}`]
     if (both) return both
 
-    // The vendor alone, but only when the category would contribute nothing.
-    // 'unknown' and '' are both "nobody has said" — see DeviceCategory in
-    // internal/devices/category.go, where the two differ in provenance but not
-    // in how much they tell a picture.
-    if (category === 'unknown' || category === '') {
+    if (uncategorised) {
       const own = IMAGES[vendor]
       if (own) return own
     }
   }
+
+  // The grey box is the answer for a device nothing is known about. A device
+  // whose maker is known is not that device, even when nobody has drawn it.
+  if (uncategorised && vendorMarked) return undefined
+
   return IMAGES[category]
 }
 
 // hasOwnIcon(category) used to live here and had no callers. Rather than grow
 // it a vendor argument nobody would pass, it is gone: `deviceIcon(...) !==
 // undefined` is what it was, and is shorter than importing it.
+
+/**
+ * A vendor's name reduced to a mark that survives at 32 pixels.
+ *
+ * This is what a device with a vendor and no category gets instead of a
+ * picture, and it is not a consolation prize — it is the only answer available.
+ * Artwork would mean drawing "an Apple something", which means choosing between
+ * a phone, a watch and a laptop, which is inventing information; ICONS.md and
+ * detect.go both refuse to do that. Artwork also only ever covers the few dozen
+ * vendors somebody has drawn, where the registry knows thirty thousand. Letters
+ * cover all of them.
+ *
+ * The rules, in order, each earning its place on a name that really occurs:
+ *
+ *   1. A short all-capitals first word *is* the mark already: "WNC", "ZTE",
+ *      "HP", "LG". Because the split happens on the hyphen too, "TP-Link"
+ *      gives "TP" rather than the "TL" nobody would recognise.
+ *   2. Two or more words give their first two initials: "Raspberry Pi" → RP,
+ *      "Philips Hue" → PH, "Texas Instruments" → TI.
+ *   3. One word gives its first two letters: "Huawei" → HU, "eero" → EE.
+ *
+ * Upper-cased at the end rather than preserved, because a column of these is
+ * scanned for difference rather than read for spelling, and "eE" beside "HU"
+ * reads as a bug.
+ */
+export function vendorInitials(vendor?: string): string {
+  if (!vendor) return ''
+
+  // Split on anything that is not a letter or digit, so hyphens, dots and
+  // ampersands all separate words: "TP-Link", "D-Link", "Routerboard.com".
+  const words = vendor.split(/[^A-Za-z0-9]+/).filter(Boolean)
+  if (words.length === 0) return ''
+
+  const first = words[0]
+  if (first.length <= 4 && first === first.toUpperCase()) return first
+  if (words.length >= 2) return (first[0] + words[1][0]).toUpperCase()
+  return first.slice(0, 2).toUpperCase()
+}
 
 /** The line glyph for a category, used wherever there is no photograph. */
 export function deviceGlyph(category: DeviceCategory): LucideIcon {

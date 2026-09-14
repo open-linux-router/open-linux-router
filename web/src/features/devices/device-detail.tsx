@@ -73,7 +73,8 @@ export function DeviceDetail({
           <div className="flex items-center gap-3">
             <DeviceIcon
               category={device.category}
-              vendor={device.vendor_key}
+              vendor={device.vendor}
+              vendorKey={device.vendor_key}
               online={device.online}
               size="lg"
             />
