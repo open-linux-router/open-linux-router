@@ -92,6 +92,11 @@ func TestDetectFromOUI(t *testing.T) {
 // Apple makes phones, tablets, laptops, watches and TV boxes. Three octets
 // cannot choose between them, and inventing an answer is exactly what
 // icon-style-spec.md forbids.
+//
+// This prefix used to be hand-listed in ouiTable; the vendor now comes from the
+// IEEE registry instead, which is the whole point of ouidb — and the answer
+// still stops at the name. The registry is not allowed to suggest a category
+// however confident it sounds.
 func TestDetectFromOUIGivesVendorWithoutGuessingCategory(t *testing.T) {
 	got := Detect("a4:83:e7:11:22:33", "")
 	if got.Vendor != "Apple" {
@@ -100,6 +105,54 @@ func TestDetectFromOUIGivesVendorWithoutGuessingCategory(t *testing.T) {
 	if got.Category != "" {
 		t.Errorf("Category = %q, want it unset: the vendor makes many kinds of device",
 			got.Category)
+	}
+}
+
+// The screen this was all for: a LAN with DHCP off, so no client has announced
+// a hostname and every row falls back to its hardware address. Before the
+// registry the list was six identical hex strings; the three globally-assigned
+// addresses on it should now say who built them.
+func TestDetectNamesVendorsFromTheRegistry(t *testing.T) {
+	tests := []struct{ mac, want string }{
+		{"18:f2:2c:d8:b0:e6", "TP-Link"},
+		{"38:b8:00:a5:f3:cf", "WNC"},
+		{"a0:31:db:7f:13:f8", "Huawei"},
+	}
+	for _, tc := range tests {
+		got := Detect(tc.mac, "")
+		if got.Vendor != tc.want {
+			t.Errorf("Detect(%q).Vendor = %q, want %q", tc.mac, got.Vendor, tc.want)
+		}
+		if got.Category != "" {
+			t.Errorf("Detect(%q).Category = %q, want it unset: a vendor name is not "+
+				"evidence of a kind of device", tc.mac, got.Category)
+		}
+	}
+	// And the other three rows on that screen stay blank, because a randomised
+	// address has no vendor to find. Half a real network looks like this now.
+	for _, mac := range []string{
+		"ce:16:7e:f8:a8:11",
+		"d6:34:90:89:67:b9",
+		"de:3a:2e:40:89:a1",
+	} {
+		if got := Detect(mac, ""); got.Vendor != "" {
+			t.Errorf("Detect(%q).Vendor = %q, want it empty: the address is "+
+				"locally administered", mac, got.Vendor)
+		}
+	}
+}
+
+// ouiTable's surviving job. IEEE knows this prefix as Signify, formerly Philips
+// Lighting; the label under a lamp in someone's hall should say Philips Hue.
+// The hand-written entry has to win, or those entries are decorative.
+func TestOverlayBeatsTheRegistry(t *testing.T) {
+	got := Detect("00:17:88:11:22:33", "")
+	if got.Vendor != "Philips Hue" {
+		t.Errorf("Vendor = %q, want %q: a hand-placed name outranks the registry",
+			got.Vendor, "Philips Hue")
+	}
+	if got.Category != CategoryLight {
+		t.Errorf("Category = %q, want %q", got.Category, CategoryLight)
 	}
 }
 

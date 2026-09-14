@@ -71,7 +71,7 @@ actual work to something that already does it well:
 | **`link`** | Which interfaces olr is allowed to touch | Kernel **netlink**, read live per request. Drives nothing — adoption is consent, not configuration. |
 | **`dhcp`** | Pools, fixed addresses, options, leases | **dnsmasq**, in a unit of its own (`olr-dhcp.service`) reading a config olr renders. Never the distro's instance. |
 | **`dns`** | Upstreams, local names, blocking policies | **unbound** recursing on loopback, behind a small relay of ours (`olr-dnsd.service`) that owns `:53`, applies policy on the fast path, and observes on a tee. |
-| **`devices`** | Device names, categories, the inventory | No daemon. dnsmasq's lease database joined with the kernel's **ARP table**, so the statically-addressed printer shows up too. |
+| **`devices`** | Device names, categories, the inventory | No daemon. dnsmasq's lease database joined with the kernel's **ARP table**, so the statically-addressed printer shows up too, plus the **IEEE OUI registry** embedded in the binary to say who built each one. |
 | **`gateway`** | Exits, and which network uses which | **nftables** and the kernel's **policy routing database**, programmed directly over netlink — no rule files, no `nft` shell-outs. |
 | **`firewall`** | Port forwards, and nothing else yet | **nftables**, one `olr_nat` table over netlink. Named for what §4 gives it eventually; today it has no zones, rules or filtering policy. |
 

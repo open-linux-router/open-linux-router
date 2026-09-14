@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/devices/ouidb"
 )
 
 // Category detection: a guess, labelled as a guess, that an operator can
@@ -22,10 +23,18 @@ import (
 //  1. **Hostname.** What the client calls itself. Much the stronger signal, and
 //     the one the operator can verify by looking at the device, which matters
 //     when they are deciding whether to trust the guess.
-//  2. **OUI.** The vendor half of the MAC. Only useful where a vendor makes
-//     essentially one kind of thing; for Apple or Samsung it identifies the
-//     vendor and nothing more, which is why Vendor and Category are reported
-//     separately below.
+//  2. **OUI.** The vendor half of the MAC, read twice. ouiTable below is a
+//     short hand-placed list, and it is the only thing here allowed to produce
+//     a *category*, because it only lists vendors that make one kind of thing.
+//     internal/devices/ouidb is the IEEE registry and produces a *vendor name*
+//     for almost any globally-assigned address — and never a category, because
+//     knowing Apple registered a prefix says nothing about whether the device
+//     is a phone, a watch, a laptop or a TV box. That asymmetry is why Vendor
+//     and Category are separate fields rather than one answer.
+//
+// Neither signal reaches a locally-administered address, which is most phones
+// and laptops now that MAC randomisation is on by default. Those get no vendor
+// and no category, and the screen has to be readable anyway.
 
 // Detected is what inference produced. Category may be empty, and that is a
 // result rather than a failure — it means nothing here was confident enough.
@@ -156,25 +165,49 @@ var hostnameRules = []hostnameRule{
 	{"router", CategoryRouter, false},
 }
 
-// ouiEntry is one vendor prefix.
+// ouiEntry is one hand-placed prefix: the name to print and the kind of thing
+// it is.
 //
-// Category is empty where the vendor makes many kinds of device — which is most
-// of them. That is the point: an Apple OUI tells us Apple, and guessing between
-// a phone, a watch, a laptop and a TV box from three octets would be inventing
+// Category may be left empty, and the zero value is meaningful — it says "we
+// want this vendor's name but will not claim to know what the device is". No
+// entry needs it today, because a vendor whose name we have no quarrel with is
+// better served by the registry than by a line here. The field stays because
+// the pairing is the point: an Apple OUI tells us Apple, and choosing between a
+// phone, a watch, a laptop and a TV box from three octets would be inventing
 // information.
 type ouiEntry struct {
 	vendor   string
 	category Category
 }
 
-// ouiTable is a hand-seeded starter set, not the IEEE registry.
+// ouiTable is the hand-maintained overlay on top of the IEEE registry.
 //
-// It is small on purpose and will stay small. The real fix is a proper OUI
-// database, which is a 30k-line generated table and a licence question, and
-// which belongs behind this same function when it arrives. Until then a prefix
-// that is not listed simply yields no vendor — the honest outcome — and the
-// entries that do carry a category are limited to vendors whose products are
-// one kind of thing.
+// It used to be the whole vendor lookup: forty prefixes standing in for a
+// database nobody had written. internal/devices/ouidb is that database now, and
+// this table kept the two jobs a registry cannot do.
+//
+//  1. **Category.** IEEE records who registered a prefix and stops there. That a
+//     Raspberry Pi Foundation OUI means a single-board computer is a judgement
+//     about a product line, and it lives here because a person made it.
+//  2. **The name we would rather print.** The registry says "Signify
+//     Netherlands"; the label under the lamp in someone's hall should say
+//     "Philips Hue". The generator carries an alias list for the general case,
+//     but an entry here wins over both, and wins as a unit.
+//
+// So it stays small — smaller than it was, in fact. Every vendor-only entry is
+// gone: twenty hand-copied Apple, Samsung, Intel, Ubiquiti and TP-Link prefixes
+// were a worse answer than the registry's fifteen hundred, and keeping them
+// would have implied this table was still where vendors come from. What is left
+// all carries a category, which is the thing the registry genuinely cannot
+// supply.
+//
+// Being unlisted is no longer a dead end: a prefix that misses here falls
+// through to the registry for its vendor, and to no category at all — the
+// honest outcome, and the one an operator fixes by naming the device once.
+//
+// Keyed by 24-bit prefix, lower-case and colon-separated, the form core.OUI
+// returns. The registry's 28- and 36-bit blocks are ouidb's business; nothing
+// worth a hand-written category has yet needed finer than an MA-L.
 var ouiTable = map[string]ouiEntry{
 	// Single-product vendors: the category is safe.
 	"b8:27:eb": {"Raspberry Pi", CategorySBC},
@@ -200,28 +233,6 @@ var ouiTable = map[string]ouiEntry{
 	"a4:cf:12": {"Espressif", CategorySensor},
 	"bc:dd:c2": {"Espressif", CategorySensor},
 	"cc:50:e3": {"Espressif", CategorySensor},
-
-	// Vendor only. These make phones, tablets, laptops, watches and TV boxes;
-	// the hostname rules above are what actually distinguish them.
-	"a4:83:e7": {"Apple", ""},
-	"ac:bc:32": {"Apple", ""},
-	"dc:a9:04": {"Apple", ""},
-	"f0:18:98": {"Apple", ""},
-	"3c:07:54": {"Apple", ""},
-	"68:a8:6d": {"Apple", ""},
-	"90:b0:ed": {"Apple", ""},
-	"00:12:fb": {"Samsung", ""},
-	"34:23:ba": {"Samsung", ""},
-	"5c:0a:5b": {"Samsung", ""},
-	"78:1f:db": {"Samsung", ""},
-	"00:1b:21": {"Intel", ""},
-	"3c:97:0e": {"Intel", ""},
-	"8c:16:45": {"Intel", ""},
-	"24:a4:3c": {"Ubiquiti", ""},
-	"fc:ec:da": {"Ubiquiti", ""},
-	"78:8a:20": {"Ubiquiti", ""},
-	"50:c7:bf": {"TP-Link", ""},
-	"a4:2b:b0": {"TP-Link", ""},
 }
 
 // Detect infers what it can from a MAC and an observed hostname.
@@ -243,8 +254,22 @@ func Detect(mac, hostname string) Detected {
 		}
 	}
 
-	// Hostname second in code, first in precedence: it overwrites an
-	// OUI-derived category because it is the stronger signal.
+	// The registry answers whatever the overlay did not. Second, so a
+	// hand-placed name keeps winning: ouiTable exists partly to disagree with
+	// IEEE about what a vendor is called, and a lookup that overwrote it would
+	// make those entries silently decorative.
+	//
+	// No category comes from here, ever. The registry knows who registered a
+	// prefix and nothing about what was built with it, and a vendor name is not
+	// evidence of a device kind — which is why this sets one field.
+	if d.Vendor == "" {
+		if vendor, found := ouidb.Vendor(mac); found {
+			d.Vendor = vendor
+		}
+	}
+
+	// Hostname last in code, first in precedence: it overwrites an OUI-derived
+	// category because it is the stronger signal.
 	if tokens := hostnameTokens(hostname); len(tokens) > 0 {
 		for _, rule := range hostnameRules {
 			if rule.matches(tokens) {

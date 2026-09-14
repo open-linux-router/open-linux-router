@@ -145,6 +145,18 @@ web: ## Build the SPA into internal/webui/assets
 types: ## Regenerate the SPA's config types from olrd's schema (needs olrd running)
 	cd $(WEB) && node scripts/gen-types.mjs http://$(DEV_LISTEN)
 
+.PHONY: ouidb
+ouidb: ## Rebuild the embedded IEEE vendor table (fetches ~5 MB from ieee.org)
+	@# Not part of `build`, and not a go:generate that CI runs. The output is
+	@# committed, which is what lets a build need no network at all and lets
+	@# two builds of one commit embed identical bytes.
+	@#
+	@# Regenerating is therefore a deliberate act with a diff to review — and
+	@# the review is the 25 vendor names the generator prints, since the diff of
+	@# a gzipped blob says nothing. Pass SRC=/some/dir to reuse CSVs already
+	@# downloaded, which is what you want while editing the name cleanup.
+	cd internal/devices/ouidb && $(GO) run gen.go $(if $(SRC),-src $(SRC),)
+
 .PHONY: all
 all: web build ## Build the SPA and the binary
 
