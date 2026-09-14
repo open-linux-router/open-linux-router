@@ -106,10 +106,7 @@ func runEnable(cmd *cobra.Command) error {
 		}
 	}
 
-	tools, err := findTools()
-	if err != nil {
-		return err
-	}
+	tools := findTools()
 	if tools.Nft == "" {
 		fmt.Fprintf(out, "warning: nft was not found on $PATH or in %s. Everything works\n"+
 			"except the DNS redirect (`olr dns set --redirect`), which needs your\n"+
@@ -374,61 +371,36 @@ func lookTool(name string) string {
 	return ""
 }
 
-// findTools locates the backends, and refuses when the two that are not
-// optional are missing.
+// findTools locates the backends. It does not refuse over any of them.
 //
-// The .deb declares these as dependencies so apt resolves them before any of
-// our code runs. Here there is no package manager to ask, so this is the
-// equivalent — and it fails before writing anything, because a box with units
-// installed and no dnsmasq is a worse place to stop than a box with neither.
-func findTools() (packaging.Tools, error) {
-	t := packaging.Tools{
+// It used to refuse over two, and that was the bug this whole change is about.
+// A box that hands out addresses and never resolves a name has no use for
+// unbound, but `olr enable` would not install at all without it — so an
+// operator who wanted DHCP was made to fetch a resolver, which on Debian then
+// started itself on 127.0.0.1:53 and became something olr's own status page
+// complains about.
+//
+// The right moment to ask for a backend is when somebody turns on the module
+// that needs it, and the right place to say so is that module's page, which is
+// what core.DependencyBlockers now does. This function's remaining job is the
+// one it was always really doing: finding out *where* the binaries are, so the
+// unit drop-ins can name the right paths. A tool that is absent simply gets no
+// drop-in, which is correct — there is nothing to correct the path of.
+//
+// The Caddy comment below said all of this three releases ago, about the one
+// tool nobody had got round to refusing over.
+func findTools() packaging.Tools {
+	return packaging.Tools{
 		Dnsmasq:          lookTool("dnsmasq"),
 		Unbound:          lookTool("unbound"),
 		UnboundCheckconf: lookTool("unbound-checkconf"),
 		UnboundAnchor:    lookTool("unbound-anchor"),
 		Nft:              lookTool("nft"),
-		// Not required, and deliberately not checked below. A router with no
-		// published services never needs a proxy, so its absence is not a
-		// reason to refuse to enable olr — `olr ingress` says what is missing
-		// and how to get it, at the moment somebody actually wants it.
+		// A router with no published services never needs a proxy, so its
+		// absence is not a reason to refuse to enable olr — `olr ingress` says
+		// what is missing and how to get it, at the moment somebody wants it.
 		Caddy: lookTool("caddy"),
 	}
-
-	if t.Dnsmasq == "" {
-		// dnsmasq-base is named, and the difference explained, because `apt
-		// install dnsmasq` is what everybody types and it is the wrong answer:
-		// the full package ships a dnsmasq.service that binds :53 the moment it
-		// is installed, and olr will not fight another daemon for a port. The
-		// .deb has depended on dnsmasq-base since the beginning; this is the
-		// path where nobody gets to read that dependency.
-		return t, missingTool("dnsmasq", "dnsmasq-base",
-			"olr does not implement DHCP itself.",
-			"dnsmasq-base rather than dnsmasq: the full package also ships a system\n"+
-				"dnsmasq service that binds :53 as soon as it is installed. olr runs its\n"+
-				"own instance from its own unit, and refuses to start when something else\n"+
-				"already holds the port.")
-	}
-	if t.Unbound == "" || t.UnboundCheckconf == "" {
-		return t, missingTool("unbound", "unbound",
-			"olr does not resolve names itself.",
-			"Debian enables its own unbound.service on install, listening on\n"+
-				"127.0.0.1:53. olr runs a separate instance and owns :53 through its relay,\n"+
-				"so disable that one before turning DNS on:\n"+
-				"  sudo systemctl disable --now unbound.service")
-	}
-	return t, nil
-}
-
-// missingTool says what was not found, where we looked, and what to install.
-//
-// Naming the directories searched is the part worth keeping. "not on PATH" is a
-// claim about the operator's shell that they cannot check without knowing which
-// PATH we meant, and it was wrong often enough to be worth never saying again.
-func missingTool(name, pkg, why, note string) error {
-	return fmt.Errorf("%s was not found.\nLooked on $PATH and in %s.\n\n%s On Debian and Ubuntu:\n\n"+
-		"  sudo apt install %s\n\n%s",
-		name, strings.Join(sbinDirs, ", "), why, pkg, note)
 }
 
 // warnDistroBackends reports the distribution's own daemons, if any are live.

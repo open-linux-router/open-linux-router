@@ -379,7 +379,13 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 	// Asked for unconditionally, including while the module is switched off.
 	// Off is exactly when this is worth knowing: the operator is about to flip
 	// the switch, and the alternative is finding out from a failed apply.
-	resp.Blockers = core.DistroConflicts(r.Context(), DNSPort)
+	//
+	// Dependencies first. "unbound is not installed" and "something else holds
+	// :53" can both be true at once, and in that order they read as a sequence
+	// to work through; reversed, the port conflict looks like the reason the
+	// resolver is not running when the resolver is not even on the box.
+	resp.Blockers = append(core.DependencyBlockers(Dependencies(cfg)),
+		core.DistroConflicts(r.Context(), DNSPort)...)
 
 	if plan, err := h.Applier.Plan(r.Context(), cfg); err != nil {
 		resp.DriftError = err.Error()

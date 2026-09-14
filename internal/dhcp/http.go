@@ -323,7 +323,10 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 	// Asked for unconditionally, including while the module is off — off is when
 	// the operator is about to turn it on, and the alternative is finding out
 	// from an apply that got halfway.
-	resp.Blockers = core.DistroConflicts(r.Context(), dhcpServerPort)
+	// Dependencies first: a missing dnsmasq is why nothing is serving, and a
+	// port conflict reported above it would read as the cause when it is not.
+	resp.Blockers = append(core.DependencyBlockers(Dependencies()),
+		core.DistroConflicts(r.Context(), dhcpServerPort)...)
 
 	if plan, err := h.plan(r, cfg); err != nil {
 		resp.DriftError = err.Error()

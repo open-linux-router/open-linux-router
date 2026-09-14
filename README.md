@@ -101,23 +101,33 @@ nftables should work.
 sudo apt install ./olr_<version>_<arch>.deb
 ```
 
-apt resolves `dnsmasq-base`, `unbound` and `nftables` before any of olr's code
-runs. This starts the control plane and touches nothing else on the machine.
+apt resolves `dnsmasq-base` and `nftables` before any of olr's code runs. This
+starts the control plane and touches nothing else on the machine.
+
+Not `unbound`, deliberately. Installing it would start a resolver on
+`127.0.0.1:53` on every box — including ones that will only ever hand out
+addresses — and olr would then report that resolver as something holding the
+port it wants. So DNS asks for it when you turn DNS on, and the page tells you
+the command for the distribution you're actually running. Every backend works
+this way: nothing is installed for a feature you haven't used.
 
 For anything the `.deb` doesn't cover, the tarball holds a single binary that
-installs itself. There is no package manager involved here to resolve the
-backends, so install them first — on Debian and Ubuntu:
+installs itself:
 
 ```sh
-sudo apt install dnsmasq-base unbound nftables
 tar xzf olr-<version>-linux-<arch>.tar.gz
 sudo ./olr enable
 ```
 
-`dnsmasq-base`, not `dnsmasq`: the full package also ships a system dnsmasq
-service that binds `:53` as soon as it's installed, and olr runs its own
-instance rather than taking somebody else's daemon over. If you already have
-the full package, `olr enable` will say so and tell you how to stand it down.
+`olr enable` no longer refuses over a missing backend — a router that never
+resolves a name shouldn't have to fetch a resolver to get installed. Each
+section reports what it needs, when you open it.
+
+If you're installing dnsmasq by hand: `dnsmasq-base`, not `dnsmasq`. The full
+package also ships a system dnsmasq service that binds `:53` as soon as it's
+installed, and olr runs its own instance rather than taking somebody else's
+daemon over. If you already have the full package, olr will say so and tell you
+how to stand it down.
 
 `olr enable` writes the systemd units, puts the binary in `/usr/local/bin`,
 corrects the units' paths if your distribution doesn't keep dnsmasq where

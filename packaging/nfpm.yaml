@@ -28,12 +28,26 @@ description: |
   a REST API and a web UI generated from one schema. The box stays an
   ordinary Linux machine: nothing outside olr's declared scope is touched.
 
+# Exactly the dependencies whose installation does *nothing* to the box beyond
+# putting a binary on it. A test holds this list to core.Dependency.Inert, so
+# the rule below is enforced rather than remembered.
+#
+# **unbound is deliberately absent, and used to be here.** Debian's unbound
+# package enables and starts unbound.service on 127.0.0.1:53 the moment it
+# lands, so depending on it meant every olr install — including on a box that
+# only ever wanted DHCP — acquired a resolver nobody asked for, holding the
+# port. olr's own status page then reported that resolver as something in the
+# way of DNS: the package manufactured the conflict the product complains
+# about. internal/dns declares it instead, and the DNS page asks for it when
+# somebody turns DNS on (internal/dns/deps.go).
+#
+# The test is "does installing it disturb the box", not "which module uses it".
+# Both entries below are used by one module apiece too, and both stay, because
+# neither costs a box that never uses them anything but disk.
 depends:
+  # Ships the binary and no service, which is the entire reason olr depends on
+  # dnsmasq-base rather than on the full dnsmasq package.
   - dnsmasq-base
-  # olr owns :53 and applies policy there, but it does not resolve names and
-  # never will — recursion, DNSSEC validation and caching are permanently out of
-  # scope (docs/dns.md §6). unbound does that part.
-  - unbound
   # Only the DNS redirect needs it, but the alternative is an operator turning
   # that on and getting a failure out of a unit rather than out of olr. A router
   # without nftables is not a configuration worth optimising the package for.

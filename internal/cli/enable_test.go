@@ -68,25 +68,10 @@ func TestLookToolReportsNothingWhenThereIsNothing(t *testing.T) {
 	}
 }
 
-// The message has to name dnsmasq-base and say why, because `apt install
-// dnsmasq` is what everybody types and it installs a service that binds :53.
-// It also has to say where it looked: "not on PATH" is a claim about the
-// operator's shell that they cannot check against a PATH we never showed them.
-func TestMissingToolExplainsWhichPackageAndWhereItLooked(t *testing.T) {
-	msg := missingTool("dnsmasq", "dnsmasq-base", "olr does not implement DHCP itself.",
-		"dnsmasq-base rather than dnsmasq: the full package also ships a service.").Error()
-
-	for _, want := range []string{
-		"dnsmasq was not found",
-		"apt install dnsmasq-base",
-		"/usr/sbin",
-		"$PATH",
-	} {
-		if !strings.Contains(msg, want) {
-			t.Errorf("missing %q:\n%s", want, msg)
-		}
-	}
-}
+// `olr enable` no longer refuses over a missing backend, so the message this
+// used to assert is gone with the function that built it. What it protected —
+// naming dnsmasq-base and saying why — is now internal/dhcp's declaration, and
+// core.TestInstallAdviceCarriesTheDebianWarning holds it there.
 
 // The table this used to assert against moved to internal/core, where every
 // surface can read it; its test moved with it (core.TestDistroBackendsCarryAFix
