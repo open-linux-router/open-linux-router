@@ -1,6 +1,7 @@
 import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 
+import { BlockerAlerts } from '@/components/layout/blockers'
 import { SettingsList } from '@/components/layout/settings-list'
 import { StatusDetail, StatusStrip } from '@/components/layout/status-strip'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -121,13 +122,15 @@ function StatusCard({
   // saying nothing was serving DNS. A first install shows exactly that: no unit
   // is enabled or active until an apply succeeds, so the page's first
   // impression was two lines contradicting each other.
-  //
-  // A unit that is not installed is kept, stopped or not — it is the one case
-  // where "not enabled" has a cause worth naming, and the branch below names
-  // it. Everything else that is off is already the headline's business.
   const notAtBoot = (status?.services ?? []).filter(
-    (s) => s.status && !s.status.enabled && (s.status.active || s.status.installed === false),
+    (s) => s.status && !s.status.enabled && s.status.active,
   )
+
+  // Its own alert rather than a branch inside the one above, which is where it
+  // used to live and where its heading was wrong. A unit that is absent cannot
+  // start at all — "will not come back after a reboot" understates it by a
+  // whole outage, and the fix is a reinstall rather than a systemctl enable.
+  const notInstalled = (status?.services ?? []).filter((s) => s.status?.installed === false)
 
   return (
     <StatusStrip
@@ -175,6 +178,24 @@ function StatusCard({
         </>
       }
     >
+      <BlockerAlerts blockers={status?.blockers} />
+
+      {notInstalled.length > 0 && (
+        <Alert variant="destructive">
+          <AlertTriangle />
+          <AlertTitle>DNS cannot start — a unit is missing</AlertTitle>
+          <AlertDescription>
+            {notInstalled.map((s) => (
+              <p key={s.unit}>
+                {UnitLabel(s.unit)} is not installed on this box. The unit ships inside
+                olr and is written by `olr enable`, so reinstall the package or run
+                `sudo olr enable`.
+              </p>
+            ))}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Tinted rather than given an Alert variant of its own: the shared
           component only ships default and destructive, and this is not
           destructive — nothing is wrong yet, which is exactly the problem. */}
@@ -185,9 +206,7 @@ function StatusCard({
           <AlertDescription className="text-warning-foreground/90">
             {notAtBoot.map((s) => (
               <p key={s.unit}>
-                {s.status?.installed === false
-                  ? `${UnitLabel(s.unit)} is not installed on this box — reinstall the olr package.`
-                  : `${UnitLabel(s.unit)} is running, but is not set to start at boot.`}
+                {UnitLabel(s.unit)} is running, but is not set to start at boot.
               </p>
             ))}
           </AlertDescription>

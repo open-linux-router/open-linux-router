@@ -215,6 +215,11 @@ func writeStatusText(w io.Writer, status statusResponse, leases leasesResponse) 
 		fmt.Fprintln(w, "drift:         none")
 	}
 
+	// After the state lines and before the counts: it is the only thing here
+	// whose fix is a command rather than an olr setting, and an operator with
+	// one of these gains nothing from the lease table until it is dealt with.
+	core.WriteBlockersText(w, status.Blockers)
+
 	fmt.Fprintf(w, "leases:        %d\n", len(leases.Leases))
 
 	if len(leases.Usage) > 0 {

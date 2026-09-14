@@ -88,27 +88,9 @@ func TestMissingToolExplainsWhichPackageAndWhereItLooked(t *testing.T) {
 	}
 }
 
-// Every unit olr warns about must carry advice, and systemd-resolved's must not
-// be "disable it" — the box resolves through it.
-func TestDistroBackendsCarryAdvice(t *testing.T) {
-	for _, b := range distroBackends {
-		if b.advice == "" {
-			t.Errorf("%s has no advice", b.unit)
-		}
-		if b.unit == "systemd-resolved.service" {
-			if !strings.Contains(b.advice, "DNSStubListener=no") {
-				t.Errorf("systemd-resolved advice should hand over the socket, not stop it:\n%s", b.advice)
-			}
-			if strings.Contains(b.advice, "disable --now systemd-resolved") {
-				t.Errorf("told the operator to disable the resolver the box depends on:\n%s", b.advice)
-			}
-			continue
-		}
-		if !strings.Contains(b.advice, "disable --now "+b.unit) {
-			t.Errorf("%s advice does not disable it:\n%s", b.unit, b.advice)
-		}
-	}
-}
+// The table this used to assert against moved to internal/core, where every
+// surface can read it; its test moved with it (core.TestDistroBackendsCarryAFix
+// AndSpareTheResolver).
 
 // fakeUnit records which systemd verb it was sent.
 type fakeUnit struct {

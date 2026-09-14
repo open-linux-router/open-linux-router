@@ -40,6 +40,27 @@ import type {
 /** What applying a change will cost (design.md §5.3.3, internal/dhcp Impact). */
 export type Impact = 'none' | 'reload' | 'restart' | 'disruptive'
 
+/**
+ * Something about the box, rather than the configuration, standing between a
+ * module and its job — internal/core Blocker.
+ *
+ * Distinct from {@link Problem}, which reports a field that failed validation.
+ * Nothing the operator can type into olr clears a blocker, so the shape carries
+ * the command that does. `fix` is shell, verbatim and possibly multi-line:
+ * render it as a block and never reflow it.
+ *
+ * Shared rather than per-module because one incumbent can block two modules —
+ * dnsmasq.service takes both :53 and UDP/67 — and the operator must not have to
+ * work out whether two pages are describing one problem or two.
+ */
+export interface Blocker {
+  kind: string
+  unit?: string
+  summary: string
+  detail?: string
+  fix?: string
+}
+
 /** What the backend needs after the files are written. */
 export type ServiceAction = 'none' | 'start' | 'stop' | 'reload' | 'restart'
 
@@ -181,6 +202,8 @@ export interface DhcpStatus {
   drifted: boolean
   drift?: Plan
   drift_error?: string
+  /** Read on every status request, including while the module is off. */
+  blockers?: Blocker[]
   as_of: string
 }
 
@@ -467,6 +490,12 @@ export interface DnsStatus {
   drifted: boolean
   drift?: DnsPlan
   drift_error?: string
+  /**
+   * Read on every status request, including while the module is off — off is
+   * exactly when it is worth knowing, because the alternative is learning it
+   * from a failed apply after the switch has been flipped.
+   */
+  blockers?: Blocker[]
   /** Absent with `stats_error` set when the relay is not answering — which is
    *  itself the most useful thing the reply can say. */
   stats?: DnsStats

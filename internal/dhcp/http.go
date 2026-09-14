@@ -288,6 +288,15 @@ type statusResponse struct {
 	Drift      *planView `json:"drift,omitempty"`
 	DriftError string    `json:"drift_error,omitempty"`
 
+	// Blockers are things about the box, not the configuration, standing
+	// between this module and its job — a distribution daemon holding UDP/67.
+	//
+	// The same list internal/dns publishes, asked about a different port.
+	// dnsmasq.service takes both, and that is the case worth getting right: a
+	// second dnsmasq is the likeliest incumbent here precisely because olr's own
+	// documentation sends people to install the package it ships in.
+	Blockers []core.Blocker `json:"blockers,omitempty"`
+
 	// AsOf stamps the whole reply. Every observed object carries its freshness
 	// so no surface can imply one it does not have (§4.5).
 	AsOf time.Time `json:"as_of"`
@@ -310,6 +319,11 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 	} else {
 		resp.Service = &svc
 	}
+
+	// Asked for unconditionally, including while the module is off — off is when
+	// the operator is about to turn it on, and the alternative is finding out
+	// from an apply that got halfway.
+	resp.Blockers = core.DistroConflicts(r.Context(), dhcpServerPort)
 
 	if plan, err := h.plan(r, cfg); err != nil {
 		resp.DriftError = err.Error()

@@ -2,6 +2,7 @@ import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 
 import { SettingsList } from '@/components/layout/settings-list'
+import { BlockerAlerts } from '@/components/layout/blockers'
 import { StatusDetail, StatusStrip } from '@/components/layout/status-strip'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ApplyOutcome, useDhcpEditor } from '@/features/dhcp/editor'
@@ -165,7 +166,14 @@ function StatusCard({
           </p>
         </>
       }
-    />
+    >
+      {/* Usually the same dnsmasq the DNS page is complaining about: the
+          distribution's unit takes UDP/67 and :53 together, so one
+          `apt install dnsmasq` blocks both modules. Same component and the
+          same words on both pages, so it reads as one problem rather than
+          two. */}
+      <BlockerAlerts blockers={status?.blockers} />
+    </StatusStrip>
   )
 }
 

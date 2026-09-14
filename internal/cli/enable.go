@@ -431,34 +431,14 @@ func missingTool(name, pkg, why, note string) error {
 		name, strings.Join(sbinDirs, ", "), why, pkg, note)
 }
 
-// distroBackends are the units a distribution ships for the daemons olr drives.
-//
-// olr starts its own instances from its own units (internal/dhcp/render.go and
-// internal/dns/render.go both say why), so the distro's are not upgrades of
-// ours or ours of theirs — they are a second daemon competing for one port. The
-// module preflights catch that at the moment a module is turned on, which is
-// correct but late: by then the operator has configured a pool or an upstream
-// and is expecting it to work. `olr enable` is already looking these binaries
-// up, so it can see the collision coming and say so while nothing is at stake.
-var distroBackends = []struct {
-	unit   string
-	holds  string
-	advice string
-}{
-	{"dnsmasq.service", "UDP/67 and :53",
-		"  sudo systemctl disable --now dnsmasq.service"},
-	{"unbound.service", ":53",
-		"  sudo systemctl disable --now unbound.service"},
-	// Not disabled, ever: this box resolves through it, so stopping it takes
-	// name resolution away from the machine you are typing on until olr's relay
-	// is up. It is told to give up the socket instead.
-	{"systemd-resolved.service", ":53",
-		"  # do not disable this one — the box resolves through it\n" +
-			"  # set DNSStubListener=no in /etc/systemd/resolved.conf, then:\n" +
-			"  sudo systemctl restart systemd-resolved"},
-}
-
 // warnDistroBackends reports the distribution's own daemons, if any are live.
+//
+// The table itself now lives in core.DistroBackends, because `olr enable` was
+// the wrong owner: it read the table once, at install, and printed to a terminal
+// that the WebUI cannot see. A box that grows a conflict a week later — `apt
+// install dnsmasq`, which is how this was found — heard nothing. Every surface
+// reads it on every status request now, and this stays because the moment before
+// anything has been configured is still the cheapest moment to hear it.
 //
 // Best-effort and never fatal. `olr enable` starts no backend, so none of this
 // is a conflict yet, and refusing to install over a daemon that is doing its job
@@ -467,27 +447,13 @@ func warnDistroBackends(parent context.Context, out io.Writer) {
 	ctx, cancel := context.WithTimeout(parent, daemonTimeout)
 	defer cancel()
 
-	for _, b := range distroBackends {
-		unit, err := core.NewUnit(b.unit)
-		if err != nil {
-			return // no service manager to ask; nothing to warn about
-		}
-		status, err := unit.Status(ctx)
-		if err != nil || !status.Installed || (!status.Active && !status.Enabled) {
-			continue
-		}
-
-		state := "enabled at boot"
-		if status.Active {
-			state = "running"
-			if status.Enabled {
-				state = "running and enabled at boot"
-			}
-		}
-		fmt.Fprintf(out, "warning: %s is %s, and holds %s.\n"+
+	// Every unit in the table, not one module's worth: `olr enable` is claiming
+	// the whole box, and each of these will be somebody's conflict.
+	for _, b := range core.DistroConflictsAll(ctx) {
+		fmt.Fprintf(out, "warning: %s\n"+
 			"olr runs its own instance rather than taking that one over, and will\n"+
-			"refuse to start while the port is held. Before turning the module on:\n%s\n\n",
-			b.unit, state, b.holds, b.advice)
+			"refuse to start while the port is held. Before turning the module on:\n\n%s\n\n",
+			b.Summary, core.IndentLines(b.Fix, "  "))
 	}
 }
 

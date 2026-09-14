@@ -326,6 +326,19 @@ type statusResponse struct {
 	Drift      *planView `json:"drift,omitempty"`
 	DriftError string    `json:"drift_error,omitempty"`
 
+	// Blockers are things about the box, not the configuration, that stand
+	// between this module and doing its job — today, a distribution daemon
+	// holding :53.
+	//
+	// Reported from status rather than raised by apply, which is the whole
+	// point. The conflict is knowable for free at any moment, and discovering it
+	// inside apply meant the operator learned only after committing, as a red
+	// partial failure. Here the page can say it before the switch is flipped.
+	//
+	// Apply still checks. This is the earlier, kinder warning, not a substitute
+	// for the refusal that keeps two daemons off one socket.
+	Blockers []core.Blocker `json:"blockers,omitempty"`
+
 	// Stats is what the relay has seen since it started. Absent, with
 	// StatsError set, when the relay is not answering — which is itself the
 	// most useful thing the reply can say.
@@ -362,6 +375,11 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		resp.Services = append(resp.Services, view)
 	}
+
+	// Asked for unconditionally, including while the module is switched off.
+	// Off is exactly when this is worth knowing: the operator is about to flip
+	// the switch, and the alternative is finding out from a failed apply.
+	resp.Blockers = core.DistroConflicts(r.Context(), DNSPort)
 
 	if plan, err := h.Applier.Plan(r.Context(), cfg); err != nil {
 		resp.DriftError = err.Error()

@@ -158,6 +158,12 @@ func writeStatusText(w io.Writer, status statusResponse) error {
 		fmt.Fprintln(w, "drift:          none")
 	}
 
+	// Last of the state lines and separated by a blank, because it is the only
+	// one whose fix is a command rather than an olr setting — and because an
+	// operator who has one of these has nothing to gain from the query counters
+	// below until it is dealt with.
+	core.WriteBlockersText(w, status.Blockers)
+
 	if status.StatsError != "" {
 		fmt.Fprintf(w, "queries:        unknown (%s)\n", status.StatsError)
 		return nil
