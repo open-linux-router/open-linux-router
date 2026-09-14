@@ -313,12 +313,23 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 		return result, nil
 	}
 
+	// Deduplicated, because the default Paths put the resolver's config and the
+	// relay's in one directory, so the unfiltered list named it twice and the
+	// step log an operator reads after a failure repeated a line verbatim.
+	// Harmless to run, but it makes the reader wonder what they missed — and
+	// observedRoots below already collapses nearly the same list.
+	seen := map[string]bool{}
 	for _, dir := range []string{
 		filepath.Dir(a.Paths.UnboundConf),
 		filepath.Dir(a.Paths.RelayConf),
 		a.Paths.PolicyDir,
 		filepath.Dir(a.Paths.TrustAnchor),
 	} {
+		dir = filepath.Clean(dir)
+		if seen[dir] {
+			continue
+		}
+		seen[dir] = true
 		if err := run("create "+dir, func() error { return os.MkdirAll(dir, 0o755) }); err != nil {
 			return result, err
 		}
