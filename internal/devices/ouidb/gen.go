@@ -50,6 +50,9 @@ type registry struct {
 	width int
 }
 
+// userAgent identifies this generator to IEEE. See read().
+const userAgent = "open-linux-router-ouidb/1 (+https://github.com/open-linux-router/open-linux-router)"
+
 var registries = []registry{
 	{"MA-L", "https://standards-oui.ieee.org/oui/oui.csv", "oui.csv", 6},
 	{"MA-M", "https://standards-oui.ieee.org/oui28/mam.csv", "mam.csv", 7},
@@ -88,7 +91,16 @@ func read(reg registry, src string) ([]byte, error) {
 	// serves it slowly enough that the stdlib default of none is not the
 	// hazard a short deadline would be.
 	client := &http.Client{Timeout: 5 * time.Minute}
-	resp, err := client.Get(reg.url)
+	req, err := http.NewRequest(http.MethodGet, reg.url, nil)
+	if err != nil {
+		return nil, err
+	}
+	// Without this IEEE answers 418 to Go's default "Go-http-client/2.0" while
+	// serving curl the file happily. Identifying the tool is the right thing to
+	// do anyway; the point worth recording is that a naked stdlib GET does not
+	// work here, so nobody removes this as noise.
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -349,6 +361,12 @@ var aliases = []alias{
 	{"d-link", "D-Link"},
 	{"netgear", "Netgear"},
 	{"ubiquiti", "Ubiquiti"},
+	// MikroTik holds every one of its blocks as "Routerboard.com"; the word
+	// "Mikrotik" appears nowhere in the registry. An alias on the trade name
+	// alone was a rule that never fired — which is the mistake an alias list
+	// makes easy to write and impossible to spot, and is why
+	// TestEveryVendorKeyIsReachable in internal/devices exists.
+	{"routerboard", "MikroTik"},
 	{"mikrotik", "MikroTik"},
 	{"cisco", "Cisco"},
 	{"aruba", "Aruba"},

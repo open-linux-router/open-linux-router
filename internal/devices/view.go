@@ -32,6 +32,13 @@ type deviceView struct {
 	DetectReason     string   `json:"detect_reason,omitempty"`
 	Vendor           string   `json:"vendor,omitempty"`
 
+	// VendorKey is the icon slug for Vendor, and is sent beside the name rather
+	// than instead of it: the name is what a person reads, the key is what
+	// selects a picture, and only a few dozen vendors have one. Absent for the
+	// rest, which a client renders by falling through to the category — see
+	// deviceIcon() in the SPA's features/devices/icons.ts.
+	VendorKey VendorKey `json:"vendor_key,omitempty"`
+
 	Model string `json:"model,omitempty"`
 	Notes string `json:"notes,omitempty"`
 
@@ -85,6 +92,7 @@ func viewDevice(r Resolved) deviceView {
 		DetectedCategory: r.Detected.Category,
 		DetectReason:     r.Detected.Reason,
 		Vendor:           r.Detected.Vendor,
+		VendorKey:        r.Detected.VendorKey,
 		Model:            r.Model,
 		Notes:            r.Notes,
 		Stored:           r.Stored,

@@ -267,7 +267,12 @@ function DeviceTile({
 
   const body = (
     <>
-      <DeviceIcon category={device.category} online={device.online} size="sm" />
+      <DeviceIcon
+        category={device.category}
+        vendor={device.vendor_key}
+        online={device.online}
+        size="sm"
+      />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-xs font-medium">{device.name || device.mac}</span>
         {address && (

@@ -27,6 +27,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
+import type { VendorKey } from '@/lib/api-types'
 import type { DeviceCategory } from '@/lib/config-types'
 
 import laptop from '@/assets/device-icons/laptop.webp'
@@ -38,14 +39,15 @@ import tablet from '@/assets/device-icons/tablet.webp'
 import tv from '@/assets/device-icons/tv.webp'
 import unknown from '@/assets/device-icons/unknown.webp'
 
-// The category → picture and category → word maps.
+// The picture, word and glyph maps.
 //
-// Both are keyed by DeviceCategory, which is *generated* from the Go enum
-// (config-types.ts, via the schema in internal/devices/schema.go). The two maps
-// are typed differently on purpose, and the difference is the whole design:
+// LABELS and GLYPHS are keyed by DeviceCategory, which is *generated* from the
+// Go enum (config-types.ts, via the schema in internal/devices/schema.go). The
+// maps are typed differently on purpose, and the difference is the whole
+// design:
 //
-//   LABELS is Record<DeviceCategory, string>       — total, checked at compile time
-//   IMAGES is Partial<Record<DeviceCategory, …>>   — sparse, filled in over time
+//   LABELS is Record<DeviceCategory, string>   — total, checked at compile time
+//   IMAGES is Partial<Record<IconKey, …>>      — sparse, filled in over time
 //
 // So adding a category in Go and regenerating breaks `npm run build` until it
 // has a *word*, but never until it has a *picture*. That is what lets the icon
@@ -55,12 +57,31 @@ import unknown from '@/assets/device-icons/unknown.webp'
 //
 // Adding an image is therefore one file and one line here. Nothing else moves.
 //
+// IMAGES is keyed more finely than the other two, by IconKey rather than by
+// category, because a vendor narrows a picture where a category cannot: a
+// laptop is a laptop, but an Apple laptop is a specific-looking object. Only
+// pictures gain from that. A *label* for `apple/laptop` would be worse than
+// "Laptop" beside a vendor name the row is already showing, and a vendor has no
+// line glyph at all. See deviceIcon for the order they resolve in.
+//
 // Imported through vite rather than referenced from public/, so the assets are
 // content-hashed into assets/ and get the immutable cache header that
 // internal/webui/webui.go already sets for that prefix. It also means a missing
 // file is a build error rather than a 404 nobody notices.
 
-const IMAGES: Partial<Record<DeviceCategory, string>> = {
+/**
+ * A key into IMAGES: a category on its own, a vendor's take on one, or a vendor
+ * with nothing else known about the device.
+ *
+ * The template literal type is doing real work. `apple/laptop` is checked
+ * against both vocabularies at compile time, so a key cannot name a vendor that
+ * does not exist or a category that has since been renamed. For strings that
+ * are also filenames, that is the difference between a build error and a
+ * picture which silently never loads.
+ */
+type IconKey = DeviceCategory | VendorKey | `${VendorKey}/${DeviceCategory}`
+
+const IMAGES: Partial<Record<IconKey, string>> = {
   laptop,
   nas,
   phone,
@@ -164,20 +185,54 @@ export const GLYPHS: Record<DeviceCategory, LucideIcon> = {
 }
 
 /**
- * The photograph for a category, or undefined when there is not one yet.
+ * The photograph for a device, or undefined when nothing has been drawn for it
+ * yet.
+ *
+ * Two axes, each falling back independently — most specific first:
+ *
+ *   1. `apple/laptop`  both known, and the picture can be both
+ *   2. `apple`         the vendor, when nothing says what kind of thing it is
+ *   3. `laptop`        the category, when the vendor has no artwork
+ *   4. undefined       neither, and the caller decides
+ *
+ * Rung 2 sits above rung 3 only when there is no category to use, which is why
+ * it is reached through `category === 'unknown'` rather than by ordering alone.
+ * A picture of the right *kind of thing* beats one of the right *brand*: an
+ * operator scanning a list is looking for their printer, not for Brother.
+ *
+ * Rung 2 is also the one that earns the whole mechanism. A network with DHCP
+ * off announces no hostnames, so nothing is categorised and every row collapses
+ * onto rung 4 — the identical grey box, six times over. A vendor is the only
+ * thing known about those devices, and it is enough to tell them apart.
  *
  * Undefined rather than a fallback image, so the caller has to decide what to
- * show — which is the decision that keeps an unillustrated category looking
- * intentional. See DeviceIcon.
+ * show; that decision is what keeps an unillustrated device looking intentional
+ * rather than broken. See DeviceIcon.
+ *
+ * Per-model artwork (ICONS.md tier 2) would sit above all of these. It has no
+ * assets and no key vocabulary yet, so it is not wired in — adding it means one
+ * more rung at the top and nothing else.
  */
-export function deviceIcon(category: DeviceCategory): string | undefined {
+export function deviceIcon(category: DeviceCategory, vendor?: VendorKey): string | undefined {
+  if (vendor) {
+    const both = IMAGES[`${vendor}/${category}`]
+    if (both) return both
+
+    // The vendor alone, but only when the category would contribute nothing.
+    // 'unknown' and '' are both "nobody has said" — see DeviceCategory in
+    // internal/devices/category.go, where the two differ in provenance but not
+    // in how much they tell a picture.
+    if (category === 'unknown' || category === '') {
+      const own = IMAGES[vendor]
+      if (own) return own
+    }
+  }
   return IMAGES[category]
 }
 
-/** Whether a category has a photograph of its own. */
-export function hasOwnIcon(category: DeviceCategory): boolean {
-  return IMAGES[category] !== undefined
-}
+// hasOwnIcon(category) used to live here and had no callers. Rather than grow
+// it a vendor argument nobody would pass, it is gone: `deviceIcon(...) !==
+// undefined` is what it was, and is shorter than importing it.
 
 /** The line glyph for a category, used wherever there is no photograph. */
 export function deviceGlyph(category: DeviceCategory): LucideIcon {

@@ -119,3 +119,24 @@ func Vendor(mac string) (string, bool) {
 // Len reports how many prefixes the table holds. For tests, and for anyone
 // wondering whether the generated file made it into the binary.
 func Len() int { return len(table()) }
+
+// Vendors returns every distinct name in the table, in no particular order.
+//
+// For tests, and the one it exists for earns the export: anything joining on a
+// vendor *name* — the icon keys in internal/devices/vendor.go do — breaks
+// silently the next time the generator's alias list is improved, and this is
+// what turns that break into a build failure. It allocates a slice of thirty
+// thousand strings, so it has no business in a request path.
+func Vendors() []string {
+	m := table()
+	seen := make(map[string]struct{}, len(m)/2)
+	out := make([]string, 0, len(m)/2)
+	for _, vendor := range m {
+		if _, dup := seen[vendor]; dup {
+			continue
+		}
+		seen[vendor] = struct{}{}
+		out = append(out, vendor)
+	}
+	return out
+}

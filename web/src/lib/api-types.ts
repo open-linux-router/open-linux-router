@@ -297,6 +297,54 @@ export type Origin = 'operator' | 'detected' | 'observed' | ''
 export type PresenceSource = 'dhcp-lease' | 'arp'
 
 /**
+ * A vendor we might have artwork for — internal/devices VendorKey.
+ *
+ * Hand-kept like the rest of this file, because it rides on the response and
+ * only *config* is reflected into config-types.ts. Staleness is survivable in
+ * the one direction it can happen: a key added in Go and missing here means
+ * that vendor never gets a picture, which is the same benign gap a category
+ * without artwork already has. What the union does catch is a key mistyped
+ * *here*, and that matters because these strings are filenames.
+ *
+ * Deliberately not every vendor. The registry knows thirty thousand; this is
+ * the few dozen whose hardware looks like something in particular.
+ */
+export type VendorKey =
+  | 'acer'
+  | 'amazon'
+  | 'apple'
+  | 'asus'
+  | 'brother'
+  | 'canon'
+  | 'cisco'
+  | 'dell'
+  | 'epson'
+  | 'espressif'
+  | 'google'
+  | 'hp'
+  | 'hpe'
+  | 'huawei'
+  | 'intel'
+  | 'lenovo'
+  | 'lg'
+  | 'microsoft'
+  | 'mikrotik'
+  | 'netgear'
+  | 'nintendo'
+  | 'philips-hue'
+  | 'qnap'
+  | 'raspberry-pi'
+  | 'roku'
+  | 'samsung'
+  | 'sonos'
+  | 'sony'
+  | 'synology'
+  | 'tp-link'
+  | 'ubiquiti'
+  | 'xiaomi'
+  | 'zyxel'
+
+/**
  * One row of the device list: identity joined to presence
  * (design.md §4.4, internal/devices deviceView).
  */
@@ -313,7 +361,18 @@ export interface DeviceRow {
   /** What detection produced, whether or not it won. */
   detected_category?: DeviceCategory
   detect_reason?: string
+
+  /**
+   * Who built the hardware, read from the MAC's registry prefix. Absent for a
+   * randomised address, which has no vendor to find and is now most phones and
+   * laptops.
+   *
+   * `vendor` is the label; `vendor_key` selects the picture and is absent for
+   * the great majority of vendors. Two fields rather than one because a label
+   * is allowed to be improved and a filename is not.
+   */
   vendor?: string
+  vendor_key?: VendorKey
 
   model?: string
   notes?: string

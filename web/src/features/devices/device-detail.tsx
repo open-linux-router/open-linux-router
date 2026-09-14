@@ -71,7 +71,12 @@ export function DeviceDetail({
       <DialogContent className="max-h-[90svh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <DeviceIcon category={device.category} online={device.online} size="lg" />
+            <DeviceIcon
+              category={device.category}
+              vendor={device.vendor_key}
+              online={device.online}
+              size="lg"
+            />
             <div className="min-w-0">
               <DialogTitle className="truncate">{device.name || device.mac}</DialogTitle>
               <DialogDescription className="truncate font-mono text-xs">

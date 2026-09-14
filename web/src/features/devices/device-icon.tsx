@@ -1,6 +1,7 @@
 import { createElement } from 'react'
 
 import { deviceGlyph, deviceIcon } from '@/features/devices/icons'
+import type { VendorKey } from '@/lib/api-types'
 import type { DeviceCategory } from '@/lib/config-types'
 import { cn } from '@/lib/utils'
 
@@ -8,10 +9,15 @@ import { cn } from '@/lib/utils'
  * A device's picture, or its glyph.
  *
  * Two presentations, because the icon set is filled in gradually and the gap
- * has to look deliberate. A category with artwork gets the photograph; one
+ * has to look deliberate. A device with artwork gets the photograph; one
  * without gets a line glyph in a quiet tile. What it never gets is the
  * *unknown photograph*, which would put an identical grey box on a doorbell, a
  * speaker and a smart plug and make the list read as broken.
+ *
+ * Which photograph is deviceIcon's business, and it reads the vendor as well as
+ * the category — most specifically drawn first. The glyph is category-only,
+ * because a glyph says what kind of thing something is and a vendor does not
+ * answer that.
  *
  * The photographs carry no baked shadow (see ICONS.md) precisely so the UI can
  * supply one, which is what stops a matte render on a flat card looking like a
@@ -23,11 +29,18 @@ import { cn } from '@/lib/utils'
  */
 export function DeviceIcon({
   category,
+  vendor,
   online,
   size = 'md',
   className,
 }: {
   category: DeviceCategory
+  /**
+   * Who built it, where that is known and might have been drawn. Optional
+   * because not every caller has a device: the category picker is showing the
+   * vocabulary itself, not anything anyone owns.
+   */
+  vendor?: VendorKey
   online?: boolean
   size?: 'sm' | 'md' | 'lg'
   className?: string
@@ -35,7 +48,7 @@ export function DeviceIcon({
   const box = { sm: 'size-8', md: 'size-11', lg: 'size-20' }[size]
   const dimmed = online === false
 
-  const photo = deviceIcon(category)
+  const photo = deviceIcon(category, vendor)
   if (photo) {
     return (
       <img

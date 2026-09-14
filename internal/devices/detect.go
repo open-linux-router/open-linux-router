@@ -42,6 +42,13 @@ type Detected struct {
 	Category Category
 	Vendor   string
 
+	// VendorKey is the icon slug for Vendor, and is empty for the great
+	// majority of vendors, which have no artwork and never will. Resolved here
+	// rather than derived from Vendor by the UI: the name is a label and is
+	// allowed to be improved, and a slug computed from it would orphan every
+	// picture keyed on the old spelling without anything failing. See vendor.go.
+	VendorKey VendorKey
+
 	// Reason names the signal that fired, so the UI can say *why* it thinks a
 	// device is a printer. An unexplained guess is one an operator has no basis
 	// to accept or correct.
@@ -267,6 +274,12 @@ func Detect(mac, hostname string) Detected {
 			d.Vendor = vendor
 		}
 	}
+
+	// Resolved once, from whichever of the two sources answered, so both routes
+	// to a vendor produce the same key. Doing it per-source would let ouiTable
+	// and the registry disagree about what "Philips Hue" is called in a
+	// filename, which is the whole thing VendorKey exists to prevent.
+	d.VendorKey = VendorKeyFor(d.Vendor)
 
 	// Hostname last in code, first in precedence: it overwrites an OUI-derived
 	// category because it is the stronger signal.
