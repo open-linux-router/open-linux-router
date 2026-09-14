@@ -38,8 +38,31 @@ RestartSec=2
 # exec.Command("systemctl") — nftables and netlink are spoken directly and
 # systemd over D-Bus. The first exec added to olrd silently costs most of what
 # is below, so this block is a standing constraint on the code, not decoration.
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+#
+# Deliberately no CapabilityBoundingSet. It used to read
+#
+#   CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+#
+# which looked like defence in depth and was not. olrd holds a root connection
+# to systemd's private bus — it has to, that is how it drives the backends —
+# and StartTransientUnit over that bus runs anything with the full capability
+# set systemd grants. The bounding set could never contain an attacker who had
+# already reached olrd's address space, because the escape hatch is a feature
+# we cannot remove.
+#
+# What it did contain was us. core.holderOf answers "who is already serving
+# DNS" by matching a socket inode against /proc/<pid>/fd, which needs
+# CAP_SYS_PTRACE the moment the holder runs as its own user — and dnsmasq,
+# unbound and systemd-resolved all do. So the one branch that could name the
+# incumbent was unreachable in production, every real conflict fell through to
+# a fallback that guesses systemd-resolved, and operators were sent to edit a
+# file for a package they did not have. A boundary that stops only the people
+# maintaining it is not a boundary.
+#
+# The directives below stay, and are not the same bet. They constrain what a
+# *bug* in olrd can reach — a mistyped path writing outside /etc/open-linux-router
+# fails loudly here instead of quietly corrupting the box — which is worth
+# having and costs nothing, because olrd never legitimately wants any of it.
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true

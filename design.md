@@ -363,7 +363,6 @@ There is no `exec.Command("nft")` and no `exec.Command("systemctl")`. That makes
 the sandbox nearly free:
 
 ```ini
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
@@ -372,7 +371,30 @@ ReadWritePaths=/etc/open-linux-router /var/lib/open-linux-router /run/olr
 ```
 
 Worth stating as a rule, because the first `exec.Command` silently costs all of
-it. **One exception is already visible and should be taken deliberately rather
+it.
+
+**There is deliberately no `CapabilityBoundingSet`, and the reason generalises.**
+It used to pin olrd to `CAP_NET_ADMIN CAP_NET_RAW`. That never bought what it
+appeared to: olrd holds a root connection to systemd's private bus — it must, it
+is how backends are driven — and `StartTransientUnit` over that bus runs
+arbitrary code with whatever capabilities systemd grants. The restriction could
+not contain anyone who had already reached olrd's address space.
+
+It did contain us. `core.holderOf` answers *"who is already serving DNS"* by
+matching a socket inode against `/proc/<pid>/fd`, which needs `CAP_SYS_PTRACE`
+as soon as the holder runs as its own user — and dnsmasq, unbound and
+systemd-resolved all do. The branch that names the incumbent was therefore
+unreachable on every real box, and operators hit a fallback that guesses
+systemd-resolved and sends them to edit a file for a package they may not have
+installed. Restoring it via `CAP_SYS_PTRACE` would have been theatre twice over,
+since that capability is root in all but name.
+
+The directives kept above are a different bet and survive it: they bound what a
+*bug* can reach, not what an attacker can. `ProtectSystem=strict` turning a
+mistyped path into a loud failure is worth having precisely because olrd never
+legitimately wants to write there. **The test is whether a restriction would
+ever stop code we intend to write.** One that cannot is cheap; one that can —
+and is escapable anyway — costs real functionality for the appearance of rigour. **One exception is already visible and should be taken deliberately rather
 than by accident:** `olr logs` (§3.2 rule 4) currently execs `journalctl` in the
 *CLI* process, which is outside `olrd` and therefore fine. The moment the WebUI
 wants logs, `olrd` needs journal access — and `go-systemd/sdjournal` is cgo,
