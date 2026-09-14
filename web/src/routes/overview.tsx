@@ -217,8 +217,15 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
 
   // A unit that runs but is not enabled costs nothing until the power goes out,
   // and then costs the whole network at once. Worth saying while it is cheap.
+  //
+  // `active` is half the condition and was missing: a unit that is stopped and
+  // not enabled is not this warning at all. The dns-down card above already
+  // says nothing is answering, and following it with "is running, but is not
+  // set to start at boot" contradicted it on the same screen — which is what a
+  // brand-new install saw, since nothing is enabled or running until the first
+  // successful apply.
   for (const service of dns?.services ?? []) {
-    if (!service.status || service.status.enabled) continue
+    if (!service.status || service.status.enabled || !service.status.active) continue
     out.push({
       key: `boot-${service.unit}`,
       title: 'DNS will not come back after a reboot',

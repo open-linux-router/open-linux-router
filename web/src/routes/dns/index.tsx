@@ -114,7 +114,20 @@ function StatusCard({
   // Reported on its own line rather than folded into the headline: a unit that
   // is running now and not enabled costs nothing until the next reboot, and
   // then costs the whole network its name resolution at once.
-  const notAtBoot = (status?.services ?? []).filter((s) => s.status && !s.status.enabled)
+  //
+  // "running now" is load-bearing and used to be missing from the predicate,
+  // so a unit that was merely *stopped* and not enabled produced the sentence
+  // "is running, but is not set to start at boot" directly under a headline
+  // saying nothing was serving DNS. A first install shows exactly that: no unit
+  // is enabled or active until an apply succeeds, so the page's first
+  // impression was two lines contradicting each other.
+  //
+  // A unit that is not installed is kept, stopped or not — it is the one case
+  // where "not enabled" has a cause worth naming, and the branch below names
+  // it. Everything else that is off is already the headline's business.
+  const notAtBoot = (status?.services ?? []).filter(
+    (s) => s.status && !s.status.enabled && (s.status.active || s.status.installed === false),
+  )
 
   return (
     <StatusStrip
