@@ -33,11 +33,19 @@ ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=2
 
-# The sandbox from design.md §3.6, which is affordable only because olrd
-# executes no subprocesses. There is no exec.Command("nft") and no
-# exec.Command("systemctl") — nftables and netlink are spoken directly and
-# systemd over D-Bus. The first exec added to olrd silently costs most of what
-# is below, so this block is a standing constraint on the code, not decoration.
+# The sandbox from design.md §3.6, which is affordable because olrd speaks
+# nftables and netlink directly and systemd over D-Bus rather than shelling out.
+# There is no exec.Command("nft") and no exec.Command("systemctl"), and the
+# first exec added to olrd silently costs most of what is below, so this block
+# is a standing constraint on the code, not decoration.
+#
+# The one command olrd does run is the distribution's package manager, when an
+# operator presses the button that clears a missing-backend blocker — and it is
+# run as a *transient systemd unit* (internal/core/install.go), which PID 1
+# spawns outside this namespace. That is not a workaround; it is the only shape
+# that keeps ProtectSystem=strict, because an apt-get inside this sandbox cannot
+# write /var/lib/dpkg and the alternative was an apt-shaped hole in the block
+# below, permanently.
 #
 # Deliberately no CapabilityBoundingSet. It used to read
 #
@@ -82,7 +90,14 @@ RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
 
 # The only paths olrd writes: module configuration, its own state, and the
 # runtime directory holding the control socket and the §5.5 guard snapshots.
-ReadWritePaths=/etc/open-linux-router /var/lib/open-linux-router
+#
+# /etc/systemd is the fourth, and it is exactly one file: the drop-in that tells
+# systemd-resolved to stop listening on :53 while it keeps resolving for this box
+# (core.resolvedDropIn). design.md §3.6's own test for a restriction is whether
+# it would ever stop code we intend to write — this one now does, and widening it
+# by one directory is the sanctioned answer rather than quietly working around
+# it. The leading `-` keeps a box without the directory from failing to start.
+ReadWritePaths=/etc/open-linux-router /var/lib/open-linux-router -/etc/systemd
 StateDirectory=open-linux-router
 RuntimeDirectory=olr
 RuntimeDirectoryMode=0755

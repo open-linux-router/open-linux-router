@@ -43,14 +43,23 @@ var unboundDependency = core.Dependency{
 	// Not inert: Debian's unbound package enables and starts unbound.service
 	// on 127.0.0.1:53 the moment it is installed.
 	Inert: false,
+	// Which is why the install has to clear it in the same breath. Without
+	// this, fixing "unbound is not installed" only ever swaps one red panel for
+	// the next one — the conflict is *caused* by the cure.
+	Shadows: []string{"unbound.service"},
 	Packages: []core.Package{
 		{
 			Distro: "debian",
 			Name:   "unbound",
+			// Still the truth for somebody installing by hand, and kept for
+			// them. It is no longer the only path: `olr dns fix` and the button
+			// on the DNS page do both halves, which is what the note is
+			// describing the manual version of.
 			Note: "Debian starts its own unbound.service on 127.0.0.1:53 when this installs.\n" +
 				"olr runs a separate instance and owns :53 through its relay, so stand the\n" +
 				"distribution's one down afterwards:\n" +
-				"  sudo systemctl disable --now unbound.service",
+				"  sudo systemctl disable --now unbound.service\n" +
+				"Or let olr do both: `sudo olr dns fix`.",
 		},
 		{Distro: "fedora", Name: "unbound"},
 		{Distro: "rhel", Name: "unbound"},

@@ -18,6 +18,11 @@ var verbs = map[string]string{
 	"logs":    "Show recent log output",
 	"enable":  "Enable the module",
 	"disable": "Disable the module",
+	// "fix" is about the *box*, not the configuration, which is what earns it a
+	// word of its own rather than a flag on `set`. It clears a core.Blocker — a
+	// missing backend, a distribution daemon on our port — and nothing an
+	// operator can type into olr would have the same effect.
+	"fix": "Clear what is standing in the module's way",
 }
 
 // Verbs returns the vocabulary, sorted. Useful for docs and tests.

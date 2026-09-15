@@ -172,7 +172,7 @@ function StatusCard({
           `apt install dnsmasq` blocks both modules. Same component and the
           same words on both pages, so it reads as one problem rather than
           two. */}
-      <BlockerAlerts blockers={status?.blockers} />
+      <BlockerAlerts module="dhcp" blockers={status?.blockers} />
     </StatusStrip>
   )
 }

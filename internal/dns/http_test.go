@@ -464,3 +464,38 @@ func TestUnknownRouteIs404(t *testing.T) {
 		t.Errorf("status = %d, want 404", w.Code)
 	}
 }
+
+// An id nobody offered is refused, and refused as a 404 rather than a 500 — it
+// is a request for something that does not exist here, not a fault in olrd.
+//
+// The ids are resolved against blockers re-derived at the moment of the call
+// rather than against the ones the client read earlier, so this also covers the
+// case that matters more: a conflict somebody else has already cleared cannot be
+// "fixed" a second time.
+//
+// Deliberately the only fix test at this level. A POST with an empty body on a
+// box that genuinely is missing a backend would run that box's package manager,
+// and a test suite must not install anything on the machine running it — which
+// is why the behaviour either side of this line is tested in internal/core
+// against a fake one.
+func TestFixingAnUnknownBlockerIs404(t *testing.T) {
+	h, _, _ := testHTTP(t)
+
+	w := do(t, h, http.MethodPost, "/blockers/fix", `{"ids":["install:no-such-thing"]}`)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404; body %s", w.Code, w.Body)
+	}
+	if !strings.Contains(w.Body.String(), "no-such-thing") {
+		t.Errorf("the refusal does not name what was asked for: %s", w.Body)
+	}
+}
+
+// A body that is not JSON is a client error, not a reason to start installing
+// things because the ids came back empty.
+func TestFixRejectsAMalformedBody(t *testing.T) {
+	h, _, _ := testHTTP(t)
+
+	if w := do(t, h, http.MethodPost, "/blockers/fix", `{"ids":`); w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400; body %s", w.Code, w.Body)
+	}
+}

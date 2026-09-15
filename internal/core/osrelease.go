@@ -105,3 +105,32 @@ var installCommands = map[string]string{
 // is that the more specific family wins, and these are listed most specific
 // first so "rhel fedora" picks rhel's dnf and not fedora's identical one.
 var installOrder = []string{"debian", "rhel", "fedora", "suse", "arch", "alpine"}
+
+// installArgv is how olr installs a package itself, as argv rather than as a
+// sentence.
+//
+// A second table beside installCommands rather than a parse of it, because the
+// two are not the same command and pretending they were would be the bug. What
+// an operator types is interactive and elevated; what olr runs is already root
+// and has nobody to answer a prompt, so each of these carries its family's way
+// of saying "assume yes" — and Debian's says apt-get, because `apt` prints
+// "does not have a stable CLI interface" the moment it is scripted.
+//
+// A test asserts the two tables cover exactly the same families, so neither can
+// grow an entry the other lacks and leave olr recommending one thing and doing
+// another.
+//
+// DPkg::Lock::Timeout on Debian is not a detail. A fresh box is usually running
+// unattended-upgrades, which holds the dpkg lock for minutes at a time, and it
+// is far and away the most likely reason this fails at all. Waiting for it beats
+// failing on it, and failing on it in dpkg's own words beats failing in ours.
+var installArgv = map[string][]string{
+	"debian": {"apt-get", "install", "-y", "-o", "DPkg::Lock::Timeout=60"},
+	"fedora": {"dnf", "install", "-y"},
+	"rhel":   {"dnf", "install", "-y"},
+	"arch":   {"pacman", "-S", "--noconfirm"},
+	// apk needs no flag: it is non-interactive already, and adding one that
+	// does not exist would fail every install on Alpine.
+	"alpine": {"apk", "add"},
+	"suse":   {"zypper", "--non-interactive", "install"},
+}

@@ -2,6 +2,9 @@ package dhcp
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -71,6 +74,22 @@ func (h HTTP) Routes() []core.Route {
 				"An empty body plans the stored configuration, which answers whether the box has drifted.",
 			Body:    core.BodyRelaxed,
 			Handler: h.postPlan,
+		},
+
+		// Clearing what is in the way, rather than only reporting it. The same
+		// route internal/dns declares, and per-module for the same reason:
+		// internal/cli cannot import a module, because the modules import it.
+		{
+			// No Tool: R3 in the conformance suite keeps every mutating route
+			// off the agent surface until §6.2's disruptive gate exists.
+			Method: "POST", Path: "/blockers/fix",
+			Summary: "Clear what is standing in DHCP's way on this box: install a backend that is " +
+				"missing, and stand down a distribution daemon holding UDP/67. " +
+				"An empty body clears everything olr can clear; a body of " +
+				`{"ids": ["..."]} clears only the named ones, using the ids from /status.`,
+			Body:     core.BodyNone,
+			Mutating: true,
+			Handler:  h.postFixBlockers,
 		},
 
 		// Observed. Never stored, never revisioned, always stamped (§4.5).
@@ -320,13 +339,7 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 		resp.Service = &svc
 	}
 
-	// Asked for unconditionally, including while the module is off — off is when
-	// the operator is about to turn it on, and the alternative is finding out
-	// from an apply that got halfway.
-	// Dependencies first: a missing dnsmasq is why nothing is serving, and a
-	// port conflict reported above it would read as the cause when it is not.
-	resp.Blockers = append(core.DependencyBlockers(Dependencies()),
-		core.DistroConflicts(r.Context(), dhcpServerPort)...)
+	resp.Blockers = h.blockers(r.Context())
 
 	if plan, err := h.plan(r, cfg); err != nil {
 		resp.DriftError = err.Error()
@@ -336,6 +349,73 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 		resp.Drift = &view
 	}
 
+	core.WriteJSON(w, http.StatusOK, resp)
+}
+
+// blockers is what stands between this module and its job.
+//
+// Asked for unconditionally, including while the module is off — off is when the
+// operator is about to turn it on, and the alternative is finding out from an
+// apply that got halfway.
+//
+// Dependencies first: a missing dnsmasq is why nothing is serving, and a port
+// conflict reported above it would read as the cause when it is not.
+//
+// One function rather than two copies so /status and /blockers/fix cannot
+// disagree about what is wrong — the fix acts on what it re-derives here.
+func (h HTTP) blockers(ctx context.Context) []core.Blocker {
+	return append(core.DependencyBlockers(Dependencies()),
+		core.DistroConflicts(ctx, dhcpServerPort)...)
+}
+
+// --- clearing what is in the way -------------------------------------------
+
+// fixRequest names which blockers to clear. Absent or empty means all of them.
+type fixRequest struct {
+	IDs []string `json:"ids,omitempty"`
+}
+
+// fixResponse carries the steps whether or not they all landed (§5.3.2).
+type fixResponse struct {
+	Steps []core.Step     `json:"steps,omitempty"`
+	Error *core.ErrorBody `json:"error,omitempty"`
+}
+
+func (h HTTP) postFixBlockers(w http.ResponseWriter, r *http.Request) {
+	data, err := core.ReadBody(w, r)
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var req fixRequest
+	if len(bytes.TrimSpace(data)) > 0 {
+		if err := json.Unmarshal(data, &req); err != nil {
+			core.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
+	// No apply lock; core.FixBlockers says why.
+	steps, err := core.FixBlockers(r.Context(), h.blockers(r.Context()), req.IDs)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, core.ErrNoSuchFix) {
+			status = http.StatusNotFound
+		}
+		core.WriteError(w, status, err.Error())
+		return
+	}
+
+	if len(steps) > 0 {
+		h.Events.Publish(core.Event{Type: core.EventApplied, Module: ModuleName})
+	}
+
+	resp := fixResponse{Steps: steps}
+	if core.StepsFailed(steps) {
+		resp.Error = &core.ErrorBody{Message: "some of that did not work; the steps say which"}
+		core.WriteJSON(w, http.StatusInternalServerError, resp)
+		return
+	}
 	core.WriteJSON(w, http.StatusOK, resp)
 }
 

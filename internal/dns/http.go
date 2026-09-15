@@ -2,6 +2,9 @@ package dns
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -81,6 +84,35 @@ func (h HTTP) Routes() []core.Route {
 				"An empty body plans the stored configuration, which answers whether the box has drifted.",
 			Body:    core.BodyRelaxed,
 			Handler: h.postPlan,
+		},
+
+		// Clearing what is in the way, rather than only reporting it.
+		//
+		// Per module rather than one endpoint for the box, for the reason
+		// internal/daemon's module list gives: internal/cli cannot import a
+		// module because the modules import *it*, so a box-wide fix route would
+		// have nowhere to live that can see them. The blocker set is
+		// config-aware anyway — Dependencies(cfg) returns nftables only when
+		// the redirect is on — so the module that computes it is the module
+		// that must act on it.
+		{
+			// No Tool, and the conformance suite's R3 is why: no mutating route
+			// is published to an agent until §6.2's disruptive gate exists, and
+			// this one installs packages and stops daemons. It is reachable from
+			// `olr routes` and from every human surface in the meantime.
+			Method: "POST", Path: "/blockers/fix",
+			Summary: "Clear what is standing in DNS's way on this box: install a backend that is " +
+				"missing, and stand down a distribution daemon holding :53. " +
+				"An empty body clears everything olr can clear; a body of " +
+				`{"ids": ["..."]} clears only the named ones, using the ids from /status.`,
+			// No declared body shape: the ids form is not a projection of the
+			// config schema and inventing a third shape to describe one
+			// optional array of opaque handles would cost more than it buys. An
+			// agent calling this with no arguments gets the whole job done,
+			// which is the right default for the surface that has no buttons.
+			Body:     core.BodyNone,
+			Mutating: true,
+			Handler:  h.postFixBlockers,
 		},
 
 		// Observed. Never stored, never revisioned, always stamped (§4.5).
@@ -376,16 +408,7 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 		resp.Services = append(resp.Services, view)
 	}
 
-	// Asked for unconditionally, including while the module is switched off.
-	// Off is exactly when this is worth knowing: the operator is about to flip
-	// the switch, and the alternative is finding out from a failed apply.
-	//
-	// Dependencies first. "unbound is not installed" and "something else holds
-	// :53" can both be true at once, and in that order they read as a sequence
-	// to work through; reversed, the port conflict looks like the reason the
-	// resolver is not running when the resolver is not even on the box.
-	resp.Blockers = append(core.DependencyBlockers(Dependencies(cfg)),
-		core.DistroConflicts(r.Context(), DNSPort)...)
+	resp.Blockers = h.blockers(r.Context(), cfg)
 
 	if plan, err := h.Applier.Plan(r.Context(), cfg); err != nil {
 		resp.DriftError = err.Error()
@@ -404,6 +427,96 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	core.WriteJSON(w, http.StatusOK, resp)
+}
+
+// blockers is what stands between this module and its job.
+//
+// Asked for unconditionally, including while the module is switched off. Off is
+// exactly when this is worth knowing: the operator is about to flip the switch,
+// and the alternative is finding out from a failed apply.
+//
+// Dependencies first. "unbound is not installed" and "something else holds :53"
+// can both be true at once, and in that order they read as a sequence to work
+// through; reversed, the port conflict looks like the reason the resolver is not
+// running when the resolver is not even on the box. The fix endpoint clears them
+// in this same order for the same reason — and because on Debian the first
+// *causes* the second, so the other order would fix something that does not
+// exist yet.
+//
+// One function rather than two copies because /status and /blockers/fix must
+// never disagree about what is wrong: the fix acts on what it re-derives here,
+// so an id for a conflict somebody has already cleared is refused rather than
+// acted on.
+func (h HTTP) blockers(ctx context.Context, cfg Config) []core.Blocker {
+	return append(core.DependencyBlockers(Dependencies(cfg)),
+		core.DistroConflicts(ctx, DNSPort)...)
+}
+
+// --- clearing what is in the way -------------------------------------------
+
+// fixRequest names which blockers to clear. Absent or empty means all of them.
+type fixRequest struct {
+	IDs []string `json:"ids,omitempty"`
+}
+
+// fixResponse carries the steps whether or not they all landed, for the §5.3.2
+// reason applyResponse does: there is no rollback, and a fix that installed the
+// package and then failed to stand the unit down has left the box somewhere the
+// operator needs told about.
+type fixResponse struct {
+	Steps []core.Step     `json:"steps,omitempty"`
+	Error *core.ErrorBody `json:"error,omitempty"`
+}
+
+func (h HTTP) postFixBlockers(w http.ResponseWriter, r *http.Request) {
+	data, err := core.ReadBody(w, r)
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var req fixRequest
+	if len(bytes.TrimSpace(data)) > 0 {
+		if err := json.Unmarshal(data, &req); err != nil {
+			core.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
+	cfg, err := h.Applier.Load()
+	if err != nil {
+		core.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// No apply lock. core.FixBlockers says why: an install waits on the dpkg
+	// lock for as long as unattended-upgrades feels like holding it, and §3.6's
+	// global lock is only affordable because everything that takes it is
+	// bounded. Nothing here writes configuration, so there is no intent to
+	// serialise against.
+	steps, err := core.FixBlockers(r.Context(), h.blockers(r.Context(), cfg), req.IDs)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, core.ErrNoSuchFix) {
+			status = http.StatusNotFound
+		}
+		core.WriteError(w, status, err.Error())
+		return
+	}
+
+	// Published whenever anything ran, including a partial failure — especially
+	// then. A package landed or a unit stopped, and every client's picture of
+	// the box is now stale.
+	if len(steps) > 0 {
+		h.Events.Publish(core.Event{Type: core.EventApplied, Module: ModuleName})
+	}
+
+	resp := fixResponse{Steps: steps}
+	if core.StepsFailed(steps) {
+		resp.Error = &core.ErrorBody{Message: "some of that did not work; the steps say which"}
+		core.WriteJSON(w, http.StatusInternalServerError, resp)
+		return
+	}
 	core.WriteJSON(w, http.StatusOK, resp)
 }
 

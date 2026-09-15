@@ -187,6 +187,15 @@ func runEnable(cmd *cobra.Command) error {
 		return err
 	}
 
+	// Only now, because everything before this was about getting olrd running
+	// and this is a client of it. olrd.service is Type=notify, so the job above
+	// completing means the API is answering rather than merely forked.
+	//
+	// cmd.Context() rather than ctx: that one is bounded by daemonTimeout,
+	// which is right for a D-Bus round trip and nowhere near enough for a
+	// package manager. The client applies its own FixTimeout per call.
+	clearBlockers(cmd.Context(), ClientFor(cmd), out)
+
 	return reportEnabled(out)
 }
 
@@ -424,7 +433,9 @@ func warnDistroBackends(parent context.Context, out io.Writer) {
 	for _, b := range core.DistroConflictsAll(ctx) {
 		fmt.Fprintf(out, "warning: %s\n"+
 			"olr runs its own instance rather than taking that one over, and will\n"+
-			"refuse to start while the port is held. Before turning the module on:\n\n%s\n\n",
+			"refuse to start while the port is held. Before turning the module on:\n\n%s\n\n"+
+			"Or let olr do it: `sudo olr dhcp fix` and `sudo olr dns fix` clear\n"+
+			"whatever is in that module's way, once the module is switched on.\n\n",
 			b.Summary, core.IndentLines(b.Fix, "  "))
 	}
 }

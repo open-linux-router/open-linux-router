@@ -44,6 +44,9 @@ func Command() *cobra.Command {
 		logsCommand(),
 		enableCommand(),
 		disableCommand(),
+		// See internal/dns/cli.go: built in internal/cli because the same
+		// dnsmasq blocks both modules and both must say the same thing about it.
+		cli.FixCommand(ModuleName, "DHCP's"),
 	)
 }
 

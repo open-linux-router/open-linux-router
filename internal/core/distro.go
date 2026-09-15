@@ -46,11 +46,20 @@ type Blocker struct {
 	// Fix is shell, verbatim and ready to paste. Multi-line where the correct
 	// answer is, and commented where a line explains rather than runs.
 	//
-	// Shown rather than performed, for now. When olr grows a button that yields
-	// the port for the operator, this is the text it must display before acting:
-	// a tool that reaches outside its own scope has to say what it is about to
-	// do, in the words the operator would have used themselves.
+	// Still shown even where Action can perform it. A tool that reaches outside
+	// its own scope has to say what it is about to do, in the words the operator
+	// would have used themselves — and an operator who would rather type it
+	// than press a button is not wrong.
 	Fix string `json:"fix,omitempty"`
+
+	// Action is olr doing it, when this is a blocker olr knows how to clear.
+	//
+	// Absent — and omitted from the JSON entirely — for one it does not, so a
+	// blocker olr cannot fix serialises and renders exactly as it did before
+	// this existed. That is the whole degradation story: an unrecognised
+	// distribution, or an incumbent that is nobody's business but the
+	// operator's, keeps the text-only advice.
+	Action *Action `json:"action,omitempty"`
 }
 
 // BlockerDistroBackend is the Kind of every blocker this file produces.
@@ -73,6 +82,23 @@ type DistroBackend struct {
 
 	// Fix is the command that resolves it.
 	Fix string
+
+	// ActionID is the stable handle a client names to ask olr to do it, and
+	// ActionLabel is the button. Spelled out here rather than derived from the
+	// unit name because the id is API surface — a client stores it and sends it
+	// back — and belongs next to the operator-facing words it goes with.
+	ActionID    string
+	ActionLabel string
+
+	// ActionRuns is what the button will do, listed before it is pressed.
+	ActionRuns []string
+
+	// perform does it, and its absence is how an entry says olr must not.
+	//
+	// It takes the backend so that the unit name is read from the row rather
+	// than repeated in a closure, which is the one thing here that could drift
+	// into disabling a unit other than the one described above it.
+	perform func(context.Context, DistroBackend) []Step
 }
 
 // DistroBackends is the table. Order is the order an operator meets them.
@@ -85,7 +111,11 @@ var DistroBackends = []DistroBackend{
 			"soon as it is installed. olr runs its own dnsmasq from olr-dhcp.service, " +
 			"with its own configuration, so this one is a second server rather than " +
 			"the one olr drives.",
-		Fix: "sudo systemctl disable --now dnsmasq.service",
+		Fix:         "sudo systemctl disable --now dnsmasq.service",
+		ActionID:    "standdown:dnsmasq.service",
+		ActionLabel: "Stop dnsmasq.service and keep it off",
+		ActionRuns:  []string{standDownCommand("dnsmasq.service")},
+		perform:     standDown,
 	},
 	{
 		Unit:  "unbound.service",
@@ -93,7 +123,11 @@ var DistroBackends = []DistroBackend{
 		Holds: ":53",
 		Detail: "Debian enables its own unbound on install, listening on 127.0.0.1:53. " +
 			"olr runs a separate instance and owns :53 through its relay.",
-		Fix: "sudo systemctl disable --now unbound.service",
+		Fix:         "sudo systemctl disable --now unbound.service",
+		ActionID:    "standdown:unbound.service",
+		ActionLabel: "Stop unbound.service and keep it off",
+		ActionRuns:  []string{standDownCommand("unbound.service")},
+		perform:     standDown,
 	},
 	{
 		// Not disabled, ever: this box resolves through it, so stopping it takes
@@ -116,7 +150,90 @@ var DistroBackends = []DistroBackend{
 			"printf '[Resolve]\\nDNSStubListener=no\\n' |\n" +
 			"  sudo tee /etc/systemd/resolved.conf.d/10-olr-yield-53.conf\n" +
 			"sudo systemctl restart systemd-resolved",
+		ActionID: "yield:systemd-resolved.service",
+		// The label is the contract: "keeps running" is the thing the operator
+		// needs to believe before pressing it, because every other button on
+		// this page stops something.
+		ActionLabel: "Hand :53 to olr and keep resolving",
+		ActionRuns: []string{
+			"printf '[Resolve]\\nDNSStubListener=no\\n' > " + resolvedDropIn,
+			"systemctl restart systemd-resolved.service",
+		},
+		perform: yieldStubListener,
 	},
+}
+
+// resolvedDropIn is where systemd-resolved is told to give up the socket.
+//
+// A variable so a test can point it at a temporary directory, the same reason
+// osReleasePath is one. olrd can write it because packaging/systemd/olrd.service
+// names /etc/systemd in ReadWritePaths — see the comment there, which is the
+// other half of this.
+var resolvedDropIn = "/etc/systemd/resolved.conf.d/10-olr-yield-53.conf"
+
+// standDown stops a shadow instance of a backend olr itself runs, and stops it
+// coming back at the next boot.
+//
+// This is the design.md §3.4 exception, and the shape of it is the argument for
+// it: the only units reachable from here are the ones in the table above, every
+// one of which is a second copy of a daemon olr drives itself. An OS component
+// is never stood down — systemd-resolved is in this table and gets
+// yieldStubListener instead.
+//
+// Over D-Bus through core.Unit rather than by running systemctl, for the reason
+// unit_linux.go gives: the mechanism already exists and a second one would be a
+// second thing to keep correct. ActionRuns still says `systemctl disable --now`,
+// because that is what the box will look like afterwards and the sentence the
+// operator would have typed.
+func standDown(ctx context.Context, b DistroBackend) []Step {
+	unit, err := newUnit(b.Unit)
+	if err != nil {
+		return []Step{{Description: standDownCommand(b.Unit), Error: err.Error()}}
+	}
+	return runTasks(ctx,
+		task{"stop " + b.Unit, unit.Stop},
+		task{"disable " + b.Unit + ", so it does not come back at the next boot", unit.Disable},
+	)
+}
+
+// standDownCommand is the sentence an operator would have typed to do what
+// standDown does over D-Bus. Built once, so the table's ActionRuns, the
+// install action's forecast and the step descriptions cannot word it three
+// ways.
+func standDownCommand(unit string) string {
+	return fmt.Sprintf("systemctl disable --now %s", unit)
+}
+
+// yieldStubListener tells systemd-resolved to give up :53 while it keeps
+// running, which is distro.go's Fix for it performed rather than printed.
+func yieldStubListener(ctx context.Context, b DistroBackend) []Step {
+	unit, err := newUnit(b.Unit)
+	if err != nil {
+		return []Step{{Description: "restart " + b.Unit, Error: err.Error()}}
+	}
+	return runTasks(ctx,
+		task{"write " + resolvedDropIn, func(context.Context) error {
+			return WriteFileAtomic(resolvedDropIn, []byte("[Resolve]\nDNSStubListener=no\n"), 0o644)
+		}},
+		task{"restart " + b.Unit + ", so it reads that and releases :53", unit.Restart},
+	)
+}
+
+// Clearable reports whether olr will do anything about this incumbent on
+// request, which is what a caller outside this package needs before offering.
+func (b DistroBackend) Clearable() bool { return b.perform != nil }
+
+// action is what olr will do about this incumbent, or nil where it will not.
+func (b DistroBackend) action() *Action {
+	if b.perform == nil {
+		return nil
+	}
+	return &Action{
+		ID:    b.ActionID,
+		Label: b.ActionLabel,
+		Runs:  b.ActionRuns,
+		do:    func(ctx context.Context) []Step { return b.perform(ctx, b) },
+	}
 }
 
 // newUnit is a variable only so the tests can answer for a box they do not
@@ -179,6 +296,7 @@ func distroConflicts(ctx context.Context, keep func(DistroBackend) bool) []Block
 			Summary: fmt.Sprintf("%s is %s, and holds %s.", b.Unit, describeLiveness(status), b.Holds),
 			Detail:  b.Detail,
 			Fix:     b.Fix,
+			Action:  b.action(),
 		})
 	}
 	return out
@@ -197,6 +315,27 @@ func WriteBlockersText(w io.Writer, blockers []Blocker) {
 			fmt.Fprintf(w, "\n%s\n", IndentLines(b.Fix, "  "))
 		}
 	}
+}
+
+// WriteFixHint names the command that clears these, when any of them can be.
+//
+// Separate from WriteBlockersText and printed once at the end rather than under
+// each blocker: `olr dns fix` clears all of them in one go, and repeating it
+// under three panels would read as three different things to run.
+func WriteFixHint(w io.Writer, module string, blockers []Blocker) {
+	actionable := Actionable(blockers)
+	if len(actionable) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\nolr can do %s for you:\n\n  sudo olr %s fix\n",
+		plural(len(actionable), "that", "all of that"), module)
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // IndentLines prefixes every line, so a multi-line fix stays one block rather

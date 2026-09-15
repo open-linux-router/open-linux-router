@@ -205,9 +205,15 @@ both. Then `olr dhcp status`, then `journalctl -u olr-dhcp -n 50`.
 **olr refuses to start the server.** Something already holds UDP/67 on this box,
 and the refusal names it — process, pid and systemd unit — along with the
 command that stands it down. olr runs its own dnsmasq instance and will not stop
-a daemon it did not start. The usual culprit is your distribution's own dnsmasq:
-`apt install dnsmasq` installs a service alongside the binary, where
-`dnsmasq-base` is just the binary olr drives.
+a daemon it did not start *unless you ask it to*: `sudo olr dhcp fix` runs that
+command for you, and the DHCP page has a button that does the same thing.
+(`--dry-run` shows exactly what it would run first.) The usual culprit is your
+distribution's own dnsmasq: `apt install dnsmasq` installs a service alongside
+the binary, where `dnsmasq-base` is just the binary olr drives.
+
+`fix` only touches a second copy of a daemon olr runs itself. It never stops an
+OS component — `systemd-resolved` is asked to give up port 53 through a drop-in
+and keeps running, because this box resolves names through it.
 
 **A range is refused as "not adopted".** Step 3.
 

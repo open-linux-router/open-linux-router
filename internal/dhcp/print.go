@@ -219,6 +219,8 @@ func writeStatusText(w io.Writer, status statusResponse, leases leasesResponse) 
 	// whose fix is a command rather than an olr setting, and an operator with
 	// one of these gains nothing from the lease table until it is dealt with.
 	core.WriteBlockersText(w, status.Blockers)
+	// Once, after the list: one `olr dhcp fix` clears all of them.
+	core.WriteFixHint(w, ModuleName, status.Blockers)
 
 	fmt.Fprintf(w, "leases:        %d\n", len(leases.Leases))
 

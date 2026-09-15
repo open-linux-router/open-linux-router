@@ -37,6 +37,17 @@ import (
 // "hung forever", which is the state this exists to turn into a message.
 const requestTimeout = 60 * time.Second
 
+// FixTimeout is what `olr <module> fix` allows instead.
+//
+// The flat 60 seconds above is right for everything olrd does itself and wrong
+// for the one call that waits on a package manager. `apt-get install unbound`
+// on a slow uplink is minutes, and on a box running unattended-upgrades it also
+// waits up to a further minute for the dpkg lock — all of which is normal, and
+// all of which the default would turn into "cannot reach olrd", which is both
+// alarming and false. olrd's own server has no WriteTimeout (internal/daemon),
+// so nothing on the other end is cutting this short either.
+const FixTimeout = 15 * time.Minute
+
 // Client talks to olrd over its control socket.
 type Client struct {
 	http   *http.Client
@@ -63,6 +74,20 @@ func NewClient(socket string) *Client {
 
 // ClientFor builds a client from the command's --socket flag.
 func ClientFor(cmd *cobra.Command) *Client { return NewClient(Socket(cmd)) }
+
+// WithTimeout returns a client allowing one call longer than the default.
+//
+// A copy of the http.Client sharing the same Transport, so the socket dialer —
+// the whole point of this type — is not rebuilt or duplicated. Per call rather
+// than per client because a longer deadline is a property of the endpoint being
+// called, not of the connection: `olr dns fix` waits on apt, and `olr dns
+// status` a second later must not inherit fifteen minutes of patience for a
+// daemon that has since died.
+func (c *Client) WithTimeout(d time.Duration) *Client {
+	http := *c.http
+	http.Timeout = d
+	return &Client{socket: c.socket, http: &http}
+}
 
 // APIError is a response olrd refused.
 //

@@ -1,10 +1,12 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // The backends a module needs, declared by the module that needs them.
@@ -49,6 +51,22 @@ type Dependency struct {
 	// A test holds packaging/nfpm.yaml to this: the .deb's depends list is
 	// exactly the inert ones.
 	Inert bool
+
+	// Shadows names the distribution units installing this package brings up,
+	// where those are second copies of a daemon olr runs itself.
+	//
+	// It exists because the two red panels an operator meets are one problem.
+	// "unbound is not installed" and "unbound.service holds :53" arrive in
+	// sequence — Debian's package enables and starts the unit on install — so
+	// fixing only the first swaps one panel for the other. Declaring the unit
+	// here is what lets the install action say both lines before it is pressed
+	// and clear both when it is.
+	//
+	// The names are matched against DistroBackends, which is where the
+	// knowledge of how to stand one down lives; a name with no entry there is a
+	// test failure rather than a silent no-op. Empty for an inert package,
+	// which by definition brings nothing up.
+	Shadows []string
 }
 
 // Package is a tool's name in one distribution family.
@@ -98,9 +116,100 @@ func DependencyBlockers(deps []Dependency) []Blocker {
 			Summary: fmt.Sprintf("%s is not installed on this box.", d.Tool),
 			Detail:  d.Why,
 			Fix:     installAdvice(d, distro),
+			Action:  installAction(d, distro),
 		})
 	}
 	return out
+}
+
+// installAction is olr fetching the package itself, or nil where it cannot.
+//
+// Nil for a distribution whose package manager is not in installArgv, which is
+// the same set installAdvice already declines to guess a command for. The two
+// degrade together on purpose: a box that gets "install unbound with your
+// distribution's package manager" must not also get a button, and the single
+// table behind both is what stops olr recommending one thing and running
+// another.
+func installAction(d Dependency, distro Distro) *Action {
+	pkg, ok := d.PackageFor(distro)
+	if !ok {
+		return nil
+	}
+	argv, ok := installArgvFor(distro, pkg.Name)
+	if !ok {
+		return nil
+	}
+
+	// The stand-downs the install is about to make necessary, named now so the
+	// button can promise them rather than summoning them.
+	shadows := shadowedBackends(d.Shadows)
+
+	runs := []string{strings.Join(argv, " ")}
+	label := "Install " + pkg.Name
+	for _, b := range shadows {
+		runs = append(runs, standDownCommand(b.Unit))
+	}
+	if len(shadows) > 0 {
+		label += " and hand olr " + shadows[0].Holds
+	}
+
+	return &Action{
+		ID:    "install:" + d.Tool,
+		Label: label,
+		Runs:  runs,
+		do: func(ctx context.Context) []Step {
+			steps := installPackage(ctx, argv)
+			if StepsFailed(steps) {
+				return steps
+			}
+			return append(steps, standDownShadows(ctx, shadows)...)
+		},
+	}
+}
+
+// shadowedBackends resolves unit names against the table that knows how to
+// stand them down.
+func shadowedBackends(units []string) []DistroBackend {
+	var out []DistroBackend
+	for _, name := range units {
+		for _, b := range DistroBackends {
+			if b.Unit == name && b.perform != nil {
+				out = append(out, b)
+			}
+		}
+	}
+	return out
+}
+
+// standDownShadows clears the units the install just brought up.
+//
+// Liveness is re-read rather than assumed, because whether the package starts
+// anything is the distribution's decision and not ours: Debian enables and
+// starts unbound.service on install and Fedora does not. A unit that did not
+// come up is reported as a step that found nothing to do rather than skipped
+// silently — the button promised the line, so the answer to it belongs in the
+// record even when the answer is "there was nothing there".
+func standDownShadows(ctx context.Context, shadows []DistroBackend) []Step {
+	var steps []Step
+	for _, b := range shadows {
+		unit, err := newUnit(b.Unit)
+		if err != nil {
+			// No service manager to ask. Not an error: the install succeeded,
+			// and a box with no systemd cannot have had a unit started by it.
+			continue
+		}
+		status, err := unit.Status(ctx)
+		if err != nil || !status.Installed || (!status.Active && !status.Enabled) {
+			steps = append(steps, Step{
+				Description: standDownCommand(b.Unit) +
+					" — this distribution did not start it, so there was nothing to stand down",
+				Done: true,
+			})
+			continue
+		}
+		steps = append(steps, standDown(ctx, b)...)
+	}
+	return steps
 }
 
 // installAdvice is the command to run, degrading as it recognises less.

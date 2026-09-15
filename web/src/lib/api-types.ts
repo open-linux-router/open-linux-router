@@ -59,6 +59,44 @@ export interface Blocker {
   summary: string
   detail?: string
   fix?: string
+  /**
+   * What olr will do about this on request, absent where it will not.
+   *
+   * A blocker without one renders exactly as every blocker did before this
+   * existed — text and a command to paste — which is what an unrecognised
+   * distribution, or an incumbent that is none of olr's business, still gets.
+   */
+  action?: BlockerAction
+}
+
+/**
+ * olr clearing a blocker itself — internal/core Action.
+ *
+ * Deliberately opaque. `id` is a handle to send back and nothing else: the
+ * client cannot name a package or a unit for olr to act on, because the code
+ * that does the acting is looked up in the daemon by this id. `runs` is what
+ * will happen, listed before it happens, and it must be shown — a tool reaching
+ * outside its own scope has to say what it is about to do.
+ */
+export interface BlockerAction {
+  id: string
+  /** The button. Says what will happen, not "fix". */
+  label: string
+  /** Every command, in order, in the words the operator would have used. */
+  runs: string[]
+}
+
+/** One unit of work in a fix and how it went, mirroring core.Step. */
+export interface FixStep {
+  description: string
+  done: boolean
+  error?: string
+}
+
+/** What POST /blockers/fix answers with, successful or not (§5.3.2). */
+export interface FixResult {
+  steps?: FixStep[]
+  error?: { message: string }
 }
 
 /** What the backend needs after the files are written. */

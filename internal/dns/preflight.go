@@ -51,8 +51,17 @@ func ErrPortInUse() error {
 // portInUseError is the message, given what the lookup found. Separated so the
 // branches can be tested without a box that happens to have :53 taken.
 func portInUseError(holder core.Holder, found bool) error {
+	// "unless you ask it to" is not a hedge. olr will now stand down a shadow
+	// copy of a backend it runs itself — but only when an operator presses the
+	// button or runs the verb, never as a side effect of an apply landing here
+	// (design.md §3.4's exception). This message is the apply path, so it is
+	// still a refusal; it just no longer implies the operator's only option is
+	// to go and type it themselves.
 	const preamble = "port %d is already in use, so something else on this box is serving DNS.\n" +
-		"olr runs its own resolver and will not stop somebody else's daemon.\n"
+		"olr runs its own resolver and will not stop somebody else's daemon unless\n" +
+		"you ask it to.\n"
+
+	offer := offerFix(holder.Unit)
 
 	if !found {
 		return fmt.Errorf(preamble+
@@ -73,7 +82,8 @@ func portInUseError(holder core.Holder, found bool) error {
 			"It is held by %s.\n"+
 			"Set DNSStubListener=no in /etc/systemd/resolved.conf and restart it:\n"+
 			"  sudo systemctl restart systemd-resolved\n"+
-			"Stopping it instead would work now and undo itself at the next boot",
+			"Stopping it instead would work now and undo itself at the next boot"+
+			offer,
 			DNSPort, holder)
 
 	case holder.Unit != "":
@@ -82,7 +92,8 @@ func portInUseError(holder core.Holder, found bool) error {
 			"To hand DNS to olr:\n"+
 			"  sudo systemctl disable --now %s\n"+
 			"`disable --now` rather than `stop`: a stopped unit returns at the next "+
-			"boot, and olr's relay then fails to start when nobody is watching",
+			"boot, and olr's relay then fails to start when nobody is watching"+
+			offer,
 			DNSPort, holder, holder.Unit)
 
 	default:
@@ -91,6 +102,22 @@ func portInUseError(holder core.Holder, found bool) error {
 			"however it was started, or move olr's relay with `olr dns set --listen`",
 			DNSPort, holder)
 	}
+}
+
+// offerFix names the verb, but only for an incumbent olr actually knows how to
+// clear.
+//
+// Checked rather than appended unconditionally, because the alternative is an
+// offer that leads to `olr dns fix` answering "nothing here is something olr can
+// clear for you" — which is worse than not offering. Somebody else's bind9, or a
+// resolver started by hand outside any unit, is the operator's to deal with.
+func offerFix(unit string) string {
+	for _, b := range core.DistroBackends {
+		if b.Unit == unit && b.Clearable() {
+			return "\nOr ask olr to do it, which does exactly the above: `sudo olr dns fix`"
+		}
+	}
+	return ""
 }
 
 // ListensOnDefaultPort reports whether any listen address uses port 53.

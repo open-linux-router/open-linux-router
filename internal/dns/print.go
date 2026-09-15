@@ -163,6 +163,10 @@ func writeStatusText(w io.Writer, status statusResponse) error {
 	// operator who has one of these has nothing to gain from the query counters
 	// below until it is dealt with.
 	core.WriteBlockersText(w, status.Blockers)
+	// After the whole list rather than under each panel: one `olr dns fix`
+	// clears all of them, and saying so three times would read as three
+	// different things to run.
+	core.WriteFixHint(w, ModuleName, status.Blockers)
 
 	if status.StatsError != "" {
 		fmt.Fprintf(w, "queries:        unknown (%s)\n", status.StatsError)

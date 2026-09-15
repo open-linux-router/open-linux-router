@@ -7,6 +7,7 @@ Available Commands:
   add         Add a reservation or pool
   disable     Disable the DHCP service
   enable      Enable the DHCP service
+  fix         Clear what is standing in DHCP's way on this box
   logs        Show dnsmasq log output
   rm          Remove a reservation or pool
   set         Change DHCP configuration

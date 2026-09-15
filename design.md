@@ -187,8 +187,18 @@ a feature; pretending we are the only actor is a bug.
   table before or after ours.
 - **Adopt-only.** We never touch an interface that wasn't explicitly adopted
   (§7).
-- **No machine-wide service disabling.** Disable NetworkManager *on adopted
-  interfaces*, not globally.
+- **No machine-wide service disabling**, with one exception, taken on request
+  and never on apply. Disable NetworkManager *on adopted interfaces*, not
+  globally. The exception is a **shadow instance of a backend olr itself runs** —
+  Debian's `dnsmasq.service` or `unbound.service`, which are second copies of
+  daemons olr drives from its own units, competing for one port. Those olr will
+  stop and disable, because the operator pressed the button that says so
+  (`core.Action`, `olr dns fix`). An **OS component is never stopped**:
+  `systemd-resolved` is asked to give up the socket through a drop-in and keeps
+  running, because the box resolves names through it — and NetworkManager stays
+  interface-scoped as above. The distinction that makes this a rule rather than
+  a loophole is *whose daemon it is*: olr will only stand down a copy of
+  something it is about to run itself, and only when asked.
 - **Generated files are additive** — our own directory, `include`-d into the
   real daemon config, never replacing user files. Ownership header on each.
 - **Don't squat shared state.** `/etc/resolv.conf`, the main route table, and
@@ -372,6 +382,20 @@ ReadWritePaths=/etc/open-linux-router /var/lib/open-linux-router /run/olr
 
 Worth stating as a rule, because the first `exec.Command` silently costs all of
 it.
+
+**Two exceptions exist, and the second one is the shape any future one must
+take.** `ingress` runs `caddy validate` on every apply (§7.1 of docs/ingress.md):
+a read-only subprocess that writes nothing, so the sandbox above contains it
+unchanged. Clearing a missing-backend blocker runs the distribution's **package
+manager**, which writes everywhere and cannot run inside this namespace at all —
+`ProtectSystem=strict` would fail it on `/var/lib/dpkg` for reasons that read
+like a bug in olr. So it is handed to systemd as a **transient unit**, which PID
+1 spawns in the host namespace with full root, and the directives above are left
+exactly as they are. The rule generalises: *a subprocess that needs more than
+olrd's sandbox allows is a subprocess systemd should be starting, not olrd.*
+Relaxing the block to fit one command would make the hole permanent and would
+apply to every bug in olrd forever; a transient unit is scoped to the one
+operation the operator asked for.
 
 **There is deliberately no `CapabilityBoundingSet`, and the reason generalises.**
 It used to pin olrd to `CAP_NET_ADMIN CAP_NET_RAW`. That never bought what it

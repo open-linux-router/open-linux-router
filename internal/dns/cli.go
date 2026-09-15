@@ -37,6 +37,10 @@ func Command() *cobra.Command {
 		logsCommand(),
 		enableCommand(),
 		disableCommand(),
+		// Built by internal/cli rather than here: it reads core.Blocker off
+		// /status and posts to /blockers/fix, neither of which is this module's
+		// shape, and dhcp needs the identical command for the identical dnsmasq.
+		cli.FixCommand(ModuleName, "DNS's"),
 	)
 }
 

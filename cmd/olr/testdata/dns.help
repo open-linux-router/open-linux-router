@@ -7,6 +7,7 @@ Available Commands:
   add         Add a policy, a blocked name or a local name
   disable     Disable DNS
   enable      Enable DNS
+  fix         Clear what is standing in DNS's way on this box
   logs        Show resolver and relay log output
   rm          Remove a policy, a blocked name or a local name
   set         Change DNS settings

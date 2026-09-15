@@ -178,7 +178,7 @@ function StatusCard({
         </>
       }
     >
-      <BlockerAlerts blockers={status?.blockers} />
+      <BlockerAlerts module="dns" blockers={status?.blockers} />
 
       {notInstalled.length > 0 && (
         <Alert variant="destructive">
