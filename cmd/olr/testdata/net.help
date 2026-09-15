@@ -1,0 +1,27 @@
+A network is a subnet, the interface it lives on, and this router's own
+address on it.
+
+It is the object everything else keys off: an address range is served on a
+network, not on an interface, and the range is checked against the network's
+subnet rather than against whatever address the interface happens to hold.
+That is what makes `olr net add lan --subnet 172.16.1.0/24` the way to
+renumber a LAN, instead of configuring the address somewhere olr cannot see.
+
+Usage:
+  olr net [command]
+
+Available Commands:
+  add         Create a network
+  rm          Delete a network
+  set         Change a network
+  show        Show the networks this router serves
+
+Flags:
+  -h, --help   help for net
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr net [command] --help" for more information about a command.

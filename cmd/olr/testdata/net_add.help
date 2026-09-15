@@ -1,0 +1,25 @@
+Create a network.
+
+Only the name is required. The subnet defaults to the next free private /24,
+this router takes the first address in it, and the interface defaults to the
+one adopted interface that does not already carry a network. Every one of
+those is overridable and none of them has to be typed.
+
+Applying this writes the router's address to the interface. If you are
+connected to this box over that interface, your session will drop — run it
+with --dry-run first, which prints exactly what would change.
+
+Usage:
+  olr net add <name> [flags]
+
+Flags:
+  -h, --help            help for add
+      --member string   the interface the network lives on (default: the only adopted interface without one)
+      --no-subnet       serve no IPv4 here, leaving the network to router advertisement alone
+      --router string   this router's address on the network (default: the first address in the subnet)
+      --subnet string   the network in CIDR form, e.g. 172.16.1.0/24 (default: the next free private /24)
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

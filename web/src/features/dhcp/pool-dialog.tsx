@@ -89,11 +89,17 @@ export function PoolDialog({
    * range somebody typed.
    */
   function chooseInterface(row: InterfaceRow) {
+    // The suggestion comes from the *network* this interface carries, not from
+    // the address the interface happens to hold. That is the whole point of
+    // networks existing: the subnet is declared, so the derived range follows
+    // intent rather than following an observation somebody configured
+    // elsewhere. An interface in no network prefills nothing.
+    const group = interfaces.data?.groups?.find((g) => g.members.includes(row.name))
     setDraft((d) => ({
       ...d,
       interface: row.name,
-      start: d.start || row.suggested_start || '',
-      end: d.end || row.suggested_end || '',
+      start: d.start || group?.suggested_start || '',
+      end: d.end || group?.suggested_end || '',
     }))
   }
 

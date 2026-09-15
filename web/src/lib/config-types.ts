@@ -290,4 +290,28 @@ export interface UpstreamIngress {
 }
 export interface LinkConfig {
   adopted?: string[]
+  groups?: Group[]
+}
+
+/**
+ * A network (design.md §4.4): the object `dhcp`, `dns` and later `firewall`
+ * key off. `group` is the schema's word; **network** is the operator's.
+ *
+ * This is where a subnet is declared. Before it existed, `dhcp` could only
+ * check a range against whatever address an interface had been given from
+ * outside olr — so wanting a different subnet produced an error with no page
+ * behind it.
+ */
+export interface Group {
+  name: string
+  /** Adopted interfaces. A list for when bridging lands; today exactly one. */
+  members: string[]
+  /** Absent for a network that serves no IPv4 — RA only. */
+  ipv4?: GroupIPv4
+}
+
+export interface GroupIPv4 {
+  subnet: string
+  /** Absent means the first host address, which is `.1` on any ordinary prefix. */
+  router?: string
 }

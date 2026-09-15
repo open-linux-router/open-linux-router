@@ -1,0 +1,217 @@
+package link
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/netip"
+	"slices"
+	"strings"
+)
+
+// The seam between deciding what a network's addressing should be and making
+// the kernel agree.
+//
+// design.md §10 requires netlink to sit behind an interface so everything above
+// it is unit-testable off Linux, and this module needs that seam for the first
+// time here: until groups landed, `link` wrote nothing that reached the system
+// at all. Everything above this line works in values — Validate checks, BuildPlan
+// compares, this translates — so an implementation of Writer contains no policy.
+//
+// There is no `exec.Command` behind it and there never may be (design.md §3.6).
+// olrd.service's sandbox is nearly free precisely because the process spawns
+// nothing, and the first shell-out silently costs all of it.
+
+// ErrUnsupported is returned by a writer that cannot program addresses.
+var ErrUnsupported = errors.New("configuring addresses needs a Linux kernel")
+
+// Desired is the addressing one interface should end up with.
+type Desired struct {
+	// Interface is the kernel name.
+	Interface string
+
+	// Addrs are the IPv4 addresses olr wants on it, with masks. Empty means olr
+	// wants none — which is how a member leaving a network is expressed.
+	//
+	// IPv4 only, and that is the scope decision rather than an oversight: v6
+	// prefixes come from delegation and dnsmasq derives them from the interface
+	// itself (`constructor:`), so olr has no v6 address to write. Observe reads
+	// only v4 for the same reason — a writer that saw a SLAAC address and did
+	// not want it would try to remove it.
+	Addrs []netip.Prefix
+
+	// Up asks for the interface to be brought up. Never down: taking an
+	// interface down is not something any group configuration implies, and an
+	// operator who wants that has `ip link` and means it.
+	Up bool
+}
+
+// Step is one kernel operation, reported whether or not it succeeded.
+//
+// Same shape as internal/gateway's, so a client's plan-and-apply rendering works
+// against any module's answer without a second implementation.
+type Step struct {
+	Description string `json:"description"`
+	Done        bool   `json:"done"`
+	Error       string `json:"error,omitempty"`
+}
+
+// Writer programs interface addressing.
+//
+// Apply returns steps *alongside* an error rather than instead of one. There is
+// no rollback (design.md §5.2/§5.3.2): if a multi-interface change fails halfway
+// the parts that landed stay landed and are reported, and re-running finishes
+// the job. On this module a revert would itself be an address change with its
+// own chance of failing — and the failure it would be attempting to recover
+// from is quite likely "the operator just lost their connection to this box".
+type Writer interface {
+	Apply(ctx context.Context, desired []Desired) ([]Step, error)
+}
+
+// AddrPlan is the difference between what an interface has and what a group
+// says it should have, computed as values so it can be shown before it is done.
+type AddrPlan struct {
+	Interface string
+
+	// Add and Remove are the addresses to gain and lose.
+	Add    []netip.Prefix
+	Remove []netip.Prefix
+
+	// BringUp reports that the interface is down and the network needs it up.
+	BringUp bool
+}
+
+// Empty reports whether the kernel already agrees.
+func (p AddrPlan) Empty() bool {
+	return len(p.Add) == 0 && len(p.Remove) == 0 && !p.BringUp
+}
+
+// PlanAddrs diffs the observed interfaces against the networks that claim them.
+//
+// # What olr takes ownership of, stated plainly
+//
+// An interface that is a member of a group has its **IPv4 addressing owned
+// entirely by olr**: any v4 address on it that the group does not call for is
+// removed. That is a real claim and it is made deliberately, because the
+// alternative is worse. To leave foreign addresses alone we would have to know
+// which addresses are ours, which means tagging them at creation and trusting
+// the tag — and a tag that survives a reboot, a `ip addr flush`, or somebody
+// else's configuration management is not something netlink offers.
+//
+// The claim is bounded in the one way that matters: an interface only becomes a
+// member because somebody adopted it and then put it in a network, which is two
+// deliberate acts. WAN interfaces are `dial`'s and are never members, so a
+// DHCP-assigned uplink address is not at risk here.
+//
+// IPv6 is not touched at all. A SLAAC or delegated address on a member is left
+// exactly where it is — see Desired.Addrs.
+func PlanAddrs(c Config, observed []Interface) []AddrPlan {
+	byName := make(map[string]Interface, len(observed))
+	for _, iface := range observed {
+		byName[iface.Name] = iface
+	}
+
+	var plans []AddrPlan
+	for _, g := range c.Groups {
+		for _, m := range g.Members {
+			iface, present := byName[m]
+			if !present {
+				// Nothing to plan against an interface that does not exist.
+				// Validate has already warned; inventing steps for it would
+				// produce a plan whose every line fails.
+				continue
+			}
+
+			plan := AddrPlan{Interface: m, BringUp: !iface.Up}
+
+			var want []netip.Prefix
+			if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
+				want = append(want, g.IPv4.RouterPrefix())
+			}
+
+			have := ipv4Prefixes(iface.Prefixes)
+			for _, w := range want {
+				if !slices.Contains(have, w) {
+					plan.Add = append(plan.Add, w)
+				}
+			}
+			for _, h := range have {
+				if !slices.Contains(want, h) {
+					plan.Remove = append(plan.Remove, h)
+				}
+			}
+
+			if !plan.Empty() {
+				plans = append(plans, plan)
+			}
+		}
+	}
+
+	slices.SortFunc(plans, func(a, b AddrPlan) int { return strings.Compare(a.Interface, b.Interface) })
+	return plans
+}
+
+// DesiredFor builds the writer's input from the stored networks.
+func DesiredFor(c Config) []Desired {
+	var out []Desired
+	for _, g := range c.Groups {
+		for _, m := range g.Members {
+			d := Desired{Interface: m, Up: true}
+			if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
+				d.Addrs = append(d.Addrs, g.IPv4.RouterPrefix())
+			}
+			out = append(out, d)
+		}
+	}
+	slices.SortFunc(out, func(a, b Desired) int { return strings.Compare(a.Interface, b.Interface) })
+	return out
+}
+
+// ipv4Prefixes filters a list to the IPv4 entries.
+//
+// Interface.Prefixes has already dropped link-local, so 169.254.0.0/16 is not
+// here to be mistaken for an address worth removing.
+func ipv4Prefixes(in []netip.Prefix) []netip.Prefix {
+	var out []netip.Prefix
+	for _, p := range in {
+		if p.Addr().Is4() {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// DescribeAddrPlan renders a plan as the lines a diff view shows.
+func DescribeAddrPlan(p AddrPlan) []string {
+	var lines []string
+	if p.BringUp {
+		lines = append(lines, fmt.Sprintf("+ ip link set %s up", p.Interface))
+	}
+	for _, a := range p.Add {
+		lines = append(lines, fmt.Sprintf("+ ip addr add %s dev %s", a, p.Interface))
+	}
+	for _, a := range p.Remove {
+		lines = append(lines, fmt.Sprintf("- ip addr del %s dev %s", a, p.Interface))
+	}
+	return lines
+}
+
+// RecordingWriter is a Writer that records instead of acting, for tests and for
+// the --root development mode where there is no kernel worth programming.
+type RecordingWriter struct {
+	Applied []Desired
+	Err     error
+}
+
+// Apply implements Writer.
+func (w *RecordingWriter) Apply(_ context.Context, desired []Desired) ([]Step, error) {
+	w.Applied = append(w.Applied, desired...)
+	steps := make([]Step, 0, len(desired))
+	for _, d := range desired {
+		steps = append(steps, Step{
+			Description: fmt.Sprintf("configure %s", d.Interface),
+			Done:        w.Err == nil,
+		})
+	}
+	return steps, w.Err
+}

@@ -317,31 +317,65 @@ export interface InterfaceRow {
   subnet?: string
 
   /**
-   * A range inside `subnet` excluding the network, broadcast and this
-   * interface's own address. A hint for prefilling a form; dhcp validates any
-   * range independently, so this cannot become a second opinion.
+   * The network this interface carries, absent if it carries none. The reverse
+   * of a group's member list, and what lets a row say what the NIC is *for*.
+   */
+  group?: string
+}
+
+/**
+ * One network as the API publishes it — internal/link groupView.
+ *
+ * `subnet`/`router` are intent; `InterfaceRow.subnet` is observation. The two
+ * disagreeing is drift, which is why both are published rather than one being
+ * derived from the other.
+ */
+export interface GroupRow {
+  name: string
+  members: string[]
+  subnet?: string
+  router?: string
+
+  /** The operator pinned the router address, rather than it being derived. */
+  router_explicit?: boolean
+
+  /**
+   * The range dhcp derives when nobody types one. A hint for prefilling, never
+   * a second opinion: dhcp validates whatever range it is given regardless.
    */
   suggested_start?: string
   suggested_end?: string
+
+  /** Every member exists on this machine. */
+  present: boolean
 }
 
 export interface InterfaceList {
   interfaces: InterfaceRow[]
+  groups: GroupRow[]
   problems?: Problem[]
   as_of: string
 }
 
 /**
- * The result of storing adoption.
+ * The result of storing adoption and networks.
  *
- * No `steps`, like devices: one atomic document write, nothing half-finished
- * to report. The impact is always `none` — adopting an interface changes
- * nothing on the box by itself.
+ * `steps` exists now. Adoption is still one atomic document write with nothing
+ * half-finished to report, but a network change continues into the kernel and
+ * that part can land halfway — one address added and the next refused. There
+ * is no rollback (§5.2), which only works if what did happen is reported.
  */
 export interface LinkApplyResult {
   plan: Plan
   config: LinkConfig
+  steps?: LinkStep[]
   error?: { message: string; problems?: Problem[] }
+}
+
+export interface LinkStep {
+  description: string
+  done: boolean
+  error?: string
 }
 
 // --- devices ---------------------------------------------------------------

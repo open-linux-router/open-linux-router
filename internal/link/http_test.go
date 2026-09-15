@@ -168,7 +168,7 @@ func TestInterfacesListsWhatTheMachineHas(t *testing.T) {
 		t.Error("lan0 is adopted in the document but not in the list")
 	case !lan0.Present || !lan0.Up:
 		t.Errorf("lan0 = %+v, want present and up", lan0)
-	case lan0.SuggestedStart == "":
-		t.Error("lan0 has an address but no suggested range")
+	case lan0.Subnet == "":
+		t.Error("lan0 has an address but the list does not report its subnet")
 	}
 }

@@ -18,6 +18,7 @@ import { DnsResolvingPage } from '@/routes/dns/resolving'
 import { FirewallPage } from '@/routes/firewall/index'
 import { FirewallUnmanagedPage } from '@/routes/firewall/unmanaged'
 import { IngressPage } from '@/routes/ingress'
+import { NetworksPage } from '@/routes/networks'
 import { OverviewPage } from '@/routes/overview'
 import { GatewayPage } from '@/routes/gateway/index'
 import { GatewayExitsPage } from '@/routes/gateway/exits'
@@ -30,6 +31,7 @@ export function App() {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<OverviewPage />} />
+          <Route path="networks" element={<NetworksPage />} />
           <Route path="gateway">
             <Route index element={<GatewayPage />} />
             <Route path="exits" element={<GatewayExitsPage />} />

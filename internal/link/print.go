@@ -23,9 +23,30 @@ func writeConfigText(w io.Writer, c Config) error {
 			"Hand one to olr with `olr adopt <interface>`, and see what this machine has\n"+
 				"with `olr link show interfaces`.")
 	}
-	fmt.Fprintf(w, "%s adopted:\n", core.Plural(len(c.Adopted), "interface"))
-	for _, name := range c.Adopted {
-		fmt.Fprintf(w, "  %s\n", name)
+	if len(c.Adopted) > 0 {
+		fmt.Fprintf(w, "%s adopted:\n", core.Plural(len(c.Adopted), "interface"))
+		for _, name := range c.Adopted {
+			line := "  " + name
+			if g, ok := c.GroupFor(name); ok {
+				line += "  (" + g.Name + ")"
+			}
+			fmt.Fprintln(w, line)
+		}
+	}
+	if len(c.Groups) > 0 {
+		fmt.Fprintf(w, "\n%s:\n", core.Plural(len(c.Groups), "network"))
+		t := table(w)
+		for _, g := range c.Groups {
+			subnet := "no ipv4"
+			if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
+				subnet = fmt.Sprintf("%s, this router at %s", g.IPv4.Subnet, g.IPv4.RouterAddr())
+			}
+			fmt.Fprintf(t, "  %s\ton %s\t%s\n", g.Name,
+				dashIfEmpty(strings.Join(g.Members, ",")), subnet)
+		}
+		if err := t.Flush(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -36,16 +57,83 @@ func writeInterfacesText(w io.Writer, resp listResponse) error {
 	}
 
 	t := table(w)
-	fmt.Fprintln(t, "INTERFACE\tOLR\tSTATE\tADDRESSES")
+	fmt.Fprintln(t, "INTERFACE\tOLR\tNETWORK\tSTATE\tADDRESSES")
 	for _, iface := range resp.Interfaces {
-		fmt.Fprintf(t, "%s\t%s\t%s\t%s\n",
-			iface.Name, adoptedText(iface), stateText(iface), addressesText(iface))
+		fmt.Fprintf(t, "%s\t%s\t%s\t%s\t%s\n",
+			iface.Name, adoptedText(iface), dashIfEmpty(iface.Group),
+			stateText(iface), addressesText(iface))
 	}
 	if err := t.Flush(); err != nil {
 		return err
 	}
 
 	return writeProblems(w, resp.Problems)
+}
+
+// writeGroupsText is `olr net list`.
+//
+// The router's address gets its own column rather than being folded into the
+// subnet, because those are two things an operator reads separately: "the
+// network is 172.16.1.0/24" and "this box is .1 on it". The range column is the
+// derived one — what `dhcp` would hand out if nobody typed a range — and is
+// marked as such so nobody reads it as configuration that already exists.
+func writeGroupsText(w io.Writer, resp listResponse) error {
+	if len(resp.Groups) == 0 {
+		return cli.NoObjects(w, "networks",
+			"Create one with `olr net add lan`. Only the name is needed — the subnet,\n"+
+				"this router's address on it, and the interface are all derived.")
+	}
+
+	t := table(w)
+	fmt.Fprintln(t, "NETWORK\tON\tSUBNET\tTHIS ROUTER\tDERIVED RANGE")
+	for _, g := range resp.Groups {
+		members := dashIfEmpty(strings.Join(g.Members, ","))
+		if !g.Present {
+			members += " (absent)"
+		}
+		rng := "-"
+		if g.SuggestedStart != "" {
+			rng = g.SuggestedStart + "-" + g.SuggestedEnd
+		}
+		fmt.Fprintf(t, "%s\t%s\t%s\t%s\t%s\n",
+			g.Name, members, dashIfEmpty(g.Subnet), dashIfEmpty(g.Router), rng)
+	}
+	if err := t.Flush(); err != nil {
+		return err
+	}
+
+	return writeProblems(w, resp.Problems)
+}
+
+// writeStepsText reports what actually reached the kernel.
+//
+// Printed even when everything succeeded. §5.2 gives this module no rollback,
+// so "what did it manage to do" is a question an operator can genuinely be left
+// holding — and a list that only appears on failure is a list nobody trusts on
+// success.
+func writeStepsText(w io.Writer, steps []Step) error {
+	if len(steps) == 0 {
+		return nil
+	}
+	fmt.Fprintf(w, "\non the interfaces:\n")
+	for _, s := range steps {
+		switch {
+		case s.Error != "":
+			fmt.Fprintf(w, "  failed   %s: %s\n", s.Description, s.Error)
+		case s.Done:
+			fmt.Fprintf(w, "  done     %s\n", s.Description)
+		default:
+			fmt.Fprintf(w, "  skipped  %s\n", s.Description)
+		}
+	}
+	return nil
+}
+
+func dashIfEmpty(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }
 
 // adoptedText is the column an operator scans for. "yes"/"-" rather than a
@@ -90,34 +178,71 @@ func writePlanText(w io.Writer, plan planView, dryRun bool) error {
 	}
 
 	verb := map[bool]string{true: "would change", false: "changed"}[dryRun]
-	fmt.Fprintf(w, "%s %s:\n", core.Plural(len(plan.Changes), "interface"), verb)
+	fmt.Fprintf(w, "%s %s:\n", core.Plural(len(plan.Changes), "change"), verb)
 	for _, c := range plan.Changes {
-		// adopt/release rather than create/delete: the shared plan shape says
-		// what happened to a document entry, and this module's entries are
-		// permissions. "delete eth0" reads like the interface went away.
-		fmt.Fprintf(w, "  %-8s %s\n", changeVerb(c.Kind), nameOf(c.Path))
+		fmt.Fprintf(w, "  %-9s %s\n", changeVerb(c.Path, c.Kind), nameOf(c.Path))
+		// Only the kernel lines get their diff printed. An adoption's diff is
+		// "+ eth0", which the line above already said, but "ip addr del
+		// 192.168.1.91/24 dev ens18" is the whole content of the change and the
+		// one thing an operator needs to read before agreeing to it.
+		if strings.HasPrefix(c.Path, "interfaces[") {
+			for _, line := range strings.Split(strings.TrimRight(c.Diff, "\n"), "\n") {
+				fmt.Fprintf(w, "            %s\n", line)
+			}
+		}
 	}
 
-	// No service line and no impact line. Every other module prints them
-	// because something on the box moves; here nothing does, and printing
-	// "impact: none" under a change that genuinely has none would train an
-	// operator to skip the line on the modules where it matters.
+	// The impact line is printed only when there is one. Adoption still moves
+	// nothing on the box, and printing "impact: none" under a change that
+	// genuinely has none would train an operator to skip the line on the
+	// changes where it matters — which here is every address change.
+	if plan.Impact != impactNone {
+		fmt.Fprintf(w, "\nimpact: %s\n", impactText(plan.Impact))
+	}
 	return writeWarnings(w, plan.Warnings)
 }
 
-func changeVerb(kind string) string {
-	if kind == kindDelete {
-		return "release"
+// impactText spells the impact in client terms rather than daemon terms
+// (design.md §11.3 does the same for dhcp).
+func impactText(impact string) string {
+	switch impact {
+	case impactDisruptive:
+		return "disruptive — devices on this network lose the address they hold"
+	case impactRestart:
+		return "restart — an interface gains addressing; nothing loses an address"
+	default:
+		return impact
 	}
-	return "adopt"
+}
+
+// changeVerb names what is happening to an entry.
+//
+// Adoption gets adopt/release rather than create/delete: those entries are
+// permissions, and "delete eth0" reads like the interface went away. Networks
+// and interfaces keep the plain verbs, because there a create really does
+// create something and a delete really does take it away.
+func changeVerb(path, kind string) string {
+	switch {
+	case strings.HasPrefix(path, "adopted["):
+		if kind == kindDelete {
+			return "release"
+		}
+		return "adopt"
+	case strings.HasPrefix(path, "interfaces["):
+		return "configure"
+	default:
+		return kind
+	}
 }
 
 // nameOf unwraps "adopted[eth0]" back to "eth0" for display. The path shape is
 // the API's, and it is right there — a UI attaches a message to a field with
 // it. It is only in a terminal that it is noise.
 func nameOf(path string) string {
-	name := strings.TrimPrefix(path, "adopted[")
-	return strings.TrimSuffix(name, "]")
+	if i := strings.IndexByte(path, '['); i >= 0 {
+		return strings.TrimSuffix(path[i+1:], "]")
+	}
+	return path
 }
 
 func writeWarnings(w io.Writer, warnings []core.Problem) error {

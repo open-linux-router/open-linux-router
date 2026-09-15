@@ -2,7 +2,8 @@ package link
 
 import (
 	"fmt"
-	"net/netip"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
@@ -39,23 +40,24 @@ type interfaceView struct {
 	// Address and Subnet are the interface's first IPv4 prefix, split into the
 	// two halves an operator reads separately: "this router is 192.168.1.2" and
 	// "the network is 192.168.1.0/24". Empty when the interface has no IPv4
-	// address, which is exactly when no address range can be served on it.
+	// address.
+	//
+	// These are *observed*. What the interface is supposed to have is its
+	// network's subnet, and the two disagreeing is drift rather than a
+	// contradiction — which is why both are published instead of one being
+	// derived from the other.
 	Address string `json:"address,omitempty"`
 	Subnet  string `json:"subnet,omitempty"`
 
-	// SuggestedStart and SuggestedEnd are a range inside Subnet that excludes
-	// the network address, the broadcast address, and this interface's own
-	// address — the three a range must not contain.
+	// Group is the network this interface carries, empty if it carries none.
 	//
-	// A hint for a form to prefill, and nothing more. It encodes subnet
-	// arithmetic, not policy: `dhcp` validates any range it is given against its
-	// own rules regardless of where the numbers came from, so this cannot become
-	// a second opinion that disagrees with the first.
-	SuggestedStart string `json:"suggested_start,omitempty"`
-	SuggestedEnd   string `json:"suggested_end,omitempty"`
+	// The reverse of a group's member list, and what lets an interface row say
+	// what it is *for*. Before networks existed the only available answer to
+	// "what is ens18 for" was whatever address it happened to be holding.
+	Group string `json:"group,omitempty"`
 }
 
-func viewInterface(info Info, observed map[string]Interface) interfaceView {
+func viewInterface(info Info, observed map[string]Interface, cfg Config) interfaceView {
 	v := interfaceView{
 		Name:     info.Name,
 		Adopted:  info.Adopted,
@@ -72,11 +74,68 @@ func viewInterface(info Info, observed map[string]Interface) interfaceView {
 		v.Loopback = iface.Loopback
 		v.MAC = iface.HardwareAddr
 	}
-
-	if prefix, ok := firstIPv4(info.Prefixes); ok {
+	if prefix, ok := core.FirstIPv4(info.Prefixes); ok {
 		v.Address = prefix.Addr().String()
 		v.Subnet = prefix.Masked().String()
-		if start, end, ok := suggestRange(prefix); ok {
+	}
+	if g, ok := cfg.GroupFor(info.Name); ok {
+		v.Group = g.Name
+	}
+	return v
+}
+
+// groupView is one network as the API publishes it.
+//
+// It carries the derived range alongside the subnet because every caller wants
+// it and none of them should compute it: `dhcp` derives a pool from it and the
+// form prefills from it, and two implementations of §11.2's "leave a static
+// block free" rule would eventually disagree about where the block ends.
+type groupView struct {
+	Name    string   `json:"name"`
+	Members []string `json:"members"`
+
+	// Subnet and Router are the network's IPv4 intent, empty for a network that
+	// serves no IPv4.
+	Subnet string `json:"subnet,omitempty"`
+	Router string `json:"router,omitempty"`
+
+	// RouterExplicit distinguishes "the operator pinned this address" from "we
+	// derived the first host address", which is what a form needs to decide
+	// between showing the field filled in and showing it as a placeholder.
+	RouterExplicit bool `json:"router_explicit,omitempty"`
+
+	// SuggestedStart and SuggestedEnd are the range `dhcp` derives when nobody
+	// types one. A hint, never a second opinion: `dhcp` validates whatever range
+	// it is given against its own rules regardless of where the numbers came
+	// from.
+	SuggestedStart string `json:"suggested_start,omitempty"`
+	SuggestedEnd   string `json:"suggested_end,omitempty"`
+
+	// Present reports whether every member exists on this machine. False is the
+	// typo case and the not-plugged-in-yet case.
+	Present bool `json:"present"`
+}
+
+func viewGroup(g Group, observed map[string]Interface) groupView {
+	v := groupView{
+		Name:    g.Name,
+		Members: slices.Clone(g.Members),
+		Present: len(g.Members) > 0,
+	}
+	if v.Members == nil {
+		v.Members = []string{}
+	}
+	for _, m := range g.Members {
+		if _, ok := observed[m]; !ok {
+			v.Present = false
+		}
+	}
+	if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
+		router := g.IPv4.RouterAddr()
+		v.Subnet = g.IPv4.Subnet.String()
+		v.Router = router.String()
+		v.RouterExplicit = g.IPv4.Router != nil
+		if start, end, ok := core.SuggestRange(g.IPv4.Subnet, router); ok {
 			v.SuggestedStart, v.SuggestedEnd = start.String(), end.String()
 		}
 	}
@@ -86,10 +145,16 @@ func viewInterface(info Info, observed map[string]Interface) interfaceView {
 type listResponse struct {
 	Interfaces []interfaceView `json:"interfaces"`
 
+	// Groups are the networks configured on this box, alongside the interfaces
+	// rather than behind a second request: every surface that renders one wants
+	// the other in the same breath, and two round trips would let them be read
+	// at two different instants.
+	Groups []groupView `json:"groups"`
+
 	// Problems are the findings against the stored set — an adopted name with
-	// no interface behind it, an interface with no address. Reported alongside
-	// the list rather than as an error, because every one of them describes a
-	// row that is still worth showing.
+	// no interface behind it, a network whose member does not exist. Reported
+	// alongside the list rather than as an error, because every one of them
+	// describes a row that is still worth showing.
 	Problems []core.Problem `json:"problems,omitempty"`
 
 	// AsOf stamps the whole reply: the observed half is read per request and
@@ -97,129 +162,18 @@ type listResponse struct {
 	AsOf time.Time `json:"as_of"`
 }
 
-// --- subnet arithmetic ------------------------------------------------------
-
-// firstIPv4 returns the interface's first IPv4 prefix.
-//
-// First rather than only: an interface can carry several, and the list is
-// sorted with IPv4 ahead of IPv6 (see prefixesOf). A box with two IPv4 subnets
-// on one interface is unusual enough that prefilling from the first is a better
-// answer than refusing to prefill at all — and the field is a hint.
-func firstIPv4(prefixes []netip.Prefix) (netip.Prefix, bool) {
-	for _, p := range prefixes {
-		if p.Addr().Is4() {
-			return p, true
-		}
-	}
-	return netip.Prefix{}, false
-}
-
-// maxSuggested caps how many addresses the hint offers.
-//
-// Without it a /16 would suggest sixty-five thousand addresses, which is a
-// legal range and an absurd default. The cap is not a limit on what an operator
-// may configure — `dhcp` will take the whole subnet if asked.
-const maxSuggested = 254
-
-// suggestRange picks a usable range inside prefix, avoiding the three addresses
-// that cannot be handed out: the network, the broadcast, and the router's own.
-//
-// The interface's address splits the host range in two, and the larger side
-// wins. On the ordinary case — a /24 with the router at either end — that is
-// simply "everything except the router".
-func suggestRange(prefix netip.Prefix) (netip.Addr, netip.Addr, bool) {
-	lo, hi, ok := hostRange(prefix)
-	if !ok {
-		return netip.Addr{}, netip.Addr{}, false
-	}
-
-	self := prefix.Addr()
-	start, end := lo, hi
-	switch {
-	case self.Compare(lo) < 0 || self.Compare(hi) > 0:
-		// The interface's address is the network or broadcast address, which is
-		// a misconfiguration rather than something to work around. The host
-		// range is still the right answer.
-	default:
-		below := runLen(lo, self.Prev())
-		above := runLen(self.Next(), hi)
-		if above >= below {
-			start, end = self.Next(), hi
-		} else {
-			start, end = lo, self.Prev()
-		}
-		if start.Compare(end) > 0 {
-			return netip.Addr{}, netip.Addr{}, false
-		}
-	}
-
-	if n := runLen(start, end); n > maxSuggested {
-		end = addTo(start, maxSuggested-1)
-	}
-	return start, end, true
-}
-
-// hostRange returns the assignable addresses in an IPv4 prefix: everything
-// between the network and broadcast addresses, exclusive of both.
-//
-// False for /31 and /32, which have no such addresses. Those are legitimate
-// prefixes — a point-to-point link, a host route — and the honest answer is
-// that there is nothing to suggest, not a range of zero.
-func hostRange(prefix netip.Prefix) (netip.Addr, netip.Addr, bool) {
-	if !prefix.Addr().Is4() || prefix.Bits() > 30 {
-		return netip.Addr{}, netip.Addr{}, false
-	}
-	network := prefix.Masked().Addr().As4()
-
-	var broadcast [4]byte
-	host := 32 - prefix.Bits()
-	for i := range broadcast {
-		// Bits below the prefix length are set; the rest are copied.
-		shift := 24 - 8*i
-		var ones byte
-		if host > shift {
-			if n := host - shift; n >= 8 {
-				ones = 0xff
-			} else {
-				ones = byte(1<<n - 1)
-			}
-		}
-		broadcast[i] = network[i] | ones
-	}
-
-	return netip.AddrFrom4(network).Next(), netip.AddrFrom4(broadcast).Prev(), true
-}
-
-// addTo returns a advanced by n addresses.
-func addTo(a netip.Addr, n int) netip.Addr {
-	v := a.As4()
-	total := uint32(v[0])<<24 | uint32(v[1])<<16 | uint32(v[2])<<8 | uint32(v[3])
-	total += uint32(n)
-	return netip.AddrFrom4([4]byte{
-		byte(total >> 24), byte(total >> 16), byte(total >> 8), byte(total),
-	})
-}
-
-// runLen counts the addresses from a to b inclusive, or 0 if b is below a.
-func runLen(a, b netip.Addr) int {
-	if !a.Is4() || !b.Is4() || a.Compare(b) > 0 {
-		return 0
-	}
-	av, bv := a.As4(), b.As4()
-	an := uint32(av[0])<<24 | uint32(av[1])<<16 | uint32(av[2])<<8 | uint32(av[3])
-	bn := uint32(bv[0])<<24 | uint32(bv[1])<<16 | uint32(bv[2])<<8 | uint32(bv[3])
-	return int(bn-an) + 1
-}
-
 // --- plan -------------------------------------------------------------------
 
 // planView mirrors internal/dhcp's and internal/devices' plan shape on purpose.
 //
 // The field names are identical so that a client's Plan type and its plan
-// preview render any module's answer without a second implementation. The
-// values are what they honestly are for a module that writes only a document:
-// no backend, no service action, and an impact of none — adopting an interface
-// cannot drop a client, because by itself it does nothing at all.
+// preview render any module's answer without a second implementation.
+//
+// The impact stopped being a constant `none` when groups landed. Two kinds of
+// change now share one plan and they could not be further apart: adopting an
+// interface still does nothing at all to the box, while renumbering a network
+// takes every client's address away and may take the operator's own session
+// with it. One number for both would be useless exactly where it matters.
 type planView struct {
 	Backend  string         `json:"backend"`
 	Changes  []changeView   `json:"changes"`
@@ -237,19 +191,28 @@ type changeView struct {
 }
 
 const (
-	impactNone = "none"
-	actionNone = "none"
+	impactNone       = "none"
+	impactRestart    = "restart"
+	impactDisruptive = "disruptive"
+
+	actionNone      = "none"
+	actionConfigure = "configure"
 
 	kindCreate = "create"
+	kindUpdate = "update"
 	kindDelete = "delete"
 )
 
-// buildPlan diffs stored adoption against a proposal.
+// impactRank orders the vocabulary so a plan can report the worst of its parts.
+var impactRank = map[string]int{impactNone: 0, impactRestart: 1, impactDisruptive: 2}
+
+// buildPlan diffs stored intent against a proposal, and both against the kernel.
 //
-// There is no update kind, only create and delete: the entries are bare names,
-// so changing one is removing a name and adding another. Rendering that as an
-// update would invent a relationship between two interfaces that have nothing
-// to do with each other.
+// Three sources, which is one more than the other modules need. The document
+// diff says what the operator changed; the kernel diff says what has to happen
+// on the box for the result to be true. They are not the same list — re-applying
+// an unchanged config still has work to do if somebody ran `ip addr del` by
+// hand, and that is drift (§5.4) rather than a no-op.
 func buildPlan(stored, desired Config, observed []Interface) planView {
 	stored.Normalize()
 	desired.Normalize()
@@ -263,32 +226,146 @@ func buildPlan(stored, desired Config, observed []Interface) planView {
 		Warnings: problems(res.Warnings),
 	}
 
+	// --- adoption: bare names, and nothing reaches the box ---
+	//
+	// No update kind here, only create and delete: the entries are bare names,
+	// so changing one is removing a name and adding another. Rendering that as
+	// an update would invent a relationship between two interfaces that have
+	// nothing to do with each other.
 	for _, name := range desired.Adopted {
 		if !stored.IsAdopted(name) {
 			plan.Changes = append(plan.Changes, changeView{
-				Path:   itemPath(name),
-				Kind:   kindCreate,
-				Impact: impactNone,
-				Diff:   fmt.Sprintf("+ %s\n", name),
+				Path: itemPath(name), Kind: kindCreate, Impact: impactNone,
+				Diff: fmt.Sprintf("+ %s\n", name),
 			})
 		}
 	}
 	for _, name := range stored.Adopted {
 		if !desired.IsAdopted(name) {
 			plan.Changes = append(plan.Changes, changeView{
-				Path:   itemPath(name),
-				Kind:   kindDelete,
-				Impact: impactNone,
-				Diff:   fmt.Sprintf("- %s\n", name),
+				Path: itemPath(name), Kind: kindDelete, Impact: impactNone,
+				Diff: fmt.Sprintf("- %s\n", name),
 			})
 		}
 	}
 
+	// --- networks: keyed objects, and these do reach the box ---
+	for _, g := range desired.Groups {
+		before, existed := stored.Group(g.Name)
+		switch {
+		case !existed:
+			plan.Changes = append(plan.Changes, changeView{
+				Path: groupPath(g.Name), Kind: kindCreate, Impact: impactRestart,
+				Diff: describeGroup("+ ", g),
+			})
+		case !sameGroup(before, g):
+			plan.Changes = append(plan.Changes, changeView{
+				Path: groupPath(g.Name), Kind: kindUpdate, Impact: groupImpact(before, g),
+				Diff: describeGroup("- ", before) + describeGroup("+ ", g),
+			})
+		}
+	}
+	for _, g := range stored.Groups {
+		if _, kept := desired.Group(g.Name); !kept {
+			// Removing a network takes the router's address off the interface,
+			// which is every bit as disruptive as renumbering it.
+			plan.Changes = append(plan.Changes, changeView{
+				Path: groupPath(g.Name), Kind: kindDelete, Impact: impactDisruptive,
+				Diff: describeGroup("- ", g),
+			})
+		}
+	}
+
+	// --- the kernel: what has to happen for any of the above to be true ---
+	for _, ap := range PlanAddrs(desired, observed) {
+		lines := DescribeAddrPlan(ap)
+		if len(lines) == 0 {
+			continue
+		}
+		plan.Changes = append(plan.Changes, changeView{
+			Path: "interfaces[" + ap.Interface + "]",
+			Kind: kindUpdate,
+			// Taking an address away drops whatever was using it. Adding one to
+			// an interface that had none takes nothing away from anybody.
+			Impact: pick(len(ap.Remove) > 0, impactDisruptive, impactRestart),
+			Diff:   strings.Join(lines, "\n") + "\n",
+		})
+	}
+
+	for _, c := range plan.Changes {
+		if impactRank[c.Impact] > impactRank[plan.Impact] {
+			plan.Impact = c.Impact
+		}
+	}
+	if plan.Impact != impactNone {
+		plan.Action = actionConfigure
+	}
 	plan.Empty = len(plan.Changes) == 0
 	return plan
 }
 
-func itemPath(name string) string { return "adopted[" + name + "]" }
+// sameGroup reports whether two networks are configured identically.
+func sameGroup(a, b Group) bool {
+	if a.Name != b.Name || !slices.Equal(a.Members, b.Members) {
+		return false
+	}
+	if (a.IPv4 == nil) != (b.IPv4 == nil) {
+		return false
+	}
+	if a.IPv4 == nil {
+		return true
+	}
+	return a.IPv4.Subnet == b.IPv4.Subnet && a.IPv4.RouterAddr() == b.IPv4.RouterAddr()
+}
+
+// groupImpact classifies a change to an existing network in client terms.
+//
+// The question is only ever "does anything on this network lose the address it
+// is holding". Renumbering the subnet does; adding an IPv4 block to a network
+// that had none does not, because there was nothing there to lose.
+func groupImpact(before, after Group) string {
+	switch {
+	case !slices.Equal(before.Members, after.Members):
+		return impactDisruptive
+	case before.IPv4 == nil:
+		return impactRestart
+	case after.IPv4 == nil, before.IPv4.Subnet != after.IPv4.Subnet:
+		return impactDisruptive
+	case before.IPv4.RouterAddr() != after.IPv4.RouterAddr():
+		// The subnet is unchanged, so clients keep valid addresses — but their
+		// default gateway just moved and they will not learn that until they
+		// renew, which is a network that looks fine and does not work.
+		return impactDisruptive
+	}
+	return impactNone
+}
+
+// describeGroup renders a network as diff lines.
+func describeGroup(sign string, g Group) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%snetwork %s\n", sign, g.Name)
+	if len(g.Members) > 0 {
+		fmt.Fprintf(&b, "%s  on %s\n", sign, strings.Join(g.Members, ", "))
+	}
+	if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
+		fmt.Fprintf(&b, "%s  ipv4 %s, this router at %s\n", sign, g.IPv4.Subnet, g.IPv4.RouterAddr())
+	} else {
+		fmt.Fprintf(&b, "%s  no ipv4\n", sign)
+	}
+	return b.String()
+}
+
+func itemPath(name string) string  { return "adopted[" + name + "]" }
+func groupPath(name string) string { return "groups[" + name + "]" }
+
+// pick is a conditional expression, for the places where a three-line if would
+// only separate a value from the condition that chooses it.
+func pick[T any](cond bool, yes, no T) T {
+	if cond {
+		return yes
+	}
+	return no
+}
 
 // observedByName indexes the kernel's list, for the view's second half.
 func observedByName(in []Interface) map[string]Interface {

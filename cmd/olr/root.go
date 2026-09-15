@@ -41,11 +41,16 @@ func newRoot() *cobra.Command {
 		ingress.Command(),
 	)
 
-	// `adopt` and `release` are hub-level operations in design.md §6.1's list,
-	// but they write the link module's document, so they are built there and
-	// mounted here. internal/cli stays free of module imports, which is what
-	// keeps `olr --help` a description of the tree rather than of the modules.
+	// `adopt`, `release` and `net` are hub-level in design.md §6.1's list, but
+	// they write the link module's document, so they are built there and mounted
+	// here. internal/cli stays free of module imports, which is what keeps `olr
+	// --help` a description of the tree rather than of the modules.
+	//
+	// `net` in particular is top-level rather than under `olr link` because §4.4
+	// makes "network" the operator's word for the object the schema calls a
+	// group, and §11.2 spells the acceptance criterion `olr net add iot`.
 	root.AddCommand(link.OperationCommands()...)
+	root.AddCommand(link.NetCommand())
 	root.AddCommand(system.OperationCommands()...)
 	return root
 }

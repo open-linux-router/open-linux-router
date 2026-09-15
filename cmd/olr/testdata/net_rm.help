@@ -1,0 +1,16 @@
+Delete a network and take its address off the interface.
+
+Any address range served on this network stops validating, and `olr dhcp`
+will say so against its own field the next time it is applied. Remove the
+range first if you mean to stop serving cleanly.
+
+Usage:
+  olr net rm <name> [flags]
+
+Flags:
+  -h, --help   help for rm
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

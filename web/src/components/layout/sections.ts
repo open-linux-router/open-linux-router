@@ -84,6 +84,18 @@ export const SECTIONS: Section[] = [
     groups: [],
   },
   {
+    // First after the overview, because it is what everything below it keys
+    // off: a DHCP range is served on a network, a gateway exit is chosen by
+    // network. Putting it after them would mean every one of those pages sends
+    // the operator back here before they can do anything.
+    to: '/networks',
+    label: 'Networks',
+    icon: Router,
+    end: false,
+    blurb: 'The subnets this router serves, and the interfaces they live on.',
+    groups: [],
+  },
+  {
     to: '/gateway',
     label: 'Gateway',
     icon: Waypoints,
