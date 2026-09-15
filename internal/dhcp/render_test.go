@@ -19,10 +19,10 @@ var update = flag.Bool("update", false, "rewrite the golden files in testdata")
 // Golden files rather than assertions on substrings: the rendered config is the
 // module's actual contract with dnsmasq, and a diff against a reviewed file is
 // the only check that notices a line nobody thought to assert on disappearing.
-func renderGolden(t *testing.T, name string, c Config, links LinkView) {
+func renderGolden(t *testing.T, name string, c Config, groups GroupView) {
 	t.Helper()
 
-	rendered, err := NewDnsmasq(DefaultPaths()).Render(c, links)
+	rendered, err := NewDnsmasq(DefaultPaths()).Render(c, groups)
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -55,7 +55,7 @@ func renderGolden(t *testing.T, name string, c Config, links LinkView) {
 }
 
 func TestRenderMinimalPool(t *testing.T) {
-	renderGolden(t, "minimal", validConfig(t), testLinks())
+	renderGolden(t, "minimal", validConfig(t), testGroups())
 }
 
 func TestRenderEverything(t *testing.T) {
@@ -71,7 +71,7 @@ func TestRenderEverything(t *testing.T) {
 	c.Pools[0].DNS = []netip.Addr{addr(t, "192.168.1.1"), addr(t, "2001:db8::1")}
 	c.Pools[0].Domain = "lan"
 	c.Pools[0].NTP = []netip.Addr{addr(t, "192.168.1.1")}
-	c.Pools[0].RA = RASLAAC
+	c.Pools[0].IPv6 = &PoolIPv6{Mode: RASLAAC}
 	c.Pools[0].Options = []Option{{Option: "252", Value: "http://wpad.lan/wpad.dat"}}
 	c.Reservations = []Reservation{
 		{MAC: "aa:bb:cc:dd:ee:ff", IP: addr(t, "192.168.1.50"), Hostname: "nas"},
@@ -83,25 +83,24 @@ func TestRenderEverything(t *testing.T) {
 	// validation error (see TestExtraConfMayNotSetARenderedDirective).
 	c.ExtraConf = "log-dhcp\ndhcp-rapid-commit"
 
-	renderGolden(t, "everything", c, testLinks())
+	renderGolden(t, "everything", c, testGroups())
 }
 
 func TestRenderStatefulIPv6(t *testing.T) {
 	c := validConfig(t)
-	c.Pools[0].RA = RAStateful
-	renderGolden(t, "stateful-v6", c, testLinks())
+	c.Pools[0].IPv6 = &PoolIPv6{Mode: RAStateful}
+	renderGolden(t, "stateful-v6", c, testGroups())
 }
 
 func TestRenderTwoPools(t *testing.T) {
 	c := validConfig(t)
 	c.Pools = append(c.Pools, Pool{
-		Interface: "br-guest",
-		Start:     addr(t, "10.10.0.100"),
-		End:       addr(t, "10.10.0.200"),
-		Domain:    "guest",
-		RA:        RASLAAC,
+		Group:  "guest",
+		IPv4:   &PoolIPv4{Start: addr(t, "10.10.0.100"), End: addr(t, "10.10.0.200")},
+		IPv6:   &PoolIPv6{Mode: RASLAAC},
+		Domain: "guest",
 	})
-	renderGolden(t, "two-pools", c, testLinks())
+	renderGolden(t, "two-pools", c, testGroups())
 }
 
 // Disabling stops the service but still renders, so that enabling later is a
@@ -109,7 +108,7 @@ func TestRenderTwoPools(t *testing.T) {
 func TestRenderDisabled(t *testing.T) {
 	c := validConfig(t)
 	c.Enabled = false
-	renderGolden(t, "disabled", c, testLinks())
+	renderGolden(t, "disabled", c, testGroups())
 }
 
 // port=0 is the obligation dnsmasq's dual role creates: without it this daemon
@@ -121,7 +120,7 @@ func TestRenderAlwaysDisablesDNS(t *testing.T) {
 		c := validConfig(t)
 		c.Enabled = name == "enabled"
 
-		rendered, err := NewDnsmasq(DefaultPaths()).Render(c, testLinks())
+		rendered, err := NewDnsmasq(DefaultPaths()).Render(c, testGroups())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -145,7 +144,7 @@ func TestRenderIsDeterministic(t *testing.T) {
 		{MAC: "aa:bb:cc:dd:ee:ff", IP: addr(t, "192.168.1.50")},
 	}
 	c.Pools = append(c.Pools, Pool{
-		Interface: "br-guest", Start: addr(t, "10.10.0.100"), End: addr(t, "10.10.0.200"),
+		Group: "guest", IPv4: &PoolIPv4{Start: addr(t, "10.10.0.100"), End: addr(t, "10.10.0.200")},
 	})
 
 	shuffled := c.Clone()
@@ -153,11 +152,11 @@ func TestRenderIsDeterministic(t *testing.T) {
 	shuffled.Pools[0], shuffled.Pools[1] = shuffled.Pools[1], shuffled.Pools[0]
 
 	b := NewDnsmasq(DefaultPaths())
-	first, err := b.Render(c, testLinks())
+	first, err := b.Render(c, testGroups())
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := b.Render(shuffled, testLinks())
+	second, err := b.Render(shuffled, testGroups())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,26 +181,26 @@ func TestRenderIsDeterministic(t *testing.T) {
 // what keeps those two answers the same.
 func TestLeaseMaxCoversThePools(t *testing.T) {
 	small := validConfig(t) // 192.168.1.100-200, well under the default
-	if got := leaseMax(small); got != DefaultLeaseMax {
+	if got := leaseMax(small, testGroups()); got != DefaultLeaseMax {
 		t.Errorf("leaseMax for a small pool = %d, want dnsmasq's own default %d", got, DefaultLeaseMax)
 	}
 
 	// A /16 worth of pool: 8000 addresses plus a reservation outside it.
 	big := validConfig(t)
-	big.Pools[0].Start = addr(t, "192.168.1.1")
-	big.Pools[0].End = addr(t, "192.168.32.64")
+	big.Pools[0].IPv4.Start = addr(t, "192.168.1.1")
+	big.Pools[0].IPv4.End = addr(t, "192.168.32.64")
 	big.Reservations = []Reservation{{MAC: "aa:bb:cc:dd:ee:ff", IP: addr(t, "192.168.1.50")}}
 
-	want := RangeSize(big.Pools[0].Start, big.Pools[0].End) + 1
-	if got := leaseMax(big); got != want {
+	want := RangeSize(big.Pools[0].IPv4.Start, big.Pools[0].IPv4.End) + 1
+	if got := leaseMax(big, testGroups()); got != want {
 		t.Errorf("leaseMax = %d, want %d (every address in the pool, plus the reservation)", got, want)
 	}
 
 	// A stateful DHCPv6 range hands out addresses too, so it has to be counted
 	// or the ceiling would be short by exactly the size of that range.
 	v6 := validConfig(t)
-	v6.Pools[0].RA = RAStateful
-	if got, floor := leaseMax(v6), RangeSize(v6.Pools[0].Start, v6.Pools[0].End)+StatefulRASize; got < floor && floor > DefaultLeaseMax {
+	v6.Pools[0].IPv6 = &PoolIPv6{Mode: RAStateful}
+	if got, floor := leaseMax(v6, testGroups()), RangeSize(v6.Pools[0].IPv4.Start, v6.Pools[0].IPv4.End)+StatefulRASize; got < floor && floor > DefaultLeaseMax {
 		t.Errorf("leaseMax = %d, want at least %d for a stateful IPv6 range", got, floor)
 	}
 }
@@ -214,7 +213,7 @@ func TestReloadableFilesAreTheHotOnes(t *testing.T) {
 	c.Reservations = []Reservation{{MAC: "aa:bb:cc:dd:ee:ff", IP: addr(t, "192.168.1.50")}}
 
 	paths := DefaultPaths()
-	rendered, err := NewDnsmasq(paths).Render(c, testLinks())
+	rendered, err := NewDnsmasq(paths).Render(c, testGroups())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +262,7 @@ func TestDnsmasqAcceptsRenderedConfig(t *testing.T) {
 		"minimal": validConfig,
 		"stateful-v6": func(t *testing.T) Config {
 			c := validConfig(t)
-			c.Pools[0].RA = RAStateful
+			c.Pools[0].IPv6 = &PoolIPv6{Mode: RAStateful}
 			return c
 		},
 		"everything": func(t *testing.T) Config {
@@ -273,7 +272,7 @@ func TestDnsmasqAcceptsRenderedConfig(t *testing.T) {
 			c.Pools[0].DNS = []netip.Addr{addr(t, "192.168.1.1"), addr(t, "2001:db8::1")}
 			c.Pools[0].Domain = "lan"
 			c.Pools[0].NTP = []netip.Addr{addr(t, "192.168.1.1")}
-			c.Pools[0].RA = RASLAAC
+			c.Pools[0].IPv6 = &PoolIPv6{Mode: RASLAAC}
 			c.Pools[0].Options = []Option{{Option: "252", Value: "http://wpad.lan/wpad.dat"}}
 			c.Reservations = []Reservation{{MAC: "aa:bb:cc:dd:ee:ff", IP: addr(t, "192.168.1.50"), Hostname: "nas"}}
 			c.ExtraConf = "log-dhcp"
@@ -297,7 +296,7 @@ func TestDnsmasqAcceptsRenderedConfig(t *testing.T) {
 				}
 			}
 
-			rendered, err := NewDnsmasq(paths).Render(build(t), testLinks())
+			rendered, err := NewDnsmasq(paths).Render(build(t), testGroups())
 			if err != nil {
 				t.Fatal(err)
 			}

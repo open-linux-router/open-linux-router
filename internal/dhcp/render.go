@@ -207,20 +207,20 @@ func (d Dnsmasq) reloadable(path string) bool {
 }
 
 // Render is pure: same config and same link facts, same bytes.
-func (d Dnsmasq) Render(c Config, links LinkView) (Rendered, error) {
+func (d Dnsmasq) Render(c Config, groups GroupView) (Rendered, error) {
 	c = c.Clone()
 	c.Normalize()
 
 	var out Rendered
 
-	main, err := d.renderMain(c, links)
+	main, err := d.renderMain(c, groups)
 	if err != nil {
 		return Rendered{}, err
 	}
 	out.add(File{Path: d.Paths.Conf, Mode: 0o644, Data: main})
 
 	for _, p := range c.Pools {
-		opts, err := d.renderOptions(p, links)
+		opts, err := d.renderOptions(p)
 		if err != nil {
 			return Rendered{}, err
 		}
@@ -228,7 +228,7 @@ func (d Dnsmasq) Render(c Config, links LinkView) (Rendered, error) {
 			continue
 		}
 		out.add(File{
-			Path:       d.Paths.OptsDir + "/" + p.Interface + ".conf",
+			Path:       d.Paths.OptsDir + "/" + p.Group + ".conf",
 			Mode:       0o644,
 			Data:       opts,
 			Reloadable: true,
@@ -253,7 +253,7 @@ func (d Dnsmasq) Render(c Config, links LinkView) (Rendered, error) {
 	return out, nil
 }
 
-func (d Dnsmasq) renderMain(c Config, links LinkView) ([]byte, error) {
+func (d Dnsmasq) renderMain(c Config, groups GroupView) ([]byte, error) {
 	var b strings.Builder
 	b.WriteString(d.header("dnsmasq configuration for the olr dhcp module"))
 
@@ -301,7 +301,7 @@ dhcp-authoritative
 # addresses. Sized from the configured pools instead, and never lowered below
 # dnsmasq's default so this can only ever raise the ceiling.
 dhcp-lease-max=%d
-`, leaseMax(c))
+`, leaseMax(c, groups))
 
 	if !c.Enabled {
 		b.WriteString(`
@@ -312,27 +312,43 @@ dhcp-lease-max=%d
 
 	wantsRA := false
 	for _, p := range c.Pools {
-		info, err := links.Interface(p.Interface)
+		info, err := groups.Group(p.Group)
 		if err != nil {
-			return nil, fmt.Errorf("rendering pool %q: %w", p.Interface, err)
-		}
-		prefix, ok := info.FindPrefix(p.Start)
-		if !ok {
-			return nil, fmt.Errorf("rendering pool %q: %s is outside every subnet on the interface", p.Interface, p.Start)
+			return nil, fmt.Errorf("rendering pool %q: %w", p.Group, err)
 		}
 
-		fmt.Fprintf(&b, "\n# pool: %s (%s)\n", p.Interface, prefix)
-		fmt.Fprintf(&b, "interface=%s\n", p.Interface)
+		fmt.Fprintf(&b, "\n# network: %s\n", p.Group)
+		for _, member := range info.Members {
+			fmt.Fprintf(&b, "interface=%s\n", member)
+		}
 
-		// The netmask is optional for a directly connected network, but stating
-		// it removes dnsmasq's class-based guess as a failure mode.
-		fmt.Fprintf(&b, "dhcp-range=set:%s,%s,%s,%s,%s\n",
-			p.Interface, p.Start, p.End, netmaskOf(prefix), p.LeaseTimeOrDefault().Seconds())
+		// The dnsmasq tag is the network's name, so a tagged option reads as
+		// belonging to the thing the operator named rather than to whichever
+		// NIC it happens to sit on this week.
+		if p.ServesIPv4() {
+			start, end, ok := p.Range(info)
+			if !ok {
+				return nil, fmt.Errorf("rendering pool %q: no IPv4 range, and none could be derived from %s",
+					p.Group, info.Subnet)
+			}
+			derived := ""
+			if !p.IPv4.Explicit() {
+				derived = "  # derived from the network's subnet"
+			}
+			// The netmask is optional for a directly connected network, but
+			// stating it removes dnsmasq's class-based guess as a failure mode.
+			fmt.Fprintf(&b, "dhcp-range=set:%s,%s,%s,%s,%s%s\n",
+				p.Group, start, end, netmaskOf(info.Subnet), p.LeaseTimeOrDefault().Seconds(), derived)
+		}
 
-		if ra := p.RA.OrDefault(); ra != RAOff {
+		if ra := p.RA(); ra != RAOff {
 			wantsRA = true
 			b.WriteString(raComment(ra))
-			fmt.Fprintf(&b, "dhcp-range=set:%s,%s\n", p.Interface, raRange(ra, p))
+			// One IPv6 range per member: `constructor:` names an interface, so a
+			// network on two of them needs one line each.
+			for _, member := range info.Members {
+				fmt.Fprintf(&b, "dhcp-range=set:%s,%s\n", p.Group, raRange(ra, member, p))
+			}
 		}
 	}
 
@@ -376,11 +392,15 @@ const StatefulRASize = 0x100
 // outside its pool's range and so cost an extra lease — and every stateful
 // DHCPv6 range. That total is a true upper bound: dnsmasq reuses a lease record
 // when an expired one is handed out again, so nothing accumulates beyond it.
-func leaseMax(c Config) int {
+func leaseMax(c Config, groups GroupView) int {
 	total := len(c.Reservations)
 	for _, p := range c.Pools {
-		total += RangeSize(p.Start, p.End)
-		if p.RA.OrDefault() == RAStateful {
+		if info, err := groups.Group(p.Group); err == nil {
+			if start, end, ok := p.Range(info); ok {
+				total += core.RangeSize(start, end)
+			}
+		}
+		if p.RA() == RAStateful {
 			total += StatefulRASize
 		}
 	}
@@ -392,18 +412,18 @@ func leaseMax(c Config) int {
 // constructor: makes dnsmasq derive the prefix from the interface's current
 // address, which is why prefix delegation needs no plumbing here — a WAN prefix
 // that changes is followed by the daemon, not by a re-render.
-func raRange(mode RAMode, p Pool) string {
+func raRange(mode RAMode, member string, p Pool) string {
 	switch mode {
 	case RAStateful:
 		// A stateful range needs real bounds. These are host identifiers; the
 		// network part comes from the interface.
 		return fmt.Sprintf("::100,::1ff,constructor:%s,slaac,%s",
-			p.Interface, p.LeaseTimeOrDefault().Seconds())
+			member, p.LeaseTimeOrDefault().Seconds())
 	default:
 		// ra-stateless: the O and A bits. Clients self-assign an address and
 		// ask us for the rest. No range bounds are needed because we assign no
 		// addresses, which is what "::" means here.
-		return fmt.Sprintf("::,constructor:%s,ra-stateless", p.Interface)
+		return fmt.Sprintf("::,constructor:%s,ra-stateless", member)
 	}
 }
 
@@ -421,9 +441,13 @@ func raComment(mode RAMode) string {
 //
 // The file holds the text that would follow "dhcp-option=", one per line, which
 // is the format dnsmasq's optsdir expects.
-func (d Dnsmasq) renderOptions(p Pool, links LinkView) ([]byte, error) {
+//
+// It takes no view of the networks. It used to, and only to read the interface
+// name for its tag — the tag is the network's name now, which the pool already
+// carries.
+func (d Dnsmasq) renderOptions(p Pool) ([]byte, error) {
 	var lines []string
-	tag := "tag:" + p.Interface
+	tag := "tag:" + p.Group
 
 	// A nil Gateway or DNS renders nothing on purpose. dnsmasq's own default
 	// for both is the address of the machine it runs on, which is exactly what
@@ -461,7 +485,7 @@ func (d Dnsmasq) renderOptions(p Pool, links LinkView) ([]byte, error) {
 	}
 
 	var b strings.Builder
-	b.WriteString(d.header("DHCP options for " + p.Interface))
+	b.WriteString(d.header("DHCP options for " + p.Group))
 	b.WriteString("\n")
 	for _, l := range lines {
 		b.WriteString(l)

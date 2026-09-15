@@ -222,3 +222,78 @@ func LoadFile(path string) (Source, error) {
 	// halfway through a session.
 	return func() ([]Interface, error) { return out, nil }, nil
 }
+
+// GroupInfo is one network joined to the state of its members.
+//
+// The stored half is the network — name, members, subnet, router address. The
+// observed half is exactly one boolean: whether every member is up. That
+// asymmetry is the point of the whole object. A consumer asking "what subnet is
+// this network" gets an answer that does not depend on the machine, which is
+// what lets `dhcp` validate a range without a kernel; a consumer asking "is it
+// working" still gets the truth, read fresh.
+type GroupInfo struct {
+	Name    string
+	Members []string
+
+	// Subnet and Router are intent. Invalid when the network serves no IPv4.
+	Subnet netip.Prefix
+	Router netip.Addr
+
+	// Up reports that every member exists and is administratively up. A network
+	// with no members is not up: there is nothing for it to be up on.
+	Up bool
+}
+
+// Groups returns every configured network, joined to its members' state.
+func (f Facts) Groups() ([]GroupInfo, error) {
+	observed, err := f.source()()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := f.Config()
+	if err != nil {
+		return nil, err
+	}
+
+	byName := make(map[string]Interface, len(observed))
+	for _, iface := range observed {
+		byName[iface.Name] = iface
+	}
+
+	out := make([]GroupInfo, 0, len(cfg.Groups))
+	for _, g := range cfg.Groups {
+		info := GroupInfo{
+			Name:    g.Name,
+			Members: slices.Clone(g.Members),
+			Up:      len(g.Members) > 0,
+		}
+		for _, m := range g.Members {
+			if iface, ok := byName[m]; !ok || !iface.Up {
+				info.Up = false
+			}
+		}
+		if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
+			info.Subnet = g.IPv4.Subnet
+			info.Router = g.IPv4.RouterAddr()
+		}
+		out = append(out, info)
+	}
+	return out, nil
+}
+
+// ErrNoSuchGroup is returned by Group for an unknown name.
+var ErrNoSuchGroup = errors.New("no such network")
+
+// Group returns one network, or ErrNoSuchGroup.
+func (f Facts) Group(name string) (GroupInfo, error) {
+	all, err := f.Groups()
+	if err != nil {
+		return GroupInfo{}, err
+	}
+	for _, g := range all {
+		if g.Name == name {
+			return g, nil
+		}
+	}
+	return GroupInfo{}, fmt.Errorf("%q: %w", name, ErrNoSuchGroup)
+}

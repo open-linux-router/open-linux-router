@@ -129,8 +129,8 @@ func TestNormalizeMAC(t *testing.T) {
 func TestNormalizeIsCanonical(t *testing.T) {
 	c := Config{
 		Pools: []Pool{
-			{Interface: "br-guest", Start: addr(t, "10.10.0.10"), End: addr(t, "10.10.0.20")},
-			{Interface: "br-lan", Start: addr(t, "192.168.1.100"), End: addr(t, "192.168.1.200")},
+			{Group: "guest", IPv4: &PoolIPv4{Start: addr(t, "10.10.0.10"), End: addr(t, "10.10.0.20")}},
+			{Group: "lan", IPv4: &PoolIPv4{Start: addr(t, "192.168.1.100"), End: addr(t, "192.168.1.200")}},
 		},
 		Reservations: []Reservation{
 			{MAC: "FF:EE:DD:CC:BB:AA", IP: addr(t, "192.168.1.50")},
@@ -139,8 +139,8 @@ func TestNormalizeIsCanonical(t *testing.T) {
 	}
 	c.Normalize()
 
-	if c.Pools[0].Interface != "br-guest" || c.Pools[1].Interface != "br-lan" {
-		t.Errorf("pools not sorted by interface: %v", c.Pools)
+	if c.Pools[0].Group != "guest" || c.Pools[1].Group != "lan" {
+		t.Errorf("pools not sorted by network: %v", c.Pools)
 	}
 	if c.Reservations[0].MAC != "aa:bb:cc:dd:ee:ff" {
 		t.Errorf("reservations not sorted by MAC: %v", c.Reservations)
@@ -168,14 +168,13 @@ func TestConfigRoundTripsThroughJSON(t *testing.T) {
 	original := Config{
 		Enabled: true,
 		Pools: []Pool{{
-			Interface: "br-lan",
-			Start:     addr(t, "192.168.1.100"),
-			End:       addr(t, "192.168.1.200"),
+			Group:     "lan",
+			IPv4:      &PoolIPv4{Start: addr(t, "192.168.1.100"), End: addr(t, "192.168.1.200")},
+			IPv6:      &PoolIPv6{Mode: RASLAAC},
 			LeaseTime: lease,
 			Gateway:   &gw,
 			DNS:       []netip.Addr{addr(t, "192.168.1.1")},
 			Domain:    "lan",
-			RA:        RASLAAC,
 			Options:   []Option{{Option: "252", Value: "http://wpad/wpad.dat"}},
 		}},
 		Reservations: []Reservation{{
@@ -238,10 +237,10 @@ func TestMissingSectionIsEmptyNotAnError(t *testing.T) {
 func TestCloneDoesNotShareBackingArrays(t *testing.T) {
 	gw := addr(t, "192.168.1.254")
 	original := Config{Pools: []Pool{{
-		Interface: "br-lan",
-		Gateway:   &gw,
-		DNS:       []netip.Addr{addr(t, "1.1.1.1")},
-		Options:   []Option{{Option: "42", Value: "x"}},
+		Group:   "lan",
+		Gateway: &gw,
+		DNS:     []netip.Addr{addr(t, "1.1.1.1")},
+		Options: []Option{{Option: "42", Value: "x"}},
 	}}}
 
 	clone := original.Clone()
@@ -284,10 +283,10 @@ func TestPoolAndReservationAccessors(t *testing.T) {
 		t.Error("RemoveReservation reported success twice")
 	}
 
-	if !c.RemovePool("br-lan") {
+	if !c.RemovePool("lan") {
 		t.Error("RemovePool(br-lan) reported nothing removed")
 	}
-	if c.RemovePool("br-lan") {
+	if c.RemovePool("lan") {
 		t.Error("RemovePool reported success twice")
 	}
 }

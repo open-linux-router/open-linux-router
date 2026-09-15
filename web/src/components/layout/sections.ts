@@ -134,7 +134,7 @@ export const SECTIONS: Section[] = [
         slug: 'ranges',
         label: 'Address ranges',
         blurb:
-          'The addresses this router is allowed to hand out. A range is served on one interface and must fall inside a subnet already configured there.',
+          'The addresses this router hands out on each network. Leave a range blank and it is derived from the network\u2019s subnet, keeping the low addresses free for devices you configure by hand.',
       },
       {
         slug: 'reservations',
@@ -146,7 +146,7 @@ export const SECTIONS: Section[] = [
         slug: 'interfaces',
         label: 'Interfaces',
         blurb:
-          'Which interfaces this router has been given. Switching one on changes nothing by itself — no address is set and no service is started — but until one is on, everything else here is refused.',
+          'Which interfaces this router has been given. Switching one on changes nothing by itself \u2014 no address is set and no service is started \u2014 but until one is on, it cannot carry a network, and everything else here is refused.',
       },
       {
         slug: 'advanced',

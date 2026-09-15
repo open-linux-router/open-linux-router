@@ -5,7 +5,7 @@ Adopting by itself changes nothing on the machine: no address is set, no
 daemon is started, and the interface keeps whatever configuration it
 already had. What it changes is permission — olr refuses to touch an
 interface nobody handed it (design.md §3.4), so this is the step that
-makes `olr dhcp add pool` stop refusing.
+makes `olr net add` stop refusing.
 
 Usage:
   olr adopt <interface> [flags]

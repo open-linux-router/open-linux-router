@@ -44,6 +44,6 @@ dhcp-authoritative
 # dnsmasq's default so this can only ever raise the ceiling.
 dhcp-lease-max=1000
 
-# pool: br-lan (192.168.1.1/24)
+# network: lan
 interface=br-lan
-dhcp-range=set:br-lan,192.168.1.100,192.168.1.200,255.255.255.0,43200
+dhcp-range=set:lan,192.168.1.100,192.168.1.200,255.255.255.0,43200

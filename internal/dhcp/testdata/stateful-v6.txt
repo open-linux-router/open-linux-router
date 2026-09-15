@@ -44,11 +44,11 @@ dhcp-authoritative
 # dnsmasq's default so this can only ever raise the ceiling.
 dhcp-lease-max=1000
 
-# pool: br-lan (192.168.1.1/24)
+# network: lan
 interface=br-lan
-dhcp-range=set:br-lan,192.168.1.100,192.168.1.200,255.255.255.0,43200
+dhcp-range=set:lan,192.168.1.100,192.168.1.200,255.255.255.0,43200
 # IPv6: advertise the prefix and hand out DHCPv6 addresses from it.
-dhcp-range=set:br-lan,::100,::1ff,constructor:br-lan,slaac,43200
+dhcp-range=set:lan,::100,::1ff,constructor:br-lan,slaac,43200
 
 # Required for any of the IPv6 ranges above to be advertised.
 enable-ra

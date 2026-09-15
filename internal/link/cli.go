@@ -151,7 +151,7 @@ func adoptCommand() *cobra.Command {
 			"daemon is started, and the interface keeps whatever configuration it\n" +
 			"already had. What it changes is permission — olr refuses to touch an\n" +
 			"interface nobody handed it (design.md §3.4), so this is the step that\n" +
-			"makes `olr dhcp add pool` stop refusing.",
+			"makes `olr net add` stop refusing.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			return mutate(c, args[0], func(cfg *Config) (bool, string) {
@@ -160,7 +160,8 @@ func adoptCommand() *cobra.Command {
 				}
 				return true, ""
 			}, fmt.Sprintf(
-				"Add an address range with `olr dhcp add pool %s --range START-END`.", args[0]))
+				"Put a network on it with `olr net add <name> --member %s`, then serve\n"+
+					"addresses there with `olr dhcp add pool <name>`.", args[0]))
 		},
 	}
 	c.ValidArgsFunction = cli.CompleteArgs(unadoptedInterfaces)

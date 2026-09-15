@@ -9,7 +9,7 @@ import (
 // The baseline must be clean, or every "this is rejected" case below could be
 // passing for the wrong reason.
 func TestValidateAcceptsAGoodConfig(t *testing.T) {
-	r := Validate(validConfig(t), testLinks())
+	r := Validate(validConfig(t), testGroups())
 	if !r.OK() {
 		t.Fatalf("baseline config rejected:\n    %s", problemStrings(r.Errors))
 	}
@@ -24,103 +24,131 @@ func TestValidateRejects(t *testing.T) {
 	tests := []struct {
 		name    string
 		mutate  func(*Config)
-		links   StaticLinks // nil for testLinks()
+		groups  StaticGroups // nil for testGroups()
 		path    string
 		message string
 	}{{
-		name:    "missing interface",
-		mutate:  func(c *Config) { c.Pools[0].Interface = "" },
-		path:    "pools[0].interface",
+		name:    "missing network",
+		mutate:  func(c *Config) { c.Pools[0].Group = "" },
+		path:    "pools[0].group",
 		message: "required",
 	}, {
-		name:    "unknown interface",
-		mutate:  func(c *Config) { c.Pools[0].Interface = "br-nope" },
-		path:    "pools[0].interface",
-		message: "no such interface",
+		name:    "unknown network",
+		mutate:  func(c *Config) { c.Pools[0].Group = "nope" },
+		path:    "pools[0].group",
+		message: "no such network",
 	}, {
-		// design.md §3.4: adopt-only. Serving DHCP on an interface nobody
-		// handed us is the surprise that rule exists to prevent.
-		name:    "interface not adopted",
-		mutate:  func(c *Config) { c.Pools[0].Interface = "eth-foreign" },
-		path:    "pools[0].interface",
-		message: "not adopted",
-	}, {
-		name:    "start above end",
-		mutate:  func(c *Config) { c.Pools[0].Start, c.Pools[0].End = c.Pools[0].End, c.Pools[0].Start },
-		path:    "pools[0]",
+		// The adopt-only check that used to live here is gone, and its absence
+		// is the point: being in a network means having been adopted, and
+		// `link` enforces that where the network is stored. A rule checked in
+		// two modules is a rule that can be enforced in one of them and not the
+		// other.
+		name: "start above end",
+		mutate: func(c *Config) {
+			c.Pools[0].IPv4.Start, c.Pools[0].IPv4.End = c.Pools[0].IPv4.End, c.Pools[0].IPv4.Start
+		},
+		path:    "pools[0].ipv4",
 		message: "is above end",
 	}, {
 		name:    "start missing",
-		mutate:  func(c *Config) { c.Pools[0].Start = netip.Addr{} },
-		path:    "pools[0].start",
-		message: "required",
+		mutate:  func(c *Config) { c.Pools[0].IPv4.Start = netip.Addr{} },
+		path:    "pools[0].ipv4.start",
+		message: "required when an end is given",
 	}, {
-		// The cross-module check from design.md §5.3.1 — the highest-value
-		// validation in the design, catching a half-finished renumbering
-		// before anything is written.
-		name:    "range outside the interface subnet",
-		mutate:  func(c *Config) { c.Pools[0].Start, c.Pools[0].End = addr(t, "10.0.0.5"), addr(t, "10.0.0.9") },
-		path:    "pools[0].start",
-		message: "outside every subnet on br-lan",
+		// The rule that started all of this. It used to read "outside every
+		// subnet on br-lan" — true, unactionable, and checked against an
+		// address configured outside olr. It is now a contradiction between two
+		// things olr stores, and the message names the network.
+		name:    "range outside the network's subnet",
+		mutate:  func(c *Config) { c.Pools[0].IPv4.Start, c.Pools[0].IPv4.End = addr(t, "10.0.0.5"), addr(t, "10.0.0.9") },
+		path:    "pools[0].ipv4.start",
+		message: `outside 192.168.1.0/24, the subnet of network "lan"`,
 	}, {
-		name:    "range spans two subnets",
-		mutate:  func(c *Config) { c.Pools[0].End = addr(t, "192.168.2.50") },
-		path:    "pools[0].end",
-		message: "cannot span subnets",
+		name:    "end outside the network's subnet",
+		mutate:  func(c *Config) { c.Pools[0].IPv4.End = addr(t, "192.168.2.50") },
+		path:    "pools[0].ipv4.end",
+		message: `outside 192.168.1.0/24`,
 	}, {
 		name:    "range contains the router itself",
-		mutate:  func(c *Config) { c.Pools[0].Start = addr(t, "192.168.1.1") },
-		path:    "pools[0]",
-		message: "br-lan's own address",
+		mutate:  func(c *Config) { c.Pools[0].IPv4.Start = addr(t, "192.168.1.1") },
+		path:    "pools[0].ipv4",
+		message: "this router's own address",
 	}, {
 		name:    "range contains the network address",
-		mutate:  func(c *Config) { c.Pools[0].Start = addr(t, "192.168.1.0") },
-		path:    "pools[0]",
+		mutate:  func(c *Config) { c.Pools[0].IPv4.Start = addr(t, "192.168.1.0") },
+		path:    "pools[0].ipv4",
 		message: "network address",
 	}, {
 		name:    "range contains the broadcast address",
-		mutate:  func(c *Config) { c.Pools[0].End = addr(t, "192.168.1.255") },
-		path:    "pools[0]",
+		mutate:  func(c *Config) { c.Pools[0].IPv4.End = addr(t, "192.168.1.255") },
+		path:    "pools[0].ipv4",
 		message: "broadcast address",
 	}, {
-		name:    "IPv6 range",
-		mutate:  func(c *Config) { c.Pools[0].Start, c.Pools[0].End = addr(t, "2001:db8::1"), addr(t, "2001:db8::9") },
-		path:    "pools[0]",
-		message: "configure IPv6 with the ra field",
+		// An IPv6 literal in the v4 range is almost always somebody looking for
+		// the ipv6 block, so the message points at it.
+		name: "IPv6 addresses in the IPv4 range",
+		mutate: func(c *Config) {
+			c.Pools[0].IPv4.Start, c.Pools[0].IPv4.End = addr(t, "2001:db8::1"), addr(t, "2001:db8::9")
+		},
+		path:    "pools[0].ipv4",
+		message: "configure IPv6 under ipv6.mode",
 	}, {
-		name: "two pools on one interface",
+		name: "two pools on one network",
 		mutate: func(c *Config) {
 			second := lanPool(t)
-			second.Start, second.End = addr(t, "192.168.1.210"), addr(t, "192.168.1.220")
+			second.IPv4.Start, second.IPv4.End = addr(t, "192.168.1.210"), addr(t, "192.168.1.220")
 			c.Pools = append(c.Pools, second)
 		},
-		path:    "pools[1].interface",
-		message: "one pool per interface",
+		path:    "pools[1].group",
+		message: "one pool per network",
 	}, {
-		// Two pools can only overlap if their interfaces share a subnet, which
-		// is a link-level misconfiguration rather than a dhcp one. The rule
-		// exists precisely for that case: both pools are individually valid, so
-		// nothing else would catch the collision.
-		name: "overlapping ranges on interfaces that share a subnet",
+		// Both pools are individually valid, so nothing else would catch the
+		// collision. `link` refuses overlapping subnets, but a fixture can
+		// still state them and a hand-edited document can still contain them.
+		name: "overlapping ranges on networks that share a subnet",
 		mutate: func(c *Config) {
-			other := Pool{Interface: "br-guest", Start: addr(t, "192.168.1.150"), End: addr(t, "192.168.1.160")}
-			c.Pools = append(c.Pools, other)
+			c.Pools = append(c.Pools, Pool{
+				Group: "guest",
+				IPv4:  &PoolIPv4{Start: addr(t, "192.168.1.150"), End: addr(t, "192.168.1.160")},
+			})
 		},
-		links: StaticLinks{
-			"br-lan":   {Adopted: true, Up: true, Prefixes: []netip.Prefix{netip.MustParsePrefix("192.168.1.1/24")}},
-			"br-guest": {Adopted: true, Up: true, Prefixes: []netip.Prefix{netip.MustParsePrefix("192.168.1.2/24")}},
+		groups: StaticGroups{
+			"lan": {
+				Members: []string{"br-lan"}, Up: true,
+				Subnet: netip.MustParsePrefix("192.168.1.0/24"),
+				Router: netip.MustParseAddr("192.168.1.1"),
+			},
+			"guest": {
+				Members: []string{"br-guest"}, Up: true,
+				Subnet: netip.MustParsePrefix("192.168.1.0/24"),
+				Router: netip.MustParseAddr("192.168.1.2"),
+			},
 		},
 		path:    "pools[1]",
 		message: "overlaps",
+	}, {
+		// Not expressible before the split, and now the one shape that really
+		// is broken: a pool that serves neither family does nothing at all.
+		name:    "serves neither family",
+		mutate:  func(c *Config) { c.Pools[0].IPv4 = nil },
+		path:    "pools[0]",
+		message: "serves neither IPv4 nor IPv6",
+	}, {
+		// A v4 range on a network with no subnet has nothing to sit in, and the
+		// message says where to fix it rather than only that it is wrong.
+		name:    "IPv4 pool on a network with no subnet",
+		mutate:  func(c *Config) { c.Pools[0].Group = "v6only" },
+		path:    "pools[0].ipv4",
+		message: "olr net set v6only --subnet",
 	}, {
 		name:    "lease below the dnsmasq floor",
 		mutate:  func(c *Config) { c.Pools[0].LeaseTime = Duration(30 * time.Second) },
 		path:    "pools[0].lease_time",
 		message: "two minute minimum",
 	}, {
-		name:    "unknown RA mode",
-		mutate:  func(c *Config) { c.Pools[0].RA = "sometimes" },
-		path:    "pools[0].ra",
+		name:    "unknown IPv6 mode",
+		mutate:  func(c *Config) { c.Pools[0].IPv6 = &PoolIPv6{Mode: "sometimes"} },
+		path:    "pools[0].ipv6.mode",
 		message: "unknown mode",
 	}, {
 		name: "gateway outside the subnet",
@@ -228,11 +256,11 @@ func TestValidateRejects(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := validConfig(t)
 			tc.mutate(&c)
-			links := tc.links
-			if links == nil {
-				links = testLinks()
+			groups := tc.groups
+			if groups == nil {
+				groups = testGroups()
 			}
-			r := Validate(c, links)
+			r := Validate(c, groups)
 			if r.OK() {
 				t.Fatalf("config was accepted, expected %s to be rejected", tc.path)
 			}
@@ -258,13 +286,16 @@ func TestValidateWarns(t *testing.T) {
 			c.Reservations = []Reservation{{MAC: "aa:bb:cc:dd:ee:ff", IP: addr(t, "192.168.1.150")}}
 		},
 		path:    "reservations[0].ip",
-		message: "inside br-lan's dynamic range",
+		message: "inside lan's dynamic range",
 	}, {
-		name: "pool on a down interface",
+		name: "pool on a down network",
 		mutate: func(c *Config) {
-			c.Pools = []Pool{{Interface: "br-down", Start: addr(t, "172.16.0.100"), End: addr(t, "172.16.0.200")}}
+			c.Pools = []Pool{{
+				Group: "down",
+				IPv4:  &PoolIPv4{Start: addr(t, "172.16.0.100"), End: addr(t, "172.16.0.200")},
+			}}
 		},
-		path:    "pools[0].interface",
+		path:    "pools[0].group",
 		message: "is down",
 	}, {
 		name:    "enabled with no pools",
@@ -277,7 +308,7 @@ func TestValidateWarns(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := validConfig(t)
 			tc.mutate(&c)
-			r := Validate(c, testLinks())
+			r := Validate(c, testGroups())
 			if !r.OK() {
 				t.Fatalf("expected a warning, got errors:\n    %s", problemStrings(r.Errors))
 			}
@@ -294,7 +325,7 @@ func TestReservationOutsideRangeIsClean(t *testing.T) {
 	c := validConfig(t)
 	c.Reservations = []Reservation{{MAC: "aa:bb:cc:dd:ee:ff", IP: addr(t, "192.168.1.50"), Hostname: "nas"}}
 
-	r := Validate(c, testLinks())
+	r := Validate(c, testGroups())
 	if !r.OK() {
 		t.Fatalf("rejected:\n    %s", problemStrings(r.Errors))
 	}
@@ -304,30 +335,12 @@ func TestReservationOutsideRangeIsClean(t *testing.T) {
 }
 
 func TestValidateErrIsNilWhenOK(t *testing.T) {
-	if err := Validate(validConfig(t), testLinks()).Err(); err != nil {
+	if err := Validate(validConfig(t), testGroups()).Err(); err != nil {
 		t.Errorf("Err() = %v, want nil", err)
 	}
 }
 
-func TestBroadcastAddress(t *testing.T) {
-	tests := []struct{ prefix, want string }{
-		{"192.168.1.1/24", "192.168.1.255"},
-		{"10.0.0.1/8", "10.255.255.255"},
-		{"172.16.5.1/30", "172.16.5.3"},
-		{"192.168.1.1/32", "192.168.1.1"},
-		{"0.0.0.0/0", "255.255.255.255"},
-	}
-	for _, tc := range tests {
-		got, ok := broadcast(netip.MustParsePrefix(tc.prefix))
-		if !ok {
-			t.Errorf("broadcast(%s) reported no IPv4 broadcast", tc.prefix)
-			continue
-		}
-		if got.String() != tc.want {
-			t.Errorf("broadcast(%s) = %s, want %s", tc.prefix, got, tc.want)
-		}
-	}
-	if _, ok := broadcast(netip.MustParsePrefix("2001:db8::/64")); ok {
-		t.Error("broadcast() claimed an IPv6 prefix has a broadcast address")
-	}
-}
+// The broadcast arithmetic moved to internal/core, where `link` uses it too;
+// see internal/core/subnet_test.go. Keeping a copy here would be a second
+// implementation of the same eight lines, which is exactly what the move was
+// for.

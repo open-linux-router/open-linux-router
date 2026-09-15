@@ -31,23 +31,46 @@ import (
 // the two in step — an operator who renumbered an interface got pools validated
 // against the address it used to have.
 
-// dhcpLinkView is the dhcp module's window onto link.
-type dhcpLinkView struct{ facts link.Facts }
+// dhcpGroupView is the dhcp module's window onto link's networks.
+//
+// The only one of these adapters keyed by network rather than by interface, and
+// deliberately so: a DHCP pool serves a network, and what it needs to know is
+// the subnet somebody declared — not the address an interface happens to hold.
+// The other four still read interfaces because what they configure really is
+// per-interface; moving them is a separate retrofit (design.md §4.4).
+type dhcpGroupView struct{ facts link.Facts }
 
-func (l dhcpLinkView) Interface(name string) (dhcp.LinkInfo, error) {
-	info, err := l.facts.Interface(name)
+func (l dhcpGroupView) Group(name string) (dhcp.GroupInfo, error) {
+	info, err := l.facts.Group(name)
 	if err != nil {
 		// The sentinel is re-wrapped as the consumer's own, so that a caller
-		// testing errors.Is against dhcp.ErrNoSuchInterface still gets a true
+		// testing errors.Is against dhcp.ErrNoSuchGroup still gets a true
 		// answer. Passing ours through would make that test silently false.
-		return dhcp.LinkInfo{}, fmt.Errorf("%q: %w", name, dhcp.ErrNoSuchInterface)
+		return dhcp.GroupInfo{}, fmt.Errorf("%q: %w", name, dhcp.ErrNoSuchGroup)
 	}
-	return dhcp.LinkInfo{
-		Name:     info.Name,
-		Adopted:  info.Adopted,
-		Up:       info.Up,
-		Prefixes: info.Prefixes,
-	}, nil
+	return dhcpGroup(info), nil
+}
+
+func (l dhcpGroupView) Groups() ([]dhcp.GroupInfo, error) {
+	all, err := l.facts.Groups()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dhcp.GroupInfo, 0, len(all))
+	for _, info := range all {
+		out = append(out, dhcpGroup(info))
+	}
+	return out, nil
+}
+
+func dhcpGroup(info link.GroupInfo) dhcp.GroupInfo {
+	return dhcp.GroupInfo{
+		Name:    info.Name,
+		Members: info.Members,
+		Subnet:  info.Subnet,
+		Router:  info.Router,
+		Up:      info.Up,
+	}
 }
 
 // dnsLinkView is the dns module's window onto link.

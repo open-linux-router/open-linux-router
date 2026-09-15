@@ -269,21 +269,31 @@ func addCommand() *cobra.Command {
 }
 
 // poolFlags is the pool's field set, shared by add and set.
+//
+// The IPv4 and IPv6 halves are separate flags rather than one, mirroring the
+// config: `--range` says what addresses to hand out, `--ipv6` says what to
+// advertise, and neither implies the other. `--no-range` is what makes a
+// RA-only network expressible — it was not, before, because a pool required a
+// range to exist at all.
 type poolFlags struct {
 	rng      string
+	noRange  bool
 	lease    string
 	gateway  string
 	dns      []string
 	ntp      []string
 	domain   string
-	ra       string
+	ipv6     string
 	options  []string
 	noGate   bool
 	clearDNS bool
 }
 
 func (f *poolFlags) register(c *cobra.Command) {
-	c.Flags().StringVar(&f.rng, "range", "", "address range, e.g. 192.168.1.100-192.168.1.200")
+	c.Flags().StringVar(&f.rng, "range", "",
+		"address range, e.g. 192.168.1.100-192.168.1.200 (default: derived from the network's subnet)")
+	c.Flags().BoolVar(&f.noRange, "no-range", false,
+		"hand out no IPv4 addresses here, leaving the network to IPv6 alone")
 	c.Flags().StringVar(&f.lease, "lease", "", "lease time, e.g. 12h (default 12h)")
 	c.Flags().StringVar(&f.gateway, "gateway", "", "gateway to advertise (default: the router itself)")
 	c.Flags().BoolVar(&f.noGate, "no-gateway", false, "advertise the router itself as the gateway")
@@ -296,12 +306,13 @@ func (f *poolFlags) register(c *cobra.Command) {
 	c.Flags().BoolVar(&f.clearDNS, "no-dns", false, "advertise the router itself as the DNS server")
 	c.Flags().StringArrayVar(&f.ntp, "ntp", nil, "NTP server to advertise, repeatable")
 	c.Flags().StringVar(&f.domain, "domain", "", "search domain to advertise")
-	c.Flags().StringVar(&f.ra, "ra", "", fmt.Sprintf("IPv6 mode: %s", joinRAModes()))
+	c.Flags().StringVar(&f.ipv6, "ipv6", "", fmt.Sprintf("IPv6 mode: %s", joinRAModes()))
 	c.Flags().StringArrayVar(&f.options, "option", nil, "extra DHCP option as CODE=VALUE, repeatable")
 
 	c.MarkFlagsMutuallyExclusive("gateway", "no-gateway")
 	c.MarkFlagsMutuallyExclusive("dns", "no-dns")
-	cli.EnumFlag(c, "ra", raModeNames()...)
+	c.MarkFlagsMutuallyExclusive("range", "no-range")
+	cli.EnumFlag(c, "ipv6", raModeNames()...)
 }
 
 // apply mutates a pool with only the flags the operator actually gave.
@@ -311,12 +322,15 @@ func (f *poolFlags) register(c *cobra.Command) {
 // silently erase the lease time (design.md §10: the relaxed schema projection
 // exists for exactly this).
 func (f *poolFlags) apply(c *cobra.Command, p *Pool) error {
+	if c.Flags().Changed("no-range") && f.noRange {
+		p.IPv4 = nil
+	}
 	if c.Flags().Changed("range") {
 		start, end, err := parseRange(f.rng)
 		if err != nil {
 			return err
 		}
-		p.Start, p.End = start, end
+		p.IPv4 = &PoolIPv4{Start: start, End: end}
 	}
 	if c.Flags().Changed("lease") {
 		d, err := ParseDuration(f.lease)
@@ -355,12 +369,16 @@ func (f *poolFlags) apply(c *cobra.Command, p *Pool) error {
 	if c.Flags().Changed("domain") {
 		p.Domain = f.domain
 	}
-	if c.Flags().Changed("ra") {
-		mode := RAMode(f.ra)
+	if c.Flags().Changed("ipv6") {
+		mode := RAMode(f.ipv6)
 		if !mode.Valid() {
-			return fmt.Errorf("--ra: unknown mode %q (want %s)", f.ra, joinRAModes())
+			return fmt.Errorf("--ipv6: unknown mode %q (want %s)", f.ipv6, joinRAModes())
 		}
-		p.RA = mode
+		if mode.OrDefault() == RAOff {
+			p.IPv6 = nil
+		} else {
+			p.IPv6 = &PoolIPv6{Mode: mode}
+		}
 	}
 	if c.Flags().Changed("option") {
 		opts, err := parseOptions(f.options)
@@ -375,31 +393,45 @@ func (f *poolFlags) apply(c *cobra.Command, p *Pool) error {
 func poolCommand(mode string) *cobra.Command {
 	flags := &poolFlags{}
 
-	short := "Add an address pool on an interface"
+	short := "Serve addresses on a network"
 	if mode == "set" {
-		short = "Change an existing pool"
+		short = "Change what a network serves"
 	}
 
 	c := &cobra.Command{
-		Use:   "pool <interface>",
+		Use:   "pool <network>",
 		Short: short,
-		Args:  cobra.ExactArgs(1),
+		Long: "Serve addresses on a network.\n\n" +
+			"The range is optional: left out, it is derived from the network's subnet,\n" +
+			"leaving the low addresses free for devices configured by hand. `olr net show`\n" +
+			"prints the range that would be derived.\n\n" +
+			"IPv4 and IPv6 are set separately. --range says what addresses to hand out,\n" +
+			"--ipv6 says what to advertise, and a network can do either or both.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
-			iface := args[0]
+			group := args[0]
 			return mutate(c, func(cfg *Config) error {
-				pool, exists := cfg.Pool(iface)
+				pool, exists := cfg.Pool(group)
 				switch {
 				case mode == "add" && exists:
-					return fmt.Errorf("%s already has a pool; use `olr dhcp set pool %s` to change it", iface, iface)
+					return fmt.Errorf("%s already has a pool; use `olr dhcp set pool %s` to change it", group, group)
 				case mode == "set" && !exists:
-					return fmt.Errorf("%s has no pool; use `olr dhcp add pool %s` to create one", iface, iface)
+					return fmt.Errorf("%s has no pool; use `olr dhcp add pool %s` to create one", group, group)
 				}
-				pool.Interface = iface
+				pool.Group = group
+				if mode == "add" && pool.IPv4 == nil && !flags.noRange {
+					// Adding a pool without saying anything means "hand out v4
+					// addresses here", with the range derived. Requiring
+					// --range was the old shape's doing: there was no subnet to
+					// derive from, so there was nothing to default to.
+					pool.IPv4 = &PoolIPv4{}
+				}
 				if err := flags.apply(c, &pool); err != nil {
 					return err
 				}
-				if !pool.Start.IsValid() || !pool.End.IsValid() {
-					return fmt.Errorf("--range is required when adding a pool")
+				if pool.IPv4 == nil && pool.RA() == RAOff {
+					return fmt.Errorf("a pool that serves neither IPv4 nor IPv6 does nothing; " +
+						"drop --no-range, or set --ipv6")
 				}
 				cfg.SetPool(pool)
 				return nil
@@ -747,8 +779,8 @@ func raModeNames() []string {
 // with it the habit of naming what does exist — this module used to say
 // "br-lan has no pool" and leave the operator to go and look.
 
-func unknownPool(cfg *Config, iface string) error {
-	return cli.UnknownObject("pool", iface, "olr dhcp add pool <interface>", poolNames(cfg))
+func unknownPool(cfg *Config, group string) error {
+	return cli.UnknownObject("pool", group, "olr dhcp add pool <network>", poolNames(cfg))
 }
 
 func unknownReservation(cfg *Config, mac string) error {
@@ -758,7 +790,7 @@ func unknownReservation(cfg *Config, mac string) error {
 func poolNames(cfg *Config) []string {
 	out := make([]string, 0, len(cfg.Pools))
 	for _, p := range cfg.Pools {
-		out = append(out, p.Interface)
+		out = append(out, p.Group)
 	}
 	return out
 }

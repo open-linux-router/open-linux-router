@@ -257,7 +257,8 @@ export interface Lease {
 }
 
 export interface PoolUsage {
-  interface: string
+  /** The network this describes — internal/dhcp Usage.Group. */
+  group: string
   size: number
   active: number
   expired: number

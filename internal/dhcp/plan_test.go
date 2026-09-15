@@ -12,7 +12,7 @@ var planNow = time.Unix(1767225000, 0).UTC()
 // state, i.e. "this config is exactly what is running".
 func observe(t *testing.T, c Config, running bool, leases ...Lease) Observed {
 	t.Helper()
-	rendered, err := NewDnsmasq(DefaultPaths()).Render(c, testLinks())
+	rendered, err := NewDnsmasq(DefaultPaths()).Render(c, testGroups())
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -25,7 +25,7 @@ func observe(t *testing.T, c Config, running bool, leases ...Lease) Observed {
 
 func buildPlan(t *testing.T, desired Config, obs Observed) Plan {
 	t.Helper()
-	plan, err := BuildPlan(NewDnsmasq(DefaultPaths()), desired, testLinks(), obs, planNow)
+	plan, err := BuildPlan(NewDnsmasq(DefaultPaths()), desired, testGroups(), obs, planNow)
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestChangingAPoolRestarts(t *testing.T) {
 	obs := observe(t, current, true, activeLease(t, "192.168.1.150", "aa:bb:cc:dd:ee:ff", "laptop"))
 
 	desired := current.Clone()
-	desired.Pools[0].End = addr(t, "192.168.1.210")
+	desired.Pools[0].IPv4.End = addr(t, "192.168.1.210")
 
 	plan := buildPlan(t, desired, obs)
 
@@ -208,7 +208,7 @@ func TestShrinkingAPoolBelowALiveLeaseIsDisruptive(t *testing.T) {
 	)
 
 	desired := current.Clone()
-	desired.Pools[0].End = addr(t, "192.168.1.120") // .190 no longer covered
+	desired.Pools[0].IPv4.End = addr(t, "192.168.1.120") // .190 no longer covered
 
 	plan := buildPlan(t, desired, obs)
 
@@ -234,7 +234,7 @@ func TestShrinkingAPoolIsNotDisruptiveWhenAReservationCovers(t *testing.T) {
 	obs := observe(t, current, true, activeLease(t, "192.168.1.190", "aa:bb:cc:dd:ee:ff", "nas"))
 
 	desired := current.Clone()
-	desired.Pools[0].End = addr(t, "192.168.1.120")
+	desired.Pools[0].IPv4.End = addr(t, "192.168.1.120")
 	desired.SetReservation(Reservation{MAC: "aa:bb:cc:dd:ee:ff", IP: addr(t, "192.168.1.190"), Hostname: "nas"})
 
 	plan := buildPlan(t, desired, obs)
@@ -251,7 +251,7 @@ func TestExpiredLeasesDoNotMakeAChangeDisruptive(t *testing.T) {
 	obs := observe(t, current, true, expired)
 
 	desired := current.Clone()
-	desired.Pools[0].End = addr(t, "192.168.1.120")
+	desired.Pools[0].IPv4.End = addr(t, "192.168.1.120")
 
 	plan := buildPlan(t, desired, obs)
 
@@ -320,7 +320,7 @@ func TestChangesWhileStoppedNeedNoServiceAction(t *testing.T) {
 	obs := observe(t, current, false)
 
 	desired := current.Clone()
-	desired.Pools[0].End = addr(t, "192.168.1.210")
+	desired.Pools[0].IPv4.End = addr(t, "192.168.1.210")
 
 	plan := buildPlan(t, desired, obs)
 
@@ -337,16 +337,16 @@ func TestChangesWhileStoppedNeedNoServiceAction(t *testing.T) {
 func TestPlanRefusesAnInvalidConfig(t *testing.T) {
 	c := validConfig(t)
 	obs := observe(t, c, true)
-	c.Pools[0].Start = addr(t, "10.0.0.5") // outside br-lan's subnet
+	c.Pools[0].IPv4.Start = addr(t, "10.0.0.5") // outside the lan network's subnet
 
-	plan, err := BuildPlan(NewDnsmasq(DefaultPaths()), c, testLinks(), obs, planNow)
+	plan, err := BuildPlan(NewDnsmasq(DefaultPaths()), c, testGroups(), obs, planNow)
 	if err == nil {
-		t.Fatal("BuildPlan accepted a config whose pool is outside its interface's subnet")
+		t.Fatal("BuildPlan accepted a config whose range is outside its network's subnet")
 	}
 	if len(plan.Changes) != 0 {
 		t.Errorf("a rejected config still produced changes: %v", changePaths(plan))
 	}
-	if !strings.Contains(err.Error(), "outside every subnet") {
+	if !strings.Contains(err.Error(), "the subnet of network") {
 		t.Errorf("error does not explain the problem: %v", err)
 	}
 }
@@ -437,7 +437,7 @@ func TestReservingAnAddressAnotherClientHoldsIsDisruptive(t *testing.T) {
 // meaningless.
 func TestIPv6LeasesDoNotMakeEveryChangeDisruptive(t *testing.T) {
 	current := validConfig(t)
-	current.Pools[0].RA = RASLAAC
+	current.Pools[0].IPv6 = &PoolIPv6{Mode: RASLAAC}
 	v6 := Lease{IP: addr(t, "2001:db8::1234"), IAID: "1", Expires: planNow.Add(time.Hour)}
 	obs := observe(t, current, true,
 		activeLease(t, "192.168.1.150", "aa:bb:cc:dd:ee:ff", "laptop"), v6)
@@ -456,7 +456,7 @@ func TestIPv6LeasesDoNotMakeEveryChangeDisruptive(t *testing.T) {
 // nothing renews.
 func TestDisablingDropsEveryLeaseIncludingIPv6(t *testing.T) {
 	current := validConfig(t)
-	current.Pools[0].RA = RASLAAC
+	current.Pools[0].IPv6 = &PoolIPv6{Mode: RASLAAC}
 	v6 := Lease{IP: addr(t, "2001:db8::1234"), IAID: "1", Expires: planNow.Add(time.Hour)}
 	obs := observe(t, current, true,
 		activeLease(t, "192.168.1.150", "aa:bb:cc:dd:ee:ff", "laptop"), v6)
@@ -469,7 +469,7 @@ func TestDisablingDropsEveryLeaseIncludingIPv6(t *testing.T) {
 	if plan.Impact != ImpactDisruptive {
 		t.Errorf("Impact = %s, want disruptive", plan.Impact)
 	}
-	if dropped := Dropped(desired, obs.Leases, planNow); len(dropped) != 2 {
+	if dropped := Dropped(desired, testGroups(), obs.Leases, planNow); len(dropped) != 2 {
 		t.Errorf("dropped %d leases, want both", len(dropped))
 	}
 }

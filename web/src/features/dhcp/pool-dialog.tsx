@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -20,8 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useInterfaces } from '@/features/link/queries'
-import type { InterfaceRow } from '@/lib/api-types'
-import type { Pool, RouterAdvertisementMode } from '@/lib/config-types'
+import type { Pool, PoolIPv4, RouterAdvertisementMode } from '@/lib/config-types'
 
 // The RA vocabulary comes from the published schema (RAMode.JSONSchema in Go),
 // so these labels are the only thing added here. The values themselves are not
@@ -43,7 +43,7 @@ const RA_OPTIONS: { value: Exclude<RouterAdvertisementMode, ''>; label: string; 
 
 const RA_LABEL = new Map(RA_OPTIONS.map((o) => [o.value as string, o.label]))
 
-const EMPTY: Pool = { interface: '', start: '', end: '' }
+const EMPTY: Pool = { group: '', ipv4: {} }
 
 export function PoolDialog({
   open,
@@ -64,51 +64,31 @@ export function PoolDialog({
   const [draft, setDraft] = useState<Pool>(initial ?? EMPTY)
   const editing = initial !== undefined
 
-  // Only the interfaces this router has been given: a range on anything else is
-  // refused by the server (design.md §3.4), so offering the rest would be
-  // offering choices that cannot work. The Interfaces card above is where that
-  // set is changed, and the empty state below points at it.
+  // The networks this router serves. A pool is served on one of them, not on an
+  // interface — which is what lets the range be checked against a subnet
+  // somebody declared rather than one an interface happens to hold.
   const interfaces = useInterfaces()
-  const adopted = (interfaces.data?.interfaces ?? []).filter((i) => i.adopted && !i.loopback)
-  const chosen = adopted.find((i) => i.name === draft.interface)
+  const networks = interfaces.data?.groups ?? []
+  const chosen = networks.find((g) => g.name === draft.group)
 
   function field<K extends keyof Pool>(key: K, value: Pool[K]) {
     setDraft((d) => ({ ...d, [key]: value }))
   }
-
-  /**
-   * Choosing an interface fills in a range that will pass validation.
-   *
-   * The numbers come from the server (internal/link suggestRange), which knows
-   * the subnet and excludes the three addresses a range must not contain — the
-   * network, the broadcast, and the router's own. Deriving them here would be a
-   * second implementation of subnet arithmetic that could disagree with the
-   * validator about what is legal.
-   *
-   * Only ever fills blanks. Re-picking an interface must not silently discard a
-   * range somebody typed.
-   */
-  function chooseInterface(row: InterfaceRow) {
-    // The suggestion comes from the *network* this interface carries, not from
-    // the address the interface happens to hold. That is the whole point of
-    // networks existing: the subnet is declared, so the derived range follows
-    // intent rather than following an observation somebody configured
-    // elsewhere. An interface in no network prefills nothing.
-    const group = interfaces.data?.groups?.find((g) => g.members.includes(row.name))
-    setDraft((d) => ({
-      ...d,
-      interface: row.name,
-      start: d.start || group?.suggested_start || '',
-      end: d.end || group?.suggested_end || '',
-    }))
+  function ipv4<K extends keyof PoolIPv4>(key: K, value: PoolIPv4[K]) {
+    setDraft((d) => ({ ...d, ipv4: { ...d.ipv4, [key]: value } }))
   }
 
-  // Only the fields the server requires are checked here. Everything else —
-  // whether the range sits inside the interface's subnet, whether a reservation
-  // collides — is the server's job (design.md §5.3.1) and is deliberately not
-  // duplicated: a second validator in the browser would be a second source of
-  // truth that disagrees with the first one the day either changes.
-  const complete = draft.interface.trim() && draft.start.trim() && draft.end.trim()
+  // Only the field the server requires. Everything else — whether the range
+  // sits inside the network's subnet, whether a reservation collides — is the
+  // server's job (design.md §5.3.1) and is deliberately not duplicated: a second
+  // validator in the browser would be a second source of truth that disagrees
+  // with the first one the day either changes.
+  //
+  // The range is not required any more. Left blank it is derived from the
+  // network's subnet, which is both less typing and the safer answer — see the
+  // hint under the fields.
+  const servesSomething = draft.ipv4 !== undefined || (draft.ipv6?.mode ?? 'off') !== 'off'
+  const complete = draft.group.trim() !== '' && servesSomething
 
   return (
     <Dialog
@@ -120,51 +100,45 @@ export function PoolDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{editing ? 'Edit address range' : 'Add address range'}</DialogTitle>
+          <DialogTitle>{editing ? `Edit ${initial.group}` : 'Add addresses'}</DialogTitle>
           <DialogDescription>
-            An address range served on one interface. The range must fall inside
-            a subnet already configured on that interface.
+            What a network hands out. IPv4 and IPv6 are set separately — a
+            network can do either, or both.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="pool-interface">Interface</Label>
+            <Label htmlFor="pool-group">Network</Label>
             {editing ? (
               <>
-                <Input id="pool-interface" value={draft.interface} disabled />
+                <Input id="pool-group" value={draft.group} disabled />
                 <p className="text-xs text-muted-foreground">
-                  The interface identifies this range and cannot be changed.
-                  Remove and re-add to move it.
+                  The network identifies this pool and cannot be changed. Remove and re-add
+                  to move it.
                 </p>
               </>
-            ) : adopted.length === 0 ? (
+            ) : networks.length === 0 ? (
               <p
-                id="pool-interface"
+                id="pool-group"
                 className="rounded-lg border border-dashed px-3 py-4 text-center text-sm text-muted-foreground"
               >
-                No interface has been given to this router yet. Switch one on
-                under Interfaces above, then come back.
+                No network yet. Create one under Networks — it is where the subnet is
+                declared, and a range needs one to sit in.
               </p>
             ) : (
               <>
-                <Select
-                  value={draft.interface}
-                  onValueChange={(name) => {
-                    const row = adopted.find((i) => i.name === name)
-                    if (row) chooseInterface(row)
-                  }}
-                >
-                  <SelectTrigger id="pool-interface" className="w-full">
-                    <SelectValue placeholder="Choose an interface" />
+                <Select value={draft.group} onValueChange={(name) => field('group', name ?? '')}>
+                  <SelectTrigger id="pool-group" className="w-full">
+                    <SelectValue placeholder="Choose a network" />
                   </SelectTrigger>
                   <SelectContent>
-                    {adopted.map((row) => (
-                      <SelectItem key={row.name} value={row.name}>
+                    {networks.map((g) => (
+                      <SelectItem key={g.name} value={g.name}>
                         <span className="flex flex-col gap-0.5">
-                          <span className="font-mono">{row.name}</span>
+                          <span className="font-mono">{g.name}</span>
                           <span className="text-xs text-muted-foreground">
-                            {row.subnet ?? 'no IPv4 address'}
+                            {g.subnet ?? 'no IPv4 subnet'}
                           </span>
                         </span>
                       </SelectItem>
@@ -174,71 +148,112 @@ export function PoolDialog({
                 {chosen && (
                   <p className="text-xs text-muted-foreground">
                     {chosen.subnet
-                      ? `Network ${chosen.subnet}. This router is ${chosen.address} on it.`
-                      : 'This interface has no IPv4 address, so a range here has no subnet to sit in.'}
+                      ? `Network ${chosen.subnet}. This router is ${chosen.router} on it.`
+                      : 'This network has no IPv4 subnet, so it can only advertise IPv6.'}
                   </p>
                 )}
               </>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="pool-start">First address</Label>
-              <Input
-                id="pool-start"
-                placeholder="192.168.1.100"
-                value={draft.start}
-                onChange={(e) => field('start', e.target.value)}
+          {/* IPv4 and IPv6 are two sections, not two fields in one, because
+              they are two decisions. "Hand out 172.16.1.100-200" and "advertise
+              the prefix so devices configure themselves" have nothing in common
+              except the network they happen on — and the old form put the
+              second one in a dropdown beside the lease time, which said
+              otherwise. */}
+          <fieldset className="grid gap-3 rounded-lg border p-3">
+            <div className="flex items-center justify-between">
+              <legend className="text-sm font-medium">IPv4 addresses</legend>
+              <Switch
+                checked={draft.ipv4 !== undefined}
+                onCheckedChange={(on) => field('ipv4', on ? {} : undefined)}
+                aria-label="Hand out IPv4 addresses"
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="pool-end">Last address</Label>
-              <Input
-                id="pool-end"
-                placeholder="192.168.1.200"
-                value={draft.end}
-                onChange={(e) => field('end', e.target.value)}
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="pool-lease">Lease time</Label>
-              <Input
-                id="pool-lease"
-                placeholder="12h"
-                value={draft.lease_time ?? ''}
-                onChange={(e) => field('lease_time', e.target.value || undefined)}
-              />
+            {draft.ipv4 === undefined ? (
               <p className="text-xs text-muted-foreground">
-                Blank for the default. Units: s, m, h, d, w.
+                No IPv4 addresses are handed out here. Devices get an address only if this
+                network advertises IPv6 below.
               </p>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="pool-ra">IPv6</Label>
-              <Select
-                value={draft.ra ?? 'off'}
-                onValueChange={(v) => field('ra', v as RouterAdvertisementMode)}
-              >
-                <SelectTrigger id="pool-ra" className="w-full">
-                  {/* Without the render function this shows the raw schema
-                      value — the trigger read "slaac". */}
-                  <SelectValue>{(value: string) => RA_LABEL.get(value) ?? 'Off'}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {RA_OPTIONS.map(({ value, label, hint }) => (
-                    <SelectItem key={value} value={value}>
-                      <span className="flex flex-col gap-0.5">
-                        <span>{label}</span>
-                        <span className="text-xs text-muted-foreground">{hint}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="pool-start">First address</Label>
+                    <Input
+                      id="pool-start"
+                      placeholder={chosen?.suggested_start ?? '192.168.1.100'}
+                      value={draft.ipv4.start ?? ''}
+                      onChange={(e) => ipv4('start', e.target.value || undefined)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="pool-end">Last address</Label>
+                    <Input
+                      id="pool-end"
+                      placeholder={chosen?.suggested_end ?? '192.168.1.200'}
+                      value={draft.ipv4.end ?? ''}
+                      onChange={(e) => ipv4('end', e.target.value || undefined)}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {chosen?.suggested_start
+                    ? `Blank uses ${chosen.suggested_start}–${chosen.suggested_end}, derived from
+                       the network's subnet. It leaves the low addresses free for devices you
+                       configure by hand — DHCP cannot avoid an address it was never told about.`
+                    : "Blank derives a range from the network's subnet, leaving the low addresses free for devices configured by hand."}
+                </p>
+              </>
+            )}
+          </fieldset>
+
+          <fieldset className="grid gap-3 rounded-lg border p-3">
+            <legend className="text-sm font-medium">IPv6</legend>
+            <Select
+              value={draft.ipv6?.mode ?? 'off'}
+              onValueChange={(v) =>
+                field(
+                  'ipv6',
+                  !v || v === 'off' ? undefined : { mode: v as RouterAdvertisementMode },
+                )
+              }
+            >
+              <SelectTrigger id="pool-ra" className="w-full">
+                {/* Without the render function this shows the raw schema
+                    value — the trigger read "slaac". */}
+                <SelectValue>{(value: string) => RA_LABEL.get(value) ?? 'Off'}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {RA_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    <span className="flex flex-col gap-0.5">
+                      <span>{o.label}</span>
+                      <span className="text-xs text-muted-foreground">{o.hint}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              There is no range to set: the prefix comes from your internet connection, and
+              this router follows it when it changes.
+            </p>
+          </fieldset>
+
+          <div className="grid gap-2">
+            <Label htmlFor="pool-lease">Lease time</Label>
+            <Input
+              id="pool-lease"
+              placeholder="12h"
+              value={draft.lease_time ?? ''}
+              onChange={(e) => field('lease_time', e.target.value || undefined)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Blank for the default. Units: s, m, h, d, w. Applies to both families.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -274,7 +289,7 @@ export function PoolDialog({
               first impression to debug. */}
           <p className="text-xs text-muted-foreground">
             Blank means this router
-            {chosen?.address ? ` (${chosen.address})` : ''}. If something else on
+            {chosen?.router ? ` (${chosen.router})` : ''}. If something else on
             this network still provides the internet connection, put its address
             in both — otherwise devices will send their traffic and their name
             lookups here.
@@ -332,16 +347,28 @@ function splitList(value: string): string[] | undefined {
   return items.length ? items : undefined
 }
 
-/** Trims, and drops empty optional fields so they are omitted rather than sent blank. */
+/**
+ * Trims, and drops empty optional fields so they are omitted rather than sent
+ * blank.
+ *
+ * The IPv4 block matters here: an empty `{}` means "derive the range", while
+ * `{start: ""}` is a range the server has to reject. Blank fields have to
+ * disappear, not travel as empty strings.
+ */
 function normalise(pool: Pool): Pool {
-  return {
+  const out: Pool = {
     ...pool,
-    interface: pool.interface.trim(),
-    start: pool.start.trim(),
-    end: pool.end.trim(),
+    group: pool.group.trim(),
     lease_time: pool.lease_time?.trim() || undefined,
     gateway: pool.gateway?.trim() || undefined,
     domain: pool.domain?.trim() || undefined,
-    ra: pool.ra || undefined,
   }
+  if (pool.ipv4) {
+    out.ipv4 = {
+      start: pool.ipv4.start?.trim() || undefined,
+      end: pool.ipv4.end?.trim() || undefined,
+    }
+  }
+  if (!pool.ipv6?.mode || pool.ipv6.mode === 'off') out.ipv6 = undefined
+  return out
 }

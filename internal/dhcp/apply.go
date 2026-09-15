@@ -24,8 +24,8 @@ import (
 type Applier struct {
 	// Backend renders the daemon's files.
 	Backend Dnsmasq
-	// Links is the window onto the link module.
-	Links LinkView
+	// Groups is the window onto the link module's networks.
+	Groups GroupView
 	// Service supervises the daemon.
 	Service Service
 	// Paths is the on-disk layout.
@@ -83,7 +83,7 @@ func (a Applier) portCheck() func() (bool, error) {
 // exists — it is the development escape hatch, not a supported deployment
 // layout, and nothing but the daemon's own flags should ever set it. The store
 // is passed in already rooted, because core owns that path.
-func NewApplierAt(store *core.Store, links LinkView, root string) (Applier, error) {
+func NewApplierAt(store *core.Store, groups GroupView, root string) (Applier, error) {
 	paths := RootedPaths(root)
 	backend := NewDnsmasq(paths).WithSource(store.Path())
 	service, err := NewService(backend.Unit())
@@ -92,7 +92,7 @@ func NewApplierAt(store *core.Store, links LinkView, root string) (Applier, erro
 	}
 	return Applier{
 		Backend: backend,
-		Links:   links,
+		Groups:  groups,
 		Service: service,
 		Paths:   paths,
 		Store:   store,
@@ -195,7 +195,7 @@ func (a Applier) Plan(ctx context.Context, desired Config) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	return BuildPlan(a.Backend, desired, a.Links, obs, time.Now())
+	return BuildPlan(a.Backend, desired, a.Groups, obs, time.Now())
 }
 
 // Drift reports what has changed underneath stored intent.
@@ -219,7 +219,7 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	plan, err := BuildPlan(a.Backend, desired, a.Links, obs, time.Now())
+	plan, err := BuildPlan(a.Backend, desired, a.Groups, obs, time.Now())
 	if err != nil {
 		return ApplyResult{Plan: plan}, err
 	}
@@ -274,7 +274,7 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 		}
 	}
 
-	rendered, err := a.Backend.Render(desired, a.Links)
+	rendered, err := a.Backend.Render(desired, a.Groups)
 	if err != nil {
 		return result, err
 	}
@@ -508,11 +508,19 @@ func (a Applier) observedRoots() []string {
 func (a Applier) Leases() ([]Lease, []Problem, error) { return LoadLeases(a.Paths.LeaseFile) }
 
 // Usage summarises each pool's occupancy.
+//
+// A pool whose network has gone away is skipped rather than reported as empty.
+// "0 of 0 in use" is indistinguishable from a working network nobody is on,
+// and the missing network is already a validation error with a better message.
 func (a Applier) Usage(c Config, leases []Lease) []Usage {
 	out := make([]Usage, 0, len(c.Pools))
 	for _, p := range c.Pools {
-		out = append(out, UsageOf(p, leases, time.Now()))
+		info, err := a.Groups.Group(p.Group)
+		if err != nil {
+			continue
+		}
+		out = append(out, UsageOf(p, info, leases, time.Now()))
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Interface < out[j].Interface })
+	sort.Slice(out, func(i, j int) bool { return out[i].Group < out[j].Group })
 	return out
 }

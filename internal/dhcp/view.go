@@ -120,22 +120,22 @@ func viewLease(l Lease, now time.Time) leaseView {
 // client recomputing them would be a second implementation of "how full is this
 // pool" that could disagree with ours.
 type usageView struct {
-	Interface string `json:"interface"`
-	Size      int    `json:"size"`
-	Active    int    `json:"active"`
-	Expired   int    `json:"expired"`
-	Free      int    `json:"free"`
-	Percent   int    `json:"percent"`
+	Group   string `json:"group"`
+	Size    int    `json:"size"`
+	Active  int    `json:"active"`
+	Expired int    `json:"expired"`
+	Free    int    `json:"free"`
+	Percent int    `json:"percent"`
 }
 
 func viewUsage(u Usage) usageView {
 	return usageView{
-		Interface: u.Interface,
-		Size:      u.Size,
-		Active:    u.Active,
-		Expired:   u.Expired,
-		Free:      u.Free(),
-		Percent:   u.Percent(),
+		Group:   u.Group,
+		Size:    u.Size,
+		Active:  u.Active,
+		Expired: u.Expired,
+		Free:    u.Free(),
+		Percent: u.Percent(),
 	}
 }
 

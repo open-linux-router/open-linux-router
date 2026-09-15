@@ -97,7 +97,7 @@ func testApplier(t *testing.T) (Applier, *fakeService) {
 	svc := &fakeService{}
 	return Applier{
 		Backend: NewDnsmasq(paths),
-		Links:   testLinks(),
+		Groups:  testGroups(),
 		Service: svc,
 		Paths:   paths,
 		Store:   core.NewStore(filepath.Join(root, "olr.json"), ModuleName),
@@ -392,7 +392,7 @@ func TestApplyStoresIntentEvenWhenTheServiceFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(stored.Pools) != 1 || stored.Pools[0].Interface != "br-lan" {
+	if len(stored.Pools) != 1 || stored.Pools[0].Group != "lan" {
 		t.Errorf("intent was not stored before the failure: %+v", stored)
 	}
 }
@@ -400,7 +400,7 @@ func TestApplyStoresIntentEvenWhenTheServiceFails(t *testing.T) {
 func TestApplyRejectsAnInvalidConfigBeforeWritingAnything(t *testing.T) {
 	a, svc := testApplier(t)
 	c := validConfig(t)
-	c.Pools[0].Start = addr(t, "10.0.0.5") // outside br-lan
+	c.Pools[0].IPv4.Start = addr(t, "10.0.0.5") // outside the lan network's subnet
 
 	if _, err := a.Apply(context.Background(), c); err == nil {
 		t.Fatal("Apply accepted an invalid config")

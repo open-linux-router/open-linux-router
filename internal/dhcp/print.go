@@ -44,21 +44,38 @@ func writeConfigText(w io.Writer, c Config) error {
 
 func writePoolsText(w io.Writer, pools []Pool) error {
 	if len(pools) == 0 {
-		return cli.NoObjects(w, "pools", "Add one with `olr dhcp add pool <interface>`.")
+		return cli.NoObjects(w, "pools", "Add one with `olr dhcp add pool <network>`.")
 	}
 	t := table(w)
-	fmt.Fprintln(t, "INTERFACE\tRANGE\tLEASE\tGATEWAY\tDNS\tDOMAIN\tIPv6")
+	fmt.Fprintln(t, "NETWORK\tIPv4\tIPv6\tLEASE\tGATEWAY\tDNS\tDOMAIN")
 	for _, p := range pools {
-		fmt.Fprintf(t, "%s\t%s-%s\t%s\t%s\t%s\t%s\t%s\n",
-			p.Interface, p.Start, p.End,
+		fmt.Fprintf(t, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			p.Group,
+			rangeText(p),
+			p.RA(),
 			p.LeaseTimeOrDefault(),
 			orRouter(p.Gateway == nil, addrOrEmpty(p.Gateway)),
 			orRouter(len(p.DNS) == 0, joinAddrs(p.DNS)),
 			orDash(p.Domain),
-			p.RA.OrDefault(),
 		)
 	}
 	return t.Flush()
+}
+
+// rangeText renders the IPv4 half, saying when the range is derived rather than
+// printing a value the operator never typed as though they had.
+//
+// `olr net show` prints the addresses it resolves to; this column is about what
+// is *configured*, and "derived" is the honest answer to that.
+func rangeText(p Pool) string {
+	switch {
+	case p.IPv4 == nil:
+		return "off"
+	case p.IPv4.Explicit():
+		return fmt.Sprintf("%s-%s", p.IPv4.Start, p.IPv4.End)
+	default:
+		return "derived"
+	}
 }
 
 // writePoolText and writeReservationText are the detail halves of docs/cli.md
@@ -67,14 +84,14 @@ func writePoolsText(w io.Writer, pools []Pool) error {
 
 func writePoolText(w io.Writer, p Pool) error {
 	rows := [][2]string{
-		{"interface", p.Interface},
-		{"range", fmt.Sprintf("%s-%s", p.Start, p.End)},
+		{"network", p.Group},
+		{"ipv4", rangeText(p)},
+		{"ipv6", string(p.RA())},
 		{"lease", fmt.Sprintf("%s", p.LeaseTimeOrDefault())},
 		{"gateway", orRouter(p.Gateway == nil, addrOrEmpty(p.Gateway))},
 		{"dns", orRouter(len(p.DNS) == 0, joinAddrs(p.DNS))},
 		{"ntp", orDash(joinAddrs(p.NTP))},
 		{"domain", orDash(p.Domain)},
-		{"ipv6", fmt.Sprintf("%s", p.RA.OrDefault())},
 	}
 	for _, o := range p.Options {
 		rows = append(rows, [2]string{"option", o.Option + "=" + o.Value})
@@ -230,7 +247,7 @@ func writeStatusText(w io.Writer, status statusResponse, leases leasesResponse) 
 		fmt.Fprintln(t, "INTERFACE\tSIZE\tACTIVE\tEXPIRED\tFREE\tUSED")
 		for _, u := range leases.Usage {
 			fmt.Fprintf(t, "%s\t%d\t%d\t%d\t%d\t%d%%\n",
-				u.Interface, u.Size, u.Active, u.Expired, u.Free, u.Percent)
+				u.Group, u.Size, u.Active, u.Expired, u.Free, u.Percent)
 		}
 		if err := t.Flush(); err != nil {
 			return err

@@ -4,7 +4,7 @@ Usage:
   olr dhcp add [command]
 
 Available Commands:
-  pool        Add an address pool on an interface
+  pool        Serve addresses on a network
   reservation Reserve an address for a client
 
 Flags:

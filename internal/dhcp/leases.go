@@ -1,13 +1,14 @@
 package dhcp
 
 import (
-	"encoding/binary"
 	"fmt"
 	"net/netip"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 // Leases are an observed resource, not configuration (design.md §6.2): read
@@ -142,8 +143,8 @@ func LoadLeases(path string) ([]Lease, []Problem, error) {
 
 // Usage summarises how full a pool is.
 type Usage struct {
-	// Interface is the pool this describes.
-	Interface string
+	// Group is the network this describes.
+	Group string
 	// Size is the number of addresses in the range.
 	Size int
 	// Active is how many currently hold a live lease.
@@ -164,10 +165,18 @@ func (u Usage) Percent() int {
 }
 
 // UsageOf counts leases falling inside a pool's range.
-func UsageOf(p Pool, leases []Lease, now time.Time) Usage {
-	u := Usage{Interface: p.Interface, Size: RangeSize(p.Start, p.End)}
+//
+// It takes the network so that a derived range is resolved the same way the
+// renderer resolves it. A pool with no range of its own is not a pool with no
+// addresses — it is one whose addresses come from its network's subnet.
+func UsageOf(p Pool, g GroupInfo, leases []Lease, now time.Time) Usage {
+	start, end, ok := p.Range(g)
+	u := Usage{Group: p.Group, Size: core.RangeSize(start, end)}
+	if !ok {
+		return u
+	}
 	for _, l := range leases {
-		if !inRange(p.Start, p.End, l.IP) {
+		if !core.InRange(start, end, l.IP) {
 			continue
 		}
 		if l.Active(now) {
@@ -187,7 +196,7 @@ func UsageOf(p Pool, leases []Lease, now time.Time) Usage {
 func LeasesIn(start, end netip.Addr, leases []Lease) []Lease {
 	var out []Lease
 	for _, l := range leases {
-		if inRange(start, end, l.IP) {
+		if core.InRange(start, end, l.IP) {
 			out = append(out, l)
 		}
 	}
@@ -195,10 +204,8 @@ func LeasesIn(start, end netip.Addr, leases []Lease) []Lease {
 }
 
 // RangeSize counts the addresses in an inclusive IPv4 range.
-func RangeSize(start, end netip.Addr) int {
-	if !start.Is4() || !end.Is4() || start.Compare(end) > 0 {
-		return 0
-	}
-	s, e := start.As4(), end.As4()
-	return int(binary.BigEndian.Uint32(e[:]) - binary.BigEndian.Uint32(s[:]) + 1)
-}
+//
+// Kept as this module's spelling of core.RangeSize because it is part of the
+// published surface; the arithmetic itself moved to core, where `link` derives
+// a range with it and the two cannot disagree.
+func RangeSize(start, end netip.Addr) int { return core.RangeSize(start, end) }

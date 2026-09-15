@@ -1,19 +1,25 @@
 package dhcp
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"net/netip"
 	"strings"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 // Validation is the highest-value mechanism in the whole apply story
 // (design.md §5.3.1). There is no cross-module transaction, so nothing unwinds
 // a bad change — but atomic *validation* is cheap where atomic *apply* is not,
-// because validation is pure reads and needs no coordination. Catching a pool
-// that has drifted outside its interface's subnet before anything is written
-// prevents most of the breakage a rollback would have had to repair.
+// because validation is pure reads and needs no coordination.
+//
+// It became markedly more pure when pools moved from interfaces to networks.
+// Every rule about a range used to be checked against an interface's observed
+// prefixes, so the rules needed the kernel and a stored config could be made
+// invalid by something that happened outside olr entirely. Now a range is
+// checked against the network's stored subnet, and the only fact still read
+// from the machine is whether the members are up — which is a warning.
 
 // Problem is one validation finding, addressed by a JSON-ish path so a UI can
 // attach it to the field that caused it.
@@ -108,48 +114,64 @@ var renderedOptions = map[string]string{
 //
 // It is pure: no files, no netlink, no root. That is what lets the entire rule
 // set be table-tested and lets `olr dhcp` check a config on a laptop.
-func Validate(c Config, links LinkView) Result {
+func Validate(c Config, groups GroupView) Result {
 	var r Result
 
 	if c.Enabled && len(c.Pools) == 0 {
 		r.warnf("pools", "DHCP is enabled but no pool is configured, so nothing will be served")
 	}
 
-	// prefixes maps an interface to the subnet its pool sits in, for the
-	// reservation checks below.
-	prefixes := map[string]netip.Prefix{}
-	seenIface := map[string]int{}
+	// subnets maps a network to the prefix its pool sits in, and ranges to the
+	// resolved range, for the checks below. Both are resolved once: a derived
+	// range recomputed per rule is a derived range that eventually differs
+	// between two of them.
+	subnets := map[string]netip.Prefix{}
+	ranges := map[string][2]netip.Addr{}
+	seenGroup := map[string]int{}
 
 	for i, p := range c.Pools {
 		path := fmt.Sprintf("pools[%d]", i)
 
-		if p.Interface == "" {
-			r.errorf(path+".interface", "required")
+		if p.Group == "" {
+			r.errorf(path+".group", "required")
 			continue
 		}
-		if first, dup := seenIface[p.Interface]; dup {
-			r.errorf(path+".interface", "interface %q already has a pool at pools[%d]; one pool per interface", p.Interface, first)
+		if first, dup := seenGroup[p.Group]; dup {
+			r.errorf(path+".group", "network %q already has a pool at pools[%d]; one pool per network",
+				p.Group, first)
 			continue
 		}
-		seenIface[p.Interface] = i
+		seenGroup[p.Group] = i
 
-		prefix, ok := validatePoolRange(&r, path, p, links)
-		if ok {
-			prefixes[p.Interface] = prefix
+		info, err := groups.Group(p.Group)
+		if err != nil {
+			r.errorf(path+".group", "%v; `olr net show` lists the networks there are", err)
+			continue
 		}
+		if !info.Up {
+			r.warnf(path+".group", "%q is down; the pool is configured but will not serve until it comes up",
+				p.Group)
+		}
+		if p.IPv4 == nil && p.RA() == RAOff {
+			r.errorf(path, "%q serves neither IPv4 nor IPv6, so it does nothing; "+
+				"give it an ipv4 range or set ipv6.mode", p.Group)
+		}
+
+		if start, end, ok := validatePoolIPv4(&r, path, p, info); ok {
+			subnets[p.Group] = info.Subnet
+			ranges[p.Group] = [2]netip.Addr{start, end}
+		}
+		validatePoolIPv6(&r, path, p, info)
 
 		if lt := p.LeaseTime; lt != 0 && lt < MinLeaseTime {
 			r.errorf(path+".lease_time", "%s is below dnsmasq's two minute minimum", lt)
 		}
-		if !p.RA.Valid() {
-			r.errorf(path+".ra", "unknown mode %q (want %v)", p.RA, RAModes())
-		}
 		validateOptions(&r, path, p.Options)
 	}
 
-	validateOverlaps(&r, c.Pools)
-	validateReservations(&r, c, prefixes)
-	validateCapacity(&r, c)
+	validateOverlaps(&r, c, ranges)
+	validateReservations(&r, c, subnets, ranges)
+	validateCapacity(&r, c, ranges)
 	validateExtraConf(&r, c.ExtraConf)
 
 	return r
@@ -167,10 +189,12 @@ const LargePoolWarning = 10000
 // pool that cannot fill is worse — but a /16 handed out to an untrusted network
 // is a decision worth making on purpose rather than by leaving a prefix at its
 // default. A warning says so and gets out of the way.
-func validateCapacity(r *Result, c Config) {
+func validateCapacity(r *Result, c Config, ranges map[string][2]netip.Addr) {
 	total := 0
 	for _, p := range c.Pools {
-		total += RangeSize(p.Start, p.End)
+		if rng, ok := ranges[p.Group]; ok {
+			total += core.RangeSize(rng[0], rng[1])
+		}
 	}
 	if total > LargePoolWarning {
 		r.warnf("pools",
@@ -180,61 +204,69 @@ func validateCapacity(r *Result, c Config) {
 	}
 }
 
-// validatePoolRange checks the range against the interface it is served on, and
-// returns the interface prefix it belongs to.
-func validatePoolRange(r *Result, path string, p Pool, links LinkView) (netip.Prefix, bool) {
+// validatePoolIPv4 checks a pool's range against the network it is served on,
+// and returns the resolved range.
+//
+// Every rule below reads the network's *stored* subnet. That is the change this
+// whole thing exists for: a range is now wrong because it contradicts the
+// network it is on, not because an interface somewhere happens to hold a
+// different address — a complaint the operator had no way to act on, because
+// nothing in olr could change that address.
+func validatePoolIPv4(r *Result, path string, p Pool, g GroupInfo) (netip.Addr, netip.Addr, bool) {
+	if p.IPv4 == nil {
+		return netip.Addr{}, netip.Addr{}, false
+	}
+	v4 := *p.IPv4
+
+	if !g.HasIPv4() {
+		r.errorf(path+".ipv4", "%q has no IPv4 subnet, so there is nothing to hand out from; "+
+			"give it one with `olr net set %s --subnet <cidr>`", g.Name, g.Name)
+		return netip.Addr{}, netip.Addr{}, false
+	}
+
 	switch {
-	case !p.Start.IsValid():
-		r.errorf(path+".start", "required")
-		return netip.Prefix{}, false
-	case !p.End.IsValid():
-		r.errorf(path+".end", "required")
-		return netip.Prefix{}, false
-	case !p.Start.Is4() || !p.End.Is4():
-		// IPv6 pools are expressed through the ra field instead, which lets
-		// dnsmasq derive the prefix from the interface. A literal IPv6 range
-		// would have to be re-typed every time a delegated prefix changed.
-		r.errorf(path, "pool ranges are IPv4; configure IPv6 with the ra field")
-		return netip.Prefix{}, false
-	case p.Start.Compare(p.End) > 0:
-		r.errorf(path, "start %s is above end %s", p.Start, p.End)
-		return netip.Prefix{}, false
+	case v4.Explicit() && !v4.Start.IsValid():
+		r.errorf(path+".ipv4.start", "required when an end is given")
+		return netip.Addr{}, netip.Addr{}, false
+	case v4.Explicit() && !v4.End.IsValid():
+		r.errorf(path+".ipv4.end", "required when a start is given")
+		return netip.Addr{}, netip.Addr{}, false
+	case v4.Explicit() && (!v4.Start.Is4() || !v4.End.Is4()):
+		// An IPv6 literal here is almost always somebody looking for the ipv6
+		// block, so the message points at it rather than just refusing.
+		r.errorf(path+".ipv4", "an IPv4 range takes IPv4 addresses; configure IPv6 under ipv6.mode")
+		return netip.Addr{}, netip.Addr{}, false
+	case v4.Explicit() && v4.Start.Compare(v4.End) > 0:
+		r.errorf(path+".ipv4", "start %s is above end %s", v4.Start, v4.End)
+		return netip.Addr{}, netip.Addr{}, false
 	}
 
-	info, err := links.Interface(p.Interface)
-	if err != nil {
-		r.errorf(path+".interface", "%v", err)
-		return netip.Prefix{}, false
-	}
-	if !info.Adopted {
-		// design.md §3.4: adopt-only. Serving DHCP on an interface the operator
-		// never handed us is the exact surprise that rule forbids.
-		r.errorf(path+".interface", "%q is not adopted; run `olr adopt %s` first", p.Interface, p.Interface)
-		return netip.Prefix{}, false
-	}
-	if !info.Up {
-		r.warnf(path+".interface", "%q is down; the pool is configured but will not serve until it comes up", p.Interface)
-	}
-
-	prefix, ok := info.FindPrefix(p.Start)
+	start, end, ok := p.Range(g)
 	if !ok {
-		r.errorf(path+".start", "%s is outside every subnet on %s (%s)", p.Start, p.Interface, formatPrefixes(info.Prefixes))
-		return netip.Prefix{}, false
-	}
-	if !prefix.Contains(p.End) {
-		r.errorf(path+".end", "%s is outside %s, the subnet the range starts in; a pool cannot span subnets", p.End, prefix)
-		return netip.Prefix{}, false
+		r.errorf(path+".ipv4", "%s has no addresses to hand out", g.Subnet)
+		return netip.Addr{}, netip.Addr{}, false
 	}
 
-	// The router's own address must not be handed to a client.
-	if router := prefix.Addr(); inRange(p.Start, p.End, router) {
-		r.errorf(path, "the range contains %s, which is %s's own address", router, p.Interface)
+	prefix := g.Subnet
+	if !prefix.Contains(start) {
+		r.errorf(path+".ipv4.start", "%s is outside %s, the subnet of network %q", start, prefix, g.Name)
+		return netip.Addr{}, netip.Addr{}, false
 	}
-	if network := prefix.Masked().Addr(); inRange(p.Start, p.End, network) {
-		r.errorf(path, "the range contains the network address %s", network)
+	if !prefix.Contains(end) {
+		r.errorf(path+".ipv4.end", "%s is outside %s, the subnet of network %q", end, prefix, g.Name)
+		return netip.Addr{}, netip.Addr{}, false
 	}
-	if bcast, ok := broadcast(prefix); ok && inRange(p.Start, p.End, bcast) {
-		r.errorf(path, "the range contains the broadcast address %s", bcast)
+
+	// The three addresses that cannot be handed to a client.
+	if core.InRange(start, end, g.Router) {
+		r.errorf(path+".ipv4", "the range contains %s, which is this router's own address on %q",
+			g.Router, g.Name)
+	}
+	if network := prefix.Masked().Addr(); core.InRange(start, end, network) {
+		r.errorf(path+".ipv4", "the range contains the network address %s", network)
+	}
+	if bcast, ok := core.Broadcast(prefix); ok && core.InRange(start, end, bcast) {
+		r.errorf(path+".ipv4", "the range contains the broadcast address %s", bcast)
 	}
 
 	if p.Gateway != nil {
@@ -256,29 +288,62 @@ func validatePoolRange(r *Result, path string, p Pool, links LinkView) (netip.Pr
 		}
 	}
 
-	return prefix, true
+	return start, end, true
+}
+
+// validatePoolIPv6 checks the IPv6 half, which is a mode and nothing else.
+//
+// There is no range to check because there is no range: dnsmasq's
+// `constructor:` derives the prefix from the member interface, so what would be
+// validated here is a fact about the uplink's delegation that neither module
+// stores.
+func validatePoolIPv6(r *Result, path string, p Pool, g GroupInfo) {
+	if p.IPv6 == nil {
+		return
+	}
+	if !p.IPv6.Mode.Valid() {
+		r.errorf(path+".ipv6.mode", "unknown mode %q (want %v)", p.IPv6.Mode, RAModes())
+		return
+	}
+	if p.IPv6.Mode.OrDefault() == RAStateful {
+		// design.md §4.3: Android has never implemented DHCPv6 and Google closed
+		// the request as "Won't Fix (Intended Behavior)". A network relying on
+		// stateful DHCPv6 silently loses every Android device on it, which for
+		// this audience is most of the handsets.
+		r.warnf(path+".ipv6.mode",
+			"stateful DHCPv6 hands out addresses that Android devices will not ask for — "+
+				"they get no DHCPv6 address at all. They still work via the advertised prefix, "+
+				"but anything depending on a DHCPv6 lease will not see them")
+	}
+	if len(g.Members) == 0 {
+		r.warnf(path+".ipv6", "%q has no interface, so nothing can be advertised on it", g.Name)
+	}
 }
 
 // validateOverlaps rejects two pools handing out the same address. Ranges on
-// different interfaces cannot legitimately overlap either — if they do, the
-// subnets themselves collide and routing is already broken.
-func validateOverlaps(r *Result, pools []Pool) {
-	for i := range pools {
-		for j := i + 1; j < len(pools); j++ {
-			a, b := pools[i], pools[j]
-			if !a.Start.IsValid() || !a.End.IsValid() || !b.Start.IsValid() || !b.End.IsValid() {
+// different networks cannot legitimately overlap either — if they do, the
+// subnets themselves collide, and `link` refuses that separately.
+func validateOverlaps(r *Result, c Config, ranges map[string][2]netip.Addr) {
+	for i := range c.Pools {
+		a, aok := ranges[c.Pools[i].Group]
+		if !aok {
+			continue
+		}
+		for j := i + 1; j < len(c.Pools); j++ {
+			b, bok := ranges[c.Pools[j].Group]
+			if !bok {
 				continue
 			}
-			if a.Start.Compare(b.End) <= 0 && b.Start.Compare(a.End) <= 0 {
+			if a[0].Compare(b[1]) <= 0 && b[0].Compare(a[1]) <= 0 {
 				r.errorf(fmt.Sprintf("pools[%d]", j),
 					"range %s-%s overlaps pools[%d] (%s) which serves %s-%s",
-					b.Start, b.End, i, a.Interface, a.Start, a.End)
+					b[0], b[1], i, c.Pools[i].Group, a[0], a[1])
 			}
 		}
 	}
 }
 
-func validateReservations(r *Result, c Config, prefixes map[string]netip.Prefix) {
+func validateReservations(r *Result, c Config, subnets map[string]netip.Prefix, ranges map[string][2]netip.Addr) {
 	seenMAC := map[string]int{}
 	seenIP := map[netip.Addr]int{}
 
@@ -297,14 +362,14 @@ func validateReservations(r *Result, c Config, prefixes map[string]netip.Prefix)
 		if !res.IP.IsValid() {
 			r.errorf(path+".ip", "required")
 		} else if !res.IP.Is4() {
-			r.errorf(path+".ip", "reservations are IPv4; IPv6 clients are addressed by the ra field")
+			r.errorf(path+".ip", "reservations are IPv4; IPv6 clients are addressed by the ipv6 block")
 		} else {
 			if first, dup := seenIP[res.IP]; dup {
 				r.errorf(path+".ip", "%s is already reserved at reservations[%d]", res.IP, first)
 			} else {
 				seenIP[res.IP] = i
 			}
-			validateReservationSubnet(r, path, c, res, prefixes)
+			validateReservationSubnet(r, path, res, subnets, ranges)
 		}
 
 		if res.Hostname != "" {
@@ -321,18 +386,18 @@ func validateReservations(r *Result, c Config, prefixes map[string]netip.Prefix)
 // validateReservationSubnet enforces dnsmasq's own rule — a dhcp-host address
 // must share a subnet with some dhcp-range, though it need not be inside the
 // range itself.
-func validateReservationSubnet(r *Result, path string, c Config, res Reservation, prefixes map[string]netip.Prefix) {
-	for iface, prefix := range prefixes {
+func validateReservationSubnet(r *Result, path string, res Reservation, subnets map[string]netip.Prefix, ranges map[string][2]netip.Addr) {
+	for group, prefix := range subnets {
 		if !prefix.Contains(res.IP) {
 			continue
 		}
-		if pool, ok := c.Pool(iface); ok && inRange(pool.Start, pool.End, res.IP) {
+		if rng, ok := ranges[group]; ok && core.InRange(rng[0], rng[1], res.IP) {
 			// Permitted by dnsmasq, and it does honour the reservation. But the
 			// address is also in the pool it hands out from, so the margin for
 			// error is one dnsmasq bug wide. Say so; do not refuse.
 			r.warnf(path+".ip",
 				"%s is inside %s's dynamic range (%s-%s); reserving an address outside the range removes any chance of a collision",
-				res.IP, iface, pool.Start, pool.End)
+				res.IP, group, rng[0], rng[1])
 		}
 		return
 	}
@@ -401,37 +466,4 @@ func validateHostname(h string) error {
 		}
 	}
 	return nil
-}
-
-// inRange reports whether addr falls within [start, end] inclusive.
-func inRange(start, end, addr netip.Addr) bool {
-	if !start.IsValid() || !end.IsValid() || !addr.IsValid() {
-		return false
-	}
-	return start.Compare(addr) <= 0 && addr.Compare(end) <= 0
-}
-
-// broadcast returns the IPv4 broadcast address of a prefix.
-func broadcast(p netip.Prefix) (netip.Addr, bool) {
-	p = p.Masked()
-	if !p.Addr().Is4() {
-		return netip.Addr{}, false
-	}
-	b := p.Addr().As4()
-	host := uint(32 - p.Bits())
-	// A shift of 32 yields 0 in Go, so 1<<32-1 is the all-ones mask a /0 wants.
-	v := binary.BigEndian.Uint32(b[:]) | (uint32(1)<<host - 1)
-	binary.BigEndian.PutUint32(b[:], v)
-	return netip.AddrFrom4(b), true
-}
-
-func formatPrefixes(prefixes []netip.Prefix) string {
-	if len(prefixes) == 0 {
-		return "it has no addresses"
-	}
-	parts := make([]string, len(prefixes))
-	for i, p := range prefixes {
-		parts[i] = p.String()
-	}
-	return strings.Join(parts, ", ")
 }

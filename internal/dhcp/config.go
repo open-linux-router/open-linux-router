@@ -32,8 +32,8 @@ type Config struct {
 	// retyping it.
 	Enabled bool `json:"enabled"`
 
-	// Pools holds at most one address pool per interface (design.md — the
-	// interface is the pool's identity).
+	// Pools holds at most one pool per network (design.md §11.4 — multiple
+	// pools per group is permanently the escape hatch's job).
 	Pools []Pool `json:"pools,omitempty"`
 
 	// Reservations are deliberately global rather than nested under a pool.
@@ -49,32 +49,70 @@ type Config struct {
 	//
 	// It may not set directives the module renders itself; see validateExtra.
 	ExtraConf string `json:"extra_dnsmasq_conf,omitempty"`
+
+	// Legacy carries the pre-0.3 pools when the document held them, so that the
+	// daemon can create the networks they imply and finish keying them.
+	//
+	// Not serialised: it exists between parsing an old document and rewriting a
+	// current one, and a `-` tag is what keeps it out of both the stored file
+	// and the published schema. See unmarshalLegacy.
+	Legacy []LegacyPool `json:"-"`
 }
 
-// Pool is one interface's dynamic address range.
+// Pool is what one network serves.
+//
+// # Why IPv4 and IPv6 are separate objects
+//
+// They were one: an IPv4 range with an `ra` field bolted onto it. Two arguments
+// against that, pointing the same way.
+//
+// The operator's is that these are two decisions. "Hand out 172.16.1.100–200"
+// and "advertise the prefix so devices configure themselves" have nothing in
+// common except the network they happen on, and a form that puts the second in
+// a dropdown beside the lease time is claiming otherwise.
+//
+// The backend's is that dnsmasq already models them apart: an IPv6 range is its
+// own `dhcp-range` line (`dhcp-range=::,constructor:ens18,ra-stateless`). The
+// old shape collapsed two things into one and made render.go split them back
+// out, leaving us a layer of indirection further from the daemon than the
+// daemon is from itself.
+//
+// It also makes a configuration expressible that was not: a network that serves
+// only RA. The old Pool required IPv4 Start and End, so "no v4 here, just
+// advertise the prefix" could not be written down at all.
 type Pool struct {
-	// Interface is the pool's primary key. It must name an interface that has
-	// been adopted (design.md §7) — we never serve DHCP on something the
-	// operator did not hand us.
-	Interface string `json:"interface"`
+	// Group is the pool's primary key: the network it serves (design.md §4.4).
+	//
+	// It used to be the kernel interface name — the thing §4.4 calls an
+	// implementation detail. Keying on it meant a range was checked against
+	// whatever address the interface had been given from outside olr.
+	Group string `json:"group"`
 
-	// Start and End bound the dynamic range, inclusive. Both must fall inside
-	// one of the interface's own prefixes; validate.go enforces that against
-	// the link module rather than trusting what is typed here.
-	Start netip.Addr `json:"start"`
-	End   netip.Addr `json:"end"`
+	// IPv4 is nil for a network that hands out no IPv4 addresses.
+	IPv4 *PoolIPv4 `json:"ipv4,omitempty"`
+
+	// IPv6 is nil for RAOff.
+	IPv6 *PoolIPv6 `json:"ipv6,omitempty"`
 
 	// LeaseTime is zero for DefaultLeaseTime.
+	//
+	// Shared rather than per-family, like everything below it. dnsmasq writes
+	// these onto each range separately, but they are one decision to an operator
+	// — "how long a lease lasts here" is not a question anybody answers twice.
 	LeaseTime Duration `json:"lease_time,omitempty"`
 
-	// Gateway is nil for "the router's own address on this interface", which is
-	// what almost every deployment wants. Set it only to hand clients a
-	// different next hop.
+	// Gateway is nil for "the network's router address", which is what almost
+	// every deployment wants. Set it only to hand clients a different next hop.
+	//
+	// IPv4 only, and not for want of symmetry: DHCPv6 has no default-gateway
+	// option and never had one (design.md §4.3). IPv6 hosts learn their next hop
+	// from router advertisement and nowhere else.
 	Gateway *netip.Addr `json:"gateway,omitempty"`
 
 	// DNS is nil for "the router itself". Note that the router answering DNS is
 	// the dns module's job, not ours (design.md §4.2) — we only advertise the
-	// address.
+	// address. Both families may appear here; render.go sorts them onto the
+	// right range.
 	DNS []netip.Addr `json:"dns,omitempty"`
 
 	// Domain is DHCP option 15, the client's search domain.
@@ -83,14 +121,40 @@ type Pool struct {
 	// NTP is DHCP option 42.
 	NTP []netip.Addr `json:"ntp,omitempty"`
 
-	// RA controls IPv6 router advertisement and DHCPv6 on this interface.
-	// Empty means RAOff.
-	RA RAMode `json:"ra,omitempty"`
-
 	// Options are additional DHCP options, the per-pool escape hatch. Rendered
 	// into the reloadable options directory, so changing one does not restart
 	// the daemon.
 	Options []Option `json:"options,omitempty"`
+}
+
+// PoolIPv4 is the dynamic IPv4 range a network hands out.
+type PoolIPv4 struct {
+	// Start and End bound the range, inclusive. Both absent means "derive it
+	// from the network's subnet" (design.md §11.2) — see GroupInfo.DerivedRange
+	// for why deriving is a safety property rather than a convenience.
+	//
+	// They are checked against the network's *stored* subnet. Nothing here
+	// consults the kernel, which is the point: a range is wrong because it
+	// contradicts the network it is on, not because an interface somewhere is
+	// holding a different address.
+	Start netip.Addr `json:"start,omitempty"`
+	End   netip.Addr `json:"end,omitempty"`
+}
+
+// Explicit reports whether the operator typed a range rather than leaving it
+// derived.
+func (p PoolIPv4) Explicit() bool { return p.Start.IsValid() || p.End.IsValid() }
+
+// PoolIPv6 is what a network advertises over IPv6.
+type PoolIPv6 struct {
+	// Mode selects the behaviour. Empty means RAOff.
+	//
+	// There is no range here, and that is not an omission. dnsmasq's
+	// `constructor:` derives the prefix from the member interface's own address,
+	// so a delegated prefix that changes is followed by the daemon rather than
+	// re-rendered by us. A literal IPv6 range would have to be retyped every
+	// time the uplink's delegation moved.
+	Mode RAMode `json:"mode,omitempty"`
 }
 
 // LeaseTimeOrDefault resolves the zero value.
@@ -99,6 +163,33 @@ func (p Pool) LeaseTimeOrDefault() Duration {
 		return DefaultLeaseTime
 	}
 	return p.LeaseTime
+}
+
+// RA resolves the IPv6 block to a mode, RAOff when there is none.
+func (p Pool) RA() RAMode {
+	if p.IPv6 == nil {
+		return RAOff
+	}
+	return p.IPv6.Mode.OrDefault()
+}
+
+// ServesIPv4 reports whether the pool hands out IPv4 addresses at all.
+func (p Pool) ServesIPv4() bool { return p.IPv4 != nil }
+
+// Range resolves the pool's IPv4 range against its network, deriving one when
+// the operator did not type it.
+//
+// One place rather than three. The renderer, the validator and the lease
+// accounting all need the resolved range, and a derived value computed
+// separately in each is a derived value that eventually differs in one.
+func (p Pool) Range(g GroupInfo) (netip.Addr, netip.Addr, bool) {
+	if p.IPv4 == nil {
+		return netip.Addr{}, netip.Addr{}, false
+	}
+	if p.IPv4.Explicit() {
+		return p.IPv4.Start, p.IPv4.End, p.IPv4.Start.IsValid() && p.IPv4.End.IsValid()
+	}
+	return g.DerivedRange()
 }
 
 // Reservation pins one client to one address.
@@ -304,7 +395,7 @@ func (c *Config) Normalize() {
 		}
 	}
 	slices.SortStableFunc(c.Pools, func(a, b Pool) int {
-		return strings.Compare(a.Interface, b.Interface)
+		return strings.Compare(a.Group, b.Group)
 	})
 	slices.SortStableFunc(c.Reservations, func(a, b Reservation) int {
 		if n := strings.Compare(a.MAC, b.MAC); n != 0 {
@@ -327,24 +418,32 @@ func (c Config) Clone() Config {
 			gw := *p.Gateway
 			p.Gateway = &gw
 		}
+		if p.IPv4 != nil {
+			v4 := *p.IPv4
+			p.IPv4 = &v4
+		}
+		if p.IPv6 != nil {
+			v6 := *p.IPv6
+			p.IPv6 = &v6
+		}
 		out.Pools[i] = p
 	}
 	out.Reservations = slices.Clone(c.Reservations)
 	return out
 }
 
-// Pool returns the pool for an interface.
-func (c Config) Pool(iface string) (Pool, bool) {
-	i := slices.IndexFunc(c.Pools, func(p Pool) bool { return p.Interface == iface })
+// Pool returns the pool for a network.
+func (c Config) Pool(group string) (Pool, bool) {
+	i := slices.IndexFunc(c.Pools, func(p Pool) bool { return p.Group == group })
 	if i < 0 {
 		return Pool{}, false
 	}
 	return c.Pools[i], true
 }
 
-// SetPool adds or replaces the pool for p.Interface.
+// SetPool adds or replaces the pool for p.Group.
 func (c *Config) SetPool(p Pool) {
-	if i := slices.IndexFunc(c.Pools, func(e Pool) bool { return e.Interface == p.Interface }); i >= 0 {
+	if i := slices.IndexFunc(c.Pools, func(e Pool) bool { return e.Group == p.Group }); i >= 0 {
 		c.Pools[i] = p
 		return
 	}
@@ -352,9 +451,9 @@ func (c *Config) SetPool(p Pool) {
 	c.Normalize()
 }
 
-// RemovePool drops an interface's pool, reporting whether there was one.
-func (c *Config) RemovePool(iface string) bool {
-	i := slices.IndexFunc(c.Pools, func(p Pool) bool { return p.Interface == iface })
+// RemovePool drops a network's pool, reporting whether there was one.
+func (c *Config) RemovePool(group string) bool {
+	i := slices.IndexFunc(c.Pools, func(p Pool) bool { return p.Group == group })
 	if i < 0 {
 		return false
 	}
@@ -419,15 +518,112 @@ func MarshalConfig(c Config) ([]byte, error) {
 // Strictness is deliberate: a typo'd key that is silently ignored produces a
 // router that is quietly not doing what its config says, which is the worst
 // failure mode this module has.
+//
+// The one exception is the pre-0.3 pool shape, which it reads and converts —
+// see LegacyPool. Strictness and migration are not in tension here: a key we
+// used to write is not a typo, and the alternative is a box that stops serving
+// DHCP on upgrade with a parse error naming a field the operator never typed.
 func UnmarshalConfig(data []byte) (Config, error) {
 	dec := json.NewDecoder(strings.NewReader(string(data)))
 	dec.DisallowUnknownFields()
 	var c Config
 	if err := dec.Decode(&c); err != nil {
+		if migrated, legacy, ok := unmarshalLegacy(data); ok {
+			migrated.Normalize()
+			migrated.Legacy = legacy
+			return migrated, nil
+		}
 		return Config{}, fmt.Errorf("parsing dhcp config: %w", err)
 	}
 	c.Normalize()
 	return c, nil
+}
+
+// LegacyPool is a pool as written before networks existed: keyed by kernel
+// interface, with the IPv4 range at the top level and IPv6 as a sibling `ra`
+// field.
+//
+// Kept readable rather than dropped because 0.2.0 shipped and there are
+// installs in the field. It is only ever read — nothing writes this shape
+// again.
+type LegacyPool struct {
+	Interface string       `json:"interface"`
+	Start     netip.Addr   `json:"start"`
+	End       netip.Addr   `json:"end"`
+	LeaseTime Duration     `json:"lease_time,omitempty"`
+	Gateway   *netip.Addr  `json:"gateway,omitempty"`
+	DNS       []netip.Addr `json:"dns,omitempty"`
+	Domain    string       `json:"domain,omitempty"`
+	NTP       []netip.Addr `json:"ntp,omitempty"`
+	RA        RAMode       `json:"ra,omitempty"`
+	Options   []Option     `json:"options,omitempty"`
+}
+
+// legacyConfig is the 0.2.0 document shape.
+type legacyConfig struct {
+	Enabled      bool          `json:"enabled"`
+	Pools        []LegacyPool  `json:"pools,omitempty"`
+	Reservations []Reservation `json:"reservations,omitempty"`
+	ExtraConf    string        `json:"extra_dnsmasq_conf,omitempty"`
+}
+
+// unmarshalLegacy reads the old shape and converts it, reporting the pools it
+// converted so that the caller can finish the job.
+//
+// The conversion is deliberately incomplete, and that is the honest shape for
+// it. A pool's `interface` names a kernel interface; a pool's `group` names a
+// network, and this module does not own networks and cannot invent one. So the
+// range, lease, options and IPv6 mode are carried across here, the interface
+// name is parked in Legacy, and internal/daemon — the one place that sees both
+// modules — creates the matching network and fills the key in. See
+// daemon.migratePools.
+func unmarshalLegacy(data []byte) (Config, []LegacyPool, bool) {
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	dec.DisallowUnknownFields()
+
+	var old legacyConfig
+	if err := dec.Decode(&old); err != nil {
+		return Config{}, nil, false
+	}
+	if len(old.Pools) == 0 {
+		// Nothing distinguishes an empty legacy document from a current one, so
+		// there is nothing to migrate and no reason to claim there was.
+		return Config{}, nil, false
+	}
+
+	out := Config{
+		Enabled:      old.Enabled,
+		Reservations: old.Reservations,
+		ExtraConf:    old.ExtraConf,
+		Pools:        make([]Pool, 0, len(old.Pools)),
+	}
+	for _, p := range old.Pools {
+		out.Pools = append(out.Pools, p.Convert())
+	}
+	return out, old.Pools, true
+}
+
+// Convert turns a legacy pool into the current shape, minus its key.
+func (p LegacyPool) Convert() Pool {
+	out := Pool{
+		// Group is left empty on purpose; only the daemon can supply it.
+		LeaseTime: p.LeaseTime,
+		Gateway:   p.Gateway,
+		DNS:       p.DNS,
+		Domain:    p.Domain,
+		NTP:       p.NTP,
+		Options:   p.Options,
+	}
+	if p.Start.IsValid() || p.End.IsValid() {
+		// Carried across explicitly rather than left to be derived. The operator
+		// typed this range, devices are holding addresses from it right now, and
+		// re-deriving would silently renumber a working network on upgrade.
+		out.IPv4 = &PoolIPv4{Start: p.Start, End: p.End}
+	}
+	if mode := p.RA.OrDefault(); mode != RAOff {
+		out.IPv6 = &PoolIPv6{Mode: mode}
+	}
+	return out
 }
 
 // FromDocument reads this module's subtree out of the configuration document.

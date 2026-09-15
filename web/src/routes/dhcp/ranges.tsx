@@ -20,13 +20,13 @@ export function DhcpRangesPage() {
 
   function upsert(pool: Pool) {
     if (!config) return
-    const rest = pools.filter((p) => p.interface !== pool.interface)
+    const rest = pools.filter((p) => p.group !== pool.group)
     change({ ...config, pools: [...rest, pool] })
   }
 
-  function remove(iface: string) {
+  function remove(group: string) {
     if (!config) return
-    change({ ...config, pools: pools.filter((p) => p.interface !== iface) })
+    change({ ...config, pools: pools.filter((p) => p.group !== group) })
   }
 
   return (
@@ -47,16 +47,16 @@ export function DhcpRangesPage() {
       </div>
 
       {pools.length === 0 ? (
-        <ListEmpty>No ranges yet. Add one so devices can get an address.</ListEmpty>
+        <ListEmpty>No addresses yet. Pick a network and it will hand out addresses on it.</ListEmpty>
       ) : (
         <List>
           {pools.map((pool) => {
-            const u = leases.data?.usage?.find((x) => x.interface === pool.interface)
+            const u = leases.data?.usage?.find((x) => x.group === pool.group)
             return (
               <ListRow
-                key={pool.interface}
-                title={pool.interface}
-                subtitle={`${pool.start} – ${pool.end}`}
+                key={pool.group}
+                title={pool.group}
+                subtitle={describePool(pool)}
                 trailing={u ? `${u.active} of ${u.size} in use` : undefined}
                 onSelect={
                   busy
@@ -73,13 +73,35 @@ export function DhcpRangesPage() {
       )}
 
       <PoolDialog
-        key={editing?.interface ?? 'new'}
+        key={editing?.group ?? 'new'}
         open={open}
         onOpenChange={setOpen}
         initial={editing}
         onSubmit={upsert}
-        onRemove={editing ? () => remove(editing.interface) : undefined}
+        onRemove={editing ? () => remove(editing.group) : undefined}
       />
     </SubPage>
   )
+}
+
+/**
+ * What a network hands out, in one line.
+ *
+ * It says "derived" rather than printing the addresses when the range was not
+ * typed. Those two are genuinely different states — one is a decision somebody
+ * made, the other is one this router made for them — and showing resolved
+ * numbers for both would hide which is which. The Networks page prints what a
+ * derived range resolves to.
+ */
+function describePool(pool: Pool): string {
+  const parts: string[] = []
+  if (!pool.ipv4) parts.push('no IPv4')
+  else if (pool.ipv4.start && pool.ipv4.end) parts.push(`${pool.ipv4.start} – ${pool.ipv4.end}`)
+  else parts.push('IPv4, range derived from the subnet')
+
+  const v6 = pool.ipv6?.mode
+  if (v6 === 'slaac') parts.push('IPv6 automatic')
+  else if (v6 === 'stateful') parts.push('IPv6 managed')
+
+  return parts.join(' · ')
 }

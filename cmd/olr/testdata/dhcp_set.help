@@ -5,7 +5,7 @@ Usage:
 
 Available Commands:
   extra-conf  Replace the dnsmasq passthrough configuration
-  pool        Change an existing pool
+  pool        Change what a network serves
 
 Flags:
   -h, --help   help for set

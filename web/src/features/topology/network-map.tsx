@@ -3,7 +3,8 @@ import { useMemo } from 'react'
 
 import { Skeleton } from '@/components/ui/skeleton'
 import { DeviceIcon } from '@/features/devices/device-icon'
-import type { AssignmentStatus, DeviceRow, ExitStatus } from '@/lib/api-types'
+import { useInterfaces } from '@/features/link/queries'
+import type { AssignmentStatus, DeviceRow, ExitStatus, GroupRow } from '@/lib/api-types'
 import type { Pool } from '@/lib/config-types'
 import { cn } from '@/lib/utils'
 
@@ -58,9 +59,15 @@ export function NetworkMap({
     )
   }, [all, filter])
 
+  // The networks, for joining a pool (keyed by network) to a gateway assignment
+  // (keyed by interface). Read here rather than passed in because every caller
+  // of this component would otherwise have to fetch it only to hand it back.
+  const interfaces = useInterfaces()
+  const networks = interfaces.data?.groups
+
   const groups = useMemo(
-    () => buildGroups(devices, assignments, exits, pools),
-    [devices, assignments, exits, pools],
+    () => buildGroups(devices, assignments, exits, pools, networks),
+    [devices, assignments, exits, pools, networks],
   )
 
   if (pending) return <Skeleton className="h-64 w-full rounded-xl" />
@@ -121,13 +128,28 @@ function buildGroups(
   assignments?: AssignmentStatus[],
   exits?: ExitStatus[],
   pools?: Pool[],
+  networks?: GroupRow[],
 ): Group[] {
   // Networks are the union of what gateway knows and what dhcp serves: one with
   // a pool but no assignment has no way out chosen yet, one with an assignment
   // but no pool is served statically, and the intersection would drop both.
+  //
+  // A pool names a network and gateway names an interface, so the two are
+  // joined through the network's members. Until `gateway` keys off networks too
+  // (design.md §4.4's retrofit), this is where the two vocabularies meet.
+  const interfaceOfGroup = new Map(
+    (networks ?? []).flatMap((g) => g.members.map((m) => [g.name, m] as const)),
+  )
+  const poolOnInterface = new Map(
+    (pools ?? []).flatMap((p) => {
+      const iface = interfaceOfGroup.get(p.group)
+      return iface ? [[iface, p] as const] : []
+    }),
+  )
+
   const names = new Set<string>()
   for (const a of assignments ?? []) names.add(a.interface)
-  for (const p of pools ?? []) names.add(p.interface)
+  for (const iface of poolOnInterface.keys()) names.add(iface)
   for (const d of devices) if (d.network) names.add(d.network)
 
   const groups: Group[] = [...names].map((name) => {
@@ -140,7 +162,7 @@ function buildGroups(
       devices: devices
         .filter((d) => d.network === name)
         .sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name)),
-      pool: pools?.find((p) => p.interface === name),
+      pool: poolOnInterface.get(name),
       exit,
       inherited: assignment?.source === 'default',
       status,

@@ -4,90 +4,114 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// LinkView is this module's read-only window onto the link module.
+// GroupView is this module's read-only window onto the link module.
 //
 // design.md §4.1 fixes the direction: dhcp depends on link, reads link's facts
-// through link, and never keeps its own copy. That is what makes drift between
-// "the interface's subnet" and "the pool's subnet" structurally impossible
-// rather than merely unlikely.
+// through link, and never keeps its own copy. The interface is declared here,
+// by the consumer, so dhcp imports nothing — internal/daemon adapts link's
+// neutral shape into this one.
 //
-// The interface is declared here, by the consumer, and stays that way now that
-// `link` exists: it states exactly the four facts dhcp needs instead of
-// exposing all of link's surface, and dhcp still imports nothing. internal/daemon
-// adapts link's neutral Info into this. Three near-identical LinkInfo structs
-// across dhcp, dns and routing is the cost, and the thing it buys is that the
-// day one of them needs an MTU, the other two do not grow a field they never
-// read.
-type LinkView interface {
-	// Interface returns what is known about an interface, or
-	// ErrNoSuchInterface.
-	Interface(name string) (LinkInfo, error)
+// # Why this is keyed by group and not by interface
+//
+// It used to hand back an interface's *observed* prefixes, and every rule in
+// validate.go was written against them. That made a stored range depend on an
+// address configured outside olr: a range in a subnet the interface did not
+// happen to hold was refused, with no way to change the subnet from anywhere in
+// the product. §4.4 always said modules key off the group — `vlan30` is an
+// implementation detail, `guest` is the thing somebody named — and `link` now
+// owns one, so the subnet arrives as intent rather than as an observation.
+//
+// What that buys is visible in validate.go: nearly every rule became pure. The
+// only facts still read from the machine are whether the members exist and
+// whether they are up, and both of those are warnings.
+type GroupView interface {
+	// Group returns what is known about a network, or ErrNoSuchGroup.
+	Group(name string) (GroupInfo, error)
+
+	// Groups lists every configured network, for the surfaces that offer a
+	// choice rather than resolving one.
+	Groups() ([]GroupInfo, error)
 }
 
-// LinkInfo is the subset of an interface's state that DHCP decisions depend on.
-type LinkInfo struct {
-	// Name is the kernel interface name.
-	Name string `json:"name,omitempty"`
+// GroupInfo is the subset of a network that DHCP decisions depend on.
+type GroupInfo struct {
+	// Name is the network's name, and the pool's foreign key.
+	Name string `json:"name"`
 
-	// Adopted reports whether the operator handed this interface to olr
-	// (design.md §7). We refuse to serve DHCP on anything else — silently
-	// answering DHCP on an interface nobody adopted is precisely the kind of
-	// surprise §3.4 exists to prevent.
-	Adopted bool `json:"adopted"`
+	// Members are the kernel interfaces it lives on. dnsmasq needs them for its
+	// `interface=` and `constructor:` directives, which are the two places a
+	// kernel name still legitimately appears in this module.
+	Members []string `json:"members,omitempty"`
 
-	// Up reports the operational state. Not an error for configuration
-	// purposes: an interface can be legitimately configured while down, so this
-	// only ever produces a warning.
+	// Subnet is the network's IPv4 prefix — stored intent, not an observation.
+	// Invalid for a network that serves no IPv4 at all, which is a real
+	// configuration: RA needs no v4 subnet.
+	Subnet netip.Prefix `json:"subnet,omitempty"`
+
+	// Router is this box's address on the network, and the default gateway a
+	// client is handed when a pool does not override it.
+	Router netip.Addr `json:"router,omitempty"`
+
+	// Up reports whether every member is up. Not an error for configuration
+	// purposes: a network can legitimately be configured while its cable is
+	// out, so this only ever produces a warning.
 	Up bool `json:"up"`
-
-	// Prefixes are the addresses configured on the interface, with masks. A
-	// pool's range must fall inside one of them.
-	Prefixes []netip.Prefix `json:"prefixes"`
 }
 
-// ErrNoSuchInterface is returned by LinkView.Interface for an unknown name.
-var ErrNoSuchInterface = errors.New("no such interface")
+// ErrNoSuchGroup is returned by GroupView.Group for an unknown name.
+var ErrNoSuchGroup = errors.New("no such network")
 
-// FindPrefix returns the interface prefix containing addr.
-func (l LinkInfo) FindPrefix(addr netip.Addr) (netip.Prefix, bool) {
-	for _, p := range l.Prefixes {
-		if p.Contains(addr) {
-			return p, true
-		}
-	}
-	return netip.Prefix{}, false
-}
+// HasIPv4 reports whether the network has a subnet to serve addresses from.
+func (g GroupInfo) HasIPv4() bool { return g.Subnet.IsValid() && g.Subnet.Addr().Is4() }
 
-// Address returns the interface's own address within prefix — the address a
-// client should use as its gateway when the pool does not override it.
-func (l LinkInfo) Address(prefix netip.Prefix) (netip.Addr, bool) {
-	for _, p := range l.Prefixes {
-		if p == prefix {
-			return p.Addr(), true
-		}
-	}
-	return netip.Addr{}, false
-}
-
-// StaticLinks is a LinkView backed by a map, for tests.
+// DerivedRange is the range a pool gets when nobody types one (design.md
+// §11.2 — "range: derived from the group prefix; explicit overrides").
 //
-// It used to be a production path too: olrd read a hand-written JSON file into
-// one of these because there was no link module to ask. There is now, and it
-// reads the kernel — so this is the fixture and nothing else, which is the
-// right size for it. Validation rules are the largest thing in this module and
-// the whole point of §5.3.1 is that they can be exercised without a network.
-type StaticLinks map[string]LinkInfo
+// Deriving matters for more than convenience. The collision DHCP cannot defend
+// against is a statically configured device inside the dynamic range, and
+// dnsmasq has no exclusion primitive — so the only defence is a range that
+// deliberately leaves a low block free. Deriving it gives that for free;
+// asking the operator to type it does not.
+func (g GroupInfo) DerivedRange() (netip.Addr, netip.Addr, bool) {
+	if !g.HasIPv4() {
+		return netip.Addr{}, netip.Addr{}, false
+	}
+	return core.SuggestRange(g.Subnet, g.Router)
+}
 
-// Interface implements LinkView.
-func (s StaticLinks) Interface(name string) (LinkInfo, error) {
+// StaticGroups is a GroupView backed by a map, for tests.
+//
+// Validation rules are the largest thing in this module and the whole point of
+// §5.3.1 is that they can be exercised without a network. That was already true
+// and is more true now: with the subnet arriving as intent, a fixture is three
+// fields rather than a simulated kernel.
+type StaticGroups map[string]GroupInfo
+
+// Group implements GroupView.
+func (s StaticGroups) Group(name string) (GroupInfo, error) {
 	info, ok := s[name]
 	if !ok {
-		return LinkInfo{}, fmt.Errorf("%q: %w", name, ErrNoSuchInterface)
+		return GroupInfo{}, fmt.Errorf("%q: %w", name, ErrNoSuchGroup)
 	}
 	if info.Name == "" {
 		info.Name = name
 	}
 	return info, nil
+}
+
+// Groups implements GroupView.
+func (s StaticGroups) Groups() ([]GroupInfo, error) {
+	out := make([]GroupInfo, 0, len(s))
+	for name := range s {
+		info, err := s.Group(name)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, info)
+	}
+	return out, nil
 }

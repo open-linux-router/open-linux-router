@@ -76,7 +76,7 @@ export function DhcpPage() {
           {
             slug: 'ranges',
             value: pools.length
-              ? pools.map((p) => p.interface).join(', ')
+              ? pools.map((p) => p.group).join(', ')
               : 'None — nothing is handed out',
           },
           {

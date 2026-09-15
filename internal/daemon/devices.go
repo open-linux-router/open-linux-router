@@ -111,13 +111,25 @@ func (d dhcpNetworks) Networks(_ context.Context) ([]devices.Network, error) {
 
 	out := make([]devices.Network, 0, len(cfg.Pools))
 	for _, p := range cfg.Pools {
-		if !p.Start.IsValid() || !p.End.IsValid() {
+		info, err := d.applier.Groups.Group(p.Group)
+		if err != nil {
 			continue
 		}
+		// The resolved range, not the stored fields: a pool whose range is
+		// derived has addresses, and reading the stored fields would report it
+		// as having none.
+		start, end, ok := p.Range(info)
+		if !ok {
+			continue
+		}
+		iface := p.Group
+		if len(info.Members) > 0 {
+			iface = info.Members[0]
+		}
 		out = append(out, devices.Network{
-			Interface: p.Interface,
-			Start:     p.Start,
-			End:       p.End,
+			Interface: iface,
+			Start:     start,
+			End:       end,
 		})
 	}
 	return out, nil

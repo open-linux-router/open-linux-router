@@ -187,13 +187,23 @@ func run(args []string) error {
 	// is what keeps §4.5 true — there is no cached copy of either to go stale
 	// while olrd is running.
 	facts := link.Facts{Source: source, Store: store}
-	links := dhcpLinkView{facts: facts}
+
+	// Before anything reads the document as config, convert it if it was written
+	// by a version that keyed pools by interface. It has to happen here: the
+	// conversion needs a network per pool, `dhcp` does not own networks, and
+	// this is the only place that sees both modules. See migrateDocument for why
+	// it runs at startup rather than on the way past every read.
+	if _, err := migrateDocument(store, facts, logger); err != nil {
+		return fmt.Errorf("migrating the stored configuration: %w", err)
+	}
+
+	groups := dhcpGroupView{facts: facts}
 	dnsLinks := dnsLinkView{facts: facts}
 	gatewayLinks := gatewayLinkView{facts: facts}
 	firewallLinks := firewallLinkView{facts: facts}
 	dialLinks := dialLinkView{facts: facts}
 
-	applier, err := dhcp.NewApplierAt(store, links, opts.root)
+	applier, err := dhcp.NewApplierAt(store, groups, opts.root)
 	if err != nil {
 		return fmt.Errorf("initialising dhcp: %w", err)
 	}

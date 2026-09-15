@@ -20,8 +20,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { useApplyLinkConfig, useInterfaces, useLinkConfig } from '@/features/link/queries'
 import { ApiError } from '@/lib/api'
-import type { InterfaceRow } from '@/lib/api-types'
-import type { DhcpConfig } from '@/lib/config-types'
+import type { GroupRow, InterfaceRow } from '@/lib/api-types'
+import type { DhcpConfig, Pool } from '@/lib/config-types'
 import { cn } from '@/lib/utils'
 
 /**
@@ -96,10 +96,11 @@ export function InterfacesCard({
       adopt(row)
       return
     }
-    // Releasing an interface a pool still names does not undo the pool — it
-    // makes it invalid, so the next apply of anything on this page fails with a
-    // message about adoption. Asking first is cheaper than explaining that.
-    if (poolsOn(dhcp, row.name).length > 0) {
+    // Releasing an interface a pool still reaches does not undo the pool — it
+    // makes the network invalid, and the pool on it with it, so the next apply
+    // fails with a message about adoption. Asking first is cheaper than
+    // explaining that.
+    if (poolsOn(dhcp, interfaces.data?.groups, row.name).length > 0) {
       setConfirming(row)
       return
     }
@@ -146,7 +147,7 @@ export function InterfacesCard({
 
       <ReleaseDialog
         row={confirming}
-        pools={poolsOn(dhcp, confirming?.name)}
+        pools={poolsOn(dhcp, interfaces.data?.groups, confirming?.name)}
         onCancel={() => setConfirming(null)}
         onConfirm={() => {
           if (confirming) release(confirming)
@@ -248,10 +249,25 @@ function describeState(row: InterfaceRow): {
   return { dot: 'bg-success', detail: 'Connected.' }
 }
 
-/** Which pools name this interface, for the release warning. */
-function poolsOn(dhcp: DhcpConfig | undefined, name: string | undefined) {
+/**
+ * Which pools would stop working if this interface were released.
+ *
+ * Two hops now rather than one: a pool names a network and the network names
+ * the interface. The indirection is the point — it is what lets a network move
+ * to a different NIC without every pool having to be re-pointed — but the
+ * warning still has to reach all the way back to the interface the operator is
+ * about to take away.
+ */
+function poolsOn(
+  dhcp: DhcpConfig | undefined,
+  groups: GroupRow[] | undefined,
+  name: string | undefined,
+) {
   if (!dhcp || !name) return []
-  return (dhcp.pools ?? []).filter((p) => p.interface === name)
+  const onThisInterface = new Set(
+    (groups ?? []).filter((g) => g.members.includes(name)).map((g) => g.name),
+  )
+  return (dhcp.pools ?? []).filter((p) => onThisInterface.has(p.group))
 }
 
 function ReleaseDialog({
@@ -261,7 +277,7 @@ function ReleaseDialog({
   onConfirm,
 }: {
   row: InterfaceRow | null
-  pools: { interface: string; start: string; end: string }[]
+  pools: Pool[]
   onCancel: () => void
   onConfirm: () => void
 }) {
@@ -283,8 +299,8 @@ function ReleaseDialog({
 
         <ul className="space-y-1 font-mono text-xs text-muted-foreground">
           {pools.map((p) => (
-            <li key={p.interface}>
-              {p.interface}: {p.start} – {p.end}
+            <li key={p.group}>
+              {p.group}
             </li>
           ))}
         </ul>

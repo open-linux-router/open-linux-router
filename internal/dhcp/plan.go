@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 // Planning is deliberately pure and reads *observed* state rather than a cached
@@ -197,13 +199,13 @@ func (p Plan) nothingToDo() bool {
 // It validates first and returns the error rather than planning against a
 // config that cannot be applied — the whole value of validation is that it
 // happens before anything is written (design.md §5.3.1).
-func BuildPlan(b Dnsmasq, desired Config, links LinkView, obs Observed, now time.Time) (Plan, error) {
-	result := Validate(desired, links)
+func BuildPlan(b Dnsmasq, desired Config, groups GroupView, obs Observed, now time.Time) (Plan, error) {
+	result := Validate(desired, groups)
 	if err := result.Err(); err != nil {
 		return Plan{Validation: result}, err
 	}
 
-	rendered, err := b.Render(desired, links)
+	rendered, err := b.Render(desired, groups)
 	if err != nil {
 		return Plan{Validation: result}, err
 	}
@@ -274,7 +276,7 @@ func BuildPlan(b Dnsmasq, desired Config, links LinkView, obs Observed, now time
 		plan.Enable = &want
 	}
 
-	plan.Impact, plan.Reasons = classify(desired, plan, obs, now)
+	plan.Impact, plan.Reasons = classify(desired, groups, plan, obs, now)
 
 	return plan, nil
 }
@@ -300,7 +302,7 @@ func serviceAction(enabled, running, changed, reloadOnly bool) ServiceAction {
 }
 
 // classify reduces the plan to a single impact plus the reasons behind it.
-func classify(desired Config, plan Plan, obs Observed, now time.Time) (Impact, []string) {
+func classify(desired Config, groups GroupView, plan Plan, obs Observed, now time.Time) (Impact, []string) {
 	impact := ImpactNone
 	for _, c := range plan.Changes {
 		impact = max(impact, c.Impact)
@@ -317,7 +319,7 @@ func classify(desired Config, plan Plan, obs Observed, now time.Time) (Impact, [
 	// The honest question is not "did a range field change" but "will a client
 	// lose the address it is using". Answering it from the live lease database
 	// is what makes `disruptive` a fact rather than a guess.
-	if dropped := Dropped(desired, obs.Leases, now); len(dropped) > 0 && obs.Running {
+	if dropped := Dropped(desired, groups, obs.Leases, now); len(dropped) > 0 && obs.Running {
 		impact = ImpactDisruptive
 		reasons = append(reasons, describeDropped(desired, dropped))
 	}
@@ -348,7 +350,7 @@ func classify(desired Config, plan Plan, obs Observed, now time.Time) (Impact, [
 // right now", not "did a range field change". Answering it from the live lease
 // database is what makes `disruptive` a fact rather than a guess (design.md
 // §11.3), so the cases below are about the client's experience, not ours.
-func Dropped(c Config, leases []Lease, now time.Time) []Lease {
+func Dropped(c Config, groups GroupView, leases []Lease, now time.Time) []Lease {
 	var dropped []Lease
 	for _, l := range leases {
 		if !l.Active(now) {
@@ -369,7 +371,7 @@ func Dropped(c Config, leases []Lease, now time.Time) []Lease {
 			// supplies the interface.
 			continue
 		}
-		if servedBy(c, l) {
+		if servedBy(c, groups, l) {
 			continue
 		}
 		dropped = append(dropped, l)
@@ -378,7 +380,7 @@ func Dropped(c Config, leases []Lease, now time.Time) []Lease {
 }
 
 // servedBy reports whether the client holding this lease keeps this address.
-func servedBy(c Config, l Lease) bool {
+func servedBy(c Config, groups GroupView, l Lease) bool {
 	// A reservation matching the client's MAC is decisive and outranks every
 	// range: dnsmasq will hand that client exactly the reserved address and
 	// nothing else. So the lease survives only if the reservation names the
@@ -400,7 +402,16 @@ func servedBy(c Config, l Lease) bool {
 	}
 
 	for _, p := range c.Pools {
-		if inRange(p.Start, p.End, l.IP) {
+		info, err := groups.Group(p.Group)
+		if err != nil {
+			continue
+		}
+		// The *resolved* range, so a pool whose range is derived is compared
+		// against the same addresses dnsmasq will actually be told to hand out.
+		// Reading the stored fields directly would treat every derived pool as
+		// covering nothing, and mark every apply disruptive.
+		start, end, ok := p.Range(info)
+		if ok && core.InRange(start, end, l.IP) {
 			return true
 		}
 	}

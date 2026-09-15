@@ -47,6 +47,6 @@ dhcp-lease-max=1000
 # NOTE: the dhcp module is disabled. The pools below are rendered so that
 # enabling is a service start rather than a re-render, but the unit is stopped.
 
-# pool: br-lan (192.168.1.1/24)
+# network: lan
 interface=br-lan
-dhcp-range=set:br-lan,192.168.1.100,192.168.1.200,255.255.255.0,43200
+dhcp-range=set:lan,192.168.1.100,192.168.1.200,255.255.255.0,43200

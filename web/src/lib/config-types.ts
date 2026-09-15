@@ -36,6 +36,10 @@ export type DeviceCategory =
 export type IPAddress = string
 export type IPAddress1 = string
 /**
+ * How IPv6 is served on this pool's interface. off serves no IPv6; slaac advertises the prefix and answers DHCPv6 information requests; stateful additionally hands out addresses over DHCPv6. Empty means off.
+ */
+export type RouterAdvertisementMode = '' | 'off' | 'slaac' | 'stateful'
+/**
  * A duration written the way an operator would say it: a number and a unit, optionally repeated. Units are s, m, h, d and w. A bare number means seconds, matching dnsmasq.
  */
 export type Duration = string
@@ -48,11 +52,19 @@ export type IPAddress3 = string
  * An IPv4 or IPv6 address, such as 192.168.1.1 or 2001:db8::1.
  */
 export type IPAddress4 = string
-/**
- * How IPv6 is served on this pool's interface. off serves no IPv6; slaac advertises the prefix and answers DHCPv6 information requests; stateful additionally hands out addresses over DHCPv6. Empty means off.
- */
-export type RouterAdvertisementMode = '' | 'off' | 'slaac' | 'stateful'
 export type IPAddress5 = string
+/**
+ * Which provider hosts the zone this name lives in. cloudflare takes an API token. alidns is Alibaba Cloud DNS and tencentcloud is Tencent Cloud DNSPod; both take a key ID and a secret. callback is the generic form: olr requests a URL you supply with the address substituted into it, which is how the DynDNS-style endpoints — No-IP, DuckDNS, Dynu — are reached. The list grows by request rather than by completeness; a name outside it is refused rather than guessed at.
+ */
+export type DNSProvider = 'alidns' | 'callback' | 'cloudflare' | 'tencentcloud'
+/**
+ * interface reads the address off an uplink this router owns, which is right when olr terminates the WAN — PPPoE, or DHCP from the ISP. reflector asks an HTTPS endpoint what address the internet sees, which is right when olr sits behind a modem, and is the only form that can tell you your ISP has put you behind carrier-grade NAT. There is no default: olr will not choose between talking to a third party and not.
+ */
+export type WhereTheAddressComesFrom = 'interface' | 'reflector'
+/**
+ * A duration with a unit, such as 5m, 30s or 1m30s. Units are ns, us, ms, s, m and h.
+ */
+export type Duration1 = string
 /**
  * An address and port, such as 192.168.1.1:53 or [2001:db8::1]:53.
  */
@@ -107,11 +119,11 @@ export type AddressAndPort3 = string
 /**
  * A duration with a unit, such as 30s, 5s or 1m30s. Units are ns, us, ms, s, m and h.
  */
-export type Duration1 = string
+export type Duration2 = string
 /**
  * Who hosts the DNS for your domain. olr writes a temporary record through their API to prove the domain is yours, which is the only way to get a certificate for a name that does not resolve from the internet. The names your proxy supports are listed by `olr ingress show providers`.
  */
-export type DNSProvider = string
+export type DNSProvider1 = string
 /**
  * An API credential for the DNS provider. Scope it to this one zone if the provider allows it: it is stored on the router and can change your DNS. It is never shown again after it is set.
  */
@@ -128,6 +140,8 @@ export type PropagationCheckResolvers = string[]
  * How olr speaks to the service being published. http is almost always right: the connection runs over your own LAN to a device you named, and the HTTPS a browser sees is terminated here. Use https only when the service refuses plain HTTP — many NAS and hypervisor UIs do — in which case its own certificate is not checked, because those are self-signed and demanding a valid one would make the case this option exists for impossible. Empty means http.
  */
 export type UpstreamScheme = '' | 'http' | 'https'
+export type IPPrefix2 = string
+export type IPAddress8 = string
 
 /**
  * The whole box's configuration, one property per module — the shape of /etc/open-linux-router/olr.json.
@@ -135,11 +149,13 @@ export type UpstreamScheme = '' | 'http' | 'https'
 export interface OlrDocument {
   devices?: DevicesConfig
   dhcp?: DhcpConfig
+  dial?: DialConfig
   dns?: DnsConfig
   firewall?: FirewallConfig
   gateway?: GatewayConfig
   ingress?: IngressConfig
   link?: LinkConfig
+  system?: SystemConfig
 }
 export interface DevicesConfig {
   devices?: Device[]
@@ -158,16 +174,22 @@ export interface DhcpConfig {
   extra_dnsmasq_conf?: string
 }
 export interface Pool {
-  interface: string
-  start: IPAddress
-  end: IPAddress1
+  group: string
+  ipv4?: PoolIPv4
+  ipv6?: PoolIPv6
   lease_time?: Duration
   gateway?: IPAddress2
   dns?: IPAddress3[]
   domain?: string
   ntp?: IPAddress4[]
-  ra?: RouterAdvertisementMode
   options?: Option[]
+}
+export interface PoolIPv4 {
+  start?: IPAddress
+  end?: IPAddress1
+}
+export interface PoolIPv6 {
+  mode?: RouterAdvertisementMode
 }
 export interface Option {
   option: string
@@ -178,6 +200,22 @@ export interface Reservation {
   ip: IPAddress5
   hostname?: string
   lease_time?: Duration
+}
+export interface DialConfig {
+  records?: Record[]
+}
+export interface Record {
+  name: string
+  zone?: string
+  provider: DNSProvider
+  provider_key_id?: string
+  provider_token?: string
+  callback_url?: string
+  source: WhereTheAddressComesFrom
+  interface?: string
+  reflector_url?: string
+  interval?: Duration1
+  ttl?: number
 }
 export interface DnsConfig {
   enabled: boolean
@@ -254,8 +292,8 @@ export interface Via {
 }
 export interface Probe {
   target: AddressAndPort3
-  interval?: Duration1
-  timeout?: Duration1
+  interval?: Duration2
+  timeout?: Duration2
   failures?: number
   successes?: number
 }
@@ -273,7 +311,7 @@ export interface IngressConfig {
  * How the one wildcard certificate that serves every published name is obtained.
  */
 export interface Certificate {
-  provider?: DNSProvider
+  provider?: DNSProvider1
   provider_token?: ProviderAPIToken
   acme_email?: ContactAddress
   resolvers?: PropagationCheckResolvers
@@ -292,26 +330,31 @@ export interface LinkConfig {
   adopted?: string[]
   groups?: Group[]
 }
-
-/**
- * A network (design.md §4.4): the object `dhcp`, `dns` and later `firewall`
- * key off. `group` is the schema's word; **network** is the operator's.
- *
- * This is where a subnet is declared. Before it existed, `dhcp` could only
- * check a range against whatever address an interface had been given from
- * outside olr — so wanting a different subnet produced an error with no page
- * behind it.
- */
 export interface Group {
   name: string
-  /** Adopted interfaces. A list for when bridging lands; today exactly one. */
   members: string[]
-  /** Absent for a network that serves no IPv4 — RA only. */
   ipv4?: GroupIPv4
 }
-
 export interface GroupIPv4 {
-  subnet: string
-  /** Absent means the first host address, which is `.1` on any ordinary prefix. */
-  router?: string
+  subnet: IPPrefix2
+  router?: IPAddress8
+}
+export interface SystemConfig {
+  access?: Access
+}
+export interface Access {
+  /**
+   * When this box was claimed.
+   */
+  claimed_at: string
+  password: Password
+}
+/**
+ * The password required over the network
+ */
+export interface Password {
+  /**
+   * Derived form of the password. Never the password.
+   */
+  hash: string
 }
