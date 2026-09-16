@@ -134,26 +134,28 @@ function buildGroups(
   // a pool but no assignment has no way out chosen yet, one with an assignment
   // but no pool is served statically, and the intersection would drop both.
   //
-  // A pool names a network and gateway names an interface, so the two are
-  // joined through the network's members. Until `gateway` keys off networks too
-  // (design.md §4.4's retrofit), this is where the two vocabularies meet.
-  const interfaceOfGroup = new Map(
-    (networks ?? []).flatMap((g) => g.members.map((m) => [g.name, m] as const)),
+  // Everything is keyed by *network name*. Pools and devices already are;
+  // gateway still names a kernel interface (internal/gateway/config.go: "the
+  // source network, named by its kernel interface"), so its assignments are
+  // translated through the network's members on the way in. Until gateway keys
+  // off networks too — design.md §4.4's remaining retrofit — this is where the
+  // two vocabularies meet, and it has to be exactly one place: two nodes for
+  // one network, called `lan` and `bridge0`, is the bug this shape prevents.
+  const groupOfInterface = new Map(
+    (networks ?? []).flatMap((g) => g.members.map((m) => [m, g.name] as const)),
   )
-  const poolOnInterface = new Map(
-    (pools ?? []).flatMap((p) => {
-      const iface = interfaceOfGroup.get(p.group)
-      return iface ? [[iface, p] as const] : []
-    }),
+  const assignmentOf = new Map(
+    (assignments ?? []).map((a) => [groupOfInterface.get(a.interface) ?? a.interface, a] as const),
   )
+  const poolOf = new Map((pools ?? []).map((p) => [p.group, p] as const))
 
   const names = new Set<string>()
-  for (const a of assignments ?? []) names.add(a.interface)
-  for (const iface of poolOnInterface.keys()) names.add(iface)
+  for (const name of assignmentOf.keys()) names.add(name)
+  for (const name of poolOf.keys()) names.add(name)
   for (const d of devices) if (d.network) names.add(d.network)
 
   const groups: Group[] = [...names].map((name) => {
-    const assignment = assignments?.find((a) => a.interface === name)
+    const assignment = assignmentOf.get(name)
     const exit = assignment?.exit || ''
     const status = exit ? exits?.find((e) => e.name === exit) : undefined
     return {
@@ -162,7 +164,7 @@ function buildGroups(
       devices: devices
         .filter((d) => d.network === name)
         .sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name)),
-      pool: poolOnInterface.get(name),
+      pool: poolOf.get(name),
       exit,
       inherited: assignment?.source === 'default',
       status,

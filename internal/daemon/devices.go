@@ -122,14 +122,11 @@ func (d dhcpNetworks) Networks(_ context.Context) ([]devices.Network, error) {
 		if !ok {
 			continue
 		}
-		iface := p.Group
-		if len(info.Members) > 0 {
-			iface = info.Members[0]
-		}
 		out = append(out, devices.Network{
-			Interface: iface,
-			Start:     start,
-			End:       end,
+			Name:    p.Group,
+			Members: info.Members,
+			Start:   start,
+			End:     end,
 		})
 	}
 	return out, nil

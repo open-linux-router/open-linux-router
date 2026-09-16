@@ -184,3 +184,49 @@ func TestEveryInterfaceConsumerSeesTheSameAdoption(t *testing.T) {
 			dnsInfo.Adopted, gatewayInfo.Adopted, firewallInfo.Adopted)
 	}
 }
+
+// The device list's "which network is this on" has to be the network's name,
+// not a member interface's.
+//
+// This adapter is where that value originates, and it briefly reported
+// `info.Members[0]` — so an operator who named a network `lan` saw their
+// devices filed under `bridge0`, contradicting every other screen. The field's
+// own contract (internal/devices/view.go) calls it "which of this router's
+// networks the device is on", and an interface is not one of them.
+func TestDeviceNetworksAreNamedByNetwork(t *testing.T) {
+	// A pool with no range of its own, so this also covers the resolution the
+	// adapter has to do: derived ranges are where reading the stored fields
+	// would report a working network as having no addresses.
+	const document = `{"link":{"adopted":["lan0"],` +
+		`"groups":[{"name":"lan","members":["lan0"],"ipv4":{"subnet":"192.168.1.0/24"}}]},` +
+		`"dhcp":{"enabled":true,"pools":[{"group":"lan","ipv4":{}}]}}`
+
+	facts := testFacts(t, document)
+	applier, err := dhcp.NewApplierAt(facts.Store, dhcpGroupView{facts: facts}, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := dhcpNetworks{applier: applier}.Networks(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d networks, want 1: %+v", len(got), got)
+	}
+	n := got[0]
+	if n.Name != "lan" {
+		t.Errorf("Name = %q, want the network's name", n.Name)
+	}
+	// Members come too, so a device the neighbour table saw on an interface can
+	// still be placed — it is the only source that reports one.
+	if len(n.Members) != 1 || n.Members[0] != "lan0" {
+		t.Errorf("Members = %v, want [lan0]", n.Members)
+	}
+	// The resolved range. A pool that leaves it derived has addresses, and
+	// reading the stored fields would report it as having none — which would
+	// silently unplace every device on the network.
+	if !n.Holds(netip.MustParseAddr("192.168.1.150")) {
+		t.Errorf("the range %s-%s does not hold an address inside the subnet", n.Start, n.End)
+	}
+}

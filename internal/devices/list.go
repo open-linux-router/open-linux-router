@@ -38,13 +38,26 @@ type FixedAddressView interface {
 // address falls in is the difference between a map of the household and a map
 // of whatever happens to be awake.
 type NetworkView interface {
-	// Networks returns the ranges served on each interface.
+	// Networks returns this router's networks and the range served on each.
 	Networks(ctx context.Context) ([]Network, error)
 }
 
-// Network is one interface and the range served on it.
+// Network is one of this router's networks: the name an operator gave it, the
+// interfaces it lives on, and the range served there.
+//
+// Keyed by name rather than by interface since design.md §4.4's group landed.
+// The distinction is not cosmetic here — this is the value that reaches the
+// device list and the topology map as "which network is this on", so naming it
+// by kernel interface meant the operator called a network `lan` everywhere
+// except the one screen where they look for their devices.
 type Network struct {
-	Interface  string
+	// Name is the network's name, and what a placed device reports.
+	Name string
+
+	// Members are the kernel interfaces it lives on, for placing a device that
+	// a source saw on an interface rather than by address.
+	Members []string
+
 	Start, End netip.Addr
 }
 
@@ -61,11 +74,27 @@ func (n Network) Holds(addr netip.Addr) bool {
 	return addr.Compare(n.Start) >= 0 && addr.Compare(n.End) <= 0
 }
 
-// place returns the first network holding the address.
+// place returns the name of the first network holding the address.
 func place(addr netip.Addr, networks []Network) (string, bool) {
 	for _, n := range networks {
 		if n.Holds(addr) {
-			return n.Interface, true
+			return n.Name, true
+		}
+	}
+	return "", false
+}
+
+// placeInterface returns the name of the network an interface carries.
+//
+// A device seen on an interface that carries no network is left unplaced rather
+// than reported as being on an interface. That is the same rule the range
+// fallback follows and the one the field's own contract states: filing a device
+// under a plausible-looking guess is the failure mode to avoid, and "bridge0"
+// is not one of this router's networks just because a packet arrived on it.
+func placeInterface(iface string, networks []Network) (string, bool) {
+	for _, n := range networks {
+		if slices.Contains(n.Members, iface) {
+			return n.Name, true
 		}
 	}
 	return "", false
@@ -210,10 +239,17 @@ func resolve(mac string, cfg Config, presence map[string]Presence, fixed map[str
 	// complementary rather than redundant: ARP is the only thing that can place
 	// a statically-addressed device, whose address sits outside every pool.
 	if r.Presence != nil {
-		switch {
-		case len(r.Presence.Interfaces) > 0:
-			r.Network, r.NetworkOrigin = r.Presence.Interfaces[0], OriginObserved
-		default:
+		// What a source saw is resolved through the interface's network rather
+		// than reported raw. The two branches now answer the same question in
+		// the same vocabulary — before, one said `lan` and the other said
+		// `bridge0`, and which one a device got depended on whether it happened
+		// to be awake.
+		if len(r.Presence.Interfaces) > 0 {
+			if name, ok := placeInterface(r.Presence.Interfaces[0], networks); ok {
+				r.Network, r.NetworkOrigin = name, OriginObserved
+			}
+		}
+		if r.Network == "" {
 			for _, ip := range r.Presence.IPs {
 				addr, err := netip.ParseAddr(ip)
 				if err != nil {

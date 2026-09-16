@@ -288,29 +288,79 @@ func names(list []Resolved) []string {
 
 // --- placing a device on a network ------------------------------------------
 
-func netw(iface, start, end string) Network {
+// netw builds a network whose name and sole member differ, so that a test
+// asserting on the result cannot pass by accident when the two are confused.
+// That confusion is exactly what this fixture used to hide: the field held an
+// interface name and was read as a network name.
+func netw(name, member, start, end string) Network {
 	return Network{
-		Interface: iface,
-		Start:     netip.MustParseAddr(start),
-		End:       netip.MustParseAddr(end),
+		Name:    name,
+		Members: []string{member},
+		Start:   netip.MustParseAddr(start),
+		End:     netip.MustParseAddr(end),
 	}
 }
 
 // What a source saw beats what an address implies, because a range only ever
 // says where an address *would* come from.
+//
+// The interface it was seen on is resolved to the network carrying it, so the
+// answer is in the same vocabulary as the range fallback below. Before that,
+// which of the two a device got decided whether it was called `lan` or `lan0`.
 func TestBuildPrefersTheObservedInterface(t *testing.T) {
 	s := arp("aa:bb:cc:dd:ee:ff", "192.168.1.150", true)
 	s.Interface = "lan0"
 
-	list, _ := Build(Config{}, []Sighting{s}, nil,
-		[]Network{netw("iot0", "192.168.1.100", "192.168.1.200")})
+	list, _ := Build(Config{}, []Sighting{s}, nil, []Network{
+		netw("lan", "lan0", "10.0.0.100", "10.0.0.200"),
+		netw("iot", "iot0", "192.168.1.100", "192.168.1.200"),
+	})
 
 	got := find(t, list, "aa:bb:cc:dd:ee:ff")
-	if got.Network != "lan0" {
-		t.Errorf("Network = %q, want lan0 — the neighbour table saw it there", got.Network)
+	if got.Network != "lan" {
+		t.Errorf("Network = %q, want lan — the neighbour table saw it on lan0, which lan carries", got.Network)
 	}
 	if got.NetworkOrigin != OriginObserved {
 		t.Errorf("NetworkOrigin = %q, want %q", got.NetworkOrigin, OriginObserved)
+	}
+}
+
+// A device seen on an interface that carries no network falls through to the
+// range, and is left unplaced if that finds nothing.
+//
+// Reporting the interface would be reporting something that is not one of this
+// router's networks — the exact guess-as-fact the Network field's contract
+// rules out, and the thing that made the device list contradict every other
+// screen.
+func TestBuildDoesNotReportAnInterfaceAsANetwork(t *testing.T) {
+	s := arp("aa:bb:cc:dd:ee:ff", "10.9.9.9", true)
+	s.Interface = "eth-unmanaged"
+
+	list, _ := Build(Config{}, []Sighting{s}, nil,
+		[]Network{netw("lan", "lan0", "192.168.1.100", "192.168.1.200")})
+
+	got := find(t, list, "aa:bb:cc:dd:ee:ff")
+	if got.Network != "" {
+		t.Errorf("Network = %q, want empty — eth-unmanaged carries no network", got.Network)
+	}
+}
+
+// Seen on an interface with no network, but holding an address from one: the
+// range still places it. The two sources are complementary, so one failing to
+// answer must not stop the other from trying.
+func TestBuildFallsBackToTheRangeWhenTheInterfaceIsUnknown(t *testing.T) {
+	s := arp("aa:bb:cc:dd:ee:ff", "192.168.1.150", true)
+	s.Interface = "eth-unmanaged"
+
+	list, _ := Build(Config{}, []Sighting{s}, nil,
+		[]Network{netw("lan", "lan0", "192.168.1.100", "192.168.1.200")})
+
+	got := find(t, list, "aa:bb:cc:dd:ee:ff")
+	if got.Network != "lan" {
+		t.Errorf("Network = %q, want lan from the range", got.Network)
+	}
+	if got.NetworkOrigin != OriginDetected {
+		t.Errorf("NetworkOrigin = %q, want %q — a range is an inference", got.NetworkOrigin, OriginDetected)
 	}
 }
 
@@ -319,13 +369,13 @@ func TestBuildPrefersTheObservedInterface(t *testing.T) {
 func TestBuildPlacesALeaseByItsRange(t *testing.T) {
 	list, _ := Build(Config{}, []Sighting{lease("aa:bb:cc:dd:ee:ff", "192.168.30.142", "tv", false)}, nil,
 		[]Network{
-			netw("lan0", "192.168.1.100", "192.168.1.200"),
-			netw("iot0", "192.168.30.100", "192.168.30.240"),
+			netw("lan", "lan0", "192.168.1.100", "192.168.1.200"),
+			netw("iot", "iot0", "192.168.30.100", "192.168.30.240"),
 		})
 
 	got := find(t, list, "aa:bb:cc:dd:ee:ff")
-	if got.Network != "iot0" {
-		t.Errorf("Network = %q, want iot0", got.Network)
+	if got.Network != "iot" {
+		t.Errorf("Network = %q, want iot", got.Network)
 	}
 	if got.NetworkOrigin != OriginDetected {
 		t.Errorf("NetworkOrigin = %q, want %q — a range is an inference", got.NetworkOrigin, OriginDetected)
@@ -337,7 +387,7 @@ func TestBuildPlacesALeaseByItsRange(t *testing.T) {
 // on a map reads exactly like a fact.
 func TestBuildLeavesAnUnplaceableDeviceEmpty(t *testing.T) {
 	list, _ := Build(Config{}, []Sighting{lease("aa:bb:cc:dd:ee:ff", "192.168.1.10", "printer", true)}, nil,
-		[]Network{netw("lan0", "192.168.1.100", "192.168.1.200")})
+		[]Network{netw("lan", "lan0", "192.168.1.100", "192.168.1.200")})
 
 	got := find(t, list, "aa:bb:cc:dd:ee:ff")
 	if got.Network != "" {
@@ -352,7 +402,7 @@ func TestBuildLeavesAnUnplaceableDeviceEmpty(t *testing.T) {
 func TestBuildPlacesNothingWithoutPresence(t *testing.T) {
 	cfg := Config{Devices: []Device{{MAC: "aa:bb:cc:dd:ee:ff", Name: "Spare laptop"}}}
 
-	list, _ := Build(cfg, nil, nil, []Network{netw("lan0", "192.168.1.100", "192.168.1.200")})
+	list, _ := Build(cfg, nil, nil, []Network{netw("lan", "lan0", "192.168.1.100", "192.168.1.200")})
 
 	if got := find(t, list, "aa:bb:cc:dd:ee:ff"); got.Network != "" {
 		t.Errorf("Network = %q, want empty", got.Network)
@@ -360,7 +410,7 @@ func TestBuildPlacesNothingWithoutPresence(t *testing.T) {
 }
 
 func TestNetworkHolds(t *testing.T) {
-	n := netw("lan0", "192.168.1.100", "192.168.1.200")
+	n := netw("lan", "lan0", "192.168.1.100", "192.168.1.200")
 
 	for _, tc := range []struct {
 		addr string
@@ -381,7 +431,7 @@ func TestNetworkHolds(t *testing.T) {
 		}
 	}
 
-	if (Network{Interface: "lan0"}).Holds(netip.MustParseAddr("192.168.1.1")) {
+	if (Network{Name: "lan"}).Holds(netip.MustParseAddr("192.168.1.1")) {
 		t.Error("a network with no range should hold nothing")
 	}
 }
