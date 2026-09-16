@@ -543,7 +543,7 @@ The boundary §2 said had to be drawn here.
 - **Caddy's admin API instead of a rendered file.** §7.2.
 - **Naming this module `proxy` or `gateway`.** Both words are taken and mean
   the opposite direction of travel — `gateway.md` uses them for egress and for
-  the operator's mihomo/clash box. A third word was needed.
+  the operator's proxy box. A third word was needed.
 - **A Caddy site block per published name**, which is the obvious rendering and
   reads better. Each block would request its own certificate, which is exactly
   the per-service certificate step §1 promises does not exist. One wildcard site

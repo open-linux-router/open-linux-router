@@ -11,7 +11,7 @@ import type { GatewayConfig } from '@/lib/config-types'
 //
 // This screen has one reason to poll the others do not: an exit's health is
 // decided by a background prober inside olrd, so the answer can change with
-// nobody having clicked anything. "Living Room TV: no internet — Clash is down"
+// nobody having clicked anything. "Living Room TV: no internet — Proxy is down"
 // is only useful if it appears on its own.
 const OBSERVED_REFETCH_MS = 5000
 

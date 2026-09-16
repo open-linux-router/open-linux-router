@@ -752,7 +752,7 @@ func reapplyGateway(a gateway.Applier, srv *core.Server, logger *slog.Logger, ex
 	}
 
 	// Announced so the UI re-reads. The device that just lost its internet is
-	// on somebody's screen, and "no internet — Clash is down" is only useful if
+	// on somebody's screen, and "no internet — Proxy is down" is only useful if
 	// it appears without a refresh.
 	srv.Events().Publish(core.Event{Type: core.EventApplied, Module: gateway.ModuleName})
 }

@@ -122,7 +122,7 @@ func TestRenderUnbound(t *testing.T) {
 //
 // olr does not route by domain name and so has no use for a fake IP of its own
 // (docs/gateway.md §4). This guards somebody else's setup: an operator running
-// mihomo in fake-IP mode with `upstream` pointed at its resolver would have
+// a proxy in fake-IP mode with `upstream` pointed at its resolver would have
 // every answer stripped, with the cause a line in a rendered config they have
 // no reason to suspect.
 func TestRenderDoesNotStripTheBenchmarkingRange(t *testing.T) {

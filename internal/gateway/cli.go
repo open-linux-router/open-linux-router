@@ -229,8 +229,8 @@ func setDefaultCommand() *cobra.Command {
 		Short: "Set the exit everything uses unless something more specific says otherwise",
 		Long: "Set the box-wide exit — the top rung of the ladder.\n\n" +
 			"Every network follows this unless it has been given an exit of its own,\n" +
-			"so `set default Clash` plus one `rm via` for the NAS is how you say\n" +
-			"\"everything through Clash except that\". Use --no-exit to go back to the\n" +
+			"so `set default Proxy` plus one `rm via` for the NAS is how you say\n" +
+			"\"everything through Proxy except that\". Use --no-exit to go back to the\n" +
 			"box's own internet connection.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
@@ -302,7 +302,7 @@ func addExitCommand() *cobra.Command {
 			"An exit is anything that accepts traffic addressed somewhere else and\n" +
 			"takes responsibility for delivering it — a WireGuard or proxy interface,\n" +
 			"another box on the network, or nothing at all.\n\n" +
-			"  olr gateway add exit Clash  --next-hop 192.168.1.50 --probe 1.1.1.1:443\n" +
+			"  olr gateway add exit Proxy  --next-hop 192.168.1.50 --probe 1.1.1.1:443\n" +
 			"  olr gateway add exit Office --interface wg0\n" +
 			"  olr gateway add exit Blocked --blocked\n\n" +
 			"A SOCKS5 or HTTP proxy port cannot be an exit: the client has to ask it,\n" +

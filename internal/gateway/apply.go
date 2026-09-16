@@ -279,7 +279,7 @@ type AssignmentStatus struct {
 
 	// Reason explains a state that is not simply "via this exit" — an exit that
 	// is down, or a network that falls back to the box's own route. This is
-	// §2.2's *"no internet — Clash is down"*, which is the sentence that makes
+	// §2.2's *"no internet — Proxy is down"*, which is the sentence that makes
 	// a failure diagnosable in the place the operator is already looking.
 	Reason string
 }

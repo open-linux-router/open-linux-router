@@ -60,7 +60,7 @@ type Desired struct {
 // The concatenated key is what makes that true: the mark is already on the
 // packet from the classify chain, so keying on `address . mark` costs nothing
 // over keying on the address alone and answers "Living Room TV: 40 GB, of which
-// 38 via Clash" without a second table.
+// 38 via Proxy" without a second table.
 type StatTable struct {
 	Enabled bool
 
@@ -306,7 +306,7 @@ type RouteSpec struct {
 	Dev string
 
 	// Exit is carried for messages, and Why explains an unreachable route in
-	// the operator's terms — "Clash does not carry IPv6" reads very differently
+	// the operator's terms — "Proxy does not carry IPv6" reads very differently
 	// from an unexplained refusal.
 	Exit string
 	Why  string

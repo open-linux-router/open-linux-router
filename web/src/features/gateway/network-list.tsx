@@ -25,7 +25,7 @@ export /**
  * One row per network, each with the sentence docs/gateway.md §1.3 settles on.
  *
  * The effective value carries its source, which is the whole reason
- * inheritance is usable here at all: *Clash · from the box-wide setting* tells
+ * inheritance is usable here at all: *Proxy · from the box-wide setting* tells
  * an operator both what is happening and where to go to change it, without
  * anyone having to simulate a rule list.
  */

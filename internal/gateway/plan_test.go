@@ -106,7 +106,7 @@ func TestMovingAPathNobodyIsUsingIsNotDisruptive(t *testing.T) {
 	k.Active = nil
 
 	after := testConfig()
-	setExit(&after, "Clash", func(e *Exit) { e.Via.NextHop = hop("192.168.1.51") })
+	setExit(&after, "Proxy", func(e *Exit) { e.Via.NextHop = hop("192.168.1.51") })
 
 	plan := planFor(t, after, k, netip.Addr{})
 	if plan.Impact == ImpactDisruptive {
@@ -120,7 +120,7 @@ func TestMovingAPathSomebodyIsUsingIsDisruptive(t *testing.T) {
 	k.Active = []string{"192.168.1.23"}
 
 	after := testConfig()
-	setExit(&after, "Clash", func(e *Exit) { e.Via.NextHop = hop("192.168.1.51") })
+	setExit(&after, "Proxy", func(e *Exit) { e.Via.NextHop = hop("192.168.1.51") })
 
 	plan := planFor(t, after, k, netip.Addr{})
 	if plan.Impact != ImpactDisruptive {

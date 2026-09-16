@@ -313,13 +313,13 @@ before this module landed.** The fix is in `gateway`, not here, and it is worth
 recording in both documents because neither module is wrong on its own.
 
 Follow a forwarded connection on a box where `lan0` is assigned to the exit
-"Clash". `olr_route`'s classify chain runs in prerouting at mangle priority, and
+"Proxy". `olr_route`'s classify chain runs in prerouting at mangle priority, and
 `gateway:`§3.5 restricts it to forwarded traffic with `fib daddr type != local`:
 
 | Packet | What classify sees | Result |
 |---|---|---|
 | Inbound `SYN`, before DNAT | destination is still the router's own address, so `fib daddr type != local` is false | mark 0 — correct |
-| The server's `SYN/ACK` back | source `192.168.1.10` matches `lan0`'s source rule; destination is the public internet | **marked for Clash** — wrong |
+| The server's `SYN/ACK` back | source `192.168.1.10` matches `lan0`'s source rule; destination is the public internet | **marked for Proxy** — wrong |
 
 The reply looks exactly like an ordinary LAN machine opening an outbound
 connection, because conntrack does not restore the original source address until

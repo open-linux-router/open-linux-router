@@ -229,11 +229,11 @@ func BuildPlan(c Config, links LinkView, health Health, obs Observed, admin neti
 	desired := Render(c, links, health)
 	plan := Plan{Validation: result, Foreign: obs.Foreign}
 
-	// §6. Structural, never a hardcoded priority: mihomo and sing-box both move
-	// their numbers between versions, so a check that named one would pass on
-	// the release that broke it. The test is "a rule we do not own, selecting a
-	// table that carries a default route" — which is the definition of a second
-	// owner of this decision, whatever priority it happens to sit at.
+	// §6. Structural, never a hardcoded priority: the daemons that install their
+	// own routing move their numbers between versions, so a check that named one
+	// would pass on the release that broke it. The test is "a rule we do not own,
+	// selecting a table that carries a default route" — which is the definition of
+	// a second owner of this decision, whatever priority it happens to sit at.
 	//
 	// Checked only when there is something to install. Tearing our own state
 	// down never conflicts with anybody, and refusing to do so would leave an
@@ -472,7 +472,8 @@ func describeForeign(rules []ForeignRule) string {
 
 	return fmt.Sprintf(
 		"something else is managing routing on this box (%d foreign ip rule(s), priority %s, "+
-			"table %s). olr cannot share the routing table with it. If this is mihomo or "+
-			"sing-box, set auto-route: false and retry",
+			"table %s). olr cannot share the routing table with it. If that is a proxy or "+
+			"VPN daemon, turn its automatic routing off (`auto-route: false` or the "+
+			"equivalent) and retry",
 		len(rules), strings.Join(prios, ", "), strings.Join(names, ", "))
 }

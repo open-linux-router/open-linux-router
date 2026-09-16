@@ -45,15 +45,15 @@ func probeCfg() Probe {
 // cannot blackhole the network.
 func TestGoingDownNeedsConsecutiveFailures(t *testing.T) {
 	p := NewProber()
-	p.health["Clash"] = true
+	p.health["Proxy"] = true
 	cfg := probeCfg()
 
 	for i := 1; i < cfg.Failures; i++ {
-		if changed, _ := p.record("Clash", false, cfg); changed {
+		if changed, _ := p.record("Proxy", false, cfg); changed {
 			t.Fatalf("flipped after %d failures, want %d", i, cfg.Failures)
 		}
 	}
-	changed, up := p.record("Clash", false, cfg)
+	changed, up := p.record("Proxy", false, cfg)
 	if !changed || up {
 		t.Fatalf("should be down after %d failures, got changed=%v up=%v", cfg.Failures, changed, up)
 	}
@@ -63,29 +63,29 @@ func TestGoingDownNeedsConsecutiveFailures(t *testing.T) {
 // stops a flapping exit from being reported down on a technicality.
 func TestOneSuccessResetsTheFailureStreak(t *testing.T) {
 	p := NewProber()
-	p.health["Clash"] = true
+	p.health["Proxy"] = true
 	cfg := probeCfg()
 
-	p.record("Clash", false, cfg)
-	p.record("Clash", false, cfg)
-	p.record("Clash", true, cfg) // agrees with the current verdict; resets
-	p.record("Clash", false, cfg)
-	p.record("Clash", false, cfg)
+	p.record("Proxy", false, cfg)
+	p.record("Proxy", false, cfg)
+	p.record("Proxy", true, cfg) // agrees with the current verdict; resets
+	p.record("Proxy", false, cfg)
+	p.record("Proxy", false, cfg)
 
-	if changed, _ := p.record("Clash", false, cfg); !changed {
+	if changed, _ := p.record("Proxy", false, cfg); !changed {
 		t.Fatal("the third consecutive failure after the reset should flip it")
 	}
 }
 
 func TestComingBackNeedsConsecutiveSuccesses(t *testing.T) {
 	p := NewProber()
-	p.health["Clash"] = false
+	p.health["Proxy"] = false
 	cfg := probeCfg()
 
-	if changed, _ := p.record("Clash", true, cfg); changed {
+	if changed, _ := p.record("Proxy", true, cfg); changed {
 		t.Fatal("one success should not be enough to bring an exit back")
 	}
-	changed, up := p.record("Clash", true, cfg)
+	changed, up := p.record("Proxy", true, cfg)
 	if !changed || !up {
 		t.Fatalf("should be up after %d successes, got changed=%v up=%v", cfg.Successes, changed, up)
 	}
@@ -110,7 +110,7 @@ func TestWatchStartsAndStopsWithTheConfig(t *testing.T) {
 	p.Dial = dialer.dial
 
 	c := testConfig()
-	setExit(&c, "Clash", func(e *Exit) {
+	setExit(&c, "Proxy", func(e *Exit) {
 		e.Probe = &Probe{Target: netip.MustParseAddrPort("1.1.1.1:443")}
 	})
 	c.Normalize()
@@ -121,7 +121,7 @@ func TestWatchStartsAndStopsWithTheConfig(t *testing.T) {
 	p.Watch(ctx, c)
 	defer p.Stop()
 
-	if _, watched := p.Health()["Clash"]; !watched {
+	if _, watched := p.Health()["Proxy"]; !watched {
 		t.Fatal("an exit with a probe should be watched")
 	}
 	// A blocked exit is never down, so probing one does nothing.
@@ -131,9 +131,9 @@ func TestWatchStartsAndStopsWithTheConfig(t *testing.T) {
 
 	// Removing the probe stops the watch and forgets the verdict, rather than
 	// leaving a stale "down" behind that nothing will ever clear.
-	setExit(&c, "Clash", func(e *Exit) { e.Probe = nil })
+	setExit(&c, "Proxy", func(e *Exit) { e.Probe = nil })
 	p.Watch(ctx, c)
-	if _, watched := p.Health()["Clash"]; watched {
+	if _, watched := p.Health()["Proxy"]; watched {
 		t.Error("an exit with no probe should not be watched")
 	}
 }
@@ -145,7 +145,7 @@ func TestANewExitStartsBelievedUp(t *testing.T) {
 	p.Dial = func(context.Context, uint32, string) error { return errBoom }
 
 	c := testConfig()
-	setExit(&c, "Clash", func(e *Exit) {
+	setExit(&c, "Proxy", func(e *Exit) {
 		e.Probe = &Probe{Target: netip.MustParseAddrPort("1.1.1.1:443"), Interval: Duration(time.Hour)}
 	})
 	c.Normalize()
@@ -155,7 +155,7 @@ func TestANewExitStartsBelievedUp(t *testing.T) {
 	p.Watch(ctx, c)
 	defer p.Stop()
 
-	if p.Health().Down("Clash") {
+	if p.Health().Down("Proxy") {
 		t.Error("a freshly-watched exit should not start down")
 	}
 }
@@ -163,13 +163,13 @@ func TestANewExitStartsBelievedUp(t *testing.T) {
 func TestHealthTreatsAnUnknownExitAsUp(t *testing.T) {
 	// An exit nobody is probing must not be assumed dead.
 	var h Health
-	if h.Down("Clash") {
+	if h.Down("Proxy") {
 		t.Error("an unprobed exit is not down")
 	}
-	if (Health{"Clash": true}).Down("Clash") {
+	if (Health{"Proxy": true}).Down("Proxy") {
 		t.Error("an exit reported up is not down")
 	}
-	if !(Health{"Clash": false}).Down("Clash") {
+	if !(Health{"Proxy": false}).Down("Proxy") {
 		t.Error("an exit reported down is down")
 	}
 }

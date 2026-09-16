@@ -705,9 +705,10 @@ func (k LinuxKernel) observeRules() (lines []string, foreign []ForeignRule, err 
 			if reservedTable(r.Table) || OwnsTable(r.Table) {
 				continue
 			}
-			// §6, and the test is structural on purpose. mihomo and sing-box
-			// both move their priority numbers between versions, so a check
-			// that named one would pass on exactly the release that broke it.
+			// §6, and the test is structural on purpose. The daemons that
+			// install their own routing move their priority numbers between
+			// versions, so a check that named one would pass on exactly the
+			// release that broke it.
 			// What makes a rule a conflict is not where it sits but what it
 			// does: selecting a table that carries a default route is being a
 			// second owner of "where does traffic go".

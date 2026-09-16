@@ -18,11 +18,11 @@ func testConfig() Config {
 	return Config{
 		Enabled: true,
 		Exits: []Exit{
-			{Name: "Clash", Via: Via{Kind: ViaNextHop, NextHop: hop("192.168.1.50")}},
+			{Name: "Proxy", Via: Via{Kind: ViaNextHop, NextHop: hop("192.168.1.50")}},
 			{Name: "Blocked", Via: Via{Kind: ViaBlocked}},
 		},
 		Interfaces: []Assignment{
-			{Interface: "br-lan", Exit: "Clash"},
+			{Interface: "br-lan", Exit: "Proxy"},
 			{Interface: "br-iot", Exit: "Blocked"},
 		},
 	}
@@ -59,7 +59,7 @@ func TestNormalizeSortsAndAllocatesSlots(t *testing.T) {
 // an existing one, because moving it would move its route table out from under
 // every flow already marked for it.
 func TestAddingAnExitKeepsEveryOtherSlot(t *testing.T) {
-	c := Config{Exits: []Exit{{Name: "Clash"}, {Name: "Modem"}}}
+	c := Config{Exits: []Exit{{Name: "Proxy"}, {Name: "Modem"}}}
 	c.Normalize()
 	before := map[string]int{}
 	for _, e := range c.Exits {
@@ -81,15 +81,15 @@ func TestAddingAnExitKeepsEveryOtherSlot(t *testing.T) {
 }
 
 func TestUpsertKeepsTheSlotWhenReplacing(t *testing.T) {
-	c := Config{Exits: []Exit{{Name: "Clash"}, {Name: "Modem"}}}
+	c := Config{Exits: []Exit{{Name: "Proxy"}, {Name: "Modem"}}}
 	c.Normalize()
-	clash, _ := c.Find("Clash")
+	proxy, _ := c.Find("Proxy")
 
-	c.Upsert(Exit{Name: "Clash", Via: Via{Kind: ViaInterface, Interface: "wg0"}})
+	c.Upsert(Exit{Name: "Proxy", Via: Via{Kind: ViaInterface, Interface: "wg0"}})
 
-	got, _ := c.Find("Clash")
-	if got.Slot != clash.Slot {
-		t.Fatalf("slot changed on replace: was %d, now %d", clash.Slot, got.Slot)
+	got, _ := c.Find("Proxy")
+	if got.Slot != proxy.Slot {
+		t.Fatalf("slot changed on replace: was %d, now %d", proxy.Slot, got.Slot)
 	}
 	if got.Via.Interface != "wg0" {
 		t.Fatalf("via not replaced: %+v", got.Via)
@@ -159,7 +159,7 @@ func TestOwnsPriorityAndTable(t *testing.T) {
 
 func TestAssignedReportsItsSource(t *testing.T) {
 	c := testConfig()
-	c.Default = "Clash"
+	c.Default = "Proxy"
 	c.Normalize()
 
 	exit, source := c.Assigned("br-iot")
@@ -169,18 +169,18 @@ func TestAssignedReportsItsSource(t *testing.T) {
 
 	// A network nobody has configured follows the box-wide setting, and says so.
 	exit, source = c.Assigned("br-guest")
-	if exit != "Clash" || source != SourceDefault {
-		t.Errorf("br-guest = %q from %q, want Clash from default", exit, source)
+	if exit != "Proxy" || source != SourceDefault {
+		t.Errorf("br-guest = %q from %q, want Proxy from default", exit, source)
 	}
 }
 
-// §2.1's motivating case: everything through Clash except one network, which is
+// §2.1's motivating case: everything through Proxy except one network, which is
 // a default plus one override rather than a negation or a rule at position 1.
 func TestEverythingThroughOneExitExceptOne(t *testing.T) {
 	c := Config{
 		Enabled: true,
-		Default: "Clash",
-		Exits:   []Exit{{Name: "Clash", Via: Via{Kind: ViaBlocked}}},
+		Default: "Proxy",
+		Exits:   []Exit{{Name: "Proxy", Via: Via{Kind: ViaBlocked}}},
 		Interfaces: []Assignment{
 			{Interface: "br-lan"},
 			{Interface: "br-nas", Exit: ""},
@@ -191,28 +191,28 @@ func TestEverythingThroughOneExitExceptOne(t *testing.T) {
 	// An explicitly-empty assignment inherits, and reports the default as the
 	// source so that changing the default makes the consequence visible.
 	exit, source := c.Assigned("br-nas")
-	if exit != "Clash" || source != SourceDefault {
-		t.Errorf("explicit inherit = %q from %q, want Clash from default", exit, source)
+	if exit != "Proxy" || source != SourceDefault {
+		t.Errorf("explicit inherit = %q from %q, want Proxy from default", exit, source)
 	}
 }
 
 func TestRenameMovesEveryReference(t *testing.T) {
 	c := testConfig()
-	c.Default = "Clash"
+	c.Default = "Proxy"
 	c.Normalize()
 
-	if !c.Rename("Clash", "Proxy") {
+	if !c.Rename("Proxy", "Relay") {
 		t.Fatal("rename reported no such exit")
 	}
-	if c.Default != "Proxy" {
+	if c.Default != "Relay" {
 		t.Errorf("default still names the old exit: %q", c.Default)
 	}
 	for _, a := range c.Interfaces {
-		if a.Exit == "Clash" {
+		if a.Exit == "Proxy" {
 			t.Errorf("%s still points at the old name", a.Interface)
 		}
 	}
-	if _, ok := c.Find("Proxy"); !ok {
+	if _, ok := c.Find("Relay"); !ok {
 		t.Error("the renamed exit is missing")
 	}
 }
@@ -220,11 +220,11 @@ func TestRenameMovesEveryReference(t *testing.T) {
 func TestRenameKeepsTheSlot(t *testing.T) {
 	c := testConfig()
 	c.Normalize()
-	before, _ := c.Find("Clash")
+	before, _ := c.Find("Proxy")
 
-	c.Rename("Clash", "Proxy")
+	c.Rename("Proxy", "Relay")
 
-	after, _ := c.Find("Proxy")
+	after, _ := c.Find("Relay")
 	if after.Slot != before.Slot {
 		t.Errorf("renaming moved the route table: slot %d became %d", before.Slot, after.Slot)
 	}
@@ -233,7 +233,7 @@ func TestRenameKeepsTheSlot(t *testing.T) {
 func TestRemoveLeavesDanglingReferencesForValidateToReport(t *testing.T) {
 	c := testConfig()
 	c.Normalize()
-	c.Remove("Clash")
+	c.Remove("Proxy")
 
 	// Deliberate: silently re-pointing br-lan at the modem because an exit was
 	// deleted elsewhere is worse than refusing.
@@ -269,7 +269,7 @@ func TestIPv6DefaultsToBlock(t *testing.T) {
 
 func TestRoundTripThroughJSON(t *testing.T) {
 	c := testConfig()
-	c.Default = "Clash"
+	c.Default = "Proxy"
 	c.Normalize()
 
 	data, err := MarshalConfig(c)
@@ -283,7 +283,7 @@ func TestRoundTripThroughJSON(t *testing.T) {
 	if len(back.Exits) != len(c.Exits) || back.Default != c.Default {
 		t.Fatalf("round trip lost data: %+v", back)
 	}
-	got, _ := back.Find("Clash")
+	got, _ := back.Find("Proxy")
 	if got.Via.NextHop == nil || got.Via.NextHop.String() != "192.168.1.50" {
 		t.Errorf("next hop did not survive: %+v", got.Via)
 	}

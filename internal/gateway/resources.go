@@ -6,9 +6,9 @@ package gateway
 // design.md §3.4's good-citizen rule is why these are constants in a file of
 // their own rather than incidental values scattered through the renderer: the
 // whole point is that somebody else can plan around them. Docker, libvirt, k8s,
-// WireGuard and mihomo all use fwmarks; mihomo and sing-box both install `ip
-// rule` entries. We are not alone in any of these namespaces and must not
-// behave as though we are.
+// WireGuard and proxy daemons all use fwmarks; proxy and VPN daemons install
+// their own `ip rule` entries. We are not alone in any of these namespaces and
+// must not behave as though we are.
 //
 //	fwmark        one documented byte, 0x00ff0000 — always set *and* matched
 //	              with the mask, never touching another module's bits
@@ -90,7 +90,7 @@ const (
 // **Why it is stored rather than derived.** Every alternative was tried against
 // one question — what happens to traffic already in flight when the operator
 // adds an exit? Deriving the slot from the exit's position in a sorted list
-// means inserting "Backup" before "Clash" renumbers Clash; its route table id
+// means inserting "Backup" before "Proxy" renumbers Proxy; its route table id
 // changes; and for the moment between the two netlink operations, packets whose
 // `ct mark` still names the old table find nothing there and fall through to
 // `main`. That is a silent direct leak of exactly the traffic the operator

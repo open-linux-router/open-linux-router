@@ -283,7 +283,7 @@ func (b Backend) Render(c Config, links LinkView) (Rendered, error) {
 // 198.18.0.0/15 is deliberately absent, and it stays absent even though olr no
 // longer has any use of its own for it. docs/gateway.md §4 took routing by
 // domain name out of the design, so nothing here mints or routes a fake IP —
-// but an operator is still free to run mihomo in fake-IP mode and point
+// but an operator is still free to run a proxy in fake-IP mode and point
 // `upstream` at its resolver, and adding this range would strip their answers
 // with no error anywhere. Their proxy would look broken and the cause would be
 // a line in olr's rendered config they have no reason to suspect.

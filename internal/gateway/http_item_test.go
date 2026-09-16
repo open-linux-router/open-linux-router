@@ -32,7 +32,7 @@ func TestPutExitAddsOneWithoutTouchingTheOthers(t *testing.T) {
 	if _, ok := cfg.Find("Office"); !ok {
 		t.Error("Office was not added")
 	}
-	if _, ok := cfg.Find("Clash"); !ok {
+	if _, ok := cfg.Find("Proxy"); !ok {
 		t.Error("adding one exit dropped another")
 	}
 }
@@ -48,13 +48,13 @@ func TestPutExitRenamesEveryReferenceWithIt(t *testing.T) {
 	h, a := newTestHandler(t, &StaticKernel{})
 
 	cfg := testConfig()
-	cfg.Default = "Clash"
+	cfg.Default = "Proxy"
 	if w := do(t, h, http.MethodPut, "/config", cfg); w.Code != http.StatusOK {
 		t.Fatalf("setup failed: %s", w.Body)
 	}
 
-	renamed := Exit{Name: "Proxy", Via: Via{Kind: ViaNextHop, NextHop: hop("192.168.1.50")}}
-	if w := do(t, h, http.MethodPut, "/exits/Clash", renamed); w.Code != http.StatusOK {
+	renamed := Exit{Name: "Relay", Via: Via{Kind: ViaNextHop, NextHop: hop("192.168.1.50")}}
+	if w := do(t, h, http.MethodPut, "/exits/Proxy", renamed); w.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", w.Code, w.Body)
 	}
 
@@ -62,16 +62,16 @@ func TestPutExitRenamesEveryReferenceWithIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := stored.Find("Clash"); ok {
+	if _, ok := stored.Find("Proxy"); ok {
 		t.Error("the old name is still in the exit list")
 	}
-	if _, ok := stored.Find("Proxy"); !ok {
+	if _, ok := stored.Find("Relay"); !ok {
 		t.Error("the new name is not in the exit list")
 	}
-	if stored.Default != "Proxy" {
+	if stored.Default != "Relay" {
 		t.Errorf("the box-wide default still says %q", stored.Default)
 	}
-	if got, _ := stored.Assigned("br-lan"); got != "Proxy" {
+	if got, _ := stored.Assigned("br-lan"); got != "Relay" {
 		t.Errorf("br-lan still routes via %q", got)
 	}
 }
@@ -83,7 +83,7 @@ func TestPutExitRefusesToRenameOntoAnExistingName(t *testing.T) {
 	}
 
 	onto := Exit{Name: "Blocked", Via: Via{Kind: ViaBlocked}}
-	if w := do(t, h, http.MethodPut, "/exits/Clash", onto); w.Code != http.StatusBadRequest {
+	if w := do(t, h, http.MethodPut, "/exits/Proxy", onto); w.Code != http.StatusBadRequest {
 		t.Fatalf("status %d: %s", w.Code, w.Body)
 	}
 }
@@ -101,12 +101,12 @@ func TestPutExitKeepsTheSlot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	was, _ := before.Find("Clash")
+	was, _ := before.Find("Proxy")
 
 	// A different next hop, and no slot in the body: a caller does not know
 	// about slots and must not have to.
-	edited := Exit{Name: "Clash", Via: Via{Kind: ViaNextHop, NextHop: hop("192.168.1.60")}}
-	if w := do(t, h, http.MethodPut, "/exits/Clash", edited); w.Code != http.StatusOK {
+	edited := Exit{Name: "Proxy", Via: Via{Kind: ViaNextHop, NextHop: hop("192.168.1.60")}}
+	if w := do(t, h, http.MethodPut, "/exits/Proxy", edited); w.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", w.Code, w.Body)
 	}
 
@@ -114,7 +114,7 @@ func TestPutExitKeepsTheSlot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now, _ := after.Find("Clash")
+	now, _ := after.Find("Proxy")
 	if now.Slot != was.Slot {
 		t.Fatalf("slot moved from %d to %d", was.Slot, now.Slot)
 	}
@@ -129,11 +129,11 @@ func TestDeleteExitStillInUseIsRefused(t *testing.T) {
 		t.Fatalf("setup failed: %s", w.Body)
 	}
 
-	w := do(t, h, http.MethodDelete, "/exits/Clash", nil)
+	w := do(t, h, http.MethodDelete, "/exits/Proxy", nil)
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status %d: %s", w.Code, w.Body)
 	}
-	if !strings.Contains(w.Body.String(), "Clash") {
+	if !strings.Contains(w.Body.String(), "Proxy") {
 		t.Errorf("the refusal should name the exit: %s", w.Body)
 	}
 
@@ -141,7 +141,7 @@ func TestDeleteExitStillInUseIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := cfg.Find("Clash"); !ok {
+	if _, ok := cfg.Find("Proxy"); !ok {
 		t.Error("a refused delete removed it anyway")
 	}
 }
@@ -188,7 +188,7 @@ func TestPutAssignmentPointsOneNetworkAtAnExit(t *testing.T) {
 		t.Fatalf("setup failed: %s", w.Body)
 	}
 
-	w := do(t, h, http.MethodPut, "/assignments/br-iot", assignmentBody{Exit: "Clash"})
+	w := do(t, h, http.MethodPut, "/assignments/br-iot", assignmentBody{Exit: "Proxy"})
 	if w.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", w.Code, w.Body)
 	}
@@ -197,7 +197,7 @@ func TestPutAssignmentPointsOneNetworkAtAnExit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := cfg.Assigned("br-iot"); got != "Clash" {
+	if got, _ := cfg.Assigned("br-iot"); got != "Proxy" {
 		t.Fatalf("br-iot routes via %q", got)
 	}
 }
@@ -251,7 +251,7 @@ func TestDryRunOnAnItemRouteWritesNothing(t *testing.T) {
 // off hearing about it than having the change quietly held — or quietly made.
 func TestAMalformedFlagIsRefusedRatherThanIgnored(t *testing.T) {
 	h, _ := newTestHandler(t, &StaticKernel{})
-	w := do(t, h, http.MethodDelete, "/exits/Clash?confirm=yes%20please", nil)
+	w := do(t, h, http.MethodDelete, "/exits/Proxy?confirm=yes%20please", nil)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status %d: %s", w.Code, w.Body)
 	}
@@ -289,7 +289,7 @@ func TestADisruptiveChangeIsHeldUntilConfirmed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := cfg.Assigned("br-lan"); got != "Clash" {
+	if got, _ := cfg.Assigned("br-lan"); got != "Proxy" {
 		t.Fatalf("a held change was applied anyway: br-lan routes via %q", got)
 	}
 

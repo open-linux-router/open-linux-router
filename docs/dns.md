@@ -27,7 +27,7 @@ willing to act as a gateway, and devices free to pick any of them:
 |---|---|---|
 | 1 | Modem / ISP router — dials, NATs, serves DNS, usually serves DHCP too | yes |
 | 2 | The olr box — DHCP, DNS, routing | no |
-| 3 | A proxy box — mihomo/clash or similar, DNS + routing | no |
+| 3 | A proxy box — DNS + routing | no |
 | 4 | Devices | |
 
 Boxes 2 and 3 are side routers: they hang off box 1 and forward to it. A device
@@ -69,7 +69,7 @@ worth writing down why so they are not re-proposed:
 One layer up it is not a problem at all: olr health-probes the exit and
 re-points it. No device knows anything happened, so there is nothing to
 converge. The probe must be the **through-path probe**, not a ping — a crashed
-mihomo on a live Debian box answers ARP and ICMP indefinitely while forwarding
+proxy daemon on a live box answers ARP and ICMP indefinitely while forwarding
 nothing.
 
 ### 1.3 The limits of the rule, stated
@@ -130,7 +130,7 @@ client that did not use our resolver:
 | Source of the domain | Survives? |
 |---|---|
 | Fake-IP reverse map (`198.18.0.0/15` → name) | No — the client never received a fake IP |
-| `redir-host` ip→domain cache | No — same dependency |
+| A real-address mode's ip→domain cache | No — same dependency |
 | Sniffing TLS SNI / HTTP Host / QUIC ClientHello | **Yes**, for TLS and HTTP |
 
 So sniffing rescues rule matching *inside* the proxy, and nothing rescues a
@@ -175,7 +175,7 @@ the tablet and fine for the laptop", which is a miserable thing to debug.
 
 Two ways out, and the first is the recommendation:
 
-- **Ask the proxy for real addresses.** mihomo's `redir-host` mode answers with
+- **Ask the proxy for real addresses.** A proxy's real-address mode answers with
   the genuine address and keeps its own ip→domain cache, so its rules still
   match and every device — proxied or not — gets something routable. This costs
   the operator nothing olr was relying on, because since gateway:§4 olr never
@@ -200,8 +200,8 @@ mechanism. That is v2's per-client upstream selection, and it is what lets a
 fake-IP proxy coexist with mixed exits properly rather than by convention.
 
 Either way it is a tradeable to be argued to the operator in their terms —
-*"a second resolver so the devices on Modem don't get Netflix's address from the
-proxy"* — never as a limitation of a daemon they did not choose.
+*"a second resolver so the devices on Modem don't get a streaming site's address
+from the proxy"* — never as a limitation of a daemon they did not choose.
 
 ---
 

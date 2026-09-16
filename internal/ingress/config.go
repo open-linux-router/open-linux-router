@@ -13,7 +13,7 @@ import (
 // module.
 //
 // Neither `proxy` nor `gateway` was available: docs/gateway.md uses both for
-// traffic on its way *out* — an exit, and the operator's mihomo/clash box. This
+// traffic on its way *out* — an exit, and the operator's proxy box. This
 // module is the other direction, so it needed a third word.
 const ModuleName = "ingress"
 

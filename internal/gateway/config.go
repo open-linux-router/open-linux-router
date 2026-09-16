@@ -8,7 +8,7 @@
 // because the client has to *ask* in its own protocol.
 //
 // The operator never meets the word. They meet one sentence with a preposition
-// doing the work — *Internet via [ Clash ]* — attached to the thing they are
+// doing the work — *Internet via [ Proxy ]* — attached to the thing they are
 // looking at, inherited most-specific-wins (§2). An ordered first-match rule
 // list is what the kernel gets; it is deliberately not what the screen shows,
 // because answering "where does my phone actually go?" against one requires
@@ -109,7 +109,7 @@ type Assignment struct {
 
 // Exit is one way out of the box.
 type Exit struct {
-	// Name is what the operator calls it — "Clash", "Modem", "Blocked". It is
+	// Name is what the operator calls it — "Proxy", "Modem", "Blocked". It is
 	// also the reference used by Default and by every Assignment, so renaming
 	// one is a rename everywhere; see Config.Rename.
 	Name string `json:"name"`
@@ -190,7 +190,7 @@ type Via struct {
 	Interface string `json:"interface,omitempty"`
 
 	// NextHop is the address of a box that will take the traffic on — the
-	// modem, or a machine on the LAN running mihomo. Only for ViaNextHop.
+	// modem, or a machine on the LAN running a proxy. Only for ViaNextHop.
 	NextHop *netip.Addr `json:"next_hop,omitempty"`
 
 	// Dev is the interface the next hop is reachable through. Only for
@@ -275,7 +275,7 @@ type FailureMode string
 
 const (
 	// FailBlock stops the traffic, which is the default. The UI can then say
-	// "Living Room TV: no internet — Clash is down", and that is a sentence
+	// "Living Room TV: no internet — Proxy is down", and that is a sentence
 	// somebody can act on.
 	FailBlock FailureMode = "block"
 
@@ -302,7 +302,7 @@ func (f FailureMode) OrDefault() FailureMode {
 // Probe is a through-path health check for one exit (§5.5).
 //
 // Through-path, not a ping, and the distinction is the whole point: a crashed
-// mihomo on a live Debian box answers ARP and ICMP indefinitely while
+// proxy daemon on a live box answers ARP and ICMP indefinitely while
 // forwarding nothing — and worse, loops our traffic back at us, because its own
 // default gateway is us. Only an end-to-end connection through the exit can
 // tell that apart from a healthy one.

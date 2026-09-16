@@ -39,8 +39,8 @@ func TestValidateAcceptsTheReferenceTopology(t *testing.T) {
 func TestNextHopMustBeDirectlyReachable(t *testing.T) {
 	c := Config{
 		Enabled:    true,
-		Exits:      []Exit{{Name: "Clash", Via: Via{Kind: ViaNextHop, NextHop: hop("203.0.113.9")}}},
-		Interfaces: []Assignment{{Interface: "br-lan", Exit: "Clash"}},
+		Exits:      []Exit{{Name: "Proxy", Via: Via{Kind: ViaNextHop, NextHop: hop("203.0.113.9")}}},
+		Interfaces: []Assignment{{Interface: "br-lan", Exit: "Proxy"}},
 	}
 	c.Normalize()
 
@@ -54,10 +54,10 @@ func TestNextHopMustBeDirectlyReachable(t *testing.T) {
 func TestNextHopIsCheckedAgainstTheNamedDevice(t *testing.T) {
 	c := Config{
 		Enabled: true,
-		Exits: []Exit{{Name: "Clash", Via: Via{
+		Exits: []Exit{{Name: "Proxy", Via: Via{
 			Kind: ViaNextHop, NextHop: hop("192.168.1.50"), Dev: "br-iot",
 		}}},
-		Interfaces: []Assignment{{Interface: "br-lan", Exit: "Clash"}},
+		Interfaces: []Assignment{{Interface: "br-lan", Exit: "Proxy"}},
 	}
 	c.Normalize()
 
@@ -147,7 +147,7 @@ func TestUnknownExitNamesTheOnesThatExist(t *testing.T) {
 
 	res := Validate(c, testLinks())
 	p := errorAt(t, res, "default")
-	if !strings.Contains(p.Message, `"Clash"`) {
+	if !strings.Contains(p.Message, `"Proxy"`) {
 		t.Errorf("the message should list the real exits, got %q", p.Message)
 	}
 }
@@ -160,7 +160,7 @@ func TestProbeTargetMustBeOnTheFarSide(t *testing.T) {
 	c.Normalize()
 
 	res := Validate(c, testLinks())
-	i := indexOfExit(t, c, "Clash")
+	i := indexOfExit(t, c, "Proxy")
 	errorAt(t, res, exitPath(i)+".probe.target")
 }
 
@@ -174,7 +174,7 @@ func TestProbeTimeoutMustBeShorterThanItsInterval(t *testing.T) {
 	c.Normalize()
 
 	res := Validate(c, testLinks())
-	i := indexOfExit(t, c, "Clash")
+	i := indexOfExit(t, c, "Proxy")
 	errorAt(t, res, exitPath(i)+".probe.timeout")
 }
 
@@ -215,8 +215,8 @@ func TestFailDirectIsWarnedAbout(t *testing.T) {
 
 func TestDuplicateExitNamesAreRefused(t *testing.T) {
 	c := Config{Exits: []Exit{
-		{Name: "Clash", Via: Via{Kind: ViaBlocked}},
-		{Name: "Clash", Via: Via{Kind: ViaBlocked}},
+		{Name: "Proxy", Via: Via{Kind: ViaBlocked}},
+		{Name: "Proxy", Via: Via{Kind: ViaBlocked}},
 	}}
 	c.Normalize()
 

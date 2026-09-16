@@ -130,7 +130,7 @@ export function ExitDialog({
             <Input
               id="exit-name"
               value={draft.name}
-              placeholder="Clash"
+              placeholder="Proxy"
               onChange={(e) => field('name', e.target.value)}
             />
             <p className="text-xs text-muted-foreground">

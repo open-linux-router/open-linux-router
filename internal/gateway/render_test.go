@@ -65,7 +65,7 @@ func TestTheLocalGuardIsAlwaysPresentInBothFamilies(t *testing.T) {
 func TestEachExitGetsOneRuleAndOneRoutePerFamily(t *testing.T) {
 	c := testConfig()
 	c.Normalize()
-	clash, _ := c.Find("Clash")
+	proxy, _ := c.Find("Proxy")
 
 	got := lines(t, c, nil)
 
@@ -73,11 +73,11 @@ func TestEachExitGetsOneRuleAndOneRoutePerFamily(t *testing.T) {
 	// lands in is an allocation detail and asserting on it would make this test
 	// fail every time an unrelated exit was renamed.
 	wantRule := sprintf("rule ip priority %d fwmark %#08x/%#08x lookup %d",
-		clash.Priority(), clash.Mark(), MarkMask, clash.Table())
+		proxy.Priority(), proxy.Mark(), MarkMask, proxy.Table())
 	if !contains(got, wantRule) {
 		t.Errorf("missing %q in %s", wantRule, dump(got))
 	}
-	wantRoute := sprintf("route ip table %d default via 192.168.1.50 dev br-lan", clash.Table())
+	wantRoute := sprintf("route ip table %d default via 192.168.1.50 dev br-lan", proxy.Table())
 	if !contains(got, wantRoute) {
 		t.Errorf("missing %q in %s", wantRoute, dump(got))
 	}
@@ -88,10 +88,10 @@ func TestEachExitGetsOneRuleAndOneRoutePerFamily(t *testing.T) {
 func TestAV4OnlyNextHopBlocksIPv6RatherThanLeakingIt(t *testing.T) {
 	c := testConfig()
 	c.Normalize()
-	clash, _ := c.Find("Clash")
+	proxy, _ := c.Find("Proxy")
 
 	got := lines(t, c, nil)
-	want := sprintf("route ip6 table %d unreachable default", clash.Table())
+	want := sprintf("route ip6 table %d unreachable default", proxy.Table())
 	if !contains(got, want) {
 		t.Errorf("IPv6 should be refused, not left to the default path: %s", dump(got))
 	}
@@ -100,14 +100,14 @@ func TestAV4OnlyNextHopBlocksIPv6RatherThanLeakingIt(t *testing.T) {
 func TestIPv6DirectInstallsNoV6RuleAtAll(t *testing.T) {
 	c := testConfig()
 	c.Normalize()
-	setExit(&c, "Clash", func(e *Exit) { e.IPv6 = IPv6Direct })
-	clash, _ := c.Find("Clash")
+	setExit(&c, "Proxy", func(e *Exit) { e.IPv6 = IPv6Direct })
+	proxy, _ := c.Find("Proxy")
 	got := lines(t, c, nil)
 
-	if containsPrefix(got, sprintf("route ip6 table %d", clash.Table())) {
+	if containsPrefix(got, sprintf("route ip6 table %d", proxy.Table())) {
 		t.Errorf("direct means no v6 route, so the mark selects nothing: %s", dump(got))
 	}
-	if containsPrefix(got, sprintf("rule ip6 priority %d", clash.Priority())) {
+	if containsPrefix(got, sprintf("rule ip6 priority %d", proxy.Priority())) {
 		t.Errorf("a v6 rule with no table behind it would fall through to main: %s", dump(got))
 	}
 }
@@ -146,11 +146,11 @@ func TestBlockedIsUnreachable(t *testing.T) {
 func TestClassifyRulesMatchTheNetworksOwnPrefixes(t *testing.T) {
 	c := testConfig()
 	c.Normalize()
-	clash, _ := c.Find("Clash")
+	proxy, _ := c.Find("Proxy")
 
 	got := lines(t, c, nil)
 
-	if !contains(got, sprintf("nft source ip 192.168.1.0/24 mark %#08x from br-lan via Clash unless dnat", clash.Mark())) {
+	if !contains(got, sprintf("nft source ip 192.168.1.0/24 mark %#08x from br-lan via Proxy unless dnat", proxy.Mark())) {
 		t.Errorf("missing the classify rule for br-lan: %s", dump(got))
 	}
 	// The prefix is masked, so a link reporting 192.168.1.1/24 classifies the
@@ -189,15 +189,15 @@ func TestClassifyRulesExcludeDNATedConnections(t *testing.T) {
 func TestRestoreAndAccountRulesExistPerExitInUse(t *testing.T) {
 	c := testConfig()
 	c.Normalize()
-	clash, _ := c.Find("Clash")
+	proxy, _ := c.Find("Proxy")
 
 	got := lines(t, c, nil)
 
-	if !contains(got, sprintf("nft restore mark %#08x for Clash", clash.Mark())) {
-		t.Errorf("no ct-mark restore for Clash: %s", dump(got))
+	if !contains(got, sprintf("nft restore mark %#08x for Proxy", proxy.Mark())) {
+		t.Errorf("no ct-mark restore for Proxy: %s", dump(got))
 	}
-	if !contains(got, sprintf("nft account mark %#08x counter exit%d for Clash", clash.Mark(), clash.Slot)) {
-		t.Errorf("no accounting rule for Clash: %s", dump(got))
+	if !contains(got, sprintf("nft account mark %#08x counter exit%d for Proxy", proxy.Mark(), proxy.Slot)) {
+		t.Errorf("no accounting rule for Proxy: %s", dump(got))
 	}
 	// §7.3: show what you cannot account for.
 	if !contains(got, "nft count-unpoliced") {
@@ -231,10 +231,10 @@ func TestRulesAreInEvaluationOrder(t *testing.T) {
 func TestANextHopSNATsByDefault(t *testing.T) {
 	c := testConfig()
 	c.Normalize()
-	clash, _ := c.Find("Clash")
+	proxy, _ := c.Find("Proxy")
 
 	got := lines(t, c, nil)
-	want := sprintf("nft snat mark %#08x dev br-lan for Clash", clash.Mark())
+	want := sprintf("nft snat mark %#08x dev br-lan for Proxy", proxy.Mark())
 	if !contains(got, want) {
 		t.Errorf("missing %q in %s", want, dump(got))
 	}
@@ -244,7 +244,7 @@ func TestSNATCanBeTurnedOff(t *testing.T) {
 	c := testConfig()
 	c.Normalize()
 	off := false
-	setExit(&c, "Clash", func(e *Exit) { e.SNAT = &off })
+	setExit(&c, "Proxy", func(e *Exit) { e.SNAT = &off })
 	got := lines(t, c, nil)
 
 	if containsPrefix(got, "nft snat") {
@@ -271,15 +271,15 @@ func TestRedirectSysctlsAreSetOnTheNextHopsInterface(t *testing.T) {
 	}
 }
 
-// §5.5: block is the default, and the UI can then say "no internet — Clash is
+// §5.5: block is the default, and the UI can then say "no internet — Proxy is
 // down", which is a sentence somebody can act on.
 func TestADownExitBlocksItsTraffic(t *testing.T) {
 	c := testConfig()
 	c.Normalize()
-	clash, _ := c.Find("Clash")
+	proxy, _ := c.Find("Proxy")
 
-	got := lines(t, c, Health{"Clash": false})
-	want := sprintf("route ip table %d unreachable default", clash.Table())
+	got := lines(t, c, Health{"Proxy": false})
+	want := sprintf("route ip table %d unreachable default", proxy.Table())
 	if !contains(got, want) {
 		t.Errorf("a down exit should refuse rather than leak: %s", dump(got))
 	}
@@ -288,15 +288,15 @@ func TestADownExitBlocksItsTraffic(t *testing.T) {
 func TestADownExitSetToDirectInstallsNothing(t *testing.T) {
 	c := testConfig()
 	c.Normalize()
-	setExit(&c, "Clash", func(e *Exit) { e.OnFailure = FailDirect })
-	clash, _ := c.Find("Clash")
+	setExit(&c, "Proxy", func(e *Exit) { e.OnFailure = FailDirect })
+	proxy, _ := c.Find("Proxy")
 
-	got := lines(t, c, Health{"Clash": false})
+	got := lines(t, c, Health{"Proxy": false})
 
-	if containsPrefix(got, sprintf("route ip table %d ", clash.Table())) {
+	if containsPrefix(got, sprintf("route ip table %d ", proxy.Table())) {
 		t.Errorf("failing open means no table entry at all: %s", dump(got))
 	}
-	if containsPrefix(got, sprintf("rule ip priority %d ", clash.Priority())) {
+	if containsPrefix(got, sprintf("rule ip priority %d ", proxy.Priority())) {
 		t.Errorf("failing open means no policy rule, so traffic uses main: %s", dump(got))
 	}
 }
@@ -431,7 +431,7 @@ func TestInheritingTheBoxDefaultMarksNothing(t *testing.T) {
 	// the box's own connection" asks for.
 	c := Config{
 		Enabled:    true,
-		Exits:      []Exit{{Name: "Clash", Via: Via{Kind: ViaBlocked}}},
+		Exits:      []Exit{{Name: "Proxy", Via: Via{Kind: ViaBlocked}}},
 		Interfaces: []Assignment{{Interface: "br-lan"}},
 	}
 	got := lines(t, c, nil)

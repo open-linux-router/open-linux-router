@@ -15,7 +15,7 @@ which packets we can see well enough to decide about. Neither works alone.
 ## 1. The object: an exit
 
 Every attempt to name this failed while we were reaching for a *destination*
-word. In routing the pair is always *(destination, via)* — `netflix.com` is a
+word. In routing the pair is always *(destination, via)* — `example.com` is a
 destination, `10.8.0.0/24` is a destination, and the thing we kept failing to
 name is the **via**. "Gateway" and "proxy" both feel half-right because they
 describe what the box on the far side does, which is not what this object is
@@ -32,7 +32,7 @@ without further argument:
 | | Exit? | Why |
 |---|---|---|
 | A WireGuard or proxy TUN interface | yes | accepts packets for anywhere |
-| A box on the LAN running mihomo | yes | same, one hop away |
+| A box on the LAN running a proxy | yes | same, one hop away |
 | A TPROXY port on this box | yes | accepts connections addressed elsewhere |
 | `unreachable` | yes | takes responsibility by refusing, explicitly |
 | **A SOCKS5 or HTTP proxy port** | **no** | the client has to *ask*, in its own protocol |
@@ -79,7 +79,7 @@ exits.
 sentence with the preposition doing the work:
 
 ```
-Internet via  [ Clash ▾ ]        上网经由  [ Clash ▾ ]
+Internet via  [ Proxy ▾ ]        上网经由  [ Proxy ▾ ]
 ```
 
 Same construction as `group` / "network" (§4.4) — one object, two registers,
@@ -87,12 +87,12 @@ progressive disclosure rather than two models.
 
 Rejected: **`gateway`**, which already means "next hop" specifically while this
 object has three forms that are not one, and which is an engineer's word of the
-same class as the retired "segment". **`outbound`** (sing-box's term) was
-considered and rejected on a concrete collision: one of our exits *contains* a
-list of sing-box outbounds, so the two words would name different things one
-level apart in a deployment running both. sing-box itself later had to split
-`endpoint` out of `outbound` for WireGuard and Tailscale — at exactly the
-interface-shaped boundary this object spans.
+same class as the retired "segment". **`outbound`** — the word several proxy
+tools use — was considered and rejected on a concrete collision: one of our
+exits *contains* a list of such a tool's outbounds, so the two words would name
+different things one level apart in a deployment running both. At least one such
+tool later had to split `endpoint` out of `outbound` for WireGuard and Tailscale
+peers — at exactly the interface-shaped boundary this object spans.
 
 ---
 
@@ -116,11 +116,11 @@ The two cases that motivated this:
 
 - *IoT devices go direct* — the IoT network keeps the default. Nothing to
   configure; it is already right.
-- *Phones go through Clash* — the `Phones` tag gets `Internet via: Clash`. One
+- *Phones go through Proxy* — the `Phones` tag gets `Internet via: Proxy`. One
   setting.
 
 And the case an ordered list handles badly falls out for free: *everything
-through Clash except the NAS* is `default: Clash` plus one device set back. No
+through Proxy except the NAS* is `default: Proxy` plus one device set back. No
 negation, no rule at position 1 that everyone forgets.
 
 Nothing is draggable and there is no precedence to learn. We derive the kernel
@@ -133,12 +133,12 @@ Inheritance is unusable if the answer is not visible:
 
 ```
 Living Room TV
-  Internet via   Clash          from tag "Phones"        [override]
-  Status         ● via Clash · 14 GB this month
+  Internet via   Proxy          from tag "Phones"        [override]
+  Status         ● via Proxy · 14 GB this month
 ```
 
 This is §5.6's *effective state is first-class* applied to inheritance instead of
-to `auto`. It is also where a failed exit surfaces — `no internet — Clash is
+to `auto`. It is also where a failed exit surfaces — `no internet — Proxy is
 down` is a diagnosable state in the place the operator already looks.
 
 ### 2.3 Conflicts are refused, not resolved
@@ -147,7 +147,7 @@ A device in two tags with different exits is genuinely ambiguous. Inventing a
 tie-break (creation order, alphabetical) produces behaviour nobody can predict
 from the screen, so the plan step refuses:
 
-> *Phone-3 is in both `Phones` (Clash) and `Kids` (Modem) — pick one.*
+> *Phone-3 is in both `Phones` (Proxy) and `Kids` (Modem) — pick one.*
 
 §5.6's *refuse, do not disable*, one level down.
 
@@ -208,7 +208,8 @@ rule` it saves is one we are already paying for the next-hop form.
 
 Three shared namespaces, and §3.4's good-citizen rule says we take a documented
 slice of each rather than assuming we are alone. Docker, libvirt, k8s, WireGuard
-and mihomo all use marks; mihomo and sing-box both install `ip rule` entries.
+and proxy daemons all use marks; proxy and VPN daemons install their own `ip
+rule` entries.
 
 | Resource | Ours | Rule |
 |---|---|---|
@@ -226,8 +227,8 @@ point is that someone can plan around them.
 table inet olr_route {
   chain classify {                    # type filter hook prerouting, priority mangle
     ct mark and 0x00ff0000 != 0  meta mark set ct mark  return    # restore, §3.4
-    ip  saddr @dev_clash  counter name "r1" meta mark set … or 0x00120000
-    ip6 saddr @dev_clash  counter name "r1" meta mark set … or 0x00120000
+    ip  saddr @dev_proxy  counter name "r1" meta mark set … or 0x00120000
+    ip6 saddr @dev_proxy  counter name "r1" meta mark set … or 0x00120000
     counter name "unpoliced"
     ct mark set meta mark                                          # save
   }
@@ -322,7 +323,7 @@ trace.
 For a proxy on this box, the packet is never routed:
 
 ```
-ip  saddr @dev_clash meta l4proto { tcp, udp } tproxy to 127.0.0.1:7893 \
+ip  saddr @dev_proxy meta l4proto { tcp, udp } tproxy to 127.0.0.1:7893 \
     meta mark set 0x00120000 accept
 
 ip rule  add fwmark 0x00120000/0x00ff0000 lookup 8112
@@ -357,12 +358,12 @@ in §10 so it is not re-proposed on its merits — which were real.
 The argument is not that it could not be built. It is that the operator already
 owns a domain-routing engine:
 
-> **Whoever runs mihomo or sing-box has already written their domain rules, in
-> a tool built for it, with rule providers and GeoSite sets we would never
+> **Whoever runs a proxy router has already written their domain rules, in a
+> tool built for it, with rule sources and geo/category sets we would never
 > match. A second list in olr is two places that can disagree.**
 
-And when they disagree it does not fail cleanly. It produces *"I put
-netflix.com in olr and it still goes direct"*, whose cause is a rule inside the
+And when they disagree it does not fail cleanly. It produces *"I put a domain
+in olr and it still goes direct"*, whose cause is a rule inside the
 proxy that won — a thing olr cannot see, explain, or show in a diff.
 
 **So the division is by layer, and each side does the part it can do well.**
@@ -381,13 +382,13 @@ be told to make, and the second is what silently happens if they do not.
   <the proxy's resolver>` makes every answer the network gets come from the
   thing that also routes it, so its rules match on an exact name. This is the
   configuration to recommend, **with one condition attached**: the proxy must
-  answer with real addresses — mihomo's `redir-host` — and not fake ones.
+  answer with real addresses — its real-address mode — and not fake ones.
   `upstream` is global (dns:§3), so a fake-IP proxy hands `198.18.x` to *every*
   device including the ones on `Internet via: Modem`, and those are blackholed.
   It presents as "the internet works on the laptop and not the tablet", which is
   a miserable thing to debug. Nothing is lost by asking: olr has no use for a
-  fake IP anywhere, so `redir-host` costs the operator nothing they were relying
-  on.
+  fake IP anywhere, so real addresses cost the operator nothing they were
+  relying on.
 - **Otherwise the proxy sniffs.** TLS SNI and HTTP Host, per dns:§2.2, which
   works today and degrades as ECH deploys. Fine as a fallback, not something to
   design around.
@@ -400,7 +401,7 @@ selection.
 
 ### 4.2 What this costs, stated
 
-*"Send only Netflix through the proxy and everything else direct"* is **not
+*"Send only one site through the proxy and everything else direct"* is **not
 expressible in olr**. It is expressible in the proxy, which is where the rest of
 that operator's domain policy already lives.
 
@@ -474,13 +475,13 @@ it is the difference between working and appearing to work.
 
 ### 5.5 When the exit dies
 
-The health check is a **through-path probe, not a ping**. A crashed mihomo on a
-live Debian box answers ARP and ICMP indefinitely while forwarding nothing —
+The health check is a **through-path probe, not a ping**. A crashed proxy daemon
+on a live box answers ARP and ICMP indefinitely while forwarding nothing —
 worse, it loops our traffic back at us, because its own default gateway is us.
 
 Failure behaviour is declared per §5.6, with hysteresis:
 
-- `block` — **the default.** The UI says *"Living Room TV: no internet — Clash is
+- `block` — **the default.** The UI says *"Living Room TV: no internet — Proxy is
   down"*, which is diagnosable.
 - `direct` — silently leaks exactly the traffic the operator asked to route.
   Available, never the default.
@@ -494,9 +495,10 @@ it is what the topology rule is trading against.
 
 ## 6. Coexistence with a proxy that wants to route
 
-mihomo's `auto-route` and sing-box's equivalent install their own `ip rule`
-entries, route tables and nftables rules. On the same host as olr that is two
-owners of one decision surface, with the worst available failure mode: it works
+A proxy or VPN daemon in its automatic-routing mode (`auto-route` and its
+equivalents) installs its own `ip rule` entries, route tables and nftables
+rules. On the same host as olr that is two owners of one decision surface, with
+the worst available failure mode: it works
 until a version bump moves a priority number, and then some traffic silently
 takes the wrong path.
 
@@ -506,9 +508,9 @@ The requirement is `auto-route: false`. It is a setting in a file we do not own
 > **Detect and refuse.** If adding an exit finds foreign `ip rule` entries
 > pointing at a table carrying a default route, the plan does not proceed:
 >
-> *mihomo is managing routing itself (4 foreign ip rules, priority 9000–9003,
-> table 2022). olr cannot share the routing table with it. Set
-> `auto-route: false` and retry.*
+> *something else is managing routing on this box (4 foreign ip rules, priority
+> 9000–9003, table 2022). olr cannot share the routing table with it. Turn its
+> automatic routing off (`auto-route: false` or the equivalent) and retry.*
 
 §5.6's *refuse, do not disable* — we do not rewrite their file and we do not
 silently work around it. The check must be **structural** (any foreign rule at a
@@ -545,7 +547,7 @@ table inet olr_stat {
 
 The concatenated key gives per-device **and** per-exit from one structure,
 because the mark is already there from §3.3. *"Living Room TV: 40 GB, of which 38
-via Clash"* costs nothing extra. With no routing installed the mark is 0 and it
+via Proxy"* costs nothing extra. With no routing installed the mark is 0 and it
 degrades to plain per-device totals, so this table does not depend on that one.
 
 **The direction match is what makes the address mean "a device here."** An
@@ -763,19 +765,20 @@ any work.
 
 ## 10. Considered and rejected
 
-- **Wrapping mihomo or sing-box as a managed backend.** Structurally legal — a
-  separate unit, rendered config, supervised like dnsmasq. It fails on packaging
-  and cadence: neither is in Debian, so we would be distributing a proxy binary
-  and its CVEs, and sing-box makes breaking config changes across minor versions,
-  which is fine for a human with a migration guide and expensive for a renderer
-  that must survive `apt upgrade`. The operator runs it; we route to it. If it is
-  ever revisited, mihomo is the candidate — its config format is the stable one,
-  and it parses subscriptions natively.
-- **sing-box as the base layer, with no nftables at all.** It is more featureful
-  at routing, and that is not the question. Everything through a userspace TUN
-  costs: inbound port forwards stop working (a TUN is outbound-only), a client's
-  own IPsec breaks, ICMP becomes emulated so the tools people debug with lie, and
-  every byte crosses a userspace stack with no offloads. mDNS was *not* a valid
+- **Wrapping a third-party proxy router as a managed backend.** Structurally
+  legal — a separate unit, rendered config, supervised like dnsmasq. It fails on
+  packaging and cadence: these tools are not in Debian, so we would be
+  distributing a proxy binary and its CVEs, and they make breaking config changes
+  across minor versions, which is fine for a human with a migration guide and
+  expensive for a renderer that must survive `apt upgrade`. The operator runs it;
+  we route to it. If it is ever revisited, the candidate is whichever one has the
+  most stable config format.
+- **A userspace TUN router as the base layer, with no nftables at all.** Such a
+  tool is more featureful at routing, and that is not the question. Everything
+  through a userspace TUN costs: inbound port forwards stop working (a TUN is
+  outbound-only), a client's own IPsec breaks, ICMP becomes emulated so the tools
+  people debug with lie, and every byte crosses a userspace stack with no
+  offloads. mDNS was *not* a valid
   objection and is recorded here as withdrawn — it is link-local with TTL 1 and
   never crosses a router.
 - **REDIRECT (`redir-port`).** The only nftables-only mechanism, and TCP-only.

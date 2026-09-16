@@ -233,7 +233,7 @@ func TestApplyRepairsDrift(t *testing.T) {
 func TestStatusReportsEffectiveValuesAndTheirSource(t *testing.T) {
 	h, _ := newTestHandler(t, &StaticKernel{})
 	cfg := testConfig()
-	cfg.Default = "Clash"
+	cfg.Default = "Proxy"
 	if w := do(t, h, http.MethodPut, "/config", cfg); w.Code != http.StatusOK {
 		t.Fatalf("setup failed: %s", w.Body)
 	}
@@ -282,7 +282,7 @@ func TestStatusOnAnUnreadableKernelSaysSo(t *testing.T) {
 
 func TestStatusSaysWhenAnExitIsDown(t *testing.T) {
 	prober := NewProber()
-	prober.health["Clash"] = false
+	prober.health["Proxy"] = false
 
 	a := Applier{
 		Kernel: &StaticKernel{}, Links: testLinks(), Store: newTestStore(t), Probes: prober,
@@ -301,7 +301,7 @@ func TestStatusSaysWhenAnExitIsDown(t *testing.T) {
 	}
 	// §2.2: the failure surfaces in the place the operator already looks, in
 	// words they can act on.
-	if !strings.Contains(reason, "no internet") || !strings.Contains(reason, "Clash") {
+	if !strings.Contains(reason, "no internet") || !strings.Contains(reason, "Proxy") {
 		t.Errorf("br-lan should say why it has no internet, got %q", reason)
 	}
 }
@@ -366,10 +366,10 @@ func TestTrafficEndpointDegradesRatherThanFailing(t *testing.T) {
 func TestTrafficEndpointReportsUsage(t *testing.T) {
 	cfg := testConfig()
 	cfg.Normalize()
-	clash, _ := cfg.Find("Clash")
+	proxy, _ := cfg.Find("Proxy")
 
 	k := &StaticKernel{Flows: []Flow{
-		{Addr: netip.MustParseAddr("192.168.1.23"), Mark: clash.Mark(), UpBytes: 10, DownBytes: 90},
+		{Addr: netip.MustParseAddr("192.168.1.23"), Mark: proxy.Mark(), UpBytes: 10, DownBytes: 90},
 	}}
 	h, _ := newTestHandler(t, k)
 	if w := do(t, h, http.MethodPut, "/config", cfg); w.Code != http.StatusOK {
@@ -380,7 +380,7 @@ func TestTrafficEndpointReportsUsage(t *testing.T) {
 	if !tv.Counting || len(tv.Usage) != 1 {
 		t.Fatalf("unexpected response: %+v", tv)
 	}
-	if tv.Usage[0].Exit != "Clash" || tv.Usage[0].DownBytes != 90 {
+	if tv.Usage[0].Exit != "Proxy" || tv.Usage[0].DownBytes != 90 {
 		t.Errorf("unexpected row: %+v", tv.Usage[0])
 	}
 	if len(tv.Limits) == 0 {

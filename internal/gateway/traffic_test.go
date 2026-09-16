@@ -23,7 +23,7 @@ func TestTrafficNamesTheExitBehindEachMark(t *testing.T) {
 	c.Normalize()
 
 	k := &StaticKernel{Flows: []Flow{
-		{Addr: netip.MustParseAddr("192.168.1.23"), Mark: markOf(t, c, "Clash"),
+		{Addr: netip.MustParseAddr("192.168.1.23"), Mark: markOf(t, c, "Proxy"),
 			UpBytes: 100, DownBytes: 900},
 	}}
 	a := Applier{Kernel: k, Links: testLinks(), Store: newTestStore(t)}
@@ -38,7 +38,7 @@ func TestTrafficNamesTheExitBehindEachMark(t *testing.T) {
 	if len(usage) != 1 {
 		t.Fatalf("expected one row, got %+v", usage)
 	}
-	if usage[0].Exit != "Clash" {
+	if usage[0].Exit != "Proxy" {
 		t.Errorf("mark was not resolved to a name: %+v", usage[0])
 	}
 	if usage[0].Total() != 1000 {

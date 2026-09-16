@@ -10,7 +10,7 @@ import (
 
 // Exit health (docs/gateway.md §5.5).
 //
-// **A through-path probe, not a ping.** A crashed mihomo on a live Debian box
+// **A through-path probe, not a ping.** A crashed proxy daemon on a live box
 // answers ARP and ICMP indefinitely while forwarding nothing — and worse, loops
 // our traffic back at us, because its own default gateway is us. So the only
 // check worth running is one that traverses the exit and reaches something on
