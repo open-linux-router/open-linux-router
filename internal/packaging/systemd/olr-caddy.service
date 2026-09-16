@@ -83,45 +83,22 @@ RestartSec=5
 # against Let's Encrypt is how an operator loses issuance for a week. Slower,
 # and only on failure.
 
-# Binding :80 and :443 is the only privilege this process gets. It does not keep
-# a root identity to do it.
-DynamicUser=yes
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-PrivateTmp=true
-PrivateDevices=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RestrictNamespaces=true
-RestrictRealtime=true
-RestrictSUIDSGID=true
-LockPersonality=true
-
-# No MemoryDenyWriteExecute=, unlike the other units here.
+# No sandbox, and root — see "Privileges" in design.md §3.5.
 #
-# Not an oversight and not laziness: the Go runtime this binary is built with
-# allocates executable pages, and olr's own units get away with the restriction
-# only because they are built the way they are. Imposing it on a binary we did
-# not build would fail at start with a SIGSYS and no useful message — the worst
-# possible way to learn that a hardening flag was aspirational.
-
-# AF_NETLINK alongside the obvious three. Go's resolver and its interface
-# enumeration both use netlink, and leaving it out produces a proxy that starts,
-# binds, and then cannot resolve the ACME server — which looks like a network
-# fault rather than a sandbox one and is miserable to track down.
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+# This unit had already conceded two of the arguments that decision generalises.
+# MemoryDenyWriteExecute= was left off because the Go runtime in a binary we did
+# not build allocates executable pages and would die of SIGSYS with no useful
+# message; AF_NETLINK had to be added because Go's resolver uses netlink and
+# without it the proxy started, bound, and then could not reach the ACME server —
+# a sandbox fault wearing a network fault's clothes. Two exceptions carved for a
+# binary olr does not ship is the shape of a rule that was not working.
 
 # Certificate storage: the ACME account key and the certificates themselves.
 #
 # StateDirectory= rather than ReadWritePaths=, for the reason olr-dns records:
 # systemd refuses to start a unit whose ReadWritePaths= target does not exist,
 # and at boot this can legitimately run before olr has ever applied anything.
-# StateDirectory= makes systemd create it, and with DynamicUser=yes own it
-# correctly.
+# StateDirectory= makes systemd create it.
 #
 # **This directory is not scratch.** Deleting it discards the ACME account key
 # and every certificate, and the next start re-issues from the authority — with
@@ -130,9 +107,9 @@ StateDirectory=open-linux-router/ingress
 StateDirectoryMode=0700
 
 # Caddy stores under $XDG_DATA_HOME/caddy. Pointed at the state directory
-# because DynamicUser leaves no meaningful home to fall back on, and the default
-# would otherwise land certificates somewhere neither olr nor the operator would
-# think to look.
+# because the default would otherwise land certificates in root's home, which is
+# somewhere neither olr nor the operator would think to look — and which no
+# other part of olr backs up, upgrades or cleans.
 Environment=XDG_DATA_HOME=/var/lib/open-linux-router/ingress
 
 [Install]

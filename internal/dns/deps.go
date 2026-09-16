@@ -24,12 +24,13 @@ import "github.com/open-linux-router/open-linux-router/internal/core"
 // should not be told to install it — that is the same rule this file exists to
 // apply, one level in.
 //
-// unbound is one entry, not three. unbound-checkconf and unbound-anchor matter
-// to the units and are looked up separately there, but they ship in the same
-// package everywhere, so reporting them individually would tell an operator to
-// install the same thing three times.
+// Two entries for unbound, not one and not three. unbound-checkconf does ship
+// with the resolver everywhere, so it is looked up by the units and reported by
+// neither. unbound-anchor does not: Debian, Fedora, RHEL and openSUSE all split
+// it into a package of its own, and a box that installed only `unbound` has a
+// resolver that cannot start at all — see unboundAnchorDependency.
 func Dependencies(c Config) []core.Dependency {
-	deps := []core.Dependency{unboundDependency}
+	deps := []core.Dependency{unboundDependency, unboundAnchorDependency}
 	if c.Hijack.Enabled {
 		deps = append(deps, nftablesDependency)
 	}
@@ -64,6 +65,44 @@ var unboundDependency = core.Dependency{
 		{Distro: "fedora", Name: "unbound"},
 		{Distro: "rhel", Name: "unbound"},
 		{Distro: "suse", Name: "unbound"},
+		{Distro: "arch", Name: "unbound"},
+		{Distro: "alpine", Name: "unbound"},
+	},
+}
+
+// unboundAnchorDependency is the root trust anchor's fetcher, and the surprise
+// is how hard a requirement it is.
+//
+// olr renders `auto-trust-anchor-file`, and unbound treats a missing one as
+// fatal rather than as something to bootstrap — "error reading
+// auto-trust-anchor-file" and it refuses to start. The unit runs unbound-anchor
+// before it to write that file. The `-` on that ExecStartPre is about
+// unbound-anchor's exit code, not about it being optional, so an absent binary
+// is skipped in silence and the failure surfaces one step later as a resolver
+// that will not come up.
+//
+// Which is exactly what a box that installed `unbound` on Debian gets, because
+// the binary is not in that package. Declaring it here is what turns that into
+// a sentence on the DNS page with a button under it.
+//
+// Inert, and so carried by the .deb: the package is one binary, one man page,
+// no unit and no port (compare unbound above, which is none of those things).
+// That means an apt box never meets this blocker at all — it is already there
+// when DNS is first turned on — and a tarball box is told precisely what to
+// install rather than being left with a unit that fails.
+var unboundAnchorDependency = core.Dependency{
+	Tool: "unbound-anchor",
+	Why: "unbound validates DNSSEC against the root trust anchor and refuses to " +
+		"start without it; this is what fetches it and keeps it current as the root key rolls.",
+	Inert: true,
+	Packages: []core.Package{
+		// Split out of the resolver package by everything but Arch and Alpine.
+		{Distro: "debian", Name: "unbound-anchor"},
+		{Distro: "fedora", Name: "unbound-anchor"},
+		{Distro: "rhel", Name: "unbound-anchor"},
+		{Distro: "suse", Name: "unbound-anchor"},
+		// Ship one unbound package with every tool in it, so this resolves to
+		// the same install the entry above already asked for.
 		{Distro: "arch", Name: "unbound"},
 		{Distro: "alpine", Name: "unbound"},
 	},

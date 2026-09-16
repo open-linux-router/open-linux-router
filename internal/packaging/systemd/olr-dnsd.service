@@ -23,10 +23,10 @@ ExecStart=/usr/bin/olr internal dns-relay
 # it stops. Tying its lifetime to this unit is the whole point of putting it
 # here rather than in a unit of its own.
 #
-# The `+` prefix runs these as root, outside the sandbox below. That is what
-# lets the relay itself — the most exposed process on the box, parsing
-# unauthenticated packets from every device on the LAN — hold no privileges at
-# all while still getting its ruleset loaded.
+# The `+` prefix runs these as root, outside whatever sandbox the service has.
+# It buys nothing today, because the service is root already (see below), and it
+# stays for the day the sandbox comes back: it is what lets the relay itself
+# hold no privileges and still get its ruleset loaded.
 #
 # The leading `-` on the load is deliberate and is a judgement, not laziness: if
 # the ruleset fails to load, clients that use this resolver still resolve.
@@ -55,27 +55,14 @@ ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=2
 
-# Binding :53 is the only privilege this process gets, and it does not keep a
-# root identity to do it. design.md §3.5 is explicit about why this matters more
-# here than for most units: a DNS server parses unauthenticated packets from
-# every device on the LAN, which is the most dangerous code on the box.
-DynamicUser=yes
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-PrivateTmp=true
-PrivateDevices=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RestrictNamespaces=true
-RestrictRealtime=true
-RestrictSUIDSGID=true
-LockPersonality=true
-MemoryDenyWriteExecute=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# No sandbox, and root — see "Privileges" in design.md §3.5.
+#
+# This unit is the one that decision costs something real, and the note belongs
+# next to it rather than only in the design doc: a DNS relay parses
+# unauthenticated packets from every device on the LAN, which is the most
+# exposed code olr ships, and it used to run under DynamicUser with
+# CAP_NET_BIND_SERVICE and nothing else. If any unit earns its sandbox back
+# first, it is this one.
 
 # olr/dns, not olr. systemd deletes a RuntimeDirectory when its unit stops, and
 # /run/olr also holds olrd's control socket and the lockout guard's revert

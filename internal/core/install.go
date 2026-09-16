@@ -12,16 +12,16 @@ import (
 // that it cannot perform in-process.
 //
 // This is a subprocess started by olrd, and design.md §3.6 says olrd executes
-// none — so the exception is taken deliberately and paid for in the one way
-// that keeps the sandbox intact. olrd runs under ProtectSystem=strict; an
-// apt-get inside that mount namespace cannot write /var/lib/dpkg, /usr/sbin or
-// anything else it needs, and would fail on a read-only filesystem for reasons
-// that read like a bug in olr. So the package manager is handed to systemd as a
-// transient unit, which PID 1 spawns in the *host* namespace with full root,
-// outside every restriction olrd sets for itself. The sandbox is not relaxed to
-// make this work, which was the alternative and is much worse: the directives
-// in packaging/systemd/olrd.service bound what a bug in olrd can reach, and an
-// apt-shaped hole in them would be permanent.
+// none — so the exception is taken deliberately, and handed to systemd as a
+// transient unit rather than forked from here.
+//
+// That shape was originally forced: olrd ran under ProtectSystem=strict, and an
+// apt-get inside that mount namespace cannot write /var/lib/dpkg and fails on a
+// read-only filesystem for reasons that read like a bug in olr. The sandbox is
+// gone (design.md §3.5, "Privileges") and the shape stays, because it was the
+// better one anyway — a package manager that can run for minutes belongs in a
+// unit of its own, where it is one line in the journal with its own name rather
+// than output interleaved into olrd's.
 //
 // systemd-run --wait --pipe is how that is asked for. It ships with systemd, it
 // propagates the service's exit status, and it hands the transient unit our own

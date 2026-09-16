@@ -52,6 +52,12 @@ depends:
   # that on and getting a failure out of a unit rather than out of olr. A router
   # without nftables is not a configuration worth optimising the package for.
   - nftables
+  # One binary, no unit, no port — and Debian keeps it out of the `unbound`
+  # package, so an operator who installs the resolver still has no way to fetch
+  # the root trust anchor, and unbound refuses to start without it. Carrying it
+  # here is 200 kB on a box that may never resolve a name, against a resolver
+  # that cannot start on one that does.
+  - unbound-anchor
 
 # No `overrides:` block, because deb is the only format built from this file.
 # nfpm will also emit .apk and .rpm, and once did, each with its own dependency

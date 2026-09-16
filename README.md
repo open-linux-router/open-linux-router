@@ -77,7 +77,7 @@ actual work to something that already does it well:
 
 All of it is one binary. `olr` is the command you type, the control plane
 systemd runs, and the DNS relay behind port 53 — separate units and separate
-sandboxes, one executable. Under it sits the Go standard library plus a short
+processes, one executable. Under it sits the Go standard library plus a short
 list of direct dependencies: [`google/nftables`](https://github.com/google/nftables)
 and [`vishvananda/netlink`](https://github.com/vishvananda/netlink) for the
 kernel, [`coreos/go-systemd`](https://github.com/coreos/go-systemd) for
@@ -85,8 +85,10 @@ supervision over D-Bus, [`spf13/cobra`](https://github.com/spf13/cobra) for the
 CLI, and [`invopop/jsonschema`](https://github.com/invopop/jsonschema) for the
 schema reflection everything else is generated from. Keeping that list short is
 a deliberate constraint, not an accident. There is no database and no message
-bus — configuration is one JSON file. `olrd` spawns no subprocesses at all,
-which is what makes its systemd sandbox nearly free.
+bus — configuration is one JSON file. The units run as root with no systemd
+sandbox, which is a deliberate trade and not an oversight: design.md §3.5
+"Privileges" records what that bought, what it costs, and what has to happen
+before it changes back.
 
 Not written yet: firewall *filtering* — zones and rules, the other half of the
 firewall module — Wi-Fi (hostapd), VPN (WireGuard), QoS (tc), WAN dialling
@@ -101,8 +103,15 @@ nftables should work.
 sudo apt install ./olr_<version>_<arch>.deb
 ```
 
-apt resolves `dnsmasq-base` and `nftables` before any of olr's code runs. This
-starts the control plane and touches nothing else on the machine.
+apt resolves `dnsmasq-base`, `nftables` and `unbound-anchor` before any of olr's
+code runs. This starts the control plane and touches nothing else on the
+machine.
+
+`unbound-anchor` is in that list and `unbound` is not, which looks inconsistent
+and is not: the anchor package is one binary that fetches the root DNSSEC key,
+starts nothing and takes no port, while unbound without that key refuses to
+start at all. Carrying the small half means turning DNS on asks you for one
+thing instead of two.
 
 Not `unbound`, deliberately. Installing it would start a resolver on
 `127.0.0.1:53` on every box — including ones that will only ever hand out

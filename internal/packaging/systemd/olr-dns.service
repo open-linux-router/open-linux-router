@@ -58,33 +58,34 @@ ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=2
 
-# unbound answers on 5353, which is unprivileged, and talks to the root servers
-# and forwarders outbound. It needs no capabilities at all — the rendered config
-# sets `username: ""` and `chroot: ""` precisely so that the confinement is
-# systemd's and there is exactly one place to read it.
-DynamicUser=yes
-CapabilityBoundingSet=
-AmbientCapabilities=
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-PrivateTmp=true
-PrivateDevices=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RestrictNamespaces=true
-RestrictRealtime=true
-RestrictSUIDSGID=true
-LockPersonality=true
-MemoryDenyWriteExecute=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# No sandbox, and root. See "Privileges" in design.md §3.5 for the decision this
+# unit is one instance of.
+#
+# This is the unit that bought the decision. It ran under DynamicUser=yes with
+# an empty capability set and thirteen restrictions, including
+#
+#   RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+#
+# and unbound never started once on Debian 13, because unbound resolves its
+# `interface:` lines through getifaddrs() — a netlink socket — even when every
+# interface named is a literal address. The filter returned EAFNOSUPPORT,
+# unbound-checkconf reported "could not resolve interface names", and the unit
+# sat in an auto-restart loop while the rendered config it was rejecting was
+# perfectly valid. Nothing in the error pointed at the sandbox.
+#
+# The rendered config still sets `username: ""` and `chroot: ""`, so unbound
+# does not drop privileges either: one process identity, and a failure that
+# means what it says.
 
 # The trust anchor, which unbound rewrites as the root key rolls.
 # StateDirectory= and not ReadWritePaths=: systemd refuses to start a unit whose
 # ReadWritePaths= target does not exist, and at boot this unit can legitimately
 # run before olr has ever applied anything and created it. StateDirectory= makes
-# systemd create it instead, and with DynamicUser=yes it also owns it correctly.
+# systemd create it instead, so the unit is self-sufficient.
+#
+# Running as root also puts this back at /var/lib/open-linux-router/dns. Under
+# DynamicUser systemd kept it in /var/lib/private and left a symlink, which is
+# why an upgrading box logs one "migrating" line and then stops mentioning it.
 StateDirectory=open-linux-router/dns
 StateDirectoryMode=0755
 

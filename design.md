@@ -337,6 +337,42 @@ two module shapes through the back door, and it costs two things for free: the
 backend stops being independently runnable and debuggable, and §3.2 rule 5's
 escape hatch stops working for it.
 
+**Privileges: every unit runs as root, with no sandbox** (decided 2026-09-16).
+
+olr's five units used to carry per-unit systemd hardening — `DynamicUser=`,
+`ProtectSystem=strict`, capability bounding sets, `RestrictAddressFamilies=`,
+the rest. They no longer carry any of it. Each unit runs as root with the
+privileges systemd gives a system service by default.
+
+This is a deliberate trade and not a gap nobody noticed:
+
+- **Every failure it produced was ours, and none of them said "sandbox".**
+  unbound would not start on a valid config, because resolving `interface:`
+  lines calls `getifaddrs()` and the address-family filter had no `AF_NETLINK`.
+  Caddy started, bound its ports, and could not reach its certificate
+  authority, for the same reason one layer along. `core.holderOf` could never
+  name the process holding `:53` because that needs `CAP_SYS_PTRACE` against a
+  daemon running as its own user, so every port conflict fell through to a
+  guess. The cost was paid in debugging sessions, in features that silently did
+  not work, and in one shipped release where DNS could not start at all.
+- **The strongest boundary was already gone.** `olrd` holds a root D-Bus
+  connection to PID 1 — that is how it drives the backends — and
+  `StartTransientUnit` over that bus runs anything with any capability. A
+  bounding set on `olrd` could not contain anyone who had reached its address
+  space; it only contained us.
+- **Getting it exactly right is not today's problem.** Least privilege is worth
+  having, and it is worth doing once, deliberately, with a way to test that a
+  unit still works under it — not as a directive added per unit from memory and
+  discovered to be wrong months later by an operator whose DNS is down.
+
+What this costs, stated plainly so it is not rediscovered as a surprise:
+`olr-dnsd` parses unauthenticated packets from every device on the LAN and now
+does so as root. That is the unit to harden first when this is revisited, and
+the one that should get a real test when it is.
+
+`internal/packaging/embed_test.go` holds the units to this, so a directive added
+back in isolation fails the build rather than the box.
+
 ### 3.6 Concurrency and privilege inside `olrd`
 
 **One global apply lock.** Every config write across every module takes it. Not

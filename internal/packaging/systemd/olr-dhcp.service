@@ -49,17 +49,11 @@ ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=2
 
-# dnsmasq drops privileges to its own unprivileged user after binding, so it
-# starts as root but does not stay there. These keep the blast radius small
-# without interfering with that.
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_NET_RAW CAP_SETUID CAP_SETGID
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-PrivateTmp=true
-ProtectKernelTunables=true
-ProtectControlGroups=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
+# No sandbox, and root — see "Privileges" in design.md §3.5.
+#
+# dnsmasq still drops privileges to its own unprivileged user after binding,
+# because that is dnsmasq's behaviour and not systemd's. Nothing here overrides
+# it, so this unit loses the least of the five.
 
 # The lease database. StateDirectory= and not ReadWritePaths=: systemd refuses
 # to start a unit whose ReadWritePaths= target does not exist, and at boot this
