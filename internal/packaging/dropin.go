@@ -22,13 +22,20 @@ const (
 	OLRCaddy = "/usr/lib/open-linux-router/caddy"
 
 	dhcpConf    = "/etc/open-linux-router/rendered/dhcp/dnsmasq.conf"
-	dnsConf     = "/etc/open-linux-router/rendered/dns/unbound.conf"
-	dnsAnchor   = "/var/lib/open-linux-router/dns/root.key"
 	dnsHijack   = "/etc/open-linux-router/rendered/dns/hijack.nft"
 	ingressConf = "/etc/open-linux-router/rendered/ingress/Caddyfile"
 	dropInName  = "10-path.conf"
 	dropInDir   = "/etc/systemd/system"
 	dropInBlurb = "# Written by `olr enable`: %s is not at the path this unit assumes.\n"
+
+	// These two are not under /etc/open-linux-router with the rest, and the
+	// reason is the daemon rather than the module: Debian confines
+	// /usr/sbin/unbound by path, and only lets it read under /etc/unbound and
+	// write under /var/lib/unbound. internal/dns.Paths says why in full, and
+	// paths_test.go holds these three copies of the answer — the unit, this
+	// drop-in and the renderer — against each other.
+	dnsConf   = "/etc/unbound/open-linux-router/unbound.conf"
+	dnsAnchor = "/var/lib/unbound/open-linux-router/root.key"
 )
 
 // Tools is where each backend was actually found on this box. An empty string

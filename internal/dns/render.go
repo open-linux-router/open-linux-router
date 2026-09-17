@@ -18,11 +18,51 @@ import (
 // directory and still get files whose internal references are self-consistent —
 // the rendered files name these paths, so overriding them halfway would produce
 // a config that pointed at the real system.
+//
+// Two of them are not ours to place freely, because a distribution that
+// confines the resolver by path decides where it may look. Debian's unbound
+// package ships an AppArmor profile for /usr/sbin/unbound — Ubuntu inherits it
+// — and the only paths it grants are these:
+//
+//	/etc/unbound/** r,
+//	owner /etc/unbound/*.key* rw,
+//	/{,etc/unbound/}var/lib/unbound/** r,
+//	owner /{,etc/unbound/}var/lib/unbound/** rw,
+//
+// Everything else is denied. UnboundConf and TrustAnchor are the only two
+// files in this list that the daemon itself opens — the relay's configuration,
+// the policies and the hijack ruleset are read by olr's own binaries, which
+// nothing confines — so those two have to live where that profile already
+// points, and each in a subdirectory named after us rather than in the tree
+// itself. Three reasons for the subdirectory, and each of them is a bug on its
+// own:
+//
+//   - Applier.observe walks the directories it renders into and plans a delete
+//     for every file it finds there that the current config does not produce.
+//     Rendering into /etc/unbound itself would put the distribution's
+//     unbound.conf on that list.
+//   - /etc/unbound/unbound.conf.d is included by the distribution's own
+//     resolver, so a file there would be read by a daemon we do not run — the
+//     interference design.md §3.4 forbids, arrived at by accident.
+//   - /var/lib/unbound is the unbound package's state directory. We add a
+//     directory inside it and write only our own files there; the package's
+//     root.key and control keys are never touched.
+//
+// confinement_test.go holds this, and internal/packaging's unit test holds the
+// other half: that the units and the drop-in name exactly these paths.
 type Paths struct {
-	// UnboundConf is the resolver's configuration.
+	// UnboundConf is the resolver's configuration, under /etc/unbound because
+	// that is the only tree the distribution's profile lets the daemon read
+	// from. Getting this wrong is a resolver that exits 1 the moment it is
+	// exec'd, with "Could not open …: Permission denied" and nothing else —
+	// while unbound-checkconf, which nothing confines, calls the same file
+	// valid.
 	UnboundConf string
 
 	// RelayConf is the relay's, holding everything that costs a restart.
+	//
+	// This one, PolicyDir and HijackNFT stay in olr's own directory: the relay
+	// is our binary and no distribution confines it.
 	RelayConf string
 
 	// PolicyDir holds one file per policy. Re-read on SIGHUP, which is what
@@ -34,9 +74,13 @@ type Paths struct {
 	HijackNFT string
 
 	// TrustAnchor is unbound's root key, which it rewrites as the root KSK
-	// rolls. Ours rather than the distro's: /var/lib/unbound belongs to
-	// whatever the operator installed unbound for, and writing into it would be
-	// squatting shared state (design.md §3.4).
+	// rolls.
+	//
+	// Ours rather than the distribution package's root.key, but inside the
+	// distribution's state directory, because the profile above grants write
+	// access nowhere else: /etc/unbound is readable only (bar a `*.key*` at its
+	// top level) and /var/lib/unbound/** is read-write for the user the daemon
+	// runs as, which is root, as is the file unbound-anchor writes there.
 	TrustAnchor string
 
 	// ObserveSocket is where the relay serves what it saw. In the module's own
@@ -55,13 +99,19 @@ func DefaultPaths() Paths { return RootedPaths("") }
 // lets olrd run as an ordinary user against a scratch directory, so the whole
 // render-plan-apply path can be exercised without root or systemd.
 func RootedPaths(root string) Paths {
+	// What unbound itself opens, and so where its distribution's confinement
+	// insists. Subdirectories, not the trees themselves: see Paths.
+	unbound := filepath.Join(root, "/etc/unbound/open-linux-router")
+	anchor := filepath.Join(root, "/var/lib/unbound/open-linux-router")
+
+	// What only olr's own binaries open.
 	rendered := filepath.Join(root, "/etc/open-linux-router/rendered/dns")
 	return Paths{
-		UnboundConf:   filepath.Join(rendered, "unbound.conf"),
+		UnboundConf:   filepath.Join(unbound, "unbound.conf"),
 		RelayConf:     filepath.Join(rendered, "relay.json"),
 		PolicyDir:     filepath.Join(rendered, "policy.d"),
 		HijackNFT:     filepath.Join(rendered, "hijack.nft"),
-		TrustAnchor:   filepath.Join(root, "/var/lib/open-linux-router/dns/root.key"),
+		TrustAnchor:   filepath.Join(anchor, "root.key"),
 		ObserveSocket: filepath.Join(root, "/run/olr/dns/observe.sock"),
 	}
 }
@@ -353,12 +403,13 @@ server:
 `)
 
 	fmt.Fprintf(&s, `
-    # DNSSEC. The anchor is ours rather than the distro's: /var/lib/unbound
-    # belongs to whatever the operator installed unbound for, and unbound
-    # rewrites this file as the root key rolls, so sharing it would be writing
-    # into somebody else's state (design.md §3.4). The unit bootstraps it with
-    # unbound-anchor before starting, which falls back to a built-in copy when
-    # the network is not up yet.
+    # DNSSEC. Our own anchor, in a directory of ours inside the distribution's
+    # state directory — not the package's root.key, which we never read and
+    # never write. It sits there rather than anywhere else because unbound
+    # rewrites this file as the root key rolls, and on Debian the profile that
+    # confines /usr/sbin/unbound allows writes nowhere else (Paths). The unit
+    # bootstraps it with unbound-anchor before starting, which falls back to a
+    # built-in copy when the network is not up yet.
     auto-trust-anchor-file: "%s"
 `, b.Paths.TrustAnchor)
 

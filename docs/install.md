@@ -178,7 +178,9 @@ this box has to be added by hand.
 | `/etc/open-linux-router/olr.json` | everything you configured, one file |
 | `/etc/open-linux-router/olrd.env` | whether the web UI listens, and on what |
 | `/etc/open-linux-router/api-token` | the API token, used only with `--auth` |
-| `/etc/open-linux-router/rendered/` | what olr generated for dnsmasq — never edit |
+| `/etc/open-linux-router/rendered/` | what olr generated for its backends — never edit |
+| `/etc/unbound/open-linux-router/` | the resolver's rendered config — unbound may read nowhere else |
+| `/var/lib/unbound/open-linux-router/` | the resolver's DNSSEC anchor, rewritten as the root key rolls |
 | `/var/lib/open-linux-router/dhcp/` | the lease database |
 | `journalctl -u olrd -u olr-dhcp` | logs; olr keeps no log files of its own |
 

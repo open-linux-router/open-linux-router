@@ -1007,7 +1007,13 @@ nothing that could be taken advantage of before its owner arrives.
   ship first: consent that changes nothing cannot disconnect anybody, which is
   what the first line of this section is about.
 - generated files live under `/etc/open-linux-router/rendered/`, included into
-  the real daemons' configs; user files are never hand-edited
+  the real daemons' configs; user files are never hand-edited. The resolver's
+  config and trust anchor are the two exceptions, and they are not a preference:
+  a distribution that confines `unbound` by path decides where the daemon may
+  read a config from and write a key to, and on Debian that is a directory of
+  ours inside `/etc/unbound` and `/var/lib/unbound` and nowhere else. Nothing
+  else of the distribution's is touched, and `internal/dns/confinement_test.go`
+  holds the split
 - every generated file carries an ownership header
 
 ---

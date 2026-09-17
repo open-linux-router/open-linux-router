@@ -529,6 +529,14 @@ func (a Applier) checkInstalled(ctx context.Context, unit string) error {
 // unbound exits on a config it cannot parse or a socket it cannot bind, and so
 // does the relay — neither sits there alive and idle. So a process still
 // running after the window has read its configuration and bound its sockets.
+//
+// There is a third way to exit, which this used to read as one of those two: a
+// file it is not allowed to open at all. A distribution that confines the
+// resolver by path refuses that before the configuration is parsed, and the
+// config check the unit runs first — as an ordinary, unconfined process —
+// calls the same file valid. Two explanations that do not fit, and a dead
+// resolver. Paths holds the answer to where those files have to live; the
+// message below names the case rather than leaving the operator to guess.
 func (a Applier) verifyServing(ctx context.Context, unit string) error {
 	svc, err := a.service(unit)
 	if err != nil {
@@ -550,7 +558,13 @@ func (a Applier) verifyServing(ctx context.Context, unit string) error {
 			return fmt.Errorf(
 				"%s did not stay up after starting (%s).\n"+
 					"The backend accepted the job and then exited, which usually means it "+
-					"rejected the rendered configuration or could not bind a socket.\n"+
+					"rejected the rendered configuration or could not bind a socket. A "+
+					"third thing does it and looks like neither: it was not allowed to "+
+					"open the file. Debian's AppArmor profile confines /usr/sbin/unbound "+
+					"to /etc/unbound and /var/lib/unbound — which is why this module's two "+
+					"resolver files are rendered inside those trees — and a denial there "+
+					"reads as \"Permission denied\" for a config unbound-checkconf just "+
+					"passed.\n"+
 					"See `journalctl -u %s`",
 				status.Unit, describeState(status), status.Unit)
 		}
