@@ -29,7 +29,7 @@ type ProxyApplier struct {
 	// Unit supervises the backend.
 	Unit core.Unit
 
-	// Locate finds the proxy binary. Nil means FindShadowsocks.
+	// Locate finds the proxy binary. Nil means the finder for Object.
 	//
 	// Injectable for the reason internal/ingress injects its own: left to the
 	// real thing, every test in this package would pass or fail depending on
@@ -39,6 +39,11 @@ type ProxyApplier struct {
 	// Settle is how long apply watches a started backend before believing it.
 	// Zero means DefaultSettle; negative means check once and return.
 	Settle time.Duration
+
+	// Object selects which of the two file-backed proxies this applier drives.
+	// The zero value is Shadowsocks, so a construction that predates the second
+	// object keeps its meaning (socks_apply.go).
+	Object ProxyObject
 }
 
 // DefaultSettle is the post-apply observation window.
@@ -68,14 +73,14 @@ func (a ProxyApplier) locate() func() (string, error) {
 	if a.Locate != nil {
 		return a.Locate
 	}
-	return FindShadowsocks
+	return a.Object.kind().Locate
 }
 
 // Observe reads the actual state of the system, every field fresh.
 func (a ProxyApplier) Observe(ctx context.Context) (ProxyObserved, error) {
 	obs := ProxyObserved{Files: map[string][]byte{}}
 
-	root := filepath.Dir(a.Paths.Conf)
+	root := filepath.Dir(a.Object.kind().Conf(a.Paths))
 	err := filepath.WalkDir(root, func(path string, e fs.DirEntry, err error) error {
 		switch {
 		case os.IsNotExist(err):
@@ -125,7 +130,7 @@ func (a ProxyApplier) Plan(ctx context.Context, desired Config) (ProxyPlan, Rend
 		return ProxyPlan{}, Rendered{}, err
 	}
 	stored, _ := a.Load()
-	return BuildProxyPlan(desired, stored, a.Paths, obs)
+	return a.Object.kind().Build(desired, stored, a.Paths, obs)
 }
 
 // Apply writes the config and brings the proxy into line with it. It applies
@@ -152,6 +157,7 @@ type ProxyApplyResult struct {
 // observation, so the plan the operator agreed to would not be the plan that
 // lands.
 func (a ProxyApplier) ApplyPlanned(ctx context.Context, desired Config, plan ProxyPlan, rendered Rendered) (ProxyApplyResult, error) {
+	kind := a.Object.kind()
 	result := ProxyApplyResult{Plan: plan}
 	run := func(description string, fn func() error) error {
 		err := fn()
@@ -178,7 +184,7 @@ func (a ProxyApplier) ApplyPlanned(ctx context.Context, desired Config, plan Pro
 	}
 
 	if len(rendered.Files) > 0 {
-		dir := filepath.Dir(a.Paths.Conf)
+		dir := filepath.Dir(a.Object.kind().Conf(a.Paths))
 		if err := run("create "+dir, func() error { return os.MkdirAll(dir, 0o700) }); err != nil {
 			return result, err
 		}
@@ -214,17 +220,17 @@ func (a ProxyApplier) ApplyPlanned(ctx context.Context, desired Config, plan Pro
 		// to be missing and the one whose absence olr can explain. A unit that
 		// exists with no binary behind it fails at start with an exec error
 		// naming a path and nothing else.
-		if desired.Shadowsocks.Enabled {
-			if err := run("check a Shadowsocks server is available", func() error {
+		if kind.Enabled(desired) {
+			if err := run("check a "+kind.Object+" server is available", func() error {
 				if _, err := a.locate()(); err != nil {
-					return ErrShadowsocksMissing()
+					return kind.Missing()
 				}
 				return nil
 			}); err != nil {
 				return result, err
 			}
 		}
-		if err := run("check "+UnitName+" is installed", func() error {
+		if err := run("check "+kind.Unit+" is installed", func() error {
 			return a.checkInstalled(ctx)
 		}); err != nil {
 			return result, err
@@ -238,7 +244,7 @@ func (a ProxyApplier) ApplyPlanned(ctx context.Context, desired Config, plan Pro
 	if a.Unit == nil {
 		if plan.Action != ActionNone || plan.Enable != nil {
 			result.Steps = append(result.Steps, Step{
-				Description: "no service manager on this box, so " + UnitName + " was not touched",
+				Description: "no service manager on this box, so " + kind.Unit + " was not touched",
 				Done:        true,
 			})
 		}
@@ -250,7 +256,7 @@ func (a ProxyApplier) ApplyPlanned(ctx context.Context, desired Config, plan Pro
 	if plan.Enable != nil {
 		enable := *plan.Enable
 		verb := map[bool]string{true: "enable", false: "disable"}[enable]
-		if err := run(verb+" "+UnitName+" at boot", func() error {
+		if err := run(verb+" "+kind.Unit+" at boot", func() error {
 			if enable {
 				return a.Unit.Enable(ctx)
 			}
@@ -261,7 +267,7 @@ func (a ProxyApplier) ApplyPlanned(ctx context.Context, desired Config, plan Pro
 	}
 
 	if action := plan.Action; action != ActionNone {
-		if err := run(string(action)+" "+UnitName, func() error {
+		if err := run(string(action)+" "+kind.Unit, func() error {
 			switch action {
 			case ActionStart:
 				return a.Unit.Start(ctx)
@@ -275,8 +281,8 @@ func (a ProxyApplier) ApplyPlanned(ctx context.Context, desired Config, plan Pro
 			return result, err
 		}
 
-		if desired.Shadowsocks.Enabled && action != ActionStop {
-			if err := run("verify "+UnitName+" stayed up", func() error {
+		if kind.Enabled(desired) && action != ActionStop {
+			if err := run("verify "+kind.Unit+" stayed up", func() error {
 				return a.verifyServing(ctx)
 			}); err != nil {
 				return result, err

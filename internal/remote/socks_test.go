@@ -383,3 +383,85 @@ func TestEndpointNotRequiredForATunnelScopedProxy(t *testing.T) {
 		t.Errorf("a tunnel-scoped proxy was made to require an endpoint: %v", r.Errors)
 	}
 }
+
+func TestBuildSocksPlanWritesOneSecretFile(t *testing.T) {
+	paths := RootedPaths(t.TempDir())
+	c := socksConfig()
+
+	plan, rendered, err := BuildSocksPlan(c, Config{}, paths, ProxyObserved{Files: map[string][]byte{}})
+	if err != nil {
+		t.Fatalf("BuildSocksPlan() error: %v", err)
+	}
+	if len(plan.Changes) != 1 || plan.Changes[0].Kind != FileCreate {
+		t.Fatalf("expected one create, got %+v", plan.Changes)
+	}
+	if !plan.Changes[0].Secret {
+		t.Error("the change is not secret; its diff would print the credential")
+	}
+	if plan.Action != ActionStart {
+		t.Errorf("action = %q, want start", plan.Action)
+	}
+	if got := rendered.Files[0].Path; got != paths.SocksConf {
+		t.Errorf("rendered to %q, want %q", got, paths.SocksConf)
+	}
+}
+
+func TestBuildSocksPlanDisabledRendersNothing(t *testing.T) {
+	paths := RootedPaths(t.TempDir())
+	c := socksConfig()
+	c.Socks.Enabled = false
+
+	plan, rendered, err := BuildSocksPlan(c, Config{}, paths, ProxyObserved{Files: map[string][]byte{}})
+	if err != nil {
+		t.Fatalf("BuildSocksPlan() error: %v", err)
+	}
+	if len(rendered.Files) != 0 {
+		t.Errorf("a disabled proxy rendered %d files", len(rendered.Files))
+	}
+	if !plan.Empty() {
+		t.Errorf("a disabled proxy on a fresh box planned work: %+v", plan)
+	}
+}
+
+func TestClassifySocksScopeMoveIsDisruptive(t *testing.T) {
+	paths := RootedPaths(t.TempDir())
+	before := socksConfig()
+	after := before.Clone()
+	after.Socks.Listen = ListenInternet
+
+	// Pretend the old config is live and its file is on disk.
+	rendered, err := RenderSocks(before, paths)
+	if err != nil {
+		t.Fatalf("RenderSocks() error: %v", err)
+	}
+	obs := ProxyObserved{
+		Files:   map[string][]byte{paths.SocksConf: rendered.Files[0].Data},
+		Running: true,
+	}
+
+	plan, _, err := BuildSocksPlan(after, before, paths, obs)
+	if err != nil {
+		t.Fatalf("BuildSocksPlan() error: %v", err)
+	}
+	if plan.Impact != ImpactDisruptive {
+		t.Errorf("impact = %v, want disruptive: moving onto the internet re-issues every link", plan.Impact)
+	}
+	if len(plan.Reasons) == 0 {
+		t.Fatal("no reason given for a disruptive change")
+	}
+}
+
+func TestProxyObjectSelectsTheRightBackend(t *testing.T) {
+	// The parameterisation itself: the zero value must still mean Shadowsocks,
+	// or every existing construction silently changes meaning.
+	if got := ObjectShadowsocks.kind().Unit; got != UnitName {
+		t.Errorf("zero ProxyObject drives %q, want %q", got, UnitName)
+	}
+	if got := ObjectSocks.kind().Unit; got != SocksUnitName {
+		t.Errorf("ObjectSocks drives %q, want %q", got, SocksUnitName)
+	}
+	paths := RootedPaths("/tmp/x")
+	if got := ObjectSocks.kind().Conf(paths); got != paths.SocksConf {
+		t.Errorf("ObjectSocks writes %q, want %q", got, paths.SocksConf)
+	}
+}
