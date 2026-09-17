@@ -42,8 +42,8 @@ description: |
 # somebody turns DNS on (internal/dns/deps.go).
 #
 # The test is "does installing it disturb the box", not "which module uses it".
-# Both entries below are used by one module apiece too, and both stay, because
-# neither costs a box that never uses them anything but disk.
+# Every entry below is used by one module apiece too, and all of them stay,
+# because none costs a box that never uses them anything but disk.
 depends:
   # Ships the binary and no service, which is the entire reason olr depends on
   # dnsmasq-base rather than on the full dnsmasq package.
@@ -58,6 +58,12 @@ depends:
   # here is 200 kB on a box that may never resolve a name, against a resolver
   # that cannot start on one that does.
   - unbound-anchor
+  # Two binaries, a man page, and a `wg-quick@.service` template that is not
+  # enabled — nothing is started and no port is taken. Not the `wireguard`
+  # metapackage, which also pulls in a DKMS module that every kernel since 5.6
+  # already has in tree. olr does not use wg-quick and must not:
+  # docs/remote-access.md §5.1 is why.
+  - wireguard-tools
 
 # No `overrides:` block, because deb is the only format built from this file.
 # nfpm will also emit .apk and .rpm, and once did, each with its own dependency

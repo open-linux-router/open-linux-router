@@ -18,6 +18,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
+	"github.com/open-linux-router/open-linux-router/internal/remote"
 	"github.com/open-linux-router/open-linux-router/internal/system"
 )
 
@@ -44,6 +45,7 @@ func moduleRoutes() map[string][]core.Route {
 		devices.ModuleName:  devices.HTTP{}.Routes(),
 		gateway.ModuleName:  gateway.HTTP{}.Routes(),
 		firewall.ModuleName: firewall.HTTP{}.Routes(),
+		remote.ModuleName:   remote.HTTP{}.Routes(),
 		ingress.ModuleName:  ingress.HTTP{}.Routes(),
 	}
 }

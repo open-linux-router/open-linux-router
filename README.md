@@ -63,8 +63,8 @@ design, and our job is to stay out of its way.
 
 ## What's underneath
 
-Five modules ship today. Each one owns a slice of configuration and hands the
-actual work to something that already does it well:
+The networking modules that ship today are below. Each one owns a slice of
+configuration and hands the actual work to something that already does it well:
 
 | Module | What you configure | What actually does the work |
 |---|---|---|
@@ -74,6 +74,7 @@ actual work to something that already does it well:
 | **`devices`** | Device names, categories, the inventory | No daemon. dnsmasq's lease database joined with the kernel's **ARP table**, so the statically-addressed printer shows up too, plus the **IEEE OUI registry** embedded in the binary to say who built each one. |
 | **`gateway`** | Exits, and which network uses which | **nftables** and the kernel's **policy routing database**, programmed directly over netlink — no rule files, no `nft` shell-outs. |
 | **`firewall`** | Port forwards, and nothing else yet | **nftables**, one `olr_nat` table over netlink. Named for what §4 gives it eventually; today it has no zones, rules or filtering policy. |
+| **`remote`** | Which of your devices may dial in from outside | **WireGuard**, in the kernel. olr creates the interface over netlink and loads keys with `wg` — never `wg-quick`, whose automatic routing would fight the gateway module's. `olr remote add peer phone` prints a configuration to import, once. |
 
 All of it is one binary. `olr` is the command you type, the control plane
 systemd runs, and the DNS relay behind port 53 — separate units and separate
@@ -91,8 +92,8 @@ sandbox, which is a deliberate trade and not an oversight: design.md §3.5
 before it changes back.
 
 Not written yet: firewall *filtering* — zones and rules, the other half of the
-firewall module — Wi-Fi (hostapd), VPN (WireGuard), QoS (tc), WAN dialling
-(pppd/dhcpcd).
+firewall module — Wi-Fi (hostapd), QoS (tc), WAN dialling (pppd/dhcpcd), and the
+Shadowsocks and SOCKS5 halves of remote access.
 
 ## Getting started
 
@@ -194,6 +195,7 @@ that go wrong.
 | [docs/dns.md](docs/dns.md) | What the DNS module does, and refuses to do |
 | [docs/gateway.md](docs/gateway.md) | Exits, and which networks use them |
 | [docs/firewall.md](docs/firewall.md) | Port forwarding, and why there is no filtering yet |
+| [docs/remote-access.md](docs/remote-access.md) | Dialling in from outside, and why not `wg-quick` |
 | [docs/mcp.md](docs/mcp.md) | The agent surface |
 | [design.md](design.md) | Architecture, and the decisions behind it |
 

@@ -1,0 +1,19 @@
+Show remote-access configuration
+
+Usage:
+  olr remote show [flags]
+  olr remote show [command]
+
+Available Commands:
+  peer        Show one device in full
+  peers       List the devices that may dial in
+
+Flags:
+  -h, --help   help for show
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr remote show [command] --help" for more information about a command.

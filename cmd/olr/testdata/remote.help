@@ -1,0 +1,24 @@
+Get back into your network from outside it
+
+Usage:
+  olr remote [command]
+
+Available Commands:
+  add         Let a device dial in
+  disable     Stop accepting connections from outside
+  enable      Start accepting connections from outside
+  fix         Clear what is standing in remote access's way on this box
+  rm          Stop a device dialling in
+  set         Set how devices reach this box
+  show        Show remote-access configuration
+  status      Show whether the tunnel is up and who has connected
+
+Flags:
+  -h, --help   help for remote
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr remote [command] --help" for more information about a command.

@@ -11,6 +11,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
+	"github.com/open-linux-router/open-linux-router/internal/remote"
 	"github.com/open-linux-router/open-linux-router/internal/system"
 )
 
@@ -38,6 +39,7 @@ func newRoot() *cobra.Command {
 		dns.Command(),
 		gateway.Command(),
 		firewall.Command(),
+		remote.Command(),
 		ingress.Command(),
 	)
 

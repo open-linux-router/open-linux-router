@@ -14,6 +14,7 @@ Modules:
   gateway     Exits and which networks use them
   ingress     Publish internal services at https:// names
   link        Network interfaces olr has been given
+  remote      Get back into your network from outside it
   system      Show how this router may be reached
 
 Operations:

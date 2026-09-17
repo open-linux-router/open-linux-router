@@ -491,7 +491,7 @@ Bounded list. Not expected to grow much. The object they all key off is the
 | | `firewall` | nftables `olr_filter`, `olr_nat` — zones, rules, NAT, forwards. **Part built:** `olr_nat` and port forwarding only; no zones, no rules, no filtering policy (docs/firewall.md) | ✅ |
 | | `qos` | tc — CAKE / fq_codel, per-device shaping | |
 | | `gateway` | static + policy routes; later bird (BGP/OSPF) | |
-| | `vpn` | wireguard — remote access, site-to-site | |
+| | `remote` | getting back in from outside: **WireGuard** built; Shadowsocks and SOCKS5 planned beside it, never under it (docs/remote-access.md) | ✅ |
 | | `wifi` | hostapd — only if the box has radios | |
 | **Operational** | `system` | hostname, time, admin users, updates, backup, logs | ✅ |
 
@@ -1120,7 +1120,15 @@ be the released artefact.
    plus `/api/schema` are the two halves an OpenAPI document is a join of.
    Still owed: writes, which wait on §6.2's disruptive gate reaching `dhcp`,
    `dns` and `devices`; the document itself; skills.
-6. **Then:** `qos`, `vpn`, `gateway`, `wifi`.
+6. **Then:** `qos`, `remote`, `gateway`, `wifi`.
+
+**`remote` was called `vpn` here until it was built**, and the rename is
+recorded rather than applied silently because the reserved name was the narrower
+one. Two of the three objects that module is meant to hold are not VPNs — a
+SOCKS proxy borrows an exit and gives no access to the network at all — so `vpn`
+would have described a third of it and mis-described the rest. `remote` is what
+the operator is doing. docs/remote-access.md §10 has the argument; the package
+split named in §8 keeps the old spelling until there is a split to name.
 
 **Order taken so far, and why it departs from the list.** `olrd`, the core
 control plane and the WebUI shell landed before milestone 1, against a single

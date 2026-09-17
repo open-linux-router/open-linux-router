@@ -1,0 +1,29 @@
+Set the tunnel's settings: the public address your devices dial,
+the network they get addresses on, and which port to listen on.
+
+The endpoint is the one thing olr cannot work out for itself. If a
+name already tracks this box's address, use it — `olr dial show`
+lists the ones olr keeps current.
+
+Changing the network renumbers every device, so every configuration
+already on a phone stops working. olr reports that as a disruptive
+change; `--dry-run` shows it before you commit to it.
+
+Usage:
+  olr remote set [flags]
+
+Flags:
+      --address string              this box's own address on that network
+      --endpoint string             public name or address your devices dial, optionally with a port
+  -h, --help                        help for set
+      --interface string            kernel interface name for the tunnel (default wg0)
+      --no-address                  use the first address in the network, which is the default
+      --no-raw-wireguard-conf       remove the extra WireGuard configuration
+      --port uint16                 UDP port to listen on (default 51820)
+      --raw-wireguard-conf string   extra WireGuard configuration, appended verbatim
+      --subnet string               network dial-in devices get addresses on, e.g. 10.6.0.0/24
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

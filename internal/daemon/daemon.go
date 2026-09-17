@@ -41,6 +41,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/mcp"
+	"github.com/open-linux-router/open-linux-router/internal/remote"
 	"github.com/open-linux-router/open-linux-router/internal/system"
 	"github.com/open-linux-router/open-linux-router/internal/webui"
 )
@@ -173,13 +174,19 @@ func run(args []string) error {
 	// leaving here goes, the other decides what arriving here is allowed in to.
 	// docs/firewall.md §6 records the one place they meet — a forwarded
 	// connection's reply must not be handed to an exit.
+	// `remote` follows that pair and completes the direction: `gateway` decides
+	// where traffic leaving a network goes, `firewall` what may come in to one
+	// service, and `remote` how the operator themselves gets back in to all of
+	// it (docs/remote-access.md §1). It reads `link`'s networks for what to push
+	// into a client's tunnel, so it comes after `link` and depends on nothing
+	// else.
 	// `ingress` is last and is the only one that is not networking at all
 	// (docs/ingress.md §2). It reads `dns` for the suffix it publishes under and
 	// `devices` for what to point at, so it cannot come up before either.
 	store := core.NewStore(core.RootedConfigPath(opts.root),
 		link.ModuleName, dial.ModuleName, dhcp.ModuleName, dns.ModuleName,
 		devices.ModuleName, gateway.ModuleName, firewall.ModuleName,
-		ingress.ModuleName)
+		remote.ModuleName, ingress.ModuleName)
 	checkStore(store, logger)
 
 	// The consumers' windows onto link, all backed by one Facts: the kernel for
@@ -340,6 +347,24 @@ func run(args []string) error {
 		Events:  srv.Events(),
 	}.Routes(), firewall.Config{})
 
+	// `remote` is the third module whose configuration lives in the kernel
+	// rather than in a file some backend reads, so it is applied at startup for
+	// the same reason `gateway` and `firewall` are (below). It supervises no
+	// unit at all, and that is not an omission: WireGuard's data path is in the
+	// kernel, so there is no process for systemd to watch
+	// (docs/remote-access.md §7.1).
+	remoteApplier := remote.Applier{
+		Kernel:   remote.NewKernel(),
+		Networks: remoteNetworks{facts: facts},
+		Store:    store,
+	}
+
+	srv.Mount(remote.ModuleName, remote.HTTP{
+		Applier: remoteApplier,
+		Lock:    srv.ApplyLock(),
+		Events:  srv.Events(),
+	}.Routes(), remote.Config{})
+
 	// `ingress` is mounted last, matching the store's order. Its two views are
 	// adapted in ingress.go for the same reason the dhcp↔devices ones are: the
 	// module declares what it needs and imports neither of the modules that
@@ -388,13 +413,15 @@ func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Routing and forwarding are put back into the kernel here, and they are the
-	// only two modules that need this.
+	// Routing, forwarding and the remote-access tunnel are put back into the
+	// kernel here, and they are the only three modules that need this.
 	//
 	// dnsmasq and unbound read files that survive a reboot; nftables rules,
-	// `ip rule` entries and route tables do not, so without this a box would
-	// come back up with its configuration intact and none of it in force. Both
-	// are idempotent by construction — the plan against an already-correct
+	// `ip rule` entries, route tables and a WireGuard interface do not, so
+	// without this a box would come back up with its configuration intact and
+	// none of it in force — and for `remote` that means an operator who is away
+	// from the box being unable to reach the box they would fix it from. All
+	// three are idempotent by construction — the plan against an already-correct
 	// kernel is empty and nothing is written — which is what keeps design.md
 	// §3.5's invariant true: `systemctl restart olrd` re-runs them and disturbs
 	// no traffic.
@@ -404,6 +431,7 @@ func run(args []string) error {
 	// fixed.
 	startGateway(ctx, gatewayApplier, prober, logger)
 	startFirewall(ctx, firewallApplier, logger)
+	startRemote(ctx, remoteApplier, logger)
 	startDial(ctx, dialApplier, publisher, logger)
 
 	var listeners []net.Listener
@@ -705,6 +733,38 @@ func startFirewall(ctx context.Context, a firewall.Applier, logger *slog.Logger)
 			"steps", len(result.Steps))
 	case !result.Plan.Empty():
 		logger.Info("port forwards applied", "changes", len(result.Plan.Changes))
+	}
+}
+
+// startRemote re-creates the dial-in tunnel.
+//
+// The same shape as startFirewall, and the same reason: kernel state does not
+// survive a reboot. What is different is the stake — this is the module whose
+// absence an operator discovers from outside the building, so a failure here is
+// logged with the interface named rather than folded into a generic line.
+func startRemote(ctx context.Context, a remote.Applier, logger *slog.Logger) {
+	cfg, err := a.Load()
+	if err != nil {
+		logger.Error("remote-access configuration could not be read; the tunnel was not created",
+			"error", err)
+		return
+	}
+	if cfg.Empty() {
+		return
+	}
+
+	result, err := a.Apply(ctx, cfg)
+	switch {
+	case err != nil && result.Plan.Blocked != "":
+		// The interface name belongs to something else. The one refusal this
+		// module makes, and the one an operator can act on directly.
+		logger.Error("the tunnel was not created", "reason", result.Plan.Blocked)
+	case err != nil:
+		logger.Error("the tunnel could not be created", "error", err,
+			"interface", cfg.WireGuard.InterfaceOrDefault(), "steps", len(result.Steps))
+	case !result.Plan.Empty():
+		logger.Info("remote access applied",
+			"interface", cfg.WireGuard.InterfaceOrDefault(), "peers", len(cfg.WireGuard.Peers))
 	}
 }
 

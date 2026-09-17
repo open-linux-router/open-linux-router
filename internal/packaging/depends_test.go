@@ -13,6 +13,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
+	"github.com/open-linux-router/open-linux-router/internal/remote"
 )
 
 // nfpmPath is the package definition, relative to this test.
@@ -29,6 +30,7 @@ func allDependencies() []core.Dependency {
 	var out []core.Dependency
 	out = append(out, dhcp.Dependencies()...)
 	out = append(out, dns.Dependencies(cfg)...)
+	out = append(out, remote.Dependencies()...)
 	return out
 }
 
