@@ -36,6 +36,7 @@ import type {
   Protocol,
   GatewayConfig,
   RemoteConfig,
+  Shadowsocks,
 } from '@/lib/config-types'
 
 /** What applying a change will cost (design.md §5.3.3, internal/dhcp Impact). */
@@ -1114,4 +1115,83 @@ export interface RemoteApplyResult {
    *  says the document did not move. */
   config?: RemoteConfig
   peer?: RemotePeerResult
+}
+
+// --- remote: the proxies -----------------------------------------------------
+//
+// The tunnel's types above describe kernel state — lines added and removed. A
+// proxy's describe a file and a unit, so they are a different set rather than
+// the same one widened, which mirrors internal/remote's own split: the two
+// objects share the Impact vocabulary and nothing else.
+
+/** One file's worth of pending work — internal/remote proxyChangeView. */
+export interface ProxyChange {
+  path: string
+  kind: 'create' | 'update' | 'delete'
+  impact: Impact
+  /** Suppresses the contents everywhere this is displayed: the file holds a
+   *  credential. It is still written and compared byte for byte. */
+  secret?: boolean
+  diff: string
+}
+
+/** What the daemon needs after the files are written. */
+export type ProxyServiceAction = 'none' | 'start' | 'stop' | 'restart'
+
+/** What applying a proxy change would do — internal/remote proxyPlanView. */
+export interface ProxyPlan {
+  changes: ProxyChange[]
+  action: ProxyServiceAction
+  impact: Impact
+  /** The boot-time state the unit will be moved to, when that has to change. */
+  enable?: boolean
+  reasons?: string[]
+  /** The drift answer, precomputed so a client does not have to reimplement
+   *  what counts as "no change". */
+  empty: boolean
+  /** olr filled in or replaced the password as part of this change, which means
+   *  every client has to be handed a new link. */
+  password_generated?: boolean
+  warnings?: Problem[]
+}
+
+/** Whether a proxy is installed, running and undrifted — internal/remote proxyStatus. */
+export interface ProxyStatus {
+  enabled: boolean
+  listen_port: number
+  cipher: string
+  udp: boolean
+  /** What systemd knows. Absent, with service_error set, when the query itself
+   *  failed — normal on a box with no D-Bus, and it must not take the rest of
+   *  the answer down with it. */
+  service?: UnitStatus
+  service_error?: string
+  /** The server binary olr found, and why it found none. */
+  binary?: string
+  binary_error?: string
+  drifted: boolean
+  drift?: ProxyPlan
+  drift_error?: string
+  as_of: string
+}
+
+/**
+ * The client link, from the one route that hands over a credential.
+ *
+ * Every other read in olr redacts. This one is the exception the redaction
+ * exists to make safe — a password that appears in no `show`, no plan and no log
+ * has to appear somewhere, or the feature cannot be used.
+ */
+export interface ProxyLink {
+  url: string
+  label?: string
+  as_of: string
+}
+
+export interface ProxyApplyResult {
+  plan: ProxyPlan
+  steps?: Step[]
+  error?: { message: string; problems?: Problem[] }
+  /** What is stored now, redacted. Present on the refusal path especially. */
+  config?: Shadowsocks
 }

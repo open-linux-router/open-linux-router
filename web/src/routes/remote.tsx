@@ -28,11 +28,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ClientConfigDialog } from '@/features/remote/client-config'
 import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/remote/impact'
 import { PeerDialog } from '@/features/remote/peer-dialog'
+import { ProxyCard } from '@/features/remote/proxy-card'
 import {
   remoteChange,
   useRemoteConfig,
   useRemoteStatus,
   useReapplyRemote,
+  useShadowsocksStatus,
   type RemoteChangeRequest,
 } from '@/features/remote/queries'
 import { SettingsDialog } from '@/features/remote/settings-dialog'
@@ -42,6 +44,7 @@ import type { RemotePeer, RemoteStatus } from '@/lib/api-types'
 export function RemotePage() {
   const config = useRemoteConfig()
   const status = useRemoteStatus()
+  const proxy = useShadowsocksStatus()
   const applier = useRemoteApply()
   const reapply = useReapplyRemote()
 
@@ -165,6 +168,13 @@ export function RemotePage() {
           <PeerList peers={peers} onEdit={setEditing} />
         </CardContent>
       </Card>
+
+      {/* Below the tunnel, deliberately. The two are not alternatives and the
+          order says which one an operator usually wants: getting *in* to your own
+          network is the reason this page exists, and borrowing its way *out* is
+          the narrower second thing. Putting them side by side as equals would
+          invite picking one. */}
+      <ProxyCard status={proxy.data} applier={applier} />
 
       <PeerDialog
         open={adding}
