@@ -26,11 +26,20 @@ import (
 //
 // Deliberately a fragment rather than the module's own statusResponse, which
 // internal/cli cannot see: the modules import this package, so it can never
-// import them (internal/dhcp/cli.go and friends). Decoding only `blockers` and
-// `enabled` works against every module's status and stays working when one of
-// them grows a field.
+// import them (internal/dhcp/cli.go and friends). The three fields below are
+// the ones every module's status carries, so this works against all of them and
+// stays working when one of them grows a field of its own.
 type fixStatus struct {
-	Enabled  bool           `json:"enabled"`
+	Enabled bool `json:"enabled"`
+
+	// Drifted is §5.4's answer to "is the box what the configuration says",
+	// and it is the one field every module publishes that answers it. The
+	// backend's own state is the sharper signal and is spelled differently in
+	// each — internal/dns publishes `services`, internal/dhcp `service` — so
+	// reading that here would make this fragment depend on which module it is
+	// looking at, which is the property these fields exist to keep.
+	Drifted bool `json:"drifted"`
+
 	Blockers []core.Blocker `json:"blockers,omitempty"`
 }
 
@@ -181,6 +190,20 @@ func clearBlockers(ctx context.Context, client *Client, out io.Writer) {
 		}
 		actionable := core.Actionable(status.Blockers)
 		if len(actionable) == 0 {
+			// Nothing for olr to clear, which is not the same as nothing wrong.
+			// A module can be switched on and still not be what is on the box:
+			// its backend not running, a file it rendered not there yet, one it
+			// no longer renders still there. `olr enable` printed its success
+			// block over exactly that, because blockers were the only thing it
+			// asked about — and a resolver that had been exiting every two
+			// seconds for an hour was reported as "nothing else on this machine
+			// has changed".
+			if status.Drifted {
+				fmt.Fprintf(out, "\nwarning: %s is switched on, and what it says should be on\n"+
+					"this box is not — a backend that is not running is the usual reason.\n"+
+					"`olr %s status` says what differs, and `sudo olr %s enable` re-applies\n"+
+					"it.\n\n", module, module, module)
+			}
 			continue
 		}
 
