@@ -72,7 +72,14 @@ func (r *Result) merge(other Result) {
 // on a phone rather than here.
 func validateEndpoint(r *Result, c Config) {
 	host := c.EndpointHost()
-	needed := c.WireGuard.Enabled || c.Shadowsocks.Enabled
+
+	// SOCKS5 is the one object that may not need this, and the condition is the
+	// whole point of its listen scope: a tunnel-scoped proxy is dialled at this
+	// box's address *inside* WireGuard, which clients already have from their
+	// peer configuration. Requiring a public endpoint for it would demand a fact
+	// that plays no part in reaching it.
+	needed := c.WireGuard.Enabled || c.Shadowsocks.Enabled ||
+		(c.Socks.Enabled && c.Socks.ListenScopeOrDefault() == ListenInternet)
 
 	if host == "" {
 		if needed {

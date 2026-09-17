@@ -30,14 +30,24 @@ import (
 // the difference between working and not on a box that has done this before.
 const UnitName = "olr-shadowsocks.service"
 
-// Paths locates everything the proxy reads or writes.
+// Paths locates everything the module's file-backed objects read or write.
 //
 // A struct rather than constants so tests can render into a temporary directory
 // and still get a config whose internal references are self-consistent.
+//
+// It covers **both proxies**, which is why it is one struct and not two. That is
+// not the module's "three objects share nothing" rule being bent: the two
+// proxies genuinely share a mechanism — render a file, drive a unit — while the
+// tunnel beside them writes no file at all and appears here nowhere. What they
+// still do not share is a field, a plan or an apply.
 type Paths struct {
 	// Conf is the JSON file `ssserver -c` is given. It holds the password, so
 	// it is written 0600 and withheld from every surface that displays a file.
 	Conf string
+
+	// SocksConf is the script `3proxy` is given. Same treatment for the same
+	// reason: it carries a cleartext credential.
+	SocksConf string
 }
 
 // DefaultPaths is the on-disk layout for a real install.
@@ -47,7 +57,8 @@ func DefaultPaths() Paths { return RootedPaths("") }
 // a scratch directory without root or systemd.
 func RootedPaths(root string) Paths {
 	return Paths{
-		Conf: filepath.Join(root, "/etc/open-linux-router/rendered/remote/shadowsocks.json"),
+		Conf:      filepath.Join(root, "/etc/open-linux-router/rendered/remote/shadowsocks.json"),
+		SocksConf: filepath.Join(root, "/etc/open-linux-router/rendered/remote/3proxy.cfg"),
 	}
 }
 

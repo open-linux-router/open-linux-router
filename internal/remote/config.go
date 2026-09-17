@@ -26,8 +26,17 @@
 //
 // # What is built
 //
-// WireGuard and Shadowsocks. SOCKS5 is not; docs/remote-access.md §9 keeps it
-// as the third object, and nothing here has to move when it lands.
+// All three. SOCKS5 arrived last and needed no new argument, which is what
+// docs/remote-access.md §9 predicted when it deferred it: the second object had
+// already settled that the parallelism goes all the way down, so the third only
+// had to follow it.
+//
+// It did add one thing the other two did not need — a listen *scope*. SOCKS5
+// carries no encryption, so where it listens is the difference between a
+// sensible thing to run and an open door. It defaults to listening inside the
+// WireGuard tunnel, which is the one place a plaintext protocol is fine, and
+// composing the two objects that way is cheaper than giving SOCKS5 a crypto
+// layer it was never designed to have.
 package remote
 
 import (
@@ -73,6 +82,11 @@ type Config struct {
 	// Shadowsocks is the proxy that lends a device this box's way out, and
 	// gives it no access to the network at all.
 	Shadowsocks Shadowsocks `json:"shadowsocks"`
+
+	// Socks is the plain SOCKS5 proxy: the same lending of a way out, with no
+	// encryption of its own and therefore a default that keeps it inside the
+	// tunnel (socks.go).
+	Socks Socks5 `json:"socks5"`
 }
 
 // RedactedSecret is what stands in for a credential on a printed surface.
@@ -128,6 +142,7 @@ func (c *Config) Normalize() {
 	c.Endpoint = strings.TrimSpace(c.Endpoint)
 	c.WireGuard.Normalize()
 	c.Shadowsocks.Normalize()
+	c.Socks.Normalize()
 }
 
 // Clone returns a deep copy, so a caller may edit a config without disturbing
@@ -136,6 +151,7 @@ func (c Config) Clone() Config {
 	out := c
 	out.WireGuard = c.WireGuard.Clone()
 	out.Shadowsocks = c.Shadowsocks.Clone()
+	out.Socks = c.Socks.Clone()
 	return out
 }
 
@@ -160,12 +176,15 @@ func (c Config) Redacted() Config {
 	if out.Shadowsocks.Password != "" {
 		out.Shadowsocks.Password = RedactedSecret
 	}
+	if out.Socks.Password != "" {
+		out.Socks.Password = RedactedSecret
+	}
 	return out
 }
 
 // Empty reports whether the module has been configured at all.
 func (c Config) Empty() bool {
-	return c.Endpoint == "" && c.WireGuard.Empty() && c.Shadowsocks.Empty()
+	return c.Endpoint == "" && c.WireGuard.Empty() && c.Shadowsocks.Empty() && c.Socks.Empty()
 }
 
 // MarshalConfig encodes a config for the store, normalising first so that two
