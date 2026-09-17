@@ -242,6 +242,12 @@ func writePeerResultText(w io.Writer, result *peerResult) {
 	if result.Note != "" {
 		fmt.Fprintf(w, "%s\n", result.Note)
 	}
+	if len(result.NextSteps) > 0 {
+		fmt.Fprintln(w, "\nTo reach it by name from home:")
+		for _, step := range result.NextSteps {
+			fmt.Fprintf(w, "    %s\n", step)
+		}
+	}
 	if result.ClientConfig == "" {
 		return
 	}

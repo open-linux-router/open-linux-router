@@ -94,17 +94,58 @@ decision rather than a description, and the alternative was live: the dial-in
 clients could have been "remote clients", a list belonging to this module and
 visible nowhere else.
 
-Modelling them as a network (`design.md` §4.4's group) is what makes the rest
-of olr apply to them without any of it being written twice:
+Modelling them as a network is what lets the rest of olr apply to them without
+being written twice. **This section used to list three integrations that fell
+out of it for free. Then somebody went and read the three modules, and only one
+of them is free** — the corrected version is below, because a justification that
+overstates its own payoff is worse than a smaller true one.
 
-- they appear in `devices` with the names their operator gave them;
-- `dns` answers those names, so `phone.home.example.com` means something;
-- `gateway`'s `Internet via` applies to the dial-in network exactly as it does
-  to `iot` — which is how a peer's traffic can be sent out through a chosen
-  exit rather than the box's normal path.
+| | What it actually costs | |
+|---|---|---|
+| `gateway`'s `Internet via` | **nothing — it already works** | assignments are keyed by kernel interface (`internal/gateway/config.go`), so `olr gateway set via wg0 <exit>` sends a peer's traffic out a chosen exit today. gateway:§2.5 will re-key these to network names eventually; until it does, the absence of a group is not felt |
+| `dns` answering `phone.home.example.com` | **one command, the same one every other device costs** | `olr dns add host phone --address 10.6.0.2` |
+| a peer appearing in `devices` | **blocked, and not on this module** | §3.3 |
 
-Each of those is a feature nobody has to build twice. As "remote clients" every
-one of them would be a second integration.
+The second row is the one that looked like a gap and is not. A local name in
+`dns` is *stored intent*, never derived from another module's addresses:
+`internal/dns/dhcp.go` argues the case at length for DHCP reservations, and
+every word of it applies here. A name that came from a peer would be correct
+exactly once; rendered bytes are what drift is measured against
+(`design.md` §5.4), so a peer edit would leave `dns` drifted until somebody
+applied it — and re-applying `dns` from inside a `remote` change would break the
+promise underneath every mutating route in olr, that one request is planned and
+the plan decides whether it lands.
+
+So a dial-in device is named exactly the way a device on the LAN is named, and
+what this module owes is not a mechanism but a **pointer**: `olr remote add
+peer` prints the `olr dns add host` line with the address already filled in.
+That is `design.md` §5.6's rule — automatic behaviour is declared, never
+inferred — applied to the smallest possible case.
+
+### 3.3 A peer is not a device, and `devices` is why
+
+`devices` is keyed by MAC. Not incidentally — `design.md` §4.4 says so in as
+many words, `Merge` in `internal/devices/presence.go` drops any sighting whose
+MAC will not parse, and the vendor lookup, the icon detection and the fixed
+address all hang off it.
+
+**A WireGuard peer has no MAC.** It is a public key at the end of a tunnel;
+there is no layer 2. So putting one in the device list needs one of three
+things, and two of them are worse than the gap:
+
+- **Synthesise a MAC per peer.** A fabricated hardware address in the
+  operator's own device list, with a vendor lookup that would confidently
+  report something. This is the shape of lie the whole `Origin` field in
+  `internal/devices/list.go` exists to prevent.
+- **Re-key `devices` on something wider than a MAC.** Defensible, possibly
+  right eventually, and a change to a foundation module that four others
+  reference. Not something a new module gets to force on its way in.
+- **Leave it.** A peer is listed by `olr remote show peers`, with its address,
+  its last handshake and where it was last seen from — which is more than the
+  device list would show, and in the one vocabulary that is true of it.
+
+The third is what is built, and §11 #2 keeps the question open rather than
+closed.
 
 ### 3.1 Registered, not managed — who writes the address
 
@@ -128,13 +169,19 @@ skipped — `wg0` is **never added to `link.Adopted`**. Adoption is the operator
 consenting to hand over *their* NIC (`design.md` §7); `wg0` is olr's own, and
 there is nothing for anyone to consent to.
 
-**What the group buys is a name other modules can key off, and that half is not
-built yet.** Batch 1 creates the interface and addresses it; registering the
-segment as a group so `devices` and `dns` see it is deferred to the batch that
-needs it. The deferral is honest rather than convenient: nothing consumes the
-registration today, and inventing the registration path before a consumer exists
-is how `dhcp` came to be keyed on kernel interface names for a year
-(`design.md` §9).
+**And the group is not registered with `link` at all, which is a reversal of
+what this section first said.** The plan was to register it once a consumer
+existed. Going to find that consumer is what produced the table above: `gateway`
+does not need one, `dns` must not have one, and `devices` cannot use one. What
+is left is a registration with no reader — and one active cost, because `dhcp`
+keys off `link`'s groups, so a registered dial-in network would show up on the
+DHCP page offering to serve addresses on a network whose addresses are not
+served at all (§3.2).
+
+So `remote` owns the interface, its address and the segment, and `link` is not
+told. The day something needs to name this network, the thing to weigh is
+whether `link` grows a notion of a group it does not address — not whether to
+paper over it here.
 
 ### 3.2 The asymmetry that has to be said out loud
 
@@ -544,11 +591,17 @@ behalf.
      something is installing routing that olr did not — and the whole argument
      for creating the interface ourselves is wrong.
 
-2. **The dial-in segment is not registered as a group yet** (§3.1), so a peer
-   does not appear in `devices` and `dns` does not answer its name. Those are
-   the three integrations §3 uses to justify the module existing at all, and
-   none of them is built. This is the first thing to do after hardware proves
-   the tunnel.
+2. **A peer is not in `devices`, and the question is `devices`', not this
+   module's** (§3.3). The list is keyed by MAC and a peer has none. Re-keying it
+   — on "a thing on a network", with a MAC as one kind of identity rather than
+   the identity — is the change that would let a peer, a container and a
+   statically-routed subnet all appear where an operator looks for them. It is
+   a foundation-module decision and wants its own argument; the open question is
+   whether it is worth making, not how to work around it here.
+
+   What was *closed* by going and looking: the group registration this section
+   used to ask for is not wanted (§3.1), and `dns` naming is one command rather
+   than a mechanism (§3).
 
 3. **Egress NAT belongs to somebody** (§8, row 1). `routes: everything` cannot
    work on the common topology without it, and this module must not grow its own

@@ -162,6 +162,17 @@ type peerResult struct {
 	// Note says what to do with what is here, or why what is expected is not. A
 	// field rather than something each surface words for itself.
 	Note string `json:"note,omitempty"`
+
+	// NextSteps are commands in *other* modules that this one deliberately does
+	// not run.
+	//
+	// One today, and it is the whole of docs/remote-access.md §3's naming story.
+	// A local name is `dns`'s stored intent; writing one from here would be
+	// inferring a change to another module's configuration, which design.md
+	// §5.6 forbids, and would leave `dns` drifted until somebody applied it.
+	// What is left is to say the command with the address already in it, at the
+	// one moment the operator is looking at that address.
+	NextSteps []string `json:"next_steps,omitempty"`
 }
 
 func problems(in []Problem) []core.Problem {

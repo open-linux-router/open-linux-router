@@ -125,6 +125,14 @@ func TestAddingAPeerReturnsAConfigurationOnce(t *testing.T) {
 		t.Errorf("stored public key is not one: %v", err)
 	}
 
+	// A local name is `dns`'s to store, so the one thing this module owes is
+	// the command — with the address already in it, at the moment the operator
+	// is looking at that address (docs/remote-access.md §3).
+	if len(resp.Peer.NextSteps) == 0 ||
+		!strings.Contains(resp.Peer.NextSteps[0], "olr dns add host phone --address 10.6.0.2") {
+		t.Errorf("no pointer at how to name the device: %v", resp.Peer.NextSteps)
+	}
+
 	// Editing the peer afterwards is not a re-issue — there is no private key
 	// left to write one with.
 	w = do(t, h, http.MethodPut, "/peers/phone?confirm=true", `{"routes":"everything"}`)

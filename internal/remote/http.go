@@ -324,6 +324,11 @@ func (h HTTP) putPeer(w http.ResponseWriter, r *http.Request) {
 			created.Note = "This is the only time olr can show this file: the private key in it is " +
 				"not stored. Import it on the device now."
 		}
+		// A local name belongs to `dns` and is not ours to write (see
+		// peerResult.NextSteps). Offered here because this is the one moment
+		// the operator has the address in front of them.
+		created.NextSteps = append(created.NextSteps, fmt.Sprintf(
+			"olr dns add host %s --address %s", name, addr))
 		return created, nil
 	})
 }
