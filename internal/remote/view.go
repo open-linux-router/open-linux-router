@@ -35,6 +35,11 @@ type planView struct {
 	// to reimplement what counts as "no change".
 	Empty bool `json:"empty"`
 
+	// Known reports whether the kernel could be read. Empty means opposite
+	// things with and without it — "nothing to do" against "we could not look"
+	// — and a screen has to say them differently.
+	Known bool `json:"known"`
+
 	// Diff is the unified rendering, for a UI that shows the lines next to the
 	// impact that classified them.
 	Diff string `json:"diff,omitempty"`
@@ -50,6 +55,7 @@ func viewPlan(p Plan, before, after []string) planView {
 		Reasons:  p.Reasons,
 		Blocked:  p.Blocked,
 		Empty:    p.Empty(),
+		Known:    p.Known,
 		Warnings: problems(p.Validation.Warnings),
 	}
 	if len(p.Changes) > 0 {

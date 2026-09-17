@@ -1,4 +1,13 @@
-import { Activity, Globe, Link2, Network, Router, ShieldCheck, Waypoints } from 'lucide-react'
+import {
+  Activity,
+  Globe,
+  KeyRound,
+  Link2,
+  Network,
+  Router,
+  ShieldCheck,
+  Waypoints,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /**
@@ -216,6 +225,21 @@ export const SECTIONS: Section[] = [
           'Another program on this box drops traffic passing through the router by default. olr cannot override that, so a forward may be correct and still not reach.',
       },
     ],
+  },
+  {
+    // Beside the firewall rather than beside the gateway, because the two of
+    // them are the same question asked twice: what may come in. The firewall
+    // lets the internet reach one thing; this lets you reach all of it.
+    to: '/remote',
+    label: 'Remote access',
+    icon: KeyRound,
+    end: false,
+    blurb: 'Reach your whole network from outside it, from your own devices.',
+    // No sub-pages. Everything here is either live — who is connected, and when
+    // they last were — or a setting that is set once and never revisited, and
+    // there are three of those. A settings page holding three fields would be a
+    // level of navigation charging rent.
+    groups: [],
   },
   {
     to: '/ingress',

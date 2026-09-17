@@ -115,6 +115,14 @@ type Plan struct {
 	// trying to do.
 	Blocked string `json:"blocked,omitempty"`
 
+	// Known reports whether the kernel could be read at all.
+	//
+	// Carried on the plan rather than only on status, because without it a
+	// client cannot tell "there is nothing to do" from "we could not look" —
+	// and an empty plan means opposite things in those two cases. internal/
+	// gateway publishes the same field for the same reason.
+	Known bool `json:"known"`
+
 	// Validation carries warnings even on success.
 	Validation Result `json:"-"`
 }
@@ -166,7 +174,7 @@ func BuildPlan(c, previous Config, networks NetworkView, obs Observed) (Plan, De
 	}
 
 	desired := Render(c)
-	plan := Plan{Validation: result}
+	plan := Plan{Validation: result, Known: obs.Known}
 
 	// The one refusal. An interface with our name that is not WireGuard belongs
 	// to somebody else, and design.md §3.4's adopt-only rule says we do not

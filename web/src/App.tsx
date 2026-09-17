@@ -19,6 +19,7 @@ import { FirewallPage } from '@/routes/firewall/index'
 import { FirewallUnmanagedPage } from '@/routes/firewall/unmanaged'
 import { IngressPage } from '@/routes/ingress'
 import { NetworksPage } from '@/routes/networks'
+import { RemotePage } from '@/routes/remote'
 import { OverviewPage } from '@/routes/overview'
 import { GatewayPage } from '@/routes/gateway/index'
 import { GatewayExitsPage } from '@/routes/gateway/exits'
@@ -64,6 +65,7 @@ export function App() {
             <Route index element={<FirewallPage />} />
             <Route path="unmanaged" element={<FirewallUnmanagedPage />} />
           </Route>
+          <Route path="remote" element={<RemotePage />} />
           <Route path="ingress" element={<IngressPage />} />
 
           {/* The two addresses that moved. Redirected rather than deleted: a

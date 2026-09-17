@@ -35,6 +35,7 @@ import type {
   LinkConfig,
   Protocol,
   GatewayConfig,
+  RemoteConfig,
 } from '@/lib/config-types'
 
 /** What applying a change will cost (design.md §5.3.3, internal/dhcp Impact). */
@@ -986,4 +987,131 @@ export interface IngressApplyResult {
 export interface IngressProviders {
   binary?: string
   providers: string[]
+}
+
+// --- remote -----------------------------------------------------------------
+
+/**
+ * One line of kernel state — internal/remote Change.
+ *
+ * The same shape gateway's changes have, and for the same reason: what this
+ * module configures *is* the kernel, so a plan is lines to add and remove
+ * rather than files to write.
+ */
+export interface RemoteChange {
+  kind: 'add' | 'remove'
+  line: string
+}
+
+/** What applying a remote-access change would do — internal/remote planView. */
+export interface RemotePlan {
+  changes: RemoteChange[]
+  impact: Impact
+  reasons?: string[]
+  /**
+   * Set when the interface name belongs to something that is not olr's. A
+   * string rather than a boolean, because the answer is to pick a different
+   * name and the message is what says so.
+   */
+  blocked?: string
+  empty: boolean
+  /**
+   * Whether the kernel could be read. Without it a client cannot tell "nothing
+   * to do" from "we could not look", which need different words on screen.
+   */
+  known: boolean
+  diff?: string
+  warnings?: Problem[]
+}
+
+/**
+ * One device that may dial in — internal/remote peerView.
+ *
+ * Stored intent joined to what the kernel knows right now. The join is the
+ * point: the name and address are configuration and answer nothing about
+ * whether remote access works, while `last_handshake` is the only liveness
+ * signal WireGuard has and is not in the configuration at all.
+ */
+export interface RemotePeer {
+  name: string
+  address?: string
+  routes: 'home' | 'everything'
+  public_key?: string
+  /**
+   * Absent for a device that has never connected, and that absence is
+   * load-bearing: "never" almost always means the configuration was not
+   * imported or the port is not reachable from outside — a setup problem —
+   * while "an hour ago" means it works and the device is asleep.
+   */
+  last_handshake?: string
+  online: boolean
+  /** Where the device was last heard from: its address out in the world. */
+  endpoint?: string
+  rx_bytes?: number
+  tx_bytes?: number
+  /**
+   * The kernel could not be read, so every observed field above is absent
+   * rather than zero. Without it a developer box would report every device as
+   * having never connected, which is a claim rather than an absence of one.
+   */
+  unknown?: boolean
+}
+
+export interface RemotePeers {
+  peers: RemotePeer[]
+  subnet?: string
+  as_of: string
+}
+
+export interface RemoteStatus {
+  enabled: boolean
+  interface: string
+  listen_port: number
+  endpoint?: string
+  subnet?: string
+  address?: string
+  /**
+   * This box's public key. Not a secret — it is in every client configuration
+   * already — and the one value an operator completing a file by hand needs.
+   */
+  public_key?: string
+  kernel_known: boolean
+  interface_present: boolean
+  interface_up: boolean
+  /** The name is taken by an interface that is not WireGuard. olr will not
+   *  touch it (design.md §3.4). */
+  interface_foreign?: boolean
+  blockers?: Blocker[]
+  peers: RemotePeer[]
+  drifted: boolean
+  drift?: RemotePlan
+  drift_error?: string
+  as_of: string
+}
+
+/**
+ * What comes back from writing a device — internal/remote peerResult.
+ *
+ * `client_config` is the only response in olr that cannot be reproduced. The
+ * private key in it is stored nowhere, so a screen that receives one has to
+ * treat it as the last chance to hand it over, and must not offer a way to ask
+ * for it again — there is nothing to ask.
+ */
+export interface RemotePeerResult {
+  name: string
+  address?: string
+  client_config?: string
+  note?: string
+  /** Commands in other modules that this one deliberately does not run. */
+  next_steps?: string[]
+}
+
+export interface RemoteApplyResult {
+  plan: RemotePlan
+  steps?: Step[]
+  error?: { message: string; problems?: Problem[] }
+  /** What is stored now, redacted. Present on the refusal path especially: it
+   *  says the document did not move. */
+  config?: RemoteConfig
+  peer?: RemotePeerResult
 }
