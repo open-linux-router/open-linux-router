@@ -5,8 +5,11 @@ Usage:
   olr remote show [command]
 
 Available Commands:
+  link        Print the proxy link to import on a device
   peer        Show one device in full
   peers       List the devices that may dial in
+  shadowsocks Show the proxy in full
+  wireguard   Show the tunnel in full
 
 Flags:
   -h, --help   help for show

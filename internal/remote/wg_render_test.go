@@ -91,7 +91,7 @@ func TestServerConfCarriesTheEscapeHatch(t *testing.T) {
 func TestClientConfigForHome(t *testing.T) {
 	c, peer := withPeer(enabledConfig(), "phone", RouteHome)
 
-	conf, err := ClientConfig(c.WireGuard, peer, "PRIVATE", testNetworks)
+	conf, err := ClientConfig(c, peer, "PRIVATE", testNetworks)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestClientConfigForHome(t *testing.T) {
 func TestClientConfigForEverythingIsIPv4Only(t *testing.T) {
 	c, peer := withPeer(enabledConfig(), "laptop", RouteEverything)
 
-	conf, err := ClientConfig(c.WireGuard, peer, "PRIVATE", testNetworks)
+	conf, err := ClientConfig(c, peer, "PRIVATE", testNetworks)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,9 +134,9 @@ func TestClientConfigForEverythingIsIPv4Only(t *testing.T) {
 // is a file that cannot do anything. Refused rather than written.
 func TestClientConfigNeedsAnEndpoint(t *testing.T) {
 	c, peer := withPeer(enabledConfig(), "phone", RouteHome)
-	c.WireGuard.Endpoint = ""
+	c.Endpoint = ""
 
-	if _, err := ClientConfig(c.WireGuard, peer, "PRIVATE", testNetworks); err == nil {
+	if _, err := ClientConfig(c, peer, "PRIVATE", testNetworks); err == nil {
 		t.Fatal("a client config was written with nowhere to dial")
 	}
 }
@@ -147,7 +147,7 @@ func TestClientConfigNeedsAnEndpoint(t *testing.T) {
 func TestClientConfigWithoutAPrivateKeySaysSo(t *testing.T) {
 	c, peer := withPeer(enabledConfig(), "work", RouteHome)
 
-	conf, err := ClientConfig(c.WireGuard, peer, "", testNetworks)
+	conf, err := ClientConfig(c, peer, "", testNetworks)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestClientConfigWithoutAPrivateKeySaysSo(t *testing.T) {
 func TestHomeWithNoNetworksIsJustTheTunnel(t *testing.T) {
 	c, peer := withPeer(enabledConfig(), "phone", RouteHome)
 
-	conf, err := ClientConfig(c.WireGuard, peer, "PRIVATE", nil)
+	conf, err := ClientConfig(c, peer, "PRIVATE", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

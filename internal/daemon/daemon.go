@@ -353,16 +353,33 @@ func run(args []string) error {
 	// unit at all, and that is not an omission: WireGuard's data path is in the
 	// kernel, so there is no process for systemd to watch
 	// (docs/remote-access.md §7.1).
-	remoteApplier := remote.Applier{
+	// Two objects, two appliers, one document. They are separate types because
+	// what they drive has nothing in common — the tunnel is kernel state with
+	// no daemon, the proxy is a rendered file and a unit — and they share
+	// `remote.Store` so that both read stored intent through the same code.
+	remoteStore := remote.Store{Store: store}
+	remoteTunnel := remote.TunnelApplier{
+		Store:    remoteStore,
 		Kernel:   remote.NewKernel(),
 		Networks: remoteNetworks{facts: facts},
-		Store:    store,
+	}
+	proxyUnit, err := core.NewUnit(remote.UnitName)
+	if err != nil {
+		// No service manager. Not fatal: the tunnel half needs none, and the
+		// proxy reports "we could not tell" rather than "it is off" (§3.4).
+		logger.Warn("no service manager for the remote-access proxy", "error", err)
+	}
+	remoteProxy := remote.ProxyApplier{
+		Store: remoteStore,
+		Paths: remote.RootedPaths(opts.root),
+		Unit:  proxyUnit,
 	}
 
 	srv.Mount(remote.ModuleName, remote.HTTP{
-		Applier: remoteApplier,
-		Lock:    srv.ApplyLock(),
-		Events:  srv.Events(),
+		Tunnel: remoteTunnel,
+		Proxy:  remoteProxy,
+		Lock:   srv.ApplyLock(),
+		Events: srv.Events(),
 	}.Routes(), remote.Config{})
 
 	// `ingress` is mounted last, matching the store's order. Its two views are
@@ -431,7 +448,7 @@ func run(args []string) error {
 	// fixed.
 	startGateway(ctx, gatewayApplier, prober, logger)
 	startFirewall(ctx, firewallApplier, logger)
-	startRemote(ctx, remoteApplier, logger)
+	startRemote(ctx, remoteTunnel, remoteProxy, logger)
 	startDial(ctx, dialApplier, publisher, logger)
 
 	var listeners []net.Listener
@@ -742,10 +759,10 @@ func startFirewall(ctx context.Context, a firewall.Applier, logger *slog.Logger)
 // survive a reboot. What is different is the stake — this is the module whose
 // absence an operator discovers from outside the building, so a failure here is
 // logged with the interface named rather than folded into a generic line.
-func startRemote(ctx context.Context, a remote.Applier, logger *slog.Logger) {
-	cfg, err := a.Load()
+func startRemote(ctx context.Context, tunnel remote.TunnelApplier, proxy remote.ProxyApplier, logger *slog.Logger) {
+	cfg, err := tunnel.Load()
 	if err != nil {
-		logger.Error("remote-access configuration could not be read; the tunnel was not created",
+		logger.Error("remote-access configuration could not be read; nothing was restored",
 			"error", err)
 		return
 	}
@@ -753,7 +770,10 @@ func startRemote(ctx context.Context, a remote.Applier, logger *slog.Logger) {
 		return
 	}
 
-	result, err := a.Apply(ctx, cfg)
+	// The proxy needs no restoring — its unit is enabled at boot and reads a
+	// file that survives a reboot, which is the whole difference between a
+	// rendered backend and kernel state. Only the tunnel is put back here.
+	result, err := tunnel.Apply(ctx, cfg)
 	switch {
 	case err != nil && result.Plan.Blocked != "":
 		// The interface name belongs to something else. The one refusal this

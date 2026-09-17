@@ -11,7 +11,7 @@ Available Commands:
   rm          Stop a device dialling in
   set         Set how devices reach this box
   show        Show remote-access configuration
-  status      Show whether the tunnel is up and who has connected
+  status      Show whether each way in is working
 
 Flags:
   -h, --help   help for remote

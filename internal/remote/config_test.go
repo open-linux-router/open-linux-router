@@ -113,29 +113,50 @@ func TestSetPeerKeepsTheAddressAndKeyWhenTheEditOmitsThem(t *testing.T) {
 	}
 }
 
-func TestEndpointWithPort(t *testing.T) {
+// The endpoint is the module's, not the tunnel's, so the port a client dials
+// comes from whichever way in it is dialling — and `public_port` is what says
+// so when a router in front forwards a different one.
+func TestDialAddress(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		endpoint string
-		port     uint16
+		listen   uint16
+		public   uint16
 		want     string
 	}{
-		{"name gets the listen port", "home.example.net", 0, "home.example.net:51820"},
-		{"a port already there wins", "home.example.net:51821", 0, "home.example.net:51821"},
-		{"the configured port is used", "home.example.net", 3000, "home.example.net:3000"},
-		{"IPv4", "203.0.113.5", 0, "203.0.113.5:51820"},
+		{"a name gets the listen port", "home.example.net", 0, 0, "home.example.net:51820"},
+		{"public_port wins", "home.example.net", 0, 51821, "home.example.net:51821"},
+		{"the configured port is used", "home.example.net", 3000, 0, "home.example.net:3000"},
+		{"IPv4", "203.0.113.5", 0, 0, "203.0.113.5:51820"},
 		// The one worth a case: a bare v6 address has colons of its own, so
-		// appending `:port` would produce something wg cannot parse.
-		{"IPv6 is bracketed", "2001:db8::1", 0, "[2001:db8::1]:51820"},
-		{"IPv6 with a port is left alone", "[2001:db8::1]:51821", 0, "[2001:db8::1]:51821"},
-		{"nothing set", "", 0, ""},
+		// appending `:port` would produce something no client can parse.
+		{"IPv6 is bracketed", "2001:db8::1", 0, 0, "[2001:db8::1]:51820"},
+		{"nothing set", "", 0, 0, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			w := WireGuard{Endpoint: tc.endpoint, ListenPort: tc.port}
-			if got := w.EndpointWithPort(); got != tc.want {
-				t.Errorf("EndpointWithPort() = %q, want %q", got, tc.want)
+			c := Config{
+				Endpoint:  tc.endpoint,
+				WireGuard: WireGuard{ListenPort: tc.listen, PublicPort: tc.public},
+			}
+			if got := c.DialAddress(c.WireGuard.DialPort()); got != tc.want {
+				t.Errorf("DialAddress() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// A port in the shared endpoint could only ever be right for one of the two
+// ways in, so it is refused rather than guessed at.
+func TestEndpointMayNotCarryAPort(t *testing.T) {
+	c := enabledConfig()
+	c.Endpoint = "home.example.net:51820"
+
+	res := validateAll(c, testNetworks)
+	if res.OK() {
+		t.Fatal("an endpoint with a port was accepted")
+	}
+	if !strings.Contains(res.Errors[0].Message, "public_port") {
+		t.Errorf("the refusal does not name the field that replaces it: %q", res.Errors[0].Message)
 	}
 }
 
@@ -143,7 +164,7 @@ func TestRedactedHidesTheKeyAndLeavesTheOriginal(t *testing.T) {
 	c := enabledConfig()
 
 	red := c.Redacted()
-	if red.WireGuard.PrivateKey != RedactedKey {
+	if red.WireGuard.PrivateKey != RedactedSecret {
 		t.Errorf("private key = %q, want it masked", red.WireGuard.PrivateKey)
 	}
 	if c.WireGuard.PrivateKey != testKey.Private {

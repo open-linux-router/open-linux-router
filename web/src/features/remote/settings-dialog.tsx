@@ -36,24 +36,24 @@ export function SettingsDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  initial?: RemoteConfig['wireguard']
-  onSubmit: (fields: Record<string, unknown>) => void
+  initial?: RemoteConfig
+  onSubmit: (endpoint: string, wireguard: Record<string, unknown>) => void
 }) {
   const [endpoint, setEndpoint] = useState(initial?.endpoint ?? '')
-  const [subnet, setSubnet] = useState(initial?.subnet ?? '')
-  const [port, setPort] = useState(String(initial?.listen_port ?? ''))
+  const [subnet, setSubnet] = useState(initial?.wireguard.subnet ?? '')
+  const [port, setPort] = useState(String(initial?.wireguard.listen_port ?? ''))
 
   function submit() {
-    const fields: Record<string, unknown> = { endpoint: endpoint.trim() }
-    // Only what changed. A patch that does not mention a key leaves it alone,
-    // which is what lets this form round-trip without a way to clear a field by
-    // opening the dialog and pressing Save.
-    if (subnet.trim() !== (initial?.subnet ?? '')) fields.subnet = subnet.trim()
+    // Only what changed, and split by who owns it. A patch that does not
+    // mention a key leaves it alone, which is what lets this form round-trip
+    // without a way to clear a field by opening the dialog and pressing Save.
+    const wireguard: Record<string, unknown> = {}
+    if (subnet.trim() !== (initial?.wireguard.subnet ?? '')) wireguard.subnet = subnet.trim()
     const parsed = Number(port)
-    if (port.trim() !== '' && Number.isFinite(parsed) && parsed !== initial?.listen_port) {
-      fields.listen_port = parsed
+    if (port.trim() !== '' && Number.isFinite(parsed) && parsed !== initial?.wireguard.listen_port) {
+      wireguard.listen_port = parsed
     }
-    onSubmit(fields)
+    onSubmit(endpoint.trim(), wireguard)
     onOpenChange(false)
   }
 
@@ -80,8 +80,7 @@ export function SettingsDialog({
             <p className="text-xs text-muted-foreground">
               The name or address your devices dial from outside. If a name already follows this
               router&rsquo;s address, use it — that is what the DDNS records keep current. Add
-              <span className="font-mono"> :port</span> if the port forwarded to this router differs
-              from the one below.
+                It is shared by every way in, so give the host alone.
             </p>
           </div>
 

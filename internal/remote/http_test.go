@@ -25,10 +25,10 @@ import (
 // Everything else is covered where the decision lives — validate_test.go,
 // plan_test.go, render_test.go.
 
-func testHTTP(t *testing.T) (http.Handler, Applier) {
+func testHTTP(t *testing.T) (http.Handler, TunnelApplier) {
 	t.Helper()
 	applier, _ := testApplier(t)
-	h := HTTP{Applier: applier, Lock: core.NewLock(), Events: core.NewEvents()}
+	h := HTTP{Tunnel: applier, Lock: core.NewLock(), Events: core.NewEvents()}
 	return h.Handler(), applier
 }
 
@@ -56,11 +56,20 @@ func decode[T any](t *testing.T, w *httptest.ResponseRecorder) T {
 
 // turnOn gets the tunnel configured and running, which is what makes a later
 // removal disruptive.
+//
+// Two requests, and the split is the module's shape rather than an awkwardness:
+// where devices dial belongs to the box and is set at the module level, while
+// turning the tunnel on belongs to the tunnel. A single route that did both
+// would be the composite the two objects exist not to be.
 func turnOn(t *testing.T, h http.Handler) {
 	t.Helper()
-	body := `{"wireguard":{"enabled":true,"endpoint":"home.example.net"}}`
-	if w := do(t, h, http.MethodPatch, "/config?confirm=true", body); w.Code != http.StatusOK {
-		t.Fatalf("setup PATCH = %d: %s", w.Code, w.Body)
+	if w := do(t, h, http.MethodPatch, "/config?confirm=true",
+		`{"endpoint":"home.example.net"}`); w.Code != http.StatusOK {
+		t.Fatalf("setup endpoint PATCH = %d: %s", w.Code, w.Body)
+	}
+	if w := do(t, h, http.MethodPatch, "/wireguard/config?confirm=true",
+		`{"enabled":true}`); w.Code != http.StatusOK {
+		t.Fatalf("setup tunnel PATCH = %d: %s", w.Code, w.Body)
 	}
 }
 
@@ -81,8 +90,8 @@ func TestEnablingGeneratesTheKey(t *testing.T) {
 	// And it is stable: a second edit must not replace it, or every
 	// configuration issued before it would name a public key the box no longer
 	// has.
-	if w := do(t, h, http.MethodPatch, "/config?confirm=true",
-		`{"wireguard":{"listen_port":51821}}`); w.Code != http.StatusOK {
+	if w := do(t, h, http.MethodPatch, "/wireguard/config?confirm=true",
+		`{"listen_port":51821}`); w.Code != http.StatusOK {
 		t.Fatalf("second PATCH = %d: %s", w.Code, w.Body)
 	}
 	after, _ := applier.Load()
@@ -95,12 +104,12 @@ func TestAddingAPeerReturnsAConfigurationOnce(t *testing.T) {
 	h, applier := testHTTP(t)
 	turnOn(t, h)
 
-	w := do(t, h, http.MethodPut, "/peers/phone?confirm=true", `{"routes":"home"}`)
+	w := do(t, h, http.MethodPut, "/wireguard/peers/phone?confirm=true", `{"routes":"home"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", w.Code, w.Body)
 	}
 
-	resp := decode[applyResponse](t, w)
+	resp := decode[tunnelApplyResponse](t, w)
 	if resp.Peer == nil || resp.Peer.ClientConfig == "" {
 		t.Fatal("no client configuration came back, so the device cannot be set up at all")
 	}
@@ -135,11 +144,11 @@ func TestAddingAPeerReturnsAConfigurationOnce(t *testing.T) {
 
 	// Editing the peer afterwards is not a re-issue — there is no private key
 	// left to write one with.
-	w = do(t, h, http.MethodPut, "/peers/phone?confirm=true", `{"routes":"everything"}`)
+	w = do(t, h, http.MethodPut, "/wireguard/peers/phone?confirm=true", `{"routes":"everything"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("edit = %d: %s", w.Code, w.Body)
 	}
-	edit := decode[applyResponse](t, w)
+	edit := decode[tunnelApplyResponse](t, w)
 	if edit.Peer == nil {
 		t.Fatal("changing what a device sends said nothing, so the operator would believe olr had done it")
 	}
@@ -164,12 +173,12 @@ func TestASuppliedPublicKeyGetsNoPrivateOne(t *testing.T) {
 	turnOn(t, h)
 
 	key := mustKey().Public
-	w := do(t, h, http.MethodPut, "/peers/work?confirm=true", `{"public_key":"`+key+`"}`)
+	w := do(t, h, http.MethodPut, "/wireguard/peers/work?confirm=true", `{"public_key":"`+key+`"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", w.Code, w.Body)
 	}
 
-	resp := decode[applyResponse](t, w)
+	resp := decode[tunnelApplyResponse](t, w)
 	if resp.Peer == nil {
 		t.Fatal("nothing came back about the device that was just added")
 	}
@@ -184,16 +193,16 @@ func TestASuppliedPublicKeyGetsNoPrivateOne(t *testing.T) {
 func TestRemovingAPeerIsRefusedWithoutConfirm(t *testing.T) {
 	h, applier := testHTTP(t)
 	turnOn(t, h)
-	if w := do(t, h, http.MethodPut, "/peers/phone?confirm=true", ""); w.Code != http.StatusOK {
+	if w := do(t, h, http.MethodPut, "/wireguard/peers/phone?confirm=true", ""); w.Code != http.StatusOK {
 		t.Fatalf("setup PUT = %d: %s", w.Code, w.Body)
 	}
 
-	w := do(t, h, http.MethodDelete, "/peers/phone", "")
+	w := do(t, h, http.MethodDelete, "/wireguard/peers/phone", "")
 	if w.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409: %s", w.Code, w.Body)
 	}
 
-	resp := decode[applyResponse](t, w)
+	resp := decode[tunnelApplyResponse](t, w)
 	if resp.Plan.Impact != ImpactDisruptive {
 		t.Errorf("impact = %s, want disruptive", resp.Plan.Impact)
 	}
@@ -222,11 +231,11 @@ func TestRemovingAPeerIsRefusedWithoutConfirm(t *testing.T) {
 	if _, ok := resp.Config.WireGuard.Peer("phone"); !ok {
 		t.Error("the refusal reports a document the device has already left")
 	}
-	if resp.Config.WireGuard.PrivateKey != RedactedKey {
+	if resp.Config.WireGuard.PrivateKey != RedactedSecret {
 		t.Errorf("the refusal returned the key as %q", resp.Config.WireGuard.PrivateKey)
 	}
 
-	if w := do(t, h, http.MethodDelete, "/peers/phone?confirm=true", ""); w.Code != http.StatusOK {
+	if w := do(t, h, http.MethodDelete, "/wireguard/peers/phone?confirm=true", ""); w.Code != http.StatusOK {
 		t.Fatalf("confirmed delete = %d: %s", w.Code, w.Body)
 	}
 	after, _ := applier.Load()
@@ -239,7 +248,7 @@ func TestDeletingAnUnknownPeerIsNotFound(t *testing.T) {
 	h, _ := testHTTP(t)
 	turnOn(t, h)
 
-	if w := do(t, h, http.MethodDelete, "/peers/nobody?confirm=true", ""); w.Code != http.StatusNotFound {
+	if w := do(t, h, http.MethodDelete, "/wireguard/peers/nobody?confirm=true", ""); w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404: %s", w.Code, w.Body)
 	}
 }
@@ -260,8 +269,12 @@ func TestTheKeyIsNeverReturnedAndTheMaskMeansUnchanged(t *testing.T) {
 
 	// The round trip redaction creates: a UI that renders the mask into a form
 	// and sends the form back must not store eight asterisks as the key.
-	body := w.Body.String()
-	if w := do(t, h, http.MethodPut, "/config?confirm=true", body); w.Code != http.StatusOK {
+	// Scoped to the tunnel's own section, which is what its route accepts.
+	section, err := json.Marshal(decode[Config](t, w).WireGuard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := do(t, h, http.MethodPut, "/wireguard/config?confirm=true", string(section)); w.Code != http.StatusOK {
 		t.Fatalf("PUT of what GET returned = %d: %s", w.Code, w.Body)
 	}
 	after, _ := applier.Load()
@@ -274,7 +287,7 @@ func TestDryRunWritesNothing(t *testing.T) {
 	h, applier := testHTTP(t)
 	turnOn(t, h)
 
-	w := do(t, h, http.MethodPut, "/peers/phone?dry_run=true", "")
+	w := do(t, h, http.MethodPut, "/wireguard/peers/phone?dry_run=true", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", w.Code, w.Body)
 	}
@@ -294,11 +307,11 @@ func TestStatusReportsTheTunnelAndItsBlockers(t *testing.T) {
 	h, _ := testHTTP(t)
 	turnOn(t, h)
 
-	w := do(t, h, http.MethodGet, "/status", "")
+	w := do(t, h, http.MethodGet, "/wireguard/status", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", w.Code, w.Body)
 	}
-	resp := decode[statusResponse](t, w)
+	resp := decode[tunnelStatus](t, w)
 
 	if !resp.Enabled || resp.Interface != DefaultInterface {
 		t.Errorf("status does not describe the tunnel: %+v", resp)

@@ -1,0 +1,15 @@
+Stop accepting connections over one of the two ways in.
+
+The configuration is kept, including the key or password, so
+turning it back on needs nothing to be re-issued.
+
+Usage:
+  olr remote disable wireguard|shadowsocks [flags]
+
+Flags:
+  -h, --help   help for disable
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

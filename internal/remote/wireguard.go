@@ -1,0 +1,407 @@
+package remote
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/netip"
+	"slices"
+	"strings"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
+)
+
+// The WireGuard object: the one that puts a device *inside* the network.
+//
+// That is the whole difference from the object beside it, and it is what an
+// operator has to understand before choosing between them. A WireGuard peer
+// reaches the NAS, the printer and this router's own UI, because it is a device
+// on a network at home. A Shadowsocks client reaches none of those; it borrows
+// this box's way out and nothing else (shadowsocks.go).
+//
+// Unlike every other backend-driven object in olr, this one has no unit.
+// WireGuard's data path is in the kernel, so what it configures *is* kernel
+// state — which makes it shaped like internal/gateway, applied at olrd startup
+// because a reboot is what kernel state does not survive.
+
+// DefaultInterface is the kernel name of the tunnel olr creates.
+//
+// `wg0` and not `olr-wg0`, which would have matched the naming everywhere else
+// in olr. Two reasons went the other way: every piece of WireGuard
+// documentation an operator will read says `wg0`, and unlike a unit name or a
+// config path there is nothing here to collide with — a box already running
+// WireGuard on `wg0` is a box this module refuses to touch (wg_validate.go)
+// rather than one it has to coexist with on the same name.
+const DefaultInterface = "wg0"
+
+// DefaultListenPort is WireGuard's own default, and the number every guide
+// tells an operator to forward.
+const DefaultListenPort = 51820
+
+// DefaultKeepalive is how often a peer sends a keepalive packet, in seconds.
+//
+// Rendered into every client configuration rather than offered as a field. A
+// peer behind NAT is reachable from home only while the NAT mapping is open, so
+// without this the operator's phone is contactable for a minute after it last
+// spoke and then silently is not — which is precisely the situation somebody
+// notices at the worst moment. 25 is upstream's recommendation and sits below
+// every NAT timeout worth worrying about.
+const DefaultKeepalive = 25
+
+// DefaultSubnet is the dial-in network when the operator does not choose one.
+//
+// Arbitrary, and chosen only to be unlikely: home networks cluster on
+// 192.168.0.0/16 and the low end of 10.0.0.0/8, and a default that collided
+// with the LAN would produce a tunnel that comes up and reaches nothing. An
+// overlap is refused rather than worked around (wg_validate.go), so the cost of
+// a bad guess here is one clear error naming `--subnet`.
+var DefaultSubnet = netip.MustParsePrefix("10.6.0.0/24")
+
+// WireGuard is everything about the tunnel.
+type WireGuard struct {
+	// Enabled controls whether the tunnel exists at all. Disabling removes the
+	// interface and leaves the configuration in place, so peers do not have to
+	// be re-issued to turn remote access back on.
+	Enabled bool `json:"enabled"`
+
+	// Interface is the kernel name. Empty means DefaultInterface.
+	//
+	// A field rather than a constant because a box may already have a `wg0`
+	// that belongs to somebody else, and the answer to that has to be "use a
+	// different name" rather than "uninstall your other tunnel".
+	Interface string `json:"interface,omitempty"`
+
+	// ListenPort is the UDP port this box listens on. Empty means
+	// DefaultListenPort.
+	ListenPort uint16 `json:"listen_port,omitempty"`
+
+	// PublicPort is the port clients dial, when a router in front forwards a
+	// different one to us. Empty — the ordinary case — means ListenPort.
+	PublicPort uint16 `json:"public_port,omitempty"`
+
+	// Subnet is the dial-in network. Empty means DefaultSubnet.
+	//
+	// This is a network in design.md §4.4's sense and behaves like one in every
+	// respect but the one that matters most: **its addresses are not served.**
+	// They are written into each client configuration when it is generated,
+	// because the address has to be known before the tunnel that would carry a
+	// DHCP request exists. docs/remote-access.md §3.2 is that asymmetry, and it
+	// is why changing this field is disruptive even though nothing disconnects
+	// at the instant it is applied — every configuration already on a phone
+	// becomes wrong.
+	Subnet netip.Prefix `json:"subnet,omitempty"`
+
+	// Address is this box's own address on the dial-in network. Nil derives the
+	// first host address, which is `.1` on every ordinary prefix — the same
+	// rule link.GroupIPv4 uses, deliberately, so the two kinds of network do
+	// not answer "where is the router" differently.
+	Address *netip.Addr `json:"address,omitempty"`
+
+	// PrivateKey is the box's own half of the key pair, base64 as WireGuard
+	// spells it.
+	//
+	// It carries the obligations docs/ingress.md §4.1 states for the other
+	// credentials olr holds: redacted on every surface that prints config or a
+	// plan, and never returned by the API. Unlike those it is generated here
+	// rather than typed, so an operator never sees it at all — the only thing
+	// that needs the public half is a client configuration, and this object
+	// writes those itself.
+	PrivateKey string `json:"private_key,omitempty" jsonschema:"description=Generated by olr and never shown. It is redacted on every surface; sending the mask back means 'unchanged'."`
+
+	// Peers are the devices that may dial in, keyed by Name.
+	Peers []Peer `json:"peers,omitempty"`
+
+	// ExtraConf is this object's declared escape hatch (design.md §3.2 rule 5):
+	// appended verbatim to what `wg setconf` is given. WireGuard's own format
+	// has a handful of knobs olr does not model — a pre-shared key, an FwMark —
+	// and this field plus upstream's documentation is the whole of our answer
+	// to them.
+	ExtraConf string `json:"raw_wireguard_conf,omitempty"`
+}
+
+// Peer is one device that may dial in.
+//
+// Two fields the operator gives and two that are derived, which is the object's
+// whole claim: `olr remote add peer phone` prints a configuration that works.
+type Peer struct {
+	// Name is the peer's identity — what this device is called. Positional on
+	// the CLI and the key of the item routes (docs/cli.md R2).
+	//
+	// Constrained to a DNS label by the validator, because this is the name an
+	// operator will give the same device in `dns` (docs/remote-access.md §3).
+	Name string `json:"name"`
+
+	// PublicKey is the device's half of the key pair, base64.
+	//
+	// Normally generated here along with the private half, which is handed back
+	// once and never stored (wg_keys.go). An operator who would rather generate
+	// the pair on the device supplies this instead, and gets tunnel settings to
+	// paste rather than a finished file — olr cannot write an `[Interface]`
+	// section for a private key it does not have.
+	PublicKey string `json:"public_key"`
+
+	// Address is the peer's address on the dial-in network, allocated when the
+	// peer is added and fixed for its lifetime.
+	//
+	// Stored rather than derived from position in the list: deriving would
+	// renumber every peer after a removal, and a renumbered peer is a client
+	// configuration that stops working for a reason nobody can see.
+	Address netip.Addr `json:"address,omitempty"`
+
+	// Routes is what the *device* sends through the tunnel. Empty means
+	// RouteHome.
+	//
+	// Not to be confused with the peer's `AllowedIPs` on this side, which is
+	// derived and is not a field: on the server side that word means "which
+	// source addresses this key may use" and the only defensible answer is the
+	// peer's own address. docs/remote-access.md §6.2 is the two meanings.
+	Routes RouteScope `json:"routes,omitempty"`
+}
+
+// RouteScope is what a client sends into the tunnel.
+type RouteScope string
+
+// The route scopes.
+const (
+	// RouteHome sends the home networks and the dial-in network, and nothing
+	// else. The device reaches the NAS and the router's own UI while its video
+	// calls keep going out of whatever network it is actually on.
+	RouteHome RouteScope = "home"
+
+	// RouteEverything sends all of it, so the device appears to be at home for
+	// every purpose including its public address.
+	//
+	// It is not the default, and the reason is not caution: the client is a
+	// phone out in the world, and full-tunnel drags everything it does across
+	// the operator's home upload. The "configure it once on the router"
+	// instinct that is right for devices at home is wrong here, because olr is
+	// not in the path of anything that phone does until it decides otherwise.
+	RouteEverything RouteScope = "everything"
+)
+
+// RouteScopes lists the vocabulary. One source, so the enum published in the
+// schema and the check in the validator cannot disagree.
+func RouteScopes() []RouteScope { return []RouteScope{RouteHome, RouteEverything} }
+
+// Valid reports whether s is a known scope. The empty string is valid and means
+// RouteHome.
+func (s RouteScope) Valid() bool { return s == "" || slices.Contains(RouteScopes(), s) }
+
+// OrDefault resolves the empty value.
+func (s RouteScope) OrDefault() RouteScope {
+	if s == "" {
+		return RouteHome
+	}
+	return s
+}
+
+// --- resolved defaults ------------------------------------------------------
+
+// InterfaceOrDefault resolves the empty interface name.
+func (w WireGuard) InterfaceOrDefault() string {
+	if name := strings.TrimSpace(w.Interface); name != "" {
+		return name
+	}
+	return DefaultInterface
+}
+
+// PortOrDefault resolves the zero listen port.
+func (w WireGuard) PortOrDefault() uint16 {
+	if w.ListenPort != 0 {
+		return w.ListenPort
+	}
+	return DefaultListenPort
+}
+
+// DialPort is the port a client is told to use.
+func (w WireGuard) DialPort() uint16 { return portOr(w.PublicPort, w.PortOrDefault()) }
+
+// SubnetOrDefault resolves the unset subnet.
+func (w WireGuard) SubnetOrDefault() netip.Prefix {
+	if w.Subnet.IsValid() {
+		return w.Subnet
+	}
+	return DefaultSubnet
+}
+
+// RouterAddr is this box's address on the dial-in network.
+func (w WireGuard) RouterAddr() netip.Addr {
+	if w.Address != nil && w.Address.IsValid() {
+		return *w.Address
+	}
+	addr, _ := core.FirstHost(w.SubnetOrDefault())
+	return addr
+}
+
+// RouterPrefix is the router address with the network's mask — the form netlink
+// wants, and the form that gives the kernel a connected route covering every
+// peer.
+//
+// The mask is the subnet's rather than a /32 deliberately. A /32 would leave
+// the kernel with no route to the peers at all, so every peer would need one
+// written by hand; the connected route is what makes cryptokey routing and the
+// routing table agree without a second mechanism.
+func (w WireGuard) RouterPrefix() netip.Prefix {
+	return netip.PrefixFrom(w.RouterAddr(), w.SubnetOrDefault().Bits())
+}
+
+// --- peers ------------------------------------------------------------------
+
+// Peer returns a peer by name.
+func (w WireGuard) Peer(name string) (Peer, bool) {
+	name = normalizeName(name)
+	i := slices.IndexFunc(w.Peers, func(p Peer) bool { return p.Name == name })
+	if i < 0 {
+		return Peer{}, false
+	}
+	return w.Peers[i], true
+}
+
+// SetPeer adds or replaces a peer, keyed by name.
+//
+// An address already held is kept when the replacement does not name one, which
+// is what makes editing a peer's routes free of a renumbering: the client
+// configuration on the device says an address, and changing it here would
+// silently invalidate a file olr cannot reach.
+func (w *WireGuard) SetPeer(p Peer) {
+	p.Name = normalizeName(p.Name)
+	if i := slices.IndexFunc(w.Peers, func(e Peer) bool { return e.Name == p.Name }); i >= 0 {
+		if !p.Address.IsValid() {
+			p.Address = w.Peers[i].Address
+		}
+		if p.PublicKey == "" {
+			p.PublicKey = w.Peers[i].PublicKey
+		}
+		w.Peers[i] = p
+		w.Normalize()
+		return
+	}
+	w.Peers = append(w.Peers, p)
+	w.Normalize()
+}
+
+// RemovePeer drops a peer, reporting whether there was one.
+func (w *WireGuard) RemovePeer(name string) bool {
+	name = normalizeName(name)
+	i := slices.IndexFunc(w.Peers, func(p Peer) bool { return p.Name == name })
+	if i < 0 {
+		return false
+	}
+	w.Peers = slices.Delete(w.Peers, i, i+1)
+	return true
+}
+
+// NextAddress allocates the lowest free address on the dial-in network.
+//
+// Lowest rather than "one past the last", so that removing a peer returns its
+// address to the pool instead of leaving a hole that grows until the subnet is
+// exhausted by a network with three devices on it.
+//
+// The router's own address is skipped, and so are the network and broadcast
+// addresses — core.HostRange already excludes the second pair, and the first is
+// ours.
+func (w WireGuard) NextAddress() (netip.Addr, bool) {
+	subnet := w.SubnetOrDefault()
+	start, end, ok := core.HostRange(subnet)
+	if !ok {
+		return netip.Addr{}, false
+	}
+
+	taken := map[netip.Addr]bool{w.RouterAddr(): true}
+	for _, p := range w.Peers {
+		if p.Address.IsValid() {
+			taken[p.Address] = true
+		}
+	}
+
+	for addr := start; addr.IsValid() && core.InRange(start, end, addr); addr = addr.Next() {
+		if !taken[addr] {
+			return addr, true
+		}
+	}
+	return netip.Addr{}, false
+}
+
+// --- canonical form ---------------------------------------------------------
+
+// normalizeName reduces a peer name to its stored form.
+//
+// Lower-cased, unlike an interface name: this is a DNS label in waiting
+// (Peer.Name), and `Phone` and `phone` resolving to two different devices is
+// not a distinction anybody meant to draw.
+func normalizeName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+// Normalize puts the tunnel's config in canonical form.
+func (w *WireGuard) Normalize() {
+	w.Interface = strings.TrimSpace(w.Interface)
+	// The key is not trimmed or re-cased. It is opaque base64 and "helpfully"
+	// altering it would produce a tunnel nobody can connect to, with a diff
+	// that looks right.
+
+	if w.Subnet.IsValid() {
+		// Masked, so that 10.6.0.1/24 typed into a form is stored as
+		// 10.6.0.0/24. Without it one network could be written two ways and
+		// every byte comparison downstream would call the difference drift.
+		w.Subnet = w.Subnet.Masked()
+	}
+	// An explicit address equal to what would be derived is dropped, so the
+	// stored file says `.1` exactly once — in the subnet — and a form that
+	// helpfully fills the field in does not turn a default into a pin.
+	if w.Address != nil {
+		if derived, ok := core.FirstHost(w.SubnetOrDefault()); ok && *w.Address == derived {
+			w.Address = nil
+		}
+	}
+
+	out := make([]Peer, 0, len(w.Peers))
+	seen := map[string]bool{}
+	for _, p := range w.Peers {
+		p.Name = normalizeName(p.Name)
+		p.PublicKey = strings.TrimSpace(p.PublicKey)
+		if p.Name == "" || seen[p.Name] {
+			continue
+		}
+		seen[p.Name] = true
+		out = append(out, p)
+	}
+	slices.SortStableFunc(out, func(a, b Peer) int { return strings.Compare(a.Name, b.Name) })
+	if len(out) == 0 {
+		out = nil
+	}
+	w.Peers = out
+}
+
+// Clone deep-copies the tunnel's config.
+func (w WireGuard) Clone() WireGuard {
+	out := w
+	out.Peers = slices.Clone(w.Peers)
+	if w.Address != nil {
+		addr := *w.Address
+		out.Address = &addr
+	}
+	return out
+}
+
+// Empty reports whether this object has been configured at all.
+func (w WireGuard) Empty() bool {
+	return !w.Enabled && w.PrivateKey == "" && len(w.Peers) == 0 &&
+		!w.Subnet.IsValid() && w.Interface == "" && w.ListenPort == 0 && w.PublicPort == 0
+}
+
+// UnmarshalWireGuard parses the tunnel's section, rejecting unknown fields.
+//
+// Strict for the reason UnmarshalConfig is: a typo'd key that is silently
+// ignored produces a box quietly not doing what its config says. Here that is
+// an operator who believes they narrowed a device's routes and did not.
+func UnmarshalWireGuard(data []byte) (WireGuard, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	var w WireGuard
+	if err := dec.Decode(&w); err != nil {
+		return WireGuard{}, fmt.Errorf("%s wireguard configuration: %w", ModuleName, err)
+	}
+	w.Normalize()
+	return w, nil
+}

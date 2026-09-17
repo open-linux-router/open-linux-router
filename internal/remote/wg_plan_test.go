@@ -145,33 +145,37 @@ func TestRenumberingTheNetworkIsDisruptive(t *testing.T) {
 // A WireGuard client retries forever, so this is an interruption rather than a
 // loss — as long as the endpoint names the port, which is the case that decides
 // whether the files already handed out are still right.
-func TestMovingThePortIsRestartWhenTheEndpointNamesIt(t *testing.T) {
+// With `public_port` pinned, moving the listen port changes nothing a client
+// can see — a router in front is still forwarding the same number.
+func TestMovingThePortIsRestartWhenTheDialledPortIsPinned(t *testing.T) {
 	before, _ := withPeer(enabledConfig(), "phone", RouteHome)
-	before.WireGuard.Endpoint = "home.example.net:51820"
+	before.WireGuard.PublicPort = 51820
 	obs := applied(before)
 
 	after := before.Clone()
 	after.WireGuard.ListenPort = 51821
 
-	plan := planFor(t, after, obs)
+	plan := planAfter(t, after, before, obs)
 	if plan.Impact != ImpactRestart {
 		t.Fatalf("impact = %s, want restart: %v", plan.Impact, plan.Reasons)
 	}
 }
 
-func TestMovingThePortIsDisruptiveWhenTheEndpointDoesNot(t *testing.T) {
+// Without it, the port a client dials moves with the listen port, so every
+// configuration already handed out points at the old one.
+func TestMovingThePortIsDisruptiveWhenTheDialledPortMoves(t *testing.T) {
 	before, _ := withPeer(enabledConfig(), "phone", RouteHome)
 	obs := applied(before)
 
 	after := before.Clone()
 	after.WireGuard.ListenPort = 51821
 
-	plan := planFor(t, after, obs)
+	plan := planAfter(t, after, before, obs)
 	if plan.Impact != ImpactDisruptive {
 		t.Fatalf("impact = %s, want disruptive: %v", plan.Impact, plan.Reasons)
 	}
-	if !strings.Contains(strings.Join(plan.Reasons, " "), "51820") {
-		t.Errorf("the reason does not name the port every file still says: %v", plan.Reasons)
+	if !strings.Contains(strings.Join(plan.Reasons, " "), "address devices dial") {
+		t.Errorf("the reason does not say what moved: %v", plan.Reasons)
 	}
 }
 
@@ -244,7 +248,7 @@ func TestAnUnreadableKernelPlansNothing(t *testing.T) {
 
 func TestAnInvalidConfigIsRefusedBeforePlanning(t *testing.T) {
 	c := enabledConfig()
-	c.WireGuard.Endpoint = ""
+	c.Endpoint = ""
 
 	if _, _, err := BuildPlan(c, c, testNetworks, Observed{Known: true}); err == nil {
 		t.Fatal("an unapplyable config was planned")

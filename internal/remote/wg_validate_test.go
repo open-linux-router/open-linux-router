@@ -31,17 +31,17 @@ func hasPath(r Result, path string) bool {
 
 func TestValidConfigPasses(t *testing.T) {
 	c, _ := withPeer(enabledConfig(), "phone", RouteHome)
-	if res := Validate(c, testNetworks); !res.OK() {
+	if res := validateAll(c, testNetworks); !res.OK() {
 		t.Fatalf("a valid config was refused: %v", errorPaths(res))
 	}
 }
 
 func TestEndpointIsRequiredWhenOn(t *testing.T) {
 	c := enabledConfig()
-	c.WireGuard.Endpoint = ""
+	c.Endpoint = ""
 
-	res := Validate(c, testNetworks)
-	if !hasPath(res, "wireguard.endpoint") {
+	res := validateAll(c, testNetworks)
+	if !hasPath(res, "endpoint") {
 		t.Fatalf("no endpoint error: %v", errorPaths(res))
 	}
 	// The refusal has to point somewhere. `dial` is where a name that tracks
@@ -54,7 +54,7 @@ func TestEndpointIsRequiredWhenOn(t *testing.T) {
 	// Off, it is not required: a configuration being assembled is not a
 	// configuration that is wrong.
 	c.WireGuard.Enabled = false
-	if res := Validate(c, testNetworks); !res.OK() {
+	if res := validateAll(c, testNetworks); !res.OK() {
 		t.Errorf("a switched-off tunnel was refused for a missing endpoint: %v", errorPaths(res))
 	}
 }
@@ -65,7 +65,7 @@ func TestSubnetMayNotOverlapAHomeNetwork(t *testing.T) {
 	c := enabledConfig()
 	c.WireGuard.Subnet = netip.MustParsePrefix("192.168.1.0/25")
 
-	res := Validate(c, testNetworks)
+	res := validateAll(c, testNetworks)
 	if !hasPath(res, "wireguard.subnet") {
 		t.Fatalf("an overlapping dial-in network was accepted: %v", errorPaths(res))
 	}
@@ -89,7 +89,7 @@ func TestSubnetRules(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := enabledConfig()
 			c.WireGuard.Subnet = netip.MustParsePrefix(tc.subnet)
-			res := Validate(c, nil)
+			res := validateAll(c, nil)
 			if ok := !hasPath(res, "wireguard.subnet"); ok != tc.want {
 				t.Errorf("subnet %s accepted = %v, want %v (%v)", tc.subnet, ok, tc.want, errorPaths(res))
 			}
@@ -122,7 +122,7 @@ func TestPeerRules(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := base.Clone()
 			c.WireGuard.Peers = []Peer{tc.peer}
-			res := Validate(c, testNetworks)
+			res := validateAll(c, testNetworks)
 			if !hasPath(res, tc.path) {
 				t.Errorf("want an error at %s, got %v", tc.path, errorPaths(res))
 			}
@@ -141,7 +141,7 @@ func TestTwoPeersMayNotShareAKey(t *testing.T) {
 		{Name: "phone", PublicKey: shared, Address: netip.MustParseAddr("10.6.0.3")},
 	}
 
-	res := Validate(c, testNetworks)
+	res := validateAll(c, testNetworks)
 	if !hasPath(res, "wireguard.peers[1].public_key") {
 		t.Fatalf("a shared key was accepted: %v", errorPaths(res))
 	}
@@ -158,7 +158,7 @@ func TestTwoPeersMayNotShareAnAddress(t *testing.T) {
 		{Name: "phone", PublicKey: mustKey().Public, Address: addr},
 	}
 
-	if res := Validate(c, testNetworks); !hasPath(res, "wireguard.peers[1].address") {
+	if res := validateAll(c, testNetworks); !hasPath(res, "wireguard.peers[1].address") {
 		t.Fatalf("a shared address was accepted: %v", errorPaths(res))
 	}
 }
@@ -168,7 +168,7 @@ func TestTwoPeersMayNotShareAnAddress(t *testing.T) {
 func TestTheTwoThingsThatOnlyWarn(t *testing.T) {
 	t.Run("home with no networks", func(t *testing.T) {
 		c, _ := withPeer(enabledConfig(), "phone", RouteHome)
-		res := Validate(c, nil)
+		res := validateAll(c, nil)
 		if !res.OK() {
 			t.Fatalf("refused rather than warned: %v", errorPaths(res))
 		}
@@ -179,7 +179,7 @@ func TestTheTwoThingsThatOnlyWarn(t *testing.T) {
 
 	t.Run("everything with no egress translation", func(t *testing.T) {
 		c, _ := withPeer(enabledConfig(), "laptop", RouteEverything)
-		res := Validate(c, testNetworks)
+		res := validateAll(c, testNetworks)
 		if !res.OK() {
 			t.Fatalf("refused rather than warned: %v", errorPaths(res))
 		}
@@ -199,14 +199,14 @@ func TestEscapeHatchMayNotRestateWhatWeRender(t *testing.T) {
 	c := enabledConfig()
 	c.WireGuard.ExtraConf = "ListenPort = 9999"
 
-	if res := Validate(c, testNetworks); !hasPath(res, "wireguard.raw_wireguard_conf") {
+	if res := validateAll(c, testNetworks); !hasPath(res, "wireguard.raw_wireguard_conf") {
 		t.Fatalf("the hatch was allowed to contradict the config: %v", errorPaths(res))
 	}
 
 	// A hand-written peer block is the main thing the hatch is for, so the keys
 	// a `[Peer]` needs must stay allowed.
 	c.WireGuard.ExtraConf = "[Peer]\nPublicKey = " + mustKey().Public + "\nAllowedIPs = 10.6.0.200/32"
-	if res := Validate(c, testNetworks); !res.OK() {
+	if res := validateAll(c, testNetworks); !res.OK() {
 		t.Errorf("a hand-written peer block was refused: %v", errorPaths(res))
 	}
 }
@@ -214,12 +214,12 @@ func TestEscapeHatchMayNotRestateWhatWeRender(t *testing.T) {
 func TestInterfaceNameRules(t *testing.T) {
 	c := enabledConfig()
 	c.WireGuard.Interface = strings.Repeat("w", MaxInterfaceNameLen+1)
-	if res := Validate(c, testNetworks); !hasPath(res, "wireguard.interface") {
+	if res := validateAll(c, testNetworks); !hasPath(res, "wireguard.interface") {
 		t.Errorf("an unusable interface name was accepted: %v", errorPaths(res))
 	}
 
 	c.WireGuard.Interface = "lo"
-	if res := Validate(c, testNetworks); !hasPath(res, "wireguard.interface") {
+	if res := validateAll(c, testNetworks); !hasPath(res, "wireguard.interface") {
 		t.Errorf("loopback was accepted as the tunnel's name: %v", errorPaths(res))
 	}
 }

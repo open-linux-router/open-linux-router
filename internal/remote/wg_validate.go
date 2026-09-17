@@ -1,10 +1,8 @@
 package remote
 
 import (
-	"errors"
 	"fmt"
 	"net/netip"
-	"strconv"
 	"strings"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
@@ -34,59 +32,15 @@ const MaxInterfaceNameLen = 15
 // rather than migrated later.
 const MaxPeerNameLen = 63
 
-// Problem is one validation finding, addressed by a JSON-ish path so a UI can
-// attach it to the field that caused it.
-type Problem struct {
-	Path    string
-	Message string
-}
-
-func (p Problem) String() string {
-	if p.Path == "" {
-		return p.Message
-	}
-	return p.Path + ": " + p.Message
-}
-
-// Result separates the fatal from the merely suspect.
-type Result struct {
-	Errors   []Problem
-	Warnings []Problem
-}
-
-func (r *Result) errorf(path, format string, args ...any) {
-	r.Errors = append(r.Errors, Problem{Path: path, Message: fmt.Sprintf(format, args...)})
-}
-
-func (r *Result) warnf(path, format string, args ...any) {
-	r.Warnings = append(r.Warnings, Problem{Path: path, Message: fmt.Sprintf(format, args...)})
-}
-
-// OK reports whether the config can be applied.
-func (r Result) OK() bool { return len(r.Errors) == 0 }
-
-// Err collapses the errors into one, or nil.
-func (r Result) Err() error {
-	if r.OK() {
-		return nil
-	}
-	msgs := make([]error, len(r.Errors))
-	for i, p := range r.Errors {
-		msgs[i] = errors.New(p.String())
-	}
-	return fmt.Errorf("invalid remote-access configuration:\n  %w", errors.Join(msgs...))
-}
-
-// Validate checks a config against itself and against the networks this box
-// serves.
-func Validate(c Config, networks NetworkView) Result {
+// ValidateWireGuard checks the tunnel's half of a config, and the networks it
+// has to coexist with.
+func ValidateWireGuard(c Config, networks NetworkView) Result {
 	var r Result
 	w := c.WireGuard
 	known := networksOf(networks)
 
 	validateInterface(&r, w)
 	validateSubnet(&r, w, known)
-	validateEndpoint(&r, w)
 	validateKey(&r, w)
 	validatePeers(&r, w, known)
 	validateExtraConf(&r, w.ExtraConf)
@@ -165,50 +119,6 @@ func validateSubnet(r *Result, w WireGuard, networks []NetworkInfo) {
 			r.errorf("wireguard.address",
 				"%s is the network or broadcast address of %s, which no host may hold", addr, subnet)
 		}
-	}
-}
-
-// validateEndpoint refuses the one field olr cannot derive.
-//
-// A refusal rather than a warning, because a client configuration without a
-// reachable endpoint is not a degraded configuration — it is a file that cannot
-// do anything at all, and the operator finds that out on a phone rather than
-// here.
-func validateEndpoint(r *Result, w WireGuard) {
-	if !w.Enabled {
-		return
-	}
-	if strings.TrimSpace(w.Endpoint) == "" {
-		r.errorf("wireguard.endpoint",
-			"required: the public name or address your devices dial from outside. "+
-				"If a name here already tracks this box's address, use it — that is what `olr dial show` lists")
-		return
-	}
-
-	host := w.Endpoint
-	if h, port, ok := splitEndpoint(host); ok {
-		host = h
-		if n, err := strconv.ParseUint(port, 10, 16); err != nil || n == 0 {
-			r.errorf("wireguard.endpoint", "%q is not a port", port)
-			return
-		}
-	}
-	if strings.ContainsAny(host, " \t/") {
-		r.errorf("wireguard.endpoint", "%q is neither an address nor a hostname", w.Endpoint)
-		return
-	}
-
-	addr, err := netip.ParseAddr(host)
-	if err != nil {
-		// A name, which is the ordinary case and the one `dial` exists to keep
-		// current. Nothing to check here — whether it resolves to this box is a
-		// question about the internet, not about the config.
-		return
-	}
-	if addr.IsPrivate() || addr.IsLoopback() || addr.IsLinkLocalUnicast() {
-		r.warnf("wireguard.endpoint",
-			"%s is not reachable from the internet, so only devices already on this network can dial in. "+
-				"That is a fine way to test and not a way to get home", addr)
 	}
 }
 
@@ -374,7 +284,7 @@ func hasIPv4Network(networks []NetworkInfo) bool {
 // hatch is for, and both belong in one. The check is textual and therefore
 // approximate — the authoritative one is `wg setconf` rejecting the file before
 // anything else happens.
-var ownedKeys = map[string]string{
+var ownedWireGuardKeys = map[string]string{
 	"privatekey": "the box's key is generated and stored by olr",
 	"listenport": "set from wireguard.listen_port",
 }
@@ -392,7 +302,7 @@ func validateExtraConf(r *Result, extra string) {
 		if !ok {
 			continue
 		}
-		if why, owned := ownedKeys[strings.ToLower(strings.TrimSpace(key))]; owned {
+		if why, owned := ownedWireGuardKeys[strings.ToLower(strings.TrimSpace(key))]; owned {
 			r.errorf("wireguard.raw_wireguard_conf",
 				"line %d sets %q, which this module renders: %s", i+1, strings.TrimSpace(key), why)
 		}

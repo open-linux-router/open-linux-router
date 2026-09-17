@@ -74,7 +74,7 @@ configuration and hands the actual work to something that already does it well:
 | **`devices`** | Device names, categories, the inventory | No daemon. dnsmasq's lease database joined with the kernel's **ARP table**, so the statically-addressed printer shows up too, plus the **IEEE OUI registry** embedded in the binary to say who built each one. |
 | **`gateway`** | Exits, and which network uses which | **nftables** and the kernel's **policy routing database**, programmed directly over netlink — no rule files, no `nft` shell-outs. |
 | **`firewall`** | Port forwards, and nothing else yet | **nftables**, one `olr_nat` table over netlink. Named for what §4 gives it eventually; today it has no zones, rules or filtering policy. |
-| **`remote`** | Which of your devices may dial in from outside | **WireGuard**, in the kernel. olr creates the interface over netlink and loads keys with `wg` — never `wg-quick`, whose automatic routing would fight the gateway module's. `olr remote add peer phone` prints a configuration to import, once. |
+| **`remote`** | How you get back into your own network from outside | Two parallel objects. **WireGuard** in the kernel — olr creates the interface over netlink and loads keys with `wg`, never `wg-quick`, whose automatic routing would fight the gateway module's — puts a device *inside* your network. **Shadowsocks** (`ssserver` in a unit of its own) lends a device this box's way out and shows it nothing else. |
 
 All of it is one binary. `olr` is the command you type, the control plane
 systemd runs, and the DNS relay behind port 53 — separate units and separate
@@ -93,7 +93,7 @@ before it changes back.
 
 Not written yet: firewall *filtering* — zones and rules, the other half of the
 firewall module — Wi-Fi (hostapd), QoS (tc), WAN dialling (pppd/dhcpcd), and the
-Shadowsocks and SOCKS5 halves of remote access.
+SOCKS5 third of remote access.
 
 ## Getting started
 

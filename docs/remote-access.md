@@ -1,8 +1,9 @@
 # `remote` module design
 
-Status: **built for WireGuard, unproven on hardware.** `internal/remote` is the
-module, the tunnel is kernel WireGuard driven through `wg`, and there is no
-WebUI page yet. What has not happened is a phone connecting: §11.1 records
+Status: **two of the three objects built, unproven on hardware.**
+`internal/remote` holds WireGuard — kernel tunnel, driven through `wg` — and
+Shadowsocks — a supervised `ssserver` with a rendered configuration. SOCKS5 is
+not built. There is a WebUI page for the tunnel and none for the proxy. What has not happened is a phone connecting: §11.1 records
 exactly how far this has been driven and where that stops. Bare section
 references are to this document; references to `design.md` name it, and
 `gateway:` / `ingress:` name those.
@@ -30,7 +31,7 @@ variations of each other:
 
 | Intent | Who gets in | What they reach | Status |
 |---|---|---|---|
-| **Remote access** | only the operator, with a credential | the whole network | **this module** |
+| **Remote access** | only the operator, with a credential | the whole network, or just the way out | **this module** |
 | **Public publishing** | anybody | one service | `ingress` + `firewall`, built |
 
 These take opposite values on both dimensions, so the common part is empty:
@@ -44,6 +45,35 @@ service, credentialed) and site-to-site (two networks joined permanently).
 Private publishing is remote access with extra steps once you are already
 inside; site-to-site is a different object shape with a different lifecycle and
 a different failure story, and nothing about this module forecloses it.
+
+---
+
+## 1a. Two objects, and the difference an operator has to understand first
+
+Remote access ships as parallel objects rather than one thing with a backend
+setting, and the reason is not implementation tidiness — it is that they do
+different jobs, and an operator choosing between them is choosing between those
+jobs:
+
+| | **Tunnel** (WireGuard) | **Proxy** (Shadowsocks) |
+|---|---|---|
+| The device becomes | a device on a network at home | a device somewhere else, borrowing this box's way out |
+| It can reach | the NAS, the printer, this router's UI, the internet | exactly what the internet can reach |
+| Identity | one key pair per device | **one password for every device** |
+| Revoking one device | remove its key; nobody else notices | impossible — change the password for everybody |
+| A client configuration | issued once per device, never re-showable | one link, reproducible whenever asked |
+| Underneath | kernel state, no daemon | a rendered file and a systemd unit |
+
+They are not substitutes and an operator may well want both: one to get *in*,
+one to borrow a route out from a network that is filtering or watching. What
+they have in common is a single field — the address clients dial — and that is
+the only thing the module level owns.
+
+**The parallelism goes all the way down.** They do not share a plan, an apply,
+an HTTP surface or a page section. Folding them together would produce a plan
+type whose `changes` field is a list of files half the time and a list of kernel
+lines the other half, to describe two mechanisms that never interact. §7.5 is
+what that decision cost and bought.
 
 ---
 
@@ -344,13 +374,23 @@ AllowedIPs          = 10.6.0.0/24, 192.168.1.0/24
 PersistentKeepalive = 25
 ```
 
-### 6.1 `Endpoint` is the one thing olr cannot derive
+### 6.1 `Endpoint` is the one thing olr cannot derive, and it belongs to the box
 
-It is the public name or address a client dials, and nothing on the box knows
-it: the uplink address may be behind a carrier NAT, and the name that tracks it
-lives at a DNS provider. So it is a required field when the module is enabled,
-and the validator refuses rather than rendering a configuration that cannot
-connect.
+It is the public name or address a client dials, and nothing here knows it: the
+uplink address may be behind a carrier NAT, and the name that tracks it lives at
+a DNS provider. So it is required as soon as anything is switched on, and the
+validator refuses rather than rendering a configuration that cannot connect.
+
+**It sits at the module level rather than inside either object**, because both
+need exactly this value and a field typed twice is a field that can disagree
+with itself — design.md §4.1's rule occurring inside one module rather than
+across two. An operator who moves house changes it once.
+
+The consequence is that it carries **no port**: each object listens on its own,
+so a port here could only ever be right for one of them. An object whose public
+port differs from the one it listens on says so with its own `public_port`, and
+the validator refuses a port on the shared field rather than guessing which
+object it was meant for.
 
 An operator who is already using `olr dial` has the answer — it is the name they
 keep current there — and the refusal says so. Reading it from `dial`
@@ -486,6 +526,98 @@ guess:
 
 ---
 
+---
+
+## 7.5 The proxy: Shadowsocks
+
+The second object, and the one that reaches nothing. A client gets this box's
+way out and no sight of the network at all — which is the whole point when the
+problem is a hostile network rather than a NAS you cannot reach.
+
+### 7.5.1 One password, and therefore no device list
+
+There is one secret for every client, because that is what Shadowsocks is.
+Three things follow and all of them are visible to an operator:
+
+- **There is no client list**, and there must not be one. A list the server
+  cannot tell apart would look exactly like the tunnel's device list and behave
+  nothing like it: removing an entry would revoke nobody. That is precisely the
+  "looks unified, behaves differently" trap, and the honest answer is to have no
+  list rather than a decorative one.
+- **The link is reproducible.** `olr remote show link` prints it whenever it is
+  asked, because olr stores the password. The tunnel's equivalent cannot exist —
+  a peer's private key is generated, returned once and forgotten — and the
+  asymmetry is not an inconsistency, it is the same fact seen twice.
+- **Revoking is changing the password for everybody.** olr classifies that as
+  disruptive and says who it affects, which is everyone.
+
+Per-device keys *are* possible — SIP022 has a multi-user extension — and were
+considered and deferred (§10). They would buy the tunnel's revocation story at
+the cost of client support olr cannot verify, and the failure that produces is
+a device that will not connect for a reason nothing on screen explains.
+
+### 7.5.2 The cipher decides what a password *is*, and that is a trap
+
+This is the `wg-quick` of this object: a sharp edge that olr must absorb once so
+nobody else meets it.
+
+For a `2022-blake3-…` method the password field is **not a password**. It is a
+base64-encoded pre-shared key of a length the cipher fixes — 16 bytes for
+`aes-128-gcm`, 32 for the other two — and a server handed anything else refuses
+to start with a complaint about base64 that never mentions the cipher. The older
+`aes-256-gcm` and `chacha20-ietf-poly1305` take an ordinary passphrase.
+
+So an operator who picks a stronger-sounding cipher and keeps their password
+gets a proxy that will not run, for a reason nothing connects to what they
+changed. olr's answer:
+
+- **the password is generated, never typed** — there is nothing a human could
+  choose that would be better than random bytes of the right length;
+- **changing the cipher regenerates it**, because keeping it would be keeping a
+  value the server will reject; and
+- **that change is classified disruptive**, because every link already handed
+  out stops working. Regenerating quietly would be the worst of the three
+  options.
+
+### 7.5.3 UDP is on, against upstream's default
+
+`ssserver` defaults to `tcp_only`. The symptom of that is not "UDP does not
+work" — it is *"the web works and some apps mysteriously do not"*, because name
+resolution and anything over QUIC fall back slowly or not at all. olr renders
+`tcp_and_udp` so nobody has to learn it, and keeps a field so an operator who
+wants the narrower thing can say so (design.md §5.6 — declared, never inferred).
+
+### 7.5.4 The backend, and the part that is the operator's
+
+`ssserver` from shadowsocks-rust, supervised as `olr-shadowsocks.service`,
+reading a configuration olr renders at mode `0600` — internal/ingress's shape,
+because this one is a daemon.
+
+**No distribution packages it.** Debian carries shadowsocks-libev, which
+upstream has declared bug-fix-only; the Rust implementation is the shadowsocks
+project's own and its stated direction, and it ships as a release binary and
+nothing else. So unlike `wireguard-tools` there is no `core.Dependency` here —
+one would produce "install shadowsocks-rust with your package manager", which
+names a package that exists nowhere — and the blocker carries a download and an
+`install` line instead.
+
+That has a cost worth stating rather than burying: **security updates for this
+one are the operator's.** A router nobody touches for two years is exactly where
+that matters. It was raised as a reason to prefer a backend with an apt channel
+and the answer was that a sustained upgrade channel is not the deciding
+constraint here; recorded so the trade is visible rather than rediscovered.
+
+### 7.5.5 What it does *not* need
+
+The thing the tunnel's full-tunnel mode cannot do without (§8, row 1) — egress
+address translation — this object does not need at all. The proxy terminates a
+client's connection on this box and opens its own, so traffic leaves with the
+router's own source address and there is nothing to masquerade. On the common
+deployment, where olr sits behind something else that does the NAT, **the proxy
+works today and `routes: everything` does not.**
+
+---
+
 ## 8. Failure modes
 
 The honest ones first, because two of them are gaps in olr rather than in this
@@ -521,7 +653,11 @@ behalf.
 | | last handshake and transfer per peer in `status` | §8 — the only honest liveness signal |
 | | applied at olrd startup, like `gateway` and `firewall` | §7.1 |
 | | `raw_wireguard_conf` escape hatch | §7.3 |
-| **v2** | Shadowsocks and SOCKS5, as two more parallel objects | §10 — the second instance is what earns any shared shape, not the first |
+| **v1** | Shadowsocks: one port, one cipher, one generated password, one reproducible link | §7.5 |
+| | UDP carried by default, against upstream's | §7.5.3 |
+| **v2** | SOCKS5, as the third parallel object | the second instance settled the shape; the third should need no new argument |
+| | per-device keys for the proxy, through SIP022's multi-user extension | §7.5.1 — buys real revocation, costs client support that cannot be verified from here |
+| | a WebUI section for the proxy | the page covers the tunnel only |
 | | registering the dial-in segment as a group, so `devices` and `dns` see peers | §3.1 |
 | | a QR code for the client configuration | the phone case, and the reason `add peer` returns the file rather than a path |
 | | pre-shared keys per peer | escape hatch until then |
@@ -608,13 +744,12 @@ behalf.
    masquerade — that would be a second owner of a decision `firewall` is going
    to make. The warning is a placeholder for a real answer.
 
-4. **The CLI spells no protocol, and the stored configuration does.**
-   `olr remote set --endpoint …` writes `remote.wireguard.endpoint`. The nesting
-   is right where it is expensive to change and absent where it is cheap, but it
-   means that the day Shadowsocks lands, `set` splits into `set wireguard` and
-   `set shadowsocks`, and `enable`/`disable` grow an object. `docs/cli.md` §12
-   says pre-1.0 CLI changes are cheap, which is the licence being used here
-   rather than an oversight.
+4. ~~**The CLI spells no protocol.**~~ **Closed by the second object arriving.**
+   `set` split into `set wireguard` and `set shadowsocks`, `enable`/`disable`
+   grew a required object, and the protocol went in the *object* position rather
+   than a fifth one — so docs/cli.md's four positions are intact. The endpoint
+   stayed unqualified because it belongs to the box (§6.1), and `add peer` /
+   `rm peer` stayed unqualified because only the tunnel has devices.
 
 5. **Peer removal is `disruptive` and the CLI confirms it automatically.** Every
    `olr` command sends `confirm=true` (gateway:§8a), so `olr remote rm peer

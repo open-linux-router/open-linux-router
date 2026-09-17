@@ -8,7 +8,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// Applier turns intent into a running tunnel.
+// TunnelApplier turns the tunnel's intent into kernel state.
 //
 // There is no rollback (design.md §5.2/§5.3.2). If a multi-step change fails
 // halfway, the steps that landed stay landed and are reported; re-running
@@ -16,7 +16,10 @@ import (
 // discarded on error — and it matters more here than in a file-rendering
 // module, because a half-applied tunnel is one an operator may be looking at
 // from the outside, unable to get in to fix it.
-type Applier struct {
+type TunnelApplier struct {
+	// Store is the module's document, shared with the proxy's applier.
+	Store
+
 	// Kernel is the window onto what this module programs. Nil means
 	// NewKernel — the real one on Linux, a refusal everywhere else.
 	Kernel Kernel
@@ -25,58 +28,24 @@ type Applier struct {
 	// expands to, and what the dial-in subnet must not overlap.
 	Networks NetworkView
 
-	// Store is core's configuration document.
-	Store *core.Store
-
 	// PortInUse reports whether something already holds the tunnel's UDP port.
 	// Nil means core.UDPPortInUse. Injectable so the refusal path is testable
 	// without arranging a real conflict on the build machine.
 	PortInUse func(port uint64) (bool, error)
 }
 
-func (a Applier) kernel() Kernel {
+func (a TunnelApplier) kernel() Kernel {
 	if a.Kernel == nil {
 		return NewKernel()
 	}
 	return a.Kernel
 }
 
-func (a Applier) portInUse() func(uint64) (bool, error) {
+func (a TunnelApplier) portInUse() func(uint64) (bool, error) {
 	if a.PortInUse != nil {
 		return a.PortInUse
 	}
 	return core.UDPPortInUse
-}
-
-// Load reads stored intent out of the configuration document.
-func (a Applier) Load() (Config, error) {
-	doc, err := a.Store.Load()
-	if err != nil {
-		return Config{}, err
-	}
-	return FromDocument(doc)
-}
-
-// Save stores intent without programming anything.
-//
-// Read-modify-write on the shared document, so a save here cannot drop another
-// module's configuration. It is safe without further locking because every
-// config write in this process holds the one global apply lock (§3.6) — the
-// caller takes it.
-func (a Applier) Save(c Config) error {
-	doc, err := a.Store.Load()
-	if err != nil {
-		return err
-	}
-	data, err := MarshalConfig(c)
-	if err != nil {
-		return err
-	}
-	doc.Set(ModuleName, data)
-	if err := a.Store.Save(doc); err != nil {
-		return fmt.Errorf("storing configuration in %s: %w", a.Store.Path(), err)
-	}
-	return nil
 }
 
 // Observe reads the actual state of the tunnel, fresh.
@@ -86,7 +55,7 @@ func (a Applier) Save(c Config) error {
 // "what does the kernel hold" is not a question that can be asked without
 // saying which interface, and an operator who renamed it would otherwise have
 // olr observing a device nobody configured.
-func (a Applier) Observe(ctx context.Context) (Observed, error) {
+func (a TunnelApplier) Observe(ctx context.Context) (Observed, error) {
 	cfg, err := a.Load()
 	if err != nil {
 		return Observed{}, err
@@ -95,7 +64,7 @@ func (a Applier) Observe(ctx context.Context) (Observed, error) {
 }
 
 // ObserveFor reads the state of the interface a given config names.
-func (a Applier) ObserveFor(ctx context.Context, c Config) (Observed, error) {
+func (a TunnelApplier) ObserveFor(ctx context.Context, c Config) (Observed, error) {
 	return a.kernel().Observe(ctx, c.WireGuard.InterfaceOrDefault())
 }
 
@@ -105,7 +74,7 @@ func (a Applier) ObserveFor(ctx context.Context, c Config) (Observed, error) {
 // is being removed is in the kernel and in the store and nowhere else — see
 // BuildPlan. A store that cannot be read is not a reason to refuse to plan: the
 // worst that follows is a revoked device named by its key.
-func (a Applier) Plan(ctx context.Context, desired Config) (Plan, Desired, error) {
+func (a TunnelApplier) Plan(ctx context.Context, desired Config) (Plan, Desired, error) {
 	obs, err := a.ObserveFor(ctx, desired)
 	if err != nil {
 		return Plan{}, Desired{}, err
@@ -116,7 +85,7 @@ func (a Applier) Plan(ctx context.Context, desired Config) (Plan, Desired, error
 
 // Drift reports what has changed underneath stored intent — design.md §5.4 in
 // one line. A non-empty plan is drift.
-func (a Applier) Drift(ctx context.Context) (Plan, error) {
+func (a TunnelApplier) Drift(ctx context.Context) (Plan, error) {
 	current, err := a.Load()
 	if err != nil {
 		return Plan{}, err
@@ -127,7 +96,7 @@ func (a Applier) Drift(ctx context.Context) (Plan, error) {
 
 // Apply stores the config and brings the tunnel into line with it. It applies
 // immediately and is in effect on return (design.md §5.1).
-func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error) {
+func (a TunnelApplier) Apply(ctx context.Context, desired Config) (ApplyResult, error) {
 	plan, d, err := a.Plan(ctx, desired)
 	if err != nil {
 		return ApplyResult{Plan: plan}, err
@@ -143,7 +112,7 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 // second observation, so the plan the operator agreed to would not be the plan
 // that lands — and "this device loses its way in" is exactly the kind of thing
 // that must not change shape between being shown and being done.
-func (a Applier) ApplyPlanned(ctx context.Context, desired Config, plan Plan, d Desired) (ApplyResult, error) {
+func (a TunnelApplier) ApplyPlanned(ctx context.Context, desired Config, plan Plan, d Desired) (ApplyResult, error) {
 	result := ApplyResult{Plan: plan}
 	run := func(description string, fn func() error) error {
 		err := fn()
@@ -163,7 +132,7 @@ func (a Applier) ApplyPlanned(ctx context.Context, desired Config, plan Plan, d 
 	// later step leaves a re-run something to finish from (§5.3.2). It matters
 	// especially here: a key generated and not stored is a key every client
 	// configuration already names and nothing can reproduce.
-	if err := run("store configuration in "+a.Store.Path(), func() error {
+	if err := run("store configuration in "+a.Path(), func() error {
 		return a.Save(desired)
 	}); err != nil {
 		return result, err

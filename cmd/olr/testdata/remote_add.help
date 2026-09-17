@@ -4,7 +4,7 @@ Usage:
   olr remote add [command]
 
 Available Commands:
-  peer        Let a device dial in
+  peer        Let a device dial in over the tunnel
 
 Flags:
   -h, --help   help for add

@@ -107,6 +107,8 @@ contents:
     dst: /lib/systemd/system/olr-dnsd.service
   - src: internal/packaging/systemd/olr-caddy.service
     dst: /lib/systemd/system/olr-caddy.service
+  - src: internal/packaging/systemd/olr-shadowsocks.service
+    dst: /lib/systemd/system/olr-shadowsocks.service
 
   # The configuration document lives here. Created empty: an absent document
   # means "never configured", which is what a fresh install is.

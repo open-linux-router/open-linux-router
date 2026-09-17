@@ -168,7 +168,8 @@ func joinLines(lines []string) []byte {
 // base64 — and "5vVv…= loses access" tells an operator nothing they can weigh.
 // Pass `c` itself where there is no edit (drift, status).
 func BuildPlan(c, previous Config, networks NetworkView, obs Observed) (Plan, Desired, error) {
-	result := Validate(c, networks)
+	result := ValidateWireGuard(c, networks)
+	validateEndpoint(&result, c)
 	if err := result.Err(); err != nil {
 		return Plan{Validation: result}, Desired{}, err
 	}
@@ -306,18 +307,19 @@ func classify(c, previous Config, d Desired, plan Plan, obs Observed) (Impact, [
 		if impact < ImpactRestart {
 			impact = ImpactRestart
 		}
-		// The port a client dials is in its configuration. It is only implied
-		// by this field when the endpoint does not spell one out, and that is
-		// the case where changing the port breaks files that have already left.
-		if _, _, explicit := splitEndpoint(strings.TrimSpace(c.WireGuard.Endpoint)); !explicit && len(d.Peers) > 0 {
+		// The port a client dials is in its configuration, so the question is
+		// not whether the *listen* port moved — it is whether the address those
+		// files name still works. An operator who moved the listen port and set
+		// `public_port` to the old one has changed nothing a client can see.
+		if previous.DialAddress(previous.WireGuard.DialPort()) !=
+			c.DialAddress(c.WireGuard.DialPort()) && len(d.Peers) > 0 {
 			impact = ImpactDisruptive
-			reasons = append(reasons, fmt.Sprintf(
-				"the listen port changes and the endpoint does not name one, so every client "+
-					"configuration still says port %s and has to be replaced",
-				removedPort(plan.Changes)))
+			reasons = append(reasons,
+				"the address devices dial changes, so every configuration already handed out "+
+					"points at the old one and has to be replaced")
 		} else {
 			reasons = append(reasons,
-				"the listen port changes, so tunnels drop until each device dials the new one")
+				"the listen port changes, so tunnels drop until each device reconnects")
 		}
 	}
 
@@ -446,20 +448,6 @@ func changedLine(changes []Change, prefix string) bool {
 		}
 	}
 	return false
-}
-
-// removedPort digs the old listen port out of the plan, so the warning can name
-// the number that is in everybody's file rather than saying "the old one".
-func removedPort(changes []Change) string {
-	for _, c := range changes {
-		if c.Kind != ChangeRemove {
-			continue
-		}
-		if port, ok := strings.CutPrefix(c.Line, "listen-port "); ok {
-			return port
-		}
-	}
-	return "the old one"
 }
 
 func plural(n int, one, many string) string {

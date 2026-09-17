@@ -44,3 +44,37 @@ func (RouteScope) JSONSchema() *jsonschema.Schema {
 		Default: string(RouteHome),
 	}
 }
+
+// JSONSchema publishes the cipher vocabulary as an enum, and carries the one
+// piece of knowledge an operator needs in order to choose.
+//
+// The description does the work a list of names cannot: the two families are
+// not "newer" and "older" in a way anybody can act on, and the thing that
+// actually decides between them is whether every client can speak SIP022. The
+// consequence of getting it wrong is a client that cannot connect, which looks
+// like a network problem.
+func (Cipher) JSONSchema() *jsonschema.Schema {
+	// The empty string is legal and means DefaultCipher (Cipher.Valid), so it
+	// belongs in the enum. Omitting it would make the schema reject a document
+	// the module itself accepts.
+	values := []any{""}
+	for _, c := range Ciphers() {
+		values = append(values, string(c))
+	}
+
+	return &jsonschema.Schema{
+		Type:  "string",
+		Title: "How proxy traffic is encrypted",
+		Description: "The `2022-blake3-` ciphers are the current design and the " +
+			"right choice unless a device is too old to speak it. Prefer the " +
+			"chacha20 one on hardware with no AES instructions — an older ARM " +
+			"board — where it is several times faster. The other two are the " +
+			"previous generation, kept only for a client that cannot manage " +
+			"the newer ones. Changing this regenerates the password, because a " +
+			"2022 cipher's password is a fixed-length key rather than a " +
+			"passphrase; every device then needs a new link. Empty means " +
+			string(DefaultCipher) + ".",
+		Enum:    values,
+		Default: string(DefaultCipher),
+	}
+}

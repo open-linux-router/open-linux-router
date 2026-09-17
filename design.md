@@ -491,7 +491,7 @@ Bounded list. Not expected to grow much. The object they all key off is the
 | | `firewall` | nftables `olr_filter`, `olr_nat` — zones, rules, NAT, forwards. **Part built:** `olr_nat` and port forwarding only; no zones, no rules, no filtering policy (docs/firewall.md) | ✅ |
 | | `qos` | tc — CAKE / fq_codel, per-device shaping | |
 | | `gateway` | static + policy routes; later bird (BGP/OSPF) | |
-| | `remote` | getting back in from outside: **WireGuard** built; Shadowsocks and SOCKS5 planned beside it, never under it (docs/remote-access.md) | ✅ |
+| | `remote` | getting back in from outside: **WireGuard and Shadowsocks** built as parallel objects; SOCKS5 planned beside them, never under them (docs/remote-access.md) | ✅ |
 | | `wifi` | hostapd — only if the box has radios | |
 | **Operational** | `system` | hostname, time, admin users, updates, backup, logs | ✅ |
 

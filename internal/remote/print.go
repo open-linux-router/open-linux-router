@@ -19,22 +19,28 @@ func table(w io.Writer) *tabwriter.Writer {
 }
 
 func writeConfigText(w io.Writer, c Config) error {
-	g := c.WireGuard
-	state := "off"
-	if g.Enabled {
-		state = "on"
+	fmt.Fprintf(w, "Devices dial %s\n\n", orDash(c.EndpointHost()))
+	if err := writeWireGuardText(w, c); err != nil {
+		return err
 	}
-	fmt.Fprintf(w, "Remote access is %s\n\n", state)
+	fmt.Fprintln(w)
+	return writeShadowsocksText(w, c)
+}
+
+// writeWireGuardText is the tunnel: the one that puts a device inside the
+// network.
+func writeWireGuardText(w io.Writer, c Config) error {
+	g := c.WireGuard
+	fmt.Fprintf(w, "Tunnel (WireGuard) is %s — devices reach your whole network\n\n", onOff(g.Enabled))
 
 	t := table(w)
-	fmt.Fprintf(t, "endpoint\t%s\n", orDash(g.EndpointWithPort()))
-	fmt.Fprintf(t, "network\t%s\n", g.SubnetOrDefault())
-	fmt.Fprintf(t, "this box\t%s\n", g.RouterAddr())
-	fmt.Fprintf(t, "interface\t%s\n", g.InterfaceOrDefault())
-	fmt.Fprintf(t, "port\tUDP/%d\n", g.PortOrDefault())
+	fmt.Fprintf(t, "  devices dial\t%s\n", orDash(c.DialAddress(g.DialPort())))
+	fmt.Fprintf(t, "  network\t%s\n", g.SubnetOrDefault())
+	fmt.Fprintf(t, "  this box\t%s\n", g.RouterAddr())
+	fmt.Fprintf(t, "  interface\t%s\n", g.InterfaceOrDefault())
 	// "set" rather than the mask the API returned. Printing `********` invites
 	// somebody to think eight asterisks is the key.
-	fmt.Fprintf(t, "key\t%s\n", keyState(g.PrivateKey))
+	fmt.Fprintf(t, "  key\t%s\n", keyState(g.PrivateKey))
 	if err := t.Flush(); err != nil {
 		return err
 	}
@@ -43,14 +49,58 @@ func writeConfigText(w io.Writer, c Config) error {
 	if err := writePeersText(w, peersOf(c)); err != nil {
 		return err
 	}
+	return writeExtra(w, "WireGuard", g.ExtraConf)
+}
 
-	if g.ExtraConf != "" {
-		fmt.Fprintf(w, "\nextra WireGuard configuration:\n")
-		for _, line := range strings.Split(g.ExtraConf, "\n") {
-			fmt.Fprintf(w, "  %s\n", line)
-		}
+// writeShadowsocksText is the proxy: the one that lends this box's way out and
+// shows the network to nobody.
+//
+// The second line is the whole reason the two are printed differently. An
+// operator scanning this has to be able to tell, without reading a manual,
+// which of the two does what — and "one link for every device" against "one
+// configuration per device" is the difference they will actually run into.
+func writeShadowsocksText(w io.Writer, c Config) error {
+	s := c.Shadowsocks
+	fmt.Fprintf(w, "Proxy (Shadowsocks) is %s — devices borrow this box's way out, and see nothing else\n\n",
+		onOff(s.Enabled))
+
+	t := table(w)
+	fmt.Fprintf(t, "  devices dial\t%s\n", orDash(c.DialAddress(s.DialPort())))
+	fmt.Fprintf(t, "  cipher\t%s\n", s.Cipher.OrDefault())
+	fmt.Fprintf(t, "  carries UDP\t%s\n", yesNo(s.UDPEnabled()))
+	fmt.Fprintf(t, "  password\t%s\n", keyState(s.Password))
+	if err := t.Flush(); err != nil {
+		return err
+	}
+	if s.Password != "" {
+		fmt.Fprintf(w, "\n  One link serves every device: `olr remote show link`\n")
+	}
+	return writeExtra(w, "Shadowsocks", s.ExtraConf)
+}
+
+func writeExtra(w io.Writer, what, extra string) error {
+	if extra == "" {
+		return nil
+	}
+	fmt.Fprintf(w, "\n  extra %s configuration:\n", what)
+	for _, line := range strings.Split(extra, "\n") {
+		fmt.Fprintf(w, "    %s\n", line)
 	}
 	return nil
+}
+
+func onOff(on bool) string {
+	if on {
+		return "on"
+	}
+	return "off"
+}
+
+func yesNo(yes bool) string {
+	if yes {
+		return "yes"
+	}
+	return "no"
 }
 
 func keyState(key string) string {
@@ -142,18 +192,23 @@ func bytesText(n uint64) string {
 	}
 }
 
-func writeStatusText(w io.Writer, s statusResponse) error {
-	state := "off"
-	if s.Enabled {
-		state = "on"
+func writeStatusText(w io.Writer, s moduleStatus) error {
+	fmt.Fprintf(w, "Devices dial %s\n\n", orDash(s.Endpoint))
+
+	if err := writeTunnelStatus(w, s.Tunnel); err != nil {
+		return err
 	}
-	fmt.Fprintf(w, "Remote access is %s\n\n", state)
+	fmt.Fprintln(w)
+	return writeProxyStatus(w, s.Proxy)
+}
+
+func writeTunnelStatus(w io.Writer, s tunnelStatus) error {
+	fmt.Fprintf(w, "Tunnel (WireGuard) is %s\n", onOff(s.Enabled))
 
 	t := table(w)
-	fmt.Fprintf(t, "endpoint\t%s\n", orDash(s.Endpoint))
-	fmt.Fprintf(t, "network\t%s\n", s.Subnet)
-	fmt.Fprintf(t, "tunnel\t%s\n", tunnelLine(s))
-	fmt.Fprintf(t, "public key\t%s\n", orDash(s.PublicKey))
+	fmt.Fprintf(t, "  network\t%s\n", s.Subnet)
+	fmt.Fprintf(t, "  interface\t%s\n", tunnelLine(s))
+	fmt.Fprintf(t, "  public key\t%s\n", orDash(s.PublicKey))
 	if err := t.Flush(); err != nil {
 		return err
 	}
@@ -165,17 +220,7 @@ func writeStatusText(w io.Writer, s statusResponse) error {
 	if err := writePeersText(w, s.Peers); err != nil {
 		return err
 	}
-
-	fmt.Fprintln(w)
-	switch {
-	case s.DriftError != "":
-		fmt.Fprintf(w, "config: unknown (%s)\n", s.DriftError)
-	case s.Drifted:
-		fmt.Fprintf(w, "config: drifted — the box no longer matches what olr stored\n")
-	default:
-		fmt.Fprintf(w, "config: matches\n")
-	}
-
+	fmt.Fprintf(w, "  config: %s\n", driftLine(s.Drifted, s.DriftError))
 	if s.Drifted && s.Drift != nil {
 		fmt.Fprintln(w)
 		return writePlanText(w, *s.Drift, true)
@@ -183,9 +228,44 @@ func writeStatusText(w io.Writer, s statusResponse) error {
 	return nil
 }
 
+func writeProxyStatus(w io.Writer, s proxyStatus) error {
+	fmt.Fprintf(w, "Proxy (Shadowsocks) is %s\n", onOff(s.Enabled))
+
+	t := table(w)
+	fmt.Fprintf(t, "  port\tTCP%s/%d\n", map[bool]string{true: " and UDP", false: ""}[s.UDP], s.Port)
+	fmt.Fprintf(t, "  cipher\t%s\n", s.Cipher)
+	switch {
+	case s.BinaryError != "":
+		fmt.Fprintf(t, "  server\tnot installed\n")
+	case s.Binary != "":
+		fmt.Fprintf(t, "  server\t%s\n", s.Binary)
+	}
+	switch {
+	case s.ServiceError != "":
+		fmt.Fprintf(t, "  service\tunknown (%s)\n", s.ServiceError)
+	case s.Service == nil:
+		fmt.Fprintf(t, "  service\tunknown\n")
+	default:
+		fmt.Fprintf(t, "  service\t%s\n", unitLine(*s.Service))
+	}
+	if err := t.Flush(); err != nil {
+		return err
+	}
+
+	if s.BinaryError != "" {
+		fmt.Fprintf(w, "\n%s\n\n", s.BinaryError)
+	}
+	fmt.Fprintf(w, "  config: %s\n", driftLine(s.Drifted, s.DriftError))
+	if s.Drifted && s.Drift != nil {
+		fmt.Fprintln(w)
+		return writeProxyPlanText(w, *s.Drift, true)
+	}
+	return nil
+}
+
 // tunnelLine folds the kernel's three booleans into one sentence, keeping the
 // "we could not tell" case distinct from "it is not there" (design.md §3.4).
-func tunnelLine(s statusResponse) string {
+func tunnelLine(s tunnelStatus) string {
 	switch {
 	case !s.Known:
 		return fmt.Sprintf("%s — unknown (this box cannot be read)", s.Interface)
@@ -198,6 +278,69 @@ func tunnelLine(s statusResponse) string {
 	default:
 		return fmt.Sprintf("%s is up, listening on UDP/%d", s.Interface, s.Port)
 	}
+}
+
+func driftLine(drifted bool, err string) string {
+	switch {
+	case err != "":
+		return "unknown (" + err + ")"
+	case drifted:
+		return "drifted — the box no longer matches what olr stored"
+	default:
+		return "matches"
+	}
+}
+
+func unitLine(s core.UnitStatus) string {
+	switch {
+	case !s.Installed:
+		return "not installed"
+	case s.Active && s.Enabled:
+		return "running, starts at boot"
+	case s.Active:
+		return "running, but will not start at boot"
+	case s.Enabled:
+		return "stopped, but set to start at boot"
+	default:
+		return "stopped"
+	}
+}
+
+// writeProxyPlanText is the file-and-service plan, which reads nothing like the
+// tunnel's line diff — one changes a daemon's configuration, the other changes
+// the kernel.
+func writeProxyPlanText(w io.Writer, plan proxyPlanView, dryRun bool) error {
+	if plan.Empty {
+		fmt.Fprintln(w, cli.NothingToDo)
+		return writeWarnings(w, plan.Warnings)
+	}
+
+	verb := map[bool]string{true: "would change", false: "changed"}[dryRun]
+	fmt.Fprintf(w, "%s %s:\n", core.Plural(len(plan.Changes), "file"), verb)
+	for _, c := range plan.Changes {
+		fmt.Fprintf(w, "  %-6s %s\n", c.Kind, c.Path)
+	}
+	if plan.Action != ActionNone {
+		fmt.Fprintf(w, "\nservice: %s\n", plan.Action)
+	}
+	fmt.Fprintf(w, "impact:  %s\n", plan.Impact)
+	for _, reason := range plan.Reasons {
+		fmt.Fprintf(w, "         %s\n", reason)
+	}
+	return writeWarnings(w, plan.Warnings)
+}
+
+// writeEndpointText prints the answer for the one change that has no plan.
+func writeEndpointText(w io.Writer, resp endpointResponse, dryRun bool) error {
+	if resp.Impact == ImpactNone {
+		fmt.Fprintln(w, map[bool]string{true: "Nothing would be invalidated.", false: "Saved."}[dryRun])
+		return nil
+	}
+	fmt.Fprintf(w, "impact: %s\n", resp.Impact)
+	for _, reason := range resp.Reasons {
+		fmt.Fprintf(w, "        %s\n", reason)
+	}
+	return nil
 }
 
 func writePlanText(w io.Writer, plan planView, dryRun bool) error {

@@ -195,3 +195,65 @@ func problems(in []Problem) []core.Problem {
 // stamp is the freshness every observed reply carries (§4.5), so no surface can
 // imply a currency it does not have.
 func stamp() time.Time { return time.Now() }
+
+// proxyPlanView is the proxy's plan as the API reports it.
+//
+// A separate type from the tunnel's, because the plans are separate: this one
+// carries files and a service action, that one carries lines of kernel state.
+// A client that tried to render both from one shape would have to branch on
+// which fields were present, which is the composite this module refused.
+type proxyPlanView struct {
+	Changes []proxyChangeView `json:"changes"`
+	Action  ServiceAction     `json:"action"`
+	Impact  Impact            `json:"impact"`
+
+	// Enable, when non-nil, is the boot-time state the unit will be moved to.
+	Enable *bool `json:"enable,omitempty"`
+
+	Reasons []string `json:"reasons,omitempty"`
+
+	// Empty is the drift answer (§5.4), precomputed so a client does not have
+	// to reimplement what counts as "no change".
+	Empty bool `json:"empty"`
+
+	// PasswordGenerated reports that olr filled in or replaced the password as
+	// part of this change.
+	//
+	// Surfaced rather than left implicit, because it is the one thing olr does
+	// here on the operator's behalf, and design.md §5.6 requires a change olr
+	// made to be visible in the same breath as the change that was asked for.
+	PasswordGenerated bool `json:"password_generated,omitempty"`
+
+	Warnings []core.Problem `json:"warnings,omitempty"`
+}
+
+type proxyChangeView struct {
+	Path   string   `json:"path"`
+	Kind   FileKind `json:"kind"`
+	Impact Impact   `json:"impact"`
+	Secret bool     `json:"secret,omitempty"`
+	Diff   string   `json:"diff"`
+}
+
+func viewProxyPlan(p ProxyPlan, generated bool) proxyPlanView {
+	v := proxyPlanView{
+		Changes:           make([]proxyChangeView, 0, len(p.Changes)),
+		Action:            p.Action,
+		Impact:            p.Impact,
+		Enable:            p.Enable,
+		Reasons:           p.Reasons,
+		Empty:             p.Empty(),
+		PasswordGenerated: generated,
+		Warnings:          problems(p.Validation.Warnings),
+	}
+	for _, c := range p.Changes {
+		v.Changes = append(v.Changes, proxyChangeView{
+			Path:   c.Path,
+			Kind:   c.Kind,
+			Impact: c.Impact,
+			Secret: c.Secret,
+			Diff:   c.Diff(),
+		})
+	}
+	return v
+}

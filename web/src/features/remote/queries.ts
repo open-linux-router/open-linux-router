@@ -33,7 +33,7 @@ export function useRemoteConfig() {
 export function useRemoteStatus() {
   return useQuery({
     queryKey: remoteKeys.status,
-    queryFn: () => api.get<RemoteStatus>('/api/remote/status'),
+    queryFn: () => api.get<RemoteStatus>('/api/remote/wireguard/status'),
     // Observed state, never cached by the daemon (design.md §4.5), so the only
     // way to stay current is to ask again.
     refetchInterval: OBSERVED_REFETCH_MS,
@@ -43,7 +43,7 @@ export function useRemoteStatus() {
 export function useRemotePeers() {
   return useQuery({
     queryKey: remoteKeys.peers,
-    queryFn: () => api.get<RemotePeers>('/api/remote/peers'),
+    queryFn: () => api.get<RemotePeers>('/api/remote/wireguard/peers'),
     refetchInterval: OBSERVED_REFETCH_MS,
   })
 }
@@ -86,13 +86,13 @@ export const remoteChange = {
    */
   savePeer: (name: string, body: { routes?: string; public_key?: string }): RemoteChangeRequest => ({
     method: 'PUT',
-    path: `${base}/peers/${seg(name)}`,
+    path: `${base}/wireguard/peers/${seg(name)}`,
     body,
     label: `${name} can dial in`,
   }),
   removePeer: (name: string): RemoteChangeRequest => ({
     method: 'DELETE',
-    path: `${base}/peers/${seg(name)}`,
+    path: `${base}/wireguard/peers/${seg(name)}`,
     label: `${name} can no longer dial in`,
   }),
   /**
@@ -110,8 +110,23 @@ export const remoteChange = {
    */
   settings: (fields: Record<string, unknown>): RemoteChangeRequest => ({
     method: 'PATCH',
+    path: `${base}/wireguard/config`,
+    body: fields,
+    label: 'Saved',
+  }),
+  /**
+   * The one field that is not the tunnel's.
+   *
+   * Where devices dial belongs to the box: the proxy beside the tunnel needs
+   * exactly the same value, and a field typed twice is a field that can
+   * disagree with itself. So it has its own route, and its own consequence —
+   * changing it invalidates every configuration already on a device, which is
+   * why the daemon refuses it without confirm.
+   */
+  endpoint: (endpoint: string): RemoteChangeRequest => ({
+    method: 'PATCH',
     path: `${base}/config`,
-    body: { wireguard: fields },
+    body: { endpoint },
     label: 'Saved',
   }),
 }
@@ -156,7 +171,7 @@ export function useReapplyRemote() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: () => api.send<RemoteApplyResult>('POST', `${base}/apply`, undefined),
+    mutationFn: () => api.send<RemoteApplyResult>('POST', `${base}/wireguard/apply`, undefined),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['remote'] }),
   })
 }

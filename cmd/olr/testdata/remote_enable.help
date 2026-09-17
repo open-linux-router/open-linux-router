@@ -1,0 +1,22 @@
+Start accepting connections over one of the two ways in.
+
+wireguard puts a device inside your network: it reaches your NAS,
+your printer and this router, as if it were at home.
+
+shadowsocks lends a device this router's way out and nothing else.
+It cannot see your network at all — it is for using your own
+internet connection from somewhere that is filtering or watching.
+
+olr generates the key or password the first time, so this is also
+what makes a configuration or a link possible.
+
+Usage:
+  olr remote enable wireguard|shadowsocks [flags]
+
+Flags:
+  -h, --help   help for enable
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

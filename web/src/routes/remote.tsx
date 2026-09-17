@@ -195,8 +195,19 @@ export function RemotePage() {
       <SettingsDialog
         open={settings}
         onOpenChange={setSettings}
-        initial={wg}
-        onSubmit={(fields) => change(remoteChange.settings(fields))}
+        initial={config.data}
+        onSubmit={async (endpoint, wireguard) => {
+          // Two owners, so up to two requests — and the endpoint first,
+          // because it is the one the daemon may refuse. Sending the tunnel's
+          // fields first would leave them applied against an endpoint the
+          // operator then declined to change.
+          if (endpoint !== (config.data.endpoint ?? '')) {
+            if (!(await change(remoteChange.endpoint(endpoint)))) return
+          }
+          if (Object.keys(wireguard).length > 0) {
+            await change(remoteChange.settings(wireguard))
+          }
+        }}
       />
 
       {applier.issued && (

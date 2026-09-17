@@ -227,12 +227,13 @@ func header(iface string) string {
 // (docs/remote-access.md §4.1). An empty value produces the settings without
 // an `[Interface]` key, which is the form for an operator who generated the
 // pair on the device themselves.
-func ClientConfig(w WireGuard, p Peer, privateKey string, networks []NetworkInfo) (string, error) {
+func ClientConfig(c Config, p Peer, privateKey string, networks []NetworkInfo) (string, error) {
+	w := c.WireGuard
 	public, err := PublicKeyFor(w.PrivateKey)
 	if err != nil {
 		return "", fmt.Errorf("this box has no usable key yet: %w", err)
 	}
-	endpoint := w.EndpointWithPort()
+	endpoint := c.DialAddress(w.DialPort())
 	if endpoint == "" {
 		return "", fmt.Errorf("no endpoint is set, so there is no address for %q to dial", p.Name)
 	}

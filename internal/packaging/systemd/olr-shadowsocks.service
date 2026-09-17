@@ -1,0 +1,54 @@
+[Unit]
+Description=open-linux-router Shadowsocks server
+Documentation=https://github.com/shadowsocks/shadowsocks-rust
+After=network-online.target
+Wants=network-online.target
+
+# Wants, not Requires. This listens for connections from the internet, so it
+# genuinely wants the network up — but a box whose uplink is flapping should
+# come back serving rather than staying down to be diagnosed. Ordering without
+# coupling, as the other backends do.
+
+# Deliberately no Conflicts= with anything a distribution ships. This is olr's
+# own instance, with its own unit name and its own config path, and a box
+# already running a Shadowsocks server keeps running it (design.md §3.4). If
+# both are on the same port they will fight over it, which is the operator's to
+# resolve and ours to report.
+
+[Service]
+# Type=simple, because the server has no readiness protocol. That is precisely
+# why the apply path watches the unit for a settle window afterwards: systemd
+# reports the start job done the moment the process is forked, which is before
+# the configuration has been read — and the configuration error this module
+# most expects, a password that does not match its cipher, is raised at that
+# point and not before.
+Type=simple
+
+# The binary olr does not ship.
+#
+# No distribution packages shadowsocks-rust, so this is a file the operator
+# fetched from the project's releases (internal/remote/ss_binary.go). A binary
+# found somewhere else instead gets a drop-in from `olr enable` rather than an
+# edited unit — an edited unit is overwritten by the next upgrade and a drop-in
+# is not.
+ExecStart=/usr/lib/open-linux-router/ssserver -c /etc/open-linux-router/rendered/remote/shadowsocks.json
+
+# No ExecReload. The server re-reads its configuration only at start, so every
+# change that reaches the file is a restart — which is why this module's impact
+# ladder has nothing between "no change" and "connections drop", and why
+# pretending a reload exists would be a promise the daemon cannot keep.
+
+Restart=on-failure
+RestartSec=5
+
+# on-failure and five seconds, like olr-caddy and unlike olr-dnsd. A proxy that
+# will not start is almost always a configuration it rejects, and restarting
+# twice a second against that produces a journal nobody can read. Clients
+# reconnect on their own, so coming back fast buys little.
+
+# No sandbox, and root — see "Privileges" in design.md §3.5. Every olr unit runs
+# this way, deliberately, and adding a directive to one in isolation fails
+# internal/packaging/embed_test.go rather than the box.
+
+[Install]
+WantedBy=multi-user.target
