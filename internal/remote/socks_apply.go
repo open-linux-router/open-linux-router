@@ -55,6 +55,20 @@ type proxyKind struct {
 
 	// Build is the object's plan builder.
 	Build func(desired, previous Config, paths Paths, obs ProxyObserved) (ProxyPlan, Rendered, error)
+
+	// Validate is the object's rules, run before a plan is built.
+	Validate func(Config) Result
+
+	// Fill generates the credential this object cannot work without, reporting
+	// whether it changed anything. It is called only when the object is
+	// enabled, and it is derived state rather than inferred behaviour: nothing
+	// an operator could type would be better than random bytes.
+	Fill func(*Config) (bool, error)
+
+	// Redacted picks this object's own section out of an already-redacted
+	// config, for the apply envelope. A client asking about one proxy is never
+	// told about the other.
+	Redacted func(Config) any
 }
 
 func (o ProxyObject) kind() proxyKind {
@@ -65,8 +79,18 @@ func (o ProxyObject) kind() proxyKind {
 			Conf:    func(p Paths) string { return p.SocksConf },
 			Enabled: func(c Config) bool { return c.Socks.Enabled },
 			Locate:  FindSocks,
-			Missing: ErrSocksMissing,
-			Build:   BuildSocksPlan,
+			Missing:  ErrSocksMissing,
+			Build:    BuildSocksPlan,
+			Validate: ValidateSocks,
+			Redacted: func(c Config) any { s := c.Socks; return &s },
+			Fill: func(c *Config) (bool, error) {
+				next, did, err := c.Socks.WithGeneratedPassword()
+				if err != nil {
+					return false, err
+				}
+				c.Socks = next
+				return did, nil
+			},
 		}
 	}
 	return proxyKind{
@@ -75,8 +99,18 @@ func (o ProxyObject) kind() proxyKind {
 		Conf:    func(p Paths) string { return p.Conf },
 		Enabled: func(c Config) bool { return c.Shadowsocks.Enabled },
 		Locate:  FindShadowsocks,
-		Missing: ErrShadowsocksMissing,
-		Build:   BuildProxyPlan,
+		Missing:  ErrShadowsocksMissing,
+		Build:    BuildProxyPlan,
+		Validate: ValidateShadowsocks,
+		Redacted: func(c Config) any { s := c.Shadowsocks; return &s },
+		Fill: func(c *Config) (bool, error) {
+			next, did, err := c.Shadowsocks.WithGeneratedPassword()
+			if err != nil {
+				return false, err
+			}
+			c.Shadowsocks = next
+			return did, nil
+		},
 	}
 }
 

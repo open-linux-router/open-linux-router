@@ -107,7 +107,7 @@ func (h HTTP) patchShadowsocksConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.mutateProxy(w, r, false, func(cfg *Config) error {
+	h.mutateProxy(w, r, false, h.Proxy, func(cfg *Config) error {
 		current, err := json.Marshal(cfg.Shadowsocks)
 		if err != nil {
 			return err
@@ -136,7 +136,7 @@ func (h HTTP) postShadowsocksApply(w http.ResponseWriter, r *http.Request) {
 	// forceConfirm: this re-applies intent the operator stored earlier — and
 	// confirmed then, if it needed confirming — so there is no new decision to
 	// put to them.
-	h.mutateProxy(w, r, true, func(*Config) error { return nil })
+	h.mutateProxy(w, r, true, h.Proxy, func(*Config) error { return nil })
 }
 
 // proxyApplyResponse always carries the plan and the steps, successful or not
@@ -149,7 +149,11 @@ type proxyApplyResponse struct {
 
 	// Config is what is stored now, redacted. Returned on the refusal path
 	// especially: it says the document did not move.
-	Config *Shadowsocks `json:"config,omitempty"`
+	//
+	// `any` because the two proxies return different sections and this envelope
+	// is shared. It is always the object's own section, never the whole
+	// document — a client asking about the proxy is not told about the tunnel.
+	Config any `json:"config,omitempty"`
 }
 
 // mutateProxy is the one write path the proxy's mutating routes go through.
@@ -157,7 +161,8 @@ type proxyApplyResponse struct {
 // The same shape as the tunnel's and deliberately not shared with it: the two
 // differ in every line that touches a plan, and a common helper would be a
 // parameterised thing whose body is two `if`s on which object it was given.
-func (h HTTP) mutateProxy(w http.ResponseWriter, r *http.Request, forceConfirm bool, edit func(*Config) error) {
+func (h HTTP) mutateProxy(w http.ResponseWriter, r *http.Request, forceConfirm bool, proxy ProxyApplier, edit func(*Config) error) {
+	kind := proxy.Object.kind()
 	dryRun, confirm, err := gateParams(r)
 	if err != nil {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
@@ -179,7 +184,7 @@ func (h HTTP) mutateProxy(w http.ResponseWriter, r *http.Request, forceConfirm b
 	)
 
 	if lockErr := h.Lock.Do(r.Context(), func() error {
-		cfg, err := h.Proxy.Load()
+		cfg, err := proxy.Load()
 		if err != nil {
 			failed = err
 			return nil
@@ -195,29 +200,29 @@ func (h HTTP) mutateProxy(w http.ResponseWriter, r *http.Request, forceConfirm b
 		// inferred behaviour: nothing an operator could type would be better
 		// than random bytes, and a password that does not fit its cipher is a
 		// server that will not start (Cipher.KeyLen).
-		if cfg.Shadowsocks.Enabled {
-			next, did, err := cfg.Shadowsocks.WithGeneratedPassword()
+		if kind.Enabled(cfg) {
+			did, err := kind.Fill(&cfg)
 			if err != nil {
 				failed = err
 				return nil
 			}
-			cfg.Shadowsocks, generated = next, did
+			generated = did
 		}
 		cfg.Normalize()
 
-		res := ValidateShadowsocks(cfg)
+		res := kind.Validate(cfg)
 		validateEndpoint(&res, cfg)
 		if !res.OK() {
 			invalid = res
 			return nil
 		}
 
-		obs, err := h.Proxy.Observe(r.Context())
+		obs, err := proxy.Observe(r.Context())
 		if err != nil {
 			failed = err
 			return nil
 		}
-		plan, rendered, err = BuildProxyPlan(cfg, previous, h.Proxy.Paths, obs)
+		plan, rendered, err = kind.Build(cfg, previous, proxy.Paths, obs)
 		if err != nil {
 			failed = err
 			return nil
@@ -229,8 +234,8 @@ func (h HTTP) mutateProxy(w http.ResponseWriter, r *http.Request, forceConfirm b
 			return nil
 		}
 
-		result, applyErr = h.Proxy.ApplyPlanned(r.Context(), cfg, plan, rendered)
-		stored, _ = h.Proxy.Load()
+		result, applyErr = proxy.ApplyPlanned(r.Context(), cfg, plan, rendered)
+		stored, _ = proxy.Load()
 		return nil
 	}); lockErr != nil {
 		core.WriteError(w, http.StatusServiceUnavailable,
@@ -257,11 +262,11 @@ func (h HTTP) mutateProxy(w http.ResponseWriter, r *http.Request, forceConfirm b
 		return
 	}
 
-	redacted := stored.Redacted().Shadowsocks
+	redacted := kind.Redacted(stored.Redacted())
 	if held {
 		core.WriteJSON(w, http.StatusConflict, proxyApplyResponse{
 			Plan:   view,
-			Config: &redacted,
+			Config: redacted,
 			Error: &core.ErrorBody{Message: joinReasons(plan.Reasons) +
 				"; repeat the request with confirm=true to go ahead"},
 		})
@@ -272,7 +277,7 @@ func (h HTTP) mutateProxy(w http.ResponseWriter, r *http.Request, forceConfirm b
 		h.Events.Publish(core.Event{Type: core.EventApplied, Module: ModuleName})
 	}
 
-	resp := proxyApplyResponse{Plan: view, Steps: result.Steps, Config: &redacted}
+	resp := proxyApplyResponse{Plan: view, Steps: result.Steps, Config: redacted}
 	if applyErr != nil {
 		resp.Error = &core.ErrorBody{Message: applyErr.Error()}
 		core.WriteJSON(w, http.StatusInternalServerError, resp)

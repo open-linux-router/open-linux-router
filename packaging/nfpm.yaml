@@ -109,6 +109,8 @@ contents:
     dst: /lib/systemd/system/olr-caddy.service
   - src: internal/packaging/systemd/olr-shadowsocks.service
     dst: /lib/systemd/system/olr-shadowsocks.service
+  - src: internal/packaging/systemd/olr-socks5.service
+    dst: /lib/systemd/system/olr-socks5.service
 
   # The configuration document lives here. Created empty: an absent document
   # means "never configured", which is what a fresh install is.

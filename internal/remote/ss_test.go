@@ -443,7 +443,11 @@ func TestEnablingTheProxyGeneratesAPasswordAndALink(t *testing.T) {
 		t.Fatalf("the generated password does not fit the cipher: %v", err)
 	}
 	// Redacted on the way out, like every other credential.
-	if resp.Config == nil || resp.Config.Password != RedactedSecret {
+	// The envelope carries `any` now that both proxies share it, and this
+	// response has been through JSON, so the section arrives as a map. What
+	// matters is unchanged: the credential is masked on the way out.
+	section, ok := resp.Config.(map[string]any)
+	if !ok || section["password"] != RedactedSecret {
 		t.Errorf("the password was not redacted in the response: %+v", resp.Config)
 	}
 

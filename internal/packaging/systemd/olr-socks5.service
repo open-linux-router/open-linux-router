@@ -1,0 +1,60 @@
+[Unit]
+Description=open-linux-router SOCKS5 server
+Documentation=https://3proxy.org/
+After=network-online.target
+Wants=network-online.target
+
+# Wants, not Requires, as the other backends do: a box whose uplink is flapping
+# should come back serving rather than staying down to be diagnosed.
+#
+# There is a second ordering question here that the object beside this one does
+# not have. By default this proxy binds an address *inside* the WireGuard
+# tunnel, and that address belongs to an interface olr creates itself — after
+# olrd starts, not before. No After= can express that, because the interface is
+# not a unit. Restart=on-failure is what covers it: the first start may fail to
+# bind, and the retry a few seconds later succeeds.
+
+# Deliberately no Conflicts= with anything a distribution ships. This is olr's
+# own instance, with its own unit name and its own config path, and a box
+# already running 3proxy keeps running it (design.md §3.4). If both are on the
+# same port they will fight over it, which is the operator's to resolve and ours
+# to report.
+
+[Service]
+# Type=simple, and the configuration olr renders deliberately omits 3proxy's
+# `daemon` directive. That directive forks, which under Type=simple hands
+# systemd a process that exits immediately: the unit reports failed while the
+# proxy is in fact running, and `systemctl restart` then leaves two of them.
+# internal/remote/socks_validate.go refuses it in the escape hatch for the same
+# reason.
+Type=simple
+
+# The binary olr does not ship.
+#
+# 3proxy is not in Debian but publishes its own signed apt repository, so this
+# path is the fallback for an operator who installed it by hand;
+# internal/remote/socks_binary.go also finds it on PATH and in the sbin
+# directories, and `olr enable` writes a drop-in when it is somewhere else. A
+# drop-in rather than an edited unit, because an edited unit is overwritten by
+# the next upgrade.
+ExecStart=/usr/lib/open-linux-router/3proxy /etc/open-linux-router/rendered/remote/3proxy.cfg
+
+# No ExecReload. 3proxy reloads on SIGUSR1, but olr does not use it: the
+# rendered file carries the credential and the listen address, and a reload that
+# half-applied either would be worse than a restart nobody noticed. Every change
+# that reaches the file is a restart, which is why this module's impact ladder
+# has nothing between "no change" and "connections drop".
+
+Restart=on-failure
+RestartSec=5
+
+# on-failure and five seconds, like olr-shadowsocks. It does double duty here:
+# besides a configuration 3proxy rejects, it covers the tunnel-address race
+# described above.
+
+# No sandbox, and root — see "Privileges" in design.md §3.5. Every olr unit runs
+# this way, deliberately, and adding a directive to one in isolation fails
+# internal/packaging/embed_test.go rather than the box.
+
+[Install]
+WantedBy=multi-user.target

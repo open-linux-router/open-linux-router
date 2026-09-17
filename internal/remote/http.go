@@ -33,6 +33,10 @@ type HTTP struct {
 	// Proxy owns the read and write paths onto Shadowsocks.
 	Proxy ProxyApplier
 
+	// Socks owns the read and write paths onto SOCKS5. Same type as Proxy,
+	// differing only in its Object — see socks_apply.go.
+	Socks ProxyApplier
+
 	// Lock is core's one global apply lock (§3.6). Writes take it; reads never
 	// do.
 	Lock *core.Lock
@@ -100,6 +104,7 @@ func (h HTTP) Routes() []core.Route {
 	}
 	out = append(out, h.wireguardRoutes()...)
 	out = append(out, h.shadowsocksRoutes()...)
+	out = append(out, h.socksRoutes()...)
 	return out
 }
 

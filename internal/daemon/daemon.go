@@ -374,10 +374,23 @@ func run(args []string) error {
 		Paths: remote.RootedPaths(opts.root),
 		Unit:  proxyUnit,
 	}
+	socksUnit, err := core.NewUnit(remote.SocksUnitName)
+	if err != nil {
+		logger.Warn("no service manager for the SOCKS5 proxy", "error", err)
+	}
+	// The same applier type as the one above, differing only in Object — the two
+	// proxies share a mechanism and not a field (internal/remote/socks_apply.go).
+	remoteSocks := remote.ProxyApplier{
+		Store:  remoteStore,
+		Paths:  remote.RootedPaths(opts.root),
+		Unit:   socksUnit,
+		Object: remote.ObjectSocks,
+	}
 
 	srv.Mount(remote.ModuleName, remote.HTTP{
 		Tunnel: remoteTunnel,
 		Proxy:  remoteProxy,
+		Socks:  remoteSocks,
 		Lock:   srv.ApplyLock(),
 		Events: srv.Events(),
 	}.Routes(), remote.Config{})

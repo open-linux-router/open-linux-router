@@ -143,6 +143,9 @@ func TestEveryReadRouteIsPublishedAsATool(t *testing.T) {
 	// without a person reading the result first.
 	exceptions := map[string]bool{
 		"remote GET /shadowsocks/link": true,
+		// The same argument, for the same reason, about the third object: the
+		// socks5:// line carries the username and password.
+		"remote GET /socks5/link": true,
 	}
 
 	for module, routes := range moduleRoutes() {
