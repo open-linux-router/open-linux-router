@@ -214,6 +214,19 @@ func (p Plan) significant() bool {
 	return false
 }
 
+// RewritesFiles is Empty's file half on its own: would applying put something
+// different in front of a daemon, ignoring whether any unit needs starting?
+//
+// It exists for the one caller that must tell those two halves apart. olrd
+// re-renders this module at startup (internal/daemon's startDNS), and at that
+// moment the service half is not its business: the backend units are enabled
+// and systemd is bringing them up on its own schedule, so an olrd that beat
+// unbound to the socket would see "not running", call it drift, and start a
+// unit that was already starting. The file half carries no such race — a
+// rendered file is either the one stored intent produces or it is not, and
+// nothing but olr writes it.
+func (p Plan) RewritesFiles() bool { return p.significant() }
+
 // nothingToDo reports whether there is no work at all, cosmetic included. This
 // is Apply's early exit, not the drift answer: a cosmetic rewrite is still a
 // file to write.

@@ -443,26 +443,40 @@ func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Routing, forwarding and the remote-access tunnel are put back into the
-	// kernel here, and they are the only three modules that need this.
+	// Stored intent is put back in force here, for the modules that need it.
 	//
-	// dnsmasq and unbound read files that survive a reboot; nftables rules,
-	// `ip rule` entries, route tables and a WireGuard interface do not, so
-	// without this a box would come back up with its configuration intact and
-	// none of it in force — and for `remote` that means an operator who is away
-	// from the box being unable to reach the box they would fix it from. All
-	// three are idempotent by construction — the plan against an already-correct
-	// kernel is empty and nothing is written — which is what keeps design.md
-	// §3.5's invariant true: `systemctl restart olrd` re-runs them and disturbs
-	// no traffic.
+	// Three of them need it because the kernel forgets: nftables rules, `ip
+	// rule` entries, route tables and a WireGuard interface do not survive a
+	// reboot, so without this a box would come back up with its configuration
+	// intact and none of it in force — and for `remote` that means an operator
+	// who is away from the box being unable to reach the box they would fix it
+	// from.
 	//
-	// Neither ever fails the start. A box whose routing cannot be programmed is
-	// exactly the box whose API has to come up, because the API is how it gets
-	// fixed.
+	// `dns` is here for a different reason, and it is the reason the other
+	// file-rendering module is not. dnsmasq and unbound read files that survive
+	// a reboot, so for years this line read "and they are the only three modules
+	// that need this". What that assumed is that the file is still where the
+	// unit looks for it, and an olr upgrade can move it: the release that put
+	// the resolver's config inside /etc/unbound, where Debian's AppArmor profile
+	// lets the daemon read it, left every already-configured box with a unit
+	// pointing at a path nothing had written yet. Nothing noticed until the next
+	// reboot, when unbound failed its config check and the building lost DNS.
+	// So `dns` re-renders itself here, and only when the files on disk are not
+	// the ones stored intent produces — startDNS has the rest.
+	//
+	// All of them are idempotent by construction — the plan against an
+	// already-correct box is empty and nothing is written — which is what keeps
+	// design.md §3.5's invariant true: `systemctl restart olrd` re-runs them and
+	// disturbs no traffic.
+	//
+	// None of them ever fails the start. A box whose routing cannot be
+	// programmed is exactly the box whose API has to come up, because the API is
+	// how it gets fixed.
 	startGateway(ctx, gatewayApplier, prober, logger)
 	startFirewall(ctx, firewallApplier, logger)
 	startRemote(ctx, remoteTunnel, remoteProxy, logger)
 	startDial(ctx, dialApplier, publisher, logger)
+	startDNS(ctx, dnsApplier, logger)
 
 	var listeners []net.Listener
 
@@ -763,6 +777,73 @@ func startFirewall(ctx context.Context, a firewall.Applier, logger *slog.Logger)
 			"steps", len(result.Steps))
 	case !result.Plan.Empty():
 		logger.Info("port forwards applied", "changes", len(result.Plan.Changes))
+	}
+}
+
+// startDNS re-renders the resolver's files when they are not the ones stored
+// intent produces.
+//
+// The odd one out among these, and deliberately the most reluctant. The other
+// three restore kernel state that a reboot always destroys, so they run their
+// apply unconditionally and it is usually a no-op. This one guards first,
+// because the files it writes normally do survive and rewriting them means
+// restarting a resolver the building is using.
+//
+// What it is for is the upgrade that moves one of those files. olr's own
+// release notes are the only thing that knows a rendered path changed, and the
+// .deb's postinstall cannot re-render — it has no way to ask what the config
+// says, and `olr enable` (which would warn) is not run on an upgrade. So the
+// box comes back from an upgrade with a unit pointing at a file that does not
+// exist, keeps serving from the config the running daemon already read, and
+// fails at the next boot. This closes that: the first olrd start after the
+// upgrade writes the file at the new path and brings the unit with it.
+//
+// It is also the recovery path for a rendered file deleted by hand or lost to a
+// partial restore, which has the same shape and the same symptom.
+func startDNS(ctx context.Context, a dns.Applier, logger *slog.Logger) {
+	cfg, err := a.Load()
+	if err != nil {
+		logger.Error("dns configuration could not be read; nothing was rendered",
+			"error", err)
+		return
+	}
+
+	// A module that is switched off renders nothing and stops its units, and
+	// startup is not the place to do that: the plan for a disabled `dns` is all
+	// service actions, which is exactly what this must not act on.
+	if !cfg.Enabled {
+		return
+	}
+
+	plan, err := a.Drift(ctx)
+	if err != nil {
+		// Reading the box failed, which is not the same as the box being wrong.
+		// Logged and dropped: `olr dns status` asks the same question with an
+		// operator watching, and failing the start over it would take the API
+		// down with it.
+		logger.Error("dns drift could not be read; nothing was rendered", "error", err)
+		return
+	}
+
+	// RewritesFiles and not !Empty: see internal/dns's Plan. A unit that systemd
+	// has not got to yet is not this function's business, and treating it as
+	// drift would have olrd racing systemd for the resolver at every boot.
+	if !plan.RewritesFiles() {
+		return
+	}
+
+	result, err := a.Apply(ctx, cfg)
+	switch {
+	case err != nil:
+		// Named rather than folded into a generic line, because the operator
+		// reading this journal has a box that is not resolving and the reason
+		// is the one thing they need. verifyServing's message says what a
+		// backend exiting immediately usually means.
+		logger.Error("the resolver's configuration could not be restored", "error", err,
+			"steps", len(result.Steps))
+	default:
+		logger.Info("the resolver's configuration was not what the box held and has been rewritten",
+			"changes", len(result.Plan.Changes), "services", len(result.Plan.Services))
 	}
 }
 
