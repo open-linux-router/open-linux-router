@@ -284,6 +284,27 @@ type moduleStatus struct {
 	// Endpoint is the address devices dial, shared by both ways in.
 	Endpoint string `json:"endpoint,omitempty"`
 
+	// Enabled, Drifted and Blockers are this module's answer to the three
+	// questions every module's /status answers at the top level, and they are
+	// here because this is the one module whose real answers are a level down.
+	//
+	// Remote access is two objects (docs/remote.md §1) — a tunnel and a proxy —
+	// each with its own switch and its own drift, and nothing above them said
+	// whether the module as a whole was on or matched. A generic client cannot
+	// know that: internal/cli's fix.go decodes `enabled`, `drifted` and
+	// `blockers` from whatever module it is looking at, precisely so it needs no
+	// import of any of them, and against this module it decoded three zero
+	// values and skipped it — silently, since a module that is off is the
+	// ordinary case and looks identical.
+	//
+	// Either half being on makes the module on, and either half having drifted
+	// makes it drifted, because the operator-facing sentence is "something you
+	// switched on is not what is on the box" and one of two is enough for that.
+	// `olr remote status` then says which.
+	Enabled  bool           `json:"enabled"`
+	Drifted  bool           `json:"drifted"`
+	Blockers []core.Blocker `json:"blockers,omitempty"`
+
 	Tunnel tunnelStatus `json:"tunnel"`
 	Proxy  proxyStatus  `json:"proxy"`
 
@@ -297,11 +318,23 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tunnel := h.tunnelStatusFor(r, cfg)
+	proxy := h.proxyStatusFor(r, cfg)
+
 	core.WriteJSON(w, http.StatusOK, moduleStatus{
 		Endpoint: cfg.Endpoint,
-		Tunnel:   h.tunnelStatusFor(r, cfg),
-		Proxy:    h.proxyStatusFor(r, cfg),
-		AsOf:     stamp(),
+		Enabled:  tunnel.Enabled || proxy.Enabled,
+		Drifted:  tunnel.Drifted || proxy.Drifted,
+
+		// The tunnel's, which are the module's: Blockers() is what
+		// POST /blockers/fix clears, and tunnelStatusFor reports the same list.
+		// Naming it here rather than copying from tunnel keeps the two surfaces
+		// reading from one source.
+		Blockers: Blockers(),
+
+		Tunnel: tunnel,
+		Proxy:  proxy,
+		AsOf:   stamp(),
 	})
 }
 

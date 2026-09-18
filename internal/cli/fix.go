@@ -26,18 +26,33 @@ import (
 //
 // Deliberately a fragment rather than the module's own statusResponse, which
 // internal/cli cannot see: the modules import this package, so it can never
-// import them (internal/dhcp/cli.go and friends). The three fields below are
-// the ones every module's status carries, so this works against all of them and
-// stays working when one of them grows a field of its own.
+// import them (internal/dhcp/cli.go and friends). Decoding a fragment works
+// against every module's status and stays working when one of them grows a
+// field of its own.
+//
+// What the fragment assumes is that a module which can be switched on publishes
+// these three at the top level of its status, and the assumption is load-bearing
+// in a way that hides its own failures: a module that spells them differently
+// decodes as three zero values, which is indistinguishable from a module that is
+// switched off, and gets skipped in silence. `remote` did exactly that — its two
+// halves each carried `enabled` and `drifted` under `tunnel` and `proxy` and
+// nothing carried them above — so neither the blocker clearing nor the drift
+// warning below ever reached it. internal/remote's moduleStatus now answers at
+// the top level too, and internal/cli/fix_test.go holds the shape.
+//
+// `link`, `dial` and `devices` publish none of the three and are meant to: none
+// of them has a switch to be on, so "switched on and not what is on the box" is
+// not a sentence about them. They decode as off and are skipped, which is the
+// right answer arrived at honestly.
 type fixStatus struct {
 	Enabled bool `json:"enabled"`
 
 	// Drifted is §5.4's answer to "is the box what the configuration says",
-	// and it is the one field every module publishes that answers it. The
-	// backend's own state is the sharper signal and is spelled differently in
-	// each — internal/dns publishes `services`, internal/dhcp `service` — so
-	// reading that here would make this fragment depend on which module it is
-	// looking at, which is the property these fields exist to keep.
+	// and it is the one field every switchable module publishes that answers
+	// it. The backend's own state is the sharper signal and is spelled
+	// differently in each — internal/dns publishes `services`, internal/dhcp
+	// `service` — so reading that here would make this fragment depend on which
+	// module it is looking at, which is the property these fields exist to keep.
 	Drifted bool `json:"drifted"`
 
 	Blockers []core.Blocker `json:"blockers,omitempty"`

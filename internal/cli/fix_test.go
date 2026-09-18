@@ -85,3 +85,44 @@ func TestEnableIsQuietWhenTheBoxMatches(t *testing.T) {
 		t.Errorf("a module that matches the box produced output:\n%s", out.String())
 	}
 }
+
+// A module made of two objects is still one module here, and the contract is
+// that it answers at the top level.
+//
+// `remote` is the module in question and the reason this test exists: it
+// carried `enabled` and `drifted` under `tunnel` and `proxy` and nothing above
+// them, so this decoded three zero values, read them as "switched off", and
+// skipped the module without a word. That is the worst shape a bug can have —
+// the silent path and the correct path are the same path — so the shape is
+// pinned here as well as in internal/remote, where the fix is.
+//
+// The nested halves are in the response on purpose. They are what the module
+// really serves, and a fragment that broke on their presence would be no better
+// than one that needed them.
+func TestEnableReadsAModuleThatIsTwoObjects(t *testing.T) {
+	c := serveSocket(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case core.APIPrefix + "/modules":
+			core.WriteJSON(w, http.StatusOK, map[string]any{"modules": []string{"remote"}})
+		case core.APIPrefix + "/remote/status":
+			core.WriteJSON(w, http.StatusOK, map[string]any{
+				"enabled": true, "drifted": true,
+				"tunnel": map[string]any{"enabled": true, "drifted": true},
+				"proxy":  map[string]any{"enabled": false, "drifted": false},
+			})
+		default:
+			t.Errorf("unexpected request for %s", r.URL.Path)
+		}
+	}))
+
+	var out bytes.Buffer
+	clearBlockers(context.Background(), c, &out)
+
+	got := out.String()
+	if !strings.Contains(got, "warning") {
+		t.Errorf("a module whose status nests its halves was skipped in silence:\n%s", got)
+	}
+	if !strings.Contains(got, "remote") {
+		t.Errorf("the warning does not name the module:\n%s", got)
+	}
+}
