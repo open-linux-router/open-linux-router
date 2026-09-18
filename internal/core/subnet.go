@@ -179,6 +179,22 @@ func FirstIPv4(prefixes []netip.Prefix) (netip.Prefix, bool) {
 	return netip.Prefix{}, false
 }
 
+// CGNAT is the carrier-grade NAT range, RFC 6598.
+//
+// An address in here is one the ISP handed to a customer behind their own NAT,
+// and **nothing on the internet can open a connection to it**. Two modules need
+// to say so for different reasons: `dial` because a name pointing at such an
+// address resolves to something nobody can reach (docs/ddns.md §3.2), and
+// `firewall` because a port forward on such an uplink is a rule that applies
+// cleanly and can never fire (docs/firewall.md §5.4).
+//
+// Here rather than in either of them because it is arithmetic over an address,
+// not a model — the same reason the rest of this file is here.
+var CGNAT = netip.MustParsePrefix("100.64.0.0/10")
+
+// IsCGNAT reports whether addr is inside the carrier-grade NAT range.
+func IsCGNAT(addr netip.Addr) bool { return addr.Is4() && CGNAT.Contains(addr) }
+
 // InRange reports whether addr falls within [start, end] inclusive.
 func InRange(start, end, addr netip.Addr) bool {
 	if !start.IsValid() || !end.IsValid() || !addr.IsValid() {

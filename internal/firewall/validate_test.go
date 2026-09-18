@@ -238,3 +238,112 @@ func TestDuplicateNamesAreRefused(t *testing.T) {
 		t.Fatal("two forwards called web were accepted; they are referred to by name")
 	}
 }
+
+// uplinkHolding rebuilds the fixture with a different address on wan0, which is
+// the interface testForward faces outward on.
+//
+// up is separate from the address because "down" and "has no address" are
+// different states that the reachability warning treats differently, and a
+// helper that conflated them could not test that.
+func uplinkHolding(up bool, prefixes ...string) StaticLinks {
+	links := testLinks()
+	wan := LinkInfo{Adopted: true, Up: up}
+	for _, p := range prefixes {
+		wan.Prefixes = append(wan.Prefixes, netip.MustParsePrefix(p))
+	}
+	links["wan0"] = wan
+	return links
+}
+
+// The regression that matters most in this group: an ordinary box, with a
+// routable address on its uplink, must gain no new warning at all. A
+// reachability check that fired on every healthy router would train operators to
+// skim the warning list, which costs more than the check is worth.
+func TestRoutableUplinkProducesNoReachabilityWarning(t *testing.T) {
+	res := Validate(testConfig(), uplinkHolding(true, "203.0.113.7/24"))
+	if !res.OK() {
+		t.Fatalf("a routable uplink must validate: %v", res.Errors)
+	}
+	if w, ok := warningAt(res, "forwards[0].in"); ok {
+		t.Errorf("a routable uplink produced a warning: %s", w.Message)
+	}
+}
+
+// docs/firewall.md §5.4. The forward is correct and can never carry a packet,
+// which is the one failure the operator cannot see from the configuration.
+func TestCGNATUplinkWarnsRatherThanRefusing(t *testing.T) {
+	res := Validate(testConfig(), uplinkHolding(true, "100.72.14.3/22"))
+	if !res.OK() {
+		t.Fatalf("CGNAT must warn, not refuse: %v", res.Errors)
+	}
+	w, ok := warningAt(res, "forwards[0].in")
+	if !ok {
+		t.Fatal("a CGNAT uplink produced no warning")
+	}
+	// The address and the range, because a warning that does not say which
+	// address it objects to sends the operator looking for it.
+	for _, want := range []string{"100.72.14.3", "100.64.0.0/10", "reflector"} {
+		if !strings.Contains(w.Message, want) {
+			t.Errorf("the CGNAT warning does not mention %q:\n%s", want, w.Message)
+		}
+	}
+}
+
+// Double NAT is ugly, not broken: it works the moment the upstream device
+// forwards the same port here. So the warning has to say that rather than imply
+// the forward is wrong.
+func TestPrivateUplinkSaysTheUpstreamMustForwardToo(t *testing.T) {
+	res := Validate(testConfig(), uplinkHolding(true, "192.168.0.50/24"))
+	if !res.OK() {
+		t.Fatalf("a private uplink must warn, not refuse: %v", res.Errors)
+	}
+	w, ok := warningAt(res, "forwards[0].in")
+	if !ok {
+		t.Fatal("a private uplink produced no warning")
+	}
+	// The port is named because the operator has to go and type it into
+	// somebody else's router, and a message that omits it generates the
+	// question it was supposed to answer.
+	for _, want := range []string{"192.168.0.50", "8080", "upstream"} {
+		if !strings.Contains(w.Message, want) {
+			t.Errorf("the double-NAT warning does not mention %q:\n%s", want, w.Message)
+		}
+	}
+}
+
+func TestUplinkWithNoAddressWarns(t *testing.T) {
+	res := Validate(testConfig(), uplinkHolding(true))
+	if !res.OK() {
+		t.Fatalf("an address-less uplink must warn, not refuse: %v", res.Errors)
+	}
+	if _, ok := warningAt(res, "forwards[0].in"); !ok {
+		t.Error("an uplink with no address produced no warning")
+	}
+}
+
+// One state, one sentence. A down interface has no address *because* it is
+// down, and saying both is how a warning list becomes something nobody reads.
+func TestDownUplinkIsNotAlsoReportedAsAddressless(t *testing.T) {
+	res := Validate(testConfig(), uplinkHolding(false))
+	var messages []string
+	for _, p := range res.Warnings {
+		if p.Path == "forwards[0].in" {
+			messages = append(messages, p.Message)
+		}
+	}
+	if len(messages) != 1 {
+		t.Fatalf("want exactly one warning about the interface, got %d: %v", len(messages), messages)
+	}
+	if !strings.Contains(messages[0], "down") {
+		t.Errorf("the surviving warning should be the one about being down:\n%s", messages[0])
+	}
+}
+
+// An uplink can carry a link-local address alongside a real one, and picking the
+// wrong one would condemn a perfectly reachable box.
+func TestLinkLocalIsSkippedWhenChoosingTheOutwardAddress(t *testing.T) {
+	res := Validate(testConfig(), uplinkHolding(true, "169.254.10.1/16", "203.0.113.7/24"))
+	if w, ok := warningAt(res, "forwards[0].in"); ok {
+		t.Errorf("the link-local address was chosen over the routable one: %s", w.Message)
+	}
+}

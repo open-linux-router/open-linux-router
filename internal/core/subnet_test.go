@@ -180,3 +180,36 @@ func TestAddToSaturates(t *testing.T) {
 		t.Errorf("AddTo saturated to %s, want 255.255.255.255", got)
 	}
 }
+
+// The diagnosis nothing else in the product can offer (docs/ddns.md §3.2), and
+// now the one that keeps a port forward from being debugged for an afternoon
+// (docs/firewall.md §5.4). The boundaries are the whole point: /10 is an
+// unusual mask and off-by-one here would clear a genuinely unreachable box or
+// condemn a reachable one.
+func TestCGNATIsRecognised(t *testing.T) {
+	for addr, want := range map[string]bool{
+		"100.64.0.0":      true, // first
+		"100.64.0.1":      true,
+		"100.100.100.1":   true,
+		"100.127.255.255": true, // last
+		"100.63.255.255":  false,
+		"100.128.0.0":     false,
+		"203.0.113.9":     false,
+		"192.168.1.1":     false,
+	} {
+		if got := IsCGNAT(netip.MustParseAddr(addr)); got != want {
+			t.Errorf("IsCGNAT(%s) = %v, want %v", addr, got, want)
+		}
+	}
+}
+
+// An IPv6 address is never CGNAT, and the guard matters: 100.64.0.0/10 is an
+// IPv4 prefix, and Prefix.Contains on a mismatched family would answer false
+// anyway — but only by accident. IsCGNAT says so on purpose.
+func TestCGNATIsIPv4Only(t *testing.T) {
+	for _, addr := range []string{"::ffff:100.64.0.1", "fd00::1", "2001:db8::1"} {
+		if IsCGNAT(netip.MustParseAddr(addr)) {
+			t.Errorf("IsCGNAT(%s) = true, want false", addr)
+		}
+	}
+}

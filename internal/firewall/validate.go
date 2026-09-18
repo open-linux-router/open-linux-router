@@ -22,10 +22,19 @@ import (
 // because a NAT rule that is subtly wrong does not fail, it delivers somewhere
 // else.
 //
+// §5.4's warnings are here too, and they are a different kind of finding: the
+// configuration is coherent and the forward still cannot work, because the
+// uplink holds no address the internet can reach. Warnings and not refusals
+// because double NAT is a working setup — warnUnreachableUplink has the
+// argument.
+//
 // What is deliberately *not* here is anything about the running system: a
 // foreign forward-chain policy and a local service on the port are facts about
 // the kernel rather than about the configuration, so they belong to the plan
-// (plan.go) where they can be reported against what is actually there.
+// (plan.go) where they can be reported against what is actually there. The line
+// between that and §5.4 is that an interface's own address arrives through
+// LinkView like every other fact this file reads, so checking it costs no
+// netlink of ours and keeps validation pure.
 
 // Problem is one validation finding, addressed by a JSON-ish path so a UI can
 // attach it to the field that caused it. Mirrors the other modules' shape, and
@@ -155,12 +164,74 @@ func validateIn(r *Result, path string, f Forward, links LinkView) {
 	switch {
 	case err != nil:
 		r.errorf(path+".in", "%q is not an interface this box knows about", f.In)
+		return
 	case !info.Adopted:
 		r.errorf(path+".in",
 			"%q has not been adopted; run `olr adopt %s` before forwarding a port on it",
 			f.In, f.In)
+		return
 	case !info.Up:
 		r.warnf(path+".in", "%q is down; the forward will take effect when it comes up", f.In)
+	}
+
+	warnUnreachableUplink(r, path, f, info)
+}
+
+// warnUnreachableUplink says so when the interface a forward faces outward on
+// does not hold an address the internet can open a connection to.
+//
+// This is the failure that costs an afternoon, because it does not look like
+// one: the forward validates, applies, renders correct rules and never carries a
+// packet. Every other check in this file asks whether the configuration is
+// coherent; this one asks the question the operator actually has, which is
+// whether the thing they just built can work at all.
+//
+// Warnings rather than refusals, all three. A router chained behind another
+// router that forwards this port onward is a real and working setup — double NAT
+// is ugly, not broken — so refusing would block a configuration that carries
+// traffic today. And the reading is of the interface *now*: an uplink can be
+// mid-DHCP, or behind a modem being swapped, and a refusal would make a
+// transient state permanent.
+//
+// The counter (docs/firewall.md §3.4) is what settles it afterwards. This is
+// only the part we can say before the rule is written.
+func warnUnreachableUplink(r *Result, path string, f Forward, info LinkInfo) {
+	addr, ok := info.OutwardIPv4()
+	if !ok {
+		// A down interface with no address is not news — the case above already
+		// said it is down, and saying it twice trains the operator to skim.
+		if info.Up {
+			r.warnf(path+".in",
+				"%q has no IPv4 address, so there is nothing for a connection from outside to "+
+					"arrive on; the forward will be programmed and will start carrying traffic "+
+					"when the interface is given one",
+				f.In)
+		}
+		return
+	}
+
+	switch {
+	case core.IsCGNAT(addr):
+		// The one diagnosis the product can offer that nothing on the box
+		// otherwise would (docs/ddns.md §3.2, now read from this side).
+		r.warnf(path+".in",
+			"%q holds %s, which is inside 100.64.0.0/10 — the range an ISP hands to customers "+
+				"kept behind the ISP's own NAT. Nothing on the internet can open a connection to "+
+				"this router, so this forward will be programmed correctly and never carry "+
+				"traffic. A DDNS record using the reflector source is how to confirm it, because "+
+				"that is the only address source that sees what the internet sees",
+			f.In, addr)
+
+	case addr.IsPrivate():
+		// Read carefully before changing: this is *not* a mistake on its own.
+		// It is the ordinary shape of olr behind an ISP-supplied modem-router,
+		// and it works as soon as the upstream box forwards the same port here.
+		r.warnf(path+".in",
+			"%q holds %s, a private address, so this router is behind another one rather than "+
+				"facing the internet directly. This forward moves connections that reach %s onward, "+
+				"but something has to get them that far: the upstream device needs %s/%s forwarded "+
+				"to %s as well",
+			f.In, addr, f.In, f.ProtocolOrDefault(), f.Port, addr)
 	}
 }
 

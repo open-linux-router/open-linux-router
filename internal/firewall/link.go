@@ -91,6 +91,29 @@ func (l LinkInfo) Holds(addr netip.Addr) bool {
 	return false
 }
 
+// OutwardIPv4 returns the address this interface faces the world with, if it has
+// one.
+//
+// First IPv4 that is not loopback, link-local or unspecified — the same
+// selection internal/dial's LinkInfo.PublicIPv4 makes, and for the same stated
+// reason: an uplink can legitimately carry several addresses and there is no
+// fact available here that would choose between them.
+//
+// Deliberately *not* named Public, which dial's name has to apologise for in its
+// own comment. A private address is returned rather than skipped, because for
+// this module that is the interesting answer — it is how validateIn can say
+// "this router is behind another one" instead of "no address".
+func (l LinkInfo) OutwardIPv4() (netip.Addr, bool) {
+	for _, p := range l.Prefixes {
+		addr := p.Addr()
+		if !addr.Is4() || addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsUnspecified() {
+			continue
+		}
+		return addr, true
+	}
+	return netip.Addr{}, false
+}
+
 // PrefixesContaining returns every adopted interface prefix that holds addr,
 // sorted, so a rendered ruleset does not churn on map order.
 //

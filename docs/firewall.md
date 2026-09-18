@@ -239,9 +239,17 @@ server can lock out the router and with it the whole house.
 That is a real cost and it is why `--no-hairpin` exists. It is the right choice
 for an operator whose internal clients reach the service by its internal address
 anyway — which is the better answer in general, and is what split-horizon DNS is
-for. olr cannot make that choice for them because it does not know what their
-DNS says, so it makes the choice that fails visibly rather than the one that
-fails at 2am in someone else's log file.
+for.
+
+**And olr owns a resolver, so it is worth being exact about why it cannot just
+do that.** `dns` renders `local-zone ... static` entries into unbound
+(`docs/dns.md` §4.6), so the mechanism is there. What is missing is narrower and
+names the work: local names are stored *relative to the local domain* —
+`sony-tv`, not a fully-qualified name — so the entry split-horizon actually
+needs, `home.example.net → 192.168.1.10`, has nowhere to live. Until some object
+can hold a public name with a private answer, olr genuinely cannot make this
+choice on the operator's behalf, and so it makes the one that fails visibly
+rather than the one that fails at 2am in someone else's log file. §10.4.
 
 The warning is on the surface, not only in this document: validation emits it for
 every forward with hairpin on.
@@ -303,6 +311,44 @@ accident.
 
 See §6. It is not a firewall failure mode; it is a `gateway` one that only port
 forwarding makes visible.
+
+### 5.4 The one where nothing is wrong and it still cannot work
+
+Every check above asks whether the configuration is coherent. This one asks the
+question the operator actually has: **can a connection from the internet reach
+this router at all?**
+
+If the interface a forward faces outward on does not hold a routable address,
+the answer is no, and nothing in `olr_nat` can change it. The forward validates,
+applies, renders correct rules, and never carries a packet — which is the worst
+shape a failure can take, because there is nothing to find by looking at it.
+
+Three readings of `in`'s address, all **warnings**, in `warnUnreachableUplink`:
+
+| The interface holds | What it means |
+|---|---|
+| an address in `100.64.0.0/10` | the ISP has put this box behind **their** NAT; nothing outside can open a connection to it, ever |
+| a private (RFC 1918) address | this box is behind another router; the forward works once that device forwards the same port here |
+| no IPv4 address | there is nothing for a connection to arrive on yet |
+
+**Warnings and not refusals, deliberately.** Double NAT is ugly, not broken: a
+box behind an ISP-supplied modem-router carries forwarded traffic perfectly well
+as soon as the upstream device is told to send it here, and that is an extremely
+common home topology. Refusing would block a configuration that works. The
+address is also a reading of *now* — an uplink can be mid-DHCP, or behind a modem
+being swapped — and a refusal would freeze a transient state.
+
+The CGNAT row is the one worth the code on its own. It is the diagnosis
+`docs/ddns.md` §3.2 calls the one thing DDNS can offer that nothing else in the
+product can, read here from the other side: `core.IsCGNAT` is shared by both
+modules precisely so the two cannot come to disagree about which addresses are
+hopeless. `dial` still owns *noticing* — the reflector source is the only one
+that sees what the internet sees, and a forward's warning points at it.
+
+What this does not do is check whether the port is open **from outside**. That
+needs a third party to try it, and asking one is a decision on the scale of the
+reflector's, not a rider on a validation rule. Until then the counter (§3.4)
+answers the other half: whether anything has arrived.
 
 ---
 
@@ -384,12 +430,14 @@ validation says why.
 | | per-forward named counters | §3.4 |
 | | foreign forward-policy detection, reported | §5.2 |
 | | local-port conflict warning | §5.2 |
+| | unreachable-uplink warning (CGNAT, double NAT, no address) | §5.4 |
 | **v2** | a source allow-list (`--from`) | belongs to filtering, not to NAT — see §9 |
 | | IPv6 inbound permits | needs the filtering half to exist (§7) |
 | | per-forward enable/disable without deleting | |
+| | an external "is this port open?" probe | §5.4 — needs the third-party decision made first |
 | **Later** | zones and a filter policy — the rest of §4's brief | |
 | | the nftables reader `design.md` §4.2 gives this module for the whole box | which also closes `gateway`'s observation gap |
-| **Never** | UPnP / NAT-PMP / PCP | §9 |
+| **Never, in this module** | UPnP / NAT-PMP / PCP | §9 |
 
 ---
 
@@ -406,6 +454,19 @@ validation says why.
   ever lands it needs its own object, its own list, its own expiry, and a
   per-device consent model — which is a feature, not a flag on this one.
 
+  §8 says **"never, in this module"** rather than "never", and the qualifier is
+  load-bearing. What the operator wants is not UPnP; it is *inbound working
+  without being configured*, and that need has two mechanisms. The other one is
+  **endpoint-independent (full-cone) NAT** — the thing a console means by "NAT
+  Type", and a property of how the box translates rather than an object anybody
+  creates. Linux has no upstream implementation of it: `masquerade` gives
+  endpoint-independent mapping with address-and-port-dependent *filtering*,
+  which is "moderate" on every console's test, and the out-of-tree modules that
+  change this have never been merged and break on kernel upgrades. So the
+  complaint will arrive and this module will have nothing to offer it. That is
+  worth knowing in advance rather than discovering in an issue, and it is a
+  different question from whether to run a daemon that punches holes on request.
+
 - **A source allow-list (`--from 203.0.113.0/24`) in v1.** The most-requested
   neighbouring feature and the most tempting to add, because one `ip saddr` match
   in the DNAT rule appears to buy it. It is rejected on a boundary rather than on
@@ -420,9 +481,24 @@ validation says why.
 - **Modelling the destination as a device reference.** §1.2.
 
 - **A `dmz` or "forward everything to this host" object.** One rule, universally
-  regretted, and it is expressible as a range forward if somebody insists. It is
-  not worth a first-class object that teaches operators a worse habit than
-  naming the three ports they actually need.
+  regretted, and it teaches a worse habit than naming the three ports somebody
+  actually needs.
+
+  The sharper reason is what a DMZ host *is*: **a default route for inbound
+  traffic**. That only means something on a box with a filtering policy, where
+  "default" is deny and the DMZ host is the declared exception. §2.1 says olr has
+  no such policy, so here it would mean something else entirely — every port on
+  this router, including the ones this router is itself listening on, now belongs
+  to that host. DNAT runs in prerouting, before the local delivery decision
+  (§5.2), so `:22`, `ingress`'s `:80` and `:443`, and the port the operator
+  administers the box over would all leave with it.
+
+  It is worth being explicit that **this is not expressible as a range forward**,
+  because `1-65535 → host` would pass §1.3's identity rule and look like the
+  same thing. It is not: it is the paragraph above, arrived at by accident, with
+  §5.2's local-port warning firing once for every socket on the box. If a DMZ
+  object is ever wanted it belongs to the filtering half, where "default" has a
+  meaning to be an exception to.
 
 - **Matching the WAN address explicitly instead of `fib daddr type local`.**
   §3.2. It is what every hand-written example does, and it is why those examples
@@ -458,3 +534,34 @@ validation says why.
    correct and the connection is refused, which is right, but the screen could
    say so — it needs `devices` presence, and the join belongs on the status
    endpoint rather than in the rule.
+
+4. **Whether split-horizon DNS should be an object, so hairpin can default
+   off.** §4.1 is the argument: the masquerade hides the real client, and the
+   better answer is for internal clients to resolve the name to the internal
+   address. `dns` already renders `local-zone static` entries, but only for
+   names relative to the local domain (`docs/dns.md` §4.6), so the one entry
+   this needs — a *public* name with a private answer — cannot be stored. It is
+   a small object in `dns` and it would let `firewall` stop choosing between two
+   bad defaults. The cost to weigh is that a name overridden locally and
+   forgotten is its own afternoon.
+
+5. **Replies leave by the wrong uplink on a box with two.** §6's
+   `ct status & IPS_DST_NAT == 0` guard is right for one uplink and, on two,
+   strips the reply of the only mark that could have steered it: a connection
+   arrives on `wan1`, the reply takes the main table to `wan0`, conntrack
+   rewrites its source to `wan1`'s address on the way out, and the far side's
+   ISP drops it as spoofed. This module marks nothing today. The fix is not
+   `gateway`'s source rules — those are about which exit *we* choose — but
+   saving the arriving interface into `ct mark` at prerouting, before DNAT, and
+   restoring it for the reply. It is the same failover-WAN decision as §10.1 and
+   should be taken with it, because a second uplink that silently breaks every
+   forward on the first one is worse than not supporting two.
+
+6. **§10.1's precondition has arrived and this module has not noticed.** It
+   defers "any uplink" to `link`'s groups rather than a special value; `link`
+   now has them (`internal/link/config.go`, `Group` with `Members`), while
+   `internal/firewall/link.go`'s `LinkView` still asks only about interfaces by
+   name. `design.md` §4.1 is explicit that dependents read a *group* and "do not
+   read interface names", so this is drift against the stated architecture
+   rather than a preference. Noted here so §10.1 is re-opened rather than
+   quietly stale.

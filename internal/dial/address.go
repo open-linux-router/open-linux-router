@@ -16,18 +16,16 @@ import (
 // Where the address comes from (docs/ddns.md §3), which is the whole difficulty
 // of this module. Everything after it is a periodic HTTP request.
 
-// CGNAT is the carrier-grade NAT range, RFC 6598.
+// The carrier-grade NAT range itself is core.CGNAT, because `firewall` came to
+// need the same predicate for a neighbouring reason: a name pointing into
+// 100.64.0.0/10 resolves to something nobody can reach (docs/ddns.md §3.2), and
+// a port forward on an uplink holding such an address is a rule that applies
+// cleanly and can never fire (docs/firewall.md §5.4).
 //
-// An address in here is one the ISP handed to a customer behind their own NAT,
-// and **a name pointing at it resolves to something nobody can reach**. That is
-// the one diagnosis DDNS can offer that nothing else in this product can
-// (docs/ddns.md §3.2), and it is the difference between an operator reading one
-// line of status and spending an afternoon debugging a port forward that was
-// never going to work.
-var CGNAT = netip.MustParsePrefix("100.64.0.0/10")
-
-// IsCGNAT reports whether addr is inside the carrier-grade NAT range.
-func IsCGNAT(addr netip.Addr) bool { return addr.Is4() && CGNAT.Contains(addr) }
+// What stays this module's is *noticing*. The reflector form is the only
+// address source that can see CGNAT at all — an interface read reports the
+// address the ISP handed this box, which is the one inside their NAT — and
+// schema.go says so where the operator chooses between the two.
 
 // reflectorTimeout bounds one request to a third party.
 //

@@ -137,29 +137,11 @@ func TestReflectorReportsARefusal(t *testing.T) {
 	}
 }
 
-// The diagnosis nothing else in the product can offer (docs/ddns.md §3.2).
-func TestCGNATIsRecognised(t *testing.T) {
-	for addr, want := range map[string]bool{
-		"100.64.0.1":     true,
-		"100.100.100.1":  true,
-		"100.127.255.":   false, // not an address at all
-		"100.63.255.255": false,
-		"100.128.0.0":    false,
-		"203.0.113.9":    false,
-		"192.168.1.1":    false,
-	} {
-		parsed, err := netip.ParseAddr(addr)
-		if err != nil {
-			if want {
-				t.Errorf("%q does not parse but the test expects it to be CGNAT", addr)
-			}
-			continue
-		}
-		if got := IsCGNAT(parsed); got != want {
-			t.Errorf("IsCGNAT(%s) = %v, want %v", addr, got, want)
-		}
-	}
-}
+// The predicate itself moved to core, and so did its table — see
+// TestCGNATIsRecognised in internal/core/subnet_test.go. What stays here is the
+// behaviour that is this module's: publisher_test.go's TestCGNATReachesStatus
+// proves the verdict still reaches a record's state, and view_test.go's
+// TestStatusExplainsCGNAT proves it still explains itself on the surface.
 
 // A hand-edited config with no source must not have one picked for it.
 func TestNoSourceIsRefusedRatherThanGuessed(t *testing.T) {

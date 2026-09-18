@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/dial/provider"
 )
 
@@ -302,7 +303,7 @@ func (p *Publisher) readCheck(name string, now time.Time, addr netip.Addr) Recor
 	state.Checked = now
 	state.CheckError = ""
 	state.Address = addr.String()
-	state.CGNAT = IsCGNAT(addr)
+	state.CGNAT = core.IsCGNAT(addr)
 	p.states[name] = state
 	return state
 }
