@@ -4,6 +4,7 @@
 package packaging_test
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -83,6 +84,66 @@ func TestTheDropInNamesTheSamePaths(t *testing.T) {
 	}
 	if !anyDirective(body, "ExecStartPre=", "-a "+paths.TrustAnchor) {
 		t.Errorf("the olr-dns drop-in does not bootstrap the anchor at %s:\n%s", paths.TrustAnchor, body)
+	}
+}
+
+// Purge takes back the two directories olr renders into another package's
+// trees, and takes back nothing else.
+//
+// The fourth copy of the same answer, and the one where being wrong is worst in
+// both directions. Too little and olr leaves its litter in /etc/unbound and
+// /var/lib/unbound after it is gone, where a later `apt purge unbound` cannot
+// clear it and the operator has no reason to look. Too much — a line that named
+// the tree instead of our directory inside it — and purging olr deletes the
+// distribution's resolver configuration, on a box where olr may never have been
+// the thing running unbound at all.
+//
+// Read off disk rather than embedded because nfpm reads it off disk too
+// (packaging/nfpm.yaml names this path), which is the same arrangement
+// embed_test.go asserts for the units.
+func TestPurgeRemovesOurDirectoriesInsideAnotherPackagesTrees(t *testing.T) {
+	raw, err := os.ReadFile("../../packaging/scripts/postremove.sh")
+	if err != nil {
+		t.Fatalf("reading postremove.sh: %v", err)
+	}
+	script := string(raw)
+
+	paths := dns.DefaultPaths()
+	for _, dir := range []string{
+		filepath.Dir(paths.UnboundConf),
+		filepath.Dir(paths.TrustAnchor),
+	} {
+		// Being inside somebody else's tree is what makes it purge's business.
+		// A path back under olr's own directory would be covered by the
+		// paragraph above the line and should not be in the rm at all.
+		if strings.HasPrefix(dir, "/etc/open-linux-router") || strings.HasPrefix(dir, "/var/lib/open-linux-router") {
+			continue
+		}
+		if !strings.Contains(script, dir) {
+			t.Errorf("purge does not remove %s, which olr renders into a directory belonging to the unbound package:\n%s", dir, script)
+		}
+	}
+
+	// The trees themselves, never. Compared as whole arguments, so that naming
+	// our subdirectory does not read as naming its parent.
+	for _, line := range strings.Split(script, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") || !strings.HasPrefix(line, "rm ") {
+			continue
+		}
+		for _, field := range strings.Fields(line) {
+			for _, tree := range []string{"/etc/unbound", "/var/lib/unbound", "/etc", "/var/lib"} {
+				if field == tree {
+					t.Errorf("postremove.sh removes %s itself, which is not olr's to remove:\n\t%s", tree, line)
+				}
+			}
+		}
+	}
+
+	// And only on purge. A plain `apt remove` keeps configuration, which is the
+	// promise the paragraph above the line makes about /etc/open-linux-router.
+	if !strings.Contains(script, `"$1" = purge`) {
+		t.Errorf("postremove.sh does not gate its removals on purge:\n%s", script)
 	}
 }
 
