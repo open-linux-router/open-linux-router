@@ -414,10 +414,23 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 ReadWritePaths=/etc/open-linux-router /var/lib/open-linux-router /run/olr
+                /etc/unbound/open-linux-router /var/lib/unbound/open-linux-router
 ```
 
 Worth stating as a rule, because the first `exec.Command` silently costs all of
 it.
+
+The last two are not olr's own directories, and that is the point of listing
+them: `dns` renders the resolver's config and trust anchor inside `/etc/unbound`
+and `/var/lib/unbound`, because Debian confines `/usr/sbin/unbound` to those
+trees and a config outside them is one the daemon may not open (§7, and
+`internal/dns.Paths`). A `ReadWritePaths=` built from olr's own directories
+alone would fail `olr dns apply` on its first `mkdir` — which is the kind of
+thing a block like this is copied out of a document without anyone re-deriving.
+
+Written as the shape the sandbox would take, not as a unit that exists: no
+shipped unit carries these directives today, for the reason the units themselves
+record.
 
 **Two exceptions exist, and the second one is the shape any future one must
 take.** `ingress` runs `caddy validate` on every apply (§7.1 of docs/ingress.md):

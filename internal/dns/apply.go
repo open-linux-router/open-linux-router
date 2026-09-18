@@ -313,11 +313,18 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 		return result, nil
 	}
 
-	// Deduplicated, because the default Paths put the resolver's config and the
-	// relay's in one directory, so the unfiltered list named it twice and the
-	// step log an operator reads after a failure repeated a line verbatim.
-	// Harmless to run, but it makes the reader wonder what they missed — and
-	// observedRoots below already collapses nearly the same list.
+	// Deduplicated, so that two entries naming one directory cannot make the
+	// step log an operator reads after a failure repeat a line verbatim.
+	// Harmless to run twice, but it makes the reader wonder what they missed.
+	//
+	// Under the Paths olr ships, these four are now distinct and this collapses
+	// nothing: the pair that used to collide was the resolver's config and the
+	// relay's, and the resolver's moved to where its confinement lets it read
+	// it. The filter stays because Paths is a struct a caller can build — tests
+	// do, and RootedPaths is the shipped example rather than the only one — and
+	// nothing in its type says the four stay distinct. observedRoots below does
+	// still collapse a genuine duplicate, since the relay's config and the
+	// hijack ruleset share a directory.
 	seen := map[string]bool{}
 	for _, dir := range []string{
 		filepath.Dir(a.Paths.UnboundConf),
