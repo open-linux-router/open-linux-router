@@ -50,7 +50,7 @@ rules below govern the two positions to its right and the flags after them.
 > trailing ellipsis.**
 
 ```
-pool <interface>          required
+pool <network>            required
 default [<exit>]          optional
 block <name>...           one or more
 via <network> <exit>      two required

@@ -17,12 +17,17 @@
 //     that was missing, and its absence had a specific cost: `dhcp` could only
 //     validate a range against whatever address an interface had been given
 //     from outside olr, so an operator who wanted a different subnet met an
-//     error that no page in olr could fix.
+//     error that no page in olr could fix. olrd puts the address back when it
+//     starts (Applier.Restore), because the kernel forgets it on a reboot and
+//     nothing else on the box knows it.
 //
 // Still owed, and deliberately not invented here: bridges, VLANs, and taking an
-// interface away from NetworkManager. `Group.Members` is a list so that the day
-// bridging lands the schema is already right, but Validate requires exactly one
-// member until something exists that can create a bridge device.
+// interface away from NetworkManager, systemd-networkd or ifupdown. The last of
+// those has a cost design.md §7 states: until it lands, a member interface has
+// two managers that do not know about each other, and only the operator can
+// make them agree — docs/install.md says how. `Group.Members` is a list so that
+// the day bridging lands the schema is already right, but Validate requires
+// exactly one member until something exists that can create a bridge device.
 //
 // The observed half of an interface's facts — its current addresses, whether it
 // is up — is still read from the kernel per request and never stored. There is

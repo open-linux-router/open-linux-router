@@ -157,7 +157,7 @@ func showPoolsCommand() *cobra.Command {
 // R6 requires: this module could list both objects but could not show one.
 func showPoolCommand() *cobra.Command {
 	c := &cobra.Command{
-		Use:   "pool <interface>",
+		Use:   "pool <network>",
 		Short: "Show one pool in full",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
@@ -531,8 +531,8 @@ func rmCommand() *cobra.Command {
 	c := verb("rm", "Remove a reservation or pool", func(c *cobra.Command) {})
 
 	rmPool := &cobra.Command{
-		Use:   "pool <interface>",
-		Short: "Remove an interface's pool",
+		Use:   "pool <network>",
+		Short: "Remove a network's pool",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			return mutate(c, func(cfg *Config) error {

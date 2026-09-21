@@ -6,20 +6,42 @@ fixed addresses that are easy to edit, and a configuration file you can open.
 Nothing about how traffic reaches the internet changes.
 
 This is written for that arrangement specifically, because it is the one with a
-trap in it (§3, below). If the box *is* your gateway, everything here still
-applies except the parts about pointing clients at the old router.
+trap in it (§4, below). If the box *is* your gateway, everything here still
+applies except the parts about pointing clients at the old router — and the
+address rules below have a version for that case too.
 
 ---
 
 ## What you need
 
-- A Linux box on the network, with systemd and a **static address**. olr does
-  not configure interface addresses yet — that is the unbuilt half of the `link`
-  module — so set it with whatever your distribution uses (`systemd-networkd`,
-  NetworkManager, `/etc/network/interfaces`). Give it an address outside the
-  range you are about to hand out.
+- A Linux box on the network, with systemd and a **static address**, set with
+  whatever your distribution uses (`systemd-networkd`, NetworkManager,
+  `/etc/network/interfaces`) and outside the range you are about to hand out.
+  In step 3 you give olr the same address, and from then on olr owns it — read
+  the next section before you get there.
 - Access to your existing router's settings, to turn its DHCP server off.
 - Ten minutes, and preferably not while anybody is on a call.
+
+### Who owns the box's address
+
+Putting an interface in a network (step 3) hands its IPv4 addressing to olr.
+olr writes the network's router address to it, puts it back after every reboot,
+and when you apply a change **removes any other IPv4 address it finds there**.
+
+What olr does not do yet is take the interface away from your distribution's
+network configuration. Until it does, two things manage that interface and
+neither knows about the other. Two rules keep that safe:
+
+- **The same address in both places, and static.** If your distribution also
+  configures the interface, it configures exactly the address you give the
+  network — never DHCP. A leased address that differs is removed the next time
+  you apply anything, and the default route goes with it. On a box with one
+  network interface this is the only arrangement that works: the distribution
+  keeps providing the default route, and it and olr agree on the address.
+- **An interface that gets its address by DHCP is never in a network.** On a box
+  that *is* your gateway, that is the uplink to your modem: leave it to the
+  distribution, put only the LAN side in a network, and take the LAN side out of
+  the distribution's configuration so that olr is the only thing addressing it.
 
 Throughout, the example network is `192.168.1.0/24`, the existing router is
 `192.168.1.1`, and the olr box is `192.168.1.2` on interface `enp1s0`.
@@ -63,31 +85,43 @@ first.
 
 The rest of this document gives both the UI and the CLI; they are the same API.
 
-## 3. Hand the interface to olr
+## 3. Hand the interface to olr, and name the network on it
 
 **Web UI:** DHCP → Interfaces → switch on `enp1s0`. (A box with nothing
-adopted says so on the Overview, and that link goes to the same page.)
+adopted says so on the Overview, and that link goes to the same page.) Then
+Networks → Add: subnet `192.168.1.0/24`, this box's address `192.168.1.2`, on
+`enp1s0`.
 
 **CLI:**
 
 ```sh
 olr link show interfaces
 sudo olr adopt enp1s0
+sudo olr net add lan --member enp1s0 \
+  --subnet 192.168.1.0/24 --router 192.168.1.2 --dry-run
 ```
 
-olr refuses to serve anything on an interface nobody gave it, so without this
-every range you try to add is rejected. Adopting sets no address and starts no
-service; it grants permission.
+olr refuses to serve anything on an interface nobody gave it, so without the
+adoption every range you try to add is rejected. Adopting sets no address and
+starts no service; it grants permission.
+
+The network is the step that changes the box, which is why the command above is
+a dry run. `--router` is not optional in this arrangement: left out, it defaults
+to the first address in the subnet, which here is **your existing router's**.
+Give it the static address the box already has, and the dry run should show no
+address being added or taken off. If it shows one coming off, that is the
+address you are connected over, and applying would end your session. When it
+looks right, run the same command without `--dry-run`.
 
 ## 4. Add the address range — and read this part twice
 
-**Web UI:** DHCP → Address ranges → Add. Choosing the interface fills in a range
+**Web UI:** DHCP → Address ranges → Add. Choosing the network fills in a range
 inside its subnet.
 
 **CLI:**
 
 ```sh
-sudo olr dhcp add pool enp1s0 \
+sudo olr dhcp add pool lan \
   --range 192.168.1.100-192.168.1.200 \
   --gateway 192.168.1.1 \
   --dns 192.168.1.1
@@ -191,8 +225,23 @@ box, SSH in and open it — that is the point of intent being a plain file.
 
 ```sh
 sudo olr dhcp disable        # stop serving, keep the configuration
+sudo olr dhcp rm pool lan    # forget the range
+sudo olr net rm lan          # forget the network — takes its address off enp1s0
 sudo olr release enp1s0      # take the interface back
 sudo apt remove olr          # or remove it entirely
+```
+
+The order is not arbitrary: an interface cannot be released while it is still in
+a network.
+
+`olr net rm` takes the router's address off the interface, and your distribution
+does not notice it has gone. On a box you reach through that interface, that is
+your session. Run it from the console, or have the distribution put its own
+address straight back in the same breath, so the second half runs on the box
+whether or not your session survives the first:
+
+```sh
+sudo sh -c 'olr net rm lan && systemctl restart networking'   # ifupdown; use your distribution's equivalent
 ```
 
 Turn your old router's DHCP server back on before or shortly after, or nothing
@@ -200,9 +249,9 @@ new joining the network will get an address.
 
 ## When something is wrong
 
-**Nothing gets an address.** Check the range is inside the interface's subnet and
-that the interface is up with a cable in it — `olr link show interfaces` says
-both. Then `olr dhcp status`, then `journalctl -u olr-dhcp -n 50`.
+**Nothing gets an address.** Check the range is inside the network's subnet
+(`olr net show`) and that the interface is up with a cable in it (`olr link show
+interfaces`). Then `olr dhcp status`, then `journalctl -u olr-dhcp -n 50`.
 
 **olr refuses to start the server.** Something already holds UDP/67 on this box,
 and the refusal names it — process, pid and systemd unit — along with the
@@ -221,7 +270,13 @@ and keeps running, because this box resolves names through it.
 
 **Devices get an address but no internet.** Step 4 — the gateway is almost
 certainly pointing at this box instead of your real router. `olr dhcp show pool
-enp1s0` shows what is being advertised.
+lan` shows what is being advertised.
+
+**Your session dropped in step 3.** The network's router address was not the one
+you were connected over, and olr took yours off — and the default route with it.
+From the console, `sudo olr net set lan --router <the address you had>` makes the
+two agree again, and `sudo systemctl restart networking` (or your distribution's
+equivalent) puts the route back.
 
 **The web UI cannot be reached.** `olr listen` with no listener set is off
 by default; re-run step 2. If it is set, check nothing between you and the box is

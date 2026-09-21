@@ -8,8 +8,10 @@ web UI, a CLI, a REST API and an MCP server, all speaking to the same
 configuration. It stays a normal Linux machine the whole time.
 
 **Status: early.** DHCP, DNS, devices and the gateway are built. Interface
-handling is deliberately minimal so far — olr adopts the NICs you give it, but
-does not yet create bridges, VLANs or addresses. The firewall module holds
+handling is deliberately minimal so far — olr adopts the NICs you give it and
+owns this router's own address on each network, putting it back after every
+reboot, but does not yet create bridges or VLANs or take an interface away from
+your distribution's network configuration. The firewall module holds
 **port forwarding and nothing else** — no zones, no rules, no filtering policy —
 so olr decides what is redirected *into* your network and not what is allowed
 through this box. Wi-Fi is not written at all. If you want a finished router
@@ -145,12 +147,14 @@ Debian does, and starts the service. It prints every file it writes, and
 `--dry-run` shows the list without touching anything. `olr disable` undoes the
 boot entry and leaves the files in place.
 
-Hand it an interface, then give that interface a job:
+Hand it an interface, name the network on it, then give that network a job:
 
 ```sh
 olr link show interfaces                                          # what this box has
 sudo olr adopt enp1s0                                             # grant permission
-sudo olr dhcp add pool enp1s0 --range 192.168.1.100-192.168.1.200
+sudo olr net add lan --member enp1s0 \
+  --subnet 192.168.1.0/24 --router 192.168.1.2                    # this router's address on it
+sudo olr dhcp add pool lan --range 192.168.1.100-192.168.1.200
 sudo olr dhcp enable
 olr dhcp show leases                                              # who took an address
 ```
@@ -158,6 +162,14 @@ olr dhcp show leases                                              # who took an 
 `olr adopt` is the step people miss. Every module refuses to serve on an
 interface nobody handed it. Adopting sets no address and starts no service — it
 only grants permission.
+
+`olr net add` is the step that changes the box. It writes the router's address
+to the interface, takes any other IPv4 address there off it, and olr puts it
+back after every reboot. If you are connected over that interface, give the
+network the address you are connected to, and run it with `--dry-run` first — it
+prints exactly what would change. [docs/install.md](docs/install.md) has the two
+rules that keep olr and your distribution's network configuration from fighting
+over the same interface.
 
 The web UI is already open — installing printed its address — and the first
 screen asks one question. **A box nobody has set up refuses to be configured

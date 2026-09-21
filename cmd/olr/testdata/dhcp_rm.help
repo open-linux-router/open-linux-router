@@ -4,7 +4,7 @@ Usage:
   olr dhcp rm [command]
 
 Available Commands:
-  pool        Remove an interface's pool
+  pool        Remove a network's pool
   reservation Remove a reservation
 
 Flags:

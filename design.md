@@ -1006,19 +1006,34 @@ nothing that could be taken advantage of before its owner arrives.
   recording prior state
 - `olr release <iface>` — hand it back
 
-  **Built, in the half that gates the other modules.** `olr adopt` and `olr
-  release` record consent in the `link` section of the document, and `dhcp`,
-  `dns` and `gateway` each refuse an interface that is not in it. The other
-  half — actually taking the interface from NetworkManager or
-  systemd-networkd, and recording prior state so `release` can put it back —
-  waits for the `link` module of §9 milestone 1. Until then adopting is
-  permission only: it sets no address, starts no service, and leaves whatever
-  is managing the interface managing it.
+  **Built, except the half that takes the interface away.** `olr adopt` and
+  `olr release` record consent in the `link` section of the document, and
+  `dhcp`, `dns` and `gateway` each refuse an interface that is not in it.
+  Adopting is still consent and nothing more: it sets no address and starts no
+  service, which is what keeps the first line of this section true.
 
-  That is a smaller promise than this section makes, and it is the honest one
-  for a box where olr does not yet own addressing. It is also the safer half to
-  ship first: consent that changes nothing cannot disconnect anybody, which is
-  what the first line of this section is about.
+  Addressing arrived with the network (§4.4), as a second and separate act.
+  Putting an adopted interface in a network writes this router's address to
+  it, brings it up, and takes every other IPv4 address on it off — a member's
+  v4 addressing is olr's (internal/link `PlanAddrs`). olrd puts that address
+  back when it starts, because the kernel forgets it on a reboot and nothing
+  else on the box knows it.
+
+  What is still owed is taking the interface from NetworkManager,
+  systemd-networkd or ifupdown, and recording prior state so `release` can put
+  it back. Until that lands a member interface has **two managers** — olr, and
+  whatever the distribution was told about it — and neither knows about the
+  other. Only the operator can make them agree, and docs/install.md gives the
+  two rules that do: an interface whose address the distribution gets by DHCP
+  is never a member, and a member the distribution also configures is
+  configured there with the network's router address, statically, and nothing
+  else.
+
+  That is also why the start-up restore only adds. Enforcing ownership at boot
+  would race the distribution's own address sources, and a box that broke the
+  first rule would lose its uplink address on every boot, with the way back
+  being physical. Too many addresses is a state an operator can fix from a
+  shell they can still reach; removal stays with an operator who asked for it.
 - generated files live under `/etc/open-linux-router/rendered/`, included into
   the real daemons' configs; user files are never hand-edited. The resolver's
   config and trust anchor are the two exceptions, and they are not a preference:
@@ -1128,6 +1143,11 @@ be the released artefact.
    **`link` must land groups (§4.4) here**, not later — every module after this
    keys off them, so retrofitting the primary key is the one sequencing mistake
    that would be expensive.
+   Partly done: `link` has landed groups and owns the router's address on each
+   network, restored when olrd starts. Still owed: taking an interface from the
+   distribution's network manager (§7), bridges and VLANs, and all of `dial`
+   but DDNS — so there is no uplink object, and the WAN is still brought up by
+   whatever the distribution configured.
 2. **Make it a router.** `firewall` (zones/NAT) + `dhcp` + `dns`. Success: a
    client on LAN reaches the internet with no hand-edited config.
 3. **Make it safe.** Lockout guard, per-module revisions, impact classification.
@@ -1158,14 +1178,15 @@ browser. It paid immediately: reflecting `netip.Addr` and a duration wrapper
 published the wrong types on every surface, a defect invisible from Go and
 uncorrectable later without breaking clients.
 
-What that jump does **not** buy is milestone 1. Pools are still keyed by kernel
-interface name, so the DHCP screen is keyed on something §4.4 says is an
-implementation detail, and it is scaffolding until `link` lands groups. Nothing
-downstream should be built on that key in the meantime.
+What that jump did **not** buy is milestone 1. Pools were keyed by kernel
+interface name, so the DHCP screen was keyed on something §4.4 says is an
+implementation detail, and it was scaffolding until `link` landed groups. They
+are keyed by network now, which is the retrofit this paragraph was warning
+about.
 
-**A minimal `link` landed early, and it is not milestone 1 either.** It owns one
-field — the list of adopted interface names — plus a kernel reader for the
-observed half. It exists because the adopt-only rule (§3.4, §7) was being
+**A minimal `link` landed early, and it was not milestone 1 either.** At first it
+owned one field — the list of adopted interface names — plus a kernel reader for
+the observed half. It existed because the adopt-only rule (§3.4, §7) was being
 enforced by three modules against a fact with nowhere to live: `dhcp`, `dns` and
 `gateway` each refused an interface nobody had handed over, `olr adopt` was a
 stub, and the flag was reachable only by hand-writing a JSON file that olrd's
@@ -1173,18 +1194,21 @@ own systemd unit never passed. The result was that a packaged install could not
 configure DHCP at all — every pool failed validation with "no such interface". A
 safety rule nobody can satisfy is not a safety rule.
 
-What it deliberately does not do: it lands no groups, sets no addresses, brings
-no interface up, and takes nothing from NetworkManager. Pools stay keyed by
-kernel interface name, exactly as above, so the retrofit this section warns
-about is neither done nor made harder. Milestone 1 still owes all of it.
+It has since grown the network. `link` lands groups, pools are keyed by them,
+and applying one writes the router's address to its member, brings it up and
+removes any other IPv4 address there, with olrd putting the address back when
+it starts. What it still does not do is bring up the WAN or take an interface
+from NetworkManager, systemd-networkd or ifupdown — §7 has what that leaves the
+operator to do in the meantime — and milestone 1 still owes both.
 
 Two things about it are worth keeping when the real module arrives. The observed
 half — addresses, up, carrier — is read from the kernel per request and never
 stored, so §4.5 holds by construction rather than by discipline; the file it
 replaced was a second copy that could and did disagree with the machine. And
-adoption is the only *stored* half, which is what makes `olr adopt` a
-one-sentence write that touches nothing on the box — the property §7 needs when
-it promises that installing changes nothing.
+adoption stays a stored half of its own, apart from the network, which is what
+keeps `olr adopt` a one-sentence write that touches nothing on the box — the
+property §7 needs when it promises that installing changes nothing. Addressing
+belongs to the network, a second and deliberate act.
 
 ---
 
