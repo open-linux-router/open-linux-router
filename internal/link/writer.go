@@ -44,6 +44,31 @@ type Desired struct {
 	// interface down is not something any group configuration implies, and an
 	// operator who wants that has `ip link` and means it.
 	Up bool
+
+	// AddOnly suppresses the removal half: addresses in Addrs are added if
+	// missing, and a v4 address on the interface that Addrs does not call for
+	// is left alone instead of being taken off.
+	//
+	// It exists for exactly one caller, Applier.Restore, and the distinction is
+	// between two jobs that look alike and are not. An operator applying a
+	// change has said what this interface's addressing *is*, and PlanAddrs'
+	// ownership claim is what makes that mean something. Startup has been told
+	// nothing; it is putting back what a reboot erased, and the box it is
+	// putting it back on is one whose other address sources — a DHCP client on
+	// a member interface, an operator's `ip addr add` — have not necessarily
+	// finished running yet.
+	//
+	// Enforcing ownership against that is a race olr loses in the worst
+	// possible way. The failure is concrete rather than theoretical: until
+	// `link` grows the WAN/LAN split that PlanAddrs' comment already assumes,
+	// a one-armed router has its uplink address on a group member, and a
+	// startup that removed it would take the box off the network on every boot,
+	// with the operator's only route back being physical.
+	//
+	// The asymmetry is the safe one. Too many addresses is a state an operator
+	// can see and fix from a shell they can still reach; too few is one that
+	// takes the shell away.
+	AddOnly bool
 }
 
 // Step is one kernel operation, reported whether or not it succeeded.

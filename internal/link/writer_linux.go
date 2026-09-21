@@ -83,8 +83,10 @@ func (linuxWriter) Apply(ctx context.Context, desired []Desired) ([]Step, error)
 			steps = append(steps, step)
 		}
 
+		// The removal half, and the whole of what AddOnly suppresses: every v4
+		// address on a member that the network does not call for comes off.
 		for _, got := range have {
-			if slices.Contains(d.Addrs, got) {
+			if d.AddOnly || slices.Contains(d.Addrs, got) {
 				continue
 			}
 			step := Step{Description: fmt.Sprintf("remove %s from %s", got, d.Interface)}

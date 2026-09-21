@@ -240,8 +240,13 @@ func run(args []string) error {
 		Events:  srv.Events(),
 	}.Routes(), system.Config{})
 
+	// Hoisted into a variable rather than built inline like the modules above
+	// it, because startup restores this one's kernel state as well as serving
+	// it. See the restore block below.
+	linkApplier := link.Applier{Store: store, Source: source}
+
 	srv.Mount(link.ModuleName, link.HTTP{
-		Applier: link.Applier{Store: store, Source: source},
+		Applier: linkApplier,
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
 	}.Routes(), link.Config{})
@@ -445,12 +450,28 @@ func run(args []string) error {
 
 	// Stored intent is put back in force here, for the modules that need it.
 	//
-	// Three of them need it because the kernel forgets: nftables rules, `ip
-	// rule` entries, route tables and a WireGuard interface do not survive a
-	// reboot, so without this a box would come back up with its configuration
-	// intact and none of it in force — and for `remote` that means an operator
-	// who is away from the box being unable to reach the box they would fix it
-	// from.
+	// Most of them need it because the kernel forgets: interface addresses,
+	// nftables rules, `ip rule` entries, route tables and a WireGuard interface
+	// do not survive a reboot, so without this a box would come back up with
+	// its configuration intact and none of it in force — and for `remote` that
+	// means an operator who is away from the box being unable to reach the box
+	// they would fix it from.
+	//
+	// `link` goes first, and the order is load-bearing rather than tidy. An
+	// interface address is the fact the modules after it are written against:
+	// dnsmasq will not serve a range it holds no address inside, `dns` derives
+	// allow_from from the prefixes on adopted interfaces at render time, and a
+	// gateway policy describes networks this box is supposed to be on. Restore
+	// them in the other order and each one converges against a box that has not
+	// got its addresses back yet — rendering an empty allow list, which denies
+	// every client, into a file that is then correct-looking and stale until
+	// something else triggers a render.
+	//
+	// This is also the line whose absence was the bug: `link` programs
+	// addresses through netlink and was never in this list, so a reboot took
+	// the router's own address off the box and three modules broke downstream
+	// of it. link.Applier.Restore has the rest, including why it is additive
+	// where an operator's apply is not.
 	//
 	// `dns` is here for a different reason, and it is the reason the other
 	// file-rendering module is not. dnsmasq and unbound read files that survive
@@ -472,6 +493,7 @@ func run(args []string) error {
 	// None of them ever fails the start. A box whose routing cannot be
 	// programmed is exactly the box whose API has to come up, because the API is
 	// how it gets fixed.
+	startLink(ctx, linkApplier, logger)
 	startGateway(ctx, gatewayApplier, prober, logger)
 	startFirewall(ctx, firewallApplier, logger)
 	startRemote(ctx, remoteTunnel, remoteProxy, logger)
@@ -761,6 +783,45 @@ func startGateway(ctx context.Context, a gateway.Applier, prober *gateway.Prober
 	}
 
 	prober.Watch(ctx, cfg)
+}
+
+// startLink puts the router's own addresses back after a reboot.
+//
+// First of the restore steps, because everything after it is written against
+// the addresses this puts back — the block at the call site has the ordering
+// argument, and link.Applier.Restore has the rest.
+//
+// The empty case is silent on purpose. A box with no networks configured is
+// the overwhelmingly common state of a freshly installed olr, and logging
+// "nothing to restore" on every boot of every such box would teach an operator
+// to skim exactly the lines this block writes when something is wrong.
+func startLink(ctx context.Context, a link.Applier, logger *slog.Logger) {
+	steps, err := a.Restore(ctx)
+	if err != nil {
+		logger.Error("interface addressing could not be restored", "error", err,
+			"steps", len(steps))
+		return
+	}
+
+	var done int
+	for _, s := range steps {
+		if s.Done {
+			done++
+		}
+		if s.Error != "" {
+			// Per step rather than per call: a multi-interface restore that
+			// half-lands is reported as what landed and what did not, the same
+			// way the writer reports it to an operator (link.Writer).
+			logger.Error("interface addressing step failed",
+				"step", s.Description, "error", s.Error)
+		}
+	}
+	if done > 0 {
+		// Only when something was actually programmed. An idempotent restore
+		// against a box that never rebooted is the normal case and says
+		// nothing.
+		logger.Info("interface addressing restored", "changes", done)
+	}
 }
 
 // startFirewall programs stored port forwards.

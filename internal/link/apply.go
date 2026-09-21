@@ -179,3 +179,57 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 	}
 	return result, nil
 }
+
+// Restore puts stored addressing back on the interfaces after a reboot.
+//
+// # Why this exists at all
+//
+// An address is kernel state, and the kernel forgets it. Every other thing
+// this product programs into the kernel is put back when olrd starts —
+// nftables tables, RPDB entries, route tables, a WireGuard interface — and
+// `link` was simply never added to that list. The result was a box that came
+// back from a reboot with its configuration intact and its router address
+// gone: dnsmasq with no address inside the range it serves, a `dns` render
+// deriving allow_from from an interface that no longer carried the LAN, and a
+// gateway whose policy pointed at a network the box was no longer on. One
+// missing line, three modules visibly broken, and nothing in olr saying why.
+//
+// # Why it is not just Apply
+//
+// Two differences, and both matter.
+//
+// It does not save. Apply is the operator's path and writes the document
+// because the operator said something new; startup has been told nothing, and
+// a restore that rewrote olr.json on every boot would put a modification time
+// on a file nobody edited.
+//
+// It is additive (Desired.AddOnly). Apply enforces PlanAddrs' ownership claim,
+// which is correct when a human said what an interface's addressing is, and
+// is a race at boot against every other address source on the box. AddOnly's
+// comment has the argument and the concrete way it bites.
+//
+// Failure is reported and never fatal, like every other start step: a box
+// whose addresses cannot be programmed is exactly the box whose API has to
+// come up, because the API is how it gets fixed.
+func (a Applier) Restore(ctx context.Context) ([]Step, error) {
+	cfg, err := a.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	want := DesiredFor(cfg)
+	if len(want) == 0 {
+		// Same promise Apply keeps: a box with no networks is one olr has not
+		// been asked to address, and startup touches nothing on it (§7).
+		return nil, nil
+	}
+	for i := range want {
+		want[i].AddOnly = true
+	}
+
+	steps, err := a.writer().Apply(ctx, want)
+	if err != nil {
+		return steps, fmt.Errorf("restoring interface addressing: %w", err)
+	}
+	return steps, nil
+}

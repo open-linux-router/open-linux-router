@@ -2,8 +2,13 @@ package link
 
 import (
 	"net/netip"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 // The network object, which is the half of this module that reaches the kernel.
@@ -385,5 +390,138 @@ func TestApplyStoresIntentEvenWhenTheKernelRefuses(t *testing.T) {
 	}
 	if _, ok := stored.Group("lan"); !ok {
 		t.Error("the network was not stored, so the failure left nothing to retry or inspect")
+	}
+}
+
+// The bug this exists to stop: an address is kernel state and the kernel
+// forgets it, so a box came back from a reboot with its configuration intact
+// and its router address gone — dnsmasq holding no address inside the range it
+// serves, and `dns` deriving allow_from from an interface no longer carrying
+// the LAN.
+func TestRestorePutsTheAddressBackAfterAReboot(t *testing.T) {
+	w := &RecordingWriter{}
+	a := Applier{Store: storeWith(t, ""), Source: staticSource(testInterfaces(t)...), Writer: w}
+
+	cfg := Config{
+		Adopted: []string{"lan0"},
+		Groups:  []Group{group("lan", "172.16.1.0/24", "lan0")},
+	}
+	if _, err := a.Apply(t.Context(), cfg); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	// The reboot: the kernel forgets, the document does not.
+	w.Applied = nil
+
+	if _, err := a.Restore(t.Context()); err != nil {
+		t.Fatalf("restore failed: %v", err)
+	}
+	if len(w.Applied) != 1 {
+		t.Fatalf("writer saw %+v, want one interface", w.Applied)
+	}
+	d := w.Applied[0]
+	if d.Interface != "lan0" || len(d.Addrs) != 1 || d.Addrs[0].String() != "172.16.1.1/24" {
+		t.Errorf("writer saw %+v, want lan0 with 172.16.1.1/24", d)
+	}
+	if !d.Up {
+		t.Error("the member was not asked to be brought up")
+	}
+}
+
+// Startup may not enforce PlanAddrs' ownership claim. An operator applying a
+// change has said what an interface's addressing is; startup has been told
+// nothing and is racing every other address source on the box. Until `link`
+// grows the WAN/LAN split PlanAddrs already assumes, a one-armed router
+// carries its uplink address on a group member — and a restore that removed it
+// would take the box off the network on every boot, with the only way back
+// being physical.
+func TestRestoreNeverTakesAnAddressOffTheBox(t *testing.T) {
+	w := &RecordingWriter{}
+	a := Applier{Store: storeWith(t, ""), Source: staticSource(testInterfaces(t)...), Writer: w}
+
+	cfg := Config{
+		Adopted: []string{"lan0"},
+		Groups:  []Group{group("lan", "172.16.1.0/24", "lan0")},
+	}
+	if _, err := a.Apply(t.Context(), cfg); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	w.Applied = nil
+
+	if _, err := a.Restore(t.Context()); err != nil {
+		t.Fatalf("restore failed: %v", err)
+	}
+	if len(w.Applied) != 1 {
+		t.Fatalf("writer saw %+v, want one interface", w.Applied)
+	}
+	if !w.Applied[0].AddOnly {
+		t.Error("a boot-time restore must add without removing")
+	}
+
+	// The operator's path keeps the claim. If this ever flips, the ownership
+	// PlanAddrs documents has quietly stopped being enforced anywhere.
+	w.Applied = nil
+	if _, err := a.Apply(t.Context(), cfg); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if w.Applied[0].AddOnly {
+		t.Error("an operator's apply still owns the interface's addressing")
+	}
+}
+
+// §7's promise survives the new call: a box with no networks is one olr has
+// not been asked to address, and startup must not reach a kernel on it.
+func TestRestoreTouchesNothingWithoutNetworks(t *testing.T) {
+	w := &RecordingWriter{}
+	a := Applier{Store: storeWith(t, ""), Source: staticSource(testInterfaces(t)...), Writer: w}
+
+	if _, err := a.Apply(t.Context(), Config{Adopted: []string{"lan0"}}); err != nil {
+		t.Fatalf("adopting failed: %v", err)
+	}
+	w.Applied = nil
+
+	if _, err := a.Restore(t.Context()); err != nil {
+		t.Fatalf("restore failed: %v", err)
+	}
+	if len(w.Applied) != 0 {
+		t.Errorf("the writer was called with %+v on a box with no networks", w.Applied)
+	}
+}
+
+// Restore is not Apply: the operator said nothing, so nothing is stored. A
+// boot that rewrote olr.json would put a modification time on a file nobody
+// edited, which is the one thing an operator reads to answer "when did this
+// box last change?".
+func TestRestoreDoesNotRewriteTheDocument(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "olr.json")
+	store := core.NewStore(path, ModuleName, "dhcp")
+	w := &RecordingWriter{}
+	a := Applier{Store: store, Source: staticSource(testInterfaces(t)...), Writer: w}
+
+	cfg := Config{
+		Adopted: []string{"lan0"},
+		Groups:  []Group{group("lan", "172.16.1.0/24", "lan0")},
+	}
+	if _, err := a.Apply(t.Context(), cfg); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	// Dated well into the past, so "unchanged" is unambiguous rather than a
+	// question about filesystem timestamp resolution.
+	old := time.Now().Add(-24 * time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := a.Restore(t.Context()); err != nil {
+		t.Fatalf("restore failed: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(old) {
+		t.Errorf("restore rewrote the configuration document (mtime moved to %v)", info.ModTime())
 	}
 }
