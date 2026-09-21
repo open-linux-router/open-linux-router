@@ -121,7 +121,9 @@ type Observed struct {
 	// string comparison.
 	Lines []string
 
-	// Sysctls are the per-interface settings this module owns, by key.
+	// Sysctls are the kernel settings this module owns, by key: the
+	// machine-wide forwarding switch (§3.8) and the per-interface redirect
+	// settings (§5.2).
 	//
 	// Kept out of Lines on purpose. Every other line describes an object we
 	// created and would delete; a sysctl is a pre-existing kernel setting we
@@ -370,12 +372,18 @@ func classify(c Config, plan Plan, obs Observed, desired Desired, admin netip.Ad
 
 	// Reported here rather than in Validate because it is a fact about the
 	// running kernel, not about the configuration — and the sysctl we would
-	// have to write to fix it belongs to interfaces nobody handed us.
+	// have to write to fix it changes behaviour on interfaces nobody handed us.
+	//
+	// ForwardingSysctl is machine-wide too and *is* written (§3.8), so the line
+	// below no longer gets to say "olr does not write machine-wide sysctls".
+	// The distinction that survives is what the key decides: whether this box
+	// forwards is ours, and what every unadopted interface does with redirects
+	// is not.
 	if obs.AllSendRedirects != nil && *obs.AllSendRedirects && hasSendRedirects(desired) {
 		reasons = append(reasons,
 			"net.ipv4.conf.all.send_redirects is 1, and the kernel combines it with the "+
 				"per-interface setting, so clients may still be told to bypass this router. "+
-				"Set it to 0 yourself — olr does not write machine-wide sysctls")
+				"Set it to 0 yourself — it also governs interfaces olr was never given")
 	}
 
 	return impact, reasons

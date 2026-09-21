@@ -44,7 +44,8 @@ type Desired struct {
 	// Routes are the per-exit default routes, in our documented table range.
 	Routes []RouteSpec
 
-	// Sysctls are the per-interface kernel settings this module owns (§5.2).
+	// Sysctls are the kernel settings this module owns: IP forwarding (§3.8)
+	// and the per-interface redirect settings (§5.2).
 	Sysctls []SysctlSpec
 
 	// Stat is the accounting table (§7.1), and it is deliberately outside
@@ -312,19 +313,31 @@ type RouteSpec struct {
 	Why  string
 }
 
-// SysctlSpec is one per-interface kernel setting this module owns (§5.2).
+// SysctlSpec is one kernel setting this module owns (§3.8, §5.2).
 //
-// Per-interface only. design.md §3.4 says shared state is touched only when a
-// module explicitly owns that concern, and what this module owns is the
-// interfaces it routes through — not `net.ipv4.conf.all.*`, which would change
-// behaviour on interfaces nobody handed us. The one place that bites is
-// `send_redirects`, where the kernel ORs the `all` value with the per-interface
-// one; when `all` is 1 the plan reports it rather than quietly writing it.
+// Per-interface, with exactly one exception: ForwardingSysctl, which is
+// machine-wide because the concern is. design.md §3.4 says shared state is
+// touched only when a module explicitly owns that concern — "does this box
+// forward" is owned here and nowhere else, and renderSysctls argues it.
+//
+// Everything else stays on the interfaces we route through, never
+// `net.ipv4.conf.all.*`, which would change behaviour on interfaces nobody
+// handed us. The one place that bites is `send_redirects`, where the kernel ORs
+// the `all` value with the per-interface one; when `all` is 1 the plan reports
+// it rather than quietly writing it.
 type SysctlSpec struct {
 	Key   string
 	Value string
 	Why   string
 }
+
+// ForwardingSysctl is the machine-wide IPv4 forwarding switch.
+//
+// Named rather than spelled inline because three places have to agree on it:
+// renderSysctls writes it, LinuxKernel.readSysctls reads it back so drift means
+// something, and the planner reports it as the reason a box with a complete
+// routing policy still forwards nothing.
+const ForwardingSysctl = "net.ipv4.ip_forward"
 
 // Line is this rule's canonical form, and also the bytes stored in its netlink
 // userdata so that reading the kernel back reproduces it exactly.
@@ -619,11 +632,38 @@ func renderSources(d *Desired, c Config, links LinkView) {
 	})
 }
 
-// renderSysctls is §5.2, in both directions.
+// renderSysctls is §3.8 and §5.2: the switch that makes this box a router at
+// all, and the two redirect settings that keep traffic coming through it.
 //
-// When the exit's next hop shares a segment with the clients — the normal case,
-// and the one a WAN gateway never produces — two things happen that have to be
-// turned off explicitly:
+// **IP forwarding first, because nothing else in this module means anything
+// without it.** Every rule, route and SNAT entry here describes what happens to
+// a packet addressed to somewhere else, and with `net.ipv4.ip_forward` at 0 the
+// kernel drops that packet before any of it is consulted. A module that
+// programs the whole forwarding path and then leaves the box not forwarding is
+// not being a good citizen, it is being broken — so this is written, and §3.8
+// records the argument in full.
+//
+// It is the one machine-wide key this module writes, against design.md §3.4's
+// *don't squat shared state*. That rule's own wording is what permits it:
+// sysctls are touched "only when a module explicitly owns that concern", and
+// the concern here is whether this box forwards. Per-interface
+// `conf.<dev>.forwarding` would be the narrower write and IPv4 honours it — the
+// forwarding decision reads the *ingress* device's flag — but it needs setting
+// on both the arrival and the departure interface to pass a packet and its
+// reply, and any third party writing the global key resets every per-device
+// value underneath us. Narrower, and less likely to still be true in an hour.
+// §3.8 takes the plain one while the module is young.
+//
+// IPv6 is deliberately not here. `net.ipv6.conf.all.forwarding` switches every
+// interface out of host mode, and an interface in router mode stops accepting
+// the RAs this box may be getting its own address and default route from. That
+// needs `accept_ra=2` on the uplink to be safe, which needs an uplink object to
+// hang it on — `dial` (design.md §4), which does not exist yet. Exits block
+// IPv6 by default (IPv6OrDefault), so the gap is visible rather than silent.
+//
+// Then §5.2, in both directions. When the exit's next hop shares a segment with
+// the clients — the normal case, and the one a WAN gateway never produces — two
+// things happen that have to be turned off explicitly:
 //
 //   - We forward a packet back out the interface it arrived on, and the kernel
 //     helpfully tells the client to talk to the proxy box directly. Some clients
@@ -632,6 +672,18 @@ func renderSources(d *Desired, c Config, links LinkView) {
 //     interface and sends *us* a redirect, and our table quietly acquires routes
 //     we did not choose.
 func renderSysctls(d *Desired, c Config, links LinkView) {
+	// Unconditional within an enabled module, and not tied to an exit existing.
+	// The configuration that needs this most is the one with no exits at all:
+	// `default` unset means "everything uses this box's own connection", which
+	// is precisely a box that has to forward. Keying it on an exit would leave
+	// the commonest working setup as the one that does not work.
+	d.Sysctls = append(d.Sysctls, SysctlSpec{
+		Key:   ForwardingSysctl,
+		Value: "1",
+		Why: "without it the kernel drops every packet addressed to somewhere " +
+			"else, so nothing behind this router reaches anything",
+	})
+
 	devs := map[string]bool{}
 	for _, e := range c.Exits {
 		if e.Via.Kind != ViaNextHop || !c.InUse(e.Name) {

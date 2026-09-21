@@ -112,8 +112,9 @@ type StaticKernel struct {
 	// kernel reports, so sysctls are *not* in here. Apply replaces it.
 	State []string
 
-	// Sysctls is the per-interface settings, by key, as the real kernel reports
-	// them. Apply records what it was asked to write.
+	// Sysctls is the settings this module owns, by key, as the real kernel
+	// reports them: the machine-wide forwarding switch and the per-interface
+	// redirect settings. Apply records what it was asked to write.
 	Sysctls map[string]string
 
 	// Foreign, AllSendRedirects and Active fill out the rest of Observed.

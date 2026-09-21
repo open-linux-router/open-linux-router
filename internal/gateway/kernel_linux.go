@@ -864,14 +864,24 @@ func (k LinuxKernel) readSysctl(key string) (string, bool) {
 	return strings.TrimSpace(string(data)), true
 }
 
-// readSysctls reads the per-interface settings this module owns, for every
-// interface that has them.
+// readSysctls reads the settings this module owns: the machine-wide forwarding
+// switch, and the per-interface redirect settings for every interface that has
+// them.
 //
 // Read broadly, write narrowly (design.md §3.4): we look at every interface so
 // the plan can say something true about the ones we are about to touch, and we
 // only ever write to the ones an exit actually uses.
+//
+// Forwarding is read here rather than trusted from the last apply, and that is
+// what makes it drift rather than a one-shot. Docker, libvirt and k8s all write
+// the global key on startup, and the kernel's write path resets every
+// per-device value with it — so a box olr left forwarding can stop forwarding
+// because something else was installed, and this is the read that notices.
 func (k LinuxKernel) readSysctls() map[string]string {
 	out := map[string]string{}
+	if v, ok := k.readSysctl(ForwardingSysctl); ok {
+		out[ForwardingSysctl] = v
+	}
 	links, err := netlink.LinkList()
 	if err != nil {
 		return out

@@ -458,3 +458,53 @@ func TestCanonicalLinesFitTheKernelsUserdataLimit(t *testing.T) {
 		}
 	}
 }
+
+// §3.8. Every rule, route and SNAT entry in this module describes what happens
+// to a packet addressed to somewhere else, and the kernel drops that packet
+// before consulting any of them while this is 0. A module that programs the
+// whole forwarding path and leaves the box not forwarding is broken.
+func TestForwardingIsTurnedOn(t *testing.T) {
+	got := lines(t, testConfig(), nil)
+	if !contains(got, "sysctl net.ipv4.ip_forward = 1") {
+		t.Errorf("a router has to forward: %s", dump(got))
+	}
+}
+
+// The case that motivated writing it at all, and the one an exit-keyed
+// condition would have missed: `default` unset means "everything uses this
+// box's own connection", which is precisely a box that has to forward. It is
+// also the shape every olr install has before its first exit is added.
+func TestForwardingIsTurnedOnWithNoExitsAtAll(t *testing.T) {
+	c := Config{Enabled: true}
+	c.Normalize()
+	got := Render(c, testLinks(), nil).Lines()
+
+	if !contains(got, "sysctl net.ipv4.ip_forward = 1") {
+		t.Errorf("a box with no exits still forwards for its own LAN: %s", dump(got))
+	}
+}
+
+// Switched off means "leave the box routing exactly as it did before olr was
+// installed" (Desired.Enabled), and a box we taught to forward is not that.
+func TestADisabledModuleWritesNoSysctls(t *testing.T) {
+	c := Config{Enabled: false}
+	c.Normalize()
+	got := Render(c, testLinks(), nil).Lines()
+
+	if containsPrefix(got, "sysctl ") {
+		t.Errorf("a disabled module writes nothing: %s", dump(got))
+	}
+}
+
+// Deliberately absent until there is an uplink object to hang `accept_ra=2` on:
+// net.ipv6.conf.all.forwarding switches every interface out of host mode, and
+// an interface in router mode stops accepting the RAs this box may be getting
+// its own address and default route from.
+func TestIPv6ForwardingIsNotWritten(t *testing.T) {
+	got := lines(t, testConfig(), nil)
+	for _, l := range got {
+		if strings.Contains(l, "sysctl") && strings.Contains(l, "forwarding") {
+			t.Errorf("v6 forwarding needs accept_ra=2 first, so it is not ours to write: %q", l)
+		}
+	}
+}

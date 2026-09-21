@@ -346,6 +346,76 @@ Blackhole drops silently and every connection hangs for thirty seconds.
 `unreachable` sends ICMP admin-prohibited and applications fail immediately.
 Same feature, completely different experience for whoever is holding the tablet.
 
+### 3.8 IP forwarding, and the one machine-wide sysctl
+
+Everything above describes what happens to a packet **addressed to somewhere
+else**. With `net.ipv4.ip_forward` at 0 the kernel drops that packet before any
+of it is consulted — the marks are never read, the tables are never looked up,
+the SNAT rule never fires. A module that programs the entire forwarding path and
+then leaves the box not forwarding is not being a good citizen, it is being
+broken.
+
+So **this module writes it**, and it is the one machine-wide sysctl in olr.
+
+> `net.ipv4.ip_forward = 1`, whenever the module is enabled.
+
+#### Against §3.4's *don't squat shared state*
+
+That rule's own wording is what permits this. Sysctls are touched "only when a
+module explicitly owns that concern", and *whether this box forwards* is owned
+here and nowhere else. The rule exists to stop us changing behaviour on things
+nobody handed us — and forwarding is not a property of an interface we were or
+were not given, it is a property of the box the operator installed a router on.
+
+The neighbouring keys stay per-interface and the distinction is exactly that:
+`send_redirects` on an unadopted NIC is somebody else's business, and §5.2
+reports `conf.all.send_redirects` rather than writing it for that reason.
+
+#### Not keyed on an exit existing
+
+The configuration that needs forwarding most is the one with **no exits at
+all**: `default` unset means *"everything uses this box's own connection"*,
+which is precisely a box that has to forward. It is also the shape every olr
+install has before its first exit is added. Keying the sysctl on an exit would
+have left the commonest working setup as the one that does not work.
+
+#### Why the plain key and not `conf.<dev>.forwarding`
+
+Per-interface forwarding exists and IPv4 honours it — the forwarding decision
+reads the **ingress** device's flag — so the narrower write is available. Two
+things argue against it while the module is young:
+
+- It has to be set on **both** the arrival and the departure interface to pass a
+  packet *and its reply*, so "the LAN interface" is not the answer; the set is
+  "every interface any traffic we route enters or leaves by", which is a list
+  this module does not reliably have until `link` grows groups (§2.5).
+- Any third party writing the global key resets every per-device value
+  underneath us. Docker, libvirt and k8s all do this on startup. The narrow
+  write is the one more likely to be silently undone.
+
+The narrow form is the better long-term answer and is not ruled out — §9 carries
+it. What is not acceptable in the meantime is a router that does not route.
+
+#### It is read back, not written once
+
+`Observe` reads `net.ipv4.ip_forward` like every other piece of live state, so a
+box that stopped forwarding because something else was installed shows up as
+drift and `olr gateway` offers to put it back. Writing it once at apply time and
+trusting it afterwards would make this the one setting in the module that can be
+wrong without anybody being told.
+
+#### IPv6 is deliberately absent
+
+`net.ipv6.conf.all.forwarding` switches every interface out of host mode, and an
+interface in router mode **stops accepting the RAs** this box may be getting its
+own address and default route from. Turning it on would cost the box its own
+IPv6 connectivity on exactly the deployment dns:§1 leads with. Doing it safely
+needs `accept_ra=2` on the uplink, which needs an uplink object to hang it on —
+`dial` (§4), which does not exist yet.
+
+Exits block IPv6 by default (§5.4), so the gap fails visibly rather than
+silently, and §9 carries the work.
+
 ---
 
 ## 4. Domain rules are the proxy's, not ours
@@ -750,10 +820,13 @@ any work.
 | **v1** | exits: `next_hop`, `interface`, `blocked` | `interface` is nearly free once `next_hop` exists, and it is how WireGuard and Tailscale arrive |
 | | `Internet via` at **network** level | tag and device tiers wait on §10 #6 |
 | | nft classify + RPDB, documented mark/priority/table ranges | |
+| | `net.ipv4.ip_forward`, written and read back | §3.8 — the module programs the forwarding path, so it owns whether the box forwards |
 | | per-exit health probe, `block` on failure | dns:§1.2 depends on it |
 | | named counters, the `ipv4_addr . mark` set | |
 | | foreign `ip rule` detection and refusal | |
 | **v2** | `local_socket` (TPROXY) | wants dns:§2.1's return-path answer settled first |
+| | IPv6 forwarding | §3.8 — needs `accept_ra=2` on the uplink, so it waits for `dial` to own an uplink object |
+| | per-interface `conf.<dev>.forwarding` in place of the global key | §3.8 — the narrower write, once `link`'s groups say which interfaces traffic enters and leaves by |
 | | tag and device tiers of the ladder | |
 | | conntrack-derived per-flow detail | |
 | **Later** | multi-WAN failover policy beyond `block` / `direct` | hysteresis and probe design are their own scope |

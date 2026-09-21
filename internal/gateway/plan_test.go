@@ -401,3 +401,46 @@ func TestAStaleAccountingTableIsPlannedForReplacement(t *testing.T) {
 		t.Errorf("replacing the accounting table moves no traffic: %v", plan.Reasons)
 	}
 }
+
+// §3.8, and the reason forwarding is read back rather than written once and
+// trusted: Docker, libvirt and k8s all write the global key on startup, and the
+// kernel's write path resets every per-device value with it. A box olr left
+// forwarding can stop forwarding because something else was installed, and the
+// plan is where that has to surface.
+func TestForwardingTurnedOffBehindUsIsDrift(t *testing.T) {
+	c := testConfig()
+	c.Normalize()
+	k := programmed(t, c)
+	k.Sysctls[ForwardingSysctl] = "0"
+
+	plan := planFor(t, c, k, netip.Addr{})
+	if !containsLine(plan, "add sysctl net.ipv4.ip_forward = 1") {
+		t.Fatalf("a box that stopped forwarding has drifted, got %v", changeLines(plan))
+	}
+}
+
+// The other direction of the same read: a box already forwarding is not work.
+// Without this the plan would report a change on every apply of every config,
+// and design.md §5.4's "an empty plan means the box agrees with intent" stops
+// being true for every router olr has ever configured.
+func TestForwardingAlreadyOnIsNotAChange(t *testing.T) {
+	c := testConfig()
+	c.Normalize()
+	k := programmed(t, c)
+
+	plan := planFor(t, c, k, netip.Addr{})
+	for _, l := range changeLines(plan) {
+		if strings.Contains(l, "ip_forward") {
+			t.Errorf("a box already forwarding needs no work: %q", l)
+		}
+	}
+}
+
+func containsLine(p Plan, want string) bool {
+	for _, l := range changeLines(p) {
+		if l == want {
+			return true
+		}
+	}
+	return false
+}
