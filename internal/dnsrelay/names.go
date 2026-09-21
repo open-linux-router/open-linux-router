@@ -110,20 +110,34 @@ func (m *NameMap) Record(client netip.Addr, obs Observation, now time.Time) {
 	}
 }
 
-// Snapshot returns the live entries, newest first, dropping anything expired.
-func (m *NameMap) Snapshot(now time.Time) []Name {
+// Snapshot returns up to limit live entries, newest first, dropping anything
+// expired. A negative limit — Unbounded — returns everything.
+//
+// The sort runs outside the lock, which is why this takes and releases it by
+// hand rather than deferring. Ordering up to MaxNames entries while holding it
+// puts the observer's own bookkeeping behind a reader, and the observer is what
+// drains the tee: a slow read would surface as Stats.Dropped — observations
+// thrown away — rather than as a slow read. Copying first is what makes that
+// safe. The slice is local, and Record replaces a map entry wholesale rather
+// than mutating one in place, so nothing the sort touches is shared with a
+// writer.
+//
+// Unlike the query log's, this limit cannot narrow the work before the sort:
+// "the newest N" is only known once everything is ordered. What it saves is
+// encoding, sending and parsing entries nobody asked for, which on a full map
+// is all but a fraction of them.
+func (m *NameMap) Snapshot(now time.Time, limit int) []Name {
 	if m == nil {
 		return nil
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	m.expireLocked(now)
-
 	out := make([]Name, 0, len(m.entries))
 	for _, n := range m.entries {
 		out = append(out, n)
 	}
+	m.mu.Unlock()
+
 	sort.Slice(out, func(i, j int) bool {
 		if !out[i].LastSeen.Equal(out[j].LastSeen) {
 			return out[i].LastSeen.After(out[j].LastSeen)
@@ -135,6 +149,10 @@ func (m *NameMap) Snapshot(now time.Time) []Name {
 		}
 		return out[i].Addr.String() < out[j].Addr.String()
 	})
+
+	if limit >= 0 && limit < len(out) {
+		out = out[:limit]
+	}
 	return out
 }
 

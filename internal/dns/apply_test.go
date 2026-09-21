@@ -88,11 +88,18 @@ type fakeObserver struct {
 	err     error
 }
 
-func (f fakeObserver) Queries(context.Context) ([]Query, Stats, error) {
+func (f fakeObserver) Queries(context.Context, int) ([]Query, Stats, error) {
 	return nil, Stats{}, f.err
 }
-func (f fakeObserver) Names(context.Context) ([]Name, Stats, error) { return nil, Stats{}, f.err }
-func (f fakeObserver) Clients(context.Context) ([]Client, error)    { return f.clients, f.err }
+func (f fakeObserver) Names(context.Context, int) ([]Name, Stats, error) {
+	return nil, Stats{}, f.err
+}
+func (f fakeObserver) Stats(context.Context) (Stats, error) {
+	return Stats{}, f.err
+}
+func (f fakeObserver) Clients(context.Context) ([]Client, error) {
+	return f.clients, f.err
+}
 
 // testApplier builds an Applier rooted entirely inside a temp directory, which
 // is what makes the whole apply path testable without root, systemd or /etc.

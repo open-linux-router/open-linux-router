@@ -353,6 +353,19 @@ A socket rather than a state file because the alternative is a line per query
 appended to disk, and a great many olr boxes boot from an SD card. It also
 leaves §7.5 genuinely open instead of quietly answering it.
 
+`/queries` and `/names` take the same optional `?limit=` the API does, and the
+bound travels all the way down rather than being applied to what comes back.
+A polling page asks for the newest two hundred of five thousand; trimming the
+reply in `olrd` would have meant the relay encoded five thousand entries and
+`olrd` parsed them, to show two hundred. `stats.held` still reports the true
+total, so a caller that asked for fewer can say how many it is not showing, and
+an absent `limit` still means everything — `olr dns queries` reads the log in
+full and must not start truncating because a page wanted a screenful.
+
+Reading `/stats` gets the counters without the log. The status endpoint used to
+reach them through `/queries` and discard the rows, which put the whole ring on
+the socket every five seconds to report six integers.
+
 ### 4.6 Local names live in unbound, not in the relay
 
 A device on this network should be reachable by name. `hosts` in the module

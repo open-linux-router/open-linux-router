@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -91,17 +92,45 @@ func (r *Relay) serveObservations(ctx context.Context) (*apiServer, error) {
 	return &apiServer{server: server, listener: listener, path: path}, nil
 }
 
-func (r *Relay) handleQueries(w http.ResponseWriter, _ *http.Request) {
+// readLimit reads the optional ?limit= that bounds a list.
+//
+// Absent means everything, because `olr dns queries` reads this log in full
+// through olrd and a default bound would make it quietly truncate. The polling
+// surfaces ask for one explicitly, and `?limit=0` — the counters and none of
+// the rows — is a legitimate request rather than a malformed one.
+func readLimit(r *http.Request) (int, error) {
+	raw := r.URL.Query().Get("limit")
+	if raw == "" {
+		return Unbounded, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("limit must be a non-negative whole number, not %q", raw)
+	}
+	return n, nil
+}
+
+func (r *Relay) handleQueries(w http.ResponseWriter, req *http.Request) {
+	limit, err := readLimit(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	writeJSON(w, QueriesResponse{
-		Queries: r.Queries(),
+		Queries: r.Queries(limit),
 		Stats:   r.Snapshot(),
 	})
 }
 
-func (r *Relay) handleNames(w http.ResponseWriter, _ *http.Request) {
+func (r *Relay) handleNames(w http.ResponseWriter, req *http.Request) {
+	limit, err := readLimit(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	now := time.Now()
 	writeJSON(w, NamesResponse{
-		Names: r.Names(now),
+		Names: r.Names(now, limit),
 		Stats: r.Snapshot(),
 	})
 }

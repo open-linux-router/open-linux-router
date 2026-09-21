@@ -441,7 +441,9 @@ func run(args []string) error {
 	top.Handle(core.APIPrefix+"/mcp", mcpServer)
 	logger.Info("serving MCP", "path", core.APIPrefix+"/mcp", "tools", len(mcpServer.Tools()))
 
-	handler := core.WithLogging(core.WithRecovery(top))
+	// Shared units innermost, so its release runs as a panic unwinds and
+	// recovery still sees the panic.
+	handler := core.WithLogging(core.WithRecovery(core.WithSharedUnits(top)))
 
 	// --- listeners --------------------------------------------------------
 

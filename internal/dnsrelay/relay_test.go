@@ -372,7 +372,7 @@ func TestRelayRecordsWhatItSaw(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 	var queries []Query
 	for time.Now().Before(deadline) {
-		if queries = relay.Queries(); len(queries) > 0 {
+		if queries = relay.Queries(Unbounded); len(queries) > 0 {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -387,7 +387,7 @@ func TestRelayRecordsWhatItSaw(t *testing.T) {
 		t.Errorf("Client = %s", queries[0].Client)
 	}
 
-	names := relay.Names(time.Now())
+	names := relay.Names(time.Now(), Unbounded)
 	if len(names) != 1 || names[0].Name != "www.example.com" {
 		t.Fatalf("name map = %+v", names)
 	}
@@ -411,20 +411,20 @@ func TestBlockedAnswersStayOutOfTheNameMap(t *testing.T) {
 
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		if len(relay.Queries()) > 0 {
+		if len(relay.Queries(Unbounded)) > 0 {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	queries := relay.Queries()
+	queries := relay.Queries(Unbounded)
 	if len(queries) != 1 || !queries[0].Blocked {
 		t.Fatalf("the block was not recorded: %+v", queries)
 	}
 	if queries[0].Policy != "default" {
 		t.Errorf("Policy = %q — without it the log cannot say why", queries[0].Policy)
 	}
-	if names := relay.Names(time.Now()); len(names) != 0 {
+	if names := relay.Names(time.Now(), Unbounded); len(names) != 0 {
 		t.Errorf("a blocked answer entered the name map: %+v", names)
 	}
 }
@@ -547,7 +547,7 @@ func TestUnparseableResponsesAreCountedAndStillLogged(t *testing.T) {
 	if got := relay.counters.Unparsed.Load(); got != 1 {
 		t.Errorf("Unparsed = %d, want 1", got)
 	}
-	queries := relay.Queries()
+	queries := relay.Queries(Unbounded)
 	if len(queries) != 1 || queries[0].Rcode != "UNPARSED" {
 		t.Errorf("the query was dropped from the log entirely: %+v", queries)
 	}

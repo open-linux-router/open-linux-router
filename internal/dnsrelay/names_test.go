@@ -21,7 +21,7 @@ func TestNameMapRecordsAndExpires(t *testing.T) {
 
 	m.Record(client, obsOf("example.com", time.Hour, "93.184.216.34"), now)
 
-	got := m.Snapshot(now)
+	got := m.Snapshot(now, Unbounded)
 	if len(got) != 1 || got[0].Name != "example.com" {
 		t.Fatalf("Snapshot = %+v", got)
 	}
@@ -32,7 +32,7 @@ func TestNameMapRecordsAndExpires(t *testing.T) {
 		t.Errorf("Expires = %s, want TTL plus grace", got[0].Expires.Sub(now))
 	}
 
-	if later := m.Snapshot(now.Add(2*time.Hour + NameGrace)); len(later) != 0 {
+	if later := m.Snapshot(now.Add(2*time.Hour+NameGrace), Unbounded); len(later) != 0 {
 		t.Errorf("an expired entry survived: %+v", later)
 	}
 }
@@ -45,7 +45,7 @@ func TestNameMapHasAMinimumLifetime(t *testing.T) {
 	now := time.Now()
 	m.Record(netip.MustParseAddr("192.168.1.10"), obsOf("cdn.example", 30*time.Second, "1.2.3.4"), now)
 
-	got := m.Snapshot(now)
+	got := m.Snapshot(now, Unbounded)
 	if len(got) != 1 {
 		t.Fatal("nothing recorded")
 	}
@@ -65,7 +65,7 @@ func TestNameMapKeysByDeviceAndAddress(t *testing.T) {
 	m.Record(netip.MustParseAddr("192.168.1.10"), obsOf("news.example", time.Hour, shared), now)
 	m.Record(netip.MustParseAddr("192.168.1.20"), obsOf("shop.example", time.Hour, shared), now)
 
-	got := m.Snapshot(now)
+	got := m.Snapshot(now, Unbounded)
 	if len(got) != 2 {
 		t.Fatalf("held %d entries, want one per device", len(got))
 	}
@@ -87,7 +87,7 @@ func TestNameMapIsManyToMany(t *testing.T) {
 
 	m.Record(client, obsOf("example.com", time.Hour, "1.2.3.4", "5.6.7.8", "2606:2800::1"), now)
 
-	if got := m.Snapshot(now); len(got) != 3 {
+	if got := m.Snapshot(now, Unbounded); len(got) != 3 {
 		t.Errorf("held %d entries, want one per address", len(got))
 	}
 }
@@ -100,9 +100,36 @@ func TestNameMapKeepsTheChain(t *testing.T) {
 
 	m.Record(netip.MustParseAddr("192.168.1.10"), o, now)
 
-	got := m.Snapshot(now)
+	got := m.Snapshot(now, Unbounded)
 	if len(got) != 1 || len(got[0].Chain) != 1 || got[0].Chain[0] != "example.cdn.net" {
 		t.Errorf("the CNAME chain was lost: %+v", got)
+	}
+}
+
+// The limit is applied after the sort, so it is the newest entries that
+// survive — not whichever ones the map happened to iterate first.
+func TestNameMapSnapshotLimit(t *testing.T) {
+	m := NewNameMap()
+	now := time.Now()
+	client := netip.MustParseAddr("192.168.1.10")
+
+	m.Record(client, obsOf("old.example", time.Hour, "1.1.1.1"), now.Add(-2*time.Minute))
+	m.Record(client, obsOf("mid.example", time.Hour, "2.2.2.2"), now.Add(-time.Minute))
+	m.Record(client, obsOf("new.example", time.Hour, "3.3.3.3"), now)
+
+	got := m.Snapshot(now, 2)
+	if len(got) != 2 {
+		t.Fatalf("limit 2 returned %d entries, want 2", len(got))
+	}
+	if got[0].Name != "new.example" || got[1].Name != "mid.example" {
+		t.Errorf("limit took %q, %q; want the two most recently seen", got[0].Name, got[1].Name)
+	}
+
+	if got := m.Snapshot(now, 0); len(got) != 0 {
+		t.Errorf("limit 0 returned %d entries, want none", len(got))
+	}
+	if got := m.Snapshot(now, 50); len(got) != 3 {
+		t.Errorf("a limit past the end returned %d entries, want all 3", len(got))
 	}
 }
 
@@ -142,9 +169,9 @@ func TestNameMapSnapshotIsTotallyOrdered(t *testing.T) {
 		m.Record(netip.MustParseAddr("192.168.1.10"), obsOf("example.com", time.Hour, addr), now)
 	}
 
-	first := m.Snapshot(now)
+	first := m.Snapshot(now, Unbounded)
 	for range 10 {
-		next := m.Snapshot(now)
+		next := m.Snapshot(now, Unbounded)
 		for i := range first {
 			if first[i].Addr != next[i].Addr {
 				t.Fatalf("snapshot order is unstable at %d: %s vs %s", i, first[i].Addr, next[i].Addr)

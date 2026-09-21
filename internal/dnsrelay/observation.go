@@ -21,6 +21,14 @@ import (
 // Where the query log should eventually live is genuinely open (docs/dns.md
 // §7.5); keeping it in memory is the answer that pre-decides nothing.
 
+// Unbounded asks a snapshot for everything it holds.
+//
+// A sentinel rather than "zero means everything", because zero has a meaning
+// here that a caller genuinely wants: `?limit=0` asks for the counters and none
+// of the rows, which is what a status poll needs. Conflating the two is how
+// that caller silently starts receiving the whole log again.
+const Unbounded = -1
+
 // Query is one answered query, as recorded.
 //
 // The response echoes the question section, so {client, response bytes} is

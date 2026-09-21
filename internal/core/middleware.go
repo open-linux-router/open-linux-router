@@ -65,6 +65,24 @@ func WithLogging(next http.Handler) http.Handler {
 	})
 }
 
+// WithSharedUnits lets everything in one request share a single connection to
+// the service manager.
+//
+// A status reply asks systemd about several units — its module's own backends,
+// plus every distribution unit that would contend for the same port — and each
+// of those asks used to open, authenticate and close a connection of its own.
+// Nothing about the answers changes; the handshakes do. See unit_linux.go for
+// why the scope is a request and not a daemon.
+//
+// Lazy: a request that never asks about a unit never dials the bus.
+func WithSharedUnits(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, release := WithSharedUnitConn(r.Context())
+		defer release()
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // WithRecovery turns a panic into a 500 instead of a dead daemon.
 //
 // olrd is resident and holds the admin API; a nil map write in one module's

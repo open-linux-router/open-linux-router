@@ -79,17 +79,24 @@ func (t *ClientTable) Seen(addr netip.Addr, now time.Time) {
 }
 
 // Snapshot returns the table, busiest first.
+//
+// Locked by hand rather than deferred, so the sort of up to MaxTrackedClients
+// entries happens outside it, for the reason NameMap.Snapshot gives: this lock
+// is also taken by the observer on every answered query, and holding it through
+// a sort trades a fast read for dropped observations. The copy is by value —
+// Client is built from *clientCount here, under the lock — so the sort touches
+// nothing a writer can reach.
 func (t *ClientTable) Snapshot() []Client {
 	if t == nil {
 		return nil
 	}
 	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	out := make([]Client, 0, len(t.clients))
 	for addr, c := range t.clients {
 		out = append(out, Client{Addr: addr, Queries: c.queries, LastSeen: c.lastSeen})
 	}
+	t.mu.Unlock()
+
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Queries != out[j].Queries {
 			return out[i].Queries > out[j].Queries

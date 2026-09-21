@@ -9,6 +9,12 @@ import "context"
 // systemd: every call fails, loudly, rather than returning a plausible-looking
 // zero value that a test could mistake for a working service.
 
+// WithSharedUnitConn is a no-op here: there is no bus to share. It exists so
+// that callers scoping a request need no build tag of their own.
+func WithSharedUnitConn(ctx context.Context) (context.Context, func()) {
+	return ctx, func() {}
+}
+
 type noUnit struct{ unit string }
 
 // NewUnit reports that there is no service manager on this platform.

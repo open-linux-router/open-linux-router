@@ -75,12 +75,19 @@ func (l *QueryLog) Held() int {
 	return l.next
 }
 
-// Snapshot returns the log newest first.
+// Snapshot returns up to limit entries, newest first. A negative limit —
+// Unbounded — returns everything.
 //
 // Newest first because every consumer of this — the CLI table, the API, a
 // person looking for what just happened — wants the recent end. Returning it
 // oldest-first and making each caller reverse it is how one of them forgets.
-func (l *QueryLog) Snapshot() []Query {
+//
+// The limit is honoured here rather than by the caller, and that is the whole
+// point of it: the ring is already in order, so asking for the newest 200 of
+// 5000 copies 200 entries and encodes 200 entries. A caller that trimmed the
+// result instead would still have paid for the other 4800 twice over, once to
+// encode and once to parse.
+func (l *QueryLog) Snapshot(limit int) []Query {
 	if !l.Enabled() {
 		return nil
 	}
@@ -90,6 +97,9 @@ func (l *QueryLog) Snapshot() []Query {
 	held := l.next
 	if l.full {
 		held = l.capacity
+	}
+	if limit >= 0 && limit < held {
+		held = limit
 	}
 	out := make([]Query, 0, held)
 	// Walk backwards from the most recently written slot.

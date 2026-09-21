@@ -458,8 +458,13 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 		resp.Drift = &view
 	}
 
+	// The counters, and not the log that produced them. This used to ask for
+	// the queries and discard them, which meant every status poll — and the
+	// overview page polls this every five seconds — dragged the whole
+	// five-thousand-entry ring across the socket to read six integers off the
+	// end of it.
 	if h.Applier.Observer != nil {
-		if _, stats, err := h.Applier.Observer.Queries(r.Context()); err != nil {
+		if stats, err := h.Applier.Observer.Stats(r.Context()); err != nil {
 			resp.StatsError = err.Error()
 		} else {
 			view := viewStatsAPI(stats)
@@ -572,28 +577,25 @@ func (h HTTP) postFixBlockers(w http.ResponseWriter, r *http.Request) {
 // safety. stats.held still reports the true total, so a caller that asked for
 // fewer can say how many it is not showing.
 //
+// The bound is passed down to the relay rather than applied to what comes back.
+// Trimming here was the obvious first version and it saved the least valuable
+// hop: the relay had still encoded every entry and olrd had still parsed them,
+// so `?limit=200` against a full log did five thousand entries' work to return
+// two hundred.
+//
 // A malformed or negative limit is refused rather than ignored: a client that
 // meant to bound a response and did not is better off hearing about it than
 // receiving five thousand entries it will try to render.
-func readLimit(r *http.Request) (int, bool, error) {
+func readLimit(r *http.Request) (int, error) {
 	raw := r.URL.Query().Get("limit")
 	if raw == "" {
-		return 0, false, nil
+		return Unbounded, nil
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil || n < 0 {
-		return 0, false, fmt.Errorf("limit must be a non-negative whole number, not %q", raw)
+		return 0, fmt.Errorf("limit must be a non-negative whole number, not %q", raw)
 	}
-	return n, true, nil
-}
-
-// clamp returns the newest n entries. The lists arrive newest first, so this is
-// a prefix rather than a tail.
-func clamp[T any](in []T, n int, ok bool) []T {
-	if !ok || n >= len(in) {
-		return in
-	}
-	return in[:n]
+	return n, nil
 }
 
 type queriesResponse struct {
@@ -608,13 +610,13 @@ func (h HTTP) getQueries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit, bounded, err := readLimit(r)
+	limit, err := readLimit(r)
 	if err != nil {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	queries, stats, err := h.Applier.Observer.Queries(r.Context())
+	queries, stats, err := h.Applier.Observer.Queries(r.Context(), limit)
 	if err != nil {
 		// A 503 and not a 500: the relay being down is a state of the system,
 		// not a fault in olrd, and the difference tells the operator which
@@ -622,7 +624,6 @@ func (h HTTP) getQueries(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
-	queries = clamp(queries, limit, bounded)
 
 	resp := queriesResponse{Queries: make([]queryView, 0, len(queries)), AsOf: time.Now()}
 	for _, q := range queries {
@@ -646,18 +647,17 @@ func (h HTTP) getNames(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit, bounded, err := readLimit(r)
+	limit, err := readLimit(r)
 	if err != nil {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	names, stats, err := h.Applier.Observer.Names(r.Context())
+	names, stats, err := h.Applier.Observer.Names(r.Context(), limit)
 	if err != nil {
 		core.WriteError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
-	names = clamp(names, limit, bounded)
 
 	resp := namesResponse{Names: make([]nameView, 0, len(names)), AsOf: time.Now()}
 	for _, n := range names {

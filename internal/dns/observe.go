@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/dnsrelay"
@@ -30,6 +31,15 @@ import (
 // quickly rather than hanging the request. Resolution itself is unaffected
 // either way — the relay answers queries on a different path from this one.
 const ObserveTimeout = 2 * time.Second
+
+// Unbounded asks for every row a list holds.
+//
+// Spelled again here rather than borrowed from dnsrelay for the reason the rest
+// of this file exists: the relay's vocabulary dies at the module boundary, and
+// a caller of ObserveView should not have to import the backend to say "all of
+// them". It is a sentinel and not zero because zero is a request a caller
+// genuinely makes — the counters, none of the rows.
+const Unbounded = -1
 
 // Query is one answered query, as this module models it.
 type Query struct {
@@ -74,11 +84,22 @@ type Stats struct {
 // so the module can be tested without one, and so a plan against a box whose
 // relay is stopped is an ordinary case rather than a failure.
 type ObserveView interface {
-	// Queries returns the recent query log, newest first.
-	Queries(ctx context.Context) ([]Query, Stats, error)
+	// Queries returns up to limit entries of the query log, newest first.
+	// Unbounded returns all of it.
+	Queries(ctx context.Context, limit int) ([]Query, Stats, error)
 
-	// Names returns the domain→address map.
-	Names(ctx context.Context) ([]Name, Stats, error)
+	// Names returns up to limit entries of the domain→address map, newest
+	// first. Unbounded returns all of it.
+	Names(ctx context.Context, limit int) ([]Name, Stats, error)
+
+	// Stats returns the counters alone.
+	//
+	// Separate from Queries because the status poll wants only this, and
+	// reaching it through Queries meant a five-thousand-entry log crossed the
+	// socket every few seconds to be thrown away on arrival. A caller that
+	// wants both still makes one call; a caller that wants the counters no
+	// longer pays for the rows.
+	Stats(ctx context.Context) (Stats, error)
 
 	// Clients returns who has been resolving through us, which is what tells a
 	// harmless access-control change from one that cuts somebody off.
@@ -143,10 +164,19 @@ func (o SocketObserver) get(ctx context.Context, path string, into any) error {
 	return nil
 }
 
+// limitQuery renders a limit as the relay's query string. Unbounded asks for
+// nothing, because an absent parameter is how the relay spells "everything".
+func limitQuery(limit int) string {
+	if limit < 0 {
+		return ""
+	}
+	return "?limit=" + strconv.Itoa(limit)
+}
+
 // Queries implements ObserveView.
-func (o SocketObserver) Queries(ctx context.Context) ([]Query, Stats, error) {
+func (o SocketObserver) Queries(ctx context.Context, limit int) ([]Query, Stats, error) {
 	var body dnsrelay.QueriesResponse
-	if err := o.get(ctx, "/queries", &body); err != nil {
+	if err := o.get(ctx, "/queries"+limitQuery(limit), &body); err != nil {
 		return nil, Stats{}, err
 	}
 	out := make([]Query, 0, len(body.Queries))
@@ -160,9 +190,9 @@ func (o SocketObserver) Queries(ctx context.Context) ([]Query, Stats, error) {
 }
 
 // Names implements ObserveView.
-func (o SocketObserver) Names(ctx context.Context) ([]Name, Stats, error) {
+func (o SocketObserver) Names(ctx context.Context, limit int) ([]Name, Stats, error) {
 	var body dnsrelay.NamesResponse
-	if err := o.get(ctx, "/names", &body); err != nil {
+	if err := o.get(ctx, "/names"+limitQuery(limit), &body); err != nil {
 		return nil, Stats{}, err
 	}
 	out := make([]Name, 0, len(body.Names))
@@ -175,13 +205,26 @@ func (o SocketObserver) Names(ctx context.Context) ([]Name, Stats, error) {
 	return out, viewStats(body.Stats), nil
 }
 
-// Clients implements ObserveView.
-func (o SocketObserver) Clients(ctx context.Context) ([]Client, error) {
+// Stats implements ObserveView.
+func (o SocketObserver) Stats(ctx context.Context) (Stats, error) {
 	var body dnsrelay.Stats
 	if err := o.get(ctx, "/stats", &body); err != nil {
+		return Stats{}, err
+	}
+	return viewStats(body), nil
+}
+
+// Clients implements ObserveView.
+//
+// The same read as Stats, kept as its own method because it is its own
+// question — "who would this change cut off" — and the one caller that asks it
+// reads better for saying so than for reaching into a statistics struct.
+func (o SocketObserver) Clients(ctx context.Context) ([]Client, error) {
+	stats, err := o.Stats(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return viewClients(body.Clients), nil
+	return stats.Clients, nil
 }
 
 func viewStats(s dnsrelay.Stats) Stats {

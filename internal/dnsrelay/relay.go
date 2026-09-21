@@ -319,8 +319,10 @@ func (r *Relay) record(o observation) {
 	}
 }
 
-// Queries returns the query log, newest first.
-func (r *Relay) Queries() []Query { return r.log.Snapshot() }
+// Queries returns up to limit entries of the query log, newest first.
+// Unbounded returns all of it.
+func (r *Relay) Queries(limit int) []Query { return r.log.Snapshot(limit) }
 
-// Names returns the live domain→address map.
-func (r *Relay) Names(now time.Time) []Name { return r.names.Snapshot(now) }
+// Names returns up to limit entries of the live domain→address map, newest
+// first. Unbounded returns all of it.
+func (r *Relay) Names(now time.Time, limit int) []Name { return r.names.Snapshot(now, limit) }

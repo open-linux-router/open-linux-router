@@ -6,10 +6,108 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-systemd/v22/dbus"
 )
+
+// A bus connection scoped to one request.
+//
+// The per-call connection below is right for a mutation: those happen once, at
+// human timescale, when somebody presses a button. It is wrong for a status
+// read. One GET /api/dns/status asks systemd about five units — the module's
+// two, plus the three distribution units that would take :53 — and opened five
+// connections to do it, each with its own connect and authentication handshake.
+// The overview page polls five modules like that every five seconds.
+//
+// So reads may share one, for as long as a request lasts and no longer. That
+// bound is the point: the objection to a cached connection is that it has to
+// cope with systemd restarting underneath it, and a connection that cannot
+// outlive a single reply never has to.
+//
+// It rides on the context because the alternative is threading a connection
+// through the Unit interface, which every module implements and most of them
+// only ever use to ask one question. Absent — a CLI call, a test, any code that
+// never asked for sharing — every read connects for itself exactly as before.
+
+type sharedConnKey struct{}
+
+type sharedConn struct {
+	mu       sync.Mutex
+	conn     *dbus.Conn
+	err      error
+	released bool
+}
+
+// WithSharedUnitConn scopes one bus connection to ctx, for unit reads made
+// while it is alive. It returns the derived context and a release that must be
+// called; nothing is dialled unless a read actually asks for it.
+func WithSharedUnitConn(ctx context.Context) (context.Context, func()) {
+	s := &sharedConn{}
+	return context.WithValue(ctx, sharedConnKey{}, s), s.release
+}
+
+func (s *sharedConn) release() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.released = true
+	if s.conn != nil {
+		s.conn.Close()
+		s.conn = nil
+	}
+}
+
+// get returns the shared connection, dialling it on first use. A nil connection
+// and a nil error mean the scope is over and the caller should dial its own.
+//
+// A failed dial is remembered for the rest of the scope rather than retried per
+// unit. The bus does not come back within one reply, and five identical
+// "no service manager" errors cost five timeouts to say what one says.
+func (s *sharedConn) get(ctx context.Context) (*dbus.Conn, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	switch {
+	case s.released:
+		return nil, nil
+	case s.err != nil:
+		return nil, s.err
+	case s.conn != nil:
+		return s.conn, nil
+	}
+
+	conn, err := dbus.NewSystemdConnectionContext(ctx)
+	if err != nil {
+		s.err = fmt.Errorf("%w: %v", ErrNoServiceManager, err)
+		return nil, s.err
+	}
+	s.conn = conn
+	return conn, nil
+}
+
+// readConn returns a connection for a read-only call, preferring the one shared
+// across the current request. The returned release must be called, and closes
+// the connection only when it is not the shared one.
+func readConn(ctx context.Context) (*dbus.Conn, func(), error) {
+	if s, ok := ctx.Value(sharedConnKey{}).(*sharedConn); ok {
+		conn, err := s.get(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if conn != nil {
+			return conn, func() {}, nil
+		}
+		// Released while a read was still in flight. Odd, but answering the
+		// question with a connection of our own beats failing over bookkeeping.
+	}
+
+	conn, err := dbus.NewSystemdConnectionContext(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %v", ErrNoServiceManager, err)
+	}
+	return conn, func() { conn.Close() }, nil
+}
 
 // systemdUnit drives a unit over the system bus.
 //
@@ -37,12 +135,15 @@ func (s systemdUnit) connect(ctx context.Context) (*dbus.Conn, error) {
 	return conn, nil
 }
 
+// Status is the one read here, and the only method that shares a connection.
+// The mutators keep one each: they are not called in a loop, and a request that
+// restarts a unit has bigger costs than a handshake.
 func (s systemdUnit) Status(ctx context.Context) (UnitStatus, error) {
-	conn, err := s.connect(ctx)
+	conn, release, err := readConn(ctx)
 	if err != nil {
 		return UnitStatus{Unit: s.unit}, err
 	}
-	defer conn.Close()
+	defer release()
 
 	props, err := conn.GetUnitPropertiesContext(ctx, s.unit)
 	if err != nil {

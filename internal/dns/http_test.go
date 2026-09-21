@@ -440,10 +440,81 @@ func TestQueriesAndNamesAreStamped(t *testing.T) {
 	}
 }
 
+// Status reports the counters and must not read the log to get them.
+//
+// It used to: it asked for the queries, kept the stats that came back with them
+// and dropped the rest. Every poll of the overview page — one every five
+// seconds — therefore moved the whole ring across the observation socket to
+// read six integers. The counting stub is the only way to state that as a test,
+// because the symptom was never in the response body.
+func TestStatusReadsTheCountersWithoutTheLog(t *testing.T) {
+	applier, resolver, relay := testApplier(t)
+	resolver.active, relay.active = true, true
+
+	counting := &countingObserver{stats: Stats{Since: time.Now(), Queries: 12, Held: 5, Capacity: 100}}
+	applier.Observer = counting
+	h := HTTP{Applier: applier, Lock: core.NewLock(), Events: core.NewEvents()}.Handler()
+
+	w := do(t, h, http.MethodGet, "/status", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", w.Code, w.Body)
+	}
+
+	if counting.queries != 0 {
+		t.Errorf("status read the query log %d times, want 0", counting.queries)
+	}
+	if counting.names != 0 {
+		t.Errorf("status read the name map %d times, want 0", counting.names)
+	}
+	if counting.statsCalls != 1 {
+		t.Errorf("status read the counters %d times, want 1", counting.statsCalls)
+	}
+
+	var resp statusResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Stats == nil || resp.Stats.Queries != 12 {
+		t.Errorf("the counters did not survive the change: %+v", resp.Stats)
+	}
+}
+
+// countingObserver records which reads a handler actually made.
+type countingObserver struct {
+	stats      Stats
+	queries    int
+	names      int
+	statsCalls int
+}
+
+func (c *countingObserver) Queries(context.Context, int) ([]Query, Stats, error) {
+	c.queries++
+	return nil, c.stats, nil
+}
+
+func (c *countingObserver) Names(context.Context, int) ([]Name, Stats, error) {
+	c.names++
+	return nil, c.stats, nil
+}
+
+func (c *countingObserver) Stats(context.Context) (Stats, error) {
+	c.statsCalls++
+	return c.stats, nil
+}
+
+func (c *countingObserver) Clients(context.Context) ([]Client, error) {
+	c.statsCalls++
+	return c.stats.Clients, nil
+}
+
 // The UI polls these endpoints, and the relay holds thousands of entries. The
 // default has to stay unbounded, though: `olr dns queries` reads the same route,
 // and a limit applied without being asked for would make the CLI truncate a log
 // an operator asked to see in full.
+//
+// The bound reaches the relay rather than trimming what it sent: the stub
+// honours the limit, so a handler that read the parameter and forgot to pass it
+// on fails here.
 func TestQueriesAndNamesTakeAnOptionalLimit(t *testing.T) {
 	applier, resolver, relay := testApplier(t)
 	resolver.active, relay.active = true, true
@@ -526,11 +597,28 @@ type stubObserver struct {
 	stats   Stats
 }
 
-func (s stubObserver) Queries(context.Context) ([]Query, Stats, error) {
-	return s.queries, s.stats, nil
+// The limit is honoured here, not ignored, because it is now the relay's job
+// rather than the handler's — a stub that returned everything regardless would
+// let a handler that dropped the parameter on the floor pass.
+func (s stubObserver) Queries(_ context.Context, limit int) ([]Query, Stats, error) {
+	return stubLimit(s.queries, limit), s.stats, nil
 }
-func (s stubObserver) Names(context.Context) ([]Name, Stats, error) { return s.names, s.stats, nil }
-func (s stubObserver) Clients(context.Context) ([]Client, error)    { return s.stats.Clients, nil }
+func (s stubObserver) Names(_ context.Context, limit int) ([]Name, Stats, error) {
+	return stubLimit(s.names, limit), s.stats, nil
+}
+func (s stubObserver) Stats(context.Context) (Stats, error) {
+	return s.stats, nil
+}
+func (s stubObserver) Clients(context.Context) ([]Client, error) {
+	return s.stats.Clients, nil
+}
+
+func stubLimit[T any](in []T, limit int) []T {
+	if limit < 0 || limit >= len(in) {
+		return in
+	}
+	return in[:limit]
+}
 
 func TestUnknownRouteIs404(t *testing.T) {
 	h, _, _ := testHTTP(t)
