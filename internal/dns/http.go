@@ -86,6 +86,26 @@ func (h HTTP) Routes() []core.Route {
 			Handler: h.postPlan,
 		},
 
+		// Re-apply stored intent without changing it — the repair path
+		// design.md §5.3.2 asks for in place of rollback, and the same route
+		// internal/ingress declares.
+		//
+		// It exists because drift on this module is not always a file somebody
+		// edited behind our back. A relay that is enabled but was never started
+		// drifts with nothing rendered wrong at all: the plan is one service
+		// action and an empty change list. No edit fixes that, so a surface
+		// with only PUT /config can show an operator the pending start and
+		// offer them no way to run it — which is what the web UI did until this
+		// route existed.
+		{
+			Method: "POST", Path: "/apply",
+			Summary: "Re-render and restart the resolver from the stored DNS configuration, changing no intent. " +
+				"This is the repair path for a half-applied change, a hand-edited unbound.conf, " +
+				"or a backend that is enabled but not running.",
+			Mutating: true,
+			Handler:  h.postApply,
+		},
+
 		// Clearing what is in the way, rather than only reporting it.
 		//
 		// Per module rather than one endpoint for the box, for the reason
@@ -231,11 +251,16 @@ type applyResponse struct {
 }
 
 func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
-	// Turning DNS on without saying where it answers is answered rather than
-	// refused, and the answer is written into what gets stored — see
-	// WithDerivedListen. This is the only write path in the module (the CLI and
-	// MCP are both clients of it), so filling here fills for every surface.
-	cfg, derived := cfg.WithDerivedListen(h.Applier.Links)
+	// Nothing is filled into the stored config any more: turning DNS on without
+	// saying where it answers now means the wildcard, and who may resolve is
+	// derived at render time from a live view of the box rather than copied
+	// into intent once. Both used to be written here, and the copy is what went
+	// stale when a network changed underneath.
+	//
+	// What is still owed is the sentence (design.md §5.6) — the decisions olr
+	// made for a caller who did not say, reported in the same breath as the
+	// change. That is all DerivedNotes does; it reads, it does not fill.
+	derived := DerivedNotes(cfg, h.Applier.Links)
 
 	// Validated before the lock is taken. Validation is pure (§5.3.1), so
 	// holding the lock to do it would only make a bad request slow down a good
@@ -278,6 +303,21 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 	core.WriteJSON(w, http.StatusOK, resp)
 }
 
+// postApply re-applies stored intent, changing none of it.
+//
+// Any body is ignored rather than merged. This route is for the case where
+// intent is already what the operator wants and only the box is behind it;
+// accepting a partial document would make it a second spelling of PATCH, and
+// then "put it back" would be a write nobody asked for.
+func (h HTTP) postApply(w http.ResponseWriter, r *http.Request) {
+	cfg, err := h.Applier.Load()
+	if err != nil {
+		core.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.apply(w, r, cfg)
+}
+
 // --- dry run --------------------------------------------------------------
 
 // postPlan answers "what would this do?" without doing it.
@@ -297,14 +337,14 @@ func (h HTTP) postPlan(w http.ResponseWriter, r *http.Request) {
 		derived []string
 	)
 	if len(bytes.TrimSpace(data)) == 0 {
-		// The drift check, and deliberately not derived: drift asks whether the
-		// *stored* intent still describes the box. Filling a blank in here
-		// would invent a change nobody saved and report it as drift.
+		// The drift check, and deliberately without the notes: drift asks
+		// whether the *stored* intent still describes the box, and a preview of
+		// what olr would decide for a caller belongs to a caller who asked.
 		cfg, err = h.Applier.Load()
 	} else {
 		cfg, err = UnmarshalConfig(data)
 		if err == nil {
-			cfg, derived = cfg.WithDerivedListen(h.Applier.Links)
+			derived = DerivedNotes(cfg, h.Applier.Links)
 		}
 	}
 	if err != nil {

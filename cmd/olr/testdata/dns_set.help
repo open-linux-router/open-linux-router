@@ -4,10 +4,10 @@ Usage:
   olr dns set [flags]
 
 Flags:
-      --allow-from stringArray    source network permitted to query, repeatable, e.g. 192.168.1.0/24 (empty means the networks listened on)
+      --allow-from stringArray    source network permitted to query, repeatable, e.g. 192.168.1.0/24 (empty means this router's own networks, worked out fresh each time)
       --block-dot                 drop DNS-over-TLS on 853, so clients cannot route around the redirect
   -h, --help                      help for set
-      --listen stringArray        address to answer queries on, repeatable, e.g. 192.168.1.1:53
+      --listen stringArray        pin DNS to specific addresses, repeatable, e.g. 192.168.1.1:53 (default: every address this router holds; pinned addresses are yours to keep correct)
       --local-domain string       suffix local names are published under, e.g. home.arpa
       --mode string               how names are resolved: recurse|forward
       --query-log                 record answered queries

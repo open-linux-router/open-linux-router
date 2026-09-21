@@ -49,24 +49,18 @@ func (r *Relay) Run(ctx context.Context, ready func()) error {
 		return err
 	}
 
-	for _, addr := range r.cfg.Listen {
-		udp, err := net.ListenUDP("udp", net.UDPAddrFromAddrPort(addr))
-		if err != nil {
-			return fail(fmt.Errorf("listening on %s/udp: %w", addr, err))
-		}
-		closers = append(closers, udp)
+	listeners, err := r.bind()
+	if err != nil {
+		return fail(err)
+	}
 
-		tcp, err := net.ListenTCP("tcp", net.TCPAddrFromAddrPort(addr))
-		if err != nil {
-			return fail(fmt.Errorf("listening on %s/tcp: %w", addr, err))
-		}
-		closers = append(closers, tcp)
-
-		r.logger.Info("listening", "address", addr, "upstream", r.cfg.Upstream)
+	for _, l := range listeners {
+		closers = append(closers, l.udp, l.tcp)
+		r.logger.Info("listening", "address", l.addr, "upstream", r.cfg.Upstream)
 
 		wg.Add(2)
-		go func() { defer wg.Done(); r.serveUDP(ctx, udp) }()
-		go func() { defer wg.Done(); r.serveTCP(ctx, tcp) }()
+		go func() { defer wg.Done(); r.serveUDP(ctx, l.udp) }()
+		go func() { defer wg.Done(); r.serveTCP(ctx, l.tcp) }()
 	}
 
 	// The observation side and the read-only API both live behind the tee and
@@ -102,13 +96,51 @@ func (r *Relay) Run(ctx context.Context, ready func()) error {
 	return nil
 }
 
-func (r *Relay) serveUDP(ctx context.Context, conn *net.UDPConn) {
+// bind opens the relay's sockets, honouring pinned addresses and falling back
+// to the wildcard when they cannot be had.
+//
+// The fallback is the self-healing half, and the reason a failed bind is no
+// longer simply returned. An operator who pins a listen address owns it, but
+// "owns it" cannot be allowed to mean "the house loses DNS until they notice".
+// A pinned address stops existing for reasons that never reach this process — a
+// new lease, a renumbered upstream, a cable moved to another port — and under
+// Restart=always the old behaviour turned that into a crash loop with the
+// reason buried in the journal.
+//
+// So intent is tried first and honoured when it works; when it cannot be bound
+// the relay says so loudly and serves from the wildcard rather than not
+// serving. AllowFrom is unchanged either way, so this widens nothing that
+// matters — it only stops a stale address from being fatal.
+func (r *Relay) bind() ([]bound, error) {
+	if pinned := r.cfg.Listen; len(pinned) > 0 {
+		listeners, err := bindAll(pinned)
+		if err == nil {
+			return listeners, nil
+		}
+		r.logger.Error("could not bind the configured listen addresses; "+
+			"falling back to answering on every address, which is the default. "+
+			"Clear `listen` in the DNS configuration to make that the intent",
+			"error", err)
+	}
+
+	listeners, errs := bindAny(WildcardListen(r.cfg.Port()))
+	if len(listeners) == 0 {
+		return nil, errors.Join(errs...)
+	}
+	for _, err := range errs {
+		// One family missing is survivable and worth a line; see bindAny.
+		r.logger.Warn("could not bind one address family", "error", err)
+	}
+	return listeners, nil
+}
+
+func (r *Relay) serveUDP(ctx context.Context, conn udpConn) {
 	// One buffer for this listener's read loop, reused every iteration. That is
 	// exactly why Relay.observe copies before handing anything to the tee.
 	buf := make([]byte, maxMessage)
 
 	for {
-		n, from, err := conn.ReadFromUDPAddrPort(buf)
+		n, from, replyFrom, err := conn.read(buf)
 		if err != nil {
 			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
 				return
@@ -141,7 +173,13 @@ func (r *Relay) serveUDP(ctx context.Context, conn *net.UDPConn) {
 				return
 			}
 			// The client is served here, before anything is observed.
-			if _, err := conn.WriteToUDPAddrPort(res.response, from); err != nil {
+			//
+			// replyFrom carries the address this query was sent to, so the
+			// answer leaves from it. On a wildcard socket the kernel would
+			// otherwise pick a source by routing to the client, and a DNS
+			// client discards a reply whose source is not the destination it
+			// asked — see socket.go.
+			if err := conn.write(res.response, from, replyFrom); err != nil {
 				r.logger.Warn("udp write failed", "client", client, "error", err)
 				return
 			}

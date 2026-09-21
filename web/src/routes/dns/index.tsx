@@ -5,10 +5,12 @@ import { BlockerAlerts } from '@/components/layout/blockers'
 import { SettingsList } from '@/components/layout/settings-list'
 import { StatusDetail, StatusStrip } from '@/components/layout/status-strip'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Disclosure } from '@/components/ui/disclosure'
 import { ActivityCard } from '@/features/dns/activity'
+import { PlanDiff } from '@/features/dns/impact'
 import { ApplyOutcome, useDnsEditor } from '@/features/dns/editor'
 import { useDnsStatus } from '@/features/dns/queries'
-import { RELAY_UNIT, RESOLVER_UNIT, UnitLabel, serviceOf } from '@/features/dns/units'
+import { RELAY_UNIT, RESOLVER_UNIT, UnitLabel, serviceOf, unitLabel } from '@/features/dns/units'
 import { useInterfaces } from '@/features/link/queries'
 import type { DnsStatus } from '@/lib/api-types'
 import type { DnsConfig } from '@/lib/config-types'
@@ -71,6 +73,7 @@ export function DnsPage() {
         error={status.error as Error | null}
         busy={busy}
         onChange={change}
+        onRepair={applier.repair}
       />
 
       <ActivityCard config={config} busy={busy} onChange={change} />
@@ -81,7 +84,12 @@ export function DnsPage() {
           { slug: 'blocking', value: describeCount(config.policies?.length, 'rule') },
           { slug: 'names', value: describeCount(config.hosts?.length, 'name') },
           { slug: 'resolving', value: summariseUpstream(config) },
-          { slug: 'listening', value: config.listen?.join(', ') || 'Nowhere yet' },
+          // Blank is the default now, not a gap. The relay binds every address
+          // the router holds, because an address written down here is a copy of
+          // something the kernel owns and goes stale when the network changes.
+          // "Nowhere yet" was right when this field had to be filled in; it
+          // would now read as broken on a box that is working.
+          { slug: 'listening', value: config.listen?.join(', ') || 'Every address' },
           { slug: 'enforcement', value: config.hijack.enabled ? 'On' : 'Off' },
           { slug: 'advanced', value: config.extra_unbound_conf ? 'Customised' : undefined },
         ]}
@@ -103,12 +111,15 @@ function StatusCard({
   error,
   busy,
   onChange,
+  onRepair,
 }: {
   config: DnsConfig
   status?: DnsStatus
   error: Error | null
   busy: boolean
   onChange: (next: DnsConfig) => void
+  /** Runs the pending work from what is already stored. */
+  onRepair: () => void
 }) {
   const summary = describeStatus(config, status, error)
 
@@ -132,6 +143,11 @@ function StatusCard({
   // whole outage, and the fix is a reinstall rather than a systemctl enable.
   const notInstalled = (status?.services ?? []).filter((s) => s.status?.installed === false)
 
+  // Only while it is on: see the note in routes/overview.tsx. A module that is
+  // off has nothing running to be behind.
+  const drifted = Boolean(config.enabled && status?.drifted && !status.drift_error)
+  const changes = status?.drift?.changes ?? []
+
   return (
     <StatusStrip
       headline={summary.headline}
@@ -144,9 +160,14 @@ function StatusCard({
         busy,
         onChange: (enabled) => onChange({ ...config, enabled }),
       }}
-      // Only while it is on: see the note in routes/overview.tsx. A module
-      // that is off has nothing running to be behind.
-      drifted={config.enabled && status?.drifted && !status.drift_error}
+      drifted={drifted}
+      driftNote={driftNote(status)}
+      // The button this row went without. Every other apply on this screen is a
+      // side effect of an edit, which leaves no way at all to run a plan that
+      // is one unstarted unit and an empty change list: the switch an operator
+      // would reach for is already where they want it, and the only direction
+      // it moves is the one that takes DNS away from the whole network.
+      driftAction={{ label: 'Apply now', busy, onClick: onRepair }}
       details={
         <>
           {/* Both backends, separately. Averaging them would hide the thing
@@ -178,6 +199,21 @@ function StatusCard({
         </>
       }
     >
+      {/* The difference itself, not a claim that there is one.
+          olr cannot tell a deliberate hand-edit from a file that was corrupted
+          or left behind by a half-finished apply, and it should not try — the
+          operator reading this knows which it was, and the only thing they
+          cannot get anywhere else is what actually differs. Behind a disclosure
+          because on a healthy box there is nothing here, and the button above
+          is the answer for everyone who does not want to read a diff. */}
+      {drifted && changes.length > 0 && status?.drift && (
+        <Disclosure summary={`What is different (${describeCount(changes.length, 'file')})`}>
+          <div className="pt-2">
+            <PlanDiff plan={status.drift} />
+          </div>
+        </Disclosure>
+      )}
+
       <BlockerAlerts module="dns" blockers={status?.blockers} />
 
       {notInstalled.length > 0 && (
@@ -214,6 +250,31 @@ function StatusCard({
       )}
     </StatusStrip>
   )
+}
+
+/**
+ * What the drift row says, when the pending work is worth naming.
+ *
+ * The generic sentence — what is running is behind these settings — describes
+ * the case the rest of the UI assumes: a rendered file somebody edited, which
+ * any re-save puts back. It says nothing useful about the case where every file
+ * is right and a backend was simply never started, and that is the one an
+ * operator meets on a box configured after its last boot. Worth naming, because
+ * it reads like a detail and means no device on this network can look up a
+ * name.
+ */
+function driftNote(status: DnsStatus | undefined): string | undefined {
+  const drift = status?.drift
+  if (!drift || drift.changes.length > 0) return undefined
+
+  const idle = drift.services.filter((s) => s.action === 'start').map((s) => unitLabel(s.unit))
+  if (idle.length === 0) return undefined
+
+  const names =
+    idle.length === 1 ? idle[0] : `${idle.slice(0, -1).join(', ')} and ${idle[idle.length - 1]}`
+  return `${names.charAt(0).toUpperCase()}${names.slice(1)} ${
+    idle.length === 1 ? 'is' : 'are'
+  } not running. Nothing else on this box is out of date.`
 }
 
 /**

@@ -126,7 +126,18 @@ func offerFix(unit string) string {
 // else. An operator who moved the relay to another port has taken
 // responsibility for that port; refusing to start over a conflict we never
 // looked for would be worse than letting the journal say so.
+//
+// An empty list is the wildcard on 53 (see Config.Listen), so it answers true.
+// That matters more than it used to: a wildcard socket takes :53 on every
+// address at once, including 127.0.0.53 where systemd-resolved's stub sits. It
+// is not a new assumption — core.UDPPortInUse has always looked for *any*
+// holder of the port rather than one at a particular address, so olr already
+// treated :53 as exclusively its own — but it is now enforced by the bind as
+// well as by the check.
 func ListensOnDefaultPort(c Config) bool {
+	if len(c.Listen) == 0 {
+		return true
+	}
 	for _, l := range c.Listen {
 		if l.Port() == DNSPort {
 			return true

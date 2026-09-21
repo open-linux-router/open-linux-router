@@ -46,6 +46,54 @@ func actionFor(plan Plan, unit string) ServiceAction {
 	return ActionNone
 }
 
+// A backend that is enabled and not running is work, and naming it separately
+// from the file half is what lets olrd converge one without the other.
+func TestPlanStartsABackendThatIsNotRunning(t *testing.T) {
+	b := testBackend(t)
+	cfg := validConfig()
+
+	// Every file already right, nothing running.
+	obs := observedFor(t, b, cfg, false)
+
+	plan := planFor(t, b, cfg, obs)
+	if len(plan.Changes) != 0 {
+		t.Fatalf("files were reported as changed: %+v", plan.Changes)
+	}
+	if !plan.StartsABackend() {
+		t.Errorf("a stopped backend did not plan as a start: %+v", plan.Services)
+	}
+	if plan.RewritesFiles() {
+		t.Error("the file half claimed work it does not have")
+	}
+	if plan.Empty() {
+		t.Error("a box that is not answering DNS reported no drift")
+	}
+}
+
+// The race the service half used to be excluded over. systemd brings the
+// enabled units up at boot on its own schedule, and an olrd that read
+// "activating" as "stopped" would start a unit that was already starting —
+// which is olr and systemd racing for the socket at every boot.
+func TestPlanLeavesAUnitSystemdIsAlreadyStarting(t *testing.T) {
+	b := testBackend(t)
+	cfg := validConfig()
+
+	// Enabled at boot, which is why systemd is starting them, and not up yet.
+	obs := observedFor(t, b, cfg, false)
+	for unit, state := range obs.Units {
+		state.Starting, state.EnabledAtBoot = true, true
+		obs.Units[unit] = state
+	}
+
+	plan := planFor(t, b, cfg, obs)
+	if plan.StartsABackend() {
+		t.Errorf("olr planned to start a unit systemd is already starting: %+v", plan.Services)
+	}
+	if !plan.Empty() {
+		t.Errorf("a box mid-boot reported drift: %+v", plan.Services)
+	}
+}
+
 // The drift check (design.md §5.4): plan unchanged intent against reality and
 // see whether the diff is empty.
 func TestPlanOfAnAppliedConfigIsEmpty(t *testing.T) {
@@ -311,7 +359,9 @@ func TestCosmeticChangesAreNotDrift(t *testing.T) {
 func TestBuildPlanRefusesAnInvalidConfig(t *testing.T) {
 	b := testBackend(t)
 	bad := validConfig()
-	bad.Listen = nil
+	// An address on no interface this box has. Not an empty listen list, which
+	// is now the ordinary default and means the wildcard.
+	bad.Listen = []netip.AddrPort{netip.MustParseAddrPort("10.9.9.9:53")}
 
 	if _, err := BuildPlan(b, bad, testLinks(), nil, Observed{}, time.Now()); err == nil {
 		t.Fatal("planning succeeded against a config that cannot be applied")

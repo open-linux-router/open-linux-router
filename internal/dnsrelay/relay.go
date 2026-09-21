@@ -63,10 +63,13 @@ type observation struct {
 }
 
 // New builds a relay from a rendered configuration.
+//
+// An empty Listen is no longer refused: it is the default, and it means the
+// wildcard (Config.ListenOrWildcard). Refusing it here was correct while an
+// address had to be named and is exactly backwards now — every ordinary box
+// renders `"listen": []`, so this check would stop the relay from ever
+// starting.
 func New(cfg Config, logger *slog.Logger) (*Relay, error) {
-	if len(cfg.Listen) == 0 {
-		return nil, fmt.Errorf("no listen address configured, so there is nothing to answer on")
-	}
 	if !cfg.Upstream.IsValid() {
 		return nil, fmt.Errorf("no upstream resolver configured, so there is nothing to forward to")
 	}

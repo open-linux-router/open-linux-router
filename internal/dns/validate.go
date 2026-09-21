@@ -76,7 +76,7 @@ func Validate(c Config, links LinkView, reservations ReservationView) Result {
 
 	validateListen(&r, c, links)
 	validateAllowFrom(&r, c, links)
-	validateUpstream(&r, c)
+	validateUpstream(&r, c, links)
 	validateHosts(&r, c, links, reservations)
 	validatePolicies(&r, c)
 	validateHijack(&r, c, links)
@@ -89,26 +89,35 @@ func Validate(c Config, links LinkView, reservations ReservationView) Result {
 // validateListen checks where the relay would answer.
 func validateListen(r *Result, c Config, links LinkView) {
 	if len(c.Listen) == 0 {
-		if c.Enabled {
-			// A write path reaching here has already been through
-			// WithDerivedListen and come back empty-handed, so the operator is
-			// not missing a setting in the ordinary case — they are missing an
-			// interface, and saying "set the listen address" would send them to
-			// type one that is then refused for being on something unadopted.
-			//
-			// The two cases are separated because the fix is different and
-			// neither message is any use for the other.
-			if !anyAdopted(links) {
-				r.errorf("listen",
-					"this router has not been given an interface yet, so there is no address for "+
-						"DNS to answer on. Hand it the interface facing your network first")
-				return
-			}
-			r.errorf("listen",
-				"DNS is enabled but no listen address is configured, so nothing would answer. "+
-					"Set it to the router's address on the network it serves")
+		// Empty is the default and means the wildcard, so there is nothing to
+		// check about the address. What is still worth saying is that a router
+		// with no adopted interface has no network to serve — and it is a
+		// different sentence from "you configured this wrong", because the fix
+		// is somewhere else entirely.
+		//
+		// A warning rather than an error, unlike the version this replaces. The
+		// relay binds the wildcard fine with nothing adopted; it just answers
+		// nobody, because AllowFrom derives from adopted interfaces and an
+		// empty allow list denies everybody. That is a box waiting to be
+		// finished, not a configuration to refuse.
+		if c.Enabled && !anyAdopted(links) {
+			r.warnf("listen",
+				"this router has not been given an interface yet, so DNS will answer nobody. "+
+					"Hand it the interface facing your network")
 		}
 		return
+	}
+
+	// One port across the set, because RelayPort and the hijack rule can only
+	// name one and picking the first silently would make the other addresses
+	// unreachable through the redirect.
+	for i, l := range c.Listen {
+		if i > 0 && l.Port() != c.Listen[0].Port() {
+			r.errorf(fmt.Sprintf("listen[%d]", i),
+				"%s uses a different port from %s; the relay answers on one port, so pin them "+
+					"all to the same one", l, c.Listen[0])
+			break
+		}
 	}
 
 	seen := map[netip.AddrPort]bool{}
@@ -130,9 +139,11 @@ func validateListen(r *Result, c Config, links LinkView) {
 		seen[l] = true
 
 		if l.Addr().IsUnspecified() {
-			r.errorf(path,
-				"%s is a wildcard, which would answer on every interface including the WAN. "+
-					"Name the router's address on each network it should serve instead", l.Addr())
+			// Legal, and the same thing an empty list means. Spelling it out is
+			// allowed because an operator who writes 0.0.0.0 means it, and
+			// refusing the explicit form of the default would be a rule with
+			// nothing behind it. What keeps this off the internet is AllowFrom,
+			// not the address — see the Listen field's own comment.
 			continue
 		}
 		if l.Addr().IsLoopback() {
@@ -171,17 +182,22 @@ func validateListen(r *Result, c Config, links LinkView) {
 // validateAllowFrom checks who may ask.
 func validateAllowFrom(r *Result, c Config, links LinkView) {
 	if len(c.AllowFrom) == 0 {
-		if !c.Enabled || len(c.Listen) == 0 {
+		if !c.Enabled {
 			return
 		}
-		// Empty is legal and means "the networks I listen on". It is only a
-		// problem when that derivation comes up empty, because then the relay
-		// starts and answers nobody — a silent outage that looks like a DNS bug.
-		if len(LANPrefixes(links, c.Listen)) == 0 {
+		// Empty is legal and means "the private networks this router was
+		// given". It is only a problem when that derivation comes up empty,
+		// because then the relay starts and answers nobody — a silent outage
+		// that looks like a DNS bug.
+		//
+		// Reported only when there is something adopted to derive from;
+		// otherwise validateListen has already said the more useful thing, and
+		// two messages about one missing interface is one too many.
+		if anyAdopted(links) && len(LANPrefixes(links)) == 0 {
 			r.errorf("allow_from",
-				"no source networks are allowed and none could be derived from the listen "+
-					"addresses, so every query would be dropped. List the networks that should "+
-					"be able to resolve")
+				"no source networks are allowed and none could be derived, because no adopted "+
+					"interface has a private address. List the networks that should be able to "+
+					"resolve")
 		}
 		return
 	}
@@ -209,7 +225,7 @@ func validateAllowFrom(r *Result, c Config, links LinkView) {
 }
 
 // validateUpstream checks how names get resolved.
-func validateUpstream(r *Result, c Config) {
+func validateUpstream(r *Result, c Config, links LinkView) {
 	u := c.Upstream
 	if !u.Mode.Valid() {
 		r.errorf("upstream.mode", "unknown mode %q (want %v)", u.Mode, UpstreamModes())
@@ -239,17 +255,24 @@ func validateUpstream(r *Result, c Config) {
 				"authenticated, so anything that can intercept the traffic can still answer")
 	}
 
-	listening := map[netip.Addr]bool{}
-	for _, l := range c.Listen {
-		listening[l.Addr()] = true
-	}
+	// The loop check asks the kernel rather than the listen list.
+	//
+	// It used to compare against c.Listen, which stopped detecting anything the
+	// moment the wildcard became the default: an empty list matched no
+	// forwarder, so "forward to 192.168.1.1" — this box — validated cleanly and
+	// built a loop. Reading the interfaces is both the fix and the more correct
+	// question, because a wildcard-bound relay answers on *every* address this
+	// box holds, not on a chosen few.
 	for i, srv := range u.Servers {
 		path := fmt.Sprintf("upstream.servers[%d]", i)
 		if !srv.Addr().IsValid() {
 			r.errorf(path, "invalid address")
 			continue
 		}
-		if listening[srv.Addr()] && (srv.Port() == 0 || srv.Port() == 53) {
+		if !ownAddress(c, links, srv.Addr()) {
+			continue
+		}
+		if srv.Port() == 0 || srv.Port() == DNSPort {
 			r.errorf(path,
 				"%s is this box's own DNS address, so every query would be forwarded back to "+
 					"itself", srv.Addr())
@@ -290,12 +313,10 @@ func validateHosts(r *Result, c Config, links LinkView, reservations Reservation
 		return
 	}
 
-	// Every prefix on an adopted interface, and deliberately not
-	// LANPrefixes(links, c.Listen): that derives the networks from the listen
-	// addresses, so a resolver listening only on IPv4 would have no v6 prefix
-	// to compare against and would warn about every AAAA host it was given.
-	// Which family we answer *on* says nothing about which family a device here
-	// can be reached at.
+	// Every prefix on an adopted interface, public ones included, and
+	// deliberately not LANPrefixes: that keeps only private prefixes, so a host
+	// legitimately given a globally routable address would be warned about for
+	// not being on a network this resolver serves.
 	//
 	// Empty when link knows nothing yet, in which case the check below simply
 	// does not run.
@@ -533,12 +554,6 @@ func validateHijack(r *Result, c Config, links LinkView) {
 		return
 	}
 
-	if len(c.Listen) == 0 {
-		r.errorf("hijack.enabled",
-			"there is no listen address to redirect queries to; redirecting the network's DNS at "+
-				"an address nothing answers on would take resolution down for every device")
-		return
-	}
 	if len(h.Interfaces) == 0 {
 		r.errorf("hijack.interfaces",
 			"required when the hijack is on. Naming no interfaces cannot mean \"all of them\" "+
@@ -557,17 +572,11 @@ func validateHijack(r *Result, c Config, links LinkView) {
 		}
 	}
 
-	if _, hasV4 := c.RedirectTarget(false); !hasV4 {
-		if _, hasV6 := c.RedirectTarget(true); hasV6 {
-			r.warnf("listen",
-				"there is no IPv4 listen address, so IPv4 queries are not captured at all")
-		}
-	}
-	if _, hasV6 := c.RedirectTarget(true); !hasV6 {
-		r.warnf("listen",
-			"there is no IPv6 listen address, so a client resolving over IPv6 bypasses the "+
-				"redirect entirely. On a dual-stack network that is most of the traffic")
-	}
+	// The per-family warnings that used to live here are gone with the rule
+	// they described. `redirect` rewrites the destination to the incoming
+	// interface's own address in whichever family the packet arrived in, so
+	// there is no longer a way to capture one family and silently miss the
+	// other — which was the gap worth warning about.
 
 	if !h.BlockDoT {
 		// Ranked by cost to defeat in docs/dns.md §2.2: plaintext :53 is cheap
@@ -717,4 +726,23 @@ func isSlug(s string) bool {
 		}
 	}
 	return true
+}
+
+// ownAddress reports whether an address is one this relay answers on.
+//
+// Two ways for that to be true, and the wildcard case is the one that is easy
+// to forget: with no pinned listen addresses the relay answers on every address
+// the box holds, so any of them forms a loop when named as a forwarder. A
+// pinned list narrows it back to what was named.
+func ownAddress(c Config, links LinkView, addr netip.Addr) bool {
+	if len(c.Listen) > 0 {
+		for _, l := range c.Listen {
+			if l.Addr() == addr {
+				return true
+			}
+		}
+		return false
+	}
+	_, ok := InterfaceWithAddress(links, addr)
+	return ok
 }

@@ -88,32 +88,106 @@ func InterfaceWithAddress(links LinkView, addr netip.Addr) (LinkInfo, bool) {
 	return LinkInfo{}, false
 }
 
-// LANPrefixes returns the subnets behind the given listen addresses.
+// LANPrefixes returns the private networks this router has been given.
 //
-// It is what an empty allow_from resolves to: the networks the relay is
-// listening on are exactly the networks that should be able to ask it. Deriving
-// this rather than defaulting to "everyone" is the difference between a LAN
-// resolver and an amplifier (docs/dns.md §5).
-func LANPrefixes(links LinkView, listen []netip.AddrPort) []netip.Prefix {
+// It is what an empty allow_from resolves to: the networks olr was handed are
+// exactly the networks that should be able to ask it. Deriving this rather than
+// defaulting to "everyone" is the difference between a LAN resolver and an
+// amplifier (docs/dns.md §5), and with the relay bound to the wildcard it is
+// the *only* thing holding that line — there is no input filter chain on this
+// box yet (docs/firewall.md §8 has it under "Later").
+//
+// # Why this reads the interfaces rather than the listen addresses
+//
+// It used to take each listen address and look up the subnet around it, which
+// made it a second consumer of a field that goes stale. When the network
+// changed under a box — a new lease, a renumbered upstream, a cable moved — the
+// stored listen address stopped existing, this came back empty, and an empty
+// allow list denies everybody (Relay.allowed). So a network change took DNS
+// down twice over: the relay could not bind, and if it had bound it would have
+// answered nobody.
+//
+// Read straight from link, none of it is stored. renderRelay calls this on
+// every render with a live LinkView, so the allow list follows the box without
+// anybody having to notice that it moved. design.md §5.2 rules out cross-module
+// transactions and there is no notification path between link and dns — this is
+// what makes one unnecessary rather than missing.
+//
+// Private prefixes only, and that is the load-bearing filter now that the
+// listen address no longer narrows anything: the WAN is adopted too (gateway
+// and firewall need it), so taking every prefix on every adopted interface
+// would put the uplink's own subnet in the allow list.
+func LANPrefixes(links LinkView) []netip.Prefix {
+	infos, err := links.Interfaces()
+	if err != nil {
+		// Same deferral servedAddress's callers make: every rule that needs this
+		// view already reports an unreadable one, and an empty list here is
+		// read as "deny everybody" rather than as "we could not tell".
+		return nil
+	}
+
 	var out []netip.Prefix
 	seen := map[netip.Prefix]bool{}
-	for _, l := range listen {
-		info, ok := InterfaceWithAddress(links, l.Addr())
-		if !ok {
+	for _, info := range infos {
+		if !info.Adopted {
+			// Adoption is the permission (design.md §3.4/§7). A network nobody
+			// handed us is not one we start answering for.
 			continue
 		}
-		prefix, ok := info.FindPrefix(l.Addr())
-		if !ok {
-			continue
-		}
-		masked := prefix.Masked()
-		if !seen[masked] {
-			seen[masked] = true
-			out = append(out, masked)
+		for _, prefix := range info.Prefixes {
+			if !servedAddress(prefix.Addr()) {
+				continue
+			}
+			masked := prefix.Masked()
+			if !seen[masked] {
+				seen[masked] = true
+				out = append(out, masked)
+			}
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return comparePrefix(out[i], out[j]) < 0 })
 	return out
+}
+
+// anyAdopted reports whether the operator has handed this router anything at
+// all. It separates "DNS has nothing to serve" from "DNS is misconfigured",
+// which are different problems with different fixes.
+func anyAdopted(links LinkView) bool {
+	infos, err := links.Interfaces()
+	if err != nil {
+		// Unreadable is not the same as empty, and guessing "empty" here would
+		// tell an operator with a working box to go adopt an interface they
+		// already adopted.
+		return true
+	}
+	for _, info := range infos {
+		if info.Adopted {
+			return true
+		}
+	}
+	return false
+}
+
+// servedAddress reports whether an address sits on a network this router serves
+// — a home network's own address, and nothing else.
+//
+// Named for what it decides now. It was usableListen, back when it chose which
+// addresses the relay would bind; the relay binds the wildcard, so the only
+// question left is which prefixes belong in the allow list.
+//
+// IsPrivate is RFC 1918 and RFC 4193, so it reads both halves of a dual-stack
+// LAN and neither half of an uplink. Link-local is excluded separately and is
+// worth naming: every IPv6 interface has an fe80:: address, it is not routable
+// off the segment, and allowing it would widen the allow list by a prefix that
+// every interface on the box shares.
+func servedAddress(addr netip.Addr) bool {
+	switch {
+	case !addr.IsValid(), addr.IsUnspecified(), addr.IsLoopback():
+		return false
+	case addr.IsLinkLocalUnicast(), addr.IsLinkLocalMulticast(), addr.IsMulticast():
+		return false
+	}
+	return addr.IsPrivate()
 }
 
 // StaticLinks is a LinkView backed by a map, for tests.
@@ -152,4 +226,35 @@ func (s StaticLinks) Interfaces() ([]LinkInfo, error) {
 		out = append(out, info)
 	}
 	return out, nil
+}
+
+// DerivedNotes says, in the operator's words, what this module decided for a
+// caller who did not.
+//
+// design.md §5.6 attaches a condition to behaviour olr supplies by itself: it
+// has to say so, on every surface, in the same breath as confirming the change.
+// What is supplied by itself has moved — it used to be the listen address, and
+// the note read "answering DNS on 192.168.1.91:53 (lan0)". That address is no
+// longer chosen by us, because choosing it once was what went stale.
+//
+// What is chosen for the operator now is who may resolve, and it is the more
+// important of the two to publish: the listen address was visible in the
+// configuration, while an empty allow_from looks like "no restriction" and
+// means the opposite.
+func DerivedNotes(c Config, links LinkView) []string {
+	if !c.Enabled {
+		return nil
+	}
+
+	var notes []string
+	if len(c.Listen) == 0 {
+		notes = append(notes, fmt.Sprintf(
+			"answering DNS on every address this router holds, port %d", DNSPort))
+	}
+	if len(c.AllowFrom) == 0 {
+		for _, p := range LANPrefixes(links) {
+			notes = append(notes, fmt.Sprintf("resolving for %s", p))
+		}
+	}
+	return notes
 }

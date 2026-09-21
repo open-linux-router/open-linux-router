@@ -235,27 +235,20 @@ func TestPolicyAccessors(t *testing.T) {
 	}
 }
 
-// The redirect target is derived per family, never configured. A v4-only
-// redirect on a dual-stack network leaks every query a client sends over IPv6.
-func TestRedirectTargetIsPerFamily(t *testing.T) {
-	c := Config{Listen: []netip.AddrPort{
-		mustAddrPort(t, "192.168.1.1:53"),
-		mustAddrPort(t, "[fd00::1]:53"),
-	}}
-	c.Normalize()
-
-	v4, ok := c.RedirectTarget(false)
-	if !ok || !v4.Addr().Is4() {
-		t.Errorf("RedirectTarget(v4) = %v, %v", v4, ok)
-	}
-	v6, ok := c.RedirectTarget(true)
-	if !ok || v6.Addr().Is4() {
-		t.Errorf("RedirectTarget(v6) = %v, %v", v6, ok)
+// The hijack rule needs a port and no longer needs an address, so this is what
+// is left of the per-family redirect target it replaced.
+//
+// The family split went away with the address: `redirect` rewrites to the
+// incoming interface's own address in whichever family the packet arrived in,
+// so a v4-only listen address can no longer leave IPv6 queries uncaptured.
+func TestRelayPortDefaultsToDNSPort(t *testing.T) {
+	if got := (Config{}).RelayPort(); got != DNSPort {
+		t.Errorf("RelayPort() with no listen address = %d, want %d", got, DNSPort)
 	}
 
-	only4 := Config{Listen: []netip.AddrPort{mustAddrPort(t, "192.168.1.1:53")}}
-	if _, ok := only4.RedirectTarget(true); ok {
-		t.Error("a v4-only config claimed to have a v6 redirect target")
+	pinned := Config{Listen: []netip.AddrPort{mustAddrPort(t, "192.168.1.1:5300")}}
+	if got := pinned.RelayPort(); got != 5300 {
+		t.Errorf("RelayPort() = %d, want the pinned 5300", got)
 	}
 }
 

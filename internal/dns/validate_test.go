@@ -63,16 +63,29 @@ func TestValidateListen(t *testing.T) {
 		wantErr string // a path prefix; empty means "must pass"
 	}{
 		{
-			name:    "enabled with nowhere to listen",
-			edit:    func(c *Config) { c.Listen = nil },
-			wantErr: "listen",
+			// The default, and the thing that cannot go stale. What keeps this
+			// off the internet is allow_from, not the address.
+			name: "nothing given means the wildcard",
+			edit: func(c *Config) { c.Listen = nil },
 		},
 		{
-			// A wildcard would answer on the WAN too, and the difference
-			// between that and a LAN address is one missing firewall rule.
-			name:    "wildcard address",
-			edit:    func(c *Config) { c.Listen = []netip.AddrPort{netip.MustParseAddrPort("0.0.0.0:53")} },
-			wantErr: "listen[0]",
+			// The explicit spelling of the same default. Refusing it would be a
+			// rule with nothing behind it.
+			name: "wildcard address",
+			edit: func(c *Config) { c.Listen = []netip.AddrPort{netip.MustParseAddrPort("0.0.0.0:53")} },
+		},
+		{
+			// RelayPort and the hijack rule can each name only one port, so a
+			// set that disagrees would leave addresses unreachable through the
+			// redirect without saying so.
+			name: "listen addresses disagreeing about the port",
+			edit: func(c *Config) {
+				c.Listen = []netip.AddrPort{
+					netip.MustParseAddrPort("192.168.1.1:53"),
+					netip.MustParseAddrPort("[fd00::1]:5300"),
+				}
+			},
+			wantErr: "listen[1]",
 		},
 		{
 			name: "no port",
@@ -163,10 +176,59 @@ func TestValidateEmptyAllowFromIsDerived(t *testing.T) {
 		t.Errorf("an empty allow_from with a derivable network was rejected: %v", errorPaths(res))
 	}
 
-	// Loopback is on no interface link knows about, so nothing can be derived.
-	cfg.Listen = []netip.AddrPort{netip.MustParseAddrPort("127.0.0.1:53")}
-	if res := Validate(cfg, testLinks(), nil); !hasProblem(res.Errors, "allow_from") {
+	// Nothing to derive from: the box has been handed an interface, but it has
+	// only a public address, so there is no network this resolver serves. The
+	// relay would bind and answer nobody, which is the silent outage this
+	// refuses on behalf of.
+	//
+	// Note what no longer affects this: the listen address. The derivation
+	// reads the interfaces now, so moving or clearing `listen` cannot empty the
+	// allow list — which is exactly the coupling that took DNS down when a
+	// network changed underneath a box.
+	wanOnly := StaticLinks{
+		"wan0": {Name: "wan0", Adopted: true, Up: true,
+			Prefixes: []netip.Prefix{netip.MustParsePrefix("203.0.113.7/24")}},
+	}
+	cfg.Listen = nil
+	if res := Validate(cfg, wanOnly, nil); !hasProblem(res.Errors, "allow_from") {
 		t.Errorf("a config that would answer nobody was accepted: %v", errorPaths(res))
+	}
+}
+
+// The allow list is what keeps a wildcard-bound relay off the internet, so the
+// uplink's own subnet must never appear in it however the box is wired.
+func TestDerivedAllowFromExcludesTheUplink(t *testing.T) {
+	got := LANPrefixes(testLinks())
+
+	for _, p := range got {
+		if p.Contains(netip.MustParseAddr("203.0.113.7")) {
+			t.Errorf("the WAN subnet %s is in the derived allow list: %v", p, got)
+		}
+		if p.Contains(netip.MustParseAddr("192.168.30.1")) {
+			t.Errorf("unadopted guest0's subnet %s was derived: %v", p, got)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("derived %v, want lan0's two private prefixes", got)
+	}
+}
+
+// Derivation reads the box, not the stored config, so a renumbered network is
+// followed rather than leaving the relay answering nobody.
+func TestDerivedAllowFromFollowsTheNetwork(t *testing.T) {
+	renumbered := StaticLinks{
+		"lan0": {Name: "lan0", Adopted: true, Up: true,
+			Prefixes: []netip.Prefix{netip.MustParsePrefix("10.7.0.1/16")}},
+	}
+	// The config still names an address from the network this box used to be
+	// on — the exact state a box lands in when the upstream renumbers.
+	cfg := validConfig()
+	cfg.AllowFrom = nil
+
+	got := EffectiveAllowFrom(cfg, renumbered)
+	want := netip.MustParsePrefix("10.7.0.0/16")
+	if len(got) != 1 || got[0] != want {
+		t.Errorf("EffectiveAllowFrom = %v, want %v from the network as it is now", got, want)
 	}
 }
 
@@ -176,6 +238,21 @@ func TestValidateUpstream(t *testing.T) {
 		cfg.Upstream.Mode = ModeForward
 		if res := Validate(cfg, testLinks(), nil); !hasProblem(res.Errors, "upstream.servers") {
 			t.Errorf("want an error, got %v", errorPaths(res))
+		}
+	})
+
+	// With the wildcard as the default, "ourselves" is every address this box
+	// holds — so the loop check reads the interfaces, not the listen list. A
+	// check against c.Listen would pass this config silently and build a loop.
+	t.Run("forwarding to ourselves with no pinned listen address", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.Listen = nil
+		cfg.Upstream = Upstream{
+			Mode:    ModeForward,
+			Servers: []netip.AddrPort{netip.MustParseAddrPort("192.168.1.1:53")},
+		}
+		if res := Validate(cfg, testLinks(), nil); !hasProblem(res.Errors, "upstream.servers[0]") {
+			t.Errorf("a forwarding loop was accepted: %v", errorPaths(res))
 		}
 	})
 
@@ -339,12 +416,15 @@ func TestValidateHijack(t *testing.T) {
 		}
 	})
 
-	t.Run("v4 only warns about the v6 gap", func(t *testing.T) {
+	// There is no v6 gap left to warn about. `redirect` rewrites to the
+	// incoming interface's own address in whichever family the packet arrived
+	// in, so a v4-only listen address no longer leaves IPv6 uncaptured.
+	t.Run("a v4-only listen address no longer leaves a v6 gap", func(t *testing.T) {
 		cfg := validConfig()
 		cfg.Hijack = Hijack{Enabled: true, Interfaces: []string{"lan0"}, BlockDoT: true}
 		res := Validate(cfg, testLinks(), nil)
-		if !hasProblem(res.Warnings, "listen") {
-			t.Error("no warning that IPv6 queries bypass the redirect")
+		if hasProblem(res.Warnings, "listen") {
+			t.Errorf("warned about a family gap the redirect no longer has: %v", res.Warnings)
 		}
 	})
 }

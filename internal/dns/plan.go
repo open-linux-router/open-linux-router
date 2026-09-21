@@ -140,6 +140,15 @@ type UnitState struct {
 	// Running reports whether the unit is active.
 	Running bool
 
+	// Starting reports that systemd is already bringing the unit up.
+	//
+	// Not folded into Running, because they are different answers and only one
+	// of them is a reason to act: a unit in `activating` is not serving yet, so
+	// it is not running, and starting it again would be olr racing systemd for
+	// a socket at every boot. Planning it as no work is what lets this module
+	// converge the service half at startup without that race.
+	Starting bool
+
 	// EnabledAtBoot reports whether it would start after a reboot. Drift in its
 	// own right: a `systemctl disable` behind our back costs nothing until the
 	// power goes out, and then costs the whole network its name resolution.
@@ -226,6 +235,22 @@ func (p Plan) significant() bool {
 // rendered file is either the one stored intent produces or it is not, and
 // nothing but olr writes it.
 func (p Plan) RewritesFiles() bool { return p.significant() }
+
+// StartsABackend reports whether the plan would bring a daemon up from nothing.
+//
+// The service half of Empty, for the one caller that has to act on it alone:
+// olrd converges this at startup (internal/daemon's startDNS), where "a file is
+// wrong" and "the thing that answers the network is not running" are different
+// enough to be gated separately. A unit systemd is already starting never
+// appears here — serviceAction plans that as no work.
+func (p Plan) StartsABackend() bool {
+	for _, s := range p.Services {
+		if s.Action == ActionStart {
+			return true
+		}
+	}
+	return false
+}
 
 // nothingToDo reports whether there is no work at all, cosmetic included. This
 // is Apply's early exit, not the drift answer: a cosmetic rewrite is still a
@@ -325,7 +350,7 @@ func BuildPlan(b Backend, desired Config, links LinkView, reservations Reservati
 		state := obs.Unit(unit)
 		sp := ServicePlan{
 			Unit:   unit,
-			Action: serviceAction(desired.Enabled, state.Running, changed[unit], reloadOnly[unit]),
+			Action: serviceAction(desired.Enabled, state.Running, state.Starting, changed[unit], reloadOnly[unit]),
 		}
 		// Only when the service manager answered. Without that guard a box with
 		// no system bus reads as "not enabled" and every plan against it would
@@ -345,8 +370,12 @@ func BuildPlan(b Backend, desired Config, links LinkView, reservations Reservati
 }
 
 // serviceAction decides what to do with a daemon after writing files.
-func serviceAction(enabled, running, changed, reloadOnly bool) ServiceAction {
+func serviceAction(enabled, running, starting, changed, reloadOnly bool) ServiceAction {
 	switch {
+	case enabled && !running && starting:
+		// systemd is already on it. Nothing to ask for, and asking anyway is
+		// how olrd and systemd end up racing for the socket at every boot.
+		return ActionNone
 	case enabled && !running:
 		return ActionStart
 	case !enabled && running:
@@ -425,12 +454,13 @@ func classify(b Backend, desired Config, plan Plan, links LinkView, obs Observed
 }
 
 // EffectiveAllowFrom resolves who may query, applying the "empty means the
-// networks I listen on" rule so that callers never have to re-derive it.
+// private networks this router was given" rule so that callers never have to
+// re-derive it.
 func EffectiveAllowFrom(c Config, links LinkView) []netip.Prefix {
 	if len(c.AllowFrom) > 0 {
 		return c.AllowFrom
 	}
-	return LANPrefixes(links, c.Listen)
+	return LANPrefixes(links)
 }
 
 // RecentWindow is how far back a client counts as still resolving through us.

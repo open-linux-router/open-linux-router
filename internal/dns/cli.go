@@ -299,9 +299,11 @@ type configFlags struct {
 
 func (f *configFlags) register(c *cobra.Command) {
 	c.Flags().StringArrayVar(&f.listen, "listen", nil,
-		"address to answer queries on, repeatable, e.g. 192.168.1.1:53")
+		"pin DNS to specific addresses, repeatable, e.g. 192.168.1.1:53 "+
+			"(default: every address this router holds; pinned addresses are yours to keep correct)")
 	c.Flags().StringArrayVar(&f.allowFrom, "allow-from", nil,
-		"source network permitted to query, repeatable, e.g. 192.168.1.0/24 (empty means the networks listened on)")
+		"source network permitted to query, repeatable, e.g. 192.168.1.0/24 "+
+			"(empty means this router's own networks, worked out fresh each time)")
 	c.Flags().StringVar(&f.mode, "mode", "",
 		"how names are resolved: "+joinUpstreamModes())
 	c.Flags().StringArrayVar(&f.servers, "upstream", nil,

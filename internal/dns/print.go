@@ -26,7 +26,7 @@ func writeConfigText(w io.Writer, c Config) error {
 	}
 	fmt.Fprintf(w, "DNS is %s (olr-dnsd in front of unbound)\n", state)
 
-	fmt.Fprintf(w, "\nlistening on:  %s\n", orDash(joinAddrPorts(c.Listen)))
+	fmt.Fprintf(w, "\nlistening on:  %s\n", orEveryAddress(c.Listen))
 	fmt.Fprintf(w, "queries from:  %s\n", orDerived(c.AllowFrom))
 	fmt.Fprintf(w, "resolving by:  %s\n", describeUpstream(c.Upstream))
 	fmt.Fprintf(w, "redirect:      %s\n", describeHijack(c.Hijack))
@@ -428,9 +428,21 @@ func orDash(s string) string {
 // answers everybody, which is the opposite of the truth.
 func orDerived(prefixes []netip.Prefix) string {
 	if len(prefixes) == 0 {
-		return "the networks it listens on"
+		return "this router's own networks"
 	}
 	return joinPrefixes(prefixes)
+}
+
+// orEveryAddress spells out the default rather than printing a dash.
+//
+// A dash would read as "unset, and therefore broken" on a box that is working
+// perfectly — empty is what almost every configuration should have here, and it
+// means the relay answers wherever this router can be reached.
+func orEveryAddress(in []netip.AddrPort) string {
+	if len(in) == 0 {
+		return fmt.Sprintf("every address this router holds, port %d", DNSPort)
+	}
+	return joinAddrPorts(in)
 }
 
 func joinAddrPorts(in []netip.AddrPort) string {

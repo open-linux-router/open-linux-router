@@ -178,19 +178,42 @@ func TestRenderForwarding(t *testing.T) {
 	})
 }
 
-func TestRenderRelayDerivesAllowFromTheListenNetworks(t *testing.T) {
+func TestRenderRelayDerivesAllowFromTheAdoptedNetworks(t *testing.T) {
 	b := testBackend(t)
 	cfg := validConfig()
 	cfg.AllowFrom = nil
+	// No pinned address, which is the ordinary configuration: the relay binds
+	// the wildcard and this list is the whole of what keeps it off the
+	// internet.
+	cfg.Listen = nil
 
 	relay := renderOne(t, b, cfg, b.Paths.RelayConf)
 	if !strings.Contains(relay, "192.168.1.0/24") {
-		t.Errorf("an empty allow_from did not derive the listen network:\n%s", relay)
+		t.Errorf("an empty allow_from did not derive the router's own network:\n%s", relay)
 	}
 	// Never open. An empty list denies everybody in the relay, and deriving is
 	// the only reading that cannot accidentally ship an amplifier.
 	if strings.Contains(relay, "0.0.0.0/0") {
 		t.Error("the derived access list is open")
+	}
+	// testLinks adopts wan0 at 203.0.113.7/24. With the bind no longer
+	// narrowing anything, an allow list that picked up the uplink would be an
+	// open resolver — this is the one assertion that still separates the two.
+	if strings.Contains(relay, "203.0.113.0/24") {
+		t.Errorf("the uplink's own network is in the allow list:\n%s", relay)
+	}
+}
+
+// The rendered file carries no address of its own, because an address here is a
+// copy of something the kernel owns and goes stale when the network changes.
+func TestRenderRelayPinsNoAddressByDefault(t *testing.T) {
+	b := testBackend(t)
+	cfg := validConfig()
+	cfg.Listen = nil
+
+	relay := renderOne(t, b, cfg, b.Paths.RelayConf)
+	if strings.Contains(relay, "192.168.1.1:53") {
+		t.Errorf("an address was filled into the rendered config:\n%s", relay)
 	}
 }
 
@@ -285,9 +308,11 @@ func TestRenderHijack(t *testing.T) {
 		t.Errorf("the ruleset is not idempotent:\n%s", nft)
 	}
 	for _, want := range []string{
-		`iifname { "lan0" } ip daddr != 192.168.1.1 udp dport 53 dnat ip to 192.168.1.1:53`,
-		`iifname { "lan0" } ip daddr != 192.168.1.1 tcp dport 53 dnat ip to 192.168.1.1:53`,
-		`dnat ip6 to [fd00::1]:53`,
+		// redirect, not `dnat to <address>`: the destination becomes the
+		// incoming interface's own address, so the rule names no address that
+		// could go stale and covers both families at once.
+		`iifname { "lan0" } udp dport 53 redirect to :53`,
+		`iifname { "lan0" } tcp dport 53 redirect to :53`,
 		"tcp dport 853 drop",
 		"udp dport 853 drop",
 	} {
@@ -299,6 +324,12 @@ func TestRenderHijack(t *testing.T) {
 	// that it does not.
 	if strings.Contains(nft, "reject") {
 		t.Error("DoT is rejected rather than dropped, which makes falling back instant")
+	}
+	// The regression this file is guarding: an address written into the
+	// ruleset is one the kernel is free to take away, and a redirect pointing
+	// at an address nothing answers on is a house-wide outage.
+	if strings.Contains(nft, "dnat") {
+		t.Errorf("the ruleset names a literal address to redirect to:\n%s", nft)
 	}
 }
 

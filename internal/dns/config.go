@@ -47,11 +47,40 @@ type Config struct {
 	// thing to unpick then.
 	Enabled bool `json:"enabled"`
 
-	// Listen is where the relay answers queries.
+	// Listen is where the relay answers queries. Empty — the default, and what
+	// almost every box should have — means the wildcard on port 53.
 	//
-	// Explicit addresses, never a wildcard. A resolver reachable from the
-	// internet is an amplifier (docs/dns.md §5), and the difference between
-	// "0.0.0.0 plus a firewall rule" and "the LAN address" is one missing rule.
+	// # Why the wildcard, given docs/dns.md §5
+	//
+	// This field used to hold explicit addresses and refuse a wildcard, on the
+	// grounds that a resolver reachable from the internet is an amplifier and
+	// that "0.0.0.0 plus a firewall rule" is one missing rule away from being
+	// one. The reasoning was right about the risk and wrong about where the
+	// risk lives, and it cost availability for nothing.
+	//
+	// What it cost: an address here is a copy of a fact the kernel owns, made
+	// once at write time. When the network changed under a box — a new lease, a
+	// renumbered upstream, a cable moved to another port — the address stopped
+	// existing, the relay could not bind it, and Restart=always turned that
+	// into a crash loop that took DNS down for the whole building. Nothing
+	// could have prevented it: design.md §5.2 rules out cross-module
+	// transactions, and most of those changes do not pass through olr at all,
+	// so there is no notification anybody forgot to send. The dependency itself
+	// was the defect.
+	//
+	// What it bought: nothing. The listen address was never what kept the
+	// resolver off the internet — AllowFrom is, and it always was. Binding
+	// 192.168.1.1 rather than 0.0.0.0 narrows which *socket* receives a packet;
+	// it is the source check that decides whether the packet is answered, and
+	// that check runs identically either way. A query arriving on the WAN from
+	// a source outside the allow list is dropped without a reply (Relay.allowed
+	// and dnsrelay's serveUDP) whichever address the socket holds.
+	//
+	// So the wildcard is the default because it cannot go stale, and AllowFrom
+	// — re-derived live on every render, see LANPrefixes — is what holds the
+	// line docs/dns.md §5 draws. Setting this explicitly is still supported for
+	// an operator who wants the relay pinned to one address or moved off port
+	// 53; it is then their address to keep correct.
 	Listen []netip.AddrPort `json:"listen,omitempty"`
 
 	// AllowFrom are the source prefixes permitted to ask. Anything else is
@@ -393,18 +422,20 @@ func (c *Config) RemoveHost(name string) bool {
 	return true
 }
 
-// RedirectTarget resolves where hijacked :53 is sent for one address family.
+// RelayPort is the port the relay answers on.
 //
-// Per family, because a v4-only redirect on a dual-stack network leaks every
-// query a client chooses to send over IPv6 — the same failure the routing model
-// records for a v4-only exit, and just as invisible.
-func (c Config) RedirectTarget(v6 bool) (netip.AddrPort, bool) {
-	for _, l := range c.Listen {
-		if l.Addr().Is4() == !v6 {
-			return l, true
-		}
+// It replaced RedirectTarget, which answered "which address does hijacked :53
+// get sent to, per family" — a question the nftables `redirect` statement
+// answers for itself now, by rewriting the destination to the incoming
+// interface's own address. Only the port is still ours to say.
+//
+// The first listen address wins when several are pinned. Validate refuses a set
+// that disagrees about the port, so the choice is never silently wrong here.
+func (c Config) RelayPort() uint16 {
+	if len(c.Listen) == 0 {
+		return DNSPort
 	}
-	return netip.AddrPort{}, false
+	return c.Listen[0].Port()
 }
 
 // NormalizeName puts a blocklist pattern in canonical form: lowercased, with

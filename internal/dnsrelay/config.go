@@ -38,7 +38,21 @@ import (
 
 // Config is relay.json: everything that costs a restart to change.
 type Config struct {
-	// Listen is where queries are answered, on both UDP and TCP.
+	// Listen is where queries are answered, on both UDP and TCP. Empty — the
+	// ordinary case — means the wildcard on DefaultPort, in both families.
+	//
+	// The wildcard is the default because the alternative is a copy of
+	// something the kernel owns. internal/dns.Config.Listen carries the full
+	// reasoning; what matters on this side is the failure it removes. An
+	// address that no longer exists cannot be bound, Run returned that error,
+	// and Restart=always turned a renumbered LAN into a crash loop that took
+	// DNS down for the whole building. Nothing on this side could have known
+	// the address had moved.
+	//
+	// It does not widen who gets answered. AllowFrom is checked on every
+	// datagram regardless of which socket received it, so a query arriving from
+	// outside those prefixes is dropped whether the socket holds one address or
+	// all of them.
 	Listen []netip.AddrPort `json:"listen"`
 
 	// AllowFrom are the source prefixes permitted to ask. Empty denies
@@ -91,6 +105,40 @@ const (
 	RespondNXDOMAIN = "nxdomain"
 	RespondZero     = "zero"
 )
+
+// DefaultPort is where DNS is served when Listen does not say.
+const DefaultPort = 53
+
+// ListenOrWildcard resolves Listen to the addresses to bind.
+//
+// Both families, because an empty list means "wherever this box can be
+// reached". Two sockets rather than one dual-stack socket: Go resolves a
+// wildcard "udp" listen to AF_INET6 with v4-mapped delivery, and every address
+// downstream — the allow check, the query log, the client table — would then
+// have to unmap. Pinning the family at bind time keeps addresses in the shape
+// they are written in.
+func (c Config) ListenOrWildcard() []netip.AddrPort {
+	if len(c.Listen) > 0 {
+		return c.Listen
+	}
+	return WildcardListen(DefaultPort)
+}
+
+// WildcardListen is the pair of unspecified addresses for a port.
+func WildcardListen(port uint16) []netip.AddrPort {
+	return []netip.AddrPort{
+		netip.AddrPortFrom(netip.IPv4Unspecified(), port),
+		netip.AddrPortFrom(netip.IPv6Unspecified(), port),
+	}
+}
+
+// Port is the port queries are answered on.
+func (c Config) Port() uint16 {
+	if len(c.Listen) == 0 {
+		return DefaultPort
+	}
+	return c.Listen[0].Port()
+}
 
 // DefaultUpstreamTimeout bounds one forwarded query.
 //

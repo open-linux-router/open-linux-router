@@ -122,11 +122,15 @@ func TestPatchChangesOneFieldAndReplacesArrays(t *testing.T) {
 
 // The first switch on a fresh box: turn DNS on, say nothing else.
 //
-// This used to be a 422 with a message about a field the operator had never
-// opened. It is now a 200 that says which address it chose, and the choice is
-// stored — so `GET /config` afterwards shows an address somebody can read and
-// change, not a blank that would be re-derived differently tomorrow.
-func TestEnablingDnsChoosesWhereToAnswer(t *testing.T) {
+// This was a 422 about a field the operator had never opened. Then it was a 200
+// that chose an address and stored it — which is what went stale the first time
+// a network changed underneath a box, because a stored address is a copy of
+// something the kernel owns.
+//
+// It is now a 200 that stores no address at all. The relay binds the wildcard,
+// and what olr decided for the operator is reported rather than written down:
+// design.md §5.6 asks for the sentence, not for the copy.
+func TestEnablingDnsStoresNoAddress(t *testing.T) {
 	h, _, _ := testHTTP(t)
 
 	w := do(t, h, http.MethodPatch, "/config", `{"enabled":true}`)
@@ -139,20 +143,22 @@ func TestEnablingDnsChoosesWhereToAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(applied.Plan.Derived) == 0 {
-		t.Error("chose an address without saying so")
-	} else if !strings.Contains(applied.Plan.Derived[0], "192.168.1.1:53") {
-		t.Errorf("derived %q, want the router's own LAN address", applied.Plan.Derived[0])
+		t.Fatal("turned DNS on without saying what it decided")
+	}
+	joined := strings.Join(applied.Plan.Derived, "\n")
+	// Who may resolve is the decision worth publishing: an empty allow_from
+	// looks like "no restriction" and means the opposite.
+	if !strings.Contains(joined, "192.168.1.0/24") {
+		t.Errorf("derived %q, want the network it will resolve for", applied.Plan.Derived)
 	}
 
 	var stored Config
 	if err := json.Unmarshal(do(t, h, http.MethodGet, "/config", "").Body.Bytes(), &stored); err != nil {
 		t.Fatal(err)
 	}
-	if len(stored.Listen) == 0 {
-		t.Fatal("the derived address was not stored, so it is not intent")
-	}
-	if stored.Listen[0] != netip.MustParseAddrPort("192.168.1.1:53") {
-		t.Errorf("stored listen = %v", stored.Listen)
+	if len(stored.Listen) != 0 {
+		t.Errorf("stored listen = %v, want nothing: an address here is the thing that goes stale",
+			stored.Listen)
 	}
 }
 
@@ -202,6 +208,74 @@ func TestPlanWithNoBodyIsTheDriftCheck(t *testing.T) {
 	}
 	if !plan.Empty {
 		t.Errorf("planning a just-applied config reported work: %+v", plan)
+	}
+}
+
+// The case no other route could reach: every rendered file is right and a
+// backend that should be running is not.
+//
+// There is no edit to the configuration that repairs that. The plan is one
+// service action and an empty change list, so a surface with only PUT /config
+// can show an operator the pending start and offer them no way to run it —
+// which is what the web UI did, on a box whose relay was enabled after its last
+// boot and therefore never started by anything.
+func TestApplyWithNoBodyStartsABackendThatIsNotRunning(t *testing.T) {
+	h, _, relay := testHTTP(t)
+	if w := do(t, h, http.MethodPut, "/config", validPUT); w.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d, body %s", w.Code, w.Body)
+	}
+
+	// The relay is not running, and nothing else about the box has changed.
+	relay.active = false
+	relay.calls = nil
+
+	w := do(t, h, http.MethodPost, "/apply", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", w.Code, w.Body)
+	}
+	var resp applyResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// The assertion that makes this a repair rather than a write: stored intent
+	// produced no file change, because stored intent was never the problem.
+	if len(resp.Plan.Changes) != 0 {
+		t.Errorf("re-applying stored intent rewrote files: %+v", resp.Plan.Changes)
+	}
+	if !relay.active {
+		t.Error("the relay is still not running after an apply")
+	}
+	var started bool
+	for _, c := range relay.calls {
+		if c == "start" {
+			started = true
+		}
+	}
+	if !started {
+		t.Errorf("the relay was never started; calls = %v", relay.calls)
+	}
+}
+
+// A body is not merged into stored intent, because then "put it back" would be
+// a write nobody asked for. The route takes what is stored and nothing else.
+func TestApplyIgnoresAnyBody(t *testing.T) {
+	h, _, _ := testHTTP(t)
+	if w := do(t, h, http.MethodPut, "/config", validPUT); w.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d, body %s", w.Code, w.Body)
+	}
+
+	if w := do(t, h, http.MethodPost, "/apply", `{"enabled": false}`); w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", w.Code, w.Body)
+	}
+
+	w := do(t, h, http.MethodGet, "/config", "")
+	var got Config
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Enabled {
+		t.Error("a body sent to /apply switched DNS off; it must apply stored intent only")
 	}
 }
 

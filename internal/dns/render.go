@@ -556,12 +556,23 @@ func (b Backend) renderRelay(c Config, links LinkView) ([]byte, error) {
 	allow := c.AllowFrom
 	if len(allow) == 0 {
 		// Derived, never defaulted open. An empty allow_from means "the
-		// networks I am listening on", which is what an operator means and is
-		// the only reading that cannot accidentally ship an amplifier.
-		allow = LANPrefixes(links, c.Listen)
+		// networks this router was given", which is what an operator means and
+		// is the only reading that cannot accidentally ship an amplifier.
+		//
+		// Re-derived here on every render from a live LinkView, so it follows
+		// the box when the network changes. That is what carries the safety
+		// property now that Listen no longer names addresses: the relay binds
+		// the wildcard, so this list is the whole of what separates a LAN
+		// resolver from an open one.
+		allow = LANPrefixes(links)
 	}
 
 	cfg := dnsrelay.Config{
+		// Passed through as the operator wrote it, empty included: an empty
+		// list means the wildcard to the relay (dnsrelay.Config.Listen), which
+		// is the default and the thing that cannot go stale. Filling it in here
+		// would put addresses back in a rendered file that the kernel is free
+		// to change underneath.
 		Listen:          c.Listen,
 		AllowFrom:       allow,
 		Upstream:        DefaultResolver,
@@ -612,11 +623,9 @@ func policyFile(name string) string { return name + ".json" }
 const HijackTable = "olr-dns"
 
 func (b Backend) renderHijack(c Config) ([]byte, error) {
-	v4, hasV4 := c.RedirectTarget(false)
-	v6, hasV6 := c.RedirectTarget(true)
-	if !hasV4 && !hasV6 {
-		return nil, fmt.Errorf("hijack is enabled but there is no listen address to redirect to")
-	}
+	// No listen-address guard any more. The rule below names no address, so
+	// there is no longer a way for this file to point the network's DNS at
+	// something nothing answers on — which is what that guard existed to catch.
 	if len(c.Hijack.Interfaces) == 0 {
 		return nil, fmt.Errorf("hijack is enabled but names no interfaces")
 	}
@@ -650,28 +659,26 @@ table inet %[2]s {
         # name it recognises, so domain policy silently stops applying
         # (docs/dns.md §2.2).
         #
-        # Traffic already addressed to us is excluded, or the rule would rewrite
-        # the destination of queries that were never going anywhere else.
+        # Traffic already addressed to us needs no exclusion: redirecting it to
+        # the interface it already arrived at is a no-op.
 `)
-	if hasV4 {
-		fmt.Fprintf(&s, "        iifname %s ip daddr != %s udp dport 53 dnat ip to %s\n",
-			ifaces, v4.Addr(), v4)
-		fmt.Fprintf(&s, "        iifname %s ip daddr != %s tcp dport 53 dnat ip to %s\n",
-			ifaces, v4.Addr(), v4)
-	} else {
-		s.WriteString("        # No IPv4 listen address, so IPv4 queries are not captured.\n")
-	}
-	if hasV6 {
-		fmt.Fprintf(&s, "        iifname %s ip6 daddr != %s udp dport 53 dnat ip6 to %s\n",
-			ifaces, v6.Addr(), v6)
-		fmt.Fprintf(&s, "        iifname %s ip6 daddr != %s tcp dport 53 dnat ip6 to %s\n",
-			ifaces, v6.Addr(), v6)
-	} else {
-		s.WriteString(`        # No IPv6 listen address, so IPv6 queries are not captured. On a
-        # dual-stack network that is a real gap, not a rounding error: a client
-        # that resolves over IPv6 bypasses all of this at full speed.
-`)
-	}
+	// redirect, not `dnat to <address>`. redirect rewrites the destination to
+	// the address of the interface the packet arrived on, which is what this
+	// rule actually means and the only spelling that needs no literal address.
+	//
+	// A literal one goes stale the moment the network changes under the box,
+	// and a hijack rule pointing at an address nothing answers on is a
+	// house-wide outage with no error message — the same staleness that took
+	// the relay's own bind down, one layer out.
+	//
+	// It also covers both families in one rule. The old form wrote a pair of
+	// rules per family from a listen address of that family, so a resolver
+	// listening only on IPv4 left IPv6 uncaptured — and a client resolving over
+	// IPv6 then bypassed all of this at full speed.
+	fmt.Fprintf(&s, "        iifname %s udp dport %d redirect to :%[3]d\n",
+		ifaces, DNSPort, c.RelayPort())
+	fmt.Fprintf(&s, "        iifname %s tcp dport %d redirect to :%[3]d\n",
+		ifaces, DNSPort, c.RelayPort())
 	s.WriteString("    }\n")
 
 	if c.Hijack.BlockDoT {

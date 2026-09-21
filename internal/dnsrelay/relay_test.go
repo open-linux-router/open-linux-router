@@ -649,11 +649,19 @@ func TestObservationSocketReplacesAStaleFile(t *testing.T) {
 func TestNewRefusesAConfigThatCannotServe(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	if _, err := New(Config{Upstream: netip.MustParseAddrPort("127.0.0.1:5353")}, logger); err == nil {
-		t.Error("a relay with nowhere to listen was accepted")
-	}
 	if _, err := New(Config{Listen: []netip.AddrPort{freePort(t)}}, logger); err == nil {
 		t.Error("a relay with no upstream was accepted")
+	}
+}
+
+// The inverse of the check that used to live above: an empty listen list is the
+// ordinary rendered configuration now, not a broken one. Refusing it would stop
+// every box from starting.
+func TestNewAcceptsAnEmptyListenList(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	if _, err := New(Config{Upstream: netip.MustParseAddrPort("127.0.0.1:5353")}, logger); err != nil {
+		t.Errorf("the default configuration was refused: %v", err)
 	}
 }
 

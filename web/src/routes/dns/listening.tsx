@@ -14,20 +14,20 @@ export function DnsListeningPage() {
         id="dns-listen"
         label="Listening on"
         busy={busy}
-        placeholder="192.168.1.1:53"
+        placeholder="every address this router holds"
         stored={(config.listen ?? []).join(', ')}
         onSave={(value) => change({ ...config, listen: splitList(value) })}
-        hint="Comma separated, and always specific addresses. Turning DNS on with this empty fills in this router's own address on each network you have given it. A resolver reachable from the internet is something other people can abuse to attack a third party, so there is deliberately no way to say 'everywhere' here."
+        hint="Leave this blank unless you have a reason not to: DNS then answers on every address this router holds, and keeps working when your network changes. Naming addresses here pins it to them, and they become yours to keep correct — if one stops existing, DNS stops. What keeps this router from answering the internet is 'Who may ask' below, not this field."
       />
 
       <EditableField
         id="dns-allow"
         label="Who may ask"
         busy={busy}
-        placeholder="the networks it listens on"
+        placeholder="your own networks"
         stored={(config.allow_from ?? []).join(', ')}
         onSave={(value) => change({ ...config, allow_from: splitList(value) })}
-        hint="Ranges, comma separated. Blank means the networks of the addresses above — not everybody. Anything else is dropped without an answer."
+        hint="Ranges, comma separated. Blank means your own networks — not everybody — worked out fresh each time, so it follows your network if that changes. Anything else is dropped without an answer, which is what keeps this router from being used to attack someone else. This is the setting that matters; leave it blank unless you are adding a network olr does not manage."
       />
     </SubPage>
   )
