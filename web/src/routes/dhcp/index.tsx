@@ -4,8 +4,10 @@ import { Link } from 'react-router'
 import { SettingsList } from '@/components/layout/settings-list'
 import { BlockerAlerts } from '@/components/layout/blockers'
 import { StatusDetail, StatusStrip } from '@/components/layout/status-strip'
+import { Disclosure } from '@/components/ui/disclosure'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ApplyOutcome, useDhcpEditor } from '@/features/dhcp/editor'
+import { PlanDiff } from '@/features/dhcp/impact'
 import { useDhcpLeases, useDhcpStatus } from '@/features/dhcp/queries'
 import { useInterfaces } from '@/features/link/queries'
 import type { DhcpStatus } from '@/lib/api-types'
@@ -68,6 +70,7 @@ export function DhcpPage() {
         connected={connected}
         busy={busy}
         onChange={change}
+        onRepair={applier.repair}
       />
 
       <SettingsList
@@ -112,6 +115,7 @@ function StatusCard({
   connected,
   busy,
   onChange,
+  onRepair,
 }: {
   config: DhcpConfig
   status?: DhcpStatus
@@ -119,8 +123,14 @@ function StatusCard({
   connected?: number
   busy: boolean
   onChange: (next: DhcpConfig) => void
+  /** Runs the pending work from what is already stored. */
+  onRepair: () => void
 }) {
   const summary = describeStatus(config, status, error)
+
+  // Only while it is on: see the note in routes/overview.tsx.
+  const drifted = Boolean(config.enabled && status?.drifted && !status.drift_error)
+  const changes = status?.drift?.changes ?? []
 
   return (
     <StatusStrip
@@ -138,9 +148,16 @@ function StatusCard({
         busy,
         onChange: (enabled) => onChange({ ...config, enabled }),
       }}
-      // Only while it is on: see the note in routes/overview.tsx.
-      drifted={config.enabled && status?.drifted && !status.drift_error}
-      driftNote="The running server is behind these settings."
+      drifted={drifted}
+      driftNote={
+        status?.drift?.action === 'start' && !status.drift.changes.length
+          ? 'The server is not running. Nothing else on this box is out of date.'
+          : 'The running server is behind these settings.'
+      }
+      // Without this the row is a diagnosis with no cure. A server that is
+      // enabled and simply not running drifts with an empty change list, and
+      // then there is no setting left on the page to save.
+      driftAction={{ label: 'Apply now', busy, onClick: onRepair }}
       details={
         <>
           <StatusDetail term="Service">
@@ -167,6 +184,20 @@ function StatusCard({
         </>
       }
     >
+      {/* The difference itself, not a claim that there is one. olr does not
+          try to tell a deliberate hand-edit from a file left behind by a
+          half-finished apply — the operator reading this knows which it was,
+          and what they cannot get anywhere else is what actually differs. */}
+      {drifted && changes.length > 0 && status?.drift && (
+        <Disclosure
+          summary={`What is different (${changes.length} file${changes.length === 1 ? '' : 's'})`}
+        >
+          <div className="pt-2">
+            <PlanDiff plan={status.drift} />
+          </div>
+        </Disclosure>
+      )}
+
       {/* Usually the same dnsmasq the DNS page is complaining about: the
           distribution's unit takes UDP/67 and :53 together, so one
           `apt install dnsmasq` blocks both modules. Same component and the

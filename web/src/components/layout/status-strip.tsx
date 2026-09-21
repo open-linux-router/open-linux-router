@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Disclosure } from '@/components/ui/disclosure'
 import { Label } from '@/components/ui/label'
@@ -23,6 +24,7 @@ export function StatusStrip({
   control,
   drifted,
   driftNote,
+  driftAction,
   details,
   children,
 }: {
@@ -34,6 +36,17 @@ export function StatusStrip({
   control?: { id: string; label: string; checked: boolean; busy?: boolean; onChange: (on: boolean) => void }
   drifted?: boolean
   driftNote?: string
+  /**
+   * How to run the pending work, for a section that can re-apply stored intent.
+   *
+   * Without it the drift row is a diagnosis with no cure, and the advice it
+   * used to carry — save any change and it goes away — is only true when the
+   * drift is a file. A backend that is enabled but never started drifts with an
+   * empty change list and one service action, and then there is no setting on
+   * the page left to save: the switch an operator would reach for is already in
+   * the position they want, and moving it off is the disruptive direction.
+   */
+  driftAction?: { label: string; busy?: boolean; onClick: () => void }
   /**
    * Facts about the daemon rather than about the network: unit states, the
    * clock, whether what is running matches. Kept behind a disclosure because
@@ -74,6 +87,16 @@ export function StatusStrip({
             <span className="text-sm text-muted-foreground">
               {driftNote ?? 'What is running is behind these settings.'}
             </span>
+            {driftAction && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={driftAction.busy}
+                onClick={driftAction.onClick}
+              >
+                {driftAction.label}
+              </Button>
+            )}
           </div>
         )}
 

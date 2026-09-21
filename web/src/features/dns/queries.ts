@@ -104,3 +104,25 @@ export function useApplyDnsConfig() {
     },
   })
 }
+
+/**
+ * Runs the pending work from stored intent, changing none of it.
+ *
+ * The repair path design.md §5.3.2 asks for in place of rollback, and the one
+ * thing this page could not do before it existed. Every other apply here is a
+ * side effect of an edit — `useDnsEditor` submits a whole config — which is
+ * fine while drift means somebody changed a file behind olr's back, and useless
+ * when it means a backend is enabled and simply not running. There is no edit
+ * for that, so there was no button for it either.
+ *
+ * It needs no confirmation: the intent being applied is intent the operator
+ * stored earlier, and the daemon treats it as already confirmed.
+ */
+export function useReapplyDns() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.send<DnsApplyResult>('POST', '/api/dns/apply', undefined),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['dns'] }),
+  })
+}

@@ -76,3 +76,23 @@ export function useApplyDhcpConfig() {
     },
   })
 }
+
+/**
+ * Runs the pending work from stored intent, changing none of it.
+ *
+ * The repair path design.md §5.3.2 asks for in place of rollback. Every other
+ * apply on this screen is a side effect of an edit, which is fine while drift
+ * means a file changed behind olr's back and useless when it means the server
+ * is enabled and simply not running — there is no edit for that.
+ *
+ * It needs no confirmation: the intent being applied is intent the operator
+ * stored earlier.
+ */
+export function useReapplyDhcp() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.send<ApplyResult>('POST', '/api/dhcp/apply', undefined),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['dhcp'] }),
+  })
+}

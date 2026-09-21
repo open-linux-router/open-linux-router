@@ -478,6 +478,16 @@ func run(args []string) error {
 	startDial(ctx, dialApplier, publisher, logger)
 	startDNS(ctx, dnsApplier, logger)
 
+	// And then keep looking. The line above converges the service half once, at
+	// startup, which covers the box that comes back from a reboot or an upgrade
+	// — but a unit somebody stops at noon stays stopped until olrd next
+	// restarts, and on a router that is measured in days of no DNS. See
+	// supervise.go for what it will and will not touch.
+	go superviseBackends(ctx, []backend{
+		dnsBackend(dnsApplier),
+		dhcpBackend(applier),
+	}, superviseEvery, logger)
+
 	var listeners []net.Listener
 
 	unix, err := core.ListenUnix(opts.socket)
@@ -800,6 +810,18 @@ func startFirewall(ctx context.Context, a firewall.Applier, logger *slog.Logger)
 //
 // It is also the recovery path for a rendered file deleted by hand or lost to a
 // partial restore, which has the same shape and the same symptom.
+//
+// And it is the recovery path for the same failure in the service half: intent
+// says a backend answers this network, and the backend is not running. That
+// case used to be excluded here, on the grounds that a unit systemd has not got
+// to yet is not olrd's business — true at boot, and it meant nothing at all
+// converged a backend that was never started. `systemctl enable` does not start
+// a unit, so a box configured after its last boot sat with the resolver up,
+// the relay dead, and every device unable to resolve a name, with the only
+// repair an edit to a configuration that was already correct. The race that
+// reasoning was protecting against is now answered where it belongs: a unit in
+// `activating` plans as no work (internal/dns serviceAction), so systemd keeps
+// the socket and olrd acts only on a unit nobody is bringing up.
 func startDNS(ctx context.Context, a dns.Applier, logger *slog.Logger) {
 	cfg, err := a.Load()
 	if err != nil {
@@ -825,10 +847,23 @@ func startDNS(ctx context.Context, a dns.Applier, logger *slog.Logger) {
 		return
 	}
 
-	// RewritesFiles and not !Empty: see internal/dns's Plan. A unit that systemd
-	// has not got to yet is not this function's business, and treating it as
-	// drift would have olrd racing systemd for the resolver at every boot.
-	if !plan.RewritesFiles() {
+	// The two halves, gated separately and neither one standing for the other.
+	// Still not !Empty: a unit whose only pending work is `enable` changes
+	// nothing that is running, and acting on it here would restart a resolver
+	// the building is using to record a boot-time preference.
+	if !plan.RewritesFiles() && !plan.StartsABackend() {
+		return
+	}
+
+	// The one thing startup will not do on its own. Every repair above is
+	// either a file nobody is reading yet or a daemon that is not running, and
+	// neither can cost anybody an answer they are currently getting; a
+	// disruptive plan by definition can. design.md §5.3.3 says the operator
+	// hears about those before they happen, and there is nobody to tell at
+	// startup — so it is left for a surface with a human in front of it.
+	if plan.Impact >= dns.ImpactDisruptive {
+		logger.Warn("dns is not doing what its settings say, and putting it back would cut somebody off; left for an operator",
+			"reasons", strings.Join(plan.Reasons, "; "))
 		return
 	}
 
@@ -842,8 +877,13 @@ func startDNS(ctx context.Context, a dns.Applier, logger *slog.Logger) {
 		logger.Error("the resolver's configuration could not be restored", "error", err,
 			"steps", len(result.Steps))
 	default:
-		logger.Info("the resolver's configuration was not what the box held and has been rewritten",
-			"changes", len(result.Plan.Changes), "services", len(result.Plan.Services))
+		// Said as what happened rather than as "applied": a line an operator
+		// finds at 3am has to name the thing that was wrong, because olrd
+		// acting on its own is exactly the kind of change nobody remembers
+		// making.
+		logger.Info("dns was not doing what its settings say and has been put back",
+			"changes", len(result.Plan.Changes), "services", len(result.Plan.Services),
+			"started", plan.StartsABackend())
 	}
 }
 

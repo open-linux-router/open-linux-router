@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 
-import { useApplyDnsConfig, useDnsPlanPreview } from '@/features/dns/queries'
+import { useApplyDnsConfig, useDnsPlanPreview, useReapplyDns } from '@/features/dns/queries'
 import { unitLabel } from '@/features/dns/units'
 import { ApiError } from '@/lib/api'
 import type { DnsApplyResult, DnsPlan, ServicePlan } from '@/lib/api-types'
@@ -21,6 +21,7 @@ import type { DnsConfig } from '@/lib/config-types'
 export function useDnsApply() {
   const preview = useDnsPlanPreview()
   const apply = useApplyDnsConfig()
+  const reapply = useReapplyDns()
 
   /** A change held back because it would be disruptive. */
   const [confirming, setConfirming] = useState<{ config: DnsConfig; plan: DnsPlan } | null>(null)
@@ -28,10 +29,11 @@ export function useDnsApply() {
   /** The steps of the last failed apply, which the page keeps on screen. */
   const [failure, setFailure] = useState<DnsApplyResult | null>(null)
 
-  async function commit(config: DnsConfig) {
+  /** Runs one apply, whatever asked for it, and reports how it went. */
+  async function run(call: () => Promise<DnsApplyResult>) {
     setFailure(null)
     try {
-      const result = await apply.mutateAsync(config)
+      const result = await call()
       toast.success(describe(result.plan))
       return true
     } catch (error) {
@@ -49,6 +51,24 @@ export function useDnsApply() {
       }
       return false
     }
+  }
+
+  async function commit(config: DnsConfig) {
+    return run(() => apply.mutateAsync(config))
+  }
+
+  /**
+   * Runs the work the box is behind on, without touching what is stored.
+   *
+   * No plan-then-confirm round trip, and the asymmetry is deliberate: `submit`
+   * pauses on a disruptive plan because the operator is changing their mind
+   * about what they want, and might be about to cut off the resolver they are
+   * reading this page through. Here they are asking for what they already
+   * chose, so there is nothing to warn them about that they did not already
+   * decide.
+   */
+  async function repair() {
+    return run(() => reapply.mutateAsync())
   }
 
   /** Applies config, pausing for confirmation if the plan is disruptive. */
@@ -87,12 +107,13 @@ export function useDnsApply() {
 
   return {
     submit,
+    repair,
     confirming,
     confirm,
     cancel: () => setConfirming(null),
     failure,
     dismissFailure: () => setFailure(null),
-    busy: preview.isPending || apply.isPending,
+    busy: preview.isPending || apply.isPending || reapply.isPending,
   }
 }
 

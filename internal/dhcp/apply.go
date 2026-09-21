@@ -182,6 +182,7 @@ func (a Applier) Observe(ctx context.Context) (Observed, error) {
 	if status, err := a.Service.Status(ctx); err == nil {
 		obs.ServiceKnown = true
 		obs.Running = status.Active
+		obs.Starting = status.State == "activating"
 		obs.EnabledAtBoot = status.Enabled
 		obs.Installed = status.Installed
 	}

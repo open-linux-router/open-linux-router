@@ -17,10 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { ApplyOutcome, useGatewayEditor } from '@/features/gateway/editor'
 import { DIRECT, NetworkList } from '@/features/gateway/network-list'
-import { gatewayChange, useGatewayStatus } from '@/features/gateway/queries'
+import { gatewayChange, useGatewayStatus, useReapplyGateway } from '@/features/gateway/queries'
 
 /**
  * The gateway, on the page you land on.
@@ -33,6 +34,7 @@ import { gatewayChange, useGatewayStatus } from '@/features/gateway/queries'
 export function GatewayPage() {
   const { config, busy, change, applier, gate } = useGatewayEditor()
   const status = useGatewayStatus()
+  const reapply = useReapplyGateway()
 
   if (!config) return gate
   const exits = config.exits ?? []
@@ -58,8 +60,20 @@ export function GatewayPage() {
         <Alert>
           <AlertTriangle />
           <AlertTitle>The router is not doing what these settings say</AlertTitle>
-          <AlertDescription>
-            Something changed the gateway outside olr. Saving any change here puts it back.
+          <AlertDescription className="space-y-3">
+            <p>
+              Something changed the gateway outside olr — or an earlier change stopped
+              halfway. Putting it back re-programs the kernel from these settings and
+              changes none of them.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={reapply.isPending}
+              onClick={() => reapply.mutate()}
+            >
+              Put it back
+            </Button>
           </AlertDescription>
         </Alert>
       )}

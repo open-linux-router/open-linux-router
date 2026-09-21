@@ -115,6 +115,15 @@ type Observed struct {
 	// Running reports whether the backend's unit is active.
 	Running bool
 
+	// Starting reports that systemd is already bringing the unit up.
+	//
+	// Not folded into Running, because they are different answers and only one
+	// is a reason to act: a unit in `activating` is not serving yet, so it is
+	// not running, and starting it again would be olr racing systemd for a
+	// socket at every boot. Planning it as no work is what lets olrd converge
+	// the service half without that race — internal/dns says the same.
+	Starting bool
+
 	// EnabledAtBoot reports whether the unit would start after a reboot.
 	//
 	// Observed rather than assumed, because it is drift in its own right: a
@@ -185,6 +194,20 @@ func (p Plan) significant() bool {
 	}
 	return false
 }
+
+// RewritesFiles is Empty's file half on its own: would applying put something
+// different in front of the daemon, ignoring whether the unit needs starting?
+//
+// The two halves are separated for the caller that must act on one without the
+// other — olrd's background watch, which starts a server that should be running
+// and deliberately does not rewrite a file somebody may be in the middle of
+// editing. internal/dns splits them the same way and says why at more length.
+func (p Plan) RewritesFiles() bool { return p.significant() }
+
+// StartsABackend reports whether the plan would bring the daemon up from
+// nothing. A unit systemd is already starting never appears here —
+// serviceAction plans that as no work.
+func (p Plan) StartsABackend() bool { return p.Action == ActionStart }
 
 // nothingToDo reports whether there is no work at all, cosmetic included. This
 // is Apply's early exit, not the drift answer: a cosmetic rewrite is still a
@@ -266,7 +289,7 @@ func BuildPlan(b Dnsmasq, desired Config, groups GroupView, obs Observed, now ti
 
 	sort.Slice(plan.Changes, func(i, j int) bool { return plan.Changes[i].Path < plan.Changes[j].Path })
 
-	plan.Action = serviceAction(desired.Enabled, obs.Running, plan.significant(), wantReloadOnly)
+	plan.Action = serviceAction(desired.Enabled, obs.Running, obs.Starting, plan.significant(), wantReloadOnly)
 
 	// Only when the service manager answered. Without that guard a box with no
 	// system bus reads as "not enabled" and every plan against it would carry
@@ -282,8 +305,12 @@ func BuildPlan(b Dnsmasq, desired Config, groups GroupView, obs Observed, now ti
 }
 
 // serviceAction decides what to do with the daemon after writing files.
-func serviceAction(enabled, running, changed, reloadOnly bool) ServiceAction {
+func serviceAction(enabled, running, starting, changed, reloadOnly bool) ServiceAction {
 	switch {
+	case enabled && !running && starting:
+		// systemd is already on it. Asking again is how olrd and systemd end
+		// up racing for the socket at every boot.
+		return ActionNone
 	case enabled && !running:
 		return ActionStart
 	case !enabled && running:

@@ -219,6 +219,7 @@ func (a Applier) Observe(ctx context.Context) (Observed, error) {
 			state = UnitState{
 				Known:         true,
 				Running:       status.Active,
+				Starting:      status.State == "activating",
 				EnabledAtBoot: status.Enabled,
 				Installed:     status.Installed,
 			}

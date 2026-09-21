@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 
-import { useApplyDhcpConfig, usePlanPreview } from '@/features/dhcp/queries'
+import { useApplyDhcpConfig, usePlanPreview, useReapplyDhcp } from '@/features/dhcp/queries'
 import { ApiError } from '@/lib/api'
 import type { ApplyResult, Plan } from '@/lib/api-types'
 import type { DhcpConfig } from '@/lib/config-types'
@@ -23,6 +23,7 @@ import type { DhcpConfig } from '@/lib/config-types'
 export function useDhcpApply() {
   const preview = usePlanPreview()
   const apply = useApplyDhcpConfig()
+  const reapply = useReapplyDhcp()
 
   /** A change held back because it would be disruptive. */
   const [confirming, setConfirming] = useState<{ config: DhcpConfig; plan: Plan } | null>(null)
@@ -30,10 +31,11 @@ export function useDhcpApply() {
   /** The steps of the last failed apply, which the page keeps on screen. */
   const [failure, setFailure] = useState<ApplyResult | null>(null)
 
-  async function commit(config: DhcpConfig) {
+  /** Runs one apply, whatever asked for it, and reports how it went. */
+  async function run(call: () => Promise<ApplyResult>) {
     setFailure(null)
     try {
-      const result = await apply.mutateAsync(config)
+      const result = await call()
       toast.success(describe(result.plan))
       return true
     } catch (error) {
@@ -51,6 +53,21 @@ export function useDhcpApply() {
       }
       return false
     }
+  }
+
+  async function commit(config: DhcpConfig) {
+    return run(() => apply.mutateAsync(config))
+  }
+
+  /**
+   * Runs the work the box is behind on, without touching what is stored.
+   *
+   * No plan-then-confirm round trip, unlike `submit`: the operator is asking
+   * for what they already chose, so there is nothing to warn them about that
+   * they have not already decided.
+   */
+  async function repair() {
+    return run(() => reapply.mutateAsync())
   }
 
   /** Applies config, pausing for confirmation if the plan is disruptive. */
@@ -88,12 +105,13 @@ export function useDhcpApply() {
 
   return {
     submit,
+    repair,
     confirming,
     confirm,
     cancel: () => setConfirming(null),
     failure,
     dismissFailure: () => setFailure(null),
-    busy: preview.isPending || apply.isPending,
+    busy: preview.isPending || apply.isPending || reapply.isPending,
   }
 }
 

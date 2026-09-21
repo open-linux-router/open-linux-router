@@ -251,8 +251,12 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
     out.push({
       key: `drift-${d.name}`,
       title: `${d.name} is not doing what its settings say`,
-      detail:
-        'Something changed it outside olr. Saving any change on that screen puts it back.',
+      // Not "something changed it outside olr", which this used to assert and
+      // which is only one of the two ways a module gets here. The other is a
+      // backend that is enabled and was never started — nothing changed
+      // anything, there is no file to put back, and the old advice sent the
+      // operator to a screen with no change left to save.
+      detail: 'Some of what you have set is not in force yet. That screen has a button to run it.',
       tone: 'warn',
       to: d.to,
       action: 'Take a look',

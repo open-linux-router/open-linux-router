@@ -43,6 +43,66 @@ const validPUT = `{
   "pools": [{"group":"lan","ipv4":{"start":"192.168.1.100","end":"192.168.1.200"},"lease_time":"12h"}]
 }`
 
+// The case no other route could reach: every rendered file is right and the
+// server that should be running is not.
+//
+// No edit to the configuration repairs that — the plan is one service action
+// and an empty change list — so a surface with only PUT /config can show an
+// operator the pending start and offer them no way to run it.
+func TestApplyWithNoBodyStartsAServerThatIsNotRunning(t *testing.T) {
+	applier, svc := testApplier(t)
+	svc.active = true
+	h := HTTP{Applier: applier, Lock: core.NewLock(), Events: core.NewEvents()}.Handler()
+
+	if w := do(t, h, http.MethodPut, "/config", validPUT); w.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d, body %s", w.Code, w.Body)
+	}
+
+	// The server is not running, and nothing else about the box has changed.
+	svc.active = false
+	svc.calls = nil
+
+	w := do(t, h, http.MethodPost, "/apply", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", w.Code, w.Body)
+	}
+	var resp applyResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// What makes this a repair rather than a write: stored intent produced no
+	// file change, because stored intent was never the problem.
+	if len(resp.Plan.Changes) != 0 {
+		t.Errorf("re-applying stored intent rewrote files: %+v", resp.Plan.Changes)
+	}
+	if !svc.active {
+		t.Error("the server is still not running after an apply")
+	}
+}
+
+// A body is not merged into stored intent, because then "put it back" would be
+// a write nobody asked for.
+func TestApplyIgnoresAnyBody(t *testing.T) {
+	h, _, _ := testHTTP(t)
+	if w := do(t, h, http.MethodPut, "/config", validPUT); w.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d, body %s", w.Code, w.Body)
+	}
+
+	if w := do(t, h, http.MethodPost, "/apply", `{"enabled": false}`); w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", w.Code, w.Body)
+	}
+
+	w := do(t, h, http.MethodGet, "/config", "")
+	var got Config
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Enabled {
+		t.Error("a body sent to /apply switched DHCP off; it must apply stored intent only")
+	}
+}
+
 func TestConfigRoundTripsThroughHTTP(t *testing.T) {
 	h, _, _ := testHTTP(t)
 

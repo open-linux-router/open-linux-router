@@ -76,6 +76,23 @@ func (h HTTP) Routes() []core.Route {
 			Handler: h.postPlan,
 		},
 
+		// Re-apply stored intent without changing it — the repair path
+		// design.md §5.3.2 asks for in place of rollback, and the same route
+		// internal/dns and internal/ingress declare.
+		//
+		// A server that is enabled but not running drifts with nothing
+		// rendered wrong: the plan is one service action and an empty change
+		// list, and no edit to the configuration fixes it. Without this route
+		// the only repair is to save an unrelated setting.
+		{
+			Method: "POST", Path: "/apply",
+			Summary: "Re-render and restart the DHCP server from the stored configuration, changing no intent. " +
+				"This is the repair path for a half-applied change, a hand-edited backend config, " +
+				"or a backend that is enabled but not running.",
+			Mutating: true,
+			Handler:  h.postApply,
+		},
+
 		// Clearing what is in the way, rather than only reporting it. The same
 		// route internal/dns declares, and per-module for the same reason:
 		// internal/cli cannot import a module, because the modules import it.
@@ -232,6 +249,20 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 		return
 	}
 	core.WriteJSON(w, http.StatusOK, resp)
+}
+
+// postApply re-applies stored intent, changing none of it.
+//
+// Any body is ignored rather than merged: this is the route for a box that is
+// behind intent the operator already stored, and merging would make it a second
+// spelling of PATCH.
+func (h HTTP) postApply(w http.ResponseWriter, r *http.Request) {
+	cfg, err := h.Applier.Load()
+	if err != nil {
+		core.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.apply(w, r, cfg)
 }
 
 // --- dry run --------------------------------------------------------------
