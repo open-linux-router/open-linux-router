@@ -41,6 +41,7 @@ export function FirstRun() {
   if (!interfaces.data || !dhcp.data || !dns.data) return null
 
   const adopted = interfaces.data.interfaces.filter((i) => i.adopted)
+  const networks = interfaces.data.groups
   const serving = dhcp.data.enabled || dns.data.enabled
   if (adopted.length > 0 && serving) return null
 
@@ -60,28 +61,42 @@ export function FirstRun() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-1">
+        {/* One step for both halves, because they are one page and neither is
+            any use alone: an adopted interface with no network carries no
+            address, and a network cannot be created on an interface nobody
+            handed over. Splitting them into two rows described the same trip
+            twice. */}
         <Step
           n={1}
-          done={adopted.length > 0}
-          title="Give this router an interface"
+          done={adopted.length > 0 && networks.length > 0}
+          title="Give this router an interface, and say what network it carries"
           detail={
-            adopted.length
-              ? `${adopted.map((i) => i.name).join(', ')} — yours to configure.`
-              : 'Nothing can be served on an interface until you hand it over. Switching one on changes nothing by itself.'
+            adopted.length === 0
+              ? 'Nothing can be served on an interface until you hand it over. Switching one on changes nothing by itself.'
+              : networks.length === 0
+                ? `${adopted.map((i) => i.name).join(', ')} — yours to configure. Now say what subnet it serves.`
+                : networks.map((g) => `${g.name} on ${g.members.join(', ')}`).join(' · ')
           }
-          action={{ to: '/dhcp/interfaces', label: adopted.length ? 'Change' : 'Choose one' }}
+          action={{
+            to: '/networks',
+            label: adopted.length && networks.length ? 'Change' : 'Set it up',
+          }}
         />
         <Step
           n={2}
           done={dhcp.data.enabled && (dhcp.data.pools?.length ?? 0) > 0}
-          blocked={adopted.length === 0}
+          // Blocked on the network, not just on adoption: a range is stored
+          // against a network and the form has nothing to offer until one
+          // exists. Pointing somebody at it earlier sends them to an empty
+          // select box.
+          blocked={networks.length === 0}
           title="Hand out addresses"
           // Not a one-click, unlike DNS below, and the reason is the trap
           // docs/install.md §4 spends two paragraphs on: the gateway and DNS a
           // range advertises default to *this* box, which is right when it is
           // your router and catastrophic when your old one still is. The form
           // asks; a button here could only guess.
-          detail="Choosing an interface fills in a range. Check what it advertises if something else on this network is still your router."
+          detail="Choosing a network fills in a range. Check what it advertises if something else on this network is still your router."
           action={{ to: '/dhcp/ranges', label: 'Set up a range' }}
         />
         <Step

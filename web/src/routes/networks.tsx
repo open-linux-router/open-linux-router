@@ -14,22 +14,42 @@ import {
 import { Disclosure } from '@/components/ui/disclosure'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useDhcpConfig } from '@/features/dhcp/queries'
+import { InterfacesCard } from '@/features/link/interfaces-card'
 import { NetworkDialog } from '@/features/link/network-dialog'
 import { useNetworkEditor } from '@/features/link/use-networks'
 import type { GroupRow } from '@/lib/api-types'
 import type { Group } from '@/lib/config-types'
 
 /**
- * The networks this router serves.
+ * Everything about this router's own interfaces: which ones it has been given,
+ * and what networks they carry.
  *
  * This page is the answer to a specific dead end. Adding an address range used
  * to mean choosing an interface and typing a range inside whatever subnet that
  * interface already had — and if you wanted a different subnet, the form said
  * so and there was nowhere in olr to go and change it. The subnet is declared
  * here now, and the range is checked against it.
+ *
+ * ## Why adoption is on this page, above the networks
+ *
+ * It used to be a sub-page of DHCP, and the dead end it produced was the same
+ * shape as the one above. A network needs an adopted interface; the dialog's
+ * only way of saying so was a line of small print telling you to go and find a
+ * switch under a *different* section, listed after this one. Somebody setting
+ * up two NICs could not find it at all.
+ *
+ * So it is here, and it is first. The order is the order of the work: hand an
+ * interface over, then say what network it carries. It costs a configured box a
+ * short list above the one it came for, which is a fair price — that list is
+ * also the only place in olr that answers "is the cable in", and it is read
+ * exactly when a network looks configured and does not work.
  */
 export function NetworksPage() {
   const editor = useNetworkEditor()
+  // Read here so a release can name the ranges it is about to invalidate; the
+  // card joins the two and olr never guesses on the operator's behalf.
+  const dhcp = useDhcpConfig()
   const [editing, setEditing] = useState<Group | undefined>(undefined)
   const [open, setOpen] = useState(false)
 
@@ -59,52 +79,71 @@ export function NetworksPage() {
   }
 
   return (
+    // No page header. components/layout/app-shell renders the section's title
+    // and blurb on a section's own landing page, and this page was drawing a
+    // second identical <h1> underneath it — two "Networks" headings, one above
+    // the other, since the day the section was added.
     <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Networks</h1>
-        <p className="max-w-prose text-sm text-muted-foreground">
-          A network is a subnet, the interface it lives on, and this router's address on it.
-          Address ranges and internet access are configured against a network, not against an
-          interface.
-        </p>
-      </header>
-
       <PartialApply editor={editor} />
 
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          disabled={editor.busy}
-          onClick={() => {
-            setEditing(undefined)
-            setOpen(true)
-          }}
-        >
-          <Plus className="size-4" aria-hidden /> Add
-        </Button>
-      </div>
+      <section className="space-y-3">
+        <div className="space-y-1">
+          <h2 className="text-lg font-medium tracking-tight">Interfaces</h2>
+          <p className="max-w-prose text-sm text-muted-foreground">
+            Which of this machine's interfaces this router may use. Switching one on changes
+            nothing by itself — no address is set and no service is started — but until one is
+            on, it cannot carry a network.
+          </p>
+        </div>
+        <InterfacesCard dhcp={dhcp.data} />
+      </section>
 
-      {editor.groups.length === 0 ? (
-        <ListEmpty>
-          No networks yet. Add one to say what subnet this router serves — an address range
-          needs a network to sit in.
-        </ListEmpty>
-      ) : (
-        <List>
-          {editor.groups.map((g) => (
-            <ListRow
-              key={g.name}
-              title={g.name}
-              subtitle={subtitleOf(g)}
-              trailing={g.members.join(', ') || 'no interface'}
-              onSelect={() => {
-                setEditing(stored.find((s) => s.name === g.name))
-                setOpen(true)
-              }}
-            />
-          ))}
-        </List>
-      )}
+      <section className="space-y-3">
+        {/* items-start, so Add sits level with the heading rather than at the
+            foot of a three-line paragraph. */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="text-lg font-medium tracking-tight">Networks</h2>
+            <p className="max-w-prose text-sm text-muted-foreground">
+              A network is a subnet, the interface it lives on, and this router's address on
+              it — one per subnet you serve. Address ranges and internet access are configured
+              against a network, not against an interface.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            disabled={editor.busy}
+            onClick={() => {
+              setEditing(undefined)
+              setOpen(true)
+            }}
+          >
+            <Plus className="size-4" aria-hidden /> Add
+          </Button>
+        </div>
+
+        {editor.groups.length === 0 ? (
+          <ListEmpty>
+            No networks yet. Add one to say what subnet this router serves — an address range
+            needs a network to sit in.
+          </ListEmpty>
+        ) : (
+          <List>
+            {editor.groups.map((g) => (
+              <ListRow
+                key={g.name}
+                title={g.name}
+                subtitle={subtitleOf(g)}
+                trailing={g.members.join(', ') || 'no interface'}
+                onSelect={() => {
+                  setEditing(stored.find((s) => s.name === g.name))
+                  setOpen(true)
+                }}
+              />
+            ))}
+          </List>
+        )}
+      </section>
 
       {editor.problems.length > 0 && (
         <Alert>

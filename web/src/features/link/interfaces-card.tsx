@@ -32,11 +32,13 @@ import { cn } from '@/lib/utils'
  * one row here is switched on. Before this existed, that refusal arrived as a
  * validation error on a form field, naming a permission the UI gave you no way
  * to grant — and the DHCP and DNS landing pages now say so *before* the switch
- * is touched, linking here.
+ * is touched, linking to the page this card sits on.
  *
- * The title and the explanation are the sub-page's (routes/dhcp/interfaces),
- * not this component's: it is the whole body of that page, and a card heading
- * under the page heading would say "Interfaces" twice.
+ * That page is routes/networks, which is where adoption belongs: the next thing
+ * you do with an adopted interface is put a network on it, and that form is
+ * directly below. It was a sub-page of DHCP until it moved, and the heading
+ * above it is still the page's rather than this component's — a card heading
+ * under a section heading would say "Interfaces" twice.
  */
 export function InterfacesCard({
   dhcp,
@@ -159,7 +161,9 @@ export function InterfacesCard({
         {interfaces.isSuccess && rows.length > 0 && adopted.length === 0 && (
           <p className="text-sm text-muted-foreground">
             Nothing is adopted yet. Switch on the interface facing your home
-            network — usually the one with an address on it.
+            network — usually the one with an address on it — and then add a
+            network for it below. Switch on a second one if this router serves
+            two subnets.
           </p>
         )}
       </CardContent>

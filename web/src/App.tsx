@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button'
 import { AuthGate } from '@/components/layout/auth-gate'
 import { DhcpPage } from '@/routes/dhcp/index'
 import { DhcpAdvancedPage } from '@/routes/dhcp/advanced'
-import { DhcpInterfacesPage } from '@/routes/dhcp/interfaces'
 import { DhcpRangesPage } from '@/routes/dhcp/ranges'
 import { DhcpReservationsPage } from '@/routes/dhcp/reservations'
 import { DnsPage } from '@/routes/dns/index'
@@ -43,7 +42,6 @@ export function App() {
             <Route index element={<DhcpPage />} />
             <Route path="ranges" element={<DhcpRangesPage />} />
             <Route path="reservations" element={<DhcpReservationsPage />} />
-            <Route path="interfaces" element={<DhcpInterfacesPage />} />
             <Route path="advanced" element={<DhcpAdvancedPage />} />
           </Route>
 
@@ -68,11 +66,14 @@ export function App() {
           <Route path="remote" element={<RemotePage />} />
           <Route path="ingress" element={<IngressPage />} />
 
-          {/* The two addresses that moved. Redirected rather than deleted: a
+          {/* The addresses that moved. Redirected rather than deleted: a
               bookmark or a link in someone's notes should land where the thing
-              went, not on a 404 that makes it look removed. */}
+              went, not on a 404 that makes it look removed. docs/install.md has
+              named /dhcp/interfaces in print since 0.1.0, so that one will be
+              followed by people reading an older copy for a while yet. */}
           <Route path="internet" element={<Navigate to="/gateway" replace />} />
           <Route path="devices" element={<Navigate to="/" replace />} />
+          <Route path="dhcp/interfaces" element={<Navigate to="/networks" replace />} />
 
           <Route path="*" element={<NotFound />} />
         </Route>

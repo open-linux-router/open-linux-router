@@ -128,8 +128,8 @@ export function NetworkDialog({
               </Select>
               {available.length === 0 && (
                 <p className="text-xs text-warning">
-                  No interface is free. Adopt one under DHCP → Interfaces, or remove the
-                  network already on it.
+                  No interface is free. Close this and switch one on under Interfaces above,
+                  or remove the network already on it.
                 </p>
               )}
             </div>

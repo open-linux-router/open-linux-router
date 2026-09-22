@@ -87,10 +87,13 @@ The rest of this document gives both the UI and the CLI; they are the same API.
 
 ## 3. Hand the interface to olr, and name the network on it
 
-**Web UI:** DHCP → Interfaces → switch on `enp1s0`. (A box with nothing
-adopted says so on the Overview, and that link goes to the same page.) Then
-Networks → Add: subnet `192.168.1.0/24`, this box's address `192.168.1.2`, on
-`enp1s0`.
+**Web UI:** both halves are on one page, in the order this heading gives them.
+Networks → Interfaces → switch on `enp1s0`; then, below it, Add: subnet
+`192.168.1.0/24`, this box's address `192.168.1.2`, on `enp1s0`. (A box with
+nothing adopted says so on the Overview, and that link goes to the same page.)
+
+Adoption used to live under DHCP → Interfaces, and that address still
+redirects here — an older copy of this document strands nobody.
 
 **CLI:**
 

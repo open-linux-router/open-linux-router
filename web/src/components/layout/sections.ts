@@ -101,7 +101,14 @@ export const SECTIONS: Section[] = [
     label: 'Networks',
     icon: Router,
     end: false,
-    blurb: 'The subnets this router serves, and the interfaces they live on.',
+    // Adoption lives on this page too, and did not always. It was a sub-page of
+    // DHCP, filed there because DHCP was the first module that needed it. That
+    // reason expired when this section landed: a network cannot be created on
+    // an interface nobody handed over, so adoption became the prerequisite of
+    // the page the nav already calls first — reachable only by opening a
+    // section listed *after* it and going one level down. An operator with two
+    // NICs to set up could not find it, which is the whole bug in one sentence.
+    blurb: 'The interfaces this router has been given, and the subnets they carry.',
     groups: [],
   },
   {
@@ -151,12 +158,7 @@ export const SECTIONS: Section[] = [
         blurb:
           'Devices that should always get the same address — printers, a NAS, anything you reach by address rather than by name.',
       },
-      {
-        slug: 'interfaces',
-        label: 'Interfaces',
-        blurb:
-          'Which interfaces this router has been given. Switching one on changes nothing by itself \u2014 no address is set and no service is started \u2014 but until one is on, it cannot carry a network, and everything else here is refused.',
-      },
+      // Interfaces was here, and it was the wrong place. See /networks.
       {
         slug: 'advanced',
         label: 'Advanced',
