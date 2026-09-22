@@ -236,6 +236,27 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
     })
   }
 
+  // Settings that no longer validate, which the drift check below leaves out
+  // because it cannot run against them. A different and worse state than
+  // drift: the backend keeps the last settings that did validate, and nothing
+  // saved takes effect until what broke them is fixed. StuckSettings has the
+  // rest, and the box that had it.
+  const stuck: { name: string; to: string; error?: string }[] = [
+    { name: 'DHCP', to: '/dhcp', error: dhcp?.enabled ? dhcp.drift_error : undefined },
+    { name: 'DNS', to: '/dns', error: dns?.enabled ? dns.drift_error : undefined },
+  ]
+  for (const s of stuck) {
+    if (!s.error) continue
+    out.push({
+      key: `stuck-${s.name}`,
+      title: `${s.name} is running on settings it can no longer apply`,
+      detail: 'Something those settings depend on was removed or changed. Its page says what.',
+      tone: 'warn',
+      to: s.to,
+      action: 'Take a look',
+    })
+  }
+
   // Only for a module that is switched on, and that is not a way of hiding
   // drift. A disabled module's rendered files differing from its intent has no
   // consequence — nothing is running, and enabling rewrites them on the way —

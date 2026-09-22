@@ -213,7 +213,7 @@ var impactRank = map[string]int{impactNone: 0, impactRestart: 1, impactDisruptiv
 // on the box for the result to be true. They are not the same list — re-applying
 // an unchanged config still has work to do if somebody ran `ip addr del` by
 // hand, and that is drift (§5.4) rather than a no-op.
-func buildPlan(stored, desired Config, observed []Interface) planView {
+func buildPlan(stored, desired Config, observed []Interface, opts Options) planView {
 	stored.Normalize()
 	desired.Normalize()
 
@@ -268,10 +268,13 @@ func buildPlan(stored, desired Config, observed []Interface) planView {
 	for _, g := range stored.Groups {
 		if _, kept := desired.Group(g.Name); !kept {
 			// Removing a network takes the router's address off the interface,
-			// which is every bit as disruptive as renumbering it.
+			// which is every bit as disruptive as renumbering it — unless the
+			// address is being kept for the uplink to take over, when what goes
+			// is only what this box serves there.
 			plan.Changes = append(plan.Changes, changeView{
-				Path: groupPath(g.Name), Kind: kindDelete, Impact: impactDisruptive,
-				Diff: describeGroup("- ", g),
+				Path: groupPath(g.Name), Kind: kindDelete,
+				Impact: pick(opts.KeepAddresses, impactRestart, impactDisruptive),
+				Diff:   describeGroup("- ", g),
 			})
 		}
 	}
@@ -290,6 +293,20 @@ func buildPlan(stored, desired Config, observed []Interface) planView {
 			Impact: pick(len(ap.Remove) > 0, impactDisruptive, impactRestart),
 			Diff:   strings.Join(lines, "\n") + "\n",
 		})
+	}
+
+	// The addresses networks leave behind, on interfaces no network claims any
+	// more — the half of a removal PlanAddrs cannot see, because it walks the
+	// networks that still exist.
+	if !opts.KeepAddresses {
+		for _, ap := range PlanRetire(stored, desired, observed) {
+			plan.Changes = append(plan.Changes, changeView{
+				Path:   "interfaces[" + ap.Interface + "]",
+				Kind:   kindUpdate,
+				Impact: impactDisruptive,
+				Diff:   strings.Join(DescribeAddrPlan(ap), "\n") + "\n",
+			})
+		}
 	}
 
 	for _, c := range plan.Changes {

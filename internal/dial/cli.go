@@ -552,8 +552,8 @@ func setUplinkCommand() *cobra.Command {
 	c.Flags().StringVar(&gateway, "gateway", "",
 		"where to send everything else — your modem's address on that link")
 	c.Flags().StringArrayVar(&dns, "dns", nil,
-		"resolver your ISP gave you (repeatable). Recorded only; nothing reads these yet")
-	c.Flags().BoolVar(&noDNS, "no-dns", false, "forget the recorded ISP resolvers")
+		"resolver this router looks names up through, usually your modem (repeatable)")
+	c.Flags().BoolVar(&noDNS, "no-dns", false, "forget the resolvers and give them back to the distribution")
 
 	c.MarkFlagsMutuallyExclusive("address", "no-address")
 	c.MarkFlagsMutuallyExclusive("gateway", "no-address")

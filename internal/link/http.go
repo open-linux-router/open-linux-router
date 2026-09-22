@@ -2,10 +2,12 @@ package link
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +23,18 @@ type HTTP struct {
 	Applier Applier
 	Lock    *core.Lock
 	Events  *core.Events
+
+	// Claims lists addresses other modules own, which removing an address by
+	// hand must not take away — today the uplink's. A function rather than a
+	// view, for the reason internal/dial reaches its publisher through one: the
+	// uplink is `dial`'s, and link importing dial is an arrow design.md §4.1
+	// does not draw. Nil outside olrd, which means nothing is claimed.
+	Claims func() []Claim
+
+	// HostFindings are what olr could not take from the distribution's own
+	// network configuration for a network's members (internal/host), listed
+	// with the interfaces' other findings. Nil outside olrd.
+	HostFindings func() []core.Problem
 }
 
 // Routes is the module's surface, declared as data so that it can be
@@ -60,6 +74,18 @@ func (h HTTP) Routes() []core.Route {
 		},
 
 		// The join. Observed half never stored, always stamped (§4.5).
+		// One address, by hand. Not intent — nothing stored changes — so it is
+		// its own verb rather than a field in the document, and it is the only
+		// way to reach an address no network or uplink accounts for without a
+		// shell. Applier.RemoveAddress has what it refuses.
+		{
+			Method: "DELETE", Path: "/interfaces/{name}/addresses/{address...}",
+			Summary: "Take one IPv4 address off an adopted interface that no network owns — " +
+				"typically one a removed network left behind.",
+			Mutating: true,
+			Handler:  h.deleteAddress,
+		},
+
 		{
 			Method: "GET", Path: "/interfaces", Tool: "show interfaces",
 			Summary: "List this machine's network interfaces and the networks configured on them: " +
@@ -95,7 +121,29 @@ func (h HTTP) putConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	h.apply(w, r, cfg)
+	opts, err := options(r)
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.apply(w, r, cfg, opts)
+}
+
+// options reads the query parameters an apply or a plan accepts.
+//
+// `keep_addresses` is Options.KeepAddresses, and a query parameter rather than
+// a field in the body because it is not intent: nothing about it is stored, and
+// a document that carried it would say something about every later apply.
+func options(r *http.Request) (Options, error) {
+	var opts Options
+	if v := r.URL.Query().Get("keep_addresses"); v != "" {
+		keep, err := strconv.ParseBool(v)
+		if err != nil {
+			return opts, fmt.Errorf("keep_addresses=%q is not true or false", v)
+		}
+		opts.KeepAddresses = keep
+	}
+	return opts, nil
 }
 
 // patchConfig changes named fields and leaves the rest alone.
@@ -138,7 +186,12 @@ func (h HTTP) patchConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	h.apply(w, r, cfg)
+	opts, err := options(r)
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.apply(w, r, cfg, opts)
 }
 
 // applyResponse carries the plan alongside the stored result.
@@ -154,7 +207,7 @@ type applyResponse struct {
 	Error  *core.ErrorBody `json:"error,omitempty"`
 }
 
-func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
+func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config, opts Options) {
 	// Validated before the lock is taken. The name and subnet rules are pure
 	// (§5.3.1), so holding the lock for them would only make a bad request slow
 	// down a good one. The observed half is read here too, which is a syscall
@@ -171,7 +224,7 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 		applyErr error
 	)
 	if err := h.Lock.Do(r.Context(), func() error {
-		result, applyErr = h.Applier.Apply(r.Context(), cfg)
+		result, applyErr = h.Applier.ApplyWith(r.Context(), cfg, opts)
 		return nil
 	}); err != nil {
 		core.WriteError(w, http.StatusServiceUnavailable,
@@ -207,6 +260,68 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 	}
 
 	core.WriteJSON(w, http.StatusOK, applyResponse{Plan: plan, Config: stored, Steps: result.Steps})
+}
+
+// removeResponse is what removing an address by hand reports: the steps, and
+// the error when one failed.
+type removeResponse struct {
+	Steps []Step          `json:"steps"`
+	Error *core.ErrorBody `json:"error,omitempty"`
+}
+
+func (h HTTP) deleteAddress(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	prefix, err := netip.ParsePrefix(r.PathValue("address"))
+	if err != nil || !prefix.Addr().Is4() {
+		core.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"%q is not an IPv4 address with its mask, like 172.16.1.1/24", r.PathValue("address")))
+		return
+	}
+
+	// Refused rather than warned about, unlike a plan's lockout warning. A plan
+	// is followed by a confirmation; this is one click, and what it would cost
+	// is the only session that could put the address back.
+	if local, ok := localAddr(r); ok && local == prefix.Addr() {
+		core.WriteError(w, http.StatusConflict, fmt.Sprintf(
+			"you are connected to this router at %s; removing it would cut this session off. "+
+				"Connect through another of its addresses and remove it from there", local))
+		return
+	}
+
+	var claims []Claim
+	if h.Claims != nil {
+		claims = h.Claims()
+	}
+
+	var (
+		steps []Step
+		opErr error
+	)
+	if err := h.Lock.Do(r.Context(), func() error {
+		steps, opErr = h.Applier.RemoveAddress(r.Context(), name, prefix, claims)
+		return nil
+	}); err != nil {
+		core.WriteError(w, http.StatusServiceUnavailable,
+			"timed out waiting for the apply lock: "+err.Error())
+		return
+	}
+
+	switch {
+	case errors.Is(opErr, ErrNotPresent):
+		core.WriteError(w, http.StatusNotFound, opErr.Error())
+		return
+	case errors.Is(opErr, ErrNotAdopted), errors.Is(opErr, ErrNetworkOwned), errors.Is(opErr, ErrClaimed):
+		core.WriteError(w, http.StatusUnprocessableEntity, opErr.Error())
+		return
+	case opErr != nil:
+		core.WriteJSON(w, http.StatusInternalServerError, removeResponse{
+			Steps: steps, Error: &core.ErrorBody{Message: opErr.Error()},
+		})
+		return
+	}
+
+	h.Events.Publish(core.Event{Type: core.EventApplied, Module: ModuleName})
+	core.WriteJSON(w, http.StatusOK, removeResponse{Steps: steps})
 }
 
 // withLockoutWarning adds a warning when the change moves the address the
@@ -311,7 +426,13 @@ func (h HTTP) postPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	core.WriteJSON(w, http.StatusOK, withLockoutWarning(buildPlan(current, desired, observed), r, observed))
+	opts, err := options(r)
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	core.WriteJSON(w, http.StatusOK,
+		withLockoutWarning(buildPlan(current, desired, observed, opts), r, observed))
 }
 
 // --- the list ---------------------------------------------------------------
@@ -343,6 +464,9 @@ func (h HTTP) getInterfaces(w http.ResponseWriter, r *http.Request) {
 		Groups:     make([]groupView, 0, len(cfg.Groups)),
 		Problems:   problems(append(res.Errors, res.Warnings...)),
 		AsOf:       now,
+	}
+	if h.HostFindings != nil {
+		resp.Problems = append(resp.Problems, h.HostFindings()...)
 	}
 	for _, info := range list {
 		resp.Interfaces = append(resp.Interfaces, viewInterface(info, byName, cfg))

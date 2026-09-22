@@ -396,7 +396,10 @@ export interface LinkStep {
 export interface Uplink {
   interface: string
   ipv4?: UplinkIPv4
-  /** Recorded for `dns`. Nothing reads these yet; the server says so too. */
+  /**
+   * The resolvers this router itself looks names up through, written for the
+   * box whenever the uplink is static. Only recorded when it is not.
+   */
   dns?: string[]
 }
 
@@ -445,6 +448,22 @@ export interface UplinkStatus {
    */
   route_via?: string
   route_dev?: string
+
+  /**
+   * Whether route_via answers on route_dev, from the kernel's neighbour table.
+   * Absent when nothing has tried to reach it yet. A route that matches what
+   * was set and a route that works are different facts, and only this says
+   * the second.
+   */
+  gateway_state?: 'answers' | 'silent'
+  /** Another interface route_via does answer on — usually the one that faces the modem. */
+  gateway_seen_on?: string
+
+  /**
+   * The name servers this box really looks names up through, whoever set them
+   * — beside `dns`, which is what olr was told.
+   */
+  resolving_through?: string[]
 
   problems?: Problem[]
 }

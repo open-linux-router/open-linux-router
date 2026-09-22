@@ -171,3 +171,62 @@ func TestAFailedApplyStillReportsItsSteps(t *testing.T) {
 		}
 	}
 }
+
+// Moving the way out takes the old address with it; handing it back, or
+// dropping to no static address, does not. Config.RemoveUplink has why the
+// second half is the safe one.
+func TestRetiringIsThePreviousAddressOnlyWhenTheUplinkMoves(t *testing.T) {
+	stored := Config{Uplink: &Uplink{Interface: "ens19", IPv4: &UplinkIPv4{
+		Address: netip.MustParsePrefix("192.168.1.3/24"),
+		Gateway: netip.MustParseAddr("192.168.1.1"),
+	}}}
+	moved := stored.Clone()
+	moved.Uplink.Interface = "ens18"
+	moved.Uplink.IPv4.Address = netip.MustParsePrefix("192.168.1.2/24")
+	renumbered := stored.Clone()
+	renumbered.Uplink.IPv4.Address = netip.MustParsePrefix("192.168.1.4/24")
+	sameAddressElsewhere := stored.Clone()
+	sameAddressElsewhere.Uplink.Interface = "ens18"
+	regatewayed := stored.Clone()
+	regatewayed.Uplink.IPv4.Gateway = netip.MustParseAddr("192.168.1.254")
+	noStatic := Config{Uplink: &Uplink{Interface: "ens18"}}
+
+	old := netip.MustParsePrefix("192.168.1.3/24")
+	for _, tc := range []struct {
+		name    string
+		desired Config
+		from    string
+		retire  netip.Prefix
+	}{
+		{"moved", moved, "ens19", old},
+		{"renumbered in place", renumbered, "ens19", old},
+		{"same address, other interface", sameAddressElsewhere, "ens19", old},
+		{"only the gateway changed", regatewayed, "", netip.Prefix{}},
+		{"unchanged", stored, "", netip.Prefix{}},
+		{"handed back", Config{}, "", netip.Prefix{}},
+		{"no static address", noStatic, "", netip.Prefix{}},
+	} {
+		from, retire := Retiring(stored, tc.desired)
+		if from != tc.from || retire != tc.retire {
+			t.Errorf("%s: Retiring = (%q, %v), want (%q, %v)", tc.name, from, retire, tc.from, tc.retire)
+		}
+	}
+}
+
+// The old address comes off after everything that replaces it, so a box that
+// fails halfway still has the way out it started with.
+func TestTheWriterRetiresTheOldAddressLast(t *testing.T) {
+	w := &RecordingWriter{}
+	d := desiredUplink()
+	d.Retire, d.RetireFrom = netip.MustParsePrefix("192.168.1.3/24"), "ens19"
+	if _, err := w.Apply(context.Background(), d); err != nil {
+		t.Fatal(err)
+	}
+	last := w.Steps[len(w.Steps)-1].Description
+	if last != "remove 192.168.1.3/24 from ens19" {
+		t.Errorf("last step = %q, want the retirement", last)
+	}
+	if (Desired{Interface: "ens18", Retire: d.Retire, RetireFrom: "ens19"}).Empty() {
+		t.Error("a retirement alone read as nothing to do")
+	}
+}

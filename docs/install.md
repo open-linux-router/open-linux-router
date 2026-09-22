@@ -39,9 +39,12 @@ neither knows about the other. Two rules keep that safe:
   network interface this is the only arrangement that works: something outside
   olr keeps providing the default route, and it and olr agree on the address.
 - **An interface that gets its address by DHCP is never in a network.** On a box
-  that *is* your gateway, that is the uplink to your modem: leave it to the
-  distribution, put only the LAN side in a network, and take the LAN side out of
-  the distribution's configuration so that olr is the only thing addressing it.
+  that *is* your gateway, that is the uplink to your modem: make it the uplink
+  (below), and put only the LAN side in a network. Where the distribution runs
+  dhcpcd (Debian 13, Raspberry Pi OS), olr stops it doing IPv4 on every
+  interface olr addresses and leaves its IPv6 alone. Where it runs
+  NetworkManager, systemd-networkd or dhclient, olr says so on the Networks page
+  and you take the interface out of that configuration yourself.
 
 #### If this box is your gateway: the uplink is not a network
 
@@ -57,14 +60,23 @@ sudo olr dial set uplink --interface enp2s0 \
 ```
 
 The address keeps its host bits — `192.168.2.9/24` is this box's address on the
-link to the modem, not the subnet. From then on olr owns that interface's
-address and this router's default route, and puts both back after a reboot, so
-the distribution should no longer configure that interface at all.
+link to the modem, not the subnet. From then on olr owns that interface's IPv4
+and this router's default route, and puts both back after a reboot. Add
+`--dns 192.168.2.1` — usually the modem — and this router looks names up
+through it too: olr writes `/etc/resolv.conf`, or gives systemd-resolved the
+address where the box resolves through it. docs/dial.md §4 has exactly what is
+taken from the distribution, and how it is given back.
 
 **One interface cannot be both.** olr refuses an uplink on an interface a
 network already carries, and says which network. If you set your WAN NIC up as a
 network before this existed — which was the only thing olr would accept — the
-migration is: `sudo olr net rm wan`, then the two commands above. Do it from the
+easiest migration is the web UI: under **Networks → Internet uplink**, choose
+that interface. It says it carries the network, removes the network while
+keeping its address on the interface, and sets the uplink on that same address,
+so a session arriving through it stays up.
+
+From the CLI it is `sudo olr net rm wan`, then the two commands above — and
+`net rm` takes the network's address off the interface, so do that from the
 console, or over the *other* NIC.
 
 **Your networks come with it.** Once there is an uplink, olr masquerades
@@ -324,8 +336,15 @@ there, and turning the module off closes it along with any port forwards.
 **`olr dial show uplink` says the default route goes somewhere else.** Something
 outside olr replaced it — most often the distribution still configuring that
 interface, or a DHCP client on it. `olr dial set uplink --interface <name>` with
-no other flags re-applies what is stored; then take the interface out of your
-distribution's configuration, or the two will keep overwriting each other.
+no other flags re-applies what is stored, and takes the interface from dhcpcd
+if that is what was on it; anything else olr names in the same output, and you
+take the interface out of its configuration, or the two will keep overwriting
+each other.
+
+**This router reaches the internet by address but cannot resolve names.** The
+uplink has no resolvers: set `--dns` (the Networks page offers the gateway with
+one click). The uplink card's "looks names up through" line shows what the box
+is really using.
 
 **The web UI cannot be reached.** `olr listen` with no listener set is off
 by default; re-run step 2. If it is set, check nothing between you and the box is

@@ -468,18 +468,23 @@ func TestAPublicUplinkAddressIsNotWarnedAbout(t *testing.T) {
 	}
 }
 
-// A field that appears on every generated surface, stores what it is given and
-// has no observable effect is the worst kind. Say so where it is typed.
-func TestRecordedResolversSayTheyAreNotUsedYet(t *testing.T) {
+// The resolvers are this router's own when the uplink is static — and only
+// recorded when it is not, which is the case worth saying where it is typed.
+func TestResolversSayWhenTheyAreNotUsed(t *testing.T) {
 	u := validUplink()
 	u.DNS = []netip.Addr{netip.MustParseAddr("9.9.9.9")}
 
 	res := validateUplinkOnly(t, u, uplinkLinks())
 	if !res.OK() {
-		t.Fatalf("recorded resolvers were refused: %v", res.Errors)
+		t.Fatalf("resolvers were refused: %v", res.Errors)
 	}
-	if _, found := warningAt(res, UplinkPath+".dns"); !found {
-		t.Errorf("nothing says the resolvers are not read yet: %+v", res.Warnings)
+	if w, found := warningAt(res, UplinkPath+".dns"); found {
+		t.Errorf("a static uplink's resolvers were called unused: %s", w.Message)
+	}
+
+	bare := Uplink{Interface: u.Interface, DNS: u.DNS}
+	if _, found := warningAt(validateUplinkOnly(t, bare, uplinkLinks()), UplinkPath+".dns"); !found {
+		t.Error("resolvers on an uplink olr does not address were not called unused")
 	}
 }
 

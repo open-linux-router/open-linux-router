@@ -2,8 +2,13 @@ package dial
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -345,4 +350,99 @@ func TestAnUnchangedUplinkIsNotToldAboutExitsAgain(t *testing.T) {
 	if plan := buildPlan(stored, stored, uplinkLinks(), obs); hasWarning(plan, "olr gateway add exit") {
 		t.Error("a drift check repeated the setup note")
 	}
+}
+
+// The case that motivated retiring: an uplink set on the wrong NIC and moved
+// to the right one. The old address has to come off, and the plan has to say
+// so on the interface it is actually on.
+func TestMovingTheUplinkPlansTheOldAddressOff(t *testing.T) {
+	links := StaticLinks{
+		"ens18": {Adopted: true, Up: true, Prefixes: []netip.Prefix{netip.MustParsePrefix("192.168.1.2/24")}},
+		"ens19": {Adopted: true, Up: true, Prefixes: []netip.Prefix{netip.MustParsePrefix("192.168.1.3/24")}},
+	}
+	before := Config{Uplink: &Uplink{Interface: "ens19", IPv4: &UplinkIPv4{
+		Address: netip.MustParsePrefix("192.168.1.3/24"),
+		Gateway: netip.MustParseAddr("192.168.1.1"),
+	}}}
+	after := before.Clone()
+	after.Uplink.Interface = "ens18"
+	after.Uplink.IPv4.Address = netip.MustParsePrefix("192.168.1.2/24")
+	obs := Observed{
+		Present: true, Up: true,
+		Addrs:      []netip.Prefix{netip.MustParsePrefix("192.168.1.2/24")},
+		Gateway:    netip.MustParseAddr("192.168.1.1"),
+		GatewayDev: "ens19",
+	}
+
+	plan := buildPlan(before, after, links, obs)
+	change, ok := changeAt(plan, "interfaces[ens19]")
+	if !ok {
+		t.Fatalf("no change on the old interface: %+v", plan.Changes)
+	}
+	if change.Diff != "- ip addr del 192.168.1.3/24 dev ens19\n" || change.Impact != impactDisruptive {
+		t.Errorf("old interface change = %+v", change)
+	}
+
+	// Already gone: nothing to promise.
+	delete(links, "ens19")
+	links["ens19"] = LinkInfo{Adopted: true, Up: true}
+	if _, ok := changeAt(buildPlan(before, after, links, obs), "interfaces[ens19]"); ok {
+		t.Error("the plan promised to remove an address that is not there")
+	}
+}
+
+// Renumbering in place retires the old address on the same interface — and
+// the foreign-address note must not then call it somebody else's.
+func TestRenumberingTheUplinkRetiresTheOldAddressInPlace(t *testing.T) {
+	before := uplinkConfig()
+	after := before.Clone()
+	after.Uplink.IPv4.Address = netip.MustParsePrefix("192.168.2.10/24")
+	obs := Observed{
+		Present: true, Up: true,
+		Addrs:      []netip.Prefix{netip.MustParsePrefix("192.168.2.9/24")},
+		Gateway:    netip.MustParseAddr("192.168.2.1"),
+		GatewayDev: "enp2s0",
+	}
+	plan := buildPlan(before, after, testLinks(), obs)
+	if !slices.ContainsFunc(plan.Changes, func(c changeView) bool {
+		return strings.Contains(c.Diff, "- ip addr del 192.168.2.9/24 dev enp2s0")
+	}) {
+		t.Errorf("the old address is not planned off: %+v", plan.Changes)
+	}
+	if hasWarning(plan, "also has") {
+		t.Errorf("the retiring address was reported as foreign: %+v", plan.Warnings)
+	}
+}
+
+// Somebody connected at the address being retired is told, by address, that
+// their session ends with this change.
+func TestRetiringTheCallersAddressWarnsByName(t *testing.T) {
+	before := Config{Uplink: &Uplink{Interface: "ens19", IPv4: &UplinkIPv4{
+		Address: netip.MustParsePrefix("192.168.1.3/24"),
+		Gateway: netip.MustParseAddr("192.168.1.1"),
+	}}}
+	after := before.Clone()
+	after.Uplink.Interface = "ens18"
+	after.Uplink.IPv4.Address = netip.MustParsePrefix("192.168.1.2/24")
+
+	r := httptest.NewRequest("POST", "/plan", nil)
+	r = r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey,
+		&net.TCPAddr{IP: net.ParseIP("192.168.1.3"), Port: 8080}))
+
+	plan := withLockoutWarning(planView{}, r, before, after)
+	if !hasWarning(plan, "192.168.1.3, which this takes off ens19") {
+		t.Errorf("no warning naming the retired address: %+v", plan.Warnings)
+	}
+	if !hasWarning(plan, "Reconnect on 192.168.1.2") {
+		t.Errorf("the warning does not say where to reconnect: %+v", plan.Warnings)
+	}
+}
+
+func changeAt(plan planView, path string) (changeView, bool) {
+	for _, c := range plan.Changes {
+		if c.Path == path {
+			return c, true
+		}
+	}
+	return changeView{}, false
 }

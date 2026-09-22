@@ -2,6 +2,8 @@ package dial
 
 import (
 	"fmt"
+	"net/netip"
+	"slices"
 	"strings"
 	"time"
 
@@ -109,6 +111,19 @@ type uplinkView struct {
 	RouteVia string `json:"route_via,omitempty"`
 	RouteDev string `json:"route_dev,omitempty"`
 
+	// GatewayState is whether RouteVia answers on RouteDev — "answers",
+	// "silent", or absent when nothing has tried yet — and GatewaySeenOn is
+	// another interface where it does answer. Observed.GatewayState has why a
+	// route that matches the config is not the same as one that works.
+	GatewayState  string `json:"gateway_state,omitempty"`
+	GatewaySeenOn string `json:"gateway_seen_on,omitempty"`
+
+	// ResolvingThrough are the name servers this box itself looks names up
+	// through, read from /etc/resolv.conf whoever wrote it — beside DNS, which
+	// is what olr was told, for the same reason the route is beside the
+	// gateway.
+	ResolvingThrough []string `json:"resolving_through,omitempty"`
+
 	// Problems are the uplink's findings from the validator, so a section that
 	// is misconfigured says so beside itself.
 	Problems []core.Problem `json:"problems,omitempty"`
@@ -168,6 +183,7 @@ func viewUplink(u *Uplink, obs Observed, problems []core.Problem) *uplinkView {
 	if obs.Gateway.IsValid() {
 		v.RouteVia = obs.Gateway.String()
 	}
+	v.GatewayState, v.GatewaySeenOn = obs.GatewayState, obs.GatewaySeenOn
 	return v
 }
 
@@ -369,6 +385,9 @@ func planUplink(plan *planView, stored, desired Config, links LinkView, obs Obse
 		if note := unroutedNetworksNote(desired.Uplink, links); note != "" {
 			plan.Warnings = append(plan.Warnings, core.Problem{Path: UplinkPath, Message: note})
 		}
+		if note := takeoverNote(desired.Uplink); note != "" {
+			plan.Warnings = append(plan.Warnings, core.Problem{Path: UplinkPath, Message: note})
+		}
 	}
 
 	// The kernel half: what has to happen for any of the above to be true.
@@ -389,26 +408,91 @@ func planUplink(plan *planView, stored, desired Config, links LinkView, obs Obse
 		})
 	}
 
+	// The address the previous uplink had and this one does not. Its own
+	// change, on the interface it is on, because that may not be the one the
+	// uplink is moving to — and disruptive, because a session arriving at that
+	// address goes with it. Retiring has when there is one.
+	from, old := Retiring(stored, desired)
+	if old.IsValid() && retiredStillThere(from, old, kernel.Interface, obs, links) {
+		plan.Changes = append(plan.Changes, changeView{
+			Path:   "interfaces[" + from + "]",
+			Kind:   kindUpdate,
+			Impact: impactDisruptive,
+			Diff:   fmt.Sprintf("- ip addr del %s dev %s\n", old, from),
+		})
+	}
+
 	// Outside that block on purpose: two managers on one interface is worth
 	// saying on a box where nothing else needs doing, which is exactly the box
 	// where it is hardest to notice.
-	if len(kernel.Foreign) > 0 {
-		// Reported, never removed. Two things address this interface and
-		// neither knows about the other, which is a state an operator can only
-		// fix if they can see it — and the alternative, deleting what the other
-		// one put there, is the failure the uplink object exists to stop.
-		addrs := make([]string, 0, len(kernel.Foreign))
-		for _, p := range kernel.Foreign {
-			addrs = append(addrs, p.String())
+	var foreign []string
+	for _, p := range kernel.Foreign {
+		if from == kernel.Interface && p == old {
+			// On its way off, and the line above already says so.
+			continue
 		}
+		foreign = append(foreign, p.String())
+	}
+	if len(foreign) > 0 {
+		// Reported, never removed by an apply. Two things address this
+		// interface and neither knows about the other, which is a state an
+		// operator can only fix if they can see it — and the alternative,
+		// deleting what the other one put there unasked, is the failure the
+		// uplink object exists to stop. Removing one is a separate, explicit
+		// request (link's DELETE /interfaces/{name}/addresses).
 		plan.Warnings = append(plan.Warnings, core.Problem{
 			Path: UplinkPath + ".interface",
-			Message: fmt.Sprintf("%s also has %s on it, which olr did not put there and will "+
-				"not remove. Something else is addressing this interface — usually your "+
-				"distribution's DHCP client. Leave one of the two in charge, or the address "+
-				"will come and go", kernel.Interface, strings.Join(addrs, ", ")),
+			Message: fmt.Sprintf("%s also has %s on it, which the uplink does not account for "+
+				"and an apply will not remove. If something else on this box is addressing "+
+				"the interface, leave one of the two in charge; if it is left over, remove it",
+				kernel.Interface, strings.Join(foreign, ", ")),
 		})
 	}
+}
+
+// retiredStillThere reports whether the previous uplink's address is still on
+// its interface, so a plan does not promise to remove something already gone.
+//
+// Read from obs when it is the interface being planned against and from link's
+// view otherwise. With no view at all it says yes: the writer checks again
+// before removing anything, and a plan line for an address that turns out to
+// be gone costs less than a removal nobody was shown.
+func retiredStillThere(from string, old netip.Prefix, planned string, obs Observed, links LinkView) bool {
+	if from == planned {
+		return slices.Contains(obs.Addrs, old)
+	}
+	if links == nil {
+		return true
+	}
+	info, err := links.Interface(from)
+	if err != nil {
+		return false
+	}
+	return slices.Contains(info.Prefixes, old)
+}
+
+// takeoverNote says what a static uplink takes from the distribution
+// (internal/host), at the moment it is being set rather than afterwards.
+//
+// Said generally, because the plan does not read the host: which DHCP client
+// the distribution runs, if any, is the apply's to find. What the operator
+// needs before confirming is the consequence — anything that client had put on
+// the interface goes — and where names will be looked up from.
+func takeoverNote(u *Uplink) string {
+	if !u.HasIPv4() {
+		return ""
+	}
+	note := fmt.Sprintf("olr takes IPv4 on %s from the distribution: a DHCP client it runs there "+
+		"stops asking for an address, and anything it gave %s goes. IPv6 there stays as it is",
+		u.Interface, u.Interface)
+	if len(u.DNS) > 0 {
+		addrs := make([]string, 0, len(u.DNS))
+		for _, a := range u.DNS {
+			addrs = append(addrs, a.String())
+		}
+		note += ". This router will look names up through " + strings.Join(addrs, ", ")
+	}
+	return note
 }
 
 // uplinkImpact classifies a change to the way out, in terms of what stops

@@ -206,14 +206,17 @@ func validateUplinkIPv4(r *Result, u *Uplink) {
 	}
 }
 
-// validateUplinkDNS says what the resolvers currently do, which is nothing.
+// validateUplinkDNS checks the resolvers, and says when they will not be used.
 //
-// A warning rather than silence, because the alternative is the worst kind of
-// field: one that appears on every generated surface, accepts what the operator
-// types, stores it faithfully, and has no effect that anybody can observe. The
-// arrow it is recorded for — design.md §4.1's `dial → dns (upstream resolvers)`
-// — is real and unbuilt, and saying so at the moment the value is typed costs
-// one line and saves an afternoon.
+// They are this router's own resolvers whenever the uplink is static: olr
+// writes them where the box looks names up (internal/host), because a static
+// uplink replaces the DHCP client that would otherwise have supplied them —
+// and on the box that forced this, the one that had been supplying them wrote
+// an empty file, so the router reached the internet and resolved nothing.
+//
+// With no static address olr writes nothing at all to the interface, so
+// whatever the distribution runs there still provides the resolvers, and these
+// are only recorded. That is the one case worth a warning.
 func validateUplinkDNS(r *Result, u *Uplink) {
 	if len(u.DNS) == 0 {
 		return
@@ -223,11 +226,12 @@ func validateUplinkDNS(r *Result, u *Uplink) {
 			r.errorf(fmt.Sprintf("%s.dns[%d]", UplinkPath, i), "not an IP address")
 		}
 	}
-	r.warnf(UplinkPath+".dns",
-		"olr records these and nothing reads them yet. The resolver walks the DNS "+
-			"from the root by default, which needs no upstream at all, so this box "+
-			"resolves names as soon as the route below works — set them under "+
-			"`olr dns` if you want them used")
+	if !u.HasIPv4() {
+		r.warnf(UplinkPath+".dns",
+			"these are recorded and not used: with no static address olr does not configure "+
+				"%s, so whatever the distribution runs on it still chooses this router's resolvers",
+			u.Interface)
+	}
 }
 
 // checkUplinkInterface holds the rules that need the box.

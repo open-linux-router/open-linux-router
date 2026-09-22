@@ -88,7 +88,7 @@ func TestBuildPlanNamesAdoptAndRelease(t *testing.T) {
 	stored := Config{Adopted: []string{"lan0"}}
 	desired := Config{Adopted: []string{"lan1"}}
 
-	plan := buildPlan(stored, desired, testInterfaces(t))
+	plan := buildPlan(stored, desired, testInterfaces(t), Options{})
 	if plan.Empty {
 		t.Fatal("plan is empty for a change of adopted interface")
 	}
@@ -110,7 +110,7 @@ func TestBuildPlanNamesAdoptAndRelease(t *testing.T) {
 
 func TestBuildPlanIsEmptyForNoChange(t *testing.T) {
 	cfg := Config{Adopted: []string{"lan0"}}
-	if plan := buildPlan(cfg, cfg, testInterfaces(t)); !plan.Empty {
+	if plan := buildPlan(cfg, cfg, testInterfaces(t), Options{}); !plan.Empty {
 		t.Errorf("plan = %+v, want empty", plan)
 	}
 }
@@ -130,7 +130,7 @@ func TestBuildPlanShowsTheAddressBeingRemoved(t *testing.T) {
 		}},
 	}
 
-	plan := buildPlan(stored, desired, testInterfaces(t))
+	plan := buildPlan(stored, desired, testInterfaces(t), Options{})
 	if plan.Impact != impactDisruptive {
 		t.Errorf("Impact = %q, want %q; lan0's 192.168.1.2/24 is being removed", plan.Impact, impactDisruptive)
 	}
@@ -164,7 +164,7 @@ func TestBuildPlanDoesNotCallAFirstAddressDisruptive(t *testing.T) {
 		}},
 	}
 
-	plan := buildPlan(Config{Adopted: []string{"lan1"}}, cfg, testInterfaces(t))
+	plan := buildPlan(Config{Adopted: []string{"lan1"}}, cfg, testInterfaces(t), Options{})
 	if plan.Impact != impactRestart {
 		t.Errorf("Impact = %q, want %q; lan1 has no address to lose", plan.Impact, impactRestart)
 	}
@@ -184,7 +184,7 @@ func TestBuildPlanSeesDriftAgainstAnUnchangedConfig(t *testing.T) {
 	}
 
 	// lan1 carries no address in the fixture, so intent and reality disagree.
-	plan := buildPlan(cfg, cfg, testInterfaces(t))
+	plan := buildPlan(cfg, cfg, testInterfaces(t), Options{})
 	if plan.Empty {
 		t.Error("plan is empty although the kernel does not have the network's address")
 	}

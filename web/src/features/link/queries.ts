@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
-import { api } from '@/lib/api'
-import type { InterfaceList, LinkApplyResult } from '@/lib/api-types'
+import { ApiError, api } from '@/lib/api'
+import type { InterfaceList, LinkApplyResult, LinkStep } from '@/lib/api-types'
 import type { LinkConfig } from '@/lib/config-types'
 
 // Polling, for the reason features/dhcp/queries.ts gives about /api/events.
@@ -68,4 +69,48 @@ export function useApplyLinkConfig() {
       queryClient.invalidateQueries({ queryKey: ['dhcp'] })
     },
   })
+}
+
+/**
+ * Takes one address off an adopted interface that no network owns.
+ *
+ * For what nothing else here reaches: an address no network or uplink accounts
+ * for, most often one a removed network left behind. The server refuses a
+ * network's address, the uplink's own, and the one this browser is connected
+ * to, so the button can be offered wherever such an address shows up and the
+ * refusal explains itself.
+ *
+ * Reports its own outcome, because it is one click with nothing to confirm
+ * and a silent failure would read as the click not registering.
+ */
+export function useRemoveAddress() {
+  const queryClient = useQueryClient()
+
+  const remove = useMutation({
+    mutationFn: ({ iface, address }: { iface: string; address: string }) =>
+      api.delete<{ steps: LinkStep[] }>(`/api/link/interfaces/${iface}/addresses/${address}`),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['link'] })
+      // dial too: the uplink card lists every address on its interface.
+      queryClient.invalidateQueries({ queryKey: ['dial'] })
+    },
+  })
+
+  return {
+    busy: remove.isPending,
+    remove: async (iface: string, address: string) => {
+      try {
+        await remove.mutateAsync({ iface, address })
+        toast.success(`Removed ${address} from ${iface}`)
+      } catch (error) {
+        if (error instanceof ApiError) {
+          toast.error(error.message, {
+            description: error.problems.map((p) => p.message).join('\n') || undefined,
+          })
+        } else {
+          toast.error(String(error))
+        }
+      }
+    },
+  }
 }

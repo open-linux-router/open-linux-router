@@ -148,19 +148,20 @@ type Uplink struct {
 	// nothing else, and the plan says so.
 	IPv4 *UplinkIPv4 `json:"ipv4,omitempty"`
 
-	// DNS are the resolvers the ISP handed out, in preference order.
+	// DNS are the resolvers this router itself looks names up through, in
+	// preference order — usually the modem, or the ISP's.
 	//
-	// Recorded for `dns` — the §4.1 arrow `dial → dns (upstream resolvers)` —
-	// and **nothing reads them yet**, which Validate warns about rather than
-	// leaving to be discovered. They go nowhere near `/etc/resolv.conf`: that
-	// file is named in design.md §3.4 as shared state, and claiming it is a
-	// separate ownership decision from claiming the route table.
+	// Written for the box whenever the uplink is static (internal/host):
+	// /etc/resolv.conf, or systemd-resolved where the box resolves through it.
+	// That is the ownership decision design.md §3.4 required before the file
+	// could be touched, and it is made here for the reason the route table is:
+	// a static uplink replaces the DHCP client that would otherwise have
+	// supplied both. With no static address they are only recorded, and
+	// Validate says so.
 	//
-	// Usually unnecessary even once the arrow is wired. dns.Upstream defaults
-	// to ModeRecurse, so the moment the default route exists unbound resolves
-	// from the root and wants no ISP resolver at all; these matter on a line
-	// where recursion is blocked or the ISP's resolvers are the only ones
-	// reachable.
+	// Not olr's own resolver's upstream: dns.Upstream defaults to ModeRecurse
+	// and resolves from the root. The §4.1 arrow `dial → dns (upstream
+	// resolvers)` is still unbuilt.
 	DNS []netip.Addr `json:"dns,omitempty"`
 }
 

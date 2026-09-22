@@ -19,7 +19,12 @@ import { ListEmpty } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { useUplink } from '@/features/dial/queries'
-import { useApplyLinkConfig, useInterfaces, useLinkConfig } from '@/features/link/queries'
+import {
+  useApplyLinkConfig,
+  useInterfaces,
+  useLinkConfig,
+  useRemoveAddress,
+} from '@/features/link/queries'
 import { ApiError } from '@/lib/api'
 import type { GroupRow, InterfaceRow } from '@/lib/api-types'
 import type { DhcpConfig, Pool } from '@/lib/config-types'
@@ -58,6 +63,11 @@ export function InterfacesCard({
 
   /** A release held back because a pool still names the interface. */
   const [confirming, setConfirming] = useState<InterfaceRow | null>(null)
+
+  /** An address removal waiting for its confirmation. */
+  const [removing, setRemoving] = useState<{ iface: string; address: string } | null>(null)
+  const addresses = useRemoveAddress()
+  const uplinkName = uplink.data?.uplink?.interface
 
   // Locked until the stored config has been read, because write() needs it to
   // build a complete body and a switch that silently does nothing is worse than
@@ -155,9 +165,17 @@ export function InterfacesCard({
               <InterfaceItem
                 key={row.name}
                 row={row}
-                role={roleOf(row, uplink.data?.uplink?.interface)}
+                role={roleOf(row, uplinkName)}
                 busy={!!busy}
                 onToggle={(on) => toggle(row, on)}
+                // Only where nothing in olr owns the addressing: a network's
+                // member is its network's, and the uplink's leftovers are
+                // offered on its own card, beside the address it does claim.
+                onRemoveAddress={
+                  row.adopted && !row.group && row.name !== uplinkName
+                    ? (address) => setRemoving({ iface: row.name, address })
+                    : undefined
+                }
               />
             ))}
           </ul>
@@ -172,6 +190,16 @@ export function InterfacesCard({
           </p>
         )}
       </CardContent>
+
+      <RemoveAddressDialog
+        target={removing}
+        busy={addresses.busy}
+        onCancel={() => setRemoving(null)}
+        onConfirm={async () => {
+          if (removing) await addresses.remove(removing.iface, removing.address)
+          setRemoving(null)
+        }}
+      />
 
       <ReleaseDialog
         row={confirming}
@@ -208,14 +236,19 @@ function InterfaceItem({
   role,
   busy,
   onToggle,
+  onRemoveAddress,
 }: {
   row: InterfaceRow
   role?: string
   busy: boolean
   onToggle: (on: boolean) => void
+  /** Offered only on an interface no network or uplink owns. */
+  onRemoveAddress?: (address: string) => void
 }) {
   const id = `adopt-${row.name}`
   const state = describeState(row)
+  // IPv4 only: olr writes no IPv6 address, so it has none to take away.
+  const removable = onRemoveAddress ? (row.prefixes ?? []).filter((p) => !p.includes(':')) : []
 
   return (
     <li className="flex min-h-14 items-center gap-3 bg-card px-4 py-2.5">
@@ -233,6 +266,21 @@ function InterfaceItem({
         <div className="truncate text-[0.8rem] text-muted-foreground">
           {row.prefixes?.length ? row.prefixes.join(' · ') : state.detail}
         </div>
+        {removable.length > 0 && (
+          <div className="flex flex-wrap gap-x-3 text-[0.8rem]">
+            {removable.map((address) => (
+              <button
+                key={address}
+                type="button"
+                disabled={busy}
+                className="text-muted-foreground underline underline-offset-4 hover:text-foreground disabled:opacity-50"
+                onClick={() => onRemoveAddress?.(address)}
+              >
+                Remove {address}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <Label htmlFor={id} className="sr-only">
@@ -357,6 +405,53 @@ function ReleaseDialog({
           </Button>
           <Button variant="destructive" onClick={onConfirm}>
             Take it back anyway
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * The confirmation before an address comes off by hand.
+ *
+ * It says what olr knows and no more. Nothing in olr accounts for the address,
+ * which is true of a network's leftover and equally true of the address a
+ * distribution put on an interface that has been adopted but not yet given a
+ * network — the ordinary first-run state. Which of the two it is, the operator
+ * knows and olr does not.
+ */
+function RemoveAddressDialog({
+  target,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  target: { iface: string; address: string } | null
+  busy: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <Dialog open={target !== null} onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            Remove {target?.address} from {target?.iface}?
+          </DialogTitle>
+          <DialogDescription>
+            No network and not the uplink accounts for this address, so nothing in olr will put
+            it back. If a network you removed left it behind, this is how it goes. If your
+            distribution configured it, it comes back the next time that configuration runs —
+            and anything reaching this router at that address stops reaching it now.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="destructive" disabled={busy} onClick={onConfirm}>
+            Remove it
           </Button>
         </DialogFooter>
       </DialogContent>

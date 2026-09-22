@@ -203,7 +203,11 @@ a feature; pretending we are the only actor is a bug.
 - **Generated files are additive** — our own directory, `include`-d into the
   real daemon config, never replacing user files. Ownership header on each.
 - **Don't squat shared state.** `/etc/resolv.conf`, the main route table, and
-  sysctls are touched only when a module explicitly owns that concern.
+  sysctls are touched only when a module explicitly owns that concern. `dial`
+  owns the main table's default route and, when the uplink is static and names
+  resolvers, `/etc/resolv.conf` (or systemd-resolved's upstreams): a static
+  uplink replaces the DHCP client that would otherwise have supplied both
+  (docs/dial.md §4).
 
 **Reuse the distro instead of rebuilding it.** This deletes real scope:
 
@@ -1018,15 +1022,19 @@ nothing that could be taken advantage of before its owner arrives.
   back when it starts, because the kernel forgets it on a reboot and nothing
   else on the box knows it.
 
-  What is still owed is taking the interface from NetworkManager,
-  systemd-networkd or ifupdown, and recording prior state so `release` can put
-  it back. Until that lands a member interface has **two managers** — olr, and
-  whatever the distribution was told about it — and neither knows about the
-  other. Only the operator can make them agree, and docs/install.md gives the
-  two rules that do: an interface whose address the distribution gets by DHCP
-  is never a member, and a member the distribution also configures is
-  configured there with the network's router address, statically, and nothing
-  else.
+  Taking the interface from the distribution is **built for dhcpcd** — Debian
+  13's ifupdown and Raspberry Pi OS — and only for what olr writes. At the
+  moment olr writes an interface's IPv4 (a network member with a subnet, or a
+  static uplink), the distribution's DHCP client stops doing IPv4 there and
+  keeps doing IPv6, through an `ipv6only` block olr adds to `/etc/dhcpcd.conf`
+  between markers and removes again when it lets go (internal/host,
+  docs/dial.md §4). Adoption alone still takes nothing.
+
+  What is still owed is the same for NetworkManager, systemd-networkd and
+  dhclient. Until that lands, an interface one of them manages has **two
+  managers** — olr, and whatever the distribution was told about it — and olr
+  reports it, with the step that stops the other one, rather than changing a
+  file it has not been tested against.
 
   That is also why the start-up restore only adds. Enforcing ownership at boot
   would race the distribution's own address sources, and a box that broke the

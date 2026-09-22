@@ -4,6 +4,8 @@ import { Link } from 'react-router'
 import { SettingsList } from '@/components/layout/settings-list'
 import { BlockerAlerts } from '@/components/layout/blockers'
 import { StatusDetail, StatusStrip } from '@/components/layout/status-strip'
+import { StuckSettings } from '@/components/layout/stuck-settings'
+import { STUCK_SUMMARY } from '@/components/layout/stuck-summary'
 import { Disclosure } from '@/components/ui/disclosure'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ApplyOutcome, useDhcpEditor } from '@/features/dhcp/editor'
@@ -88,22 +90,11 @@ export function DhcpPage() {
               ? `${config.reservations.length} device${config.reservations.length === 1 ? '' : 's'}`
               : 'None',
           },
-          {
-            slug: 'interfaces',
-            value: interfaces.data
-              ? describeAdopted(interfaces.data.interfaces.filter((i) => i.adopted).length)
-              : undefined,
-          },
           { slug: 'advanced', value: config.extra_dnsmasq_conf ? 'Customised' : undefined },
         ]}
       />
     </div>
   )
-}
-
-function describeAdopted(n: number): string {
-  if (n === 0) return 'None yet'
-  return `${n} interface${n === 1 ? '' : 's'}`
 }
 
 /* -------------------------------------------------------------------------- */
@@ -136,7 +127,7 @@ function StatusCard({
     <StatusStrip
       headline={summary.headline}
       detail={
-        config.enabled && connected !== undefined
+        config.enabled && connected !== undefined && summary !== STUCK_SUMMARY
           ? `${connected} device${connected === 1 ? '' : 's'} connected`
           : summary.detail
       }
@@ -198,6 +189,11 @@ function StatusCard({
         </Disclosure>
       )}
 
+      <StuckSettings
+        error={config.enabled ? status?.drift_error : undefined}
+        fix={{ to: '/dhcp/ranges', label: 'Address ranges' }}
+      />
+
       {/* Usually the same dnsmasq the DNS page is complaining about: the
           distribution's unit takes UDP/67 and :53 together, so one
           `apt install dnsmasq` blocks both modules. Same component and the
@@ -243,6 +239,10 @@ function describeStatus(
       dot: 'bg-warning',
     }
   }
+  // Running, but on what it was given before: see StuckSettings. A green
+  // "handing out addresses" here was true and was the whole problem — it was
+  // handing them out on a network that no longer existed.
+  if (status.service.active && status.drift_error) return STUCK_SUMMARY
   return status.service.active
     ? { headline: 'Handing out addresses', detail: 'Working normally.', dot: 'bg-success' }
     : {

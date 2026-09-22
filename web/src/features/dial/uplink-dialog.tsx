@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { InterfaceRow, Uplink, UplinkStatus } from '@/lib/api-types'
+import type { GroupRow, InterfaceRow, Uplink, UplinkStatus } from '@/lib/api-types'
 
 /**
  * Set how this router reaches the internet.
@@ -32,12 +32,22 @@ import type { InterfaceRow, Uplink, UplinkStatus } from '@/lib/api-types'
  * the mistake worth catching in the field rather than in a refusal. The server
  * refuses the network address too, but by then the operator has had to read an
  * error to learn something the label could have told them.
+ *
+ * An interface that carries a network is offered too, as a takeover. It used to
+ * be listed as blocked, which was accurate and a dead end: the usual reason a
+ * network sits on the modem-facing NIC is that it was the only place olr would
+ * take an address before the uplink existed, and the way out — remove the
+ * network, then set the uplink — took the address away in between, from an
+ * operator who was very likely connected through it. Choosing it here removes
+ * the network with its address kept (link's keep_addresses), and the uplink
+ * claims that same address.
  */
 export function UplinkDialog({
   open,
   onOpenChange,
   initial,
   interfaces,
+  groups,
   onSubmit,
 }: {
   open: boolean
@@ -45,21 +55,30 @@ export function UplinkDialog({
   /** Undefined when there is no uplink yet. */
   initial?: UplinkStatus
   interfaces: InterfaceRow[]
-  onSubmit: (uplink: Uplink) => void
+  groups: GroupRow[]
+  /** `replacing` names the network the chosen interface carries, which goes. */
+  onSubmit: (uplink: Uplink, replacing?: string) => void
 }) {
   const [iface, setIface] = useState(initial?.interface ?? '')
   const [address, setAddress] = useState(initial?.address ?? '')
   const [gateway, setGateway] = useState(initial?.gateway ?? '')
   const [dns, setDns] = useState((initial?.dns ?? []).join(', '))
 
-  // Only adopted interfaces (design.md §3.4), and never one already carrying a
-  // network: an uplink and a network cannot both own one interface's
-  // addressing. The server refuses it; offering it here and then refusing would
-  // be a list that lies.
-  const available = interfaces.filter(
-    (i) => i.adopted && !i.loopback && (!i.group || i.name === initial?.interface),
-  )
-  const blocked = interfaces.filter((i) => i.adopted && !i.loopback && i.group)
+  // Only adopted interfaces (design.md §3.4).
+  const available = interfaces.filter((i) => i.adopted && !i.loopback)
+  const replacing = groups.find((g) => g.name === available.find((i) => i.name === iface)?.group)
+  const kept = replacing ? routerPrefix(replacing) : undefined
+
+  function choose(name: string) {
+    setIface(name)
+    // The network's own address is what a takeover keeps, so it is the one to
+    // offer — over a blank field, or over the previous uplink's address when
+    // the uplink is moving, since that one is about to come off. Anything the
+    // operator typed stays.
+    const group = groups.find((g) => g.name === interfaces.find((i) => i.name === name)?.group)
+    const prefix = group ? routerPrefix(group) : undefined
+    if (prefix && (address.trim() === '' || address === initial?.address)) setAddress(prefix)
+  }
 
   const valid = iface !== '' && (address.trim() === '') === (gateway.trim() === '')
 
@@ -70,15 +89,15 @@ export function UplinkDialog({
           <DialogTitle>{initial ? 'Change the uplink' : 'Set up the uplink'}</DialogTitle>
           <DialogDescription>
             Which interface faces your modem, and how to reach the internet through it. From
-            here on olr owns that interface&rsquo;s address and this router&rsquo;s default
-            route, and puts both back after a reboot.
+            here on olr owns that interface&rsquo;s IPv4 and this router&rsquo;s default route
+            — the distribution stops configuring them — and puts both back after a reboot.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="uplink-interface">Interface</Label>
-            <Select value={iface} onValueChange={(v) => setIface(v ?? '')}>
+            <Select value={iface} onValueChange={(v) => choose(v ?? '')}>
               <SelectTrigger id="uplink-interface" className="w-full">
                 <SelectValue placeholder="Choose the interface facing your modem" />
               </SelectTrigger>
@@ -86,23 +105,27 @@ export function UplinkDialog({
                 {available.map((i) => (
                   <SelectItem key={i.name} value={i.name}>
                     {i.name}
-                    {i.address ? ` — currently ${i.address}` : ' — no address'}
+                    {i.group
+                      ? ` — carries the network ${i.group}`
+                      : i.address
+                        ? ` — currently ${i.address}`
+                        : ' — no address'}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {available.length === 0 && (
               <p className="text-xs text-warning">
-                No interface is free. Switch one on under Interfaces above, or remove the
-                network from the one facing your modem.
+                No interface has been handed to this router yet. Switch on the one facing your
+                modem under Interfaces above.
               </p>
             )}
-            {blocked.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {blocked.map((i) => i.name).join(', ')}{' '}
-                {blocked.length === 1 ? 'carries a network' : 'carry networks'} and cannot be the
-                uplink. A network is something this router serves — it hands out addresses there
-                — and the way out is not one.
+            {replacing && (
+              <p className="text-xs text-warning">
+                {iface} carries the network {replacing.name}. A network is something this router
+                serves, and the way out is not one, so setting the uplink here removes{' '}
+                {replacing.name}: this router stops handing out addresses and answering DNS on
+                it. {kept ? `${kept} stays on ${iface}, so a connection through it stays up.` : ''}
               </p>
             )}
           </div>
@@ -113,7 +136,7 @@ export function UplinkDialog({
               <Input
                 id="uplink-address"
                 value={address}
-                placeholder="192.168.2.9/24"
+                placeholder="e.g. 192.168.2.9/24"
                 onChange={(e) => setAddress(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
@@ -127,7 +150,7 @@ export function UplinkDialog({
               <Input
                 id="uplink-gateway"
                 value={gateway}
-                placeholder="192.168.2.1"
+                placeholder="e.g. 192.168.2.1"
                 onChange={(e) => setGateway(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
@@ -137,23 +160,45 @@ export function UplinkDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="uplink-dns">Your ISP&rsquo;s resolvers (optional)</Label>
+            <Label htmlFor="uplink-dns">Resolvers this router uses</Label>
             <Input
               id="uplink-dns"
               value={dns}
-              placeholder="e.g. 9.9.9.9, 1.1.1.1"
+              placeholder={`e.g. ${gateway.trim() || '192.168.2.1'}`}
               onChange={(e) => setDns(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Recorded only — nothing reads them yet. This router resolves names from the root
-              by default, which needs no upstream at all.
+              Where this router itself looks names up — usually your modem, the gateway above.
+              olr writes them in place of whatever the distribution set. Leave blank and the
+              router&rsquo;s own resolver setup is left as it is.
             </p>
+            {/* The one-click answer for the common case, offered rather than
+                filled in: a gateway that does not answer DNS is not rare (an
+                ISP's own equipment often does not), and a resolver nobody
+                chose would be the harder failure to explain. */}
+            {dns.trim() === '' && gateway.trim() !== '' && address.trim() !== '' && (
+              <button
+                type="button"
+                className="text-xs underline underline-offset-4"
+                onClick={() => setDns(gateway.trim())}
+              >
+                Use {gateway.trim()}
+              </button>
+            )}
           </div>
 
           {!valid && iface !== '' && (
             <p className="text-xs text-warning">
               An address needs a gateway and a gateway needs an address. Leave both blank for an
               interface olr should own and not configure.
+            </p>
+          )}
+          {valid && address.trim() === '' && (
+            // Said out loud because the blank form is valid and easy to send by
+            // accident: it brings the interface up and nothing else, which from
+            // the page looks like a click that did nothing.
+            <p className="text-xs text-muted-foreground">
+              No address or gateway: olr brings {iface} up and writes no address or route on it.
             </p>
           )}
         </div>
@@ -165,13 +210,16 @@ export function UplinkDialog({
           <Button
             disabled={!valid}
             onClick={() =>
-              onSubmit({
-                interface: iface,
-                ipv4: address.trim()
-                  ? { address: address.trim(), gateway: gateway.trim() }
-                  : undefined,
-                dns: splitAddresses(dns),
-              })
+              onSubmit(
+                {
+                  interface: iface,
+                  ipv4: address.trim()
+                    ? { address: address.trim(), gateway: gateway.trim() }
+                    : undefined,
+                  dns: splitAddresses(dns),
+                },
+                replacing?.name,
+              )
             }
           >
             {initial ? 'Save' : 'Set up'}
@@ -180,6 +228,13 @@ export function UplinkDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+/** A network's router address with the subnet's mask — 192.168.1.2/24 — or
+ * undefined for a network that serves no IPv4. */
+function routerPrefix(g: GroupRow): string | undefined {
+  if (!g.router || !g.subnet) return undefined
+  return `${g.router}/${g.subnet.split('/')[1]}`
 }
 
 /** Splits a typed list on commas or spaces. Undefined when nothing was typed,

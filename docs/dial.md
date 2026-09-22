@@ -27,15 +27,17 @@ through, and is the one this product leads with.
 
 ### 1.1 What it owns, stated plainly
 
-When an uplink is configured, olr owns three pieces of kernel state:
+When an uplink is configured, olr owns three pieces of kernel state, and — when
+it is static — two pieces of the host's own configuration:
 
 | | Owned |
 |---|---|
 | The interface's IPv4 address | yes — written, and restored after a reboot |
 | The interface's admin state | yes — brought up, never down |
 | The default route in the main table | yes — `RouteReplace`d, and restored after a reboot |
-| Any *other* address on that interface | **no** — reported, never removed |
-| `/etc/resolv.conf` | **no** — see §4 |
+| The distribution's DHCP client, for IPv4 on that interface | yes, when static — stopped there (§4) |
+| `/etc/resolv.conf` | yes, when static and `dns` is set — §4 |
+| Any *other* address on that interface | **no** — reported, removable by name, never removed by an apply |
 | Source NAT for the networks behind it | **no** — `gateway` does it, off this interface (§5) |
 
 The third row is the one that needed an argument, because design.md §3.4 says
@@ -123,6 +125,10 @@ Three operations, in this order, and the order is the argument.
 3. **Replace the default route.** Last, because it is the only one of the three
    that can be true and useless: a route out of an interface with no address is
    a route nothing can use.
+4. **Retire the previous uplink's address**, when the uplink moved to another
+   interface or another address. After everything that replaces it, and only
+   when all of that landed — until then the old address may be the only way
+   this box reaches anything. See §3.3.
 
 `RouteReplace`, never delete-then-add. Replacing the default route is the one
 operation that must not leave a window with no route at all, and `replace` is
@@ -148,6 +154,35 @@ The asymmetry is the safe one, and it is the same one
 `link.Desired.AddOnly` argues for: too many addresses is a state an operator can
 see and fix from a shell they can still reach, too few is one that takes the
 shell away.
+
+"From a shell" turned out to be the problem. The commonest foreign address on
+an uplink was olr's own — a network removed before networks took their
+addresses with them — and an operator working from the web UI had no way to
+remove it. So the Networks page offers to remove each one by name, through
+`link`'s `DELETE /api/link/interfaces/{name}/addresses/{address}`. An apply
+still never removes one; a person naming it does.
+
+### 3.3 Moving the uplink takes the old address with it
+
+Changing the uplink to another interface, or to another address on the same
+one, retires the address olr wrote for the previous uplink. Handing the uplink
+back does not, and neither does changing to an uplink with no static address:
+§2's argument about `rm uplink` holds for both — olr never recorded what the
+box had before, so taking the address away could only leave it with less.
+
+Moving is different because the replacement is already in place when the old
+address comes off, and an address olr wrote and no longer claims is exactly the
+leftover nobody can tell from somebody else's. On the box that forced this it
+was a second interface on the same subnet, answering for an address nothing
+routed to.
+
+The plan shows the removal on the interface it happens on, as disruptive, and
+names the address when the request arrived over it.
+
+The status also says whether the gateway answers. A default route via a gateway
+on the wrong segment matches the config exactly and carries nothing; that box
+showed green until the kernel's neighbour table was read, and now reads
+"192.168.1.1 is not answering on ens19. It answers on ens18".
 
 ### 3.2 Restored at startup, because the kernel forgets
 
@@ -175,23 +210,58 @@ What stops is the restore after a reboot, and the plan says so in those words.
 
 ---
 
-## 4. The ISP's resolvers, and `/etc/resolv.conf`
+## 4. Taking the interface from the distribution, and `/etc/resolv.conf`
 
-`Uplink.DNS` records the resolvers the ISP handed out. **Nothing reads them
-yet**, and the validator says so every time one is set, because a field that
-appears on every generated surface, stores what it is given and has no
-observable effect is the worst kind of field.
+olr writes addresses and routes straight into the kernel and never goes through
+ifupdown, dhcpcd, systemd-networkd or NetworkManager. Until this section
+existed, whatever the distribution had been told about the uplink's interface
+kept running beside it. The box that forced the change had `iface ens18 inet
+dhcp` in `/etc/network/interfaces`, so ifupdown started dhcpcd on the uplink at
+every boot; dhcpcd never got a lease, gave ens18 a 169.254 address and a default
+route through it, and wrote an empty `/etc/resolv.conf`. The router reached the
+internet by address and resolved nothing.
 
-They are recorded for design.md §4.1's arrow `dial → dns (upstream resolvers)`.
-What makes it safe to leave unwired for now is that `dns.Upstream` defaults to
-`ModeRecurse`: the moment the default route exists, unbound resolves from the
-root and wants no ISP resolver at all. These matter on a line where recursion is
-blocked, or where the ISP's resolvers are the only ones reachable.
+A static uplink replaces the DHCP client that would otherwise have supplied the
+interface's address, the default route **and the resolvers**. So once it is
+static, olr takes all three, through `internal/host`:
 
-`/etc/resolv.conf` is **not** touched and is not in scope. design.md §3.4 names
-it alongside the route table, and claiming it is a separate ownership decision
-with a separate argument: it is read by every process on the box rather than by
-one daemon olr drives, and the distributions disagree about who writes it.
+- **IPv4 on the interface.** The distribution's DHCP client stops doing IPv4
+  there and keeps doing IPv6, which olr does not configure. For dhcpcd — what
+  Debian 13's ifupdown runs, and Raspberry Pi OS — that is an `interface X` /
+  `ipv6only` block in `/etc/dhcpcd.conf`, between olr's markers, and a
+  `SIGHUP` — dhcpcd's `--rebind` — to the running dhcpcd so it re-reads now
+  rather than at the next boot. Never `SIGALRM`, which is its `--release`: it
+  de-configures the interface, IPv6 included, and exits. The first version
+  sent that, and it did. Anything it had put on the interface goes; the plan says so before the
+  change is confirmed.
+- **The box's resolvers**, from `dns` — usually the modem. Where
+  `/etc/resolv.conf` links into systemd-resolved, resolved stays the box's
+  resolver (design.md §3.4 never stops an OS component) and gets them through
+  `/etc/systemd/resolved.conf.d/20-olr-resolvers.conf`. Where it is a plain
+  file, olr writes it — keeping the operator's `search` and `options` lines —
+  after keeping the original to put back, and tells dhcpcd `nohook
+  resolv.conf` so no lease rewrites it.
+
+Given back by removing exactly what olr added: handing the uplink back, or
+clearing `dns`, removes olr's blocks, tells dhcpcd again, and restores the
+original `resolv.conf`. olrd converges all of this at every start, so a box
+upgraded into it, or one whose `dhcpcd.conf` a package upgrade rewrote, is put
+right without anybody saving anything.
+
+The same takeover applies to every **network member with a subnet** — the other
+place olr writes an IPv4 address — which is what finally retires docs/install.md's
+rule that a member must never be an interface the distribution addresses by DHCP.
+
+**Not taken over yet**: NetworkManager, systemd-networkd, dhclient (Debian 12's
+ifupdown), and a `resolv.conf` maintained through resolvconf. Each is detected
+and reported on the uplink card or the interface list, with the step that would
+stop it, and nothing is changed. Each one's switch is a different file told to
+re-read a different way, and shipping them untested would mean editing the
+configuration a box boots with on the strength of a reading of its manual.
+
+The resolvers are this box's own, not olr's resolver's upstream:
+`dns.Upstream` still defaults to `ModeRecurse` and resolves from the root. The
+§4.1 arrow `dial → dns (upstream resolvers)` is still unbuilt.
 
 ---
 
@@ -325,9 +395,12 @@ turn the box's own address into something netlink accepts and nothing can reach.
 3. **Multi-WAN**, and with it failover — which needs a health signal, and
    `gateway` already has one for exits (gateway:§5.5). Whether they are one
    mechanism is the interesting question and is not answered.
-4. **Who owns `/etc/resolv.conf`.** §4.
+4. ~~Who owns `/etc/resolv.conf`.~~ **Closed.** The uplink, when it is static
+   and names resolvers (§4).
 5. ~~Whether the `gateway` exit should be offered alongside the uplink.~~
    **Closed.** The question only existed because source NAT lived on an exit;
    gateway:§3.9 moved it onto the uplink interface itself, so there is no second
    object to offer and no §5 trap to close with a checkbox. §5.1 records what
    the old answer cost.
+6. **NetworkManager, systemd-networkd and dhclient** on an interface olr has
+   taken — detected and reported, not yet taken over (§4).

@@ -17,7 +17,8 @@ import { ListEmpty } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useUplinkEditor } from '@/features/dial/queries'
 import { UplinkDialog } from '@/features/dial/uplink-dialog'
-import type { InterfaceRow, UplinkStatus } from '@/lib/api-types'
+import { useRemoveAddress } from '@/features/link/queries'
+import type { GroupRow, InterfaceRow, UplinkStatus } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
 
 /**
@@ -35,7 +36,14 @@ import { cn } from '@/lib/utils'
  * correctly and going out of the wrong NIC" is visible rather than being a
  * conclusion somebody has to reach from a terminal.
  */
-export function UplinkCard({ interfaces }: { interfaces: InterfaceRow[] }) {
+export function UplinkCard({
+  interfaces,
+  groups,
+}: {
+  interfaces: InterfaceRow[]
+  /** The networks, so the dialog can offer to take one's interface over. */
+  groups: GroupRow[]
+}) {
   const editor = useUplinkEditor()
   const [open, setOpen] = useState(false)
 
@@ -92,8 +100,9 @@ export function UplinkCard({ interfaces }: { interfaces: InterfaceRow[] }) {
           onOpenChange={setOpen}
           initial={uplink}
           interfaces={interfaces}
-          onSubmit={(next) => {
-            void editor.save(next)
+          groups={groups}
+          onSubmit={(next, replacing) => {
+            void editor.save(next, replacing)
             setOpen(false)
           }}
         />
@@ -108,6 +117,8 @@ export function UplinkCard({ interfaces }: { interfaces: InterfaceRow[] }) {
 
 function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
   const route = describeRoute(uplink)
+  const leftovers = uplink.addresses?.filter((a) => a !== uplink.address) ?? []
+  const addresses = useRemoveAddress()
 
   return (
     <div className="space-y-3">
@@ -127,24 +138,35 @@ function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
         </div>
       </div>
 
-      {(uplink.addresses?.length ?? 0) > 1 && (
-        // Two managers on one interface. olr reports it and removes nothing —
-        // stripping what a distribution's DHCP client put there is the failure
-        // this whole object exists to stop.
-        <p className="text-sm text-warning">
-          {uplink.interface} also has {uplink.addresses?.filter((a) => a !== uplink.address).join(', ')}{' '}
-          on it. Something else is addressing this interface too — usually your distribution&rsquo;s
-          network configuration. olr leaves those alone; leave one of the two in charge, or the
-          address will come and go.
-        </p>
+      {leftovers.length > 0 && (
+        // An address the uplink does not account for. Never removed by an
+        // apply — stripping what a distribution's DHCP client put there is the
+        // failure this whole object exists to stop — but removable by name,
+        // because the other common source is olr itself: a network removed
+        // before networks took their addresses with them.
+        <div className="space-y-2 text-sm text-warning">
+          <p>
+            {uplink.interface} also has {leftovers.join(', ')} on it, which the uplink does not
+            account for. If something else on this box is addressing the interface, leave one of
+            the two in charge; if it is left over, remove it.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {leftovers.map((a) => (
+              <Button
+                key={a}
+                size="sm"
+                variant="outline"
+                disabled={addresses.busy}
+                onClick={() => void addresses.remove(uplink.interface, a)}
+              >
+                Remove {a}
+              </Button>
+            ))}
+          </div>
+        </div>
       )}
 
-      {(uplink.dns?.length ?? 0) > 0 && (
-        <p className="text-sm text-muted-foreground">
-          Resolvers recorded: {uplink.dns?.join(', ')}. Nothing reads them yet — this router
-          resolves names from the root by default, which needs no upstream at all.
-        </p>
-      )}
+      <ResolverLine uplink={uplink} />
 
       {uplink.problems?.map((p) => (
         <p key={p.path + p.message} className="text-sm text-warning">
@@ -156,11 +178,65 @@ function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
 }
 
 /**
+ * Where this router itself looks names up — what it was told beside what it
+ * does, like the route above it.
+ *
+ * The line that was missing on the box that forced it: an uplink exactly as
+ * set, a gateway that answered, and a router that could not resolve a single
+ * name because the file it resolves through was empty. Nothing on the page
+ * said so.
+ */
+function ResolverLine({ uplink }: { uplink: UplinkStatus }) {
+  const set = uplink.dns ?? []
+  const through = uplink.resolving_through ?? []
+  const owned = set.length > 0 && Boolean(uplink.address)
+
+  if (owned && sameSet(set, through)) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        This router looks names up through {through.join(', ')}.
+      </p>
+    )
+  }
+  if (owned) {
+    // Set, and not in force. The findings below say why when olr knows — a
+    // resolv.conf another program maintains; otherwise saving again puts
+    // them back.
+    return (
+      <p className="text-sm text-warning">
+        Set to {set.join(', ')}, but this router looks names up through{' '}
+        {through.length ? through.join(', ') : 'nothing at all'}.
+      </p>
+    )
+  }
+  if (through.length === 0) {
+    return (
+      <p className="text-sm text-warning">
+        This router has no resolver of its own, so it cannot look names up — updates and
+        installs fail by name while everything works by address. Add one to the uplink
+        {uplink.gateway ? `: usually your modem, ${uplink.gateway}` : ''}.
+      </p>
+    )
+  }
+  return (
+    <p className="text-sm text-muted-foreground">
+      This router looks names up through {through.join(', ')}, as your distribution set it.
+    </p>
+  )
+}
+
+function sameSet(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((x) => b.includes(x))
+}
+
+/**
  * The sentence that answers "so is it actually working".
  *
- * Three states, and they must not read alike: no default route at all, a route
- * going where we asked, and a route going somewhere else. The last is the one
- * this card exists for.
+ * The states must not read alike: no default route at all, a route going
+ * somewhere else, and a route going where we asked — which is itself two
+ * states, because a gateway on the wrong segment is a route exactly as set that
+ * carries nothing. That last one showed green until the neighbour table was
+ * read, on the box that had it.
  */
 function describeRoute(u: UplinkStatus): { line: string; dot: string; tone: string } {
   if (!u.present) {
@@ -194,8 +270,27 @@ function describeRoute(u: UplinkStatus): { line: string; dot: string; tone: stri
   if (!u.up) {
     return { line: `${u.interface} is down.`, dot: 'bg-warning', tone: 'text-warning' }
   }
+  // The route matches what was set; whether anything is on the other end of
+  // it is a separate fact, and the one that decides whether the box is online.
+  // A gateway on the wrong segment passes every check above.
+  if (u.gateway_state === 'silent') {
+    return {
+      line: u.gateway_seen_on
+        ? `${u.gateway} is not answering on ${u.interface}. It answers on ${u.gateway_seen_on} — that is the interface facing it, so change the uplink to ${u.gateway_seen_on}.`
+        : `${u.gateway} is not answering on ${u.interface}. Check the cable, and that ${u.interface} is the interface facing your modem.`,
+      dot: 'bg-destructive',
+      tone: 'text-destructive',
+    }
+  }
+  if (u.gateway_state !== 'answers') {
+    return {
+      line: `The default route goes via ${u.route_via} on ${u.route_dev}, as set. Nothing has tried to reach ${u.route_via} yet, so whether it answers is not known.`,
+      dot: 'bg-muted-foreground/40',
+      tone: 'text-muted-foreground',
+    }
+  }
   return {
-    line: `The default route goes via ${u.route_via} on ${u.route_dev}, as set.`,
+    line: `The default route goes via ${u.route_via} on ${u.route_dev}, as set, and ${u.route_via} answers.`,
     dot: 'bg-success',
     tone: 'text-muted-foreground',
   }

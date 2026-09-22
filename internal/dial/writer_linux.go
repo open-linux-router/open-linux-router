@@ -108,10 +108,48 @@ func (linuxWriter) Apply(ctx context.Context, d Desired) ([]Step, error) {
 		})
 	}
 
+	// The previous uplink's address, last and only on a clean run. Everything
+	// above is what replaces it; if any of that was refused, the old address may
+	// be the only way this box still reaches anything, and taking it away then
+	// would turn a half-applied change into an unreachable one.
+	if d.Retire.IsValid() && failed == 0 {
+		retire(d, &steps, &failed)
+	}
+
 	if failed > 0 {
 		return steps, fmt.Errorf("%d of %d uplink operations failed", failed, len(steps))
 	}
 	return steps, nil
+}
+
+// retire takes the previous uplink's address off its interface, if it is
+// still there. An interface that has gone has taken its addresses with it, so
+// that is not a failure.
+func retire(d Desired, steps *[]Step, failed *int) {
+	old, err := netlink.LinkByName(d.RetireFrom)
+	if err != nil {
+		return
+	}
+	have, err := readUplinkV4(old)
+	if err != nil {
+		*steps = append(*steps, Step{
+			Description: fmt.Sprintf("read addresses on %s", d.RetireFrom),
+			Error:       err.Error(),
+		})
+		*failed++
+		return
+	}
+	if !slices.Contains(have, d.Retire) {
+		return
+	}
+	step := Step{Description: fmt.Sprintf("remove %s from %s", d.Retire, d.RetireFrom)}
+	if err := netlink.AddrDel(old, toUplinkAddr(d.Retire)); err != nil {
+		step.Error = err.Error()
+		*failed++
+	} else {
+		step.Done = true
+	}
+	*steps = append(*steps, step)
 }
 
 // Observe reads back the interface and the main table's default route.
@@ -140,7 +178,66 @@ func (linuxWriter) Observe(ctx context.Context, iface string) (Observed, error) 
 		return obs, err
 	}
 	obs.Gateway, obs.GatewayDev = gw, dev
+	if gw.IsValid() {
+		obs.GatewayState, obs.GatewaySeenOn = gatewayNeighbour(gw, dev)
+	}
 	return obs, nil
+}
+
+// gatewayNeighbour reads whether the gateway answers on dev, and names another
+// interface it answers on.
+//
+// Passive: it reads what the kernel already learned and sends nothing. A box
+// with a default route sends traffic through it constantly — the resolver alone
+// sees to that — so an entry that is missing is the brief moment after the
+// route was written, and saying "not known yet" for it is honest. A read that
+// probed would make every status poll send a packet.
+//
+// A failed read is "not known" rather than an error: the rest of Observe is
+// still true, and a status that refused to render over this line would hide
+// everything else on it.
+func gatewayNeighbour(gw netip.Addr, dev string) (state, seenOn string) {
+	neighs, err := netlink.NeighList(0, netlink.FAMILY_V4)
+	if err != nil {
+		return "", ""
+	}
+	for _, n := range neighs {
+		ip, ok := netip.AddrFromSlice(n.IP)
+		if !ok || ip.Unmap() != gw {
+			continue
+		}
+		name := ""
+		if link, err := netlink.LinkByIndex(n.LinkIndex); err == nil {
+			name = link.Attrs().Name
+		}
+		switch got := neighbourState(n.State); {
+		case name == dev:
+			state = got
+		case got == GatewayAnswers:
+			seenOn = name
+		}
+	}
+	return state, seenOn
+}
+
+// neighbourState folds the kernel's NUD states into the two that matter here.
+//
+// Stale, delay and probe all mean the neighbour answered once and has not been
+// re-confirmed lately — it answers, as far as anything can say. Incomplete and
+// failed both mean it was asked and has not: incomplete is the kernel still
+// asking, and on a gateway that never answers the entry cycles between the two
+// for as long as traffic keeps trying, so splitting them would make the status
+// flicker between two readings of one fact.
+func neighbourState(nud int) string {
+	switch {
+	case nud&(netlink.NUD_REACHABLE|netlink.NUD_STALE|netlink.NUD_DELAY|netlink.NUD_PROBE|
+		netlink.NUD_PERMANENT|netlink.NUD_NOARP) != 0:
+		return GatewayAnswers
+	case nud&(netlink.NUD_INCOMPLETE|netlink.NUD_FAILED) != 0:
+		return GatewaySilent
+	default:
+		return ""
+	}
 }
 
 // defaultRoute is the netlink form of "default via <gw> dev <link>".

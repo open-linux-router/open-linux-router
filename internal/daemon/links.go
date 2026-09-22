@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"net/netip"
+	"slices"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
@@ -10,6 +11,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
+	"github.com/open-linux-router/open-linux-router/internal/host"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 )
 
@@ -302,4 +304,82 @@ func interfaceSource(path string) (link.Source, error) {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 	return source, nil
+}
+
+// uplinkClaims is the uplink's own address, as link sees it: the one address on
+// an adopted interface that removing addresses by hand must leave alone,
+// because dial configured it and would only put it back.
+//
+// Read from the document on every call rather than held, so it is never older
+// than the request asking. A document that cannot be read claims nothing,
+// which is the permissive answer — and the safe one here, because link still
+// refuses the uplink's interface whenever a network owns it, and the dial
+// status reports the address missing if it ever is.
+func uplinkClaims(store *core.Store) []link.Claim {
+	cfg, err := dial.Applier{Store: store}.Load()
+	if err != nil || !cfg.Uplink.HasIPv4() {
+		return nil
+	}
+	return []link.Claim{{Interface: cfg.Uplink.Interface, Address: cfg.Uplink.IPv4.Address}}
+}
+
+// hostDesired is what olr owns of this box's own network configuration: IPv4
+// on every interface olr writes an IPv4 address to — each network member with
+// a subnet, and the uplink when it is static — and the box's resolvers when
+// the static uplink names them.
+//
+// The join internal/host cannot make itself, because it imports neither
+// module, and neither module can make alone. An uplink with no static address
+// owns nothing here: olr writes no address there, so whatever the distribution
+// runs on it is still the only thing providing one.
+func hostDesired(store *core.Store) (host.Desired, error) {
+	var d host.Desired
+	lcfg, err := link.Applier{Store: store}.Load()
+	if err != nil {
+		return d, err
+	}
+	for _, g := range lcfg.Groups {
+		if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
+			d.IPv4 = append(d.IPv4, g.Members...)
+		}
+	}
+	dcfg, err := dial.Applier{Store: store}.Load()
+	if err != nil {
+		return d, err
+	}
+	if u := dcfg.Uplink; u.HasIPv4() {
+		d.IPv4 = append(d.IPv4, u.Interface)
+		d.Resolvers = slices.Clone(u.DNS)
+	}
+	return d, nil
+}
+
+// hostFindings reports what olr could not take over, split between the two
+// pages that show it: the uplink's interface and the box's resolvers on the
+// uplink card, network members in the interface list. A document that cannot
+// be read reports nothing here — every page already says so on its own.
+func hostFindings(a host.Applier, store *core.Store, uplink bool) []core.Problem {
+	d, err := hostDesired(store)
+	if err != nil {
+		return nil
+	}
+	dcfg, _ := dial.Applier{Store: store}.Load()
+	var uplinkIface string
+	if dcfg.Uplink.HasIPv4() {
+		uplinkIface = dcfg.Uplink.Interface
+	}
+
+	var out []core.Problem
+	for _, f := range a.Findings(d) {
+		onUplink := f.Interface == "" || f.Interface == uplinkIface
+		if onUplink != uplink {
+			continue
+		}
+		path := dial.UplinkPath
+		if !uplink {
+			path = "interfaces[" + f.Interface + "]"
+		}
+		out = append(out, core.Problem{Path: path, Message: f.Message})
+	}
+	return out
 }

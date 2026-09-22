@@ -86,11 +86,27 @@ func (linuxWriter) Apply(ctx context.Context, desired []Desired) ([]Step, error)
 		// The removal half, and the whole of what AddOnly suppresses: every v4
 		// address on a member that the network does not call for comes off.
 		for _, got := range have {
-			if d.AddOnly || slices.Contains(d.Addrs, got) {
+			if d.AddOnly || slices.Contains(d.Addrs, got) || slices.Contains(d.Retire, got) {
 				continue
 			}
 			step := Step{Description: fmt.Sprintf("remove %s from %s", got, d.Interface)}
 			if err := netlink.AddrDel(link, toNetlinkAddr(got)); err != nil {
+				step.Error = err.Error()
+				failed++
+			} else {
+				step.Done = true
+			}
+			steps = append(steps, step)
+		}
+
+		// Named removals, which hold whether or not the interface is still
+		// claimed: Desired.Retire has the difference from the loop above.
+		for _, old := range d.Retire {
+			if !slices.Contains(have, old) || slices.Contains(d.Addrs, old) {
+				continue
+			}
+			step := Step{Description: fmt.Sprintf("remove %s from %s", old, d.Interface)}
+			if err := netlink.AddrDel(link, toNetlinkAddr(old)); err != nil {
 				step.Error = err.Error()
 				failed++
 			} else {

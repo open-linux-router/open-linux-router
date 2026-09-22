@@ -69,6 +69,15 @@ type Desired struct {
 	// can see and fix from a shell they can still reach; too few is one that
 	// takes the shell away.
 	AddOnly bool
+
+	// Retire are addresses to take off if they are there, and nothing else.
+	//
+	// The precise opposite of the ownership claim above, and used where that
+	// claim has ended: an interface that has left every network is no longer
+	// olr's to address, so an apply removes exactly the router address olr put
+	// there and leaves anything else on it alone. RetiredFor builds these, and
+	// they always come with AddOnly set.
+	Retire []netip.Prefix
 }
 
 // Step is one kernel operation, reported whether or not it succeeded.
@@ -178,6 +187,71 @@ func PlanAddrs(c Config, observed []Interface) []AddrPlan {
 	}
 
 	slices.SortFunc(plans, func(a, b AddrPlan) int { return strings.Compare(a.Interface, b.Interface) })
+	return plans
+}
+
+// RetiredFor lists the router addresses a change leaves behind: for every
+// interface that was a member of a network in before and is a member of none in
+// after, the address that network had olr put on it.
+//
+// This is what `olr net rm` has always promised — "take its address off the
+// interface" — and what an apply did not do, because DesiredFor walks the
+// networks that exist and a removed one is not among them. The address stayed,
+// with nothing left in olr that knew why: on the box it happened to, a second
+// subnet answering on a NIC that no longer served one, and a card blaming the
+// distribution for it.
+//
+// An interface still in some network is left out, because that network's own
+// apply owns its addressing and removes what it does not call for anyway.
+func RetiredFor(before, after Config) []Desired {
+	member := map[string]bool{}
+	for _, g := range after.Groups {
+		for _, m := range g.Members {
+			member[m] = true
+		}
+	}
+
+	byIface := map[string][]netip.Prefix{}
+	for _, g := range before.Groups {
+		if g.IPv4 == nil || !g.IPv4.Subnet.IsValid() {
+			continue
+		}
+		for _, m := range g.Members {
+			if member[m] || slices.Contains(byIface[m], g.IPv4.RouterPrefix()) {
+				continue
+			}
+			byIface[m] = append(byIface[m], g.IPv4.RouterPrefix())
+		}
+	}
+
+	out := make([]Desired, 0, len(byIface))
+	for iface, prefixes := range byIface {
+		out = append(out, Desired{Interface: iface, AddOnly: true, Retire: prefixes})
+	}
+	slices.SortFunc(out, func(a, b Desired) int { return strings.Compare(a.Interface, b.Interface) })
+	return out
+}
+
+// PlanRetire is RetiredFor against the kernel: only the addresses that are
+// actually still there, so a plan does not promise to remove what is gone.
+func PlanRetire(before, after Config, observed []Interface) []AddrPlan {
+	byName := make(map[string]Interface, len(observed))
+	for _, iface := range observed {
+		byName[iface.Name] = iface
+	}
+	var plans []AddrPlan
+	for _, d := range RetiredFor(before, after) {
+		have := ipv4Prefixes(byName[d.Interface].Prefixes)
+		plan := AddrPlan{Interface: d.Interface}
+		for _, p := range d.Retire {
+			if slices.Contains(have, p) {
+				plan.Remove = append(plan.Remove, p)
+			}
+		}
+		if !plan.Empty() {
+			plans = append(plans, plan)
+		}
+	}
 	return plans
 }
 

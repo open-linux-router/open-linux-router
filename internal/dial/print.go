@@ -82,12 +82,18 @@ func writeUplinkText(w io.Writer, v *uplinkView) error {
 	fmt.Fprintf(t, "address\t%s\n", orDash(v.Address))
 	fmt.Fprintf(t, "gateway\t%s\n", orDash(v.Gateway))
 	if len(v.DNS) > 0 {
-		fmt.Fprintf(t, "dns\t%s (recorded; not in use yet)\n", strings.Join(v.DNS, ", "))
+		fmt.Fprintf(t, "dns\t%s\n", strings.Join(v.DNS, ", "))
 	}
 	fmt.Fprintln(t, "\t")
 	fmt.Fprintf(t, "interface state\t%s\n", interfaceStateLine(v))
 	fmt.Fprintf(t, "addresses on it\t%s\n", orDash(strings.Join(v.Addresses, ", ")))
 	fmt.Fprintf(t, "default route\t%s\n", routeLine(v))
+	// What the box resolves through, beside what it was told — the same pair
+	// as the gateway and the route. Blank on a server too old to say.
+	if v.ResolvingThrough != nil || len(v.DNS) > 0 {
+		fmt.Fprintf(t, "resolving through\t%s\n",
+			orDash(strings.Join(v.ResolvingThrough, ", ")))
+	}
 	if err := t.Flush(); err != nil {
 		return err
 	}

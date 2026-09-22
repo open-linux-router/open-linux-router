@@ -50,11 +50,43 @@ type Desired struct {
 	// down is not something any configuration here implies, and an operator who
 	// wants that has `ip link` and means it.
 	Up bool
+
+	// Retire is the address olr wrote for the previous uplink and this one no
+	// longer calls for, on RetireFrom — which is not necessarily Interface. It
+	// comes off last, and only once everything above has landed. See Retiring
+	// for when there is one.
+	Retire     netip.Prefix
+	RetireFrom string
 }
 
 // Empty reports whether there is nothing for a writer to do.
 func (d Desired) Empty() bool {
-	return d.Interface == "" || (!d.Address.IsValid() && !d.Gateway.IsValid() && !d.Up)
+	return d.Interface == "" ||
+		(!d.Address.IsValid() && !d.Gateway.IsValid() && !d.Up && !d.Retire.IsValid())
+}
+
+// Retiring is the address a change of uplink leaves behind: the one olr wrote
+// for the stored uplink, when the desired one puts a different address or the
+// same address on a different interface.
+//
+// Only between two static uplinks. Handing the uplink back leaves the address
+// and the route exactly where they are, and so does changing to an uplink with
+// no static address — Config.RemoveUplink has the argument, and it is the same
+// one: olr never recorded what the box had before, so taking the address away
+// could only leave it with less. Moving the way out is different. The new
+// address and route are in place before the old address comes off, and an
+// address olr wrote and no longer claims is exactly the leftover an operator
+// cannot tell apart from somebody else's: a second interface on the same
+// subnet, answering for an address nothing routes to.
+func Retiring(stored, desired Config) (string, netip.Prefix) {
+	if !stored.Uplink.HasIPv4() || !desired.Uplink.HasIPv4() {
+		return "", netip.Prefix{}
+	}
+	before, after := stored.Uplink, desired.Uplink
+	if before.Interface == after.Interface && before.IPv4.Address == after.IPv4.Address {
+		return "", netip.Prefix{}
+	}
+	return before.Interface, before.IPv4.Address
 }
 
 // Step is one kernel operation, reported whether or not it succeeded.
@@ -114,7 +146,27 @@ type Observed struct {
 	// GatewayDev is the interface that default route leaves by, empty when
 	// there is none.
 	GatewayDev string
+
+	// GatewayState is whether Gateway answers on GatewayDev, read from the
+	// kernel's neighbour table: GatewayAnswers, GatewaySilent, or empty when
+	// nothing has tried to reach it yet.
+	//
+	// The half of "is the uplink working" a route cannot say. A default route
+	// via a gateway on the wrong segment is written, matches the config, and
+	// carries nothing — and until this was read, that box showed green.
+	GatewayState string
+
+	// GatewaySeenOn is another interface on which Gateway does answer, when
+	// there is one. It is usually the answer to "which of my NICs faces the
+	// modem", and cheaper to state than to leave the operator to guess.
+	GatewaySeenOn string
 }
+
+// The states Observed.GatewayState can take.
+const (
+	GatewayAnswers = "answers"
+	GatewaySilent  = "silent"
+)
 
 // DesiredFor builds the writer's input from stored intent.
 func DesiredFor(c Config) Desired {
@@ -265,6 +317,9 @@ func (w *RecordingWriter) Apply(_ context.Context, d Desired) ([]Step, error) {
 	}
 	if d.Gateway.IsValid() {
 		record("route traffic out via %s on %s", d.Gateway, d.Interface)
+	}
+	if d.Retire.IsValid() {
+		record("remove %s from %s", d.Retire, d.RetireFrom)
 	}
 
 	w.Steps = steps

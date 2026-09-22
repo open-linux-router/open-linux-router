@@ -168,7 +168,7 @@ export function NetworksPage() {
             on the box already provides the default route.
           </p>
         </div>
-        <UplinkCard interfaces={editor.interfaces} />
+        <UplinkCard interfaces={editor.interfaces} groups={editor.groups} />
       </section>
 
       {editor.problems.length > 0 && (

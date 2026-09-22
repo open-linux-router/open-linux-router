@@ -4,6 +4,8 @@ import { Link } from 'react-router'
 import { BlockerAlerts } from '@/components/layout/blockers'
 import { SettingsList } from '@/components/layout/settings-list'
 import { StatusDetail, StatusStrip } from '@/components/layout/status-strip'
+import { StuckSettings } from '@/components/layout/stuck-settings'
+import { STUCK_SUMMARY } from '@/components/layout/stuck-summary'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Disclosure } from '@/components/ui/disclosure'
 import { ActivityCard } from '@/features/dns/activity'
@@ -214,6 +216,15 @@ function StatusCard({
         </Disclosure>
       )}
 
+      <StuckSettings
+        error={config.enabled ? status?.drift_error : undefined}
+        fix={
+          status?.drift_error?.startsWith('listen')
+            ? { to: '/dns/listening', label: 'Listening' }
+            : undefined
+        }
+      />
+
       <BlockerAlerts module="dns" blockers={status?.blockers} />
 
       {notInstalled.length > 0 && (
@@ -337,6 +348,7 @@ function describeStatus(
       dot: 'bg-destructive',
     }
   }
+  if (status.drift_error) return STUCK_SUMMARY
   return {
     headline: 'Answering queries',
     detail: describeUpstream(config),

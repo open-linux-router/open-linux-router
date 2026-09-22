@@ -37,6 +37,11 @@ type Applier struct {
 	// Writer programs the uplink. Nil means NewWriter — the real kernel on
 	// Linux, a refusal everywhere else.
 	Writer Writer
+
+	// Host takes the uplink's interface, and the box's own resolvers, from the
+	// distribution's network configuration after every apply (internal/host).
+	// A function for the reason link.Applier.Host is one; nil outside olrd.
+	Host func(context.Context) ([]core.Step, error)
 }
 
 // writer resolves the zero value.
@@ -147,6 +152,10 @@ type ApplyResult struct {
 // rollback (§5.2) — see the Writer interface for why a revert here is worse
 // than the failure it would be recovering from.
 func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error) {
+	previous, err := a.Load()
+	if err != nil {
+		return ApplyResult{}, err
+	}
 	plan, err := a.Plan(ctx, desired)
 	if err != nil {
 		return ApplyResult{}, err
@@ -163,14 +172,28 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 	// still cannot fail for a reason that has nothing to do with what was
 	// asked.
 	want := DesiredFor(stored)
-	if want.Empty() {
-		return ApplyResult{Plan: plan}, nil
+	want.RetireFrom, want.Retire = Retiring(previous, stored)
+	result := ApplyResult{Plan: plan}
+	if !want.Empty() {
+		steps, err := a.writer().Apply(ctx, want)
+		result.Steps = steps
+		if err != nil {
+			return result, fmt.Errorf("configuring the uplink: %w", err)
+		}
 	}
 
-	steps, err := a.writer().Apply(ctx, want)
-	result := ApplyResult{Plan: plan, Steps: steps}
-	if err != nil {
-		return result, fmt.Errorf("configuring the uplink: %w", err)
+	// After the kernel, so the address and route are in place before the
+	// distribution's DHCP client is told to stop providing its own — and run
+	// even with no kernel work, because handing the uplink back is exactly
+	// when the distribution gets the interface back.
+	if a.Host != nil {
+		steps, err := a.Host(ctx)
+		for _, s := range steps {
+			result.Steps = append(result.Steps, Step{Description: s.Description, Done: s.Done, Error: s.Error})
+		}
+		if err != nil {
+			return result, fmt.Errorf("handing the uplink over from the distribution: %w", err)
+		}
 	}
 	return result, nil
 }

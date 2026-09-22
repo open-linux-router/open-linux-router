@@ -42,6 +42,30 @@ type HTTP struct {
 	// that had to own one could not be constructed by a test.
 	Watch  func(Config)
 	States func() map[string]RecordState
+
+	// Host reads the host's side of the uplink: the resolvers this box really
+	// looks names up through, whoever wrote them, and what olr could not take
+	// from the distribution (internal/host). Nil outside olrd.
+	Host func() HostStatus
+}
+
+// HostStatus is the host's side of the uplink, as olrd reads it.
+type HostStatus struct {
+	Resolvers []netip.Addr
+	Findings  []core.Problem
+}
+
+// withHost adds the host's side to an uplink row.
+func (h HTTP) withHost(v *uplinkView) *uplinkView {
+	if v == nil || h.Host == nil {
+		return v
+	}
+	hs := h.Host()
+	v.Problems = append(v.Problems, hs.Findings...)
+	for _, a := range hs.Resolvers {
+		v.ResolvingThrough = append(v.ResolvingThrough, a.String())
+	}
+	return v
 }
 
 // Routes is the module's surface, declared as data so it can be enumerated
@@ -250,7 +274,7 @@ func (h HTTP) getUplink(w http.ResponseWriter, r *http.Request) {
 	}
 	obs := h.Applier.Observe(r.Context(), cfg.Uplink.Interface)
 	core.WriteJSON(w, http.StatusOK, uplinkResponse{
-		Uplink: viewUplink(cfg.Uplink, obs, uplinkProblems(cfg, h.Applier.Links)),
+		Uplink: h.withHost(viewUplink(cfg.Uplink, obs, uplinkProblems(cfg, h.Applier.Links))),
 		AsOf:   time.Now(),
 	})
 }
@@ -370,6 +394,7 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 		invalid  Result
 		failed   error
 		result   ApplyResult
+		previous Config
 		stored   Config
 		applyErr error
 	)
@@ -380,6 +405,7 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 			failed = err
 			return nil
 		}
+		previous = current
 
 		next := current.Clone()
 		if err := edit(&next); err != nil {
@@ -418,7 +444,7 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 		return
 	}
 
-	plan := withLockoutWarning(result.Plan, r, stored)
+	plan := withLockoutWarning(result.Plan, r, previous, stored)
 	if applyErr != nil {
 		core.WriteJSON(w, http.StatusInternalServerError, applyResponse{
 			Plan:   plan,
@@ -465,22 +491,32 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 // It warns rather than refuses. Re-routing the box you are connected through is
 // a legitimate thing to do deliberately; the plan is where olr says what it is
 // about to cost, not where it overrules them.
-func withLockoutWarning(plan planView, r *http.Request, cfg Config) planView {
+func withLockoutWarning(plan planView, r *http.Request, before, cfg Config) planView {
+	// The previous uplink's address coming off is the sharpest case, and the
+	// only one where the address is known to go rather than merely to move: a
+	// session arriving at it ends when the change finishes, whatever else
+	// happens.
+	if from, old := Retiring(before, cfg); old.IsValid() {
+		if local, ok := localAddr(r); ok && local == old.Addr() {
+			plan.Warnings = append(plan.Warnings, core.Problem{
+				Path: UplinkPath,
+				Message: fmt.Sprintf("you are connected to this router at %s, which this takes off "+
+					"%s — your session will drop when the change finishes. Reconnect on %s",
+					local, from, cfg.Uplink.IPv4.Address.Addr()),
+			})
+			return plan
+		}
+	}
 	if cfg.Uplink == nil || !cfg.Uplink.HasIPv4() {
 		return plan
 	}
+	// Being connected at the *new* uplink address is not a lockout by itself:
+	// that address is either already on the box, and stays, or not on it yet,
+	// and nobody is connected through it. What can still drop a session is the
+	// route, for somebody arriving from outside.
 	for _, change := range plan.Changes {
 		if change.Impact != impactDisruptive {
 			continue
-		}
-		if local, ok := localAddr(r); ok && local == cfg.Uplink.IPv4.Address.Addr() {
-			plan.Warnings = append(plan.Warnings, core.Problem{
-				Path: UplinkPath,
-				Message: fmt.Sprintf("you are connected to this router at %s, which is the uplink's "+
-					"own address — applying this changes it and will drop your session. Have "+
-					"console access ready", local),
-			})
-			return plan
 		}
 		plan.Warnings = append(plan.Warnings, core.Problem{
 			Path: UplinkPath,
@@ -554,7 +590,7 @@ func (h HTTP) postPlan(w http.ResponseWriter, r *http.Request) {
 
 	obs := h.Applier.Observe(r.Context(), desired.uplinkInterface())
 	plan := buildPlan(current, desired, h.Applier.Links, obs)
-	core.WriteJSON(w, http.StatusOK, withLockoutWarning(plan, r, desired))
+	core.WriteJSON(w, http.StatusOK, withLockoutWarning(plan, r, current, desired))
 }
 
 // --- observed ---------------------------------------------------------------
@@ -583,7 +619,7 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := statusResponse{
-		Uplink:  viewUplink(cfg.Uplink, h.Applier.Observe(r.Context(), cfg.uplinkInterface()), byPath[UplinkPath]),
+		Uplink:  h.withHost(viewUplink(cfg.Uplink, h.Applier.Observe(r.Context(), cfg.uplinkInterface()), byPath[UplinkPath])),
 		Records: make([]recordView, 0, len(cfg.Records)),
 		AsOf:    time.Now(),
 	}

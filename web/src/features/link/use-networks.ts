@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { toast } from 'sonner'
 
-import { api } from '@/lib/api'
+import { ApiError, api } from '@/lib/api'
 import type { InterfaceList, LinkApplyResult, Plan } from '@/lib/api-types'
 import type { Group, LinkConfig } from '@/lib/config-types'
 
@@ -43,12 +44,6 @@ export function useNetworkEditor() {
 
   const apply = useMutation({
     mutationFn: (next: LinkConfig) => api.put<LinkApplyResult>('/api/link/config', next),
-    onSuccess: (result) => {
-      // A partial apply is reported, never swallowed. There is no rollback
-      // (§5.2), so "which steps ran" is the only way back to a known state.
-      if (result.error || result.steps?.some((s) => s.error)) setFailure(result)
-      setPending(null)
-    },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['link'] })
       // dhcp too: a network is what its ranges are validated against, so
@@ -58,12 +53,44 @@ export function useNetworkEditor() {
   })
 
   async function submit(next: LinkConfig) {
-    const plan = await api.post<Plan>('/api/link/plan', next)
-    if (plan.impact === 'disruptive') {
-      setPending({ config: next, plan })
+    try {
+      const plan = await api.post<Plan>('/api/link/plan', next)
+      if (plan.impact === 'disruptive') {
+        setPending({ config: next, plan })
+        return
+      }
+    } catch (error) {
+      reportError(error)
       return
     }
-    apply.mutate(next)
+    await commit(next)
+  }
+
+  /**
+   * Applies, and says how it went — every outcome, the dhcp way.
+   *
+   * The dialog closes on submit, before any of this has answered, so an outcome
+   * that is not reported here is not reported at all: a refused change used to
+   * look exactly like a click that did nothing.
+   */
+  async function commit(next: LinkConfig) {
+    setFailure(null)
+    try {
+      const result = await apply.mutateAsync(next)
+      // A partial apply is reported, never swallowed. There is no rollback
+      // (§5.2), so "which steps ran" is the only way back to a known state.
+      if (result.error || result.steps?.some((s) => s.error)) {
+        setFailure(result)
+        return
+      }
+      toast.success('Networks updated')
+    } catch (error) {
+      // A half-applied change arrives as a 500 whose body still carries the
+      // steps that landed; keep them, for the same reason as above.
+      const body = error instanceof ApiError ? (error.body as LinkApplyResult | undefined) : undefined
+      if (body?.steps?.length) setFailure(body)
+      reportError(error)
+    }
   }
 
   return {
@@ -79,10 +106,24 @@ export function useNetworkEditor() {
     save: (groups: Group[]) => submit({ ...(config.data ?? {}), groups }),
 
     pending,
-    confirm: () => pending && apply.mutate(pending.config),
+    confirm: async () => {
+      if (!pending) return
+      setPending(null)
+      await commit(pending.config)
+    },
     cancel: () => setPending(null),
 
     failure,
     dismissFailure: () => setFailure(null),
+  }
+}
+
+function reportError(error: unknown) {
+  if (error instanceof ApiError) {
+    toast.error(error.message, {
+      description: error.problems.map((p) => p.message).join('\n') || undefined,
+    })
+  } else {
+    toast.error(String(error))
   }
 }

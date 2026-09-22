@@ -38,6 +38,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
+	"github.com/open-linux-router/open-linux-router/internal/host"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/mcp"
@@ -244,10 +245,29 @@ func run(args []string) error {
 	// it. See the restore block below.
 	linkApplier := link.Applier{Store: store, Source: source}
 
+	// The distribution's own network configuration, for the interfaces olr
+	// has taken (internal/host). Rooted like the store, so a development run
+	// against a scratch root edits the scratch root's files and signals
+	// nothing. Both modules run it after every apply, because what it owns is
+	// their two configs joined — hostDesired has the join.
+	hostApplier := host.Applier{Root: opts.root}
+	takeHost := func(ctx context.Context) ([]core.Step, error) {
+		d, err := hostDesired(store)
+		if err != nil {
+			return nil, err
+		}
+		return hostApplier.Apply(ctx, d)
+	}
+	linkApplier.Host = takeHost
+
 	srv.Mount(link.ModuleName, link.HTTP{
 		Applier: linkApplier,
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
+		Claims:  func() []link.Claim { return uplinkClaims(store) },
+		HostFindings: func() []core.Problem {
+			return hostFindings(hostApplier, store, false)
+		},
 	}.Routes(), link.Config{})
 
 	// `dial` is mounted second, matching the store's order. Like `link` it drives
@@ -263,7 +283,7 @@ func run(args []string) error {
 	publisher := dial.NewPublisher()
 	publisher.Log = logger
 	publisher.Links = dialLinks
-	dialApplier := dial.Applier{Store: store, Links: dialLinks}
+	dialApplier := dial.Applier{Store: store, Links: dialLinks, Host: takeHost}
 
 	srv.Mount(dial.ModuleName, dial.HTTP{
 		Applier: dialApplier,
@@ -271,6 +291,12 @@ func run(args []string) error {
 		Events:  srv.Events(),
 		Watch:   func(cfg dial.Config) { publisher.Watch(context.Background(), cfg) },
 		States:  publisher.States,
+		Host: func() dial.HostStatus {
+			return dial.HostStatus{
+				Resolvers: hostApplier.Resolvers(),
+				Findings:  hostFindings(hostApplier, store, true),
+			}
+		},
 	}.Routes(), dial.Config{})
 
 	srv.Mount(dhcp.ModuleName, dhcp.HTTP{
@@ -502,6 +528,7 @@ func run(args []string) error {
 	// how it gets fixed.
 	startLink(ctx, linkApplier, logger)
 	startDial(ctx, dialApplier, publisher, logger)
+	startHost(ctx, srv, takeHost, logger)
 	startGateway(ctx, gatewayApplier, prober, logger)
 	startForwards(ctx, natApplier, logger)
 	startRemote(ctx, remoteTunnel, remoteProxy, logger)
@@ -1062,6 +1089,37 @@ func restoreUplink(ctx context.Context, a dial.Applier, cfg dial.Config, logger 
 		// against a box that never rebooted is the normal case and says
 		// nothing.
 		logger.Info("uplink restored", "interface", cfg.Uplink.Interface, "changes", done)
+	}
+}
+
+// startHost takes the interfaces olr addresses from the distribution's own
+// network configuration, once, after the addresses and the uplink are back.
+//
+// After them, for the order dial.Applier.Apply gives: the distribution's DHCP
+// client is told to stop only once olr's address and route are in place. And
+// at every start rather than only on a change, so a box upgraded into this
+// release — or one whose dhcpcd.conf a package upgrade rewrote — converges
+// without anybody saving anything. Idempotent: on a box that already agrees it
+// writes nothing and signals nobody.
+func startHost(ctx context.Context, srv *core.Server, take func(context.Context) ([]core.Step, error), logger *slog.Logger) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	var steps []core.Step
+	err := srv.ApplyLock().Do(ctx, func() error {
+		var err error
+		steps, err = take(ctx)
+		return err
+	})
+	for _, s := range steps {
+		if s.Error != "" {
+			logger.Error("could not take over from the distribution", "step", s.Description, "error", s.Error)
+		} else {
+			logger.Info("took over from the distribution", "step", s.Description)
+		}
+	}
+	if err != nil && len(steps) == 0 {
+		logger.Error("could not take over from the distribution", "error", err)
 	}
 }
 

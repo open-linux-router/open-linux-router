@@ -7,11 +7,20 @@ import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { ApplyOutcome, useDhcpEditor } from '@/features/dhcp/editor'
 import { PoolDialog } from '@/features/dhcp/pool-dialog'
 import { useDhcpLeases } from '@/features/dhcp/queries'
+import { useInterfaces } from '@/features/link/queries'
 import type { Pool } from '@/lib/config-types'
 
 export function DhcpRangesPage() {
   const { config, busy, change, applier, gate } = useDhcpEditor()
   const leases = useDhcpLeases()
+  // Read to notice a range whose network has gone. Removing a network does not
+  // remove the ranges on it (routes/networks warns before it happens), and a
+  // range with no network looked exactly like a healthy one here — while the
+  // server kept handing it out on whatever interface it was last given.
+  const interfaces = useInterfaces()
+  const networks = interfaces.isSuccess
+    ? new Set(interfaces.data.groups.map((g) => g.name))
+    : undefined
   const [editing, setEditing] = useState<Pool | undefined>(undefined)
   const [open, setOpen] = useState(false)
 
@@ -56,7 +65,16 @@ export function DhcpRangesPage() {
               <ListRow
                 key={pool.group}
                 title={pool.group}
-                subtitle={describePool(pool)}
+                subtitle={
+                  networks && !networks.has(pool.group) ? (
+                    <span className="text-warning">
+                      There is no network called {pool.group} any more, so this range cannot be
+                      served. Open it to remove it, or add the network back.
+                    </span>
+                  ) : (
+                    describePool(pool)
+                  )
+                }
                 trailing={u ? `${u.active} of ${u.size} in use` : undefined}
                 onSelect={
                   busy
