@@ -469,6 +469,13 @@ func TestStatusReadsTheCountersWithoutTheLog(t *testing.T) {
 	if counting.statsCalls != 1 {
 		t.Errorf("status read the counters %d times, want 1", counting.statsCalls)
 	}
+	// One, and from the drift half: Plan asks who is resolving through us so it
+	// can tell a harmless access-control change from one that cuts somebody off.
+	// It is the same cheap /stats read, so it is counted separately rather than
+	// mistaken for a second pass at the counters.
+	if counting.clients != 1 {
+		t.Errorf("status asked who is connected %d times, want 1", counting.clients)
+	}
 
 	var resp statusResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -485,6 +492,7 @@ type countingObserver struct {
 	queries    int
 	names      int
 	statsCalls int
+	clients    int
 }
 
 func (c *countingObserver) Queries(context.Context, int) ([]Query, Stats, error) {
@@ -503,7 +511,7 @@ func (c *countingObserver) Stats(context.Context) (Stats, error) {
 }
 
 func (c *countingObserver) Clients(context.Context) ([]Client, error) {
-	c.statsCalls++
+	c.clients++
 	return c.stats.Clients, nil
 }
 
