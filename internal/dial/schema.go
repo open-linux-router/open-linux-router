@@ -55,6 +55,48 @@ func (ProviderName) JSONSchema() *jsonschema.Schema {
 	}
 }
 
+// JSONSchema describes the uplink's IPv4 block.
+//
+// Declared here rather than left to reflection for one field: core.mapType
+// publishes netip.Prefix as "an address and prefix length in CIDR form, such as
+// 192.168.1.0/24", which is the right general description and exactly the wrong
+// example for this one. The example is a network; this field is an address with
+// a mask on it, and the difference is the mistake somebody makes on their first
+// attempt — the validator refuses it, and the form that produced it should not
+// have suggested it.
+func (UplinkIPv4) JSONSchema() *jsonschema.Schema {
+	address := &jsonschema.Schema{
+		Type:  "string",
+		Title: "This router's address on the link",
+		Description: "This box's own address, with the mask of the link it is on — " +
+			"192.168.2.9/24, not 192.168.2.0/24. The host bits matter: they are the " +
+			"address, and the mask only says how big the link is.",
+		Examples: []any{"192.168.2.9/24", "203.0.113.17/29"},
+	}
+	gateway := &jsonschema.Schema{
+		Type:  "string",
+		Title: "Gateway",
+		Description: "Where to send everything else — your modem's address on this link. " +
+			"It has to be inside the address's own subnet, because this box has no " +
+			"other way to reach it.",
+		Examples: []any{"192.168.2.1"},
+	}
+
+	props := jsonschema.NewProperties()
+	props.Set("address", address)
+	props.Set("gateway", gateway)
+
+	return &jsonschema.Schema{
+		Type:  "object",
+		Title: "Static IPv4",
+		Description: "A static address and gateway, typed in. Leave the whole block out for " +
+			"an interface olr should own and not address — the shape the DHCP-client " +
+			"and PPPoE forms will take when they land.",
+		Properties: props,
+		Required:   []string{"address", "gateway"},
+	}
+}
+
 // JSONSchema publishes the address sources as an enum.
 //
 // Note what is *not* here: an empty value. Every other enum in this tree admits

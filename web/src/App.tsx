@@ -14,8 +14,8 @@ import { DnsEnforcementPage } from '@/routes/dns/enforcement'
 import { DnsListeningPage } from '@/routes/dns/listening'
 import { DnsNamesPage } from '@/routes/dns/names'
 import { DnsResolvingPage } from '@/routes/dns/resolving'
-import { FirewallPage } from '@/routes/firewall/index'
-import { FirewallUnmanagedPage } from '@/routes/firewall/unmanaged'
+import { ForwardsPage } from '@/routes/gateway/forwards'
+import { FilteringPage } from '@/routes/gateway/filtering'
 import { IngressPage } from '@/routes/ingress'
 import { NetworksPage } from '@/routes/networks'
 import { RemotePage } from '@/routes/remote'
@@ -35,8 +35,10 @@ export function App() {
           <Route path="gateway">
             <Route index element={<GatewayPage />} />
             <Route path="exits" element={<GatewayExitsPage />} />
+            <Route path="forwards" element={<ForwardsPage />} />
             <Route path="usage" element={<GatewayUsagePage />} />
             <Route path="unmanaged" element={<GatewayUnmanagedPage />} />
+            <Route path="filtering" element={<FilteringPage />} />
           </Route>
           <Route path="dhcp">
             <Route index element={<DhcpPage />} />
@@ -59,10 +61,6 @@ export function App() {
             <Route path="enforcement" element={<DnsEnforcementPage />} />
             <Route path="advanced" element={<DnsAdvancedPage />} />
           </Route>
-          <Route path="firewall">
-            <Route index element={<FirewallPage />} />
-            <Route path="unmanaged" element={<FirewallUnmanagedPage />} />
-          </Route>
           <Route path="remote" element={<RemotePage />} />
           <Route path="ingress" element={<IngressPage />} />
 
@@ -72,6 +70,11 @@ export function App() {
               named /dhcp/interfaces in print since 0.1.0, so that one will be
               followed by people reading an older copy for a while yet. */}
           <Route path="internet" element={<Navigate to="/gateway" replace />} />
+          {/* The firewall section is gone: it held port forwarding and no
+              filtering, and both halves now live under Gateway, which is the
+              module that owns the boundary in either direction. */}
+          <Route path="firewall" element={<Navigate to="/gateway/forwards" replace />} />
+          <Route path="firewall/unmanaged" element={<Navigate to="/gateway/filtering" replace />} />
           <Route path="devices" element={<Navigate to="/" replace />} />
           <Route path="dhcp/interfaces" element={<Navigate to="/networks" replace />} />
 

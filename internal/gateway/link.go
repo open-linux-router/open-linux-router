@@ -27,6 +27,33 @@ type LinkView interface {
 
 	// Interfaces lists everything link knows about, in a stable order.
 	Interfaces() ([]LinkInfo, error)
+
+	// Networks lists the subnets link declares, which is what the egress
+	// masquerade's source set is built from (docs/gateway.md §3.9).
+	//
+	// Intent, not the addresses observed on an interface. A network that has
+	// been declared and whose interface has not come up yet still gets its
+	// rule, which is the same reason `dhcp` validates a range against a group
+	// rather than against a NIC — and it is design.md §4.1's own instruction
+	// that dependents read a *group* rather than restating a subnet link
+	// already owns.
+	Networks() ([]netip.Prefix, error)
+}
+
+// UplinkView is this module's read-only window onto `dial`.
+//
+// One method and one fact: which interface, if any, is the box's own way out.
+// design.md §4.1 draws that arrow (`dial → gateway`, "NAT egress iface") and
+// this is the first thing to walk it.
+//
+// It is a second interface rather than a method on LinkView because it names a
+// different module's fact. Collapsing them would put `dial` behind a name that
+// says `link`, and the day one of them is unavailable the caller could not tell
+// which.
+type UplinkView interface {
+	// Uplink returns the uplink's interface name, or "" when olr does not own
+	// the box's way out — which is the reference topology and most boxes.
+	Uplink() (string, error)
 }
 
 // LinkInfo is the subset of an interface's state that routing decisions depend
@@ -58,6 +85,19 @@ type LinkInfo struct {
 
 // ErrNoSuchInterface is returned by LinkView.Interface for an unknown name.
 var ErrNoSuchInterface = errors.New("no such interface")
+
+// NoUplink is an UplinkView for a box where olr does not own the way out, and
+// for the tests that do not care.
+type NoUplink struct{}
+
+// Uplink implements UplinkView.
+func (NoUplink) Uplink() (string, error) { return "", nil }
+
+// StaticUplink is an UplinkView backed by a name, for tests.
+type StaticUplink string
+
+// Uplink implements UplinkView.
+func (s StaticUplink) Uplink() (string, error) { return string(s), nil }
 
 // Contains reports whether addr falls inside one of the interface's prefixes.
 func (l LinkInfo) Contains(addr netip.Addr) bool {
@@ -137,5 +177,31 @@ func (s StaticLinks) Interfaces() ([]LinkInfo, error) {
 		}
 		out = append(out, info)
 	}
+	return out, nil
+}
+
+// Networks implements LinkView.
+//
+// Derived from the adopted interfaces' prefixes rather than from declared
+// networks, because a map keyed by interface has nowhere to put the latter.
+// That is a test affordance and not the shape the daemon uses — internal/daemon
+// reads link's groups, which is what design.md §4.1 asks for.
+func (s StaticLinks) Networks() ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	all, err := s.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	for _, info := range all {
+		if !info.Adopted {
+			continue
+		}
+		for _, p := range info.Prefixes {
+			if p.Addr().Is4() {
+				out = append(out, p.Masked())
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
 	return out, nil
 }

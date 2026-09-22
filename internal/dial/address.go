@@ -20,7 +20,7 @@ import (
 // need the same predicate for a neighbouring reason: a name pointing into
 // 100.64.0.0/10 resolves to something nobody can reach (docs/ddns.md §3.2), and
 // a port forward on an uplink holding such an address is a rule that applies
-// cleanly and can never fire (docs/firewall.md §5.4).
+// cleanly and can never fire (docs/port-forwarding.md §5.4).
 //
 // What stays this module's is *noticing*. The reflector form is the only
 // address source that can see CGNAT at all — an interface read reports the

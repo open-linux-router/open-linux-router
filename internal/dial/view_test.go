@@ -3,6 +3,7 @@ package dial
 import (
 	"bytes"
 	"encoding/json"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -121,7 +122,7 @@ func TestThePlanDiffIsRedacted(t *testing.T) {
 		Source: SourceReflector, ReflectorURL: "https://reflector.example/",
 	}}}
 
-	plan := buildPlan(Config{}, desired, testLinks())
+	plan := buildPlan(Config{}, desired, testLinks(), Observed{})
 	if len(plan.Changes) != 1 {
 		t.Fatalf("plan = %+v", plan)
 	}
@@ -141,7 +142,7 @@ func TestThePlanSaysWhatAddingStarts(t *testing.T) {
 		Source: SourceReflector, ReflectorURL: "https://reflector.example/",
 	}}}
 
-	plan := buildPlan(Config{}, desired, testLinks())
+	plan := buildPlan(Config{}, desired, testLinks(), Observed{})
 	var joined string
 	for _, w := range plan.Warnings {
 		joined += w.Message + "\n"
@@ -162,7 +163,7 @@ func TestThePlanSaysRemovalLeavesTheNameBehind(t *testing.T) {
 		Source: SourceReflector, ReflectorURL: "https://reflector.example/",
 	}}}
 
-	plan := buildPlan(stored, Config{}, testLinks())
+	plan := buildPlan(stored, Config{}, testLinks(), Observed{})
 	if len(plan.Changes) != 1 || plan.Changes[0].Kind != kindDelete {
 		t.Fatalf("plan = %+v", plan)
 	}
@@ -180,7 +181,168 @@ func TestAnEmptyPlanIsEmpty(t *testing.T) {
 		Name: "home.example.net", Provider: "cloudflare", Token: "t",
 		Source: SourceReflector, ReflectorURL: "https://reflector.example/",
 	}}}
-	if plan := buildPlan(stored, stored, testLinks()); !plan.Empty {
+	if plan := buildPlan(stored, stored, testLinks(), Observed{}); !plan.Empty {
 		t.Errorf("planning a config against itself found changes: %+v", plan.Changes)
+	}
+}
+
+// --- the uplink -------------------------------------------------------------
+
+func uplinkConfig() Config {
+	u := testUplink()
+	return Config{Uplink: &u}
+}
+
+// The impact judges the *kernel*, not the stored config: setting up an uplink
+// on a box whose distribution already provides a default route is a takeover
+// and can drop the operator's session, even though the document went from
+// nothing to something.
+func TestTakingOverAnExistingDefaultRouteIsDisruptive(t *testing.T) {
+	obs := Observed{
+		Present: true, Up: true,
+		Gateway:    netip.MustParseAddr("192.168.2.254"),
+		GatewayDev: "enp1s0",
+	}
+	plan := buildPlan(Config{}, uplinkConfig(), testLinks(), obs)
+	if plan.Impact != impactDisruptive {
+		t.Errorf("impact = %q, want %q\n%+v", plan.Impact, impactDisruptive, plan.Changes)
+	}
+}
+
+func TestProvidingAFirstDefaultRouteIsNotDisruptive(t *testing.T) {
+	plan := buildPlan(Config{}, uplinkConfig(), testLinks(), Observed{Present: true, Up: true})
+	if plan.Impact == impactDisruptive {
+		t.Errorf("giving a box its first way out reported as disruptive\n%+v", plan.Changes)
+	}
+	if plan.Empty {
+		t.Error("creating an uplink produced an empty plan")
+	}
+}
+
+func TestMovingTheUplinkAddressIsDisruptive(t *testing.T) {
+	before := uplinkConfig()
+	after := before.Clone()
+	after.Uplink.IPv4.Address = netip.MustParsePrefix("192.168.2.10/24")
+
+	obs := Observed{
+		Present: true, Up: true,
+		Addrs:      []netip.Prefix{netip.MustParsePrefix("192.168.2.9/24")},
+		Gateway:    netip.MustParseAddr("192.168.2.1"),
+		GatewayDev: "enp2s0",
+	}
+	if plan := buildPlan(before, after, testLinks(), obs); plan.Impact != impactDisruptive {
+		t.Errorf("impact = %q, want %q", plan.Impact, impactDisruptive)
+	}
+}
+
+// Nothing is torn down, so the impact is honestly none — and the warning is
+// what stops "removed" reading as "this box is offline now".
+func TestRemovingTheUplinkSaysNothingIsTornDown(t *testing.T) {
+	obs := Observed{
+		Present: true, Up: true,
+		Addrs:      []netip.Prefix{netip.MustParsePrefix("192.168.2.9/24")},
+		Gateway:    netip.MustParseAddr("192.168.2.1"),
+		GatewayDev: "enp2s0",
+	}
+	plan := buildPlan(uplinkConfig(), Config{}, testLinks(), obs)
+	if plan.Impact != impactNone {
+		t.Errorf("impact = %q; removing the uplink tears nothing down", plan.Impact)
+	}
+	if !hasWarning(plan, "after a reboot") {
+		t.Errorf("nothing warns that the route stops being restored: %+v", plan.Warnings)
+	}
+}
+
+// Drift: the document diff is empty by construction, so anything left is the
+// kernel disagreeing with intent.
+func TestAnUplinkPlannedAgainstADisagreeingKernelIsNotEmpty(t *testing.T) {
+	stored := uplinkConfig()
+	plan := buildPlan(stored, stored, testLinks(), Observed{Present: true, Up: true})
+	if plan.Empty {
+		t.Error("a box that lost its address and route read as up to date")
+	}
+}
+
+func TestAnUplinkPlannedAgainstAnAgreeingKernelIsEmpty(t *testing.T) {
+	stored := uplinkConfig()
+	obs := Observed{
+		Present: true, Up: true,
+		Addrs:      []netip.Prefix{netip.MustParsePrefix("192.168.2.9/24")},
+		Gateway:    netip.MustParseAddr("192.168.2.1"),
+		GatewayDev: "enp2s0",
+	}
+	if plan := buildPlan(stored, stored, testLinks(), obs); !plan.Empty {
+		t.Errorf("an already-correct box produced %+v", plan.Changes)
+	}
+}
+
+// Two managers on one interface is a state the operator can only fix if they
+// can see it, and deleting what the other one put there is the failure the
+// uplink object exists to stop.
+func TestAForeignAddressOnTheUplinkIsCalledOut(t *testing.T) {
+	obs := Observed{
+		Present: true, Up: true,
+		Addrs: []netip.Prefix{
+			netip.MustParsePrefix("192.168.2.9/24"),
+			netip.MustParsePrefix("192.168.2.77/24"),
+		},
+		Gateway:    netip.MustParseAddr("192.168.2.1"),
+		GatewayDev: "enp2s0",
+	}
+	plan := buildPlan(uplinkConfig(), uplinkConfig(), testLinks(), obs)
+	if !hasWarning(plan, "192.168.2.77/24") {
+		t.Errorf("the foreign address was not reported: %+v", plan.Warnings)
+	}
+	if !hasWarning(plan, "will not remove") {
+		t.Errorf("the note does not say olr leaves it alone: %+v", plan.Warnings)
+	}
+}
+
+func hasWarning(plan planView, substring string) bool {
+	for _, w := range plan.Warnings {
+		if strings.Contains(w.Message, substring) {
+			return true
+		}
+	}
+	return false
+}
+
+// The "configured and does not work" trap: source NAT hangs off a gateway exit,
+// not off the route, so LAN traffic leaving through the default route has no
+// way back. A plan note rather than a validation warning, because `dial` cannot
+// read `gateway` and so cannot tell when the work is done — see
+// unroutedNetworksNote.
+func TestSettingAnUplinkSaysTheNetworksStillNeedAnExit(t *testing.T) {
+	plan := buildPlan(Config{}, uplinkConfig(), uplinkLinks(), Observed{Present: true, Up: true})
+	if !hasWarning(plan, "olr gateway add exit") {
+		t.Fatalf("no note about the networks behind the router: %+v", plan.Warnings)
+	}
+	if !hasWarning(plan, "lan") {
+		t.Errorf("the note does not name the network: %+v", plan.Warnings)
+	}
+}
+
+func TestABoxWithNoNetworksIsNotToldAboutExits(t *testing.T) {
+	links := uplinkLinks()
+	links.Networks = nil
+
+	plan := buildPlan(Config{}, uplinkConfig(), links, Observed{Present: true, Up: true})
+	if hasWarning(plan, "olr gateway add exit") {
+		t.Error("a box with no networks was told to route networks")
+	}
+}
+
+// Said once, where the operator is looking at what they asked for — not on
+// every drift check of a box that has not changed.
+func TestAnUnchangedUplinkIsNotToldAboutExitsAgain(t *testing.T) {
+	stored := uplinkConfig()
+	obs := Observed{
+		Present: true, Up: true,
+		Addrs:      []netip.Prefix{netip.MustParsePrefix("192.168.2.9/24")},
+		Gateway:    netip.MustParseAddr("192.168.2.1"),
+		GatewayDev: "enp2s0",
+	}
+	if plan := buildPlan(stored, stored, uplinkLinks(), obs); hasWarning(plan, "olr gateway add exit") {
+		t.Error("a drift check repeated the setup note")
 	}
 }

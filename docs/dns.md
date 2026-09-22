@@ -488,8 +488,8 @@ Three parts of that are load-bearing:
   with the bind no longer narrowing anything, it is now the *whole* of what
   separates a LAN resolver from an open one. §5's line about binding to LAN
   interfaces has become a line about the source check alone.
-- **Private addresses only.** The WAN gets adopted too — `gateway` and
-  `firewall` need it — so a derivation that took every adopted prefix would put
+- **Private addresses only.** The WAN gets adopted too — `gateway` and `dial`
+  both need it — so a derivation that took every adopted prefix would put
   the uplink's own subnet in the allow list and stand up an open resolver by
   default. §5 calls that an amplifier, and arriving at it helpfully is the worst
   way to arrive at it.
@@ -565,8 +565,8 @@ or we have shipped an amplifier.
 > paragraph on its own.
 >
 > Which raises the stakes on the thing that is still missing. olr has no input
-> filter chain at all: `firewall` does NAT and forwards, and a filter policy is
-> listed under "Later" in its own §8. So there is exactly one layer here, not
+> filter chain at all: `gateway` does NAT and forwards, and filtering is not
+> being built for now (docs/port-forwarding.md §0). So there is exactly one layer here, not
 > two. Per-interface binding (`SO_BINDTODEVICE`, the way dnsmasq's
 > `bind-dynamic` works) would restore the second without reintroducing the
 > staleness, because an interface is a stable name and an address is not. It is
@@ -634,8 +634,8 @@ what we do not cover instead of implying coverage we do not have.
   does not take DNS down with it — the right trade, since a broken redirect
   costs the redirect and a failed unit costs the building its name resolution.
   But nothing reads the ruleset back, so `olr dns status` cannot say the
-  redirect is missing. Reading nftables belongs to the `firewall` module; this
-  closes when that lands.
+  redirect is missing. Reading nftables back for the whole box belongs to
+  `gateway` (docs/port-forwarding.md §8); this closes when that lands.
 - **IPv6 is captured only if there is an IPv6 listen address.** The renderer
   emits per-family redirect rules and warns when one family has none, which is
   honest but not the same as covering it. A client resolving over IPv6 on a

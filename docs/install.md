@@ -36,12 +36,43 @@ neither knows about the other. Two rules keep that safe:
   configures the interface, it configures exactly the address you give the
   network — never DHCP. A leased address that differs is removed the next time
   you apply anything, and the default route goes with it. On a box with one
-  network interface this is the only arrangement that works: the distribution
-  keeps providing the default route, and it and olr agree on the address.
+  network interface this is the only arrangement that works: something outside
+  olr keeps providing the default route, and it and olr agree on the address.
 - **An interface that gets its address by DHCP is never in a network.** On a box
   that *is* your gateway, that is the uplink to your modem: leave it to the
   distribution, put only the LAN side in a network, and take the LAN side out of
   the distribution's configuration so that olr is the only thing addressing it.
+
+#### If this box is your gateway: the uplink is not a network
+
+A **network** is a subnet this router *serves* — it hands out addresses there
+and answers names. The interface facing your modem is the opposite of that, and
+it has its own place in olr: **Networks → Internet uplink**, or `olr dial set
+uplink`.
+
+```sh
+sudo olr adopt enp2s0
+sudo olr dial set uplink --interface enp2s0 \
+  --address 192.168.2.9/24 --gateway 192.168.2.1 --dry-run
+```
+
+The address keeps its host bits — `192.168.2.9/24` is this box's address on the
+link to the modem, not the subnet. From then on olr owns that interface's
+address and this router's default route, and puts both back after a reboot, so
+the distribution should no longer configure that interface at all.
+
+**One interface cannot be both.** olr refuses an uplink on an interface a
+network already carries, and says which network. If you set your WAN NIC up as a
+network before this existed — which was the only thing olr would accept — the
+migration is: `sudo olr net rm wan`, then the two commands above. Do it from the
+console, or over the *other* NIC.
+
+**Your networks come with it.** Once there is an uplink, olr masquerades
+traffic leaving it from the subnets you declared, so the devices on your
+networks reach the internet without anything further being configured. No
+`gateway` exit is needed for that — an exit is for sending a network out a
+*different* way, through a VPN or another box. `docs/gateway.md` §3.9 has the
+rule and the switch that turns it off.
 
 Throughout, the example network is `192.168.1.0/24`, the existing router is
 `192.168.1.1`, and the olr box is `192.168.1.2` on interface `enp1s0`.
@@ -55,7 +86,7 @@ sudo apt install ./olr_<version>_<arch>.deb
 ```
 
 This starts `olrd`, serves its web UI, and changes nothing else — no DHCP
-server, no resolver, no firewall rule, no interface touched. It prints the
+server, no resolver, no nftables rule, no interface touched. It prints the
 address to open:
 
 ```
@@ -280,6 +311,21 @@ you were connected over, and olr took yours off — and the default route with i
 From the console, `sudo olr net set lan --router <the address you had>` makes the
 two agree again, and `sudo systemctl restart networking` (or your distribution's
 equivalent) puts the route back.
+
+**olr refuses the uplink: "enp2s0 carries the network …".** One interface cannot
+be both a network this router serves and the way out. That is the migration in
+"If this box is your gateway", above: remove the network, then set the uplink.
+
+**The box reaches the internet and the LAN does not.** Check that `olr gateway`
+is switched on — the masquerade that gives your networks a return path lives
+there, and turning the module off closes it along with any port forwards.
+`olr gateway status` says whether it is in force.
+
+**`olr dial show uplink` says the default route goes somewhere else.** Something
+outside olr replaced it — most often the distribution still configuring that
+interface, or a DHCP client on it. `olr dial set uplink --interface <name>` with
+no other flags re-applies what is stored; then take the interface out of your
+distribution's configuration, or the two will keep overwriting each other.
 
 **The web UI cannot be reached.** `olr listen` with no listener set is off
 by default; re-run step 2. If it is set, check nothing between you and the box is

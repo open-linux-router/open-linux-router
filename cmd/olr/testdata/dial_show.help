@@ -8,6 +8,7 @@ Available Commands:
   providers   List the DNS providers olr can publish through
   record      Show one name in full
   records     List the names olr keeps current
+  uplink      Show how this router reaches the internet
 
 Flags:
   -h, --help   help for show

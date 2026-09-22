@@ -59,11 +59,11 @@ type Desired struct {
 	// finished running yet.
 	//
 	// Enforcing ownership against that is a race olr loses in the worst
-	// possible way. The failure is concrete rather than theoretical: until
-	// `link` grows the WAN/LAN split that PlanAddrs' comment already assumes,
-	// a one-armed router has its uplink address on a group member, and a
-	// startup that removed it would take the box off the network on every boot,
-	// with the operator's only route back being physical.
+	// possible way. The failure is concrete rather than theoretical: a
+	// one-armed router — one NIC, serving the LAN it is also reached over —
+	// has no uplink to move into `dial`, so its only address sits on a group
+	// member, and a startup that removed it would take the box off the network
+	// on every boot with the operator's only route back being physical.
 	//
 	// The asymmetry is the safe one. Too many addresses is a state an operator
 	// can see and fix from a shell they can still reach; too few is one that
@@ -123,10 +123,15 @@ func (p AddrPlan) Empty() bool {
 // the tag — and a tag that survives a reboot, a `ip addr flush`, or somebody
 // else's configuration management is not something netlink offers.
 //
-// The claim is bounded in the one way that matters: an interface only becomes a
+// The claim is bounded in the two ways that matter. An interface only becomes a
 // member because somebody adopted it and then put it in a network, which is two
-// deliberate acts. WAN interfaces are `dial`'s and are never members, so a
-// DHCP-assigned uplink address is not at risk here.
+// deliberate acts. And WAN interfaces are `dial`'s and are never members: that
+// sentence was vacuous until dial.Uplink existed, because there was nowhere
+// else in olr to put an interface, so the uplink ended up in a network and this
+// writer stripped the address the ISP had given it. There is somewhere now, and
+// dial's validator refuses an uplink on an interface a network already carries
+// — the two cannot both own one interface's addressing, and the refusal is what
+// makes this paragraph true rather than aspirational.
 //
 // IPv6 is not touched at all. A SLAAC or delegated address on a member is left
 // exactly where it is — see Desired.Addrs.

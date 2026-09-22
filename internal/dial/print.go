@@ -27,6 +27,16 @@ func writeConfigText(w io.Writer, c Config) error {
 		return cli.NoObjects(w, "names", addHint)
 	}
 
+	if c.Uplink != nil {
+		fmt.Fprintf(w, "uplink  %s\n", uplinkSummary(c.Uplink))
+		if len(c.Records) > 0 {
+			fmt.Fprintln(w)
+		}
+	}
+	if len(c.Records) == 0 {
+		return nil
+	}
+
 	t := table(w)
 	fmt.Fprintln(t, "NAME\tPROVIDER\tADDRESS FROM\tEVERY\tCREDENTIAL")
 	for _, r := range c.Records {
@@ -35,6 +45,88 @@ func writeConfigText(w io.Writer, c Config) error {
 			Duration(r.ResolvedInterval()), credentialState(r))
 	}
 	return t.Flush()
+}
+
+// uplinkSummary is the one-line form, for the list that shows everything.
+func uplinkSummary(u *Uplink) string {
+	if u.IPv4 == nil {
+		return u.Interface + ", no static address"
+	}
+	return fmt.Sprintf("%s, %s via %s", u.Interface, u.IPv4.Address, u.IPv4.Gateway)
+}
+
+// writeUplinkText is intent beside fact, in that order and never merged.
+//
+// The shape is the point. An operator reading this is asking one of two
+// questions — "what did I tell it" and "what is it doing" — and the failure
+// worth catching is the one where the first looks perfect. So the stored
+// gateway and the route actually in the main table are two separate lines, and
+// a route that leaves by a different interface says so rather than being
+// counted as agreement.
+func writeUplinkText(w io.Writer, v *uplinkView) error {
+	if v == nil {
+		fmt.Fprintln(w, "olr does not own this box's way out.")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "The default route is whatever your distribution, a DHCP client or")
+		fmt.Fprintln(w, "somebody's hand put in the main table, and olr leaves it alone. That is")
+		fmt.Fprintln(w, "the right arrangement when olr sits beside your modem rather than in")
+		fmt.Fprintln(w, "front of it.")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Set one with `olr dial set uplink --interface <name> --address <cidr> "+
+			"--gateway <ip>`.")
+		return nil
+	}
+
+	t := table(w)
+	fmt.Fprintf(t, "interface\t%s\n", v.Interface)
+	fmt.Fprintf(t, "address\t%s\n", orDash(v.Address))
+	fmt.Fprintf(t, "gateway\t%s\n", orDash(v.Gateway))
+	if len(v.DNS) > 0 {
+		fmt.Fprintf(t, "dns\t%s (recorded; not in use yet)\n", strings.Join(v.DNS, ", "))
+	}
+	fmt.Fprintln(t, "\t")
+	fmt.Fprintf(t, "interface state\t%s\n", interfaceStateLine(v))
+	fmt.Fprintf(t, "addresses on it\t%s\n", orDash(strings.Join(v.Addresses, ", ")))
+	fmt.Fprintf(t, "default route\t%s\n", routeLine(v))
+	if err := t.Flush(); err != nil {
+		return err
+	}
+
+	for _, p := range v.Problems {
+		fmt.Fprintf(w, "\n  ! %s\n", p.Message)
+	}
+	return nil
+}
+
+func interfaceStateLine(v *uplinkView) string {
+	switch {
+	case !v.Present:
+		return "this machine has no interface with that name"
+	case !v.Up:
+		return "down — olr brings it up on the next apply"
+	default:
+		return "up"
+	}
+}
+
+// routeLine is the sentence that answers "so is it working".
+//
+// Three states and they read nothing alike: no route at all, a route pointing
+// where we asked, and a route pointing somewhere else. The last is the one this
+// whole read exists for — a box that looks configured, has a default route, and
+// sends everything out of the wrong interface.
+func routeLine(v *uplinkView) string {
+	switch {
+	case v.RouteVia == "":
+		return "none — this box has no way out"
+	case v.Gateway == "":
+		return fmt.Sprintf("via %s on %s, which olr did not configure", v.RouteVia, orDash(v.RouteDev))
+	case v.RouteVia == v.Gateway && v.RouteDev == v.Interface:
+		return fmt.Sprintf("via %s on %s", v.RouteVia, v.RouteDev)
+	default:
+		return fmt.Sprintf("via %s on %s — not what is configured above; "+
+			"`olr dial set uplink` re-applies it", v.RouteVia, orDash(v.RouteDev))
+	}
 }
 
 func writeRecordText(w io.Writer, r Record) error {
@@ -88,7 +180,19 @@ func ttlText(ttl int) string {
 // address was read two minutes ago and the last publish failed four days ago,
 // both lines appear and neither hides the other.
 func writeStatusText(w io.Writer, resp statusResponse) error {
+	if resp.Uplink != nil {
+		fmt.Fprintln(w, "uplink")
+		if err := writeUplinkText(w, resp.Uplink); err != nil {
+			return err
+		}
+		if len(resp.Records) > 0 {
+			fmt.Fprintln(w)
+		}
+	}
 	if len(resp.Records) == 0 {
+		if resp.Uplink != nil {
+			return nil
+		}
 		return cli.NoObjects(w, "names", addHint)
 	}
 
@@ -212,8 +316,11 @@ func writePlanText(w io.Writer, plan planView, dryRun bool) error {
 		return writeWarnings(w, plan.Warnings)
 	}
 
+	// "change" rather than "record": the plan can now carry the uplink and the
+	// kernel steps that follow from it, and counting those as records was true
+	// only while records were the only thing this module had.
 	verb := map[bool]string{true: "would change", false: "changed"}[dryRun]
-	fmt.Fprintf(w, "%s %s:\n", core.Plural(len(plan.Changes), "record"), verb)
+	fmt.Fprintf(w, "%s %s:\n", core.Plural(len(plan.Changes), "change"), verb)
 	for _, c := range plan.Changes {
 		fmt.Fprintf(w, "  %-6s %s\n", c.Kind, c.Path)
 	}
@@ -226,6 +333,35 @@ func writePlanText(w io.Writer, plan planView, dryRun bool) error {
 	}
 
 	return writeWarnings(w, plan.Warnings)
+}
+
+// writeSteps reports what reached the kernel.
+//
+// Only when something did, and only the failures in detail: a successful apply
+// already said what it would do in the plan above, and repeating it as a list
+// of ticks is noise. §5.2 gives an uplink change no rollback, so what landed
+// before a failure is the one thing that must never be swallowed.
+func writeSteps(w io.Writer, steps []Step) error {
+	failed := 0
+	for _, s := range steps {
+		if !s.Done {
+			failed++
+		}
+	}
+	if failed == 0 {
+		return nil
+	}
+
+	fmt.Fprintf(w, "\n%s did not go through:\n", core.Plural(failed, "step"))
+	for _, s := range steps {
+		if s.Done {
+			continue
+		}
+		fmt.Fprintf(w, "  %s: %s\n", s.Description, s.Error)
+	}
+	fmt.Fprintln(w, "\nWhat did land has already taken effect and is not undone. "+
+		"Fixing the cause and\napplying again is safe — it picks up where this left off.")
+	return nil
 }
 
 func writeWarnings(w io.Writer, warnings []core.Problem) error {

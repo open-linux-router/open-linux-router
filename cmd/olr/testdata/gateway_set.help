@@ -1,10 +1,11 @@
-Choose which exit a network uses
+Change an exit assignment or a port forward
 
 Usage:
   olr gateway set [command]
 
 Available Commands:
   default          Set the exit everything uses unless something more specific says otherwise
+  forward          Change an existing port forward
   traffic-counting Count how much each device uses
   via              Send one network's traffic through an exit
 

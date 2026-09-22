@@ -95,7 +95,7 @@ func InterfaceWithAddress(links LinkView, addr netip.Addr) (LinkInfo, bool) {
 // defaulting to "everyone" is the difference between a LAN resolver and an
 // amplifier (docs/dns.md §5), and with the relay bound to the wildcard it is
 // the *only* thing holding that line — there is no input filter chain on this
-// box yet (docs/firewall.md §8 has it under "Later").
+// box yet (docs/port-forwarding.md §8 has it under "Later").
 //
 // # Why this reads the interfaces rather than the listen addresses
 //

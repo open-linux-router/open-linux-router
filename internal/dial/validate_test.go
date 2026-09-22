@@ -1,6 +1,7 @@
 package dial
 
 import (
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -301,5 +302,210 @@ func TestValidationWorksWithoutInterfaceFacts(t *testing.T) {
 	res := validateOne(t, rec, nil)
 	if res.OK() {
 		t.Fatal("the vocabulary rules should still apply with no link view")
+	}
+}
+
+// --- the uplink -------------------------------------------------------------
+
+// uplinkLinks is the three-NIC box from the report this object was built for:
+// one LAN, one facing the fibre modem, and one carrying a second subnet.
+func uplinkLinks() StaticView {
+	return StaticView{
+		Links: StaticLinks{
+			"enp1s0": {Adopted: true, Up: true, Prefixes: []netip.Prefix{
+				netip.MustParsePrefix("192.168.1.1/24"),
+			}},
+			"enp2s0": {Adopted: true, Up: true},
+			"enp3s0": {Adopted: false, Up: true},
+		},
+		Networks: []GroupInfo{{Name: "lan", Members: []string{"enp1s0"}}},
+	}
+}
+
+func validateUplinkOnly(t *testing.T, u Uplink, links LinkView) Result {
+	t.Helper()
+	c := Config{Uplink: &u}
+	c.Normalize()
+	return Validate(c, links)
+}
+
+func validUplink() Uplink {
+	return Uplink{
+		Interface: "enp2s0",
+		IPv4: &UplinkIPv4{
+			Address: netip.MustParsePrefix("192.168.2.9/24"),
+			Gateway: netip.MustParseAddr("192.168.2.1"),
+		},
+	}
+}
+
+func TestAValidUplinkPasses(t *testing.T) {
+	if res := validateUplinkOnly(t, validUplink(), uplinkLinks()); !res.OK() {
+		t.Fatalf("a valid uplink was refused: %v", res.Errors)
+	}
+}
+
+// The reporter's migration path, and the reason this refusal exists: before
+// dial.Uplink there was nowhere else to put a WAN NIC, so an existing box has
+// it in a network — and internal/link would strip the ISP's address off it.
+func TestAnUplinkOnAnInterfaceANetworkCarriesIsRefused(t *testing.T) {
+	u := validUplink()
+	u.Interface = "enp1s0"
+
+	res := validateUplinkOnly(t, u, uplinkLinks())
+	p, found := errorAt(res, UplinkPath+".interface")
+	if !found {
+		t.Fatalf("an uplink on a network's interface was allowed: %+v", res)
+	}
+	// It has to name the network and the way out, or the operator cannot act
+	// on it: "remove the network first" is the whole value of the message.
+	for _, want := range []string{"lan", "olr net rm lan"} {
+		if !strings.Contains(p.Message, want) {
+			t.Errorf("the refusal does not mention %q: %s", want, p.Message)
+		}
+	}
+}
+
+func TestAnUnadoptedUplinkInterfaceIsRefused(t *testing.T) {
+	u := validUplink()
+	u.Interface = "enp3s0"
+
+	res := validateUplinkOnly(t, u, uplinkLinks())
+	p, found := errorAt(res, UplinkPath+".interface")
+	if !found {
+		t.Fatalf("an unadopted interface was accepted: %+v", res)
+	}
+	if !strings.Contains(p.Message, "olr adopt enp3s0") {
+		t.Errorf("the refusal does not say how to fix it: %s", p.Message)
+	}
+}
+
+func TestAMissingUplinkInterfaceIsRefused(t *testing.T) {
+	u := validUplink()
+	u.Interface = "enp9s0"
+
+	if _, found := errorAt(validateUplinkOnly(t, u, uplinkLinks()), UplinkPath+".interface"); !found {
+		t.Error("an interface this machine does not have was accepted")
+	}
+}
+
+// The field that had nowhere to live. An address with no gateway is the state
+// the reporter was stuck in, so it is an error rather than a warning.
+func TestAnUplinkAddressWithoutAGatewayIsRefused(t *testing.T) {
+	u := validUplink()
+	u.IPv4.Gateway = netip.Addr{}
+
+	if _, found := errorAt(validateUplinkOnly(t, u, uplinkLinks()), UplinkPath+".ipv4.gateway"); !found {
+		t.Error("an address with no gateway was accepted")
+	}
+}
+
+// An off-link next hop would need a route to itself first, and olr writes
+// none — the kernel refuses with ENETUNREACH halfway through an apply, which
+// is a much worse place to learn that the mask is wrong.
+func TestAGatewayOutsideTheAddressIsRefused(t *testing.T) {
+	u := validUplink()
+	u.IPv4.Gateway = netip.MustParseAddr("10.9.9.1")
+
+	res := validateUplinkOnly(t, u, uplinkLinks())
+	p, found := errorAt(res, UplinkPath+".ipv4.gateway")
+	if !found {
+		t.Fatalf("a gateway outside the subnet was accepted: %+v", res)
+	}
+	if !strings.Contains(p.Message, "192.168.2.0/24") {
+		t.Errorf("the refusal does not name the subnet: %s", p.Message)
+	}
+}
+
+func TestTheGatewayMayNotBeThisBoxsOwnAddress(t *testing.T) {
+	u := validUplink()
+	u.IPv4.Gateway = netip.MustParseAddr("192.168.2.9")
+
+	if _, found := errorAt(validateUplinkOnly(t, u, uplinkLinks()), UplinkPath+".ipv4.gateway"); !found {
+		t.Error("the box's own address was accepted as its gateway")
+	}
+}
+
+// Normalize deliberately does not mask the address, so the typo has to be
+// caught rather than quietly corrected into something unreachable.
+func TestTheNetworkAddressIsRefusedAsTheUplinkAddress(t *testing.T) {
+	u := validUplink()
+	u.IPv4.Address = netip.MustParsePrefix("192.168.2.0/24")
+
+	res := validateUplinkOnly(t, u, uplinkLinks())
+	p, found := errorAt(res, UplinkPath+".ipv4.address")
+	if !found {
+		t.Fatalf("the network address was accepted as an interface address: %+v", res)
+	}
+	if !strings.Contains(p.Message, "192.168.2.1/24") {
+		t.Errorf("the refusal does not show the shape of a right answer: %s", p.Message)
+	}
+}
+
+// Double NAT is a working setup, so this is a warning — internal/gateway/nat makes
+// the same call about the same fact.
+func TestAPrivateUplinkAddressIsAWarning(t *testing.T) {
+	res := validateUplinkOnly(t, validUplink(), uplinkLinks())
+	if !res.OK() {
+		t.Fatalf("a private uplink address was refused: %v", res.Errors)
+	}
+	if _, found := warningAt(res, UplinkPath+".ipv4.address"); !found {
+		t.Errorf("no note about being behind another router: %+v", res.Warnings)
+	}
+}
+
+func TestAPublicUplinkAddressIsNotWarnedAbout(t *testing.T) {
+	u := validUplink()
+	u.IPv4.Address = netip.MustParsePrefix("203.0.113.17/29")
+	u.IPv4.Gateway = netip.MustParseAddr("203.0.113.22")
+
+	res := validateUplinkOnly(t, u, uplinkLinks())
+	if !res.OK() {
+		t.Fatalf("a public uplink address was refused: %v", res.Errors)
+	}
+	if _, found := warningAt(res, UplinkPath+".ipv4.address"); found {
+		t.Error("a public address should not be warned about")
+	}
+}
+
+// A field that appears on every generated surface, stores what it is given and
+// has no observable effect is the worst kind. Say so where it is typed.
+func TestRecordedResolversSayTheyAreNotUsedYet(t *testing.T) {
+	u := validUplink()
+	u.DNS = []netip.Addr{netip.MustParseAddr("9.9.9.9")}
+
+	res := validateUplinkOnly(t, u, uplinkLinks())
+	if !res.OK() {
+		t.Fatalf("recorded resolvers were refused: %v", res.Errors)
+	}
+	if _, found := warningAt(res, UplinkPath+".dns"); !found {
+		t.Errorf("nothing says the resolvers are not read yet: %+v", res.Warnings)
+	}
+}
+
+// An interface olr owns and does not address is the shape the DHCP-client and
+// PPPoE forms arrive in, so it has to be storable now.
+func TestAnUplinkWithNoStaticAddressingIsAllowed(t *testing.T) {
+	res := validateUplinkOnly(t, Uplink{Interface: "enp2s0"}, uplinkLinks())
+	if !res.OK() {
+		t.Fatalf("an uplink with no IPv4 block was refused: %v", res.Errors)
+	}
+}
+
+func TestAnUplinkNeedsAnInterface(t *testing.T) {
+	if _, found := errorAt(validateUplinkOnly(t, Uplink{}, uplinkLinks()), UplinkPath+".interface"); !found {
+		t.Error("an uplink with no interface was accepted")
+	}
+}
+
+// design.md §5.3.1: the rules that need the box are skipped without it, and
+// the rest still run.
+func TestUplinkValidationWorksWithoutInterfaceFacts(t *testing.T) {
+	u := validUplink()
+	u.IPv4.Gateway = netip.MustParseAddr("10.9.9.1")
+
+	res := validateUplinkOnly(t, u, nil)
+	if _, found := errorAt(res, UplinkPath+".ipv4.gateway"); !found {
+		t.Error("the pure rules stopped running without a LinkView")
 	}
 }

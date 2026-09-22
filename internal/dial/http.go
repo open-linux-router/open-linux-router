@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
@@ -66,6 +69,35 @@ func (h HTTP) Routes() []core.Route {
 			Body:     core.BodyRelaxed,
 			Mutating: true,
 			Handler:  h.patchConfig,
+		},
+
+		// Intent, the uplink on its own.
+		//
+		// Item routes beside /records/{name} and for the same reason: RFC 7386
+		// replaces an array wholesale, and a PATCH meaning to edit the uplink
+		// would take the record list with it. DELETE exists as its own verb
+		// because "there is no uplink" is not something a merge patch can say
+		// about a field it is also allowed to omit.
+		{
+			Method: "GET", Path: "/uplink", Tool: "show uplink",
+			Summary: "Show how this router itself reaches the internet: the interface, its address " +
+				"and the gateway olr was told to use, beside the address and default route the " +
+				"kernel actually has.",
+			Handler: h.getUplink,
+		},
+		{
+			Method: "PUT", Path: "/uplink",
+			Summary: "Set how this router itself reaches the internet. olr writes the address, brings " +
+				"the interface up and owns the default route from then on.",
+			Mutating: true,
+			Handler:  h.putUplink,
+		},
+		{
+			Method: "DELETE", Path: "/uplink",
+			Summary: "Stop owning the way out. The address and the default route stay exactly as they " +
+				"are; olr simply no longer maintains them or restores them after a reboot.",
+			Mutating: true,
+			Handler:  h.deleteUplink,
 		},
 
 		// Intent, one record at a time.
@@ -197,6 +229,69 @@ func (h HTTP) putRecord(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// getUplink answers intent and fact in one reply.
+//
+// Both, because either alone is misleading: the stored gateway says what olr
+// was told, and the route in the main table says what the box is doing, and the
+// whole reason this object exists is that those two could silently be different
+// things.
+func (h HTTP) getUplink(w http.ResponseWriter, r *http.Request) {
+	cfg, err := h.Applier.Load()
+	if err != nil {
+		core.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if cfg.Uplink == nil {
+		// 200 with the uplink absent, not 404. "olr does not own the way out"
+		// is the answer for most boxes and a perfectly good state; a 404 would
+		// make a UI render an error where it should render an empty section.
+		core.WriteJSON(w, http.StatusOK, uplinkResponse{AsOf: time.Now()})
+		return
+	}
+	obs := h.Applier.Observe(r.Context(), cfg.Uplink.Interface)
+	core.WriteJSON(w, http.StatusOK, uplinkResponse{
+		Uplink: viewUplink(cfg.Uplink, obs, uplinkProblems(cfg, h.Applier.Links)),
+		AsOf:   time.Now(),
+	})
+}
+
+func (h HTTP) putUplink(w http.ResponseWriter, r *http.Request) {
+	var u Uplink
+	if err := core.DecodeJSON(w, r, &u); err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.mutate(w, r, func(cfg *Config) error {
+		cfg.SetUplink(u)
+		return nil
+	})
+}
+
+func (h HTTP) deleteUplink(w http.ResponseWriter, r *http.Request) {
+	h.mutate(w, r, func(cfg *Config) error {
+		if !cfg.RemoveUplink() {
+			// 404, not 422, matching deleteRecord: "olr does not own the way
+			// out" is a statement about the address, and a UI retrying a delete
+			// it already completed should be able to tell that from a refusal.
+			return notFound(errors.New("olr does not own this box's uplink"))
+		}
+		return nil
+	})
+}
+
+// uplinkProblems pulls the uplink's findings out of a whole-config validation,
+// so a status row can carry its own complaints.
+func uplinkProblems(cfg Config, links LinkView) []core.Problem {
+	res := Validate(cfg, links)
+	var out []core.Problem
+	for _, p := range append(problems(res.Errors), problems(res.Warnings)...) {
+		if findingOwner(cfg, p.Path) == UplinkPath {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func (h HTTP) deleteRecord(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	h.mutate(w, r, func(cfg *Config) error {
@@ -243,33 +338,38 @@ func preserveRecordSecrets(next, current Record) Record {
 
 // applyResponse carries the plan alongside the stored result.
 //
-// No Steps, for the reason internal/link gives: storing the document is a single
-// atomic write, so there is no half-finished state to report.
+// Steps are here now. Storing the document is still a single atomic write, but
+// an uplink change continues into the kernel, and that part can land halfway —
+// the address added and the route refused. §5.2 gives it no rollback, which
+// only works if what did happen is reported. A record-only change leaves the
+// field absent, which is honest: nothing reached the box.
 type applyResponse struct {
 	Plan   planView        `json:"plan"`
 	Config Config          `json:"config"`
+	Steps  []Step          `json:"steps,omitempty"`
 	Error  *core.ErrorBody `json:"error,omitempty"`
 }
 
 // mutate is the one write path every mutating route goes through.
 //
-// Load, edit, validate, plan and write, all inside the one global apply lock
-// (§3.6). The lock has to cover both halves or it covers nothing that matters:
+// Load, edit, validate, plan and apply, all inside the one global apply lock
+// (§3.6). The lock has to cover every part or it covers nothing that matters:
 // two clients adding a record at once would otherwise each splice their own copy
-// of the list.
+// of the list, and two programming the uplink would race on the route table.
 //
-// There is no disruptive gate here, unlike `ingress` and `gateway`. Nothing this
-// module does drops a connection or takes a name away — removing a record leaves
-// the name answering at the provider and merely stops it being refreshed — so
-// §5.3.3's one interruption has nothing to interrupt. The consequence that *is*
-// worth stating, that this box starts talking to a third party on a timer,
-// reaches the operator as a plan warning, where they are already looking.
+// There is no disruptive gate here, matching `link` and unlike `ingress`. The
+// server applies what it is given; it is the client that plans first and stops
+// when the plan comes back disruptive, which is the instant-apply-unless-
+// disruptive rule every module follows. What the server owes that client is an
+// honest impact and a warning naming what is about to be lost, and
+// withLockoutWarning is the sharpest of those — §5.5's guard is still not
+// built, so the plan is the entire safety net.
 func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) error) {
 	var (
 		editErr  error
 		invalid  Result
 		failed   error
-		plan     planView
+		result   ApplyResult
 		stored   Config
 		applyErr error
 	)
@@ -293,8 +393,11 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 			return nil
 		}
 
-		plan = buildPlan(current, next, h.Applier.Links)
-		stored, applyErr = h.Applier.Save(next)
+		stored = next
+		result, applyErr = h.Applier.Apply(r.Context(), next)
+		if loaded, err := h.Applier.Load(); err == nil {
+			stored = loaded
+		}
 		return nil
 	}); lockErr != nil {
 		core.WriteError(w, http.StatusServiceUnavailable,
@@ -315,10 +418,12 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 		return
 	}
 
+	plan := withLockoutWarning(result.Plan, r, stored)
 	if applyErr != nil {
 		core.WriteJSON(w, http.StatusInternalServerError, applyResponse{
 			Plan:   plan,
 			Config: stored.Redacted(),
+			Steps:  result.Steps,
 			Error:  &core.ErrorBody{Message: applyErr.Error()},
 		})
 		return
@@ -335,14 +440,86 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 		h.Events.Publish(core.Event{Type: core.EventApplied, Module: ModuleName})
 	}
 
-	core.WriteJSON(w, http.StatusOK, applyResponse{Plan: plan, Config: stored.Redacted()})
+	core.WriteJSON(w, http.StatusOK, applyResponse{
+		Plan: plan, Config: stored.Redacted(), Steps: result.Steps,
+	})
+}
+
+// withLockoutWarning adds a warning when the change moves the address, or the
+// route, the caller is talking to us over.
+//
+// This is §5.5's scenario, and §5.5's guard — the dead-man's switch that
+// reverts a change nobody confirms — **is not built**. Until it is, this
+// warning and the confirmation the UI stops at are the only things between an
+// operator and a box they can no longer reach, so it names the address rather
+// than saying something general about disruption.
+//
+// The uplink has a second way to lock somebody out that internal/link's version
+// of this function does not have to consider: an operator reaching this box
+// from *outside* the house arrives over the default route, and replacing it
+// drops them even though no address changed. There is no reliable way to tell
+// that case apart from a LAN client here — the request's local address is the
+// box's own either way — so the route warning is attached whenever the route is
+// being taken over, and it says what it depends on.
+//
+// It warns rather than refuses. Re-routing the box you are connected through is
+// a legitimate thing to do deliberately; the plan is where olr says what it is
+// about to cost, not where it overrules them.
+func withLockoutWarning(plan planView, r *http.Request, cfg Config) planView {
+	if cfg.Uplink == nil || !cfg.Uplink.HasIPv4() {
+		return plan
+	}
+	for _, change := range plan.Changes {
+		if change.Impact != impactDisruptive {
+			continue
+		}
+		if local, ok := localAddr(r); ok && local == cfg.Uplink.IPv4.Address.Addr() {
+			plan.Warnings = append(plan.Warnings, core.Problem{
+				Path: UplinkPath,
+				Message: fmt.Sprintf("you are connected to this router at %s, which is the uplink's "+
+					"own address — applying this changes it and will drop your session. Have "+
+					"console access ready", local),
+			})
+			return plan
+		}
+		plan.Warnings = append(plan.Warnings, core.Problem{
+			Path: UplinkPath,
+			Message: "this replaces the default route this box is using right now. If you are " +
+				"reaching this router from outside your network, your session goes with it — " +
+				"have a way in from the LAN, or console access, ready.",
+		})
+		return plan
+	}
+	return plan
+}
+
+// localAddr is the address on this box that the request arrived at.
+//
+// net/http puts the listener's local address in the connection context, which
+// for TCP is the address the client actually reached us on. A unix socket has
+// none — that is the `olr` CLI talking over /run, which cannot lock itself out
+// of anything. Copied from internal/link/http.go, which had the problem first;
+// it is six lines of net/http trivia rather than a decision, and sharing it
+// would mean putting request plumbing in `core` for two callers.
+func localAddr(r *http.Request) (netip.Addr, bool) {
+	local, _ := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	tcp, ok := local.(*net.TCPAddr)
+	if !ok {
+		return netip.Addr{}, false
+	}
+	addr, ok := netip.AddrFromSlice(tcp.IP)
+	if !ok {
+		return netip.Addr{}, false
+	}
+	return addr.Unmap(), true
 }
 
 // --- dry run ----------------------------------------------------------------
 
 // postPlan answers "what would this do?" without doing it. An empty body plans
-// the stored intent, which is the §5.4 drift check — and here it is always
-// empty, because the document is the only thing this module owns.
+// the stored intent, which is the §5.4 drift check — empty on a box with no
+// uplink, because the document is then the only thing this module owns, and on
+// one with an uplink exactly the lines the kernel disagrees about.
 func (h HTTP) postPlan(w http.ResponseWriter, r *http.Request) {
 	data, err := core.ReadBody(w, r)
 	if err != nil {
@@ -375,7 +552,9 @@ func (h HTTP) postPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	core.WriteJSON(w, http.StatusOK, buildPlan(current, desired, h.Applier.Links))
+	obs := h.Applier.Observe(r.Context(), desired.uplinkInterface())
+	plan := buildPlan(current, desired, h.Applier.Links, obs)
+	core.WriteJSON(w, http.StatusOK, withLockoutWarning(plan, r, desired))
 }
 
 // --- observed ---------------------------------------------------------------
@@ -400,11 +579,11 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 	res := Validate(cfg, h.Applier.Links)
 	byPath := map[string][]core.Problem{}
 	for _, p := range append(problems(res.Errors), problems(res.Warnings)...) {
-		name := recordNameFor(cfg, p.Path)
-		byPath[name] = append(byPath[name], p)
+		byPath[findingOwner(cfg, p.Path)] = append(byPath[findingOwner(cfg, p.Path)], p)
 	}
 
 	resp := statusResponse{
+		Uplink:  viewUplink(cfg.Uplink, h.Applier.Observe(r.Context(), cfg.uplinkInterface()), byPath[UplinkPath]),
 		Records: make([]recordView, 0, len(cfg.Records)),
 		AsOf:    time.Now(),
 	}
@@ -424,8 +603,22 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 	core.WriteJSON(w, http.StatusOK, resp)
 }
 
+// findingOwner maps a validation path back to the thing it is about, so a
+// finding can be shown beside its own row: `records[3].interface` to the
+// record's name, and anything under `uplink` to UplinkPath.
+//
+// A record's name can never collide with UplinkPath, because validateName
+// refuses a single label — which is worth knowing rather than worth guarding,
+// since the guard would be a second place the two vocabularies have to agree.
+func findingOwner(c Config, path string) string {
+	if path == UplinkPath || strings.HasPrefix(path, UplinkPath+".") {
+		return UplinkPath
+	}
+	return recordNameFor(c, path)
+}
+
 // recordNameFor maps a validation path — `records[3].interface` — back to the
-// record it is about, so a finding can be shown beside its own row.
+// record it is about.
 func recordNameFor(c Config, path string) string {
 	var index int
 	if _, err := fmt.Sscanf(path, "records[%d]", &index); err != nil {

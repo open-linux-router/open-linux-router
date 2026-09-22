@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
 )
 
 // Applier turns intent into kernel state.
@@ -32,6 +33,63 @@ type Applier struct {
 	// every exit is treated as up, which is the right answer when nothing is
 	// probing — an exit we are not watching must not be assumed dead.
 	Probes HealthSource
+
+	// Uplink is the window onto `dial`, for the one fact the egress masquerade
+	// needs: which interface is the box's own way out. Nil means none, which is
+	// the reference topology and writes no rule.
+	Uplink UplinkView
+}
+
+// NATApplier is the other half of this module, wired to the same document.
+//
+// Built here rather than held as a field, because the seam is two closures over
+// this Applier: nat loads and saves through us, so the forwards travel inside
+// gateway's config section and one module keeps one owner for one document.
+func (a Applier) NATApplier(kernel nat.Kernel, links nat.LinkView) nat.Applier {
+	return nat.Applier{
+		Kernel: kernel,
+		Links:  links,
+		LoadConfig: func() (nat.Config, error) {
+			cfg, err := a.Load()
+			if err != nil {
+				return nat.Config{}, err
+			}
+			return a.natOf(cfg), nil
+		},
+		SaveConfig: func(nc nat.Config) error {
+			cfg, err := a.Load()
+			if err != nil {
+				return err
+			}
+			cfg.Forwards = nc.Forwards
+			_, err = a.Save(cfg)
+			return err
+		},
+	}
+}
+
+// natOf projects a stored config into what the nat half works on, filling in
+// the two facts that come from outside this module.
+//
+// Both reads are tolerant of failure: a box whose uplink or networks cannot be
+// read gets no egress rule rather than an error, which is the same call
+// link.Applier.observeQuietly makes and for the same reason — the rules that
+// need those facts can only ever *add* a rule, so losing them degrades to
+// "write less" rather than to "refuse to answer".
+func (a Applier) natOf(cfg Config) nat.Config {
+	var uplink string
+	if a.Uplink != nil {
+		if name, err := a.Uplink.Uplink(); err == nil {
+			uplink = name
+		}
+	}
+	var networks []netip.Prefix
+	if a.Links != nil {
+		if nets, err := a.Links.Networks(); err == nil {
+			networks = nets
+		}
+	}
+	return cfg.NAT(uplink, networks)
 }
 
 // HealthSource is where exit health comes from.

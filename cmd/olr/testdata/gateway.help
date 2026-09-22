@@ -1,15 +1,15 @@
-Exits and which networks use them
+The boundary with the internet: exits, NAT and port forwards
 
 Usage:
   olr gateway [command]
 
 Available Commands:
-  add         Add an exit
-  disable     Remove routing policy, leaving the box routing normally
-  enable      Apply routing policy
-  rm          Remove an exit, or a network's assignment
-  set         Choose which exit a network uses
-  show        Show exits and which networks use them
+  add         Add an exit or a port forward
+  disable     Remove routing policy and port forwards, keeping them configured
+  enable      Apply routing policy and port forwards
+  rm          Remove an exit, a port forward, or a network's assignment
+  set         Change an exit assignment or a port forward
+  show        Show exits, port forwards, and which networks use what
   status      Show each exit's health, what uses it, and drift
 
 Flags:

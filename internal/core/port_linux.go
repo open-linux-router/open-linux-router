@@ -154,7 +154,7 @@ func anyPortListedIn(paths []string, port uint64) (bool, error) {
 // question. That one asks "is anything at all using this port", which is the
 // right test before *binding* it — an established connection on the port would
 // make a bind fail too. This one asks "is this box serving here", which is the
-// right test before *forwarding* it onward: internal/firewall needs to warn that
+// right test before *forwarding* it onward: internal/gateway/nat needs to warn that
 // a forward would take a port away from a local service, and an outbound
 // connection that happens to have been given that number as its ephemeral source
 // port is not a local service.

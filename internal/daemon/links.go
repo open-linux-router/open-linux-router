@@ -2,12 +2,14 @@ package daemon
 
 import (
 	"fmt"
+	"net/netip"
 
+	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dial"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
-	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
+	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 )
 
@@ -15,7 +17,7 @@ import (
 //
 // They live here, in the binary that mounts them all, for the reason devices.go
 // gives about its own: it keeps design.md §4.1's arrow pointing one way. Each of
-// `dhcp`, `dns`, `gateway`, `firewall` and `dial` declares the interface facts
+// `dhcp`, `dns`, `gateway`, `gateway/nat` and `dial` declares the interface facts
 // it needs as its own LinkView and never imports `link`; `link` stays unaware
 // that anything consumes it. They are introduced at the one place that already
 // knows the whole module list.
@@ -139,20 +141,74 @@ func (l gatewayLinkView) Interfaces() ([]gateway.LinkInfo, error) {
 	return out, nil
 }
 
-// firewallLinkView is the firewall module's window onto link.
+// Networks implements gateway.LinkView: the subnets link declares, which is
+// what the egress masquerade's source set is built from.
 //
-// What it uses the prefixes for is different from what gateway does with them:
-// gateway matches a source range to classify it, while firewall needs to know
-// which of its own networks hold a forward's destination, because that is the
-// set whose replies would otherwise bypass the router (docs/firewall.md §4).
-type firewallLinkView struct{ facts link.Facts }
+// Intent rather than observation — `link.Facts.Groups` reads the stored
+// networks — which is design.md §4.1's instruction that dependents read a
+// *group* and do not restate a subnet link already owns.
+func (l gatewayLinkView) Networks() ([]netip.Prefix, error) {
+	all, err := l.facts.Groups()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]netip.Prefix, 0, len(all))
+	for _, g := range all {
+		if g.Subnet.IsValid() {
+			out = append(out, g.Subnet.Masked())
+		}
+	}
+	return out, nil
+}
 
-func (l firewallLinkView) Interface(name string) (firewall.LinkInfo, error) {
+// gatewayUplink is gateway's window onto `dial`, for the one fact the egress
+// masquerade needs.
+//
+// It reads the document directly rather than going through a dial.Applier,
+// because what it wants is stored intent and nothing else — which interface the
+// operator declared as the way out. An Applier would bring a LinkView and a
+// kernel writer with it for a field lookup.
+//
+// A missing or unreadable `dial` section is not an error: it means olr does not
+// own the way out, which is the reference topology and most boxes. The caller
+// then writes no egress rule, which is the correct answer rather than a
+// degraded one.
+type gatewayUplink struct{ store *core.Store }
+
+// Uplink implements gateway.UplinkView.
+func (u gatewayUplink) Uplink() (string, error) {
+	doc, err := u.store.Load()
+	if err != nil {
+		return "", err
+	}
+	cfg, err := dial.FromDocument(doc)
+	if err != nil {
+		return "", err
+	}
+	if cfg.Uplink == nil {
+		return "", nil
+	}
+	return cfg.Uplink.Interface, nil
+}
+
+// natLinkView is the NAT half of gateway's window onto link.
+//
+// What it uses the prefixes for is different from what the routing half does
+// with them: that one matches a source range to classify it, while this one
+// needs to know which of our networks hold a forward's destination — the set
+// whose replies would otherwise bypass the router (docs/port-forwarding.md §4).
+//
+// Two adapters for one module, because the two halves are two packages and each
+// declares the facts it needs. That is the same rule the five modules follow,
+// applied one level down.
+type natLinkView struct{ facts link.Facts }
+
+func (l natLinkView) Interface(name string) (nat.LinkInfo, error) {
 	info, err := l.facts.Interface(name)
 	if err != nil {
-		return firewall.LinkInfo{}, fmt.Errorf("%q: %w", name, firewall.ErrNoSuchInterface)
+		return nat.LinkInfo{}, fmt.Errorf("%q: %w", name, nat.ErrNoSuchInterface)
 	}
-	return firewall.LinkInfo{
+	return nat.LinkInfo{
 		Name:     info.Name,
 		Adopted:  info.Adopted,
 		Up:       info.Up,
@@ -160,14 +216,14 @@ func (l firewallLinkView) Interface(name string) (firewall.LinkInfo, error) {
 	}, nil
 }
 
-func (l firewallLinkView) Interfaces() ([]firewall.LinkInfo, error) {
+func (l natLinkView) Interfaces() ([]nat.LinkInfo, error) {
 	all, err := l.facts.Interfaces()
 	if err != nil {
 		return nil, err
 	}
-	out := make([]firewall.LinkInfo, 0, len(all))
+	out := make([]nat.LinkInfo, 0, len(all))
 	for _, info := range all {
-		out = append(out, firewall.LinkInfo{
+		out = append(out, nat.LinkInfo{
 			Name:     info.Name,
 			Adopted:  info.Adopted,
 			Up:       info.Up,
@@ -179,9 +235,12 @@ func (l firewallLinkView) Interfaces() ([]firewall.LinkInfo, error) {
 
 // dialLinkView is the dial module's window onto link.
 //
-// The narrowest use of these facts in the tree: `dial` reads an uplink's address
-// to publish it, and checks adoption because reading an address off an interface
-// nobody handed over is exactly the surprise design.md §3.4 exists to prevent.
+// `dial` reads an uplink's address to publish it, and checks adoption because
+// reading an address off an interface nobody handed over is exactly the
+// surprise design.md §3.4 exists to prevent. It is also the only one of these
+// five that reads *networks* as well as interfaces, and for a boundary rather
+// than a feature: the uplink's interface may not also be a network's member, so
+// `dial` has to be able to see what the networks claim.
 type dialLinkView struct{ facts link.Facts }
 
 func (l dialLinkView) Interface(name string) (dial.LinkInfo, error) {
@@ -210,6 +269,18 @@ func (l dialLinkView) Interfaces() ([]dial.LinkInfo, error) {
 			Up:       info.Up,
 			Prefixes: info.Prefixes,
 		})
+	}
+	return out, nil
+}
+
+func (l dialLinkView) Groups() ([]dial.GroupInfo, error) {
+	all, err := l.facts.Groups()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dial.GroupInfo, 0, len(all))
+	for _, info := range all {
+		out = append(out, dial.GroupInfo{Name: info.Name, Members: info.Members})
 	}
 	return out, nil
 }

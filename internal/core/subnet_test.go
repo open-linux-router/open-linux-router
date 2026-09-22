@@ -183,7 +183,7 @@ func TestAddToSaturates(t *testing.T) {
 
 // The diagnosis nothing else in the product can offer (docs/ddns.md §3.2), and
 // now the one that keeps a port forward from being debugged for an afternoon
-// (docs/firewall.md §5.4). The boundaries are the whole point: /10 is an
+// (docs/port-forwarding.md §5.4). The boundaries are the whole point: /10 is an
 // unusual mask and off-by-one here would clear a genuinely unreachable box or
 // condemn a reachable one.
 func TestCGNATIsRecognised(t *testing.T) {

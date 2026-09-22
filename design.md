@@ -81,9 +81,10 @@ and a lockout guard. Nothing more.
                   └──────┬──────────────────────────┘
         ┌────────────┬───┴────────┬────────────┬───────────┐
      ┌──▼──┐     ┌───▼──┐    ┌────▼───┐   ┌────▼───┐  ┌────▼───┐
-     │link │     │ dial │    │  dhcp  │   │  dns   │  │firewall│  …
+     │link │     │ dial │    │  dhcp  │   │  dns   │  │gateway │  …
      └──┬──┘     └───┬──┘    └────┬───┘   └────┬───┘  └────┬───┘
-     netlink     pppd/dhcpcd   dnsmasq      unbound     nftables
+     netlink     pppd/dhcpcd   dnsmasq      unbound   nftables +
+                                                       netlink
 ```
 
 ### 3.1 The critical inversion: library, not framework
@@ -132,7 +133,7 @@ Five rules. No abstraction, no registry, no codegen framework.
    `show`, `set`, `add`, `rm`, `status`, `logs`, `enable`, `disable`.
 5. Every module exposes a **declared escape hatch** — a config field passed
    through to the underlying backend or ruleset verbatim
-   (`dns.extra_unbound_conf`, `firewall.raw_nft`). Declared in our config and
+   (`dns.extra_unbound_conf`, `gateway.raw_nft`). Declared in our config and
    rendered by us, so it stays single-source and revisioned, unlike editing the
    file out of band. We make the common 95% pleasant; we do not hide Linux.
 
@@ -252,7 +253,7 @@ not ours at all.
   olrd ─────────────────────────────── 1 process, ours, resident
    │
    ├─ link      → netlink               (no process)
-   ├─ firewall  → nftables netlink      (no process)
+   ├─ gateway   → netlink + nftables    (no process)
    ├─ qos       → tc netlink            (no process)
    ├─ clients   → reads                 (no process)
    ├─ system    → D-Bus to systemd      (no process)
@@ -497,13 +498,13 @@ Bounded list. Not expected to grow much. The object they all key off is the
 | | Module | Owns | v1 |
 |---|---|---|---|
 | **Foundation** | `link` | NICs, bridges, VLANs, bonds, addresses (netlink); **groups** (§4.4) | ✅ |
-| | `dial` | WAN: DHCP client, PPPoE, static, LTE; IPv6 PD | ✅ |
+| | `dial` | WAN: DHCP client, PPPoE, static, LTE; IPv6 PD. **Part built:** the static uplink — interface, address, default route in the main table — and dynamic DNS; no DHCP client, PPPoE or LTE, no IPv6 (docs/dial.md) | ✅ |
 | | `devices` | **device identity** (§4.4); joins presence from leases + ARP | ✅ |
 | **Services** | `dhcp` | dnsmasq — DHCPv4, DHCPv6 **and RA** (§4.2) | ✅ |
 | | `dns` | unbound — **DNS only** | ✅ |
-| | `firewall` | nftables `olr_filter`, `olr_nat` — zones, rules, NAT, forwards. **Part built:** `olr_nat` and port forwarding only; no zones, no rules, no filtering policy (docs/firewall.md) | ✅ |
 | | `qos` | tc — CAKE / fq_codel, per-device shaping | |
-| | `gateway` | static + policy routes; later bird (BGP/OSPF) | |
+| | `gateway` | **the boundary between the networks this box serves and everything else, in both directions**: static + policy routes and exits (`olr_route`), egress NAT and port forwarding (`olr_nat`), byte accounting (`olr_stat`); later bird (BGP/OSPF). Absorbed the deleted `firewall` module (docs/gateway.md §0, docs/port-forwarding.md) | ✅ |
+| | ~~`firewall`~~ | **Deleted.** It owned `olr_nat` and port forwarding and no filtering at all, so it was a NAT module wearing a firewall's name. olr is not building filtering for now — nftables is there for anyone who wants rules — so the object moved to `gateway` and the name is free for whenever a real firewall arrives (docs/port-forwarding.md §0) | |
 | | `remote` | getting back in from outside: **WireGuard and Shadowsocks** built as parallel objects; SOCKS5 planned beside them, never under them (docs/remote-access.md) | ✅ |
 | | `wifi` | hostapd — only if the box has radios | |
 | **Operational** | `system` | hostname, time, admin users, updates, backup, logs | ✅ |
@@ -521,12 +522,10 @@ names, and they do not restate a subnet `link` already owns.
 ```
 link ──┬─→ dial ──┬─→ dns      (upstream resolvers)
        │          ├─→ qos      (WAN iface + rate)
-       │          ├─→ firewall (NAT egress iface)
-       │          └─→ gateway  (default route, PD prefix)
+       │          └─→ gateway  (default route, PD prefix, NAT egress iface)
        ├─→ dhcp ──┬─→ dns      (lease hostnames, one-way publish)
        │          ├─→ devices  (leases as presence; identity flows the other way)
        │          └─→ qos
-       ├─→ firewall
        ├─→ gateway
        └─→ wifi
 ```
@@ -567,7 +566,7 @@ rule in §1.
 ### 4.3 IPv6 is not a module
 
 It is a dimension cutting through `dial` (prefix delegation), `dhcp` (DHCPv6,
-RA), `firewall`, and `dns`. Modeling it as a module would be a mistake.
+RA), `gateway`, and `dns`. Modeling it as a module would be a mistake.
 
 **v1 serves RA with SLAAC + RDNSS, and no DHCPv6 at all.** Two facts decide
 this, and both are structural rather than matters of taste:
@@ -613,9 +612,9 @@ halves**, and keeping them distinct is the whole trick:
 | **Presence** — observed | online, current address, last seen | read-through, never stored as truth |
 
 Devices are a *foundation* object, not an operational one: `dhcp` references
-them for fixed addresses, `firewall` for per-device rules, `qos` for shaping,
-`dns` for names. `firewall` must not have to depend on `dhcp` to write a rule
-about a laptop. The apparent cycle — `dhcp` needs identity, the inventory needs
+them for fixed addresses, `gateway` for per-device routing and forwards, `qos`
+for shaping, `dns` for names. `gateway` must not have to depend on `dhcp` to
+write a rule about a laptop. The apparent cycle — `dhcp` needs identity, the inventory needs
 lease data — resolves with §4.1's own rule: identity flows one way as config,
 lease facts flow the other way as a subscription. Which module owns the
 inventory is **open** (§10).
@@ -626,8 +625,8 @@ document, the schema, and the API call it; **network** is what the operator sees
 two things to keep in sync — there is one object with one owner, and the second
 word is a label on the common path rather than a second model.
 
-**"Tag" is reserved for *sets of devices*** — parental controls, firewall rules,
-QoS classes — which cut across groups and are a different concept entirely. It
+**"Tag" is reserved for *sets of devices*** — parental controls, routing
+policy, QoS classes — which cut across groups and are a different concept entirely. It
 needs its own word: using one word for both forecloses the other, and a rule
 that applies to "the kids' iPads wherever they connect" is not a rule about a
 network.
@@ -804,7 +803,7 @@ UI, and MCP surfaces. See §10 resolved, *static command tree*.
 ```
 olr <module> <verb> [args]        olr dns show
                                   olr dhcp add reservation --mac … --ip …
-                                  olr firewall rm rule 4
+                                  olr gateway rm forward web
 
 olr status                        aggregate: drift + backend liveness
 olr diff                          pending/drifted, per module
@@ -924,7 +923,7 @@ is. Making it *easy* to say yes is a different thing from saying yes on the
 operator's behalf, and only the second one is a surprise.
 
 **Composite tasks must live in core, not the UI.** "Set up a guest network"
-touches `link` (VLAN), `dhcp` (pool), `dns` (scope), `firewall` (isolation),
+touches `link` (VLAN), `dhcp` (pool), `dns` (scope), `gateway` (isolation),
 `wifi` (SSID). If that orchestration lives in the WebUI, the CLI, the API, and
 agents cannot do it — which rebuilds the exact UniFi limitation we're trying to
 beat. Composite operations are first-class core operations with their own
@@ -1144,12 +1143,23 @@ be the released artefact.
    keys off them, so retrofitting the primary key is the one sequencing mistake
    that would be expensive.
    Partly done: `link` has landed groups and owns the router's address on each
-   network, restored when olrd starts. Still owed: taking an interface from the
-   distribution's network manager (§7), bridges and VLANs, and all of `dial`
-   but DDNS — so there is no uplink object, and the WAN is still brought up by
-   whatever the distribution configured.
-2. **Make it a router.** `firewall` (zones/NAT) + `dhcp` + `dns`. Success: a
-   client on LAN reaches the internet with no hand-edited config.
+   network, restored when olrd starts, and `dial` has landed the **uplink** —
+   an interface, a static address and the default route in the main table,
+   likewise restored when olrd starts. The two together are the first
+   arrangement in which a box with one NIC facing a modem and one facing a LAN
+   can be brought to a working state entirely inside olr.
+   Still owed: taking an interface from the distribution's network manager (§7),
+   bridges and VLANs, and three of `dial`'s four WAN forms — the DHCP client,
+   PPPoE and LTE, each of which brings a backend to supervise and an address
+   discovered rather than typed. IPv6 and prefix delegation are owed on both
+   sides. So "WAN up via DHCP and PPPoE" is not met; WAN up via a static
+   address is (docs/dial.md).
+2. **Make it a router.** NAT + `dhcp` + `dns`. Success: a client on LAN reaches
+   the internet with no hand-edited config.
+   Done, and by a different route than this assumed: NAT arrived as `gateway`'s
+   egress masquerade on `dial`'s uplink (docs/gateway.md §3.9) rather than as a
+   `firewall` module's zones, which are not being built (docs/port-forwarding.md
+   §0).
 3. **Make it safe.** Lockout guard, per-module revisions, impact classification.
 4. **Make it visible.** WebUI shell, `devices` inventory, live throughput.
    The inventory did move earlier: identity landed with the device list, which
@@ -1219,6 +1229,11 @@ belongs to the network, a second and deliberate act.
    parental), `auth` (who may log into olr, folded into `system`).
    Confirm this matches the intent.
 
+   **The first third is answered, and not as assumed.** NAT and forwards are
+   `gateway`'s (§4); zones and rules are not being built at all for now. So
+   there is no `firewall` concern left in this split — see
+   docs/port-forwarding.md §0.
+
    **The `auth` third is answered: `docs/system.md`.** It lands in `system` as
    the `access` slice, exactly as assumed here, and is scoped to one box with
    one optional password — no accounts, no roles. The rest of the split is
@@ -1280,7 +1295,7 @@ belongs to the network, a second and deliberate act.
 6. **Does creating a network default DHCP on?** Leaning yes — a LAN without
    DHCP is the unusual case, and §5.1 immediate-apply makes it cheap to undo.
 7. **What is a group, exactly?** (§4.4) Its field set is now the most
-   load-bearing schema in the project: `link`, `dhcp`, `dns`, `firewall` and
+   load-bearing schema in the project: `link`, `dhcp`, `dns`, `gateway` and
    later `wifi` all key off it. Worth designing deliberately rather than
    growing.
 
@@ -1290,7 +1305,7 @@ belongs to the network, a second and deliberate act.
   decision 6, §4.4) `clients` is promoted to v1, renamed to `devices` after the
   object it owns, and grows the intent half: MAC, name, category, model, notes.
   The alternatives both failed on §4.1. Identity in `dhcp` would force
-  `firewall` to depend on `dhcp` to write a rule about a laptop, which §4.4
+  `gateway` to depend on `dhcp` to write a rule about a laptop, which §4.4
   forbids in as many words. A separate identity module *beside* a `clients`
   reader would split one object across two owners and leave the join homeless.
 

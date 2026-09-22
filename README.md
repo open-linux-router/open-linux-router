@@ -7,15 +7,17 @@ package on an ordinary Linux box, not flashed as a system image.
 web UI, a CLI, a REST API and an MCP server, all speaking to the same
 configuration. It stays a normal Linux machine the whole time.
 
-**Status: early.** DHCP, DNS, devices and the gateway are built. Interface
-handling is deliberately minimal so far — olr adopts the NICs you give it and
+**Status: early.** DHCP, DNS, devices and the gateway are built, and olr can
+now connect the box itself: give it the NIC facing your modem, an address and a
+gateway, and it owns that interface and the default route from then on. Interface
+handling is otherwise deliberately minimal — olr adopts the NICs you give it and
 owns this router's own address on each network, putting it back after every
 reboot, but does not yet create bridges or VLANs or take an interface away from
-your distribution's network configuration. The firewall module holds
-**port forwarding and nothing else** — no zones, no rules, no filtering policy —
-so olr decides what is redirected *into* your network and not what is allowed
-through this box. Wi-Fi is not written at all. If you want a finished router
-today, this is not one — but a box serving DHCP and DNS for a household works,
+your distribution's network configuration. **There is no firewall.** olr does
+NAT — port forwarding inward, masquerade outward — and decides what is
+redirected *into* your network, not what is allowed through this box; nftables
+is there for anyone who wants rules. Wi-Fi is not written at all. If you want a
+finished router today, this is not one — but a box serving DHCP and DNS for a household works,
 and that is the path documented in [docs/install.md](docs/install.md).
 
 ---
@@ -74,8 +76,8 @@ configuration and hands the actual work to something that already does it well:
 | **`dhcp`** | Pools, fixed addresses, options, leases | **dnsmasq**, in a unit of its own (`olr-dhcp.service`) reading a config olr renders. Never the distro's instance. |
 | **`dns`** | Upstreams, local names, blocking policies | **unbound** recursing on loopback, behind a small relay of ours (`olr-dnsd.service`) that owns `:53`, applies policy on the fast path, and observes on a tee. |
 | **`devices`** | Device names, categories, the inventory | No daemon. dnsmasq's lease database joined with the kernel's **ARP table**, so the statically-addressed printer shows up too, plus the **IEEE OUI registry** embedded in the binary to say who built each one. |
-| **`gateway`** | Exits, and which network uses which | **nftables** and the kernel's **policy routing database**, programmed directly over netlink — no rule files, no `nft` shell-outs. |
-| **`firewall`** | Port forwards, and nothing else yet | **nftables**, one `olr_nat` table over netlink. Named for what §4 gives it eventually; today it has no zones, rules or filtering policy. |
+| **`dial`** | The box's own way out, and a public name that follows it | **netlink** for a static uplink — the interface's address, and the default route in the main table, both put back after a reboot. Dynamic DNS is the other half. No DHCP client or PPPoE yet. |
+| **`gateway`** | The boundary with everything else, in both directions: exits, egress NAT, port forwards | **nftables** and the kernel's **policy routing database**, programmed directly over netlink — no rule files, no `nft` shell-outs. Absorbed what used to be a `firewall` module, which did no filtering. |
 | **`remote`** | How you get back into your own network from outside | Two parallel objects. **WireGuard** in the kernel — olr creates the interface over netlink and loads keys with `wg`, never `wg-quick`, whose automatic routing would fight the gateway module's — puts a device *inside* your network. **Shadowsocks** (`ssserver` in a unit of its own) lends a device this box's way out and shows it nothing else. |
 
 All of it is one binary. `olr` is the command you type, the control plane
@@ -93,9 +95,10 @@ sandbox, which is a deliberate trade and not an oversight: design.md §3.5
 "Privileges" records what that bought, what it costs, and what has to happen
 before it changes back.
 
-Not written yet: firewall *filtering* — zones and rules, the other half of the
-firewall module — Wi-Fi (hostapd), QoS (tc), WAN dialling (pppd/dhcpcd), and the
-SOCKS5 third of remote access.
+Not written yet: Wi-Fi (hostapd), QoS (tc), the DHCP-client and PPPoE halves of
+WAN dialling, and the SOCKS5 third of remote access. Filtering — zones and
+rules — is not planned for now; see docs/port-forwarding.md §0 for why the
+module that carried the name was deleted rather than finished.
 
 ## Getting started
 
@@ -205,8 +208,9 @@ that go wrong.
 | [docs/system.md](docs/system.md) | First install, and who may configure the box |
 | [docs/cli.md](docs/cli.md) | `olr` command conventions, enforced by tests |
 | [docs/dns.md](docs/dns.md) | What the DNS module does, and refuses to do |
+| [docs/dial.md](docs/dial.md) | The box's own way out, and why it is not a network |
 | [docs/gateway.md](docs/gateway.md) | Exits, and which networks use them |
-| [docs/firewall.md](docs/firewall.md) | Port forwarding, and why there is no filtering yet |
+| [docs/port-forwarding.md](docs/port-forwarding.md) | Port forwarding, and why there is no firewall |
 | [docs/remote-access.md](docs/remote-access.md) | Dialling in from outside, and why not `wg-quick` |
 | [docs/mcp.md](docs/mcp.md) | The agent surface |
 | [design.md](design.md) | Architecture, and the decisions behind it |

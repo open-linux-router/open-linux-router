@@ -7,7 +7,6 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dial"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
-	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
@@ -38,7 +37,6 @@ func newRoot() *cobra.Command {
 		dhcp.Command(),
 		dns.Command(),
 		gateway.Command(),
-		firewall.Command(),
 		remote.Command(),
 		ingress.Command(),
 	)

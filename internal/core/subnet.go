@@ -186,7 +186,7 @@ func FirstIPv4(prefixes []netip.Prefix) (netip.Prefix, bool) {
 // to say so for different reasons: `dial` because a name pointing at such an
 // address resolves to something nobody can reach (docs/ddns.md §3.2), and
 // `firewall` because a port forward on such an uplink is a rule that applies
-// cleanly and can never fire (docs/firewall.md §5.4).
+// cleanly and can never fire (docs/port-forwarding.md §5.4).
 //
 // Here rather than in either of them because it is arithmetic over an address,
 // not a model — the same reason the rest of this file is here.

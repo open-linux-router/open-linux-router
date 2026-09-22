@@ -1363,7 +1363,7 @@ const ctStatusDstNAT uint32 = 0x20
 //     original source address until postrouting, so in prerouting the server's
 //     reply looks exactly like an ordinary LAN machine opening an outbound
 //     connection, and the policy route sends it into the proxy. The connection
-//     dies half-open. See docs/firewall.md §6 for the full trace.
+//     dies half-open. See docs/port-forwarding.md §6 for the full trace.
 //   - `fib daddr type != local` is what makes this **forward-only** (§3.5).
 //     Traffic addressed to the router itself is not forwarded, so classifying it
 //     would send the box's own replies out an exit. It is also, incidentally,
@@ -1390,7 +1390,7 @@ func sourceExprs(s SourceRule) []expr.Any {
 		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: markBytes(0)},
 
 		// The DNAT guard. Semantically general rather than a back door for
-		// internal/firewall: a connection whose destination we rewrote belongs
+		// the NAT half: a connection whose destination we rewrote belongs
 		// to whoever originated the translation, and its path is decided by the
 		// conntrack entry rather than by our source rules.
 		//

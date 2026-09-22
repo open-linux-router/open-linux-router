@@ -2,6 +2,7 @@ package dial
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
@@ -78,13 +79,96 @@ func stamp(t time.Time) *time.Time {
 	return &t
 }
 
+// uplinkView is the way out, intent beside fact.
+//
+// Both halves in one object and never collapsed into a verdict, for the reason
+// recordView is flat: the interesting failure is the one where the intent looks
+// right and the box disagrees, and a single "ok" boolean is exactly what hides
+// it. An operator reading this wants to see `gateway 192.168.2.1` next to
+// `route via 192.168.2.254 on enp3s0` and draw their own conclusion.
+type uplinkView struct {
+	// Interface, Address and Gateway are stored intent.
+	Interface string   `json:"interface"`
+	Address   string   `json:"address,omitempty"`
+	Gateway   string   `json:"gateway,omitempty"`
+	DNS       []string `json:"dns,omitempty"`
+
+	// Present and Up are what the kernel says about the interface.
+	Present bool `json:"present"`
+	Up      bool `json:"up"`
+
+	// Addresses are every IPv4 address actually on it. More than one means
+	// something else is addressing this interface too; olr reports that and
+	// removes nothing (PlanUplink).
+	Addresses []string `json:"addresses,omitempty"`
+
+	// RouteVia and RouteDev are the default route actually in the main table,
+	// whichever interface it leaves by. Empty means the box has no way out at
+	// all, which is a different sentence from "the route goes somewhere else"
+	// and has to read as one.
+	RouteVia string `json:"route_via,omitempty"`
+	RouteDev string `json:"route_dev,omitempty"`
+
+	// Problems are the uplink's findings from the validator, so a section that
+	// is misconfigured says so beside itself.
+	Problems []core.Problem `json:"problems,omitempty"`
+}
+
 // statusResponse is the whole module's observed state.
 type statusResponse struct {
+	// Uplink is absent when olr does not own the way out.
+	Uplink *uplinkView `json:"uplink,omitempty"`
+
 	Records []recordView `json:"records"`
 
 	// AsOf stamps the reply: nothing here is stored, so it carries its
 	// freshness (§4.5).
 	AsOf time.Time `json:"as_of"`
+}
+
+// uplinkResponse is what GET /uplink answers.
+//
+// Its own shape rather than statusResponse with the records left out: a reply
+// carrying an empty `records` array from a route that is not about records is
+// the kind of thing a generated client then has to have an opinion about.
+type uplinkResponse struct {
+	// Uplink is absent when olr does not own the way out, which is a state and
+	// not an error — most boxes are in it.
+	Uplink *uplinkView `json:"uplink,omitempty"`
+
+	AsOf time.Time `json:"as_of"`
+}
+
+// viewUplink joins stored intent with what the kernel has.
+func viewUplink(u *Uplink, obs Observed, problems []core.Problem) *uplinkView {
+	if u == nil {
+		return nil
+	}
+	v := &uplinkView{
+		Interface: u.Interface,
+		Present:   obs.Present,
+		Up:        obs.Up,
+		RouteDev:  obs.GatewayDev,
+		Problems:  problems,
+	}
+	if u.IPv4 != nil {
+		if u.IPv4.Address.IsValid() {
+			v.Address = u.IPv4.Address.String()
+		}
+		if u.IPv4.Gateway.IsValid() {
+			v.Gateway = u.IPv4.Gateway.String()
+		}
+	}
+	for _, a := range u.DNS {
+		v.DNS = append(v.DNS, a.String())
+	}
+	for _, p := range obs.Addrs {
+		v.Addresses = append(v.Addresses, p.String())
+	}
+	if obs.Gateway.IsValid() {
+		v.RouteVia = obs.Gateway.String()
+	}
+	return v
 }
 
 // From renders the source's parameter for a status row.
@@ -107,10 +191,13 @@ func recordFrom(r Record) string {
 // planView mirrors internal/link's plan shape on purpose.
 //
 // The field names are identical so that a client's Plan type and its plan
-// preview render any module's answer without a second implementation. The
-// values are what they honestly are for a module that writes only a document:
-// no backend, no service action, and an impact of none — storing a record
-// cannot drop a client, because by itself it does nothing at all.
+// preview render any module's answer without a second implementation.
+//
+// The impact stopped being a constant `none` when the uplink landed, exactly as
+// internal/link's did when groups landed. Two kinds of change now share one
+// plan and they could not be further apart: adding a DDNS record still does
+// nothing to the box, while moving the uplink's gateway replaces the default
+// route and may take the operator's own session with it.
 type planView struct {
 	Backend  string         `json:"backend"`
 	Changes  []changeView   `json:"changes"`
@@ -128,16 +215,31 @@ type changeView struct {
 }
 
 const (
-	impactNone = "none"
-	actionNone = "none"
+	impactNone       = "none"
+	impactRestart    = "restart"
+	impactDisruptive = "disruptive"
+
+	actionNone      = "none"
+	actionConfigure = "configure"
 
 	kindCreate = "create"
 	kindUpdate = "update"
 	kindDelete = "delete"
 )
 
-// buildPlan diffs stored records against a proposal.
-func buildPlan(stored, desired Config, links LinkView) planView {
+// impactRank orders the vocabulary so a plan can report the worst of its parts.
+var impactRank = map[string]int{impactNone: 0, impactRestart: 1, impactDisruptive: 2}
+
+// buildPlan diffs stored intent against a proposal, and the uplink against the
+// kernel.
+//
+// Three sources for the uplink half and one for the records, which is the
+// asymmetry the module has everywhere: the document diff says what the operator
+// changed, and the kernel diff says what has to happen on the box for the
+// result to be true. They are not the same list — re-applying an unchanged
+// uplink still has work to do if somebody ran `ip route del default` by hand,
+// and that is drift (§5.4) rather than a no-op.
+func buildPlan(stored, desired Config, links LinkView, obs Observed) planView {
 	stored.Normalize()
 	desired.Normalize()
 
@@ -149,6 +251,8 @@ func buildPlan(stored, desired Config, links LinkView) planView {
 		Impact:   impactNone,
 		Warnings: problems(res.Warnings),
 	}
+
+	planUplink(&plan, stored, desired, links, obs)
 
 	for _, want := range desired.Records {
 		have, existed := stored.Find(want.Name)
@@ -203,8 +307,163 @@ func buildPlan(stored, desired Config, links LinkView) planView {
 		})
 	}
 
+	for _, c := range plan.Changes {
+		if impactRank[c.Impact] > impactRank[plan.Impact] {
+			plan.Impact = c.Impact
+		}
+	}
+	if plan.Impact != impactNone {
+		plan.Action = actionConfigure
+	}
 	plan.Empty = len(plan.Changes) == 0
 	return plan
+}
+
+// planUplink adds the document diff and the kernel diff for the way out.
+func planUplink(plan *planView, stored, desired Config, links LinkView, obs Observed) {
+	changed := !stored.Uplink.Equal(desired.Uplink)
+
+	switch {
+	case desired.Uplink == nil && stored.Uplink == nil:
+	case desired.Uplink == nil:
+		// Removing the uplink is impact none, which reads as odd next to
+		// link's "removing a network is disruptive" and is the honest answer
+		// here: nothing is torn down. Config.RemoveUplink has the argument for
+		// why, and the warning below is what stops "removed" reading as "this
+		// box is offline now".
+		plan.Changes = append(plan.Changes, changeView{
+			Path:   UplinkPath,
+			Kind:   kindDelete,
+			Impact: impactNone,
+			Diff:   describeUplink("- ", stored.Uplink),
+		})
+		plan.Warnings = append(plan.Warnings, core.Problem{
+			Path: UplinkPath,
+			Message: fmt.Sprintf("olr stops owning the way out. %s keeps the address and the "+
+				"default route it has right now, so nothing goes offline — but olr will not "+
+				"put them back after a reboot, and nothing else on this box knows them. "+
+				"Give the interface to your distribution's network configuration, or set "+
+				"the uplink again", stored.Uplink.Interface),
+		})
+	case stored.Uplink == nil:
+		plan.Changes = append(plan.Changes, changeView{
+			Path:   UplinkPath,
+			Kind:   kindCreate,
+			Impact: uplinkImpact(nil, desired.Uplink, obs),
+			Diff:   describeUplink("+ ", desired.Uplink),
+		})
+	case changed:
+		plan.Changes = append(plan.Changes, changeView{
+			Path:   UplinkPath,
+			Kind:   kindUpdate,
+			Impact: uplinkImpact(stored.Uplink, desired.Uplink, obs),
+			Diff:   describeUplink("- ", stored.Uplink) + describeUplink("+ ", desired.Uplink),
+		})
+	}
+
+	// The consequence the machine's own state does not show, said once, at the
+	// moment the operator is looking at what they asked for rather than on
+	// every status read forever — unroutedNetworksNote has the argument for
+	// why it lives here and not in the validator.
+	if changed && desired.Uplink != nil {
+		if note := unroutedNetworksNote(desired.Uplink, links); note != "" {
+			plan.Warnings = append(plan.Warnings, core.Problem{Path: UplinkPath, Message: note})
+		}
+	}
+
+	// The kernel half: what has to happen for any of the above to be true.
+	// Computed against the *desired* config, so it is the drift check as well
+	// as the change preview — planning the stored config against itself leaves
+	// exactly the lines the box disagrees about.
+	kernel := PlanUplink(DesiredFor(desired), obs)
+	if lines := DescribeUplinkPlan(kernel); len(lines) > 0 {
+		plan.Changes = append(plan.Changes, changeView{
+			Path: "interfaces[" + kernel.Interface + "]",
+			Kind: kindUpdate,
+			// Taking over a default route that already points somewhere else is
+			// the one move here that can drop traffic that was working. Writing a
+			// default route onto a box that had none takes nothing away from
+			// anybody, and neither does adding an address.
+			Impact: pick(kernel.ReplacesGateway.IsValid(), impactDisruptive, impactRestart),
+			Diff:   strings.Join(lines, "\n") + "\n",
+		})
+	}
+
+	// Outside that block on purpose: two managers on one interface is worth
+	// saying on a box where nothing else needs doing, which is exactly the box
+	// where it is hardest to notice.
+	if len(kernel.Foreign) > 0 {
+		// Reported, never removed. Two things address this interface and
+		// neither knows about the other, which is a state an operator can only
+		// fix if they can see it — and the alternative, deleting what the other
+		// one put there, is the failure the uplink object exists to stop.
+		addrs := make([]string, 0, len(kernel.Foreign))
+		for _, p := range kernel.Foreign {
+			addrs = append(addrs, p.String())
+		}
+		plan.Warnings = append(plan.Warnings, core.Problem{
+			Path: UplinkPath + ".interface",
+			Message: fmt.Sprintf("%s also has %s on it, which olr did not put there and will "+
+				"not remove. Something else is addressing this interface — usually your "+
+				"distribution's DHCP client. Leave one of the two in charge, or the address "+
+				"will come and go", kernel.Interface, strings.Join(addrs, ", ")),
+		})
+	}
+}
+
+// uplinkImpact classifies a change to the way out, in terms of what stops
+// working rather than of which fields moved.
+//
+// Disruptive whenever the default route in the main table is about to be
+// replaced by a different one, and that is judged against the *kernel* rather
+// than against the stored config. The distinction matters on the first apply:
+// setting up an uplink on a box whose distribution already provides a default
+// route is a takeover and can drop the operator's session, even though the
+// stored config went from nothing to something.
+func uplinkImpact(before, after *Uplink, obs Observed) string {
+	if after == nil || !after.HasIPv4() {
+		return impactNone
+	}
+	if obs.Gateway.IsValid() && obs.Gateway != after.IPv4.Gateway {
+		return impactDisruptive
+	}
+	if before != nil && before.HasIPv4() && before.IPv4.Address != after.IPv4.Address {
+		// The address moving takes every session arriving at the old one with
+		// it, whether or not the route changes.
+		return impactDisruptive
+	}
+	return impactRestart
+}
+
+// describeUplink renders the uplink as diff lines.
+func describeUplink(sign string, u *Uplink) string {
+	if u == nil {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%suplink on %s\n", sign, u.Interface)
+	if u.IPv4 != nil {
+		fmt.Fprintf(&b, "%s  ipv4 %s via %s\n", sign, u.IPv4.Address, u.IPv4.Gateway)
+	} else {
+		fmt.Fprintf(&b, "%s  no static ipv4\n", sign)
+	}
+	if len(u.DNS) > 0 {
+		addrs := make([]string, 0, len(u.DNS))
+		for _, a := range u.DNS {
+			addrs = append(addrs, a.String())
+		}
+		fmt.Fprintf(&b, "%s  dns %s\n", sign, strings.Join(addrs, ", "))
+	}
+	return b.String()
+}
+
+// pick is a conditional expression, for the places where a three-line if would
+// only separate a value from the condition that chooses it.
+func pick[T any](cond bool, yes, no T) T {
+	if cond {
+		return yes
+	}
+	return no
 }
 
 func reflectorNote(r Record) string {

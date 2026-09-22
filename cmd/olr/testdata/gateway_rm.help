@@ -1,10 +1,11 @@
-Remove an exit, or a network's assignment
+Remove an exit, a port forward, or a network's assignment
 
 Usage:
   olr gateway rm [command]
 
 Available Commands:
   exit        Remove an exit
+  forward     Stop forwarding a port
   via         Stop overriding a network's exit, so it follows the box-wide setting
 
 Flags:

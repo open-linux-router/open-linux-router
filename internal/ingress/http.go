@@ -37,7 +37,7 @@ type HTTP struct {
 func (h HTTP) Routes() []core.Route {
 	// The gate every mutating route carries (§6.2): ask first with dry_run, go
 	// ahead with a disruptive plan only with confirm. Established by
-	// internal/gateway and followed by internal/firewall.
+	// internal/gateway and followed by its NAT half.
 	//
 	// It earns its keep here on one operation in particular. Removing a
 	// published service takes a URL away from whoever has it open, and that is

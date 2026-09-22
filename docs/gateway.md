@@ -1,14 +1,47 @@
-# `gateway` module design — exits and traffic assignment
+# `gateway` module design — the boundary, in both directions
 
 Status: **built.** `internal/gateway` is the module. It was called `routing`
 until v0.1.1 — the box as a whole is the router, and this is the part of it
-that forwards traffic, alongside `dhcp` and `dns`. The document keeps the file
-name it was written under. Section references are to `design.md` unless
-prefixed `dns:`, which means `docs/dns.md`.
+that forwards traffic, alongside `dhcp` and `dns`. It absorbed the deleted
+`firewall` module later; §0 is the current scope and this document's spine is
+still the outbound half it was written about. The document keeps the file name
+it was written under. Section references are to `design.md` unless prefixed
+`dns:`, which means `docs/dns.md`.
 
 This is the document `docs/dns.md` calls §12. The two were designed together and
 have to be read together: this one decides where a packet goes, that one decides
 which packets we can see well enough to decide about. Neither works alone.
+
+---
+
+## 0. What this module owns
+
+**The boundary between the networks this box serves and everything else**, in
+both directions. Three concerns, three nftables tables, three lifetimes:
+
+| Concern | Table | Governed by | Where |
+|---|---|---|---|
+| Exits, and which network uses which | `olr_route` | `Enabled` | this document, §1–§6 |
+| Egress NAT | `olr_nat` | `Enabled`, and only when `dial` has an uplink | §3.9 |
+| Port forwards, and hairpin | `olr_nat` | `Enabled` | `docs/port-forwarding.md` |
+| Byte accounting | `olr_stat` | **not** `Enabled` (§7.1) | §7 |
+
+Port forwarding arrived here from a module called `firewall`, deleted because it
+did no filtering and olr is not building any for now; `docs/port-forwarding.md`
+§0 has that argument and this document does not repeat it. Two consequences
+worth stating here, because they are this module's rather than that feature's:
+
+- **`Enabled` now governs both tables.** Turning this module off stops policy
+  routing *and closes every forwarded port*. That is what "disable the module
+  that does the NAT" should mean, and it is a sharper edge than the switch had
+  before, so §8a and the UI say it in those words.
+- **Only `Stats` escapes `Enabled`**, and §7.1 has always argued why. Nothing
+  else gets its own lifecycle switch; a concern's condition is its own
+  configuration existing.
+
+What this module does **not** own: the box's own way out. That is `dial`'s
+uplink (`docs/dial.md`) — §1.2 has the split, and it is the one an operator gets
+wrong first.
 
 ---
 
@@ -59,6 +92,23 @@ topology (dns:§1) olr is a side router with no WAN uplink, so its default exit 
 the modem as a next hop. Nothing about that is a special case, which is why
 multi-WAN falls out of this model rather than being built into it: a second ISP
 is a second next-hop exit and nothing else.
+
+Where that gateway comes from is **`dial`'s** and not this module's
+(`docs/dial.md` §1). If olr owns the way out, the operator sets an uplink there —
+an interface, an address and a next hop — and `dial` writes the default route
+into the main table and puts it back after a reboot. If they do not, the main
+table is whatever the distribution or a DHCP client put there, which is the
+reference topology and is supported. Either way this module reads that route and
+never writes it: `Config.Default` left empty means "whatever is in the main
+table", and there is no reserved exit name standing for it, because one value
+gets one owner.
+
+The distinction that costs an afternoon if it is missed: an uplink connects
+**this box**, an exit chooses a **different** way out for the networks behind
+it. A network that simply wants to go the way this router already goes needs no
+exit at all — what it needs is source NAT, and that is §3.9's rule rather than
+an exit's, precisely so that the default path does not have to be spelled as an
+exit repeating the uplink's own next hop.
 
 Two forms share a mechanism and one does not. `interface` and `next_hop` are both
 **routing** — the packet leaves through a route table, and they differ by one
@@ -285,7 +335,7 @@ above written by hand.
 `fib daddr type != local` is not a sufficient guard on its own, and the case it
 misses is not exotic — it is **every port forward on a box that also has an
 exit**, which is to say the two features silently did not work together until
-`firewall` landed and this was fixed.
+port forwarding landed and this was fixed.
 
 Follow the reply leg of a forwarded connection. The inbound `SYN` is addressed to
 the router, so `fib daddr type != local` is false and it is correctly left
@@ -315,8 +365,8 @@ while the alternative breaks it.
 
 The guard is part of each rule's canonical text (`… unless dnat`) and not only of
 its expression list, so a box still holding the older rules reads back as drift
-and has them replaced on the next apply. `docs/firewall.md` §6 has the full
-trace.
+and has them replaced on the next apply. `docs/port-forwarding.md` §6 has the
+full trace.
 
 ### 3.6 The TPROXY form
 
@@ -410,11 +460,100 @@ wrong without anybody being told.
 interface in router mode **stops accepting the RAs** this box may be getting its
 own address and default route from. Turning it on would cost the box its own
 IPv6 connectivity on exactly the deployment dns:§1 leads with. Doing it safely
-needs `accept_ra=2` on the uplink, which needs an uplink object to hang it on —
-`dial` (§4), which does not exist yet.
+needs `accept_ra=2` on the uplink, which needs an uplink object to hang it on.
+That object now exists — `dial.Uplink` (`docs/dial.md` §1) — so this is no
+longer blocked on anything but the work, and §9 carries it.
 
 Exits block IPv6 by default (§5.4), so the gap fails visibly rather than
 silently, and §9 carries the work.
+
+### 3.9 Egress NAT, and the other thing a LAN needs
+
+§3.8 is one of the two machine-level facts that have to be true before a network
+behind this box reaches the internet. This is the other, and it is the one that
+fails in a way nobody can read.
+
+Take the arrangement `docs/dial.md` §1 describes: `enp1s0` is the uplink at
+`192.168.1.2` via the modem at `192.168.1.1`, `enp2s0` carries the network `lan`
+on `172.16.1.0/24`. Forwarding is on, the default route is in `main`, and a
+packet from `172.16.1.5` leaves correctly — **with `172.16.1.5` still on it**.
+The modem NATs it out, gets the reply, un-NATs it back to `172.16.1.5`, and has
+no route for `172.16.1.0/24`. The packet dies there.
+
+The symptom is *the router reaches the internet and nothing behind it does*,
+which reads like DNS, or like a firewall, and is neither.
+
+> `oifname "enp1s0" ip saddr { 172.16.1.0/24 } counter masquerade`
+
+in `olr_nat`'s postrouting chain, one rule, with the source set built from the
+networks `link` holds.
+
+#### Where the interface comes from
+
+`dial`'s uplink, read through a narrow view — design.md §4.1 draws that arrow
+(`dial → gateway`) and this is the first thing that walks it. **No uplink, no
+rule.** The reference topology (dns:§1) puts olr beside the modem with the
+default route owned by the distribution, and on that box olr has no business
+guessing which interface faces outward.
+
+That is also the whole answer to "why does the operator not type the next hop
+twice". Before this existed, the only source of SNAT was an exit, so a box whose
+LAN needed nothing more than *out the way this router already goes* had to
+declare an exit repeating the uplink's own next hop. An exit is for choosing a
+**different** way out; the default way out needs no exit and never did.
+
+#### Why the source set, and not `oifname` alone
+
+A consumer router writes `oifname "wan" masquerade` and stops. Scoping to the
+subnets `link` declares costs one set and buys three things: traffic from Docker,
+libvirt or k8s that happens to route out this way is not silently rewritten by
+us; locally-originated traffic is untouched, which it should be because its
+source is already the uplink's own address; and `nft list table inet olr_nat` at
+2am says *whose* traffic this rule is for.
+
+The subnets come from `link`'s groups — **intent, not the addresses observed on
+an interface**. A network that has been declared and whose interface has not come
+up yet still gets its rule, which is the same reason `dhcp` validates a range
+against a group rather than against a NIC.
+
+#### Not keyed on an exit existing
+
+The same argument §3.8 makes about the sysctl, and it lands harder here: the
+configuration that needs egress NAT most is the one with **no exits at all**.
+
+#### It has an off switch, and that is not a lifecycle switch
+
+`snat` on the module, nil meaning on — the same word and the same pointer
+reasoning as `Exit.SNAT`, because it is the same question asked about the
+default path instead of about an exit. A `*bool` rather than a `bool` so that
+"the operator turned it off" and "this field was never written" stay
+distinguishable.
+
+Turning it off is a real configuration, not a hypothetical: an operator who has
+added a static route for `172.16.1.0/24` on the modem wants the client's own
+address to survive the trip, and masquerading would throw away exactly what they
+set that route up to preserve.
+
+What it is *not* is a second `Enabled`. §0 has the rule — a concern's condition
+is its own configuration existing, and `Stats` is the single documented
+exception.
+
+#### Against per-exit SNAT
+
+Both rules live in `olr_nat`'s postrouting chain, so where they could overlap —
+an exit that is `next_hop 192.168.1.1 dev enp1s0`, the same path the uplink
+already takes — **we order them ourselves** rather than inheriting whatever two
+tables' hook priorities happen to resolve to. Conntrack binds a connection's NAT
+once, so there is no double translation either way; what the ordering decides is
+which source address wins, and that is a decision we get to make and write down
+rather than discover.
+
+#### IPv6
+
+Absent, and not owed. A device behind this box holding a delegated global
+address needs no translation to be replied to — `docs/port-forwarding.md` §7
+makes the same point from the inbound side. What v6 needs instead is a filtering
+policy, which §0 records olr is not building for now.
 
 ---
 
@@ -499,10 +638,10 @@ plan-step checks and declared behaviour, not troubleshooting notes.
 
 | | | |
 |---|---|---|
-| **NAT on the egress** | traffic out a new exit needs masquerade, owned by `firewall` | plan *validates* and reports; a composite op (§6.3) can fix it later |
+| **NAT on the egress** | traffic out a new exit needs masquerade — `Exit.SNAT`, on by default for a next hop (§5.3); the default path's is §3.9's | plan *validates* and reports |
 | **Next hop not directly reachable** | must fall inside a prefix we hold | catches entering the proxy's public address instead of its LAN one |
 | **`rp_filter`** | drops asymmetric return traffic | this module owns the sysctl on its interfaces, declared |
-| **MSS clamping** | tunnel and PPPoE egress | `firewall`'s table, but this feature is what makes it necessary |
+| **MSS clamping** | tunnel and PPPoE egress | `olr_nat` is this module's now, so there is nowhere else for it to go |
 | **A rule matching the admin's own address** | §5.5's lockout scenario exactly | classify `disruptive`, hold, show the diff (§6.3) |
 
 ### 5.2 ICMP redirects, in both directions
@@ -756,8 +895,17 @@ read-modify-write under the global apply lock (design.md §3.6).
 | `DELETE /api/gateway/exits/{name}` | remove |
 | `PUT /api/gateway/assignments/{interface}` | body `{"exit": "…"}`; `""` means *explicitly follows the box-wide setting* |
 | `DELETE /api/gateway/assignments/{interface}` | stop overriding, so the row goes back to having no opinion |
-| `PATCH /api/gateway/config` | `enabled`, `default`, `stats` |
+| `PUT /api/gateway/forwards/{name}` | add, replace, or rename a port forward (`docs/port-forwarding.md`) |
+| `DELETE /api/gateway/forwards/{name}` | remove |
+| `PATCH /api/gateway/config` | `enabled`, `default`, `stats`, `snat` |
 | `PUT /api/gateway/config` | the whole document — restoring a backup, or several changes at once |
+
+**`enabled` is the sharpest field on this surface**, and it got sharper when
+port forwarding moved here (§0): setting it false tears down `olr_route` *and*
+`olr_nat`, so policy routing stops and every forwarded port closes in the same
+request. The plan says so in those words and the impact is `disruptive`, because
+a switch that silently shuts a port somebody is reaching a service through is
+the one thing this surface must not do quietly.
 
 **Why lists get their own routes and scalars do not.** A merge patch (RFC 7386)
 merges an object key by key but replaces an array *wholesale*, so `enabled`,
@@ -824,14 +972,17 @@ any work.
 | | per-exit health probe, `block` on failure | dns:§1.2 depends on it |
 | | named counters, the `ipv4_addr . mark` set | |
 | | foreign `ip rule` detection and refusal | |
+| | **egress NAT on `dial`'s uplink**, with an off switch | §3.9 — the other half of what a LAN needs, and what stops the next hop being typed twice |
+| | **port forwards, and hairpin NAT** | `docs/port-forwarding.md`, moved here from the deleted `firewall` module |
 | **v2** | `local_socket` (TPROXY) | wants dns:§2.1's return-path answer settled first |
-| | IPv6 forwarding | §3.8 — needs `accept_ra=2` on the uplink, so it waits for `dial` to own an uplink object |
+| | IPv6 forwarding | §3.8 — needs `accept_ra=2` on the uplink; `dial.Uplink` now exists, so this waits only on the work |
 | | per-interface `conf.<dev>.forwarding` in place of the global key | §3.8 — the narrower write, once `link`'s groups say which interfaces traffic enters and leaves by |
 | | tag and device tiers of the ladder | |
 | | conntrack-derived per-flow detail | |
 | **Later** | multi-WAN failover policy beyond `block` / `direct` | hysteresis and probe design are their own scope |
 | | an advanced source+destination rule list | the only thing the ladder cannot express |
 | **Never** | our own proxy engine, or wrapping one | §10 |
+| | filtering, zones and rules | not this module's and not olr's for now — `docs/port-forwarding.md` §0 |
 | | routing by domain name, by any mechanism | §4 — it is the proxy's job, and doing it too is two rule lists that disagree |
 
 ---
@@ -916,3 +1067,15 @@ any work.
 6. **Whether the ladder needs a fifth tier for "this device, to that
    destination".** Deferred in §9 as an advanced list; if it turns out to be
    common, it belongs in the ladder rather than beside it.
+7. **Whether egress NAT should be per-network rather than one rule for all of
+   them** (§3.9). One network translated and another not is a coherent thing to
+   want — a lab subnet the modem has a static route for, beside a guest network
+   that should look like the router. Today the switch is module-wide, which is
+   the smaller thing that covers the case somebody actually reported. If a
+   second person asks, the field moves onto the network rather than growing a
+   list beside it.
+8. **What `Enabled` should be called**, now that it governs two tables and one
+   of the module's four concerns escapes it (§0). The honest name is no longer
+   "enabled"; renaming it is a stored-document change, and the answer so far is
+   that a clear sentence in §0 and on the switch is cheaper than the migration.
+   Revisit if a third concern lands.

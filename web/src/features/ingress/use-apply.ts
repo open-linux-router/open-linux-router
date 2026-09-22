@@ -17,7 +17,7 @@ import type { IngressApplyResult, IngressPlan } from '@/lib/api-types'
  * `confirm=true` goes ahead.
  *
  * What `disruptive` means here is narrower than on the gateway screen and
- * sharper than on the firewall's: a URL somebody may have open, bookmarked, or
+ * sharper than on a port forward's: a URL somebody may have open, bookmarked, or
  * configured into another application stops resolving to anything. Reloading
  * does not help, which is what separates it from the `restart` rung above it.
  *

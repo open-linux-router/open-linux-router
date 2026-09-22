@@ -257,7 +257,7 @@ func validatePeerRoutes(r *Result, path string, p Peer, networks []NetworkInfo) 
 	case RouteEverything:
 		r.warnf(path+".routes",
 			"%q will send all of its traffic here, and olr does not yet write the address translation "+
-				"that lets it out again — port forwarding has its own (docs/firewall.md) and nothing "+
+				"that lets it out again — port forwarding has its own (docs/port-forwarding.md) and nothing "+
 				"covers ordinary egress. Unless something else on this box masquerades the dial-in "+
 				"network, expect a tunnel that connects and reaches no internet", p.Name)
 	}

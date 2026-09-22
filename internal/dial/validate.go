@@ -3,6 +3,7 @@ package dial
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"strings"
 
@@ -54,15 +55,23 @@ func (r Result) Err() error {
 	return fmt.Errorf("invalid dial configuration:\n  %w", errors.Join(msgs...))
 }
 
-// Validate checks the records against the vocabulary and against the box.
+// Validate checks the uplink and the records against the vocabulary and
+// against the box.
 //
 // `links` may be nil, in which case the rules that need an interface list are
 // skipped. That keeps the rest testable without a network the way design.md
 // §5.3.1 asks, and every rule it skips is one this module can only warn about
 // anyway — an uplink that is down or has no address yet is a normal state for a
 // line that has not come up, not a config that cannot be stored.
+//
+// The one exception is the network-overlap refusal, which *is* an error and
+// does need `links`. It is still skipped without one, and that is the right
+// trade: a box whose interface list cannot be read is not a box to refuse
+// configuration on, and the overlap is re-checked on every subsequent save.
 func Validate(c Config, links LinkView) Result {
 	var r Result
+
+	validateUplink(&r, c.Uplink, links)
 
 	seen := map[string]int{}
 	for i, rec := range c.Records {
@@ -85,6 +94,235 @@ func Validate(c Config, links LinkView) Result {
 	}
 
 	return r
+}
+
+// UplinkPath is the field path every uplink finding is reported against, so a
+// UI can attach one to the section rather than to a record row.
+const UplinkPath = "uplink"
+
+// validateUplink checks the box's own way out.
+//
+// The shape of the rules here is worth stating, because it is not the same as
+// the records': one refusal is about *ownership* rather than about the values,
+// and the two most useful findings are warnings that describe a configuration
+// which is entirely coherent and still will not carry traffic. That is the same
+// distinction internal/gateway/nat/validate.go draws, for the same reason — the
+// operator's question is not "is this well formed" but "will this work".
+func validateUplink(r *Result, u *Uplink, links LinkView) {
+	if u == nil {
+		return
+	}
+
+	if u.Interface == "" {
+		r.errorf(UplinkPath+".interface",
+			"an uplink needs the interface facing your modem or your ISP")
+	}
+	validateUplinkIPv4(r, u)
+	validateUplinkDNS(r, u)
+
+	if links == nil || u.Interface == "" {
+		return
+	}
+	checkUplinkInterface(r, u, links)
+}
+
+// validateUplinkIPv4 checks the static addressing.
+func validateUplinkIPv4(r *Result, u *Uplink) {
+	if u.IPv4 == nil {
+		// Legal, and the plan says what it means: olr owns the interface and
+		// writes neither an address nor a route. It is the state the
+		// DHCP-client and PPPoE forms arrive in.
+		return
+	}
+	addr, gw := u.IPv4.Address, u.IPv4.Gateway
+
+	switch {
+	case !addr.IsValid():
+		r.errorf(UplinkPath+".ipv4.address",
+			"give this box's own address on the uplink, with its mask — 192.168.2.9/24")
+	case !addr.Addr().Is4():
+		// §3 of the plan this was built from: IPv4 only, matching
+		// link.GroupIPv4's precedent. A v6 uplink needs a v6 write path, and
+		// accepting the field before that exists would be a promise every
+		// generated surface makes and the writer cannot keep.
+		r.errorf(UplinkPath+".ipv4.address",
+			"%s is IPv6; olr does not configure an IPv6 uplink yet", addr)
+	case addr.Addr().IsUnspecified(), addr.Addr().IsLoopback(), addr.Addr().IsMulticast():
+		r.errorf(UplinkPath+".ipv4.address", "%s cannot be an interface's address", addr)
+	case addr.Bits() < 31 && addr.Addr() == addr.Masked().Addr():
+		// The host-bits check. Normalize deliberately does not mask this field
+		// — see UplinkIPv4.Address — so the typo has to be caught rather than
+		// quietly corrected, and the correction would be the wrong one anyway:
+		// 192.168.2.0/24 is the network, not an address anything can reach.
+		// /31 and /32 are exempt because they have no network address.
+		r.errorf(UplinkPath+".ipv4.address",
+			"%s is the network itself rather than this box's address on it; "+
+				"give the address your ISP or modem assigned, such as %s",
+			addr, exampleHost(addr))
+	}
+
+	if !gw.IsValid() {
+		r.errorf(UplinkPath+".ipv4.gateway",
+			"give the gateway to send traffic to — the modem's address on this link. "+
+				"Without it this box has an address and no way out")
+		return
+	}
+	if !gw.Is4() {
+		r.errorf(UplinkPath+".ipv4.gateway",
+			"%s is IPv6; olr does not configure an IPv6 uplink yet", gw)
+		return
+	}
+
+	if addr.IsValid() && addr.Addr().Is4() {
+		switch {
+		case gw == addr.Addr():
+			r.errorf(UplinkPath+".ipv4.gateway",
+				"%s is this box's own address; the gateway is the device on the other "+
+					"end of the link, usually your modem", gw)
+		case !addr.Contains(gw):
+			// An off-link next hop needs an explicit route to itself first, and
+			// olr writes no such route. The kernel would refuse the route with
+			// ENETUNREACH, which arrives as an opaque failure halfway through an
+			// apply rather than as a sentence about the two fields that disagree.
+			r.errorf(UplinkPath+".ipv4.gateway",
+				"%s is not inside %s, so this box has no way to reach it. "+
+					"The gateway is on the same link as the address — check the mask",
+				gw, addr.Masked())
+		}
+	}
+
+	if addr.IsValid() && addr.Addr().Is4() && addr.Addr().IsPrivate() {
+		// Double NAT, said out loud and never refused — internal/gateway/nat's
+		// warnUnreachableUplink makes the same call about the same fact, and for
+		// the same reason: a router chained behind another router is ugly and
+		// works, so refusing would block a configuration that carries traffic
+		// today. What it costs is inbound: nothing on the internet can open a
+		// connection to this box without the device in front forwarding it.
+		r.warnf(UplinkPath+".ipv4.address",
+			"%s is a private address, so this router is behind another one. "+
+				"That works for reaching the internet, and it means nothing outside "+
+				"can open a connection to this box unless the device in front "+
+				"forwards it", addr.Addr())
+	}
+}
+
+// validateUplinkDNS says what the resolvers currently do, which is nothing.
+//
+// A warning rather than silence, because the alternative is the worst kind of
+// field: one that appears on every generated surface, accepts what the operator
+// types, stores it faithfully, and has no effect that anybody can observe. The
+// arrow it is recorded for — design.md §4.1's `dial → dns (upstream resolvers)`
+// — is real and unbuilt, and saying so at the moment the value is typed costs
+// one line and saves an afternoon.
+func validateUplinkDNS(r *Result, u *Uplink) {
+	if len(u.DNS) == 0 {
+		return
+	}
+	for i, addr := range u.DNS {
+		if !addr.IsValid() {
+			r.errorf(fmt.Sprintf("%s.dns[%d]", UplinkPath, i), "not an IP address")
+		}
+	}
+	r.warnf(UplinkPath+".dns",
+		"olr records these and nothing reads them yet. The resolver walks the DNS "+
+			"from the root by default, which needs no upstream at all, so this box "+
+			"resolves names as soon as the route below works — set them under "+
+			"`olr dns` if you want them used")
+}
+
+// checkUplinkInterface holds the rules that need the box.
+func checkUplinkInterface(r *Result, u *Uplink, links LinkView) {
+	info, err := links.Interface(u.Interface)
+	if err != nil {
+		r.errorf(UplinkPath+".interface", "this machine has no interface named %q", u.Interface)
+		return
+	}
+	if !info.Adopted {
+		// The adopt-only rule (design.md §3.4, §7), enforced here rather than in
+		// `link` for the reason internal/link/validate.go gives: the complaint
+		// belongs against the field that named the interface.
+		r.errorf(UplinkPath+".interface", "%q has not been handed to olr; "+
+			"run `olr adopt %s` first", u.Interface, u.Interface)
+		return
+	}
+
+	groups, err := links.Groups()
+	if err == nil {
+		if g, taken := groupFor(groups, u.Interface); taken {
+			// The refusal that guides an existing box's migration. Somebody who
+			// gave their modem-facing NIC a static address before this object
+			// existed did it on the Networks page, because that was the only
+			// place in olr that would take one, and docs/install.md told them to.
+			// Two owners for one interface's addressing is the state
+			// internal/link/writer.go's ownership claim cannot survive, so it is
+			// refused here rather than resolved.
+			r.errorf(UplinkPath+".interface",
+				"%s carries the network %q, and an uplink and a network cannot both own "+
+					"one interface's addressing. A network is something this box *serves* "+
+					"— it gets DHCP, DNS and a router address — and the way out is not. "+
+					"Remove the network first (`olr net rm %s`), then set the uplink",
+				u.Interface, g.Name, g.Name)
+		}
+	}
+
+	if !info.Up {
+		r.warnf(UplinkPath+".interface",
+			"%q is down; olr brings it up when this is applied", u.Interface)
+	}
+}
+
+// unroutedNetworksNote is the trap this object is most likely to leave behind,
+// as a sentence — or "" when there is nothing to say.
+//
+// Setting the uplink gets *this box* onto the internet. It does not get the
+// networks behind it there, and the reason is not visible from anywhere an
+// operator is looking: source NAT hangs off a `gateway` exit, not off the
+// route, so a LAN packet leaving through the default route leaves with its LAN
+// source address still on it and the modem has no route back. The symptom is
+// that the box reaches the internet and nothing else does, which reads like DNS
+// or a firewall and is neither.
+//
+// # Why it is a plan note rather than a validation warning
+//
+// Because it cannot be switched off by doing the work. The check that would
+// make it disappear — "is there a `gateway` exit covering each network" — needs
+// `gateway`'s config, and design.md §4.1's arrow points `dial → gateway`;
+// inverting it to silence a note would buy a cycle for a cosmetic gain. So
+// instead of nagging on every status read forever, it is attached to the plan
+// of a change, where dial already puts the consequence a machine's state does
+// not show, and where the operator is looking at what they just asked for.
+func unroutedNetworksNote(u *Uplink, links LinkView) string {
+	if links == nil || u == nil || !u.HasIPv4() {
+		return ""
+	}
+	groups, err := links.Groups()
+	if err != nil || len(groups) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(groups))
+	for _, g := range groups {
+		names = append(names, g.Name)
+	}
+	subject, object := "the network "+names[0], "it"
+	if len(names) > 1 {
+		subject, object = "the networks "+strings.Join(names, ", "), "them"
+	}
+	return fmt.Sprintf("this gets the router itself onto the internet; %s will not follow "+
+		"until an exit sends %s there. Traffic leaving through the default route is not "+
+		"translated, so replies have nowhere to come back to. Add one with "+
+		"`olr gateway add exit internet --next-hop %s --dev %s`, then "+
+		"`olr gateway set via <network> internet`",
+		subject, object, u.IPv4.Gateway, u.Interface)
+}
+
+// exampleHost suggests a host address inside a prefix the operator gave as a
+// network, so the refusal shows the shape of the right answer.
+func exampleHost(p netip.Prefix) netip.Prefix {
+	host, ok := core.FirstHost(p)
+	if !ok {
+		return p
+	}
+	return netip.PrefixFrom(host, p.Bits())
 }
 
 // validateName checks the thing being published.

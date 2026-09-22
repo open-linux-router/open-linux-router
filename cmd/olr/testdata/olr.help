@@ -8,10 +8,9 @@ Usage:
 
 Modules:
   dhcp        DHCP server (dnsmasq)
-  dial        Keep a public name pointing at this router
+  dial        Internet uplink, and a public name that follows it
   dns         DNS resolver and policy (olr-dnsd + unbound)
-  firewall    Let something on the internet reach one device here
-  gateway     Exits and which networks use them
+  gateway     The boundary with the internet: exits, NAT and port forwards
   ingress     Publish internal services at https:// names
   link        Network interfaces olr has been given
   remote      Get back into your network from outside it

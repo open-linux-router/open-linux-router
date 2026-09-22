@@ -12,6 +12,7 @@ import (
 
 	"github.com/open-linux-router/open-linux-router/internal/cli"
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
 )
 
 // Every command here is a client of olrd (design.md §6.1). None of them touches
@@ -22,12 +23,22 @@ import (
 
 // Command returns the module's command tree. Mounted explicitly by cmd/olr.
 func Command() *cobra.Command {
-	return cli.NewModule("gateway", "Exits and which networks use them",
-		showCommand(),
-		setCommand(),
-		addCommand(),
-		rmCommand(),
-		statusCommand(),
+	show, set, add, rm, status := showCommand(), setCommand(), addCommand(), rmCommand(), statusCommand()
+
+	// The NAT half's objects hang off this module's verbs rather than off a
+	// module of their own: `olr gateway add forward web`, `olr gateway show
+	// forwards`. docs/cli.md §1's four positions, with the object to the right
+	// of the verb — and one module keeping one command tree, however many
+	// packages implement it.
+	forwards := nat.Subcommands()
+	show.AddCommand(forwards.Show...)
+	add.AddCommand(forwards.Add...)
+	set.AddCommand(forwards.Set...)
+	rm.AddCommand(forwards.Rm...)
+	status.AddCommand(forwards.Status...)
+
+	return cli.NewModule("gateway", "The boundary with the internet: exits, NAT and port forwards",
+		show, set, add, rm, status,
 		enableCommand(),
 		disableCommand(),
 	)
@@ -152,7 +163,7 @@ func showTrafficCommand() *cobra.Command {
 }
 
 func showConfigCommand() *cobra.Command {
-	return verb("show", "Show exits and which networks use them", func(c *cobra.Command) {
+	return verb("show", "Show exits, port forwards, and which networks use what", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
 			if err := cli.ValidateOutput(c); err != nil {
@@ -186,7 +197,7 @@ func showConfigCommand() *cobra.Command {
 // ---------------------------------------------------------------- set
 
 func setCommand() *cobra.Command {
-	c := verb("set", "Choose which exit a network uses", func(*cobra.Command) {})
+	c := verb("set", "Change an exit assignment or a port forward", func(*cobra.Command) {})
 	c.AddCommand(setDefaultCommand(), setViaCommand(), setStatsCommand())
 	return c
 }
@@ -281,13 +292,13 @@ func setViaCommand() *cobra.Command {
 // ---------------------------------------------------------------- add / rm
 
 func addCommand() *cobra.Command {
-	c := verb("add", "Add an exit", func(*cobra.Command) {})
+	c := verb("add", "Add an exit or a port forward", func(*cobra.Command) {})
 	c.AddCommand(addExitCommand())
 	return c
 }
 
 func rmCommand() *cobra.Command {
-	c := verb("rm", "Remove an exit, or a network's assignment", func(*cobra.Command) {})
+	c := verb("rm", "Remove an exit, a port forward, or a network's assignment", func(*cobra.Command) {})
 	c.AddCommand(rmExitCommand(), rmViaCommand())
 	return c
 }
@@ -531,7 +542,7 @@ func rmViaCommand() *cobra.Command {
 // ---------------------------------------------------------------- lifecycle
 
 func enableCommand() *cobra.Command {
-	return verb("enable", "Apply routing policy", func(c *cobra.Command) {
+	return verb("enable", "Apply routing policy and port forwards", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
 			return patchConfig(c, map[string]any{"enabled": true})
@@ -540,12 +551,19 @@ func enableCommand() *cobra.Command {
 }
 
 func disableCommand() *cobra.Command {
-	return verb("disable", "Remove routing policy, leaving the box routing normally", func(c *cobra.Command) {
+	c := verb("disable", "Remove routing policy and port forwards, keeping them configured", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.RunE = func(c *cobra.Command, _ []string) error {
 			return patchConfig(c, map[string]any{"enabled": false})
 		}
 	})
+	c.Long = "Stop programming this module into the kernel, keeping every setting.\n\n" +
+		"This is one switch over two tables. As well as removing the routing\n" +
+		"policy, it **closes every port you have forwarded in** — the forwards\n" +
+		"stay configured and stop being programmed. docs/gateway.md §0 has why\n" +
+		"there is one switch rather than two.\n\n" +
+		"--dry-run shows what would come down before you commit to it."
+	return c
 }
 
 func statusCommand() *cobra.Command {

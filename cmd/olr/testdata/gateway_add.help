@@ -1,10 +1,11 @@
-Add an exit
+Add an exit or a port forward
 
 Usage:
   olr gateway add [command]
 
 Available Commands:
   exit        Add or replace an exit
+  forward     Send a port arriving from outside to a device here
 
 Flags:
   -h, --help   help for add

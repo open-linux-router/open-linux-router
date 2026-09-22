@@ -1,4 +1,5 @@
 import { AlertTriangle } from 'lucide-react'
+import { Link } from 'react-router'
 
 import { SettingsList } from '@/components/layout/settings-list'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -82,7 +83,13 @@ export function GatewayPage() {
         <CardHeader>
           <CardTitle>Internet via</CardTitle>
           <CardDescription>
-            The setting every network follows unless it has one of its own.
+            The setting every network follows unless it has one of its own. This is about the
+            networks behind this router, not the router itself — where{' '}
+            <em>this box</em> plugs into the internet is the uplink, under{' '}
+            <Link to="/networks" className="underline underline-offset-2">
+              Networks
+            </Link>
+            .
           </CardDescription>
           <CardAction>
             <Switch

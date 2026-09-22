@@ -1,4 +1,4 @@
-Show exits and which networks use them
+Show exits, port forwards, and which networks use what
 
 Usage:
   olr gateway show [flags]
@@ -7,6 +7,8 @@ Usage:
 Available Commands:
   exit        Show one exit in full
   exits       List the ways out of this box
+  forward     Show one port forward in full
+  forwards    List the ports being forwarded in
   traffic     Show how much each device has used, and through which way out
 
 Flags:

@@ -36,7 +36,7 @@ $ sudo apt install ./olr_0.2.0_amd64.deb
 olrd is running on http://192.168.1.91:8080
 
 Nothing else on this machine has changed — no DHCP server, no resolver, no
-firewall rule. Open that address to finish setting up.
+nftables rule. Open that address to finish setting up.
 ```
 
 ### 1.2 From the tarball

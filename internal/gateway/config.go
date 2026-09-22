@@ -1,8 +1,20 @@
-// Package gateway decides where a packet goes.
+// Package gateway owns the boundary between the networks this box serves and
+// everything else, in both directions (docs/gateway.md §0).
 //
-// The object it owns is an **exit**: anything that accepts traffic addressed
-// somewhere else and takes responsibility for delivering it (docs/gateway.md
-// §1.1). That is a membership test rather than a label, and it is what settles
+// Three concerns, three nftables tables, three lifetimes:
+//
+//   - **Exits, and which network uses which** — `olr_route`, this package.
+//   - **NAT** — `olr_nat`, internal/gateway/nat: port forwards inward, one
+//     egress masquerade outward. It arrived here from a module called
+//     `firewall` that did no filtering; docs/port-forwarding.md §0 has that
+//     argument, and the nat package's own comment has why it is a package
+//     rather than a flat merge.
+//   - **Byte accounting** — `olr_stat`, and the one concern Enabled does not
+//     govern (§7.1).
+//
+// The object this package itself owns is an **exit**: anything that accepts
+// traffic addressed somewhere else and takes responsibility for delivering it
+// (docs/gateway.md §1.1). That is a membership test rather than a label, and it is what settles
 // the question the naming kept failing at — a WireGuard interface, a proxy box
 // on the LAN and `unreachable` are all exits, while a SOCKS5 port is not,
 // because the client has to *ask* in its own protocol.
@@ -25,6 +37,7 @@ import (
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
 )
 
 // ModuleName is the path segment, config section and event label for this
@@ -40,9 +53,21 @@ const ModuleName = "gateway"
 // config format), so the tags are load-bearing.
 type Config struct {
 	// Enabled controls whether any of this is programmed into the kernel at
-	// all. Disabling tears down our table, our rules and our route tables and
-	// leaves the box routing exactly as it did before olr was installed —
-	// which is also what makes the module safe to try (design.md §7).
+	// all. Disabling tears down our tables, our rules and our route tables and
+	// leaves the box routing and translating exactly as it did before olr was
+	// installed — which is also what makes the module safe to try (design.md
+	// §7).
+	//
+	// **It governs `olr_nat` as well as `olr_route`**, and that is the sharpest
+	// edge on this config: turning the module off stops policy routing *and
+	// closes every forwarded port*, in one request. docs/gateway.md §0 states
+	// it, the plan says it in those words, and the impact is disruptive —
+	// a switch that silently shuts a port somebody is reaching a service
+	// through is the one thing this must not do quietly.
+	//
+	// Stats is the single exception, for the reason §7.1 gives: a different
+	// table with a different lifetime. Nothing else gets its own lifecycle
+	// switch; a concern's condition is its own configuration existing.
 	//
 	// Keeping the configuration while off means it can be turned back on
 	// without retyping it, matching internal/dhcp and internal/dns.
@@ -52,14 +77,48 @@ type Config struct {
 	// route, which is what an unconfigured box already does.
 	Exits []Exit `json:"exits,omitempty"`
 
+	// Forwards are the port forwards — what arrives from outside, and where it
+	// goes (internal/gateway/nat, docs/port-forwarding.md).
+	//
+	// A field of this config rather than a section of its own, because the
+	// module that used to own them was deleted. The stored shape is the nat
+	// package's Forward; the projection into what that package works on is
+	// Config.NAT.
+	Forwards []nat.Forward `json:"forwards,omitempty"`
+
+	// SNAT rewrites the source address of traffic from this box's networks as
+	// it leaves `dial`'s uplink. Nil means on.
+	//
+	// The same word and the same pointer reasoning as Exit.SNAT, because it is
+	// the same question asked about the default path instead of about an exit:
+	// a bool could not tell "the operator turned it off" from "the field was
+	// never written", which is what decides whether a document stored by an
+	// older olr keeps behaving the way it did.
+	//
+	// It is **not** a second Enabled. docs/gateway.md §3.9 has the argument;
+	// the short form is that turning it off is a real configuration — an
+	// operator who added a static route for their LAN on the modem wants the
+	// client's own address to survive the trip — rather than a lifecycle
+	// switch. Without an uplink it writes nothing either way.
+	SNAT *EgressSNAT `json:"snat,omitempty"`
+
 	// Default names the exit that everything uses unless something more
 	// specific says otherwise — the top rung of §2.1's ladder.
 	//
 	// Empty means the box's own default route, and that is deliberately not
 	// spelled as a reserved exit name. §1.2 says the box's default gateway *is*
-	// an exit, but it is one we neither configure nor own: it is whatever is in
-	// the main table, put there by `dial` or by DHCP or by hand. Modelling it
-	// as a row the operator could edit would promise a control we do not have.
+	// an exit; what it is not is an exit *this module* owns. It is whatever sits
+	// in the main table, and the control over it lives one module away, in
+	// `dial`: an operator who wants to choose it sets `dial`'s uplink, which
+	// owns the interface, its address and the default route, and olr puts all
+	// three back after a reboot. A box with no uplink configured still reaches
+	// this line, and the main table is then whatever the distribution, a DHCP
+	// client or somebody's hand put there.
+	//
+	// So an editable row here would be the wrong place rather than an
+	// impossible one — the same value with a second owner, and §4.1 allows one
+	// owner per fact. Empty stays empty, and the mechanism is unchanged; what
+	// changed is that there is now somewhere in olr to go and set it.
 	Default string `json:"default,omitempty"`
 
 	// Stats controls per-device and per-exit byte accounting (§7.1).
@@ -87,6 +146,13 @@ type Config struct {
 	// does not.
 	Interfaces []Assignment `json:"interfaces,omitempty"`
 }
+
+// EgressSNAT is Config.SNAT's type.
+//
+// A named bool so schema.go can describe it — core reflects a bare `bool` as
+// `boolean` with nothing else to say, and the one thing worth saying about this
+// field is that leaving it out means *on*.
+type EgressSNAT bool
 
 // Assignment is one rung of the ladder: this source uses that exit.
 //
@@ -565,6 +631,13 @@ func (c *Config) Normalize() {
 		return strings.Compare(a.Interface, b.Interface)
 	})
 
+	// The forwards normalize themselves — names and interfaces trimmed, list
+	// sorted, slots allocated — in the package that owns them, so that the one
+	// rule about a forward's slot lives beside the counter it names.
+	nc := nat.Config{Forwards: c.Forwards}
+	nc.Normalize()
+	c.Forwards = nc.Forwards
+
 	// Last, because it depends on the names being settled and it is the one
 	// step here that invents a value rather than tidying one.
 	c.allocateSlots()
@@ -662,5 +735,38 @@ func (c *Config) Rename(from, to string) bool {
 
 // Empty reports whether anything has been configured at all.
 func (c Config) Empty() bool {
-	return len(c.Exits) == 0 && len(c.Interfaces) == 0 && c.Default == ""
+	return len(c.Exits) == 0 && len(c.Interfaces) == 0 && c.Default == "" &&
+		len(c.Forwards) == 0
+}
+
+// SNATOrDefault resolves the nil pointer: egress masquerade is on unless the
+// operator turned it off.
+func (c Config) SNATOrDefault() bool { return c.SNAT == nil || bool(*c.SNAT) }
+
+// NAT projects this config into what internal/gateway/nat works on.
+//
+// The projection rather than a shared struct, and it is the whole seam between
+// the two halves: this package owns the stored document and decides what the
+// other one is asked to render, while that one owns the table and how. Note
+// what it passes for Enabled — this module's single switch, which is why
+// turning the module off closes every forwarded port.
+//
+// `uplink` and `networks` come from outside: the uplink is `dial`'s (read
+// through UplinkView) and the networks are `link`'s. Either being absent means
+// no egress rule, which is the correct answer for the reference topology —
+// olr beside the modem, with no interface of its own facing outward and no
+// business guessing which one does.
+func (c Config) NAT(uplink string, networks []netip.Prefix) nat.Config {
+	out := nat.Config{
+		Enabled:  c.Enabled,
+		Forwards: c.Forwards,
+	}
+	if c.SNATOrDefault() && uplink != "" && len(networks) > 0 {
+		sources := slices.Clone(networks)
+		slices.SortFunc(sources, func(a, b netip.Prefix) int {
+			return strings.Compare(a.String(), b.String())
+		})
+		out.Egress = &nat.Egress{Interface: uplink, Sources: sources}
+	}
+	return out
 }

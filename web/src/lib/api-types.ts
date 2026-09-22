@@ -31,7 +31,6 @@ import type {
   UpstreamScheme,
   DevicesConfig,
   ExitForm,
-  FirewallConfig,
   LinkConfig,
   Protocol,
   GatewayConfig,
@@ -379,6 +378,88 @@ export interface LinkStep {
   description: string
   done: boolean
   error?: string
+}
+
+// --- dial: the uplink --------------------------------------------------------
+
+/**
+ * How this router itself reaches the internet — the body of `PUT
+ * /api/dial/uplink`, mirroring `internal/dial.Uplink`.
+ *
+ * This one is a *config* shape and so does not belong in this file: it should
+ * arrive as `DialConfig.uplink` from config-types.ts, which is generated from
+ * the Go struct. It is here because the generator needs a running olrd to talk
+ * to (`make types`), and that could not be run in the environment this landed
+ * from. Regenerating is the fix, and it deletes this interface rather than
+ * changing it — `Uplink` is the name the generator will produce.
+ */
+export interface Uplink {
+  interface: string
+  ipv4?: UplinkIPv4
+  /** Recorded for `dns`. Nothing reads these yet; the server says so too. */
+  dns?: string[]
+}
+
+export interface UplinkIPv4 {
+  /**
+   * This box's own address *with the mask of its link* — 192.168.2.9/24. Not
+   * masked, which is the opposite of a network's subnet: the host bits are the
+   * address, and the server refuses 192.168.2.0/24 rather than silently
+   * accepting the network itself.
+   */
+  address: string
+  /** The modem's address on that link, and the next hop of the default route. */
+  gateway: string
+}
+
+/**
+ * The uplink as `GET /api/dial/uplink` and `GET /api/dial/status` publish it —
+ * internal/dial uplinkView.
+ *
+ * Intent and fact side by side, never collapsed into a verdict. `address` and
+ * `gateway` are what olr was told; `addresses` and `route_via`/`route_dev` are
+ * what the kernel has right now. The failure worth catching is the one where
+ * the first pair looks perfect and the default route leaves by a different
+ * interface, and a single "ok" boolean is exactly what hides it.
+ */
+export interface UplinkStatus {
+  interface: string
+  address?: string
+  gateway?: string
+  dns?: string[]
+
+  present: boolean
+  up: boolean
+
+  /**
+   * Every IPv4 address actually on the interface. More than one means
+   * something else is addressing it too — usually the distribution's DHCP
+   * client. olr reports that and removes nothing.
+   */
+  addresses?: string[]
+
+  /**
+   * The default route actually in the main table, whichever interface it
+   * leaves by. Absent means this box has no way out at all, which is a
+   * different sentence from "the route goes somewhere else".
+   */
+  route_via?: string
+  route_dev?: string
+
+  problems?: Problem[]
+}
+
+export interface UplinkResponse {
+  /** Absent when olr does not own the way out, which is most boxes. */
+  uplink?: UplinkStatus
+  as_of: string
+}
+
+/** The result of storing the uplink — internal/dial applyResponse. */
+export interface DialApplyResult {
+  plan: Plan
+  steps?: Step[]
+  error?: { message: string; problems?: Problem[] }
 }
 
 // --- devices ---------------------------------------------------------------
@@ -808,28 +889,28 @@ export interface GatewayTraffic {
 // --- firewall --------------------------------------------------------------
 
 /**
- * A change to the kernel's NAT table — internal/firewall changeView.
+ * A change to the kernel's NAT table — internal/gateway/nat changeView.
  *
  * A line rather than a file path and a diff, for the same reason gateway's is:
  * this module configures the kernel rather than a backend's config file. The
- * text is the same canonical form `olr firewall show --dry-run` prints and the
+ * text is the same canonical form `olr gateway show forwards --dry-run` prints and the
  * same one stored in each nftables rule's comment, so what the screen shows,
  * what the CLI shows and what `nft list table inet olr_nat` shows are one
  * string.
  */
-export interface FirewallChangeLine {
+export interface ForwardsChangeLine {
   kind: 'add' | 'remove'
   line: string
 }
 
 /**
- * Somebody else's chain on the forward hook — internal/firewall ForeignFilter.
+ * Somebody else's chain on the forward hook — internal/gateway/nat ForeignFilter.
  *
  * Reported rather than hidden (design.md §3.4), and — unlike gateway's
  * ForeignRule — it never blocks the change. In nftables a drop is final, so olr
  * cannot override one; but the foreign chain may also be accepting exactly this
  * traffic in a rule olr cannot evaluate, so refusing would block a legitimate
- * setup on a guess (docs/firewall.md §5.2).
+ * setup on a guess (docs/port-forwarding.md §5.2).
  */
 export interface ForeignFilter {
   table: string
@@ -838,9 +919,9 @@ export interface ForeignFilter {
   policy: string
 }
 
-/** What applying a firewall change would do — internal/firewall planView. */
-export interface FirewallPlan {
-  changes: FirewallChangeLine[]
+/** What applying a port-forwarding change would do — internal/gateway/nat planView. */
+export interface ForwardsPlan {
+  changes: ForwardsChangeLine[]
   impact: Impact
   foreign?: ForeignFilter[]
   reasons?: string[]
@@ -854,14 +935,14 @@ export interface FirewallPlan {
   warnings?: Problem[]
 }
 
-export interface FirewallApplyResult {
-  plan: FirewallPlan
+export interface ForwardsApplyResult {
+  plan: ForwardsPlan
   steps?: Step[]
-  config: FirewallConfig
+  config: GatewayConfig
   error?: { message: string; problems?: Problem[] }
 }
 
-/** One forward and what is true of it right now — internal/firewall forwardStatusView. */
+/** One forward and what is true of it right now — internal/gateway/nat forwardStatusView. */
 export interface ForwardStatus {
   name: string
   in: string
@@ -882,13 +963,13 @@ export interface ForwardStatus {
 
   /**
    * Since the table was last built, not since boot: any change to this module
-   * rebuilds it and resets these (docs/firewall.md §3.6).
+   * rebuilds it and resets these (docs/port-forwarding.md §3.6).
    */
   packets: number
   bytes: number
 }
 
-export interface FirewallStatus {
+export interface ForwardsStatus {
   enabled: boolean
   known: boolean
   forwards: ForwardStatus[]

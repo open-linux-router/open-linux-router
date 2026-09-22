@@ -1,6 +1,8 @@
 package dial
 
 import (
+	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -172,5 +174,116 @@ func TestAnEmptySectionParsesAsNoRecords(t *testing.T) {
 	}
 	if !cfg.Empty() {
 		t.Error("an empty object should parse as no records")
+	}
+}
+
+// --- the uplink -------------------------------------------------------------
+
+func testUplink() Uplink {
+	return Uplink{
+		Interface: "enp2s0",
+		IPv4: &UplinkIPv4{
+			Address: netip.MustParsePrefix("192.168.2.9/24"),
+			Gateway: netip.MustParseAddr("192.168.2.1"),
+		},
+	}
+}
+
+// The difference from link.GroupIPv4.Subnet, which *is* masked. Masking this
+// one would quietly turn the box's own address into the network address —
+// something netlink accepts and nothing can reach.
+func TestTheUplinkAddressKeepsItsHostBits(t *testing.T) {
+	c := Config{Uplink: &Uplink{
+		Interface: "enp2s0",
+		IPv4: &UplinkIPv4{
+			Address: netip.MustParsePrefix("192.168.2.9/24"),
+			Gateway: netip.MustParseAddr("192.168.2.1"),
+		},
+	}}
+	c.Normalize()
+
+	if got := c.Uplink.IPv4.Address.String(); got != "192.168.2.9/24" {
+		t.Fatalf("address = %s; Normalize must not mask it", got)
+	}
+}
+
+func TestTheUplinkRoundTrips(t *testing.T) {
+	u := testUplink()
+	u.DNS = []netip.Addr{netip.MustParseAddr("9.9.9.9")}
+	c := Config{Uplink: &u}
+
+	data, err := MarshalConfig(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := UnmarshalConfig(data)
+	if err != nil {
+		t.Fatalf("%v (from %s)", err, data)
+	}
+	if !back.Uplink.Equal(c.Uplink) {
+		t.Errorf("round-tripped %s to %+v", data, back.Uplink)
+	}
+}
+
+// Order is meaning here — resolvers are tried in the order given — so unlike
+// every other list in this tree it is not sorted. Duplicates still go.
+func TestUplinkResolversKeepTheirOrderAndLoseDuplicates(t *testing.T) {
+	c := Config{Uplink: &Uplink{Interface: "enp2s0", DNS: []netip.Addr{
+		netip.MustParseAddr("9.9.9.9"),
+		netip.MustParseAddr("1.1.1.1"),
+		netip.MustParseAddr("9.9.9.9"),
+	}}}
+	c.Normalize()
+
+	want := []netip.Addr{netip.MustParseAddr("9.9.9.9"), netip.MustParseAddr("1.1.1.1")}
+	if !slices.Equal(c.Uplink.DNS, want) {
+		t.Errorf("dns = %v, want %v", c.Uplink.DNS, want)
+	}
+}
+
+// Empty gates whether startDial restores anything, so a box with an uplink and
+// no records must not read as unconfigured — that would leave the default route
+// gone after every reboot.
+func TestAnUplinkAloneIsNotEmpty(t *testing.T) {
+	u := testUplink()
+	if (Config{Uplink: &u}).Empty() {
+		t.Error("a box with an uplink and no records reads as unconfigured")
+	}
+	if !(Config{}).Empty() {
+		t.Error("a box with neither should be empty")
+	}
+}
+
+func TestCloneDoesNotShareTheUplink(t *testing.T) {
+	u := testUplink()
+	u.DNS = []netip.Addr{netip.MustParseAddr("9.9.9.9")}
+	c := Config{Uplink: &u}
+
+	clone := c.Clone()
+	clone.Uplink.Interface = "enp3s0"
+	clone.Uplink.IPv4.Gateway = netip.MustParseAddr("10.0.0.1")
+	clone.Uplink.DNS[0] = netip.MustParseAddr("8.8.8.8")
+
+	if c.Uplink.Interface != "enp2s0" ||
+		c.Uplink.IPv4.Gateway != netip.MustParseAddr("192.168.2.1") ||
+		c.Uplink.DNS[0] != netip.MustParseAddr("9.9.9.9") {
+		t.Errorf("editing the clone reached the original: %+v", *c.Uplink)
+	}
+}
+
+// Removing the uplink stops olr owning the way out. It deliberately does not
+// tear the route down — Config.RemoveUplink has the argument — so this only
+// asserts the document half.
+func TestRemoveUplinkReportsWhetherThereWasOne(t *testing.T) {
+	var c Config
+	c.SetUplink(testUplink())
+	if !c.RemoveUplink() {
+		t.Fatal("removing a configured uplink reported nothing to remove")
+	}
+	if c.Uplink != nil {
+		t.Error("the uplink survived removal")
+	}
+	if c.RemoveUplink() {
+		t.Error("removing twice reported a second removal")
 	}
 }

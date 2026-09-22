@@ -1,46 +1,59 @@
-// Package dial owns this box's uplink, and for now owns one thing about it:
-// keeping a public name pointing at the address the uplink has today.
+// Package dial owns this box's uplink: the way the router itself reaches the
+// internet, and a public name kept pointing at the address it has today.
 //
 // # What this is, and what it is not
 //
-// design.md §9 owes a `dial` module that brings the uplink up — PPPoE, a DHCP
-// client, whatever the ISP wants — and holds the facts about it that everything
-// downstream reads. This is not that module, in exactly the way internal/link
-// is not the module design.md §9 milestone 1 owes.
+// design.md §9 milestone 1 owes a `dial` module that brings the uplink up —
+// PPPoE, a DHCP client, LTE, whatever the ISP wants — and holds the facts about
+// it that everything downstream reads. This is two pieces of that module rather
+// than the whole of it, in the way internal/link is most but not all of what
+// the same milestone owes it.
 //
-// It exists because docs/ddns.md decided that dynamic DNS belongs to `dial`
-// (§2: the module that owns the fact owns the feature, and the value published
-// is the uplink's public address), and then had to close §9 #4 — whether `dial`
-// exists before DDNS does. The honest options were to wait or to build the
-// smallest piece of `dial` that owns an uplink address. This is the second.
+//   - **The uplink** (Uplink), in its **static** form only: an interface, an
+//     address, a default gateway. olr writes all three, and owns the default
+//     route in the main table while it does. That last part is what design.md
+//     §3.4 means by not squatting shared state — the main route table is
+//     touched "only when a module explicitly owns that concern", which is a
+//     condition rather than a ban, and this is the module that owns it.
+//   - **Dynamic DNS** (Record), which is here because docs/ddns.md §2 decided
+//     that the module owning the fact owns the feature, and the value published
+//     is the uplink's public address.
 //
-// So, deliberately shaped so the real module can absorb it rather than collide
-// with it:
+// The uplink came second, and it came because the tree could not be read
+// straight otherwise. internal/link/writer.go claims IPv4 ownership of every
+// network member and bounds that claim with "WAN interfaces are `dial`'s"; this
+// package used to answer that there was no uplink object. So the only place an
+// operator could put their modem-facing NIC was a `link` network, which has
+// nowhere to hold a gateway — an operator with three NICs reported that they
+// could not reach a working configuration at all, and they were right.
 //
-//   - **There is no uplink object.** A record says where its own address comes
-//     from. The reference topology (docs/dns.md §1) puts olr behind the modem
-//     with no WAN uplink at all, so a `dial.uplink` field would be empty on the
-//     deployment this product leads with — and inventing one now would model
-//     the case we do not lead with, in the module least able to change it
-//     later. internal/link's package comment refuses a primary key for the same
-//     reason and in the same words.
-//   - **The address is read, never stored.** Which interface a record reads is
-//     intent; what address that interface has is a fact, and it is read through
-//     LinkView per check (§4.5). There is no copy to drift.
-//   - **Nothing here supervises a backend.** This is the first module since
-//     `link` with no unit to drive and no file to render, and the publisher runs
-//     inside olrd the way `gateway`'s exit prober does. design.md §3.5's test
-//     decides that: if olrd is stopped, the name stops being *updated*, which is
-//     a loss of freshness rather than a loss of service.
+// Still owed, and deliberately not invented here: the DHCP-client, PPPoE and
+// LTE forms, IPv6 and prefix delegation, and multi-WAN. The first three each
+// bring a backend to supervise and an address discovered rather than typed;
+// Uplink is a pointer to one object precisely so that multi-WAN becomes a list
+// later without changing what an already-stored document means.
 //
-// The name runs ahead of the contents, and that is the cost stated rather than
-// hidden: `dial` contains DDNS and nothing else today.
+// Two properties hold across both halves:
+//
+//   - **Intent is stored; the machine is read.** What address the uplink should
+//     have is intent and lives in the document. What address the interface
+//     *has*, and what is actually in the main route table, is read per request
+//     through LinkView and the writer (§4.5). There is no cached copy of either
+//     to drift — which is also how a hand-run `ip route del` shows up as drift
+//     rather than as agreement.
+//   - **Nothing here supervises a backend.** No unit to drive and no file to
+//     render, like `link`: the uplink is programmed straight into the kernel
+//     through netlink, and the DDNS publisher runs inside olrd the way
+//     `gateway`'s exit prober does. design.md §3.5's test decides the second:
+//     if olrd is stopped the name stops being *updated*, which is a loss of
+//     freshness rather than of service.
 package dial
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 	"time"
@@ -76,13 +89,142 @@ const MinInterval = 30 * time.Second
 
 // Config is the dial module's intent.
 //
-// One field today, and a list of structs rather than of names — the opposite of
+// Two fields, and they are shaped differently on purpose: one uplink, many
+// records. Records are a list of structs rather than of names — the opposite of
 // internal/link's bet, and for the opposite reason: a DDNS record has eight
 // fields the day it is written, so a list of names would have to become a list
 // of structs immediately.
 type Config struct {
+	// Uplink is how this box itself reaches the internet. Nil means olr does
+	// not own that, which is what every box before this ran as.
+	Uplink *Uplink `json:"uplink,omitempty"`
+
 	// Records are the public names this box keeps current.
 	Records []Record `json:"records,omitempty"`
+}
+
+// Uplink is how this box itself reaches the internet.
+//
+// Nil means olr does not own the way out — the default route is whatever the
+// distribution, a DHCP client or somebody's hand put in the main table. That is
+// what every box before this ran as, and it stays a supported arrangement: the
+// reference topology (docs/dns.md §1) puts olr beside the modem with no WAN
+// interface of its own.
+//
+// Setting it is the operator saying *olr owns the way out*. From then on olr
+// writes the address, brings the interface up, and replaces the default route
+// in the main table — and puts all three back when olrd starts, because the
+// kernel forgets them on a reboot and nothing else on the box knows them.
+//
+// One object rather than a list. Multi-WAN is a real thing, and it needs a
+// selection policy — docs/gateway.md §2.1's ladder — plus metric and failover
+// semantics that do not exist anywhere in this tree yet. A pointer to one
+// object becomes a list the day those do, without the meaning of an
+// already-stored document changing; internal/gateway's Exits is the shape to
+// copy when it is time.
+type Uplink struct {
+	// Interface is the kernel name of the NIC facing the modem or the ISP.
+	//
+	// It is `dial`'s outright, and Validate refuses to let it also be a member
+	// of a `link` network. A network is "a network this box serves"
+	// (design.md §4.4) — `dhcp`, `dns`, `firewall` and later `wifi` all key off
+	// one, and design.md §5.6 makes "we never serve DHCP on a WAN interface" a
+	// structural exception that "follows from role rather than from
+	// observation". Putting the uplink in a network would hand every one of
+	// those modules a network they must special-case.
+	//
+	// The refusal is also what makes internal/link/writer.go's ownership claim
+	// true rather than vacuous: that file strips foreign IPv4 addresses from
+	// network members on the grounds that WAN interfaces live here, and until
+	// this field existed they had nowhere to live.
+	Interface string `json:"interface"`
+
+	// IPv4 is the static addressing.
+	//
+	// Nil means olr writes no address and no route, which is deliberately a
+	// legal state rather than a hole: it is the shape the DHCP-client and PPPoE
+	// forms take when they land, where the address and the gateway are
+	// discovered rather than typed. Today it means olr owns the interface and
+	// nothing else, and the plan says so.
+	IPv4 *UplinkIPv4 `json:"ipv4,omitempty"`
+
+	// DNS are the resolvers the ISP handed out, in preference order.
+	//
+	// Recorded for `dns` — the §4.1 arrow `dial → dns (upstream resolvers)` —
+	// and **nothing reads them yet**, which Validate warns about rather than
+	// leaving to be discovered. They go nowhere near `/etc/resolv.conf`: that
+	// file is named in design.md §3.4 as shared state, and claiming it is a
+	// separate ownership decision from claiming the route table.
+	//
+	// Usually unnecessary even once the arrow is wired. dns.Upstream defaults
+	// to ModeRecurse, so the moment the default route exists unbound resolves
+	// from the root and wants no ISP resolver at all; these matter on a line
+	// where recursion is blocked or the ISP's resolvers are the only ones
+	// reachable.
+	DNS []netip.Addr `json:"dns,omitempty"`
+}
+
+// UplinkIPv4 is the uplink's static IPv4 configuration.
+type UplinkIPv4 struct {
+	// Address is this box's own address on the link, with its mask —
+	// 192.168.2.9/24, host bits and all.
+	//
+	// Deliberately **not** masked by Normalize, which is the opposite of what
+	// link.GroupIPv4.Subnet does one module away, and the two look alike enough
+	// that the difference is worth stating. That field is a network and the
+	// operator thinks of it as one, so masking 192.168.1.1/24 down to
+	// 192.168.1.0/24 removes a typo. This field is an address; masking it would
+	// quietly turn the box's own address into the network address, which
+	// netlink accepts and nothing can reach.
+	Address netip.Prefix `json:"address"`
+
+	// Gateway is the next hop for the default route — the modem's address.
+	//
+	// This is the field that had nowhere to live. An operator who gave their
+	// modem-facing NIC a static address on the Networks page found no box to
+	// type this into, and a router with no default route is not a router.
+	Gateway netip.Addr `json:"gateway"`
+}
+
+// HasIPv4 reports whether the uplink carries a usable static IPv4
+// configuration. Both halves or neither: an address with no gateway leaves the
+// box on the link and off the internet, and a gateway with no address is a next
+// hop nothing can reach.
+func (u *Uplink) HasIPv4() bool {
+	return u != nil && u.IPv4 != nil && u.IPv4.Address.IsValid() && u.IPv4.Gateway.IsValid()
+}
+
+// Clone returns a deep copy of the uplink, so a proposal can be edited without
+// disturbing the one held by the store.
+func (u *Uplink) Clone() *Uplink {
+	if u == nil {
+		return nil
+	}
+	out := *u
+	out.DNS = slices.Clone(u.DNS)
+	if u.IPv4 != nil {
+		ipv4 := *u.IPv4
+		out.IPv4 = &ipv4
+	}
+	return &out
+}
+
+// Equal reports whether two uplinks are configured identically. Used by the
+// plan, which has to tell "no change" from "the same fields, re-sent".
+func (u *Uplink) Equal(other *Uplink) bool {
+	switch {
+	case u == nil || other == nil:
+		return u == other
+	case u.Interface != other.Interface:
+		return false
+	case !slices.Equal(u.DNS, other.DNS):
+		return false
+	case (u.IPv4 == nil) != (other.IPv4 == nil):
+		return false
+	case u.IPv4 == nil:
+		return true
+	}
+	return *u.IPv4 == *other.IPv4
 }
 
 // Record is one public name whose value this box is responsible for keeping
@@ -342,6 +484,36 @@ func (c *Config) RemoveRecord(name string) bool {
 	return true
 }
 
+// SetUplink replaces the uplink.
+func (c *Config) SetUplink(u Uplink) {
+	c.Uplink = &u
+	c.Normalize()
+}
+
+// RemoveUplink drops the uplink, reporting whether there was one.
+//
+// Note what it does not do, and it is the same asymmetry RemoveRecord has: it
+// does not take the address off the interface, and it does not delete the
+// default route. Both stay exactly as olr last programmed them, so the box
+// keeps reaching the internet; what stops is olr *owning* them — putting them
+// back after a reboot, and replacing the route when the gateway changes.
+//
+// The alternative is worse in a way that has no recovery. olr never recorded
+// what the main table held before it claimed it — link.Applier.Restore refuses
+// to save state for the same reason — so a teardown could not put the previous
+// route back, only leave the box with none. The usual reason to remove an
+// uplink is to hand the interface to something else (the distribution, or the
+// PPPoE form when it lands), and taking the route away first is exactly the
+// wrong opening move. print.go and the plan say all this out loud, because
+// "removed" would otherwise read as "this box is offline now".
+func (c *Config) RemoveUplink() bool {
+	if c.Uplink == nil {
+		return false
+	}
+	c.Uplink = nil
+	return true
+}
+
 // Names lists the configured records, in stored order.
 func (c Config) Names() []string {
 	out := make([]string, 0, len(c.Records))
@@ -352,7 +524,12 @@ func (c Config) Names() []string {
 }
 
 // Empty reports whether anything is configured at all.
-func (c Config) Empty() bool { return len(c.Records) == 0 }
+//
+// It is what `olr status` and startDial read to decide whether this module has
+// been asked for anything, so the uplink counts: a box with an uplink and no
+// records is very much configured, and skipping it at startup would leave the
+// default route unrestored after every reboot.
+func (c Config) Empty() bool { return c.Uplink == nil && len(c.Records) == 0 }
 
 // --- canonical form ---------------------------------------------------------
 
@@ -373,6 +550,7 @@ func normalizeName(name string) string {
 // compared as bytes downstream, so a reordered array would read as a change
 // nobody made.
 func (c *Config) Normalize() {
+	normalizeUplink(c.Uplink)
 	for i := range c.Records {
 		r := &c.Records[i]
 		r.Name = normalizeName(r.Name)
@@ -392,10 +570,58 @@ func (c *Config) Normalize() {
 	})
 }
 
+// normalizeUplink puts the uplink in canonical form.
+//
+// Note the two things it does *not* do, both load-bearing:
+//
+// It does not mask Address. See UplinkIPv4.Address — that is an address, and
+// masking it would turn the box's own address into the network address.
+//
+// It does not sort DNS. Every other list in this tree is sorted so that a
+// reordered array cannot read as a change nobody made, and here the order *is*
+// the change: resolvers are tried in the order given, so sorting them would
+// silently re-rank the operator's preference. Duplicates still go, because a
+// resolver listed twice is a typo in every case.
+func normalizeUplink(u *Uplink) {
+	if u == nil {
+		return
+	}
+	u.Interface = strings.TrimSpace(u.Interface)
+
+	if u.IPv4 != nil {
+		// An unparseable or absent address leaves the block meaning nothing, and
+		// keeping a half-filled struct in the document would make "no static
+		// addressing" and "a broken static addressing" look the same to every
+		// reader downstream. Validate complains about the half-filled form
+		// first, so this only ever collapses the wholly empty one.
+		if !u.IPv4.Address.IsValid() && !u.IPv4.Gateway.IsValid() {
+			u.IPv4 = nil
+		} else {
+			u.IPv4.Gateway = u.IPv4.Gateway.Unmap()
+		}
+	}
+
+	seen := make(map[netip.Addr]bool, len(u.DNS))
+	out := make([]netip.Addr, 0, len(u.DNS))
+	for _, addr := range u.DNS {
+		addr = addr.Unmap().WithZone("")
+		if !addr.IsValid() || seen[addr] {
+			continue
+		}
+		seen[addr] = true
+		out = append(out, addr)
+	}
+	if len(out) == 0 {
+		u.DNS = nil
+	} else {
+		u.DNS = out
+	}
+}
+
 // Clone returns a deep copy, so a proposal can be edited without disturbing the
 // one held by the store.
 func (c Config) Clone() Config {
-	return Config{Records: slices.Clone(c.Records)}
+	return Config{Uplink: c.Uplink.Clone(), Records: slices.Clone(c.Records)}
 }
 
 // Redacted returns a copy safe to print, log, or return over the API.

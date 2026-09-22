@@ -14,8 +14,8 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dial"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
-	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
+	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
@@ -37,16 +37,18 @@ import (
 // a module what it serves.
 func moduleRoutes() map[string][]core.Route {
 	return map[string][]core.Route{
-		system.ModuleName:   system.HTTP{}.Routes(),
-		link.ModuleName:     link.HTTP{}.Routes(),
-		dial.ModuleName:     dial.HTTP{}.Routes(),
-		dhcp.ModuleName:     dhcp.HTTP{}.Routes(),
-		dns.ModuleName:      dns.HTTP{}.Routes(),
-		devices.ModuleName:  devices.HTTP{}.Routes(),
-		gateway.ModuleName:  gateway.HTTP{}.Routes(),
-		firewall.ModuleName: firewall.HTTP{}.Routes(),
-		remote.ModuleName:   remote.HTTP{}.Routes(),
-		ingress.ModuleName:  ingress.HTTP{}.Routes(),
+		system.ModuleName:  system.HTTP{}.Routes(),
+		link.ModuleName:    link.HTTP{}.Routes(),
+		dial.ModuleName:    dial.HTTP{}.Routes(),
+		dhcp.ModuleName:    dhcp.HTTP{}.Routes(),
+		dns.ModuleName:     dns.HTTP{}.Routes(),
+		devices.ModuleName: devices.HTTP{}.Routes(),
+		// Both halves of gateway, because the NAT package's routes are mounted
+		// under the same prefix and are as much of the module's surface as the
+		// routing ones (gateway.HTTP.NAT).
+		gateway.ModuleName: gateway.HTTP{NAT: &nat.HTTP{}}.Routes(),
+		remote.ModuleName:  remote.HTTP{}.Routes(),
+		ingress.ModuleName: ingress.HTTP{}.Routes(),
 	}
 }
 

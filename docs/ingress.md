@@ -129,7 +129,7 @@ The case for:
 - The recipe is **identical for everyone** and annoying for everyone. Wildcard
   cert, DNS-01, split horizon or a public record, one stanza per service. This
   is exactly the shape of thing olr exists to collapse into a form.
-- It is **separable**. Unlike `firewall` or `dial`, nothing else depends on it,
+- It is **separable**. Unlike `gateway` or `dial`, nothing else depends on it,
   it ships as its own package, and removing it removes nothing from the router.
   If the positioning bet is wrong, the cost of unwinding it is one package.
 
@@ -387,7 +387,7 @@ acceptable way to learn it.
 **Bind to LAN interfaces only.** `dns.md` §5 makes this point about the
 resolver and it applies here with more force: a reverse proxy reachable from the
 WAN is a way to publish internal services to the internet by accident. Exposure
-to the internet is `firewall`'s decision, made explicitly, with a different
+to the internet is a port forward's decision, made explicitly, with a different
 conversation attached — see §9.
 
 **The `:8080` API listener is never turned off by this module.** Ever.
@@ -514,7 +514,7 @@ The boundary §2 said had to be drawn here.
 | | shipping a proxy build, so there is no download step | §5.6 — deferred, not rejected |
 | | per-service access control by group or device | the thing a router can do here that a standalone Caddy cannot — and the only entry on this list that justifies the module living in olr rather than in a README |
 | **Never** | serving static files, PHP, a general web server | escape hatch, permanently |
-| | **exposing a published service to the internet** | that is a port forward: `firewall`'s object, `firewall`'s risk conversation, and it must not become a side effect of publishing something internally |
+| | **exposing a published service to the internet** | that is a port forward: `gateway`'s object and its risk conversation (docs/port-forwarding.md), and it must not become a side effect of publishing something internally |
 | | running, updating or backing up the services themselves | §2's boundary. We make an application reachable. We do not manage applications |
 
 ---
@@ -575,10 +575,15 @@ The boundary §2 said had to be drawn here.
    dynamic address is refused with the `olr dhcp` command that fixes it,
    because `design.md` §5.6 forbids inferring a change to another module's
    config. Confirm that is the wanted shape before the UI is built on it.
-5. **Ordering.** `dial`, `firewall` and `system` are unbuilt — `internal/` has
-   `link`, `dhcp`, `dns`, `devices` and `gateway`. Publishing services before
-   the box has a firewall is hard to defend, and §9's "never expose to the
-   internet" row is a promise that `firewall` is what actually keeps.
+5. ~~**Ordering.**~~ **Answered, and not the way it was asked.** The worry was
+   that publishing services before the box had a firewall is hard to defend,
+   and that §9's "never expose to the internet" row was a promise a `firewall`
+   module would have to keep. There is no such module and there will not be one
+   for now (docs/port-forwarding.md §0), so the row is kept by something
+   simpler and more robust: olr publishes on a private address and nothing
+   routes to it from outside unless somebody writes a port forward down. That
+   is one deliberate act by the operator, in a different object, and it is
+   exactly the line ingress must not cross on its own.
 6. ~~**Who watches Caddy releases, and how fast.**~~ **Closed by not taking the
    obligation.** olr ships no proxy, so Caddy's security updates are the
    operator's distro's problem, as every other backend's already were. It

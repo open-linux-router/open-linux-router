@@ -166,7 +166,7 @@ func TestClassifyRulesMatchTheNetworksOwnPrefixes(t *testing.T) {
 // as drift. If this string stopped being part of the line, the fix would live in
 // the binary and never reach a box that had already applied once.
 //
-// What it prevents is in docs/firewall.md §6: without it, the reply leg of a
+// What it prevents is in docs/port-forwarding.md §6: without it, the reply leg of a
 // port-forwarded connection matches the source rule — conntrack has not restored
 // the original destination yet — and is sent out the exit, so port forwarding
 // silently fails on every box that has one.

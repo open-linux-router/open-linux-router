@@ -6,6 +6,10 @@ not mean retyping it.
 
 Usage:
   olr dial set <name> [flags]
+  olr dial set [command]
+
+Available Commands:
+  uplink      Set how this router reaches the internet
 
 Flags:
   -h, --help                help for set
@@ -25,3 +29,5 @@ Global Flags:
       --dry-run         show what would change and exit without applying it
   -o, --output string   output format: text|json (default "text")
       --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr dial set [command] --help" for more information about a command.

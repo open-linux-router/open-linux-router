@@ -10,7 +10,7 @@ references are to this document; references to `design.md` name it, and
 
 olr has had the outbound half of the router for a while — `gateway` decides
 where traffic leaving a network goes. The inbound half was two thirds built:
-`firewall` forwards a port, `ingress` publishes a service over HTTPS, `dial`
+`gateway` forwards a port, `ingress` publishes a service over HTTPS, `dial`
 keeps a public name pointing here. **What was missing is the operator
 themselves getting back in.** Not one service — the network. From a phone, on
 somebody else's Wi-Fi.
@@ -32,7 +32,7 @@ variations of each other:
 | Intent | Who gets in | What they reach | Status |
 |---|---|---|---|
 | **Remote access** | only the operator, with a credential | the whole network, or just the way out | **this module** |
-| **Public publishing** | anybody | one service | `ingress` + `firewall`, built |
+| **Public publishing** | anybody | one service | `ingress` + `gateway`'s port forwards, built |
 
 These take opposite values on both dimensions, so the common part is empty:
 no shared field, no shared mechanism, no shared object. That is the inverse of
@@ -352,7 +352,7 @@ would be a second thing to protect with no reader.
 So this module writes no file, which is a departure from `design.md` §7's
 "generated files live under `rendered/`". The generated artefact here is kernel
 state, not something a daemon re-reads — exactly the situation `gateway` and
-`firewall` are already in.
+`gateway` is already in.
 
 ---
 
@@ -467,7 +467,7 @@ stopped?* The tunnel does, and it does — kernel state outlives olrd without
 anyone's help. So there is nothing to put in a unit.
 
 What kernel state does not outlive is a **reboot**. So this module is applied at
-olrd startup, exactly as `gateway` and `firewall` are, and for exactly the same
+olrd startup, exactly as `gateway` is, and for exactly the same
 reason: the configuration would otherwise survive perfectly and be in force
 nowhere.
 
@@ -625,7 +625,7 @@ module and an operator will meet them on day one.
 
 | | What happens | What olr says |
 |---|---|---|
-| **No egress NAT for `routes: everything`** | A full-tunnel peer's traffic reaches the box with a source address from the dial-in network, and olr renders no masquerade for it. On a box whose upstream does not route the dial-in subnet back, the peer has a tunnel and no internet | A warning at write time naming this exactly. `firewall` builds `olr_nat` for port forwards only (docs/firewall.md); general egress NAT is not olr's yet |
+| **No egress NAT for `routes: everything`** | A full-tunnel peer's traffic reaches the box with a source address from the dial-in network, and olr renders no masquerade for it. On a box whose upstream does not route the dial-in subnet back, the peer has a tunnel and no internet | A warning at write time naming this exactly. `gateway` now masquerades out of `dial`'s uplink (gateway:§3.9), but its source set is `link`'s networks — the dial-in subnet is not one, so this row still stands. §9 #3 has what is left of the question |
 | **IP forwarding off** | A peer reaches the router and nothing behind it | Written, by `gateway`, whenever that module is enabled (gateway:§3.8) — it is the one machine-wide sysctl olr sets, and the box forwards for a peer for the same reason it forwards for a LAN. It is read back on every plan, so a third party resetting it shows up as drift. A box with `gateway` switched off is still the operator's to turn on |
 | **LAN devices' default route is not this box** | The peer's packets arrive at the NAS and the reply goes somewhere else. The tunnel is up, `wg show` looks perfect, and one direction is missing | Not detectable from here; §9 lists a route check as v2 |
 | The UDP port is not reachable from outside | Handshakes never arrive. `wg show` shows a peer that has never handshaked | `status` reports the last handshake per peer, which is the only honest signal — "never" is different from "a while ago" |
@@ -651,7 +651,7 @@ behalf.
 | | `routes: home \| everything`, home prefixes read from `link` | §6.2 |
 | | `DNS` and `PersistentKeepalive` rendered, never asked | §6.3, §6.4 |
 | | last handshake and transfer per peer in `status` | §8 — the only honest liveness signal |
-| | applied at olrd startup, like `gateway` and `firewall` | §7.1 |
+| | applied at olrd startup, like `gateway` | §7.1 |
 | | `raw_wireguard_conf` escape hatch | §7.3 |
 | **v1** | Shadowsocks: one port, one cipher, one generated password, one reproducible link | §7.5 |
 | | UDP carried by default, against upstream's | §7.5.3 |
@@ -662,7 +662,7 @@ behalf.
 | | a QR code for the client configuration | the phone case, and the reason `add peer` returns the file rather than a path |
 | | pre-shared keys per peer | escape hatch until then |
 | | a reachability check on the home prefixes | §8 row 3 |
-| **Never** | a peer that is not a device — user accounts, roles, per-peer firewall policy | that is `firewall`'s object and a different conversation |
+| **Never** | a peer that is not a device — user accounts, roles, per-peer filtering policy | not olr's object at all for now (docs/port-forwarding.md §0) |
 | | storing a peer's private key so the configuration can be shown twice | §4.1 |
 | | `wg-quick`, in any form | §5.1 |
 | | site-to-site | §1 |
@@ -739,10 +739,14 @@ behalf.
    used to ask for is not wanted (§3.1), and `dns` naming is one command rather
    than a mechanism (§3).
 
-3. **Egress NAT belongs to somebody** (§8, row 1). `routes: everything` cannot
-   work on the common topology without it, and this module must not grow its own
-   masquerade — that would be a second owner of a decision `firewall` is going
-   to make. The warning is a placeholder for a real answer.
+3. **Egress NAT has an owner now; the dial-in subnet is not in it yet** (§8,
+   row 1). `gateway` masquerades traffic leaving `dial`'s uplink, sourced from
+   the subnets `link` declares (gateway:§3.9) — so *who owns this* is settled
+   and this module still must not grow its own masquerade. What is unsettled is
+   whether the dial-in network should join that source set automatically, or
+   whether a full-tunnel peer is a deliberate enough act to be asked about.
+   Leaning automatic: a tunnel with no internet is not a state anybody wants on
+   purpose. The warning stands until it is done.
 
 4. ~~**The CLI spells no protocol.**~~ **Closed by the second object arriving.**
    `set` split into `set wireguard` and `set shadowsocks`, `enable`/`disable`

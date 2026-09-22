@@ -104,3 +104,22 @@ func (FailureMode) JSONSchema() *jsonschema.Schema {
 		Default: string(FailBlock),
 	}
 }
+
+// JSONSchema describes the egress masquerade switch.
+//
+// Declared rather than left to reflection because a bare `boolean` on a field
+// called `snat` tells a form nothing, and this is the one field on this config
+// whose *default* is the interesting part: absent means on, so a UI that
+// rendered an unchecked box for a missing key would be showing the opposite of
+// what the box is doing.
+func (EgressSNAT) JSONSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type:  "boolean",
+		Title: "Translate traffic leaving the uplink",
+		Description: "Rewrite the source address of traffic from this router's networks as it " +
+			"leaves the internet uplink, so replies come back. On unless set to false, and " +
+			"it writes nothing at all when there is no uplink. Turn it off only if the " +
+			"device in front has a route back to your networks and you want to keep each " +
+			"client's own address.",
+	}
+}

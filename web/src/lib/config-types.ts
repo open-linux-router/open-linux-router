@@ -2,6 +2,13 @@
 //
 // Regenerate with `make types` (olrd must be running).
 // Source of truth: the Go config structs — see design.md §3.2 rule 3.
+//
+// HAND-EDITED, and it should not have been. The `firewall` module was deleted
+// and its forwards moved into `gateway`; the generator needs a running olrd to
+// talk to, and the environment that landed the move had none. The edits are the
+// three the Go change implies — `FirewallConfig` gone, `GatewayConfig.forwards`
+// and `.snat` added — and `make types` replaces the whole file with the real
+// answer, which is what should happen before this ships.
 
 /**
  * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
@@ -168,7 +175,6 @@ export interface OlrDocument {
   dhcp?: DhcpConfig
   dial?: DialConfig
   dns?: DnsConfig
-  firewall?: FirewallConfig
   gateway?: GatewayConfig
   ingress?: IngressConfig
   link?: LinkConfig
@@ -273,10 +279,6 @@ export interface QueryLog {
   enabled: boolean
   entries?: number
 }
-export interface FirewallConfig {
-  enabled: boolean
-  forwards?: Forward[]
-}
 export interface Forward {
   name: string
   in: string
@@ -289,6 +291,8 @@ export interface Forward {
 export interface GatewayConfig {
   enabled: boolean
   exits?: Exit[]
+  forwards?: Forward[]
+  snat?: boolean
   default?: string
   stats?: boolean
   interfaces?: Assignment[]

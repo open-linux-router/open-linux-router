@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label'
 import { ListEmpty } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { useUplink } from '@/features/dial/queries'
 import { useApplyLinkConfig, useInterfaces, useLinkConfig } from '@/features/link/queries'
 import { ApiError } from '@/lib/api'
 import type { GroupRow, InterfaceRow } from '@/lib/api-types'
@@ -51,6 +52,9 @@ export function InterfacesCard({
   const interfaces = useInterfaces()
   const config = useLinkConfig()
   const apply = useApplyLinkConfig()
+  // Read only to label the row that is the way out. This card owns adoption and
+  // nothing else; the uplink is configured in its own section on the same page.
+  const uplink = useUplink()
 
   /** A release held back because a pool still names the interface. */
   const [confirming, setConfirming] = useState<InterfaceRow | null>(null)
@@ -151,6 +155,7 @@ export function InterfacesCard({
               <InterfaceItem
                 key={row.name}
                 row={row}
+                role={roleOf(row, uplink.data?.uplink?.interface)}
                 busy={!!busy}
                 onToggle={(on) => toggle(row, on)}
               />
@@ -183,12 +188,29 @@ export function InterfacesCard({
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * What an adopted interface is *for*, in one word.
+ *
+ * Two roles and they are mutually exclusive by construction: an interface
+ * either carries a network this router serves or is the one way out, and the
+ * server refuses an uplink on a network's member. Showing it here is what makes
+ * that legible from the list rather than only from the two sections below it —
+ * "which NIC is my WAN" was previously answerable only by reading addresses and
+ * guessing.
+ */
+function roleOf(row: InterfaceRow, uplink: string | undefined): string | undefined {
+  if (row.name === uplink) return 'uplink'
+  return row.group
+}
+
 function InterfaceItem({
   row,
+  role,
   busy,
   onToggle,
 }: {
   row: InterfaceRow
+  role?: string
   busy: boolean
   onToggle: (on: boolean) => void
 }) {
@@ -205,6 +227,7 @@ function InterfaceItem({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate font-mono text-sm font-medium">{row.name}</span>
+          {role && <Badge variant="secondary">{role}</Badge>}
           {state.badge && <Badge variant={state.badgeVariant}>{state.badge}</Badge>}
         </div>
         <div className="truncate text-[0.8rem] text-muted-foreground">

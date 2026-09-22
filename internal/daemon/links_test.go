@@ -174,14 +174,14 @@ func TestEveryInterfaceConsumerSeesTheSameAdoption(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	firewallInfo, err := firewallLinkView{facts: facts}.Interface("lan0")
+	natInfo, err := natLinkView{facts: facts}.Interface("lan0")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !dnsInfo.Adopted || !gatewayInfo.Adopted || !firewallInfo.Adopted {
-		t.Errorf("adoption reached dns=%v gateway=%v firewall=%v; want all three",
-			dnsInfo.Adopted, gatewayInfo.Adopted, firewallInfo.Adopted)
+	if !dnsInfo.Adopted || !gatewayInfo.Adopted || !natInfo.Adopted {
+		t.Errorf("adoption reached dns=%v gateway=%v nat=%v; want all three",
+			dnsInfo.Adopted, gatewayInfo.Adopted, natInfo.Adopted)
 	}
 }
 

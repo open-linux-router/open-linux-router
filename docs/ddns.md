@@ -33,7 +33,7 @@ What it is not:
 | A public A/AAAA record we keep current | yes | this document |
 | The `_acme-challenge` TXT record | **no** | `ingress` already writes it through Caddy (ingress:§4) |
 | A name on the LAN | no | `dns` answers the local suffix authoritatively (ingress:§3) |
-| A port forward that makes the name useful | **no** | `firewall`'s object and `firewall`'s risk conversation — ingress:§9 already drew this line and it is drawn the same way here |
+| A port forward that makes the name useful | **no** | `gateway`'s object and its risk conversation (docs/port-forwarding.md) — ingress:§9 already drew this line and it is drawn the same way here |
 
 The last row is the one to hold. **A current DNS record does not expose
 anything.** Publishing an address and accepting traffic at it are two decisions,
@@ -295,7 +295,7 @@ that has to answer `status` and participate in design.md §5's apply semantics.
 | Address read, provider rejected | the provider's own error text | retry in a tight loop |
 | Credential wrong or revoked | `badauth`, named as such | treat it as a transient failure |
 | Behind CGNAT | the name resolves to an unreachable address (§3.2) | report a healthy record |
-| Record correct, nothing reachable | nothing — this is `firewall`'s question | imply that publishing exposed anything |
+| Record correct, nothing reachable | nothing — this is port forwarding's question | imply that publishing exposed anything |
 
 The first row is the one this whole design is arranged around. It is the
 failure that upstream's return value cannot express (§4.2) and it is the reason
@@ -313,7 +313,7 @@ the code is vendored.
 | | CGNAT detection in `status` | §3.2 — the diagnosis nothing else offers |
 | **v2** | AAAA | §9 #2 decides what it even means |
 | | the credential shared with `ingress` | §9 #1 |
-| **Never** | the port forward that makes the name useful | `firewall`'s object; §1 |
+| **Never** | the port forward that makes the name useful | `gateway`'s object; §1 |
 | | our own DNS provider API for a provider nobody asked for | the list grows by request, not by completeness |
 | | managing the zone — other records, TTL policy, delegation | this is not a DNS control panel |
 

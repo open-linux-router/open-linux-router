@@ -5,7 +5,6 @@ import {
   Link2,
   Network,
   Router,
-  ShieldCheck,
   Waypoints,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -43,17 +42,18 @@ import type { LucideIcon } from 'lucide-react'
  * a row also read as one system, where "Addresses / DNS / Internet" read as
  * three different registers.
  *
- * Firewall is the exception that proves the rule, and it is named for what it
- * will be rather than what it is: today it holds port forwarding and no
- * filtering at all (docs/firewall.md). The blurb carries the whole feature in
- * one sentence, which is what stops somebody opening it expecting rules.
+ * There is no Firewall section, and its absence is deliberate rather than
+ * pending. The section used to hold port forwarding and no filtering at all;
+ * both halves are under Gateway now, which is the module that owns the boundary
+ * in either direction (docs/port-forwarding.md §0). A label promising a
+ * firewall over a page that has none was the thing worth losing.
  *
  * Devices is absent because it is not a section: the device list is the body of
  * the overview. Filing it under DHCP was considered and rejected — the
  * statically-addressed printer has never held a lease, and would have lived on
  * a page named for the protocol that has never seen it.
  *
- * Ingress is the second exception, and for the opposite reason to Firewall's:
+ * Ingress is the exception, and it is kept rather than argued away:
  * the mechanism name is jargon borrowed from Kubernetes, and most people running
  * a house network have never met it. It is kept anyway, because every other
  * label here is exactly its module's name and `olr ingress` is the command —
@@ -108,7 +108,8 @@ export const SECTIONS: Section[] = [
     // the page the nav already calls first — reachable only by opening a
     // section listed *after* it and going one level down. An operator with two
     // NICs to set up could not find it, which is the whole bug in one sentence.
-    blurb: 'The interfaces this router has been given, and the subnets they carry.',
+    blurb:
+      'The interfaces this router has been given, the subnets they carry, and how the router itself gets online.',
     groups: [],
   },
   {
@@ -116,13 +117,19 @@ export const SECTIONS: Section[] = [
     label: 'Gateway',
     icon: Waypoints,
     end: false,
-    blurb: 'How each network reaches the internet.',
+    blurb: 'The boundary with the internet: where traffic goes out, and what comes in.',
     groups: [
       {
         slug: 'exits',
         label: 'Ways out',
         blurb:
           'Somewhere this router can hand traffic to — another box on your network, a VPN or proxy connection, or nowhere at all.',
+      },
+      {
+        slug: 'forwards',
+        label: 'Port forwards',
+        blurb:
+          'Let something on the internet reach one device here. This is a translation, not a firewall permission — olr has no filtering policy for it to be an exception to.',
       },
       {
         slug: 'usage',
@@ -136,6 +143,12 @@ export const SECTIONS: Section[] = [
         // else's rules are shown so a hand-rolled setup is legible rather than
         // mysterious.
         blurb: 'Rules another program put in place. olr leaves them alone.',
+      },
+      {
+        slug: 'filtering',
+        label: 'Filtering this router does not manage',
+        blurb:
+          'Another program on this box drops traffic passing through the router by default. olr cannot override that, so a forward may be correct and still not reach.',
       },
     ],
   },
@@ -211,27 +224,9 @@ export const SECTIONS: Section[] = [
     ],
   },
   {
-    to: '/firewall',
-    label: 'Firewall',
-    icon: ShieldCheck,
-    end: false,
-    blurb: 'What the internet is allowed to reach on your network.',
-    // The forwards themselves are the landing page: this section has one kind
-    // of object and looking at it is the whole visit. Only the thing olr did
-    // not do gets a page of its own.
-    groups: [
-      {
-        slug: 'unmanaged',
-        label: 'Filtering this router does not manage',
-        blurb:
-          'Another program on this box drops traffic passing through the router by default. olr cannot override that, so a forward may be correct and still not reach.',
-      },
-    ],
-  },
-  {
-    // Beside the firewall rather than beside the gateway, because the two of
-    // them are the same question asked twice: what may come in. The firewall
-    // lets the internet reach one thing; this lets you reach all of it.
+    // Next to the gateway, because the two of them are the same question asked
+    // twice: what may come in. A port forward lets the internet reach one
+    // thing; this lets you reach all of it.
     to: '/remote',
     label: 'Remote access',
     icon: KeyRound,

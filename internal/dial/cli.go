@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/netip"
 	"net/url"
 	"os"
 	"strings"
@@ -21,8 +22,14 @@ import (
 // longer exists.
 
 // Command returns the module's command tree. Mounted explicitly by cmd/olr.
+//
+// Two objects under one module, addressed the way docs/cli.md §1 lays the
+// surface out: `<module> <verb> <object> [<name>]`. So the uplink is
+// `olr dial show|set|rm uplink`, in the object position, exactly as
+// `olr remote set wireguard` puts a singleton there. A record is the one with
+// names, so it keeps the bare `olr dial add <name>` form.
 func Command() *cobra.Command {
-	return cli.NewModule("dial", "Keep a public name pointing at this router",
+	return cli.NewModule("dial", "Internet uplink, and a public name that follows it",
 		showCommand(),
 		addCommand(),
 		setCommand(),
@@ -39,6 +46,7 @@ const (
 	planEndpoint    = base + "/plan"
 	statusEndpoint  = base + "/status"
 	recordsEndpoint = base + "/records"
+	uplinkEndpoint  = base + "/uplink"
 )
 
 // recordEndpoint is the item route for one name.
@@ -112,8 +120,35 @@ func showCommand() *cobra.Command {
 		}
 	})
 
-	c.AddCommand(showRecordsCommand(), showRecordCommand(), showProvidersCommand())
+	c.AddCommand(showUplinkCommand(), showRecordsCommand(), showRecordCommand(), showProvidersCommand())
 	return c
+}
+
+func showUplinkCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "uplink",
+		Short: "Show how this router reaches the internet",
+		Args:  cobra.NoArgs,
+		Long: "Show how this router itself reaches the internet — and whether it is\n" +
+			"actually doing it.\n\n" +
+			"Two halves, printed separately on purpose. The top is what olr was told:\n" +
+			"the interface, its address and the gateway. The bottom is what the kernel\n" +
+			"has right now. The failure worth catching is the one where the top looks\n" +
+			"perfect and the default route goes out of a different interface.",
+		RunE: func(c *cobra.Command, _ []string) error {
+			if err := cli.ReadOnly(c); err != nil {
+				return err
+			}
+			var resp uplinkResponse
+			if err := cli.ClientFor(c).Get(ctxOf(c), uplinkEndpoint, &resp); err != nil {
+				return err
+			}
+			if cli.IsJSON(c) {
+				return cli.JSON(c.OutOrStdout(), resp.Uplink)
+			}
+			return writeUplinkText(c.OutOrStdout(), resp.Uplink)
+		},
+	}
 }
 
 func showRecordsCommand() *cobra.Command {
@@ -394,6 +429,136 @@ func setCommand() *cobra.Command {
 		}
 	})
 	c.ValidArgsFunction = cli.CompleteArgs(recordNames)
+	c.AddCommand(setUplinkCommand())
+	return c
+}
+
+// setUplinkCommand is `olr dial set uplink`.
+//
+// Flags rather than positionals for all three values, which R2 permits and here
+// requires: none of them is the uplink's *identity*. There is one uplink, so
+// there is nothing to say which — and `--interface` in particular is a property
+// that an operator changes on the object that already exists, which is exactly
+// what R2 says a positional must not be.
+func setUplinkCommand() *cobra.Command {
+	var (
+		iface     string
+		address   string
+		gateway   string
+		dns       []string
+		noDNS     bool
+		noAddress bool
+	)
+
+	c := &cobra.Command{
+		Use:   "uplink",
+		Short: "Set how this router reaches the internet",
+		Args:  cobra.NoArgs,
+		Long: "Tell olr how this router itself reaches the internet: which interface\n" +
+			"faces your modem, what address it has, and where to send everything else.\n\n" +
+			"  olr dial set uplink --interface enp2s0 \\\n" +
+			"      --address 192.168.2.9/24 --gateway 192.168.2.1\n\n" +
+			"The address keeps its host bits — 192.168.2.9/24, not 192.168.2.0/24.\n" +
+			"It is this box's address on the link, and the mask says how big the link\n" +
+			"is.\n\n" +
+			"From then on olr owns that interface's address and the default route, and\n" +
+			"puts both back after a reboot. The interface must be adopted and must not\n" +
+			"carry a network: a network is something this router *serves*, and the way\n" +
+			"out is not one.\n\n" +
+			"This connects the router. It does not connect the networks behind it —\n" +
+			"for that, add a gateway exit pointing at the same next hop and send your\n" +
+			"networks through it, or their traffic leaves untranslated and nothing\n" +
+			"comes back.\n\n" +
+			"Changing the address or the gateway can drop the session you are typing\n" +
+			"into; --dry-run shows what would move before you commit to it.",
+		RunE: func(c *cobra.Command, _ []string) error {
+			if c.Flags().NFlag() == 0 {
+				return fmt.Errorf("nothing to set; see `olr dial set uplink --help`")
+			}
+			if err := cli.ValidateOutput(c); err != nil {
+				return err
+			}
+
+			cfg, err := loadConfig(c)
+			if err != nil {
+				return err
+			}
+			next := cfg.Clone()
+			u := next.Uplink.Clone()
+			if u == nil {
+				u = &Uplink{}
+			}
+
+			if c.Flags().Changed("interface") {
+				u.Interface = iface
+			}
+			if u.Interface == "" {
+				// Caught here rather than at the daemon so the message can name
+				// the flag rather than the field.
+				return fmt.Errorf("say which interface faces your modem: --interface <name>")
+			}
+
+			switch {
+			case noAddress:
+				u.IPv4 = nil
+			case c.Flags().Changed("address"), c.Flags().Changed("gateway"):
+				if u.IPv4 == nil {
+					u.IPv4 = &UplinkIPv4{}
+				}
+				if c.Flags().Changed("address") {
+					prefix, err := netip.ParsePrefix(strings.TrimSpace(address))
+					if err != nil {
+						return fmt.Errorf("--address: %w; give it with a mask, "+
+							"such as 192.168.2.9/24", err)
+					}
+					u.IPv4.Address = prefix
+				}
+				if c.Flags().Changed("gateway") {
+					gw, err := netip.ParseAddr(strings.TrimSpace(gateway))
+					if err != nil {
+						return fmt.Errorf("--gateway: %w", err)
+					}
+					u.IPv4.Gateway = gw
+				}
+			}
+
+			switch {
+			case noDNS:
+				u.DNS = nil
+			case c.Flags().Changed("dns"):
+				u.DNS = nil
+				for _, s := range dns {
+					addr, err := netip.ParseAddr(strings.TrimSpace(s))
+					if err != nil {
+						return fmt.Errorf("--dns: %w", err)
+					}
+					u.DNS = append(u.DNS, addr)
+				}
+			}
+
+			next.SetUplink(*u)
+			if cli.DryRun(c) {
+				return planAndPrint(c, next)
+			}
+			return applyAndPrint(c, "PUT", uplinkEndpoint, u)
+		},
+	}
+
+	c.Flags().StringVar(&iface, "interface", "", "the interface facing your modem or your ISP")
+	c.Flags().StringVar(&address, "address", "",
+		"this box's address on that link, with its mask, such as 192.168.2.9/24")
+	c.Flags().BoolVar(&noAddress, "no-address", false,
+		"olr owns the interface but writes no address and no route")
+	c.Flags().StringVar(&gateway, "gateway", "",
+		"where to send everything else — your modem's address on that link")
+	c.Flags().StringArrayVar(&dns, "dns", nil,
+		"resolver your ISP gave you (repeatable). Recorded only; nothing reads these yet")
+	c.Flags().BoolVar(&noDNS, "no-dns", false, "forget the recorded ISP resolvers")
+
+	c.MarkFlagsMutuallyExclusive("address", "no-address")
+	c.MarkFlagsMutuallyExclusive("gateway", "no-address")
+	c.MarkFlagsMutuallyExclusive("dns", "no-dns")
+	_ = c.RegisterFlagCompletionFunc("interface", cli.CompleteFlag(interfaceNames))
 	return c
 }
 
@@ -426,7 +591,43 @@ func rmCommand() *cobra.Command {
 		}
 	})
 	c.ValidArgsFunction = cli.CompleteArgs(recordNames)
+	c.AddCommand(rmUplinkCommand())
 	return c
+}
+
+func rmUplinkCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "uplink",
+		Short: "Stop owning how this router reaches the internet",
+		Args:  cobra.NoArgs,
+		Long: "Hand the way out back.\n\n" +
+			"Nothing is torn down. The interface keeps the address it has and the\n" +
+			"default route stays exactly where it is, so this box does not go offline.\n" +
+			"What stops is olr owning them: it will not put them back after a reboot,\n" +
+			"and it will not replace the route when something else changes it.\n\n" +
+			"Do this when you are handing the interface to your distribution's network\n" +
+			"configuration. Give it the same address there before you reboot, or the\n" +
+			"box comes back with no way out and nothing that knows what it had.",
+		RunE: func(c *cobra.Command, _ []string) error {
+			if err := cli.ValidateOutput(c); err != nil {
+				return err
+			}
+			cfg, err := loadConfig(c)
+			if err != nil {
+				return err
+			}
+			if cfg.Uplink == nil {
+				return fmt.Errorf("olr does not own this box's uplink; " +
+					"there is nothing to hand back")
+			}
+			if cli.DryRun(c) {
+				desired := cfg.Clone()
+				desired.RemoveUplink()
+				return planAndPrint(c, desired)
+			}
+			return applyAndPrint(c, "DELETE", uplinkEndpoint, nil)
+		},
+	}
 }
 
 // ---------------------------------------------------------------- status
@@ -500,7 +701,13 @@ func applyAndPrint(c *cobra.Command, method, path string, body any) error {
 	if cli.IsJSON(c) {
 		return cli.JSON(c.OutOrStdout(), result)
 	}
-	return writePlanText(c.OutOrStdout(), result.Plan, false)
+	if err := writePlanText(c.OutOrStdout(), result.Plan, false); err != nil {
+		return err
+	}
+	// An uplink change continues into the kernel and can land halfway. §5.2
+	// gives it no rollback, so what did happen is printed rather than swallowed
+	// — writeSteps stays quiet when every step succeeded.
+	return writeSteps(c.OutOrStdout(), result.Steps)
 }
 
 // readToken gets the credential from wherever the operator put it.

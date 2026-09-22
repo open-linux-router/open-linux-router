@@ -9,7 +9,7 @@ import type { IngressConfig, Service } from '@/lib/config-types'
 // a fetch-based reader, and neither is worth inventing before there is live data
 // to carry.
 //
-// This screen polls more slowly than the firewall's, and for the opposite
+// This screen polls more slowly than the port forwards', and for the opposite
 // reason. Nothing here changes second to second — a certificate moves once every
 // sixty days — but two things do move on their own: a certificate appears a
 // minute or two after the module is first enabled, and a device's address can

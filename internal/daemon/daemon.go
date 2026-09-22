@@ -36,8 +36,8 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dial"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
-	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
+	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/mcp"
@@ -164,20 +164,19 @@ func run(args []string) error {
 	// `dhcp` then `dns` is §3.2's own literal list, and it is also the order
 	// they matter in on a box being brought up: addresses first, then names.
 	// `devices` follows both rather than leading them. Its identity half is a
-	// foundation object that `firewall` and `qos` will reference (§4.4), but its
+	// foundation object that `gateway` and `qos` will reference (§4.4), but its
 	// presence half reads the lease database through `dhcp`, so it is the last
 	// of the three to come up.
 	// `gateway` sits after them all, because an exit is only useful once
 	// clients have addresses and names — and because docs/gateway.md §4 has its
-	// domain half depending on `dns` owning :53, not the other way round.
-	// `firewall` reads as a pair with `gateway`: one decides where traffic
-	// leaving here goes, the other decides what arriving here is allowed in to.
-	// docs/firewall.md §6 records the one place they meet — a forwarded
-	// connection's reply must not be handed to an exit.
-	// `remote` follows that pair and completes the direction: `gateway` decides
-	// where traffic leaving a network goes, `firewall` what may come in to one
-	// service, and `remote` how the operator themselves gets back in to all of
-	// it (docs/remote-access.md §1). It reads `link`'s networks for what to push
+	// domain half depending on `dns` owning :53, not the other way round. It
+	// is one section carrying both directions across that boundary: where
+	// traffic leaving a network goes, and what arriving from outside is
+	// translated in to. docs/port-forwarding.md §6 records the one place the
+	// two meet — a forwarded connection's reply must not be handed to an exit.
+	// `remote` follows it and completes the direction: `gateway` decides what
+	// crosses the boundary for a network, and `remote` how the operator
+	// themselves gets back in to all of it (docs/remote-access.md §1). It reads `link`'s networks for what to push
 	// into a client's tunnel, so it comes after `link` and depends on nothing
 	// else.
 	// `ingress` is last and is the only one that is not networking at all
@@ -185,7 +184,7 @@ func run(args []string) error {
 	// `devices` for what to point at, so it cannot come up before either.
 	store := core.NewStore(core.RootedConfigPath(opts.root),
 		link.ModuleName, dial.ModuleName, dhcp.ModuleName, dns.ModuleName,
-		devices.ModuleName, gateway.ModuleName, firewall.ModuleName,
+		devices.ModuleName, gateway.ModuleName,
 		remote.ModuleName, ingress.ModuleName)
 	checkStore(store, logger)
 
@@ -207,7 +206,7 @@ func run(args []string) error {
 	groups := dhcpGroupView{facts: facts}
 	dnsLinks := dnsLinkView{facts: facts}
 	gatewayLinks := gatewayLinkView{facts: facts}
-	firewallLinks := firewallLinkView{facts: facts}
+	natLinks := natLinkView{facts: facts}
 	dialLinks := dialLinkView{facts: facts}
 
 	applier, err := dhcp.NewApplierAt(store, groups, opts.root)
@@ -252,9 +251,11 @@ func run(args []string) error {
 	}.Routes(), link.Config{})
 
 	// `dial` is mounted second, matching the store's order. Like `link` it drives
-	// no unit and renders no file, and like `gateway` it has a background loop
-	// inside olrd — the publisher, which re-reads each uplink address on a timer
-	// and calls a DNS provider only when one moved (docs/ddns.md §6).
+	// no unit and renders no file and programs the kernel directly — an address,
+	// the interface's state, and the default route in the main table — and like
+	// `gateway` it has a background loop inside olrd: the publisher, which
+	// re-reads each uplink address on a timer and calls a DNS provider only when
+	// one moved (docs/ddns.md §6).
 	//
 	// The loop is reached through two function fields rather than held by the
 	// module, exactly as the prober is below: it belongs to the process, so an
@@ -318,7 +319,12 @@ func run(args []string) error {
 		Links:  gatewayLinks,
 		Store:  store,
 		Probes: prober,
+		// The one fact the egress masquerade needs, read through `dial`. This
+		// is design.md §4.1's `dial → gateway` arrow, and the first thing to
+		// walk it.
+		Uplink: gatewayUplink{store: store},
 	}
+	natApplier := gatewayApplier.NATApplier(nat.NewKernel(), natLinks)
 	prober.OnChange = func(exit string, up bool) {
 		// An exit changed state, so the routing the kernel should hold has
 		// changed with it — a dead exit's traffic goes to `unreachable`, and a
@@ -328,33 +334,25 @@ func run(args []string) error {
 		reapplyGateway(gatewayApplier, srv, logger, exit, up)
 	}
 
+	// One mount for the whole module, both halves. The NAT routes are appended
+	// to the routing ones under the same prefix (gateway.HTTP.NAT), so `olr
+	// routes` and the MCP tool list see one module rather than the two packages
+	// that implement it.
 	srv.Mount(gateway.ModuleName, gateway.HTTP{
 		Applier: gatewayApplier,
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
 		Watch:   func(cfg gateway.Config) { prober.Watch(context.Background(), cfg) },
+		NAT: &nat.HTTP{
+			Applier: natApplier,
+			Lock:    srv.ApplyLock(),
+			Events:  srv.Events(),
+		},
 	}.Routes(), gateway.Config{})
 
-	// `firewall` is the second module whose configuration lives in the kernel
+	// `remote` is the second module whose configuration lives in the kernel
 	// rather than in a file some backend reads, so it is applied at startup for
-	// the same reason `gateway` is (below). It has no prober: a forward has no
-	// far end whose liveness could be measured, and the counter on each rule is
-	// what answers the question a probe would have.
-	firewallApplier := firewall.Applier{
-		Kernel: firewall.NewKernel(),
-		Links:  firewallLinks,
-		Store:  store,
-	}
-
-	srv.Mount(firewall.ModuleName, firewall.HTTP{
-		Applier: firewallApplier,
-		Lock:    srv.ApplyLock(),
-		Events:  srv.Events(),
-	}.Routes(), firewall.Config{})
-
-	// `remote` is the third module whose configuration lives in the kernel
-	// rather than in a file some backend reads, so it is applied at startup for
-	// the same reason `gateway` and `firewall` are (below). It supervises no
+	// the same reason `gateway` is (below). It supervises no
 	// unit at all, and that is not an omission: WireGuard's data path is in the
 	// kernel, so there is no process for systemd to watch
 	// (docs/remote-access.md §7.1).
@@ -475,6 +473,13 @@ func run(args []string) error {
 	// of it. link.Applier.Restore has the rest, including why it is additive
 	// where an operator's apply is not.
 	//
+	// `dial` comes straight after it, which is the store's order and the order
+	// a box is brought up in: the two foundation modules, addresses and then
+	// the way out. It is on this list for the same reason `link` is — an
+	// address and a default route are kernel state and the kernel forgets both
+	// — and the consequence of leaving it off would be worse, because the thing
+	// missing after the reboot is how anybody reaches the box to notice.
+	//
 	// `dns` is here for a different reason, and it is the reason the other
 	// file-rendering module is not. dnsmasq and unbound read files that survive
 	// a reboot, so for years this line read "and they are the only three modules
@@ -496,10 +501,10 @@ func run(args []string) error {
 	// programmed is exactly the box whose API has to come up, because the API is
 	// how it gets fixed.
 	startLink(ctx, linkApplier, logger)
-	startGateway(ctx, gatewayApplier, prober, logger)
-	startFirewall(ctx, firewallApplier, logger)
-	startRemote(ctx, remoteTunnel, remoteProxy, logger)
 	startDial(ctx, dialApplier, publisher, logger)
+	startGateway(ctx, gatewayApplier, prober, logger)
+	startForwards(ctx, natApplier, logger)
+	startRemote(ctx, remoteTunnel, remoteProxy, logger)
 	startDNS(ctx, dnsApplier, logger)
 
 	// And then keep looking. The line above converges the service half once, at
@@ -826,20 +831,24 @@ func startLink(ctx context.Context, a link.Applier, logger *slog.Logger) {
 	}
 }
 
-// startFirewall programs stored port forwards.
+// startForwards programs the stored port forwards and the egress masquerade.
 //
 // Simpler than startGateway because there is nothing to refuse and nothing to
-// watch: this module never blocks on another program owning its table — a
-// foreign filter is reported, not treated as a conflict (docs/firewall.md §5.2)
+// watch: this half never blocks on another program owning its table — a foreign
+// filter is reported, not treated as a conflict (docs/port-forwarding.md §5.2)
 // — and it has no prober to start afterwards.
-func startFirewall(ctx context.Context, a firewall.Applier, logger *slog.Logger) {
+//
+// It runs even on a box with no forwards, because the egress masquerade is the
+// other thing in this table and a LAN that reaches the internet depends on it
+// coming back after a reboot (docs/gateway.md §3.9).
+func startForwards(ctx context.Context, a nat.Applier, logger *slog.Logger) {
 	cfg, err := a.Load()
 	if err != nil {
-		logger.Error("firewall configuration could not be read; nothing was programmed",
+		logger.Error("port forwarding configuration could not be read; nothing was programmed",
 			"error", err)
 		return
 	}
-	if cfg.Empty() && !cfg.Enabled {
+	if cfg.Empty() && cfg.Egress.Empty() {
 		return
 	}
 
@@ -985,26 +994,75 @@ func startRemote(ctx context.Context, tunnel remote.TunnelApplier, proxy remote.
 	}
 }
 
-// startDial hands the stored records to the publisher.
+// startDial puts the uplink back and hands the stored records to the publisher.
 //
-// Nothing is programmed here and nothing can fail: unlike gateway and firewall
-// there is no kernel state to restore, because this module's effect lives at a
-// third party rather than on the box. What starting does is begin checking, and
-// the first check of every record publishes — the address cache is in memory and
-// a restart empties it (docs/ddns.md §6), which is also how a record somebody
-// changed by hand at the provider gets repaired.
+// Two halves that fail differently, which is why they are not one call.
+//
+// The uplink is kernel state and the kernel forgets it: an address and a
+// default route are gone after a reboot, and nothing else on the box knows what
+// they were. That is the same argument that put link.Applier.Restore in this
+// list, and it bites harder here — what the box comes back without is its way
+// out, so the operator cannot even reach the API to fix it. Restore is additive
+// and never fatal; dial.Applier.Restore has the rest.
+//
+// The records program nothing. Their effect lives at a third party rather than
+// on the box, so what starting does is begin *checking*, and the first check of
+// every record publishes — the address cache is in memory and a restart empties
+// it (docs/ddns.md §6), which is also how a record somebody changed by hand at
+// the provider gets repaired.
 func startDial(ctx context.Context, a dial.Applier, publisher *dial.Publisher, logger *slog.Logger) {
 	cfg, err := a.Load()
 	if err != nil {
-		logger.Error("dial configuration could not be read; no name will be kept current",
-			"error", err)
+		logger.Error("dial configuration could not be read; "+
+			"the uplink will not be restored and no name will be kept current", "error", err)
 		return
 	}
 	if cfg.Empty() {
+		// Silent, like startLink's empty case: a box with no uplink and no
+		// records is the ordinary state of a fresh install, and a line on every
+		// boot of every such box teaches an operator to skim exactly the lines
+		// this block writes when something is wrong.
 		return
 	}
-	publisher.Watch(ctx, cfg)
-	logger.Info("keeping names current", "records", len(cfg.Records))
+
+	restoreUplink(ctx, a, cfg, logger)
+
+	if len(cfg.Records) > 0 {
+		publisher.Watch(ctx, cfg)
+		logger.Info("keeping names current", "records", len(cfg.Records))
+	}
+}
+
+// restoreUplink is the kernel half of startDial.
+func restoreUplink(ctx context.Context, a dial.Applier, cfg dial.Config, logger *slog.Logger) {
+	if cfg.Uplink == nil {
+		return
+	}
+	steps, err := a.Restore(ctx)
+	if err != nil {
+		logger.Error("the uplink could not be restored", "error", err,
+			"interface", cfg.Uplink.Interface, "steps", len(steps))
+		return
+	}
+
+	var done int
+	for _, s := range steps {
+		if s.Done {
+			done++
+		}
+		if s.Error != "" {
+			// Per step rather than per call, matching startLink: a restore that
+			// half-lands is reported as what landed and what did not, the same
+			// way the writer reports it to an operator.
+			logger.Error("uplink step failed", "step", s.Description, "error", s.Error)
+		}
+	}
+	if done > 0 {
+		// Only when something was actually programmed. An idempotent restore
+		// against a box that never rebooted is the normal case and says
+		// nothing.
+		logger.Info("uplink restored", "interface", cfg.Uplink.Interface, "changes", done)
+	}
 }
 
 // reapplyGateway re-programs the kernel after an exit changed health.

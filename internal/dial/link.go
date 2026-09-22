@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"sort"
 )
 
@@ -16,13 +17,18 @@ import (
 // facts its own module needs, and the binary that mounts them all adapts link's
 // neutral Info into every one of them.
 //
-// What `dial` needs and the others do not is the smallest set of the five: an
-// interface's addresses, because publishing one is the whole job, and whether
-// the operator adopted it, because reading an address off an interface nobody
-// handed over is the surprise design.md §3.4 exists to prevent. It also needs
-// the *pair* — an adopted interface with no address is the ordinary state of a
-// WAN link that has not come up yet, and saying so is different from saying the
-// interface does not exist.
+// What `dial` needs is an interface's addresses, because publishing one is the
+// whole job, and whether the operator adopted it, because reading an address
+// off an interface nobody handed over is the surprise design.md §3.4 exists to
+// prevent. It also needs the *pair* — an adopted interface with no address is
+// the ordinary state of a WAN link that has not come up yet, and saying so is
+// different from saying the interface does not exist.
+//
+// Groups is the one thing this view has that the narrow four do not, and it is
+// here for a boundary rather than for a feature: the uplink's interface must
+// not also be a `link` network's member (Uplink.Interface), and the only way to
+// check that is to see the networks. It is the same read `dhcp` does, through
+// the same link.Facts, narrowed to the two fields the refusal message needs.
 type LinkView interface {
 	// Interface returns what is known about an interface, or ErrNoSuchInterface.
 	Interface(name string) (LinkInfo, error)
@@ -30,6 +36,32 @@ type LinkView interface {
 	// Interfaces lists everything link knows about, in a stable order. Used by
 	// the CLI's completion and by nothing that decides anything.
 	Interfaces() ([]LinkInfo, error)
+
+	// Groups lists the networks this box serves.
+	Groups() ([]GroupInfo, error)
+}
+
+// GroupInfo is one of `link`'s networks, narrowed to what `dial` reads.
+//
+// Two fields and no observed half, because `dial` never asks whether a network
+// is working — it asks whether one already claims the interface an uplink is
+// about to take, and what to call it in the refusal.
+type GroupInfo struct {
+	// Name is the network's name, as the operator typed it.
+	Name string
+
+	// Members are the interfaces it lives on.
+	Members []string
+}
+
+// groupFor returns the network that claims an interface, if one does.
+func groupFor(groups []GroupInfo, iface string) (GroupInfo, bool) {
+	for _, g := range groups {
+		if slices.Contains(g.Members, iface) {
+			return g, true
+		}
+	}
+	return GroupInfo{}, false
 }
 
 // LinkInfo is the subset of an interface's state a published address depends
@@ -78,6 +110,11 @@ func (l LinkInfo) PublicIPv4() (netip.Addr, bool) {
 }
 
 // StaticLinks is a LinkView backed by a map, for tests.
+//
+// It reports no networks. A map keyed by interface has nowhere to put them, and
+// widening it to a struct would rewrite every literal in this package's tests
+// for the sake of the handful that care — StaticView is the one to reach for
+// when a test needs both halves.
 type StaticLinks map[string]LinkInfo
 
 // Interface implements LinkView.
@@ -110,3 +147,23 @@ func (s StaticLinks) Interfaces() ([]LinkInfo, error) {
 	}
 	return out, nil
 }
+
+// Groups implements LinkView, reporting none.
+func (StaticLinks) Groups() ([]GroupInfo, error) { return nil, nil }
+
+// StaticView is a LinkView with networks as well as interfaces, for the tests
+// that need both — chiefly the refusal that stops an uplink taking an interface
+// a network already carries.
+type StaticView struct {
+	Links    StaticLinks
+	Networks []GroupInfo
+}
+
+// Interface implements LinkView.
+func (v StaticView) Interface(name string) (LinkInfo, error) { return v.Links.Interface(name) }
+
+// Interfaces implements LinkView.
+func (v StaticView) Interfaces() ([]LinkInfo, error) { return v.Links.Interfaces() }
+
+// Groups implements LinkView.
+func (v StaticView) Groups() ([]GroupInfo, error) { return v.Networks, nil }

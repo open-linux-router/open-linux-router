@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
 )
 
 // The module's REST surface (design.md §3.2 rule 2, §6.2).
@@ -35,6 +36,16 @@ type HTTP struct {
 	// Watch is called after a successful apply so the prober can follow the new
 	// config. Nil is legal and means nothing is being probed.
 	Watch func(Config)
+
+	// NAT serves the other half of this module — the port forwards, and with
+	// them the `olr_nat` table (internal/gateway/nat). Its routes are appended
+	// to this module's, under the same prefix, so that one module has one
+	// mount point however many packages implement it.
+	//
+	// The zero value serves nothing, which is what the conformance walk needs:
+	// it calls Routes() on a zero HTTP and must not have to build a kernel to
+	// do it.
+	NAT *nat.HTTP
 }
 
 // Routes is the module's surface, declared as data so that it can be
@@ -57,7 +68,7 @@ func (h HTTP) Routes() []core.Route {
 		},
 	}
 
-	return []core.Route{
+	routes := []core.Route{
 		// Intent, whole document. Still the way to restore a backup or make
 		// several changes at once; the routes below are additions, not
 		// replacements.
@@ -168,6 +179,14 @@ func (h HTTP) Routes() []core.Route {
 			Handler: h.getTraffic,
 		},
 	}
+
+	// The NAT half's routes, under the same prefix. Appended rather than
+	// interleaved so that `olr routes` reads in the order the document does:
+	// the routing half, then the translation half.
+	if h.NAT != nil {
+		routes = append(routes, h.NAT.Routes()...)
+	}
+	return routes
 }
 
 // Handler returns the module's routes.

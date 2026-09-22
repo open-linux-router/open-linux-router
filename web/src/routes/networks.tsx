@@ -15,6 +15,7 @@ import { Disclosure } from '@/components/ui/disclosure'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDhcpConfig } from '@/features/dhcp/queries'
+import { UplinkCard } from '@/features/dial/uplink-card'
 import { InterfacesCard } from '@/features/link/interfaces-card'
 import { NetworkDialog } from '@/features/link/network-dialog'
 import { useNetworkEditor } from '@/features/link/use-networks'
@@ -30,6 +31,18 @@ import type { Group } from '@/lib/config-types'
  * interface already had — and if you wanted a different subnet, the form said
  * so and there was nowhere in olr to go and change it. The subnet is declared
  * here now, and the range is checked against it.
+ *
+ * ## The three sections, and why they are one page
+ *
+ * Interfaces, then networks, then the uplink — which is the order of the work
+ * and, deliberately, not the order of importance. An interface has to be handed
+ * over before anything can use it; after that it becomes either a network this
+ * router *serves* or the one way *out*, and those are different objects with
+ * different owners. Splitting them across pages is what produced the dead end
+ * below and the one the uplink section closes: somebody with three NICs gave
+ * the modem-facing one a static address under Networks, because that was the
+ * only place in olr that would take an address, and then had nowhere to put a
+ * gateway.
  *
  * ## Why adoption is on this page, above the networks
  *
@@ -143,6 +156,19 @@ export function NetworksPage() {
             ))}
           </List>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <div className="space-y-1">
+          <h2 className="text-lg font-medium tracking-tight">Internet uplink</h2>
+          <p className="max-w-prose text-sm text-muted-foreground">
+            How this router itself reaches the internet: the interface facing your modem, its
+            address, and where to send everything else. Not a network — a network is one this
+            router serves, and it hands out addresses there. Leave this alone if something else
+            on the box already provides the default route.
+          </p>
+        </div>
+        <UplinkCard interfaces={editor.interfaces} />
       </section>
 
       {editor.problems.length > 0 && (
