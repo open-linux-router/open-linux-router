@@ -53,12 +53,27 @@ export function InterfacesCard({
   /** A release held back because a pool still names the interface. */
   const [confirming, setConfirming] = useState<InterfaceRow | null>(null)
 
-  const busy = disabled || apply.isPending
+  // Locked until the stored config has been read, because write() needs it to
+  // build a complete body and a switch that silently does nothing is worse than
+  // one that is visibly not ready yet.
+  const busy = disabled || apply.isPending || config.isPending
   const rows = interfaces.data?.interfaces ?? []
   const adopted = config.data?.adopted ?? []
 
   /**
    * Writes the new adopted set, announcing only what actually landed.
+   *
+   * The whole stored document goes on the wire, not just the field this card
+   * owns. `PUT /api/link/config` is `BodyFull` — it *replaces* the module's
+   * config — so a body of `{adopted}` alone deleted every network, and deleted
+   * them silently in the worst possible way: PlanAddrs walks the groups, so an
+   * empty list produced no kernel steps at all, and each interface kept the
+   * address whose reason for existing had just been thrown away. Flipping one
+   * switch here showed a success toast and lost the network on a different NIC.
+   *
+   * Nothing is written before the config has been read, for the same reason: an
+   * undefined `config.data` spread into the body is a body with no networks in
+   * it, which is the bug again with a narrower window.
    *
    * `done` is awaited rather than fired alongside the call: a toast published
    * before the mutation resolves would sit on screen next to the error toast
@@ -66,8 +81,12 @@ export function InterfacesCard({
    * one click.
    */
   async function write(next: string[], done: string) {
+    if (!config.isSuccess) return
     try {
-      await apply.mutateAsync({ adopted: next.length ? next : undefined })
+      await apply.mutateAsync({
+        ...config.data,
+        adopted: next.length ? next : undefined,
+      })
       toast.success(done)
     } catch (error) {
       if (error instanceof ApiError) {

@@ -38,11 +38,21 @@ export function useInterfaces() {
 /**
  * Adopts or releases interfaces.
  *
- * No plan preview beforehand, unlike every dhcp write. That is not a shortcut:
- * this module's plan is always `impact: none` because adoption touches nothing
- * on the box, so the round trip could only ever return "go ahead". The one
- * consequence worth warning about — a pool that will stop validating — is not
- * in this module's plan at all and is joined client-side by the card.
+ * No plan preview beforehand, unlike every dhcp write. This used to be
+ * justified as "this module's plan is always `impact: none`", which stopped
+ * being true the day `link` grew networks: the same endpoint writes addresses
+ * to the kernel now, and its plan reports `disruptive` when it does.
+ *
+ * The narrower claim still holds and is the one to state: an *adoption-only*
+ * change touches nothing on the box, so its plan is empty and the round trip
+ * could only ever return "go ahead". That is a claim about the body rather than
+ * about the module — it holds only while the caller sends the stored networks
+ * back unchanged, which is exactly what features/link/interfaces-card failed to
+ * do. Anything that changes a network belongs on useNetworkEditor's path, which
+ * plans first and stops when the plan is disruptive.
+ *
+ * The one consequence worth warning about — a pool that will stop validating —
+ * is not in this module's plan at all and is joined client-side by the card.
  */
 export function useApplyLinkConfig() {
   const queryClient = useQueryClient()
