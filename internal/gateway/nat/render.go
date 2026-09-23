@@ -343,14 +343,24 @@ func (r MasqRule) Line() string {
 // Line is this rule's canonical form, stored in its userdata for the same
 // reason. `out` rather than `from … to …` so that an egress rule cannot be
 // mistaken for a hairpin masquerade by a reader or by the planner's set diff.
+//
+// The sources are sorted here rather than trusted to arrive sorted, because
+// this line is also rebuilt from the kernel's set (egressLine), which hands
+// them back in address order — and 172.16.10.0/24 sorts after 172.16.2.0/24
+// by address but before it as text.
 func (r EgressRule) Line() string {
 	sources := make([]string, 0, len(r.Sources))
 	for _, p := range r.Sources {
 		sources = append(sources, p.String())
 	}
-	return fmt.Sprintf("nft egress out %s from %s counter %s",
+	slices.Sort(sources)
+	return fmt.Sprintf(egressLinePrefix+"out %s from %s counter %s",
 		r.Out, strings.Join(sources, ","), r.Counter)
 }
+
+// egressLinePrefix starts every egress line, which is how the observer knows to
+// read that rule back from the kernel rather than from its comment.
+const egressLinePrefix = "nft egress "
 
 // target spells an address and its ports the way nft does, so the canonical line
 // reads like the rule it describes.

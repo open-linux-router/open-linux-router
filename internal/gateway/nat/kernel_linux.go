@@ -3,10 +3,13 @@
 package nat
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/netip"
+	"slices"
 	"sort"
+	"strings"
 
 	"github.com/google/nftables"
 	"github.com/google/nftables/binaryutil"
@@ -85,6 +88,9 @@ func (k LinuxKernel) Observe(_ context.Context) (Observed, error) {
 // and has not built. The cost is bounded in the meantime: every apply replaces
 // the table wholesale in one transaction, so a hand-edit is *corrected* on the
 // next apply even while it goes unreported.
+//
+// The egress rule is the one exception, read from what it does rather than
+// from its comment — egressLine has why.
 func observeTable(conn *nftables.Conn) ([]string, map[string]Counter, error) {
 	counters := map[string]Counter{}
 
@@ -131,6 +137,9 @@ func observeTable(conn *nftables.Conn) ([]string, map[string]Counter, error) {
 		}
 		for _, r := range rules {
 			if line, ok := userdata.GetString(r.UserData, userdata.TypeComment); ok {
+				if strings.HasPrefix(line, egressLinePrefix) {
+					line = egressLine(conn, table, r)
+				}
 				out = append(out, line)
 			} else {
 				// A rule in our table that we did not label. Reported as an
@@ -143,6 +152,116 @@ func observeTable(conn *nftables.Conn) ([]string, map[string]Counter, error) {
 	}
 
 	return out, counters, nil
+}
+
+// egressLine reads the egress rule back from its expressions and its set,
+// in the canonical form EgressRule.Line renders.
+//
+// The one rule in this table that closes observeTable's known gap, and for a
+// concrete reason rather than as a start on the general reader: its set is
+// where a wrong encoding hides. v0.2.4-dev built 172.16.1.0/24 as the interval
+// [172.16.1.0, 172.16.1.1) under a comment that still said `from
+// 172.16.1.0/24`, so a comment read called the broken table current, and a
+// fixed binary never replaced it on a box that had already applied once —
+// the stat table's problem (internal/gateway's statRuleLines), met again. Read
+// from the set, the rule says what it matches, and a difference is drift that
+// the next apply, or olrd's start, rebuilds.
+//
+// Anything that cannot be read back is reported as a line no config renders,
+// which rebuilds too: the safe direction to fail in.
+func egressLine(conn *nftables.Conn, table *nftables.Table, r *nftables.Rule) string {
+	const unreadable = egressLinePrefix + "rule that could not be read back"
+
+	var rule EgressRule
+	var setName string
+	for i, e := range r.Exprs {
+		switch e := e.(type) {
+		case *expr.Meta:
+			if e.Key != expr.MetaKeyOIFNAME || i+1 >= len(r.Exprs) {
+				continue
+			}
+			if c, ok := r.Exprs[i+1].(*expr.Cmp); ok {
+				rule.Out = string(bytes.TrimRight(c.Data, "\x00"))
+			}
+		case *expr.Lookup:
+			setName = e.SetName
+		case *expr.Objref:
+			rule.Counter = e.Name
+		}
+	}
+	if setName == "" {
+		return unreadable
+	}
+
+	set, err := conn.GetSetByName(table, setName)
+	if err != nil {
+		return unreadable
+	}
+	elements, err := conn.GetSetElements(set)
+	if err != nil {
+		return unreadable
+	}
+	sources, ok := egressSources(elements)
+	if !ok {
+		return egressLinePrefix + "set that is not a list of prefixes"
+	}
+	rule.Sources = sources
+	return rule.Line()
+}
+
+// egressSources turns an interval set's elements back into the prefixes
+// egressSet built them from, or reports that they are not such a list.
+//
+// The kernel hands elements back in no useful order, so they are sorted first:
+// by address, and an interval end before a start at the same address, which
+// is how two adjacent networks' elements sit.
+func egressSources(elements []nftables.SetElement) ([]netip.Prefix, bool) {
+	elements = slices.Clone(elements)
+	slices.SortFunc(elements, func(a, b nftables.SetElement) int {
+		if c := bytes.Compare(a.Key, b.Key); c != 0 {
+			return c
+		}
+		switch {
+		case a.IntervalEnd == b.IntervalEnd:
+			return 0
+		case a.IntervalEnd:
+			return -1
+		}
+		return 1
+	})
+	if len(elements)%2 != 0 {
+		return nil, false
+	}
+
+	out := make([]netip.Prefix, 0, len(elements)/2)
+	for i := 0; i < len(elements); i += 2 {
+		start, end := elements[i], elements[i+1]
+		if start.IntervalEnd || !end.IntervalEnd {
+			return nil, false
+		}
+		addr, ok := netip.AddrFromSlice(start.Key)
+		if !ok || !addr.Is4() {
+			return nil, false
+		}
+		p, ok := prefixSpanning(addr, end.Key)
+		if !ok {
+			return nil, false
+		}
+		out = append(out, p)
+	}
+	return out, true
+}
+
+// prefixSpanning finds the prefix whose interval is [start, end), through
+// nextPrefix itself so that whatever it writes it also reads.
+func prefixSpanning(start netip.Addr, end []byte) (netip.Prefix, bool) {
+	for bits := 0; bits <= 32; bits++ {
+		p := netip.PrefixFrom(start, bits)
+		if p.Masked().Addr() == start && bytes.Equal(nextPrefix(p), end) {
+			return p, true
+		}
+	}
+	return netip.Prefix{}, false
 }
 
 func ourTable(conn *nftables.Conn) (*nftables.Table, error) {
@@ -517,10 +636,20 @@ func egressSet(table *nftables.Table, sources []netip.Prefix) (*nftables.Set, []
 // nextPrefix is the first address after a prefix, which is the exclusive upper
 // bound an interval set element needs.
 //
+// That is the prefix's *last* address plus one, so the host bits are filled in
+// before the increment. Incrementing the network address instead is the easy
+// mistake, and a silent one: 172.16.1.0/24 becomes the set [172.16.1.0,
+// 172.16.1.1), which no device on the network is ever in, and the egress
+// masquerade matches nothing.
+//
 // Saturating rather than wrapping: the last prefix in the address space has no
 // "next", and 0.0.0.0 as an interval end would invert the range.
 func nextPrefix(p netip.Prefix) []byte {
+	p = p.Masked()
 	end := p.Addr().As4()
+	for bit := p.Bits(); bit < 32; bit++ {
+		end[bit/8] |= 0x80 >> (bit % 8)
+	}
 	for i := len(end) - 1; i >= 0; i-- {
 		end[i]++
 		if end[i] != 0 {
@@ -551,7 +680,9 @@ func egressExprs(r EgressRule, set *nftables.Set) []expr.Any {
 		&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseNetworkHeader, Offset: 12, Len: 4},
 		&expr.Lookup{SourceRegister: 1, SetID: set.ID, SetName: set.Name},
 
-		&expr.Counter{},
+		// The named counter rather than an inline one, which is what
+		// EgressRule.Counter promises and what egressLine reads back.
+		&expr.Objref{Type: unix.NFT_OBJECT_COUNTER, Name: r.Counter},
 		&expr.Masq{},
 	}
 }
