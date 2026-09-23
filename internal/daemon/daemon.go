@@ -260,6 +260,15 @@ func run(args []string) error {
 	}
 	linkApplier.Host = takeHost
 
+	// What follows a change to a network, and to the uplink (dependents.go).
+	//
+	// Variables assigned further down rather than closures built here, because
+	// the modules that follow are constructed after the two that trigger them —
+	// the mounts below are in the store's order, and `gateway` is last of the
+	// three. `follow` is what makes that safe to read: it resolves the variable
+	// when the request arrives, by which time every applier exists.
+	var followNetworks, followUplink func(context.Context) []core.Step
+
 	srv.Mount(link.ModuleName, link.HTTP{
 		Applier: linkApplier,
 		Lock:    srv.ApplyLock(),
@@ -268,6 +277,7 @@ func run(args []string) error {
 		HostFindings: func() []core.Problem {
 			return hostFindings(hostApplier, store, false)
 		},
+		Dependents: follow(&followNetworks),
 	}.Routes(), link.Config{})
 
 	// `dial` is mounted second, matching the store's order. Like `link` it drives
@@ -297,6 +307,7 @@ func run(args []string) error {
 				Findings:  hostFindings(hostApplier, store, true),
 			}
 		},
+		Dependents: follow(&followUplink),
 	}.Routes(), dial.Config{})
 
 	srv.Mount(dhcp.ModuleName, dhcp.HTTP{
@@ -351,6 +362,21 @@ func run(args []string) error {
 		Uplink: gatewayUplink{store: store},
 	}
 	natApplier := gatewayApplier.NATApplier(nat.NewKernel(), natLinks)
+
+	// The cascades the mounts above reference, now that everything they run
+	// exists. In §4.1's order — `dhcp` before `gateway`, so that a renumbered
+	// network is being served before it is being translated.
+	followNetworks = func(ctx context.Context) []core.Step {
+		return applyDependents(ctx, logger,
+			dhcpDependent(applier), gatewayDependent(gatewayApplier), natDependent(natApplier))
+	}
+	followUplink = func(ctx context.Context) []core.Step {
+		// Only the NAT table. The rest of what `dial` feeds is read live: the
+		// routing half reads the main table's default route rather than
+		// holding a copy of it, and `dns` reads the uplink's resolvers.
+		return applyDependents(ctx, logger, natDependent(natApplier))
+	}
+
 	prober.OnChange = func(exit string, up bool) {
 		// An exit changed state, so the routing the kernel should hold has
 		// changed with it — a dead exit's traffic goes to `unreachable`, and a

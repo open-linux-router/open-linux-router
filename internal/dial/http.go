@@ -2,6 +2,7 @@ package dial
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -47,6 +48,17 @@ type HTTP struct {
 	// looks names up through, whoever wrote them, and what olr could not take
 	// from the distribution (internal/host). Nil outside olrd.
 	Host func() HostStatus
+
+	// Dependents re-applies the modules built from the uplink — `gateway`'s
+	// egress masquerade names the interface this module owns, which is §4.1's
+	// `dial → gateway` arrow and the only one out of here that is programmed
+	// rather than read live. Nil outside olrd.
+	//
+	// internal/link's field of the same name carries the argument; the case
+	// here is its twin. An uplink moved from one interface to another leaves
+	// the masquerade rewriting traffic on its way out of the old one, which is
+	// a LAN with no internet and nothing on screen to say why.
+	Dependents func(ctx context.Context) []core.Step
 }
 
 // HostStatus is the host's side of the uplink, as olrd reads it.
@@ -421,6 +433,11 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 
 		stored = next
 		result, applyErr = h.Applier.Apply(r.Context(), next)
+		if applyErr == nil && !result.Plan.Empty && h.Dependents != nil {
+			for _, s := range h.Dependents(r.Context()) {
+				result.Steps = append(result.Steps, Step(s))
+			}
+		}
 		if loaded, err := h.Applier.Load(); err == nil {
 			stored = loaded
 		}

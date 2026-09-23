@@ -539,6 +539,20 @@ case: `dhcp` wants to register lease hostnames in `dns`, and `dns` wants lease
 data. Direction is fixed — `dhcp` *publishes* leases, `dns` *subscribes*.
 (This is precisely why dnsmasq fuses the two; see §4.2.)
 
+**An arrow is walked when the fact at its tail changes.** Reading through an
+API keeps two copies of a fact from existing; it does not keep a *programmed*
+one from going stale. dnsmasq is handed an interface name and nftables a set
+of subnets, and neither module can notice when those move, because nothing in
+its own intent changed — a network moved to another interface leaves DHCP
+answering on the old one, and the egress masquerade translating out of it.
+So a module whose apply changes what a dependent was built from re-applies
+that dependent, in the same operation and under the same lock: one no-op
+apply per arrow, and a step reported for the ones that were not. §5.2 still
+holds — this is a sequence of independent applies, not a transaction, and a
+half-applied change follows nothing until it is re-run. The dependents a
+change reaches are `dhcp` and `gateway`, and internal/daemon's `dependents.go`
+is the list.
+
 ### 4.2 One backend, one owner
 
 Throughout this document **daemon** means `olrd`, ours, one of; **backend** means

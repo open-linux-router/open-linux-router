@@ -2,6 +2,7 @@ package link
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -35,6 +36,31 @@ type HTTP struct {
 	// network configuration for a network's members (internal/host), listed
 	// with the interfaces' other findings. Nil outside olrd.
 	HostFindings func() []core.Problem
+
+	// Dependents re-applies the modules that read this one's networks: every
+	// arrow out of `link` in design.md §4.1. Nil outside olrd, which follows
+	// nothing.
+	//
+	// It exists because those modules do not read a network, they are *built
+	// from* one — dnsmasq is told an interface name, and the egress masquerade
+	// a set of subnets — so a network that moves leaves them addressing the
+	// network it left. The supervisor will not repair that on its own and is
+	// right not to (superviseEvery's file-rewrite case): it cannot tell a
+	// half-finished apply from an operator's hand-edit. Here that ambiguity
+	// does not exist. Somebody just asked for this change, so the modules that
+	// carry it follow immediately rather than at whatever hour a person works
+	// out why half the network is on the old interface.
+	//
+	// Inside the apply lock, and after the change rather than with it: §5.2 is
+	// explicit that there is no cross-module atomicity, so this is a sequence
+	// of independent applies whose steps are reported alongside this module's,
+	// not a transaction. Each is a no-op unless the change actually reached it.
+	//
+	// A failed apply follows nothing. What the box has then is a state nobody
+	// asked for, and §5.3.2's answer to that is to report which steps landed
+	// and let a re-run finish the job — which takes the dependents along with
+	// it, at the point there is something settled for them to follow.
+	Dependents func(ctx context.Context) []core.Step
 }
 
 // Routes is the module's surface, declared as data so that it can be
@@ -225,6 +251,11 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config, opts Opt
 	)
 	if err := h.Lock.Do(r.Context(), func() error {
 		result, applyErr = h.Applier.ApplyWith(r.Context(), cfg, opts)
+		if applyErr == nil && !result.Plan.Empty && h.Dependents != nil {
+			for _, s := range h.Dependents(r.Context()) {
+				result.Steps = append(result.Steps, Step(s))
+			}
+		}
 		return nil
 	}); err != nil {
 		core.WriteError(w, http.StatusServiceUnavailable,

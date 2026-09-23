@@ -1,9 +1,11 @@
 package link
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -170,5 +172,52 @@ func TestInterfacesListsWhatTheMachineHas(t *testing.T) {
 		t.Errorf("lan0 = %+v, want present and up", lan0)
 	case lan0.Subnet == "":
 		t.Error("lan0 has an address but the list does not report its subnet")
+	}
+}
+
+// A change that reached the box takes the modules built from it along, and
+// reports what they did in the same response: design.md §4.1's arrows out of
+// this module, walked at the moment somebody asks for the change rather than
+// whenever a person notices that DHCP is still serving the old interface.
+func TestAnAppliedChangeTakesItsDependentsWithIt(t *testing.T) {
+	var calls int
+	h := HTTP{
+		Applier: Applier{Store: storeWith(t, ""), Source: staticSource(testInterfaces(t)...)},
+		Lock:    core.NewLock(),
+		Events:  core.NewEvents(),
+		Dependents: func(context.Context) []core.Step {
+			calls++
+			return []core.Step{{Description: "re-applied dhcp for this change", Done: true}}
+		},
+	}.Handler()
+
+	w := do(t, h, http.MethodPut, "/config", `{"adopted":["lan0"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d, body %s", w.Code, w.Body)
+	}
+	var got struct {
+		Plan  struct{ Empty bool } `json:"plan"`
+		Steps []Step               `json:"steps"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("dependents ran %d times for one applied change", calls)
+	}
+	if !slices.ContainsFunc(got.Steps, func(s Step) bool {
+		return s.Description == "re-applied dhcp for this change" && s.Done
+	}) {
+		t.Errorf("a dependent's steps are missing from the response: %+v", got.Steps)
+	}
+
+	// The same configuration again changes nothing, so nothing follows it. A
+	// dependent re-applied on every request would restart dnsmasq for a PUT
+	// that did not touch the network it serves.
+	if w := do(t, h, http.MethodPut, "/config", `{"adopted":["lan0"]}`); w.Code != http.StatusOK {
+		t.Fatalf("second PUT status = %d, body %s", w.Code, w.Body)
+	}
+	if calls != 1 {
+		t.Errorf("dependents ran %d times; a no-op apply must not take them along", calls)
 	}
 }
