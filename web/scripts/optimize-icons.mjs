@@ -13,9 +13,25 @@
 // resamples well, and encodes WebP — and it is driven here through plain CLI
 // flags, with no puppeteer or playwright package required.
 //
+// It also does the two things the image generator cannot be trusted with, so
+// every icon comes out framed the same way whatever the master looked like:
+//
+//   - **Background.** The generator we have cannot return transparency, so
+//     masters arrive on a near-white field. When the master's corners are
+//     opaque, the field is flooded out from the border — from the border, not
+//     by colour, so a white router or a HomePod keeps its own white body.
+//   - **Framing.** "Fill about 80% of the frame" is a request the generator
+//     reads loosely: an access point came back edge to edge and an iMac with a
+//     margin. Each icon is trimmed to what is actually drawn and refitted: its
+//     longest side at most --fill of the canvas, and its area at most --mass.
+//     The second cap is the one that matters in a list. Longest side alone
+//     makes a square smart plug look twice the size of a TV beside it; capping
+//     the area shrinks the squat objects and leaves the long ones alone.
+//
 // Usage:
 //   node scripts/optimize-icons.mjs <master-dir> [--out <dir>] [--size 256]
 //                                   [--quality 0.86] [--format webp|png]
+//                                   [--fill 0.88] [--mass 0.70]
 //
 // Set CHROME to override browser discovery.
 
@@ -29,7 +45,7 @@ const args = process.argv.slice(2)
 if (args.length === 0 || args[0].startsWith('--')) {
   console.error(
     'usage: node scripts/optimize-icons.mjs <master-dir> [--out dir] ' +
-      '[--size 256] [--quality 0.86] [--format webp|png]',
+      '[--size 256] [--quality 0.86] [--format webp|png] [--fill 0.88] [--mass 0.70]',
   )
   process.exit(2)
 }
@@ -46,6 +62,8 @@ const outDir = path.resolve(
 const size = Number(opt('size', 256))
 const quality = Number(opt('quality', 0.86))
 const format = opt('format', 'webp')
+const fill = Number(opt('fill', 0.88))
+const mass = Number(opt('mass', 0.70))
 
 if (!['webp', 'png'].includes(format)) {
   console.error(`unsupported --format ${format}`)
@@ -103,7 +121,7 @@ const chrome = findChrome()
 // Fitted rather than stretched, and centred, so that a master which is not
 // square keeps its proportions and its optical weight — the style spec requires
 // consistent weight across categories, and a squashed printer would break it.
-function page(srcUrl, size, format, quality) {
+function page(srcUrl, size, format, quality, fill, mass) {
   return `<!doctype html>
 <meta charset="utf-8">
 <body style="margin:0">
@@ -117,14 +135,83 @@ function page(srcUrl, size, format, quality) {
   // bitmap is available to drawImage.
   img.onload = () => {
     try {
+      // Work at the master's own resolution, so the cut-out edge is decided
+      // on real pixels rather than on a downscaled blur of them.
+      const W = img.naturalWidth, H = img.naturalHeight
+      const m = document.createElement('canvas')
+      m.width = W; m.height = H
+      const mctx = m.getContext('2d')
+      mctx.drawImage(img, 0, 0)
+      const data = mctx.getImageData(0, 0, W, H)
+      const p = data.data
+      const at = (x, y) => (y * W + x) * 4
+
+      // A master that is already transparent is left alone.
+      const corners = [at(0, 0), at(W - 1, 0), at(0, H - 1), at(W - 1, H - 1)]
+      if (corners.every((o) => p[o + 3] === 255)) {
+        // The field is "near white", and how near varies per image: the
+        // darkest corner channel is the reference. Pixels within 3 of it are
+        // background and carry the flood on; the next 11 levels are the
+        // anti-aliased rim, which fades but does *not* carry it on. That last
+        // part is what keeps white objects whole: a printer's paper or a white
+        // router is as bright as the field, and is only protected by the
+        // slightly darker rim around it — a flood that crossed the rim would
+        // empty them from the inside.
+        const bg = Math.min(...corners.flatMap((o) => [p[o], p[o + 1], p[o + 2]]))
+        const hard = bg - 3, lo = bg - 14
+        const seen = new Uint8Array(W * H)
+        const stack = []
+        for (let x = 0; x < W; x++) stack.push(x, (H - 1) * W + x)
+        for (let y = 0; y < H; y++) stack.push(y * W, y * W + W - 1)
+        while (stack.length) {
+          const k = stack.pop()
+          if (seen[k]) continue
+          seen[k] = 1
+          const o = k * 4
+          const v = Math.min(p[o], p[o + 1], p[o + 2])
+          if (v < lo) continue
+          if (v < hard) {
+            p[o + 3] = Math.round((255 * (hard - v)) / (hard - lo))
+            continue
+          }
+          p[o + 3] = 0
+          const x = k % W
+          if (x > 0) stack.push(k - 1)
+          if (x < W - 1) stack.push(k + 1)
+          if (k >= W) stack.push(k - W)
+          if (k < W * (H - 1)) stack.push(k + W)
+        }
+        mctx.putImageData(data, 0, 0)
+      }
+
+      // Trim to what is drawn. The alpha floor ignores the faint haze a
+      // generator sometimes leaves in the field, which would otherwise count
+      // as content and undo the point of trimming.
+      let x0 = W, y0 = H, x1 = -1, y1 = -1
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          if (p[at(x, y) + 3] > 24) {
+            if (x < x0) x0 = x
+            if (x > x1) x1 = x
+            if (y < y0) y0 = y
+            if (y > y1) y1 = y
+          }
+        }
+      }
+      if (x1 < 0) throw new Error('the master is empty once its background is removed')
+      const bw = x1 - x0 + 1, bh = y1 - y0 + 1
+
       const c = document.createElement('canvas')
       c.width = ${size}; c.height = ${size}
       const ctx = c.getContext('2d')
       ctx.imageSmoothingEnabled = true
       ctx.imageSmoothingQuality = 'high'
-      const scale = Math.min(${size} / img.naturalWidth, ${size} / img.naturalHeight)
-      const w = img.naturalWidth * scale, h = img.naturalHeight * scale
-      ctx.drawImage(img, (${size} - w) / 2, (${size} - h) / 2, w, h)
+      const scale = Math.min(
+        (${size} * ${fill}) / Math.max(bw, bh),
+        (${size} * ${mass}) / Math.sqrt(bw * bh),
+      )
+      const w = bw * scale, h = bh * scale
+      ctx.drawImage(m, x0, y0, bw, bh, (${size} - w) / 2, (${size} - h) / 2, w, h)
       const url = c.toDataURL('image/${format}', ${quality})
       const comma = url.indexOf(',')
       const mime = url.slice(5, url.indexOf(';'))
@@ -160,7 +247,7 @@ for (const master of masters) {
   const name = path.basename(master, '.png')
   const html = path.join(work, `${name}.html`)
 
-  writeFileSync(html, page(`file://${src}`, size, format, quality))
+  writeFileSync(html, page(`file://${src}`, size, format, quality, fill, mass))
 
   let dom
   try {

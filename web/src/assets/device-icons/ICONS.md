@@ -13,7 +13,7 @@ ground truth to be wrong about.
 
 "Brandless" here means no logo, no model, no brand-signature silhouette or
 colourway — **not colourless**. A category icon looks like a real device in
-realistic materials. Tier 1 has to look finished on its own, because tier 2 is
+real materials, just drawn cleanly. Tier 1 has to look finished on its own, because tier 2 is
 optional and licence-gated: a deployment with nothing but category icons must
 look intentional rather than degraded. The tiers are distinguished in the UI by
 the *label* — "Laptop" where only the class is known, "MacBook Air" where the
@@ -88,47 +88,77 @@ must not be silently changed back by the next fingerprint update.
 
 ## Shared rules
 
+The look is the device pictures in a phone's settings app: the object seen
+square-on, simplified, evenly lit, with its screen on. It replaced a matte
+three-quarter product render in September 2026, for two reasons that only show
+up in a real list:
+
+- **At 32 px a dark screen is the whole icon.** A phone, a tablet and a laptop
+  with their screens off are three black slabs; with the screens on, the
+  outline — a notch, a Dynamic Island, a keyboard deck — is what you see.
+- **Many vendors will sit side by side.** A front view is the one angle every
+  vendor's product can be drawn at, and one shared wallpaper on every screen
+  keeps a list of six brands calm. Each vendor gets its shape and its materials;
+  nobody gets their own colours on the screen.
+
 | | |
 |---|---|
-| **View** | Front three-quarter, rotated 25° to the left, camera 12° above |
-| **Light** | Soft diffuse key from upper left, broad fill, no specular hotspots |
-| **Finish** | Matte. No reflections, no gloss, no environment bounce |
+| **View** | Straight-on front, symmetrical, upright, camera very slightly above |
+| **Light** | Soft and even, crisp edges; clean, simplified, semi-realistic |
+| **Screen** | Always on, always the same wallpaper: a soft, blurred diagonal gradient from pale sky blue (top left) to periwinkle indigo (bottom right). No shapes, no UI |
 | **Shadow** | None baked in — the UI supplies `drop-shadow`, so assets stay reusable on any background |
-| **Framing** | Centred and upright, filling ~80% of frame, consistent optical weight across categories |
-| **Master** | 1024×1024, transparent background, PNG |
-| **Shipped** | 256×256 WebP, quality 0.86 |
-| **Forbidden** | Logos, text, stickers, brand marks; backgrounds; ground planes; glowing status lights |
+| **Framing** | Done by the optimiser, not the prompt: trimmed to the object, longest side ≤ 88% and area ≤ 70% of the canvas, centred |
+| **Master** | 1024×1024 PNG. A near-white background is expected and removed by the optimiser |
+| **Shipped** | 256×256 WebP, quality 0.86, transparent |
+| **Forbidden** | Logos, text, stickers, brand marks; ground planes; status LEDs |
 
-Tier 1 palette: realistic neutral device materials — matte plastic and brushed
-aluminium in graphite, slate, silver or off-white; screens dark and blank.
+Tier 1 palette: neutral device materials — graphite, silver or matte white — and
+nothing that belongs to one vendor.
 
 Tier 1.5 is the one exception, and only to the *silhouette* rule: a vendor icon
 may carry that vendor's proportions, materials and colourway, because
-recognising them is what it is for. The row above still binds otherwise, and
-"no logos, no text" binds hardest of all — the shape may say Apple, the lid may
-not.
+recognising them is what it is for. The screen is not part of that: the
+wallpaper is the house's, never the vendor's. "No logos, no text" binds hardest
+of all — the shape may say Apple, the lid may not.
+
+**What the picture cannot do.** Seen from the front, a laptop's brand lives in
+details that do not survive 32 px: a MacBook and a MateBook are the same grey
+rectangle there, and only a ThinkPad's red dot still reads. There is nowhere to
+put a logo on a front view either, and we would not ship one. Telling two
+laptops apart is the row's job — its title and vendor — not the icon's.
 
 ## Adding one
 
-1. **Generate a master** at 1024×1024, transparent, with this preamble and only
-   the subject line changed. Keeping it verbatim is what holds the set coherent:
+1. **Generate a master** at 1024×1024 with this preamble, changing only the
+   subject. Keeping the rest verbatim is what holds the set coherent:
 
-   > Product render of **\<subject\>**. Single object, centred and upright,
-   > filling about 80% of the frame. Front three-quarter view, rotated 25 degrees
-   > to the left, camera 12 degrees above. Soft diffuse key light from the upper
-   > left with broad fill, no specular hotspots. Matte finish throughout — no
-   > reflections, no gloss, no environment bounce. No shadow, no ground plane, no
-   > background: fully transparent background. Realistic neutral device
-   > materials: matte plastic and brushed aluminium in graphite and slate grey.
-   > Generic industrial design — absolutely no logos, no text, no stickers, no
-   > brand marks, no brand-signature silhouette or colourway.
+   > Clean device thumbnail illustration, like the device pictures in a phone's
+   > settings app. Shown straight-on from the front, perfectly symmetrical,
+   > upright, camera very slightly above. Clean simplified semi-realistic
+   > rendering, soft even lighting, crisp edges, designed to stay legible at 32
+   > pixels. Single object centred, filling about 80% of the frame, plain pure
+   > white background, no shadow, no ground plane. The screen shows exactly this
+   > wallpaper: a soft, blurred, low-contrast diagonal gradient from pale sky
+   > blue at the top-left to soft periwinkle indigo at the bottom-right, no
+   > shapes, no waves. No logos, no text, no UI, no brand marks. Subject:
+   > **\<subject\>**
 
-   For a **tier 1.5** vendor icon, swap the last sentence — and only that
-   sentence — for the vendor's house style, keeping every other line verbatim so
-   the two tiers sit together in a list:
+   The subject names the device and its materials. A **tier 1** subject ends
+   with *"Generic brandless industrial design in neutral materials."*; a **tier
+   1.5** subject describes the vendor's product instead — *"an Apple iPad Pro in
+   portrait orientation, silver aluminium edge, uniform thin black bezels…"*.
 
-   > \<Vendor\>'s industrial design language: \<proportions, materials,
-   > colourway\>. No logos, no text, no stickers, no brand marks of any kind.
+   Two adjustments the generator has needed, and nothing else may change:
+
+   - **No screen** (router, speaker, printer…): drop the *"The screen shows…"*
+     sentence and end the subject with *"This device has no screen."* Left in,
+     the generator adds a screen to things that have none.
+   - **A large screen** (TV, monitor): end the subject with *"The gradient is
+     only inside the screen; everything around it is plain pure white."* Without
+     it, the first TV came back with the wallpaper as its background.
+
+   The background is white rather than transparent because the generator we
+   use rejects the transparency option. The optimiser removes it; see step 2.
 
 2. **Optimise** it into this directory, named exactly after the category, or
    `<vendor>-<category>` for a vendor icon:
@@ -137,8 +167,11 @@ not.
    node scripts/optimize-icons.mjs <dir-of-masters>
    ```
 
-   Chromium does the resize and encode; no image library is needed. Masters are
-   not committed — they are ~1 MB each and this file is how they are reproduced.
+   Chromium does the cut-out, framing, resize and encode; no image library is
+   needed. The cut-out floods in from the border, so a white router keeps its
+   white body — but check the result on a dark background anyway, which is
+   where a leak shows. Masters are not committed — they are ~1 MB each and this
+   file is how they are reproduced.
 
 3. **Register it** — one line in `IMAGES` in `../../features/devices/icons.ts`.
    A vendor icon is registered under its slash form, `'apple/laptop': appleLaptop`,

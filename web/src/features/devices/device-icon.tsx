@@ -37,7 +37,7 @@ import { cn } from '@/lib/utils'
  * draw, which no asset-based answer can.
  *
  * The photographs carry no baked shadow (see ICONS.md) precisely so the UI can
- * supply one, which is what stops a matte render on a flat card looking like a
+ * supply one, which is what stops a cut-out picture on a flat card looking like a
  * sticker. It is kept subtle: this is a list of things you own, not a shop.
  *
  * Offline devices are dimmed and desaturated rather than hidden or flattened to

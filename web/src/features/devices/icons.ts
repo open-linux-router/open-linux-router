@@ -30,14 +30,31 @@ import {
 import type { VendorKey } from '@/lib/api-types'
 import type { DeviceCategory } from '@/lib/config-types'
 
+import accessPoint from '@/assets/device-icons/accesspoint.webp'
+import camera from '@/assets/device-icons/camera.webp'
+import gameConsole from '@/assets/device-icons/console.webp'
+import desktop from '@/assets/device-icons/desktop.webp'
 import laptop from '@/assets/device-icons/laptop.webp'
 import nas from '@/assets/device-icons/nas.webp'
 import phone from '@/assets/device-icons/phone.webp'
+import plug from '@/assets/device-icons/plug.webp'
 import printer from '@/assets/device-icons/printer.webp'
 import router from '@/assets/device-icons/router.webp'
+import speaker from '@/assets/device-icons/speaker.webp'
 import tablet from '@/assets/device-icons/tablet.webp'
 import tv from '@/assets/device-icons/tv.webp'
 import unknown from '@/assets/device-icons/unknown.webp'
+import vacuum from '@/assets/device-icons/vacuum.webp'
+import watch from '@/assets/device-icons/watch.webp'
+import appleDesktop from '@/assets/device-icons/apple-desktop.webp'
+import appleLaptop from '@/assets/device-icons/apple-laptop.webp'
+import applePhone from '@/assets/device-icons/apple-phone.webp'
+import appleSpeaker from '@/assets/device-icons/apple-speaker.webp'
+import appleTablet from '@/assets/device-icons/apple-tablet.webp'
+import appleTv from '@/assets/device-icons/apple-tv.webp'
+import appleWatch from '@/assets/device-icons/apple-watch.webp'
+import huaweiLaptop from '@/assets/device-icons/huawei-laptop.webp'
+import lenovoLaptop from '@/assets/device-icons/lenovo-laptop.webp'
 
 // The picture, word and glyph maps.
 //
@@ -82,14 +99,33 @@ import unknown from '@/assets/device-icons/unknown.webp'
 type IconKey = DeviceCategory | VendorKey | `${VendorKey}/${DeviceCategory}`
 
 const IMAGES: Partial<Record<IconKey, string>> = {
+  accesspoint: accessPoint,
+  camera,
+  console: gameConsole,
+  desktop,
   laptop,
   nas,
   phone,
+  plug,
   printer,
   router,
+  speaker,
   tablet,
   tv,
   unknown,
+  vacuum,
+  watch,
+
+  'apple/desktop': appleDesktop,
+  'apple/laptop': appleLaptop,
+  'apple/phone': applePhone,
+  'apple/speaker': appleSpeaker,
+  'apple/tablet': appleTablet,
+  'apple/tv': appleTv,
+  'apple/watch': appleWatch,
+
+  'huawei/laptop': huaweiLaptop,
+  'lenovo/laptop': lenovoLaptop,
 }
 
 /**
