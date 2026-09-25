@@ -23,3 +23,21 @@ export function formatBytes(n: number): string {
   }
   return `${value.toFixed(1)} ${units[i]}`
 }
+
+/**
+ * A rate, given in bytes per second, written the way a router is read: in
+ * bits. Link speeds and every provider's plan are quoted in Mbps, so a byte
+ * rate beside them would make the operator do the ×8 in their head.
+ */
+export function formatRate(bytesPerSecond: number): string {
+  const bits = bytesPerSecond * 8
+  if (bits < 1000) return `${Math.round(bits)} bps`
+  const units = ['kbps', 'Mbps', 'Gbps', 'Tbps']
+  let value = bits / 1000
+  let i = 0
+  while (value >= 1000 && i < units.length - 1) {
+    value /= 1000
+    i++
+  }
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[i]}`
+}

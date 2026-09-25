@@ -9,6 +9,10 @@
 // three the Go change implies — `FirewallConfig` gone, `GatewayConfig.forwards`
 // and `.snat` added — and `make types` replaces the whole file with the real
 // answer, which is what should happen before this ships.
+//
+// Device groups were added the same way and for the same reason:
+// `DevicesConfig.groups`, `Device.group` and `DevicesGroup`, spelled the way
+// internal/devices/config.go marshals them.
 
 /**
  * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
@@ -183,6 +187,10 @@ export interface OlrDocument {
 }
 export interface DevicesConfig {
   devices?: Device[]
+  /**
+   * The operator's sets of devices. Nothing is seeded and nothing is assigned automatically: a group exists because somebody made it.
+   */
+  groups?: DevicesGroup[]
 }
 export interface Device {
   mac: string
@@ -190,6 +198,16 @@ export interface Device {
   category?: DeviceCategory
   model?: string
   notes?: string
+  /**
+   * The one group this device is in, or absent for none. Must name an existing group.
+   */
+  group?: string
+}
+/**
+ * One set of devices. Only a name today; renaming carries every member along.
+ */
+export interface DevicesGroup {
+  name: string
 }
 export interface DhcpConfig {
   enabled: boolean

@@ -40,7 +40,13 @@ export function useDeviceActions() {
 
     // An entry with nothing but a MAC says nothing, so saving one is a request
     // to forget rather than to store an empty record.
-    const empty = !device.name && !device.category && !device.notes && !device.model
+    //
+    // A group counts as something said. It is stored on the device, so an
+    // entry holding a MAC and a group is exactly how a device that was only
+    // ever seen joins one — and treating it as empty would forget the device
+    // the moment it was put in a group.
+    const empty =
+      !device.name && !device.category && !device.notes && !device.model && !device.group
     const next: DevicesConfig = { ...current, devices: empty ? rest : [...rest, device] }
 
     try {
@@ -89,6 +95,7 @@ export function useDeviceActions() {
           open
           onOpenChange={(open) => !open && setEditing(null)}
           busy={saveIdentity.isPending}
+          groups={identity.data?.groups}
           onSave={save}
           onForget={editing.stored ? () => save({ mac: editing.mac }) : undefined}
           onEditFixedAddress={() => {

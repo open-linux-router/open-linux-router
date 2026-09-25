@@ -32,6 +32,30 @@ type Config struct {
 	// Devices is keyed by MAC. Sorted canonically by Normalize, so a UI that
 	// re-reads after a write finds rows where it left them.
 	Devices []Device `json:"devices,omitempty"`
+
+	// Groups are the operator's sets of devices — "Serving", "Personal", "IoT"
+	// (design.md §4.4). A device is in at most one, named by Device.Group.
+	//
+	// Nothing is seeded and nothing is assigned automatically. A group exists
+	// because somebody made it and a device is in one because somebody put it
+	// there; a list of groups we invented, filled by rules the operator never
+	// wrote, would be a second taxonomy competing with the category for no
+	// reason they asked for.
+	Groups []Group `json:"groups,omitempty"`
+}
+
+// Group is one set of devices.
+//
+// Today it carries only a name and is used to lay out the network map. It is a
+// struct rather than a string because it is the tier gateway.md §2.1 reserves
+// between a network and a device: the day a group carries a policy, that
+// policy is owned by the module that enforces it and references the group by
+// name, the way gateway references a network — nothing about this shape has to
+// move for that.
+type Group struct {
+	// Name is the key, operator-chosen, and renamable: RenameGroup carries
+	// every member along, so a rename is never a group that quietly emptied.
+	Name string `json:"name"`
 }
 
 // Device is what a human has said about one client on the network.
@@ -67,15 +91,24 @@ type Device struct {
 	// Notes is free text for the operator's own benefit — "in the loft", "belongs
 	// to the upstairs tenant". Never parsed.
 	Notes string `json:"notes,omitempty"`
+
+	// Group names the one group this device is in, or is empty for none.
+	//
+	// Stored on the device rather than as a member list on the group, and that
+	// is what makes membership exclusive by construction: a device has one
+	// field, so it cannot be in two groups, and there is no conflict for any
+	// later policy to refuse (gateway.md §2.3).
+	Group string `json:"group,omitempty"`
 }
 
 // MaxNameLen and the limits below exist so that a UI can lay out a row without
 // defending against a megabyte in a name field. They are generous enough that
 // no legitimate value hits them.
 const (
-	MaxNameLen  = 64
-	MaxModelLen = 128
-	MaxNotesLen = 512
+	MaxNameLen      = 64
+	MaxModelLen     = 128
+	MaxNotesLen     = 512
+	MaxGroupNameLen = 32
 )
 
 // UnmarshalConfig parses a document strictly.
@@ -137,10 +170,25 @@ func (c *Config) Normalize() {
 		c.Devices[i].Name = strings.TrimSpace(c.Devices[i].Name)
 		c.Devices[i].Model = strings.ToLower(strings.TrimSpace(c.Devices[i].Model))
 		c.Devices[i].Notes = strings.TrimSpace(c.Devices[i].Notes)
+		c.Devices[i].Group = strings.TrimSpace(c.Devices[i].Group)
 	}
 	slices.SortStableFunc(c.Devices, func(a, b Device) int {
 		return strings.Compare(a.MAC, b.MAC)
 	})
+
+	// Groups are trimmed and sorted by name, for the same reason devices are
+	// sorted by MAC. Duplicates are left in place for Validate to name: two
+	// groups called "IoT" is something the operator typed, and silently keeping
+	// one would drop whatever made them type the other.
+	for i := range c.Groups {
+		c.Groups[i].Name = strings.TrimSpace(c.Groups[i].Name)
+	}
+	slices.SortStableFunc(c.Groups, func(a, b Group) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	if len(c.Groups) == 0 {
+		c.Groups = nil
+	}
 }
 
 // Find returns the stored identity for a MAC, or false.
@@ -193,5 +241,91 @@ func (c *Config) Remove(mac string) bool {
 	return false
 }
 
+// Clone copies the config so an edit can be diffed against the stored one
+// without the two sharing a backing array. Every field of Device and Group is a
+// string, so copying the slices is a deep copy.
+func (c Config) Clone() Config {
+	return Config{Devices: slices.Clone(c.Devices), Groups: slices.Clone(c.Groups)}
+}
+
+// FindGroup returns a group by name.
+func (c Config) FindGroup(name string) (Group, bool) {
+	i := slices.IndexFunc(c.Groups, func(g Group) bool { return g.Name == name })
+	if i < 0 {
+		return Group{}, false
+	}
+	return c.Groups[i], true
+}
+
+// UpsertGroup adds a group or replaces the one with the same name.
+func (c *Config) UpsertGroup(g Group) {
+	if i := slices.IndexFunc(c.Groups, func(e Group) bool { return e.Name == g.Name }); i >= 0 {
+		c.Groups[i] = g
+		return
+	}
+	c.Groups = append(c.Groups, g)
+	c.Normalize()
+}
+
+// RenameGroup changes a group's name and every member's reference to it,
+// together, reporting whether the group existed.
+//
+// Together is the reason this is a method: membership is stored on the device,
+// so renaming only the group would leave every member pointing at a name that
+// no longer exists — a rename that looked like it emptied the group.
+func (c *Config) RenameGroup(from, to string) bool {
+	i := slices.IndexFunc(c.Groups, func(g Group) bool { return g.Name == from })
+	if i < 0 {
+		return false
+	}
+	c.Groups[i].Name = to
+	for j := range c.Devices {
+		if c.Devices[j].Group == from {
+			c.Devices[j].Group = to
+		}
+	}
+	c.Normalize()
+	return true
+}
+
+// RemoveGroup drops a group and takes its members out of it, reporting whether
+// it existed.
+//
+// Members are released rather than the delete refused, which is the opposite of
+// what gateway does for an exit still in use. The difference is what a group
+// carries: today it only arranges the map, so emptying it disconnects nothing
+// and the devices simply show as ungrouped. The day a group carries a policy,
+// deleting one changes where its members' traffic goes, and this should refuse
+// the way gateway's Remove does.
+func (c *Config) RemoveGroup(name string) bool {
+	i := slices.IndexFunc(c.Groups, func(g Group) bool { return g.Name == name })
+	if i < 0 {
+		return false
+	}
+	c.Groups = slices.Delete(c.Groups, i, i+1)
+	for j := range c.Devices {
+		if c.Devices[j].Group == name {
+			c.Devices[j].Group = ""
+		}
+	}
+	c.Normalize()
+	return true
+}
+
+// SetDeviceGroup puts a device in a group, or takes it out of every group when
+// group is empty.
+//
+// A device that has never been described gets an entry holding just its MAC
+// and the group, which is how a device that was only ever seen joins one — it
+// is the same "a MAC alone is worth storing" rule the printer relies on.
+func (c *Config) SetDeviceGroup(mac, group string) {
+	d, _ := c.Find(mac)
+	if d.MAC == "" {
+		d.MAC = mac
+	}
+	d.Group = group
+	c.Upsert(d)
+}
+
 // Empty reports whether anything has been stored at all.
-func (c Config) Empty() bool { return len(c.Devices) == 0 }
+func (c Config) Empty() bool { return len(c.Devices) == 0 && len(c.Groups) == 0 }

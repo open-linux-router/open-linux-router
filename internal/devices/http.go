@@ -2,7 +2,10 @@ package devices
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
@@ -53,6 +56,31 @@ func (h HTTP) Routes() []core.Route {
 			Body:     core.BodyRelaxed,
 			Mutating: true,
 			Handler:  h.patchConfig,
+		},
+
+		// Intent, one item at a time, for the reason internal/gateway/http.go
+		// gives: a merge patch replaces an array wholesale, so without these
+		// every client would load the document, splice it and send it back —
+		// two requests with the lock covering only the second, and the rename
+		// cascade reimplemented once per client. Here each is one request under
+		// the lock, calling config.go.
+		{
+			Method: "PUT", Path: "/groups/{name}",
+			Summary:  "Create a device group, or rename one by sending a different name in the body.",
+			Mutating: true,
+			Handler:  h.putGroup,
+		},
+		{
+			Method: "DELETE", Path: "/groups/{name}",
+			Summary:  "Remove a device group; its devices become ungrouped.",
+			Mutating: true,
+			Handler:  h.deleteGroup,
+		},
+		{
+			Method: "PUT", Path: "/devices/{mac}/group",
+			Summary:  "Put one device in a group, or take it out of its group with an empty name.",
+			Mutating: true,
+			Handler:  h.putDeviceGroup,
 		},
 
 		// Dry run. A POST because it takes a body, not because it changes
@@ -206,6 +234,169 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 	}
 
 	core.WriteJSON(w, http.StatusOK, applyResponse{Plan: plan, Config: stored})
+}
+
+// --- one item at a time ----------------------------------------------------
+
+// groupBody is the body of PUT /groups/{name}. An omitted name means the one in
+// the path, so creating a group does not have to say it twice.
+type groupBody struct {
+	Name string `json:"name"`
+}
+
+// putGroup creates a group, or renames one when the body names another.
+//
+// Creating one that already exists is a no-op rather than a conflict: the
+// request says "there should be a group called this", and there is.
+func (h HTTP) putGroup(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+
+	var body groupBody
+	if err := core.DecodeJSON(w, r, &body); err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	to := strings.TrimSpace(body.Name)
+	if to == "" {
+		to = name
+	}
+
+	h.mutate(w, r, func(cfg *Config) error {
+		if to == name {
+			if _, ok := cfg.FindGroup(name); !ok {
+				cfg.UpsertGroup(Group{Name: name})
+			}
+			return nil
+		}
+		if _, ok := cfg.FindGroup(name); !ok {
+			return notFound(fmt.Errorf("there is no group called %q; %s", name, knownGroups(*cfg)))
+		}
+		// Changing only the case of a name is a rename too, so the clash check
+		// is on the exact name: "iot" → "IoT" must not collide with itself.
+		if _, taken := cfg.FindGroup(to); taken {
+			return badRequest(fmt.Errorf(
+				"cannot rename %q to %q: there is already a group called %q", name, to, to))
+		}
+		cfg.RenameGroup(name, to)
+		return nil
+	})
+}
+
+func (h HTTP) deleteGroup(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	h.mutate(w, r, func(cfg *Config) error {
+		if !cfg.RemoveGroup(name) {
+			return notFound(fmt.Errorf("there is no group called %q; %s", name, knownGroups(*cfg)))
+		}
+		return nil
+	})
+}
+
+// deviceGroupBody is the body of PUT /devices/{mac}/group. An empty group is a
+// real value: it takes the device out of whatever group it was in.
+type deviceGroupBody struct {
+	Group string `json:"group"`
+}
+
+func (h HTTP) putDeviceGroup(w http.ResponseWriter, r *http.Request) {
+	mac, err := core.NormalizeMAC(r.PathValue("mac"))
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var body deviceGroupBody
+	if err := core.DecodeJSON(w, r, &body); err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	h.mutate(w, r, func(cfg *Config) error {
+		// Naming a group that does not exist is caught by Validate, with the
+		// list of the ones that do.
+		cfg.SetDeviceGroup(mac, strings.TrimSpace(body.Group))
+		return nil
+	})
+}
+
+// mutate loads the stored document, edits it and stores the result, all under
+// the apply lock, so that the edit is made against the document it is saved
+// over rather than one a concurrent writer has since replaced.
+func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) error) {
+	var (
+		stored   Config
+		plan     planView
+		applyErr error
+		refused  error
+		invalid  Result
+	)
+	if err := h.Lock.Do(r.Context(), func() error {
+		current, err := h.Applier.Load()
+		if err != nil {
+			applyErr = err
+			return nil
+		}
+		desired := current.Clone()
+		if err := edit(&desired); err != nil {
+			refused = err
+			return nil
+		}
+		desired.Normalize()
+		if res := Validate(desired); !res.OK() {
+			invalid = res
+			return nil
+		}
+		plan = buildPlan(current, desired)
+		stored, applyErr = h.Applier.Save(desired)
+		return nil
+	}); err != nil {
+		core.WriteError(w, http.StatusServiceUnavailable,
+			"timed out waiting for the apply lock: "+err.Error())
+		return
+	}
+
+	switch {
+	case refused != nil:
+		core.WriteError(w, statusFor(refused), refused.Error())
+		return
+	case !invalid.OK():
+		core.WriteError(w, http.StatusUnprocessableEntity,
+			"invalid devices configuration", problems(invalid.Errors)...)
+		return
+	case applyErr != nil:
+		core.WriteJSON(w, http.StatusInternalServerError, applyResponse{
+			Plan:   plan,
+			Config: stored,
+			Error:  &core.ErrorBody{Message: applyErr.Error()},
+		})
+		return
+	}
+
+	if !plan.Empty {
+		h.Events.Publish(core.Event{Type: core.EventApplied, Module: ModuleName})
+	}
+	core.WriteJSON(w, http.StatusOK, applyResponse{Plan: plan, Config: stored})
+}
+
+// editError carries the status an edit's refusal deserves, the way
+// internal/gateway/http.go does.
+type editError struct {
+	status int
+	err    error
+}
+
+func (e editError) Error() string { return e.err.Error() }
+func (e editError) Unwrap() error { return e.err }
+
+func notFound(err error) error   { return editError{http.StatusNotFound, err} }
+func badRequest(err error) error { return editError{http.StatusBadRequest, err} }
+
+func statusFor(err error) int {
+	var e editError
+	if errors.As(err, &e) {
+		return e.status
+	}
+	return http.StatusUnprocessableEntity
 }
 
 // --- dry run --------------------------------------------------------------

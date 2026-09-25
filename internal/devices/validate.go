@@ -117,9 +117,59 @@ func Validate(c Config) Result {
 		if n := utf8.RuneCountInString(d.Notes); n > MaxNotesLen {
 			r.errorf(path+".notes", "notes are %d characters; the limit is %d", n, MaxNotesLen)
 		}
+
+		if d.Group != "" {
+			if _, ok := c.FindGroup(d.Group); !ok {
+				r.errorf(path+".group", "there is no group called %q; %s", d.Group, knownGroups(c))
+			}
+		}
 	}
 
+	validateGroups(c, &r)
 	return r
+}
+
+// validateGroups checks the group list itself.
+//
+// Names are compared without case for uniqueness. "IoT" and "iot" as two groups
+// is not a distinction anybody means, and on a map they would read as the same
+// box drawn twice — but a device's reference is still matched exactly, so the
+// stored spelling is the one that counts.
+func validateGroups(c Config, r *Result) {
+	seen := map[string]int{}
+	for i, g := range c.Groups {
+		path := fmt.Sprintf("groups[%d].name", i)
+		switch n := utf8.RuneCountInString(g.Name); {
+		case g.Name == "":
+			r.errorf(path, "a group needs a name")
+			continue
+		case n > MaxGroupNameLen:
+			r.errorf(path, "name is %d characters; the limit is %d", n, MaxGroupNameLen)
+		}
+		if bad, ok := hasControlChar(g.Name); ok {
+			r.errorf(path, "name contains a control character (%q)", bad)
+		}
+		key := strings.ToLower(g.Name)
+		if first, dup := seen[key]; dup {
+			r.errorf(path, "%q is already a group at groups[%d]; group names must differ by more than case",
+				g.Name, first)
+			continue
+		}
+		seen[key] = i
+	}
+}
+
+// knownGroups finishes an unknown-group message with the names that would
+// have worked, so the fix is on the same line as the complaint.
+func knownGroups(c Config) string {
+	if len(c.Groups) == 0 {
+		return "no groups exist yet — create one first"
+	}
+	names := make([]string, len(c.Groups))
+	for i, g := range c.Groups {
+		names[i] = fmt.Sprintf("%q", g.Name)
+	}
+	return "groups are " + strings.Join(names, ", ")
 }
 
 func hasControlChar(s string) (rune, bool) {

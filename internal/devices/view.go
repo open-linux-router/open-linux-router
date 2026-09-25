@@ -42,6 +42,9 @@ type deviceView struct {
 	Model string `json:"model,omitempty"`
 	Notes string `json:"notes,omitempty"`
 
+	// Group is the device's group, absent for none.
+	Group string `json:"group,omitempty"`
+
 	// Stored reports whether a human has described this device. False means it
 	// is listed purely because it was seen, which is what the UI uses to offer
 	// "name this device".
@@ -95,6 +98,7 @@ func viewDevice(r Resolved) deviceView {
 		VendorKey:        r.Detected.VendorKey,
 		Model:            r.Model,
 		Notes:            r.Notes,
+		Group:            r.Group,
 		Stored:           r.Stored,
 		Online:           r.Online(),
 		Seen:             r.Presence != nil,
@@ -217,9 +221,31 @@ func buildPlan(stored, desired Config) planView {
 		}
 	}
 
+	// Groups have nothing but a name, so a group is either there or not — a
+	// rename reads as one removed and one added, with its members' updates
+	// listed above.
+	for _, g := range desired.Groups {
+		if _, ok := stored.FindGroup(g.Name); !ok {
+			plan.Changes = append(plan.Changes, changeView{
+				Path: groupPath(g.Name), Kind: kindCreate, Impact: impactNone,
+				Diff: "+ group: " + g.Name + "\n",
+			})
+		}
+	}
+	for _, g := range stored.Groups {
+		if _, ok := desired.FindGroup(g.Name); !ok {
+			plan.Changes = append(plan.Changes, changeView{
+				Path: groupPath(g.Name), Kind: kindDelete, Impact: impactNone,
+				Diff: "- group: " + g.Name + "\n",
+			})
+		}
+	}
+
 	plan.Empty = len(plan.Changes) == 0
 	return plan
 }
+
+func groupPath(name string) string { return fmt.Sprintf("groups[%s]", name) }
 
 func path(mac string) string { return fmt.Sprintf("devices[%s]", mac) }
 
@@ -237,5 +263,6 @@ func describe(d Device, prefix string) string {
 	line("category", string(d.Category))
 	line("model", d.Model)
 	line("notes", d.Notes)
+	line("group", d.Group)
 	return b.String()
 }

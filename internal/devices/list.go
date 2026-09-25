@@ -144,6 +144,10 @@ type Resolved struct {
 	Model string
 	Notes string
 
+	// Group is the operator's group for this device, empty for none. Never
+	// inferred: a device is in a group only because somebody put it there.
+	Group string
+
 	// Stored reports whether there is a config entry for this device. False
 	// means it is on the list purely because it was seen.
 	Stored bool
@@ -277,6 +281,7 @@ func resolve(mac string, cfg Config, presence map[string]Presence, fixed map[str
 		r.Stored = true
 		r.Model = stored.Model
 		r.Notes = stored.Notes
+		r.Group = stored.Group
 	}
 
 	switch {

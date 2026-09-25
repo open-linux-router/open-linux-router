@@ -575,6 +575,13 @@ export interface DeviceRow {
   model?: string
   notes?: string
 
+  /**
+   * The operator's group for this device, absent for none. Never inferred: a
+   * device is in a group only because somebody put it there, so a missing
+   * field is "ungrouped", not "not yet worked out".
+   */
+  group?: string
+
   /** Whether a human has described this device, as opposed to it merely being seen. */
   stored: boolean
 

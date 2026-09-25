@@ -48,8 +48,8 @@ export function AppShell() {
  */
 function DesktopNav() {
   return (
-    <nav className="ml-4 hidden sm:block" aria-label="Sections">
-      <ul className="flex items-center gap-1">
+    <nav className="ml-4 hidden self-stretch sm:block" aria-label="Sections">
+      <ul className="flex h-full items-stretch gap-1">
         {SECTIONS.map(({ to, label, end }) => (
           <li key={to}>
             <NavLink
@@ -57,10 +57,17 @@ function DesktopNav() {
               end={end}
               className={({ isActive }) =>
                 cn(
-                  'flex min-h-9 items-center rounded-lg px-3 text-sm transition-colors',
+                  // The current section is underlined against the bar's own
+                  // bottom edge rather than filled. A filled pill read as a
+                  // button — and, once focused, as a *pressed* one, with the
+                  // focus ring drawn round it — where a rule says "you are
+                  // here" and nothing else.
+                  'relative flex h-full items-center px-3 text-sm transition-colors',
+                  'after:absolute after:inset-x-3 after:-bottom-px after:h-0.5 after:rounded-full',
+                  'focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring',
                   isActive
-                    ? 'bg-accent font-medium text-accent-foreground'
-                    : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                    ? 'font-medium text-foreground after:bg-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
                 )
               }
             >

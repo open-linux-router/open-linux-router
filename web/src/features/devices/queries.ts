@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import type { DeviceList, DevicesApplyResult, Plan } from '@/lib/api-types'
 import type { DevicesConfig } from '@/lib/config-types'
 
@@ -57,4 +57,67 @@ export function useApplyDevicesConfig() {
       queryClient.invalidateQueries({ queryKey: ['devices'] })
     },
   })
+}
+
+/*
+ * Groups, one item at a time.
+ *
+ * These go to the per-item routes rather than through useApplyDevicesConfig,
+ * for the reason internal/devices/http.go gives: a whole-document PUT is two
+ * requests with the lock covering only the second, and a rename has to carry
+ * every member along — the server does that under its lock, and a client
+ * splicing the document itself would be a second copy of the cascade.
+ *
+ * Every one invalidates all of ['devices'], not just the config: the list rows
+ * carry `group` too, and the map is drawn from the list.
+ */
+
+const groupPath = (name: string) => `/api/devices/groups/${encodeURIComponent(name)}`
+
+function useDevicesMutation<T>(fn: (vars: T) => Promise<DevicesApplyResult>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: fn,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['devices'] })
+    },
+  })
+}
+
+/** Creates a group. Creating one that already exists is a no-op, not an error. */
+export function useCreateDeviceGroup() {
+  return useDevicesMutation((name: string) => api.put<DevicesApplyResult>(groupPath(name), {}))
+}
+
+/** Renames a group; its members follow on the server. */
+export function useRenameDeviceGroup() {
+  return useDevicesMutation(({ from, to }: { from: string; to: string }) =>
+    api.put<DevicesApplyResult>(groupPath(from), { name: to }),
+  )
+}
+
+/** Deletes a group. Its members become ungrouped rather than the delete being refused. */
+export function useDeleteDeviceGroup() {
+  return useDevicesMutation((name: string) => api.delete<DevicesApplyResult>(groupPath(name)))
+}
+
+/** Puts one device in a group, or takes it out of its group with an empty name. */
+export function useSetDeviceGroup() {
+  return useDevicesMutation(({ mac, group }: { mac: string; group: string }) =>
+    api.put<DevicesApplyResult>(`/api/devices/devices/${encodeURIComponent(mac)}/group`, {
+      group,
+    }),
+  )
+}
+
+/**
+ * The server's words, most specific first. A 422 carries the reason in its
+ * problems and only "invalid devices configuration" in its message, which on
+ * its own would tell the operator nothing about what to change.
+ */
+export function describeError(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.problems.length ? error.problems.map((p) => p.message).join('; ') : error.message
+  }
+  return String(error)
 }

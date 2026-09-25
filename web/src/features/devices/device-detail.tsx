@@ -14,12 +14,27 @@ import {
 import { Disclosure } from '@/components/ui/disclosure'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { CategoryPicker } from '@/features/devices/category-picker'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import { categoryLabel } from '@/features/devices/icons'
 import type { DeviceRow } from '@/lib/api-types'
-import type { Device, DeviceCategory } from '@/lib/config-types'
+import type { Device, DeviceCategory, DevicesGroup } from '@/lib/config-types'
+
+/**
+ * The Select's value for "in no group". Base UI treats an empty string as a
+ * real value, but a sentinel that cannot be a group name — names are trimmed
+ * server-side, so none starts with a space — keeps "none" from ever colliding
+ * with one.
+ */
+const NO_GROUP = ' none'
 
 /**
  * One device, and everything a human is allowed to say about it.
@@ -37,6 +52,7 @@ export function DeviceDetail({
   onSave,
   onForget,
   onEditFixedAddress,
+  groups = [],
   busy,
 }: {
   device: DeviceRow
@@ -46,6 +62,8 @@ export function DeviceDetail({
   /** Only offered for a device that has stored identity to drop. */
   onForget?: () => void
   onEditFixedAddress: () => void
+  /** Every group there is, to choose this device's from. */
+  groups?: DevicesGroup[]
   busy?: boolean
 }) {
   const [name, setName] = useState(device.name_origin === 'operator' ? device.name : '')
@@ -53,11 +71,13 @@ export function DeviceDetail({
     device.category_origin === 'operator' ? device.category : '',
   )
   const [notes, setNotes] = useState(device.notes ?? '')
+  const [group, setGroup] = useState(device.group ?? '')
 
   function reset() {
     setName(device.name_origin === 'operator' ? device.name : '')
     setCategory(device.category_origin === 'operator' ? device.category : '')
     setNotes(device.notes ?? '')
+    setGroup(device.group ?? '')
   }
 
   return (
@@ -113,6 +133,38 @@ export function DeviceDetail({
             />
           </div>
 
+          {/* Part of the form, saved with the rest, rather than applied the
+              moment it changes. A field that took effect on its own inside a
+              dialog with a Cancel button would make Cancel a lie. The quick
+              path is the map's own "Move to group", which is one click and
+              says so. */}
+          <div className="grid gap-2">
+            <Label htmlFor="device-group">Group</Label>
+            <Select
+              value={group || NO_GROUP}
+              onValueChange={(v) => setGroup(!v || v === NO_GROUP ? '' : v)}
+            >
+              <SelectTrigger id="device-group" className="w-full">
+                <SelectValue>
+                  {(value: string) => (value === NO_GROUP || !value ? 'None' : value)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_GROUP}>None</SelectItem>
+                {groups.map((g) => (
+                  <SelectItem key={g.name} value={g.name}>
+                    {g.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {groups.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No groups yet. Create one from the overview, then put devices in it here.
+              </p>
+            )}
+          </div>
+
           <div className="grid gap-2">
             <Label htmlFor="device-notes">Notes</Label>
             <Textarea
@@ -154,6 +206,7 @@ export function DeviceDetail({
                 name: name.trim() || undefined,
                 category: category || undefined,
                 notes: notes.trim() || undefined,
+                group: group || undefined,
                 // Preserved rather than edited: there is no tier-2 image set to
                 // choose from yet, and silently dropping the field on every
                 // save would quietly erase an operator's earlier answer.
