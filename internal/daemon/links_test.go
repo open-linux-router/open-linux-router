@@ -49,21 +49,21 @@ func testFacts(t *testing.T, document string) link.Facts {
 //
 // Nothing about it can be invalid except the network it names, which is the
 // point: `dhcp` no longer has an opinion about interfaces at all.
-func poolOn(group string) dhcp.Config {
+func poolOn(network string) dhcp.Config {
 	return dhcp.Config{
 		Enabled: true,
-		Pools:   []dhcp.Pool{{Group: group, IPv4: &dhcp.PoolIPv4{}}},
+		Pools:   []dhcp.Pool{{Network: network, IPv4: &dhcp.PoolIPv4{}}},
 	}
 }
 
 // The document a working box has: lan0 adopted, and a network on it.
 const lanDocument = `{"link":{"adopted":["lan0"],` +
-	`"groups":[{"name":"lan","members":["lan0"],"ipv4":{"subnet":"192.168.1.0/24"}}]}}`
+	`"networks":[{"name":"lan","members":["lan0"],"ipv4":{"subnet":"192.168.1.0/24"}}]}}`
 
 func TestAPoolIsRefusedUntilTheNetworkExists(t *testing.T) {
-	groups := dhcpGroupView{facts: testFacts(t, "")}
+	networks := dhcpNetworkView{facts: testFacts(t, "")}
 
-	res := dhcp.Validate(poolOn("lan"), groups)
+	res := dhcp.Validate(poolOn("lan"), networks)
 	if res.OK() {
 		t.Fatal("dhcp accepted a pool on a network that does not exist")
 	}
@@ -80,9 +80,9 @@ func TestAPoolIsRefusedUntilTheNetworkExists(t *testing.T) {
 }
 
 func TestAPoolValidatesAgainstTheNetworksStoredSubnet(t *testing.T) {
-	groups := dhcpGroupView{facts: testFacts(t, lanDocument)}
+	networks := dhcpNetworkView{facts: testFacts(t, lanDocument)}
 
-	if res := dhcp.Validate(poolOn("lan"), groups); !res.OK() {
+	if res := dhcp.Validate(poolOn("lan"), networks); !res.OK() {
 		t.Fatalf("dhcp refused a pool on a configured network: %v", res.Errors)
 	}
 }
@@ -97,43 +97,43 @@ func TestAPoolValidatesAgainstTheNetworksStoredSubnet(t *testing.T) {
 // operator could change the address that was overruling them.
 func TestARangeIsCheckedAgainstIntentNotTheKernel(t *testing.T) {
 	const renumbered = `{"link":{"adopted":["lan0"],` +
-		`"groups":[{"name":"lan","members":["lan0"],"ipv4":{"subnet":"172.16.1.0/24"}}]}}`
-	groups := dhcpGroupView{facts: testFacts(t, renumbered)}
+		`"networks":[{"name":"lan","members":["lan0"],"ipv4":{"subnet":"172.16.1.0/24"}}]}}`
+	networks := dhcpNetworkView{facts: testFacts(t, renumbered)}
 
 	inIntent := dhcp.Config{Enabled: true, Pools: []dhcp.Pool{{
-		Group: "lan",
+		Network: "lan",
 		IPv4: &dhcp.PoolIPv4{
 			Start: netip.MustParseAddr("172.16.1.100"),
 			End:   netip.MustParseAddr("172.16.1.200"),
 		},
 	}}}
-	if res := dhcp.Validate(inIntent, groups); !res.OK() {
+	if res := dhcp.Validate(inIntent, networks); !res.OK() {
 		t.Errorf("refused a range inside the network's own subnet: %v", res.Errors)
 	}
 
 	inKernel := dhcp.Config{Enabled: true, Pools: []dhcp.Pool{{
-		Group: "lan",
+		Network: "lan",
 		IPv4: &dhcp.PoolIPv4{
 			Start: netip.MustParseAddr("192.168.1.100"),
 			End:   netip.MustParseAddr("192.168.1.200"),
 		},
 	}}}
-	if res := dhcp.Validate(inKernel, groups); res.OK() {
+	if res := dhcp.Validate(inKernel, networks); res.OK() {
 		t.Error("accepted a range that is in the interface's current subnet but not the network's")
 	}
 }
 
 // The sentinel is re-wrapped as the consumer's own, so a caller testing
-// errors.Is against dhcp.ErrNoSuchGroup still gets a true answer.
+// errors.Is against dhcp.ErrNoSuchNetwork still gets a true answer.
 func TestUnknownNetworkReportsTheConsumersSentinel(t *testing.T) {
-	groups := dhcpGroupView{facts: testFacts(t, "")}
+	networks := dhcpNetworkView{facts: testFacts(t, "")}
 
-	_, err := groups.Group("nope")
+	_, err := networks.Network("nope")
 	if err == nil {
 		t.Fatal("the adapter accepted a network nobody configured")
 	}
-	if !errors.Is(err, dhcp.ErrNoSuchGroup) {
-		t.Errorf("err = %v, want dhcp.ErrNoSuchGroup", err)
+	if !errors.Is(err, dhcp.ErrNoSuchNetwork) {
+		t.Errorf("err = %v, want dhcp.ErrNoSuchNetwork", err)
 	}
 }
 
@@ -141,9 +141,9 @@ func TestUnknownNetworkReportsTheConsumersSentinel(t *testing.T) {
 // to write — which is what the link module landed to fix. A network is up when
 // its members are.
 func TestNetworkStateComesFromTheMachine(t *testing.T) {
-	groups := dhcpGroupView{facts: testFacts(t, lanDocument)}
+	networks := dhcpNetworkView{facts: testFacts(t, lanDocument)}
 
-	info, err := groups.Group("lan")
+	info, err := networks.Network("lan")
 	if err != nil {
 		t.Fatalf("lan is configured but the adapter reports: %v", err)
 	}
@@ -198,11 +198,11 @@ func TestDeviceNetworksAreNamedByNetwork(t *testing.T) {
 	// adapter has to do: derived ranges are where reading the stored fields
 	// would report a working network as having no addresses.
 	const document = `{"link":{"adopted":["lan0"],` +
-		`"groups":[{"name":"lan","members":["lan0"],"ipv4":{"subnet":"192.168.1.0/24"}}]},` +
-		`"dhcp":{"enabled":true,"pools":[{"group":"lan","ipv4":{}}]}}`
+		`"networks":[{"name":"lan","members":["lan0"],"ipv4":{"subnet":"192.168.1.0/24"}}]},` +
+		`"dhcp":{"enabled":true,"pools":[{"network":"lan","ipv4":{}}]}}`
 
 	facts := testFacts(t, document)
-	applier, err := dhcp.NewApplierAt(facts.Store, dhcpGroupView{facts: facts}, t.TempDir())
+	applier, err := dhcp.NewApplierAt(facts.Store, dhcpNetworkView{facts: facts}, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

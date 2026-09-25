@@ -100,28 +100,28 @@ func Validate(c Config, observed []Interface) Result {
 		case present && !iface.Up:
 			r.warnf(path, "%q is down; it can be adopted, but nothing will be served "+
 				"on it until it comes up", name)
-		case present && len(iface.Prefixes) == 0 && !inAnyGroup(c, name):
+		case present && len(iface.Prefixes) == 0 && !inAnyNetwork(c, name):
 			// An interface with no address and no network to give it one cannot
-			// carry a pool. Before groups existed this warning had to end in
+			// carry a pool. Before networks existed this warning had to end in
 			// "give it one" with nowhere to do that; now it names the command.
 			r.warnf(path, "%q has no address configured and belongs to no network; "+
 				"run `olr net add <name> --member %s --subnet <cidr>` to give it one", name, name)
 		}
 	}
 
-	validateGroups(&r, c, byName, len(observed) > 0)
+	validateNetworks(&r, c, byName, len(observed) > 0)
 
 	return r
 }
 
-// inAnyGroup reports whether an interface is a member of some network, and so
+// inAnyNetwork reports whether an interface is a member of some network, and so
 // will be given an address by the next apply.
-func inAnyGroup(c Config, iface string) bool {
-	_, ok := c.GroupFor(iface)
+func inAnyNetwork(c Config, iface string) bool {
+	_, ok := c.NetworkFor(iface)
 	return ok
 }
 
-// validateGroups checks the networks against themselves and against the
+// validateNetworks checks the networks against themselves and against the
 // interfaces that exist.
 //
 // Almost none of it needs the kernel: a subnet, a router address inside it and
@@ -129,30 +129,30 @@ func inAnyGroup(c Config, iface string) bool {
 // That is the property the whole change exists to create — `dhcp` gets to
 // validate a range against stored intent instead of against an observation, and
 // this is the module where that intent becomes checkable.
-func validateGroups(r *Result, c Config, observed map[string]Interface, haveObserved bool) {
+func validateNetworks(r *Result, c Config, observed map[string]Interface, haveObserved bool) {
 	member := map[string]int{}
 
-	for i, g := range c.Groups {
-		path := fmt.Sprintf("groups[%d]", i)
+	for i, n := range c.Networks {
+		path := fmt.Sprintf("networks[%d]", i)
 
-		if problem := checkGroupName(g.Name); problem != "" {
+		if problem := checkNetworkName(n.Name); problem != "" {
 			r.errorf(path+".name", "%s", problem)
 			continue
 		}
 
 		switch {
-		case len(g.Members) == 0:
+		case len(n.Members) == 0:
 			r.errorf(path+".members", "a network needs an interface to live on")
-		case len(g.Members) > 1:
-			// The schema allows it because §4.4 says a group has bridge members.
+		case len(n.Members) > 1:
+			// The schema allows it because §4.4 says a network has bridge members.
 			// Nothing creates a bridge yet, and two interfaces in one subnet
 			// without one is a broken network rather than a configured one.
 			r.errorf(path+".members", "%q names %d interfaces; a network is limited to one "+
 				"until bridging lands, because without a bridge the two would be separate "+
-				"L2 segments sharing a subnet", g.Name, len(g.Members))
+				"L2 segments sharing a subnet", n.Name, len(n.Members))
 		}
 
-		for j, m := range g.Members {
+		for j, m := range n.Members {
 			mpath := fmt.Sprintf("%s.members[%d]", path, j)
 
 			if problem := checkName(m); problem != "" {
@@ -167,7 +167,7 @@ func validateGroups(r *Result, c Config, observed map[string]Interface, haveObse
 			}
 			if first, dup := member[m]; dup {
 				r.errorf(mpath, "%q is already a member of %q; an interface carries one network",
-					m, c.Groups[first].Name)
+					m, c.Networks[first].Name)
 			} else {
 				member[m] = i
 			}
@@ -182,22 +182,22 @@ func validateGroups(r *Result, c Config, observed map[string]Interface, haveObse
 			}
 		}
 
-		validateGroupIPv4(r, path, g)
+		validateNetworkIPv4(r, path, n)
 	}
 
-	validateSubnetOverlap(r, c.Groups)
+	validateSubnetOverlap(r, c.Networks)
 }
 
-// validateGroupIPv4 checks a network's addressing against itself.
-func validateGroupIPv4(r *Result, path string, g Group) {
-	if g.IPv4 == nil {
+// validateNetworkIPv4 checks a network's addressing against itself.
+func validateNetworkIPv4(r *Result, path string, n Network) {
+	if n.IPv4 == nil {
 		// Legitimate: a network that serves only RA. It is worth remarking on
 		// because it is far more often a half-finished config than a choice.
-		r.warnf(path+".ipv4", "%q has no IPv4 subnet, so it serves no IPv4 addresses", g.Name)
+		r.warnf(path+".ipv4", "%q has no IPv4 subnet, so it serves no IPv4 addresses", n.Name)
 		return
 	}
 
-	v4 := *g.IPv4
+	v4 := *n.IPv4
 	switch {
 	case !v4.Subnet.IsValid():
 		r.errorf(path+".ipv4.subnet", "required, as a network is defined by its subnet")
@@ -236,19 +236,19 @@ func validateGroupIPv4(r *Result, path string, g Group) {
 // Not a style rule: overlapping subnets on one box means the routing table has
 // two entries that match, and which one wins is not something any surface above
 // here could explain.
-func validateSubnetOverlap(r *Result, groups []Group) {
-	for i := range groups {
-		a := groups[i]
+func validateSubnetOverlap(r *Result, networks []Network) {
+	for i := range networks {
+		a := networks[i]
 		if a.IPv4 == nil || !a.IPv4.Subnet.IsValid() {
 			continue
 		}
-		for j := i + 1; j < len(groups); j++ {
-			b := groups[j]
+		for j := i + 1; j < len(networks); j++ {
+			b := networks[j]
 			if b.IPv4 == nil || !b.IPv4.Subnet.IsValid() {
 				continue
 			}
 			if a.IPv4.Subnet.Overlaps(b.IPv4.Subnet) {
-				r.errorf(fmt.Sprintf("groups[%d].ipv4.subnet", j),
+				r.errorf(fmt.Sprintf("networks[%d].ipv4.subnet", j),
 					"%s overlaps %s on %q; two networks cannot share addresses",
 					b.IPv4.Subnet, a.IPv4.Subnet, a.Name)
 			}
@@ -256,20 +256,20 @@ func validateSubnetOverlap(r *Result, groups []Group) {
 	}
 }
 
-// checkGroupName returns why a string cannot name a network, or "".
+// checkNetworkName returns why a string cannot name a network, or "".
 //
 // Stricter than an interface name, and for a different reason: this one is
 // operator-chosen, appears in URLs and in dnsmasq tag names, and gets typed on
 // a command line. Letters, digits and hyphens keep it usable in all three
 // without any escaping anywhere.
-func checkGroupName(name string) string {
+func checkNetworkName(name string) string {
 	switch {
 	case strings.TrimSpace(name) == "":
 		return "a network needs a name"
 	case name != strings.TrimSpace(name):
 		return fmt.Sprintf("%q has leading or trailing whitespace", name)
-	case len(name) > MaxGroupNameLen:
-		return fmt.Sprintf("%q is longer than %d characters", name, MaxGroupNameLen)
+	case len(name) > MaxNetworkNameLen:
+		return fmt.Sprintf("%q is longer than %d characters", name, MaxNetworkNameLen)
 	case strings.HasPrefix(name, "-") || strings.HasSuffix(name, "-"):
 		return fmt.Sprintf("%q may not start or end with a hyphen", name)
 	}

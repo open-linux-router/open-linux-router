@@ -41,8 +41,8 @@ type Config struct {
 	// relay and the resolver but keeps the configuration, so it can be turned
 	// back on without retyping it.
 	//
-	// Global rather than per-group, matching internal/dhcp. design.md §5.6
-	// wants per-group `auto | on | off`; groups do not exist until the link
+	// Global rather than per-network, matching internal/dhcp. design.md §5.6
+	// wants per-network `auto | on | off`; networks do not exist until the link
 	// module lands, and inventing a second spelling here would be one more
 	// thing to unpick then.
 	Enabled bool `json:"enabled"`
@@ -297,7 +297,7 @@ type Hijack struct {
 
 	// Interfaces are the LAN-side interfaces whose forwarded traffic is
 	// captured. Kernel interface names, for the same reason internal/dhcp keys
-	// pools by them: groups arrive with the link module.
+	// pools by them: networks arrive with the link module.
 	//
 	// Empty with Enabled set is a configuration error rather than "everything",
 	// because the everything reading would capture the WAN side too.

@@ -329,7 +329,7 @@ func TestSettingAnUplinkSaysTheNetworksStillNeedAnExit(t *testing.T) {
 
 func TestABoxWithNoNetworksIsNotToldAboutExits(t *testing.T) {
 	links := uplinkLinks()
-	links.Networks = nil
+	links.Nets = nil
 
 	plan := buildPlan(Config{}, uplinkConfig(), links, Observed{Present: true, Up: true})
 	if hasWarning(plan, "olr gateway add exit") {

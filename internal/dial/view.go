@@ -210,7 +210,7 @@ func recordFrom(r Record) string {
 // preview render any module's answer without a second implementation.
 //
 // The impact stopped being a constant `none` when the uplink landed, exactly as
-// internal/link's did when groups landed. Two kinds of change now share one
+// internal/link's did when networks landed. Two kinds of change now share one
 // plan and they could not be further apart: adding a DDNS record still does
 // nothing to the box, while moving the uplink's gateway replaces the default
 // route and may take the operator's own session with it.

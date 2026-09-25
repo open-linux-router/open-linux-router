@@ -52,22 +52,22 @@ it took to say so honestly.
 `link` already models an interface that this box has an address on. It would
 have been one field cheaper to add a gateway to that.
 
-It would also have been wrong, and the wrongness has a name: a `link` group is
-**a network this box serves** (design.md §4.4). Every module downstream keys off
+It would also have been wrong, and the wrongness has a name: a `link` network is
+**one this box serves** (design.md §4.4). Every module downstream keys off
 one — `dhcp` serves a range on it, `dns` derives `allow_from` from it,
 `gateway` masquerades out of it and knows a forward's destination is inside it,
 `wifi` will attach a radio to it — and design.md §5.6 makes *"we never serve DHCP on a WAN
 interface"* a structural exception that "follows from role rather than from
-observation". A WAN interface inside a group would be a network every one of
+observation". A WAN interface inside a network would be one every one of
 those modules has to special-case, on the strength of a field none of them can
 see.
 
 There is a second reason that has nothing to do with taste. `internal/link`'s
-`PlanAddrs` claims **complete IPv4 ownership** of a group member: any address it
+`PlanAddrs` claims **complete IPv4 ownership** of a network member: any address it
 did not put there is removed on the next apply. It bounded that claim with "WAN
 interfaces are `dial`'s and are never members" — and until this object existed
 that sentence was vacuous, because `dial` had nowhere for one to live. So the
-only place an operator could put their modem-facing NIC was a group, and
+only place an operator could put their modem-facing NIC was a network, and
 `link` then stripped the address the ISP had given it. An operator with three
 NICs reported exactly this and concluded that olr could not be brought to a
 working state. They were right.
@@ -109,7 +109,7 @@ forms will arrive through — an uplink with no IPv4 block already means "olr ow
 this interface and writes no address", which is exactly what a DHCP-client
 uplink stores.
 
-`Uplink.IPv6` is absent for the reason `link.Group` has no IPv6 field: there is
+`Uplink.IPv6` is absent for the reason `link.Network` has no IPv6 field: there is
 no v6 write path behind it. A field that three generated surfaces offer and the
 writer cannot honour is worse than its absence.
 

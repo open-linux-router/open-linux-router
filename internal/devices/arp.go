@@ -107,8 +107,8 @@ func (a ARP) Presence(_ context.Context) ([]Sighting, []Problem, error) {
 		// Field 5 is the interface the neighbour was seen on.
 		//
 		// This was deliberately dropped until now, on the grounds that §4.1
-		// makes the group the operator-facing object and "enp3s0" exactly the
-		// implementation detail a group exists to hide. It is carried again
+		// makes the network the operator-facing object and "enp3s0" exactly the
+		// implementation detail a network exists to hide. It is carried again
 		// because a map of which network a device is on has no other way to
 		// place a statically-addressed one: an address can be matched against a
 		// pool's range, but a reservation and a hand-set address both sit

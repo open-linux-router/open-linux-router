@@ -8,37 +8,37 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// GroupView is this module's read-only window onto the link module.
+// NetworkView is this module's read-only window onto the link module.
 //
 // design.md §4.1 fixes the direction: dhcp depends on link, reads link's facts
 // through link, and never keeps its own copy. The interface is declared here,
 // by the consumer, so dhcp imports nothing — internal/daemon adapts link's
 // neutral shape into this one.
 //
-// # Why this is keyed by group and not by interface
+// # Why this is keyed by network and not by interface
 //
 // It used to hand back an interface's *observed* prefixes, and every rule in
 // validate.go was written against them. That made a stored range depend on an
 // address configured outside olr: a range in a subnet the interface did not
 // happen to hold was refused, with no way to change the subnet from anywhere in
-// the product. §4.4 always said modules key off the group — `vlan30` is an
+// the product. §4.4 always said modules key off the network — `vlan30` is an
 // implementation detail, `guest` is the thing somebody named — and `link` now
 // owns one, so the subnet arrives as intent rather than as an observation.
 //
 // What that buys is visible in validate.go: nearly every rule became pure. The
 // only facts still read from the machine are whether the members exist and
 // whether they are up, and both of those are warnings.
-type GroupView interface {
-	// Group returns what is known about a network, or ErrNoSuchGroup.
-	Group(name string) (GroupInfo, error)
+type NetworkView interface {
+	// Network returns what is known about a network, or ErrNoSuchNetwork.
+	Network(name string) (NetworkInfo, error)
 
-	// Groups lists every configured network, for the surfaces that offer a
+	// Networks lists every configured network, for the surfaces that offer a
 	// choice rather than resolving one.
-	Groups() ([]GroupInfo, error)
+	Networks() ([]NetworkInfo, error)
 }
 
-// GroupInfo is the subset of a network that DHCP decisions depend on.
-type GroupInfo struct {
+// NetworkInfo is the subset of a network that DHCP decisions depend on.
+type NetworkInfo struct {
 	// Name is the network's name, and the pool's foreign key.
 	Name string `json:"name"`
 
@@ -62,40 +62,40 @@ type GroupInfo struct {
 	Up bool `json:"up"`
 }
 
-// ErrNoSuchGroup is returned by GroupView.Group for an unknown name.
-var ErrNoSuchGroup = errors.New("no such network")
+// ErrNoSuchNetwork is returned by NetworkView.Network for an unknown name.
+var ErrNoSuchNetwork = errors.New("no such network")
 
 // HasIPv4 reports whether the network has a subnet to serve addresses from.
-func (g GroupInfo) HasIPv4() bool { return g.Subnet.IsValid() && g.Subnet.Addr().Is4() }
+func (n NetworkInfo) HasIPv4() bool { return n.Subnet.IsValid() && n.Subnet.Addr().Is4() }
 
 // DerivedRange is the range a pool gets when nobody types one (design.md
-// §11.2 — "range: derived from the group prefix; explicit overrides").
+// §11.2 — "range: derived from the network prefix; explicit overrides").
 //
 // Deriving matters for more than convenience. The collision DHCP cannot defend
 // against is a statically configured device inside the dynamic range, and
 // dnsmasq has no exclusion primitive — so the only defence is a range that
 // deliberately leaves a low block free. Deriving it gives that for free;
 // asking the operator to type it does not.
-func (g GroupInfo) DerivedRange() (netip.Addr, netip.Addr, bool) {
-	if !g.HasIPv4() {
+func (n NetworkInfo) DerivedRange() (netip.Addr, netip.Addr, bool) {
+	if !n.HasIPv4() {
 		return netip.Addr{}, netip.Addr{}, false
 	}
-	return core.SuggestRange(g.Subnet, g.Router)
+	return core.SuggestRange(n.Subnet, n.Router)
 }
 
-// StaticGroups is a GroupView backed by a map, for tests.
+// StaticNetworks is a NetworkView backed by a map, for tests.
 //
 // Validation rules are the largest thing in this module and the whole point of
 // §5.3.1 is that they can be exercised without a network. That was already true
 // and is more true now: with the subnet arriving as intent, a fixture is three
 // fields rather than a simulated kernel.
-type StaticGroups map[string]GroupInfo
+type StaticNetworks map[string]NetworkInfo
 
-// Group implements GroupView.
-func (s StaticGroups) Group(name string) (GroupInfo, error) {
+// Network implements NetworkView.
+func (s StaticNetworks) Network(name string) (NetworkInfo, error) {
 	info, ok := s[name]
 	if !ok {
-		return GroupInfo{}, fmt.Errorf("%q: %w", name, ErrNoSuchGroup)
+		return NetworkInfo{}, fmt.Errorf("%q: %w", name, ErrNoSuchNetwork)
 	}
 	if info.Name == "" {
 		info.Name = name
@@ -103,11 +103,11 @@ func (s StaticGroups) Group(name string) (GroupInfo, error) {
 	return info, nil
 }
 
-// Groups implements GroupView.
-func (s StaticGroups) Groups() ([]GroupInfo, error) {
-	out := make([]GroupInfo, 0, len(s))
+// Networks implements NetworkView.
+func (s StaticNetworks) Networks() ([]NetworkInfo, error) {
+	out := make([]NetworkInfo, 0, len(s))
 	for name := range s {
-		info, err := s.Group(name)
+		info, err := s.Network(name)
 		if err != nil {
 			return nil, err
 		}

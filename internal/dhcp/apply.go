@@ -24,8 +24,8 @@ import (
 type Applier struct {
 	// Backend renders the daemon's files.
 	Backend Dnsmasq
-	// Groups is the window onto the link module's networks.
-	Groups GroupView
+	// Networks is the window onto the link module's networks.
+	Networks NetworkView
 	// Service supervises the daemon.
 	Service Service
 	// Paths is the on-disk layout.
@@ -83,7 +83,7 @@ func (a Applier) portCheck() func() (bool, error) {
 // exists — it is the development escape hatch, not a supported deployment
 // layout, and nothing but the daemon's own flags should ever set it. The store
 // is passed in already rooted, because core owns that path.
-func NewApplierAt(store *core.Store, groups GroupView, root string) (Applier, error) {
+func NewApplierAt(store *core.Store, networks NetworkView, root string) (Applier, error) {
 	paths := RootedPaths(root)
 	backend := NewDnsmasq(paths).WithSource(store.Path())
 	service, err := NewService(backend.Unit())
@@ -91,11 +91,11 @@ func NewApplierAt(store *core.Store, groups GroupView, root string) (Applier, er
 		return Applier{}, err
 	}
 	return Applier{
-		Backend: backend,
-		Groups:  groups,
-		Service: service,
-		Paths:   paths,
-		Store:   store,
+		Backend:  backend,
+		Networks: networks,
+		Service:  service,
+		Paths:    paths,
+		Store:    store,
 	}, nil
 }
 
@@ -196,7 +196,7 @@ func (a Applier) Plan(ctx context.Context, desired Config) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	return BuildPlan(a.Backend, desired, a.Groups, obs, time.Now())
+	return BuildPlan(a.Backend, desired, a.Networks, obs, time.Now())
 }
 
 // Drift reports what has changed underneath stored intent.
@@ -220,7 +220,7 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	plan, err := BuildPlan(a.Backend, desired, a.Groups, obs, time.Now())
+	plan, err := BuildPlan(a.Backend, desired, a.Networks, obs, time.Now())
 	if err != nil {
 		return ApplyResult{Plan: plan}, err
 	}
@@ -275,7 +275,7 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 		}
 	}
 
-	rendered, err := a.Backend.Render(desired, a.Groups)
+	rendered, err := a.Backend.Render(desired, a.Networks)
 	if err != nil {
 		return result, err
 	}
@@ -419,7 +419,7 @@ func (a Applier) checkInstalled(ctx context.Context) error {
 // dnsmasq exits on a bad config or a socket it cannot bind rather than sitting
 // there alive and idle. So a process still running after the window has parsed
 // its configuration and bound its sockets. Asserting on UDP/67 directly was
-// considered and rejected — a group serving only RA never binds it, so the
+// considered and rejected — a network serving only RA never binds it, so the
 // check would fail exactly where IPv6 is configured correctly.
 func (a Applier) verifyServing(ctx context.Context) error {
 	deadline := time.Now().Add(a.settleWindow())
@@ -516,12 +516,12 @@ func (a Applier) Leases() ([]Lease, []Problem, error) { return LoadLeases(a.Path
 func (a Applier) Usage(c Config, leases []Lease) []Usage {
 	out := make([]Usage, 0, len(c.Pools))
 	for _, p := range c.Pools {
-		info, err := a.Groups.Group(p.Group)
+		info, err := a.Networks.Network(p.Network)
 		if err != nil {
 			continue
 		}
 		out = append(out, UsageOf(p, info, leases, time.Now()))
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Group < out[j].Group })
+	sort.Slice(out, func(i, j int) bool { return out[i].Network < out[j].Network })
 	return out
 }

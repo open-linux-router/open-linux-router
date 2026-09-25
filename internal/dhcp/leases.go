@@ -143,8 +143,8 @@ func LoadLeases(path string) ([]Lease, []Problem, error) {
 
 // Usage summarises how full a pool is.
 type Usage struct {
-	// Group is the network this describes.
-	Group string
+	// Network is the network this describes.
+	Network string
 	// Size is the number of addresses in the range.
 	Size int
 	// Active is how many currently hold a live lease.
@@ -169,9 +169,9 @@ func (u Usage) Percent() int {
 // It takes the network so that a derived range is resolved the same way the
 // renderer resolves it. A pool with no range of its own is not a pool with no
 // addresses — it is one whose addresses come from its network's subnet.
-func UsageOf(p Pool, g GroupInfo, leases []Lease, now time.Time) Usage {
-	start, end, ok := p.Range(g)
-	u := Usage{Group: p.Group, Size: core.RangeSize(start, end)}
+func UsageOf(p Pool, n NetworkInfo, leases []Lease, now time.Time) Usage {
+	start, end, ok := p.Range(n)
+	u := Usage{Network: p.Network, Size: core.RangeSize(start, end)}
 	if !ok {
 		return u
 	}

@@ -40,7 +40,7 @@ func do(t *testing.T, h http.Handler, method, path, body string) *httptest.Respo
 
 const validPUT = `{
   "enabled": true,
-  "pools": [{"group":"lan","ipv4":{"start":"192.168.1.100","end":"192.168.1.200"},"lease_time":"12h"}]
+  "pools": [{"network":"lan","ipv4":{"start":"192.168.1.100","end":"192.168.1.200"},"lease_time":"12h"}]
 }`
 
 // The case no other route could reach: every rendered file is right and the
@@ -118,7 +118,7 @@ func TestConfigRoundTripsThroughHTTP(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if !got.Enabled || len(got.Pools) != 1 || got.Pools[0].Group != "lan" {
+	if !got.Enabled || len(got.Pools) != 1 || got.Pools[0].Network != "lan" {
 		t.Fatalf("stored config did not survive the round trip: %+v", got)
 	}
 	if got.Pools[0].LeaseTime != Duration(12*60*60*1e9) {
@@ -153,7 +153,7 @@ func TestPlanningStoredIntentAfterApplyIsEmpty(t *testing.T) {
 func TestInvalidConfigIsRejectedBeforeAnythingIsWritten(t *testing.T) {
 	h, applier, _ := testHTTP(t)
 
-	const outsideSubnet = `{"enabled":true,"pools":[{"group":"lan","ipv4":{"start":"10.9.9.5","end":"10.9.9.9"}}]}`
+	const outsideSubnet = `{"enabled":true,"pools":[{"network":"lan","ipv4":{"start":"10.9.9.5","end":"10.9.9.9"}}]}`
 
 	w := do(t, h, http.MethodPut, "/config", outsideSubnet)
 	if w.Code != http.StatusUnprocessableEntity {

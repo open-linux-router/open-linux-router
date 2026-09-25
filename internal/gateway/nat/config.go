@@ -120,7 +120,7 @@ type Forward struct {
 	// An interface rather than "the internet", and that is not a placeholder
 	// for a better word: a box can have two uplinks, and a forward that
 	// silently applied to both would be a policy nobody wrote. It becomes a
-	// network name when link grows groups (docs/gateway.md §2.5's staging), and
+	// network name when link grows networks (docs/gateway.md §2.5's staging), and
 	// the stored document does not change shape when it does.
 	In string `json:"in"`
 

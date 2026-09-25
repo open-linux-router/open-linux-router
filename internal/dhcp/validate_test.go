@@ -9,7 +9,7 @@ import (
 // The baseline must be clean, or every "this is rejected" case below could be
 // passing for the wrong reason.
 func TestValidateAcceptsAGoodConfig(t *testing.T) {
-	r := Validate(validConfig(t), testGroups())
+	r := Validate(validConfig(t), testNetworks())
 	if !r.OK() {
 		t.Fatalf("baseline config rejected:\n    %s", problemStrings(r.Errors))
 	}
@@ -22,20 +22,20 @@ func TestValidateAcceptsAGoodConfig(t *testing.T) {
 // a failure names the rule that broke.
 func TestValidateRejects(t *testing.T) {
 	tests := []struct {
-		name    string
-		mutate  func(*Config)
-		groups  StaticGroups // nil for testGroups()
-		path    string
-		message string
+		name     string
+		mutate   func(*Config)
+		networks StaticNetworks // nil for testNetworks()
+		path     string
+		message  string
 	}{{
 		name:    "missing network",
-		mutate:  func(c *Config) { c.Pools[0].Group = "" },
-		path:    "pools[0].group",
+		mutate:  func(c *Config) { c.Pools[0].Network = "" },
+		path:    "pools[0].network",
 		message: "required",
 	}, {
 		name:    "unknown network",
-		mutate:  func(c *Config) { c.Pools[0].Group = "nope" },
-		path:    "pools[0].group",
+		mutate:  func(c *Config) { c.Pools[0].Network = "nope" },
+		path:    "pools[0].network",
 		message: "no such network",
 	}, {
 		// The adopt-only check that used to live here is gone, and its absence
@@ -99,7 +99,7 @@ func TestValidateRejects(t *testing.T) {
 			second.IPv4.Start, second.IPv4.End = addr(t, "192.168.1.210"), addr(t, "192.168.1.220")
 			c.Pools = append(c.Pools, second)
 		},
-		path:    "pools[1].group",
+		path:    "pools[1].network",
 		message: "one pool per network",
 	}, {
 		// Both pools are individually valid, so nothing else would catch the
@@ -108,11 +108,11 @@ func TestValidateRejects(t *testing.T) {
 		name: "overlapping ranges on networks that share a subnet",
 		mutate: func(c *Config) {
 			c.Pools = append(c.Pools, Pool{
-				Group: "guest",
-				IPv4:  &PoolIPv4{Start: addr(t, "192.168.1.150"), End: addr(t, "192.168.1.160")},
+				Network: "guest",
+				IPv4:    &PoolIPv4{Start: addr(t, "192.168.1.150"), End: addr(t, "192.168.1.160")},
 			})
 		},
-		groups: StaticGroups{
+		networks: StaticNetworks{
 			"lan": {
 				Members: []string{"br-lan"}, Up: true,
 				Subnet: netip.MustParsePrefix("192.168.1.0/24"),
@@ -137,7 +137,7 @@ func TestValidateRejects(t *testing.T) {
 		// A v4 range on a network with no subnet has nothing to sit in, and the
 		// message says where to fix it rather than only that it is wrong.
 		name:    "IPv4 pool on a network with no subnet",
-		mutate:  func(c *Config) { c.Pools[0].Group = "v6only" },
+		mutate:  func(c *Config) { c.Pools[0].Network = "v6only" },
 		path:    "pools[0].ipv4",
 		message: "olr net set v6only --subnet",
 	}, {
@@ -256,11 +256,11 @@ func TestValidateRejects(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := validConfig(t)
 			tc.mutate(&c)
-			groups := tc.groups
-			if groups == nil {
-				groups = testGroups()
+			networks := tc.networks
+			if networks == nil {
+				networks = testNetworks()
 			}
-			r := Validate(c, groups)
+			r := Validate(c, networks)
 			if r.OK() {
 				t.Fatalf("config was accepted, expected %s to be rejected", tc.path)
 			}
@@ -291,11 +291,11 @@ func TestValidateWarns(t *testing.T) {
 		name: "pool on a down network",
 		mutate: func(c *Config) {
 			c.Pools = []Pool{{
-				Group: "down",
-				IPv4:  &PoolIPv4{Start: addr(t, "172.16.0.100"), End: addr(t, "172.16.0.200")},
+				Network: "down",
+				IPv4:    &PoolIPv4{Start: addr(t, "172.16.0.100"), End: addr(t, "172.16.0.200")},
 			}}
 		},
-		path:    "pools[0].group",
+		path:    "pools[0].network",
 		message: "is down",
 	}, {
 		name:    "enabled with no pools",
@@ -308,7 +308,7 @@ func TestValidateWarns(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := validConfig(t)
 			tc.mutate(&c)
-			r := Validate(c, testGroups())
+			r := Validate(c, testNetworks())
 			if !r.OK() {
 				t.Fatalf("expected a warning, got errors:\n    %s", problemStrings(r.Errors))
 			}
@@ -325,7 +325,7 @@ func TestReservationOutsideRangeIsClean(t *testing.T) {
 	c := validConfig(t)
 	c.Reservations = []Reservation{{MAC: "aa:bb:cc:dd:ee:ff", IP: addr(t, "192.168.1.50"), Hostname: "nas"}}
 
-	r := Validate(c, testGroups())
+	r := Validate(c, testNetworks())
 	if !r.OK() {
 		t.Fatalf("rejected:\n    %s", problemStrings(r.Errors))
 	}
@@ -335,7 +335,7 @@ func TestReservationOutsideRangeIsClean(t *testing.T) {
 }
 
 func TestValidateErrIsNilWhenOK(t *testing.T) {
-	if err := Validate(validConfig(t), testGroups()).Err(); err != nil {
+	if err := Validate(validConfig(t), testNetworks()).Err(); err != nil {
 		t.Errorf("Err() = %v, want nil", err)
 	}
 }

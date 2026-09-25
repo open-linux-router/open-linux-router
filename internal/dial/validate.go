@@ -142,7 +142,7 @@ func validateUplinkIPv4(r *Result, u *Uplink) {
 			"give this box's own address on the uplink, with its mask — 192.168.2.9/24")
 	case !addr.Addr().Is4():
 		// §3 of the plan this was built from: IPv4 only, matching
-		// link.GroupIPv4's precedent. A v6 uplink needs a v6 write path, and
+		// link.NetworkIPv4's precedent. A v6 uplink needs a v6 write path, and
 		// accepting the field before that exists would be a promise every
 		// generated surface makes and the writer cannot keep.
 		r.errorf(UplinkPath+".ipv4.address",
@@ -250,9 +250,9 @@ func checkUplinkInterface(r *Result, u *Uplink, links LinkView) {
 		return
 	}
 
-	groups, err := links.Groups()
+	networks, err := links.Networks()
 	if err == nil {
-		if g, taken := groupFor(groups, u.Interface); taken {
+		if n, taken := networkFor(networks, u.Interface); taken {
 			// The refusal that guides an existing box's migration. Somebody who
 			// gave their modem-facing NIC a static address before this object
 			// existed did it on the Networks page, because that was the only
@@ -265,7 +265,7 @@ func checkUplinkInterface(r *Result, u *Uplink, links LinkView) {
 					"one interface's addressing. A network is something this box *serves* "+
 					"— it gets DHCP, DNS and a router address — and the way out is not. "+
 					"Remove the network first (`olr net rm %s`), then set the uplink",
-				u.Interface, g.Name, g.Name)
+				u.Interface, n.Name, n.Name)
 		}
 	}
 
@@ -299,13 +299,13 @@ func unroutedNetworksNote(u *Uplink, links LinkView) string {
 	if links == nil || u == nil || !u.HasIPv4() {
 		return ""
 	}
-	groups, err := links.Groups()
-	if err != nil || len(groups) == 0 {
+	networks, err := links.Networks()
+	if err != nil || len(networks) == 0 {
 		return ""
 	}
-	names := make([]string, 0, len(groups))
-	for _, g := range groups {
-		names = append(names, g.Name)
+	names := make([]string, 0, len(networks))
+	for _, n := range networks {
+		names = append(names, n.Name)
 	}
 	subject, object := "the network "+names[0], "it"
 	if len(names) > 1 {

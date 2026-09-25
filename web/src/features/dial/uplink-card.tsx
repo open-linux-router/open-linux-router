@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useUplinkEditor } from '@/features/dial/queries'
 import { UplinkDialog } from '@/features/dial/uplink-dialog'
 import { useRemoveAddress } from '@/features/link/queries'
-import type { GroupRow, InterfaceRow, UplinkStatus } from '@/lib/api-types'
+import type { NetworkRow, InterfaceRow, UplinkStatus } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
 
 /**
@@ -38,11 +38,11 @@ import { cn } from '@/lib/utils'
  */
 export function UplinkCard({
   interfaces,
-  groups,
+  networks,
 }: {
   interfaces: InterfaceRow[]
   /** The networks, so the dialog can offer to take one's interface over. */
-  groups: GroupRow[]
+  networks: NetworkRow[]
 }) {
   const editor = useUplinkEditor()
   const [open, setOpen] = useState(false)
@@ -100,7 +100,7 @@ export function UplinkCard({
           onOpenChange={setOpen}
           initial={uplink}
           interfaces={interfaces}
-          groups={groups}
+          networks={networks}
           onSubmit={(next, replacing) => {
             void editor.save(next, replacing)
             setOpen(false)

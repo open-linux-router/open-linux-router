@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 
 import { ApiError, api } from '@/lib/api'
 import type { InterfaceList, LinkApplyResult, Plan } from '@/lib/api-types'
-import type { Group, LinkConfig } from '@/lib/config-types'
+import type { Network, LinkConfig } from '@/lib/config-types'
 
 import { linkKeys } from './queries'
 
@@ -95,7 +95,7 @@ export function useNetworkEditor() {
 
   return {
     config: config.data,
-    groups: interfaces.data?.groups ?? [],
+    networks: interfaces.data?.networks ?? [],
     interfaces: interfaces.data?.interfaces ?? [],
     problems: interfaces.data?.problems ?? [],
     isPending: config.isPending || interfaces.isPending,
@@ -103,7 +103,7 @@ export function useNetworkEditor() {
     busy: apply.isPending,
 
     submit,
-    save: (groups: Group[]) => submit({ ...(config.data ?? {}), groups }),
+    save: (networks: Network[]) => submit({ ...(config.data ?? {}), networks }),
 
     pending,
     confirm: async () => {

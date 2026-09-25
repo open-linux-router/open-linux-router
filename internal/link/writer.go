@@ -14,7 +14,7 @@ import (
 //
 // design.md §10 requires netlink to sit behind an interface so everything above
 // it is unit-testable off Linux, and this module needs that seam for the first
-// time here: until groups landed, `link` wrote nothing that reached the system
+// time here: until networks landed, `link` wrote nothing that reached the system
 // at all. Everything above this line works in values — Validate checks, BuildPlan
 // compares, this translates — so an implementation of Writer contains no policy.
 //
@@ -41,7 +41,7 @@ type Desired struct {
 	Addrs []netip.Prefix
 
 	// Up asks for the interface to be brought up. Never down: taking an
-	// interface down is not something any group configuration implies, and an
+	// interface down is not something any network configuration implies, and an
 	// operator who wants that has `ip link` and means it.
 	Up bool
 
@@ -61,7 +61,7 @@ type Desired struct {
 	// Enforcing ownership against that is a race olr loses in the worst
 	// possible way. The failure is concrete rather than theoretical: a
 	// one-armed router — one NIC, serving the LAN it is also reached over —
-	// has no uplink to move into `dial`, so its only address sits on a group
+	// has no uplink to move into `dial`, so its only address sits on a network
 	// member, and a startup that removed it would take the box off the network
 	// on every boot with the operator's only route back being physical.
 	//
@@ -102,7 +102,7 @@ type Writer interface {
 	Apply(ctx context.Context, desired []Desired) ([]Step, error)
 }
 
-// AddrPlan is the difference between what an interface has and what a group
+// AddrPlan is the difference between what an interface has and what a network
 // says it should have, computed as values so it can be shown before it is done.
 type AddrPlan struct {
 	Interface string
@@ -124,8 +124,8 @@ func (p AddrPlan) Empty() bool {
 //
 // # What olr takes ownership of, stated plainly
 //
-// An interface that is a member of a group has its **IPv4 addressing owned
-// entirely by olr**: any v4 address on it that the group does not call for is
+// An interface that is a member of a network has its **IPv4 addressing owned
+// entirely by olr**: any v4 address on it that the network does not call for is
 // removed. That is a real claim and it is made deliberately, because the
 // alternative is worse. To leave foreign addresses alone we would have to know
 // which addresses are ours, which means tagging them at creation and trusting
@@ -151,8 +151,8 @@ func PlanAddrs(c Config, observed []Interface) []AddrPlan {
 	}
 
 	var plans []AddrPlan
-	for _, g := range c.Groups {
-		for _, m := range g.Members {
+	for _, n := range c.Networks {
+		for _, m := range n.Members {
 			iface, present := byName[m]
 			if !present {
 				// Nothing to plan against an interface that does not exist.
@@ -164,8 +164,8 @@ func PlanAddrs(c Config, observed []Interface) []AddrPlan {
 			plan := AddrPlan{Interface: m, BringUp: !iface.Up}
 
 			var want []netip.Prefix
-			if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
-				want = append(want, g.IPv4.RouterPrefix())
+			if n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
+				want = append(want, n.IPv4.RouterPrefix())
 			}
 
 			have := ipv4Prefixes(iface.Prefixes)
@@ -205,22 +205,22 @@ func PlanAddrs(c Config, observed []Interface) []AddrPlan {
 // apply owns its addressing and removes what it does not call for anyway.
 func RetiredFor(before, after Config) []Desired {
 	member := map[string]bool{}
-	for _, g := range after.Groups {
-		for _, m := range g.Members {
+	for _, n := range after.Networks {
+		for _, m := range n.Members {
 			member[m] = true
 		}
 	}
 
 	byIface := map[string][]netip.Prefix{}
-	for _, g := range before.Groups {
-		if g.IPv4 == nil || !g.IPv4.Subnet.IsValid() {
+	for _, n := range before.Networks {
+		if n.IPv4 == nil || !n.IPv4.Subnet.IsValid() {
 			continue
 		}
-		for _, m := range g.Members {
-			if member[m] || slices.Contains(byIface[m], g.IPv4.RouterPrefix()) {
+		for _, m := range n.Members {
+			if member[m] || slices.Contains(byIface[m], n.IPv4.RouterPrefix()) {
 				continue
 			}
-			byIface[m] = append(byIface[m], g.IPv4.RouterPrefix())
+			byIface[m] = append(byIface[m], n.IPv4.RouterPrefix())
 		}
 	}
 
@@ -258,11 +258,11 @@ func PlanRetire(before, after Config, observed []Interface) []AddrPlan {
 // DesiredFor builds the writer's input from the stored networks.
 func DesiredFor(c Config) []Desired {
 	var out []Desired
-	for _, g := range c.Groups {
-		for _, m := range g.Members {
+	for _, n := range c.Networks {
+		for _, m := range n.Members {
 			d := Desired{Interface: m, Up: true}
-			if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
-				d.Addrs = append(d.Addrs, g.IPv4.RouterPrefix())
+			if n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
+				d.Addrs = append(d.Addrs, n.IPv4.RouterPrefix())
 			}
 			out = append(out, d)
 		}

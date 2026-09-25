@@ -27,22 +27,22 @@ func writeConfigText(w io.Writer, c Config) error {
 		fmt.Fprintf(w, "%s adopted:\n", core.Plural(len(c.Adopted), "interface"))
 		for _, name := range c.Adopted {
 			line := "  " + name
-			if g, ok := c.GroupFor(name); ok {
-				line += "  (" + g.Name + ")"
+			if n, ok := c.NetworkFor(name); ok {
+				line += "  (" + n.Name + ")"
 			}
 			fmt.Fprintln(w, line)
 		}
 	}
-	if len(c.Groups) > 0 {
-		fmt.Fprintf(w, "\n%s:\n", core.Plural(len(c.Groups), "network"))
+	if len(c.Networks) > 0 {
+		fmt.Fprintf(w, "\n%s:\n", core.Plural(len(c.Networks), "network"))
 		t := table(w)
-		for _, g := range c.Groups {
+		for _, n := range c.Networks {
 			subnet := "no ipv4"
-			if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
-				subnet = fmt.Sprintf("%s, this router at %s", g.IPv4.Subnet, g.IPv4.RouterAddr())
+			if n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
+				subnet = fmt.Sprintf("%s, this router at %s", n.IPv4.Subnet, n.IPv4.RouterAddr())
 			}
-			fmt.Fprintf(t, "  %s\ton %s\t%s\n", g.Name,
-				dashIfEmpty(strings.Join(g.Members, ",")), subnet)
+			fmt.Fprintf(t, "  %s\ton %s\t%s\n", n.Name,
+				dashIfEmpty(strings.Join(n.Members, ",")), subnet)
 		}
 		if err := t.Flush(); err != nil {
 			return err
@@ -60,7 +60,7 @@ func writeInterfacesText(w io.Writer, resp listResponse) error {
 	fmt.Fprintln(t, "INTERFACE\tOLR\tNETWORK\tSTATE\tADDRESSES")
 	for _, iface := range resp.Interfaces {
 		fmt.Fprintf(t, "%s\t%s\t%s\t%s\t%s\n",
-			iface.Name, adoptedText(iface), dashIfEmpty(iface.Group),
+			iface.Name, adoptedText(iface), dashIfEmpty(iface.Network),
 			stateText(iface), addressesText(iface))
 	}
 	if err := t.Flush(); err != nil {
@@ -70,15 +70,15 @@ func writeInterfacesText(w io.Writer, resp listResponse) error {
 	return writeProblems(w, resp.Problems)
 }
 
-// writeGroupsText is `olr net list`.
+// writeNetworksText is `olr net list`.
 //
 // The router's address gets its own column rather than being folded into the
 // subnet, because those are two things an operator reads separately: "the
 // network is 172.16.1.0/24" and "this box is .1 on it". The range column is the
 // derived one — what `dhcp` would hand out if nobody typed a range — and is
 // marked as such so nobody reads it as configuration that already exists.
-func writeGroupsText(w io.Writer, resp listResponse) error {
-	if len(resp.Groups) == 0 {
+func writeNetworksText(w io.Writer, resp listResponse) error {
+	if len(resp.Networks) == 0 {
 		return cli.NoObjects(w, "networks",
 			"Create one with `olr net add lan`. Only the name is needed — the subnet,\n"+
 				"this router's address on it, and the interface are all derived.")
@@ -86,17 +86,17 @@ func writeGroupsText(w io.Writer, resp listResponse) error {
 
 	t := table(w)
 	fmt.Fprintln(t, "NETWORK\tON\tSUBNET\tTHIS ROUTER\tDERIVED RANGE")
-	for _, g := range resp.Groups {
-		members := dashIfEmpty(strings.Join(g.Members, ","))
-		if !g.Present {
+	for _, n := range resp.Networks {
+		members := dashIfEmpty(strings.Join(n.Members, ","))
+		if !n.Present {
 			members += " (absent)"
 		}
 		rng := "-"
-		if g.SuggestedStart != "" {
-			rng = g.SuggestedStart + "-" + g.SuggestedEnd
+		if n.SuggestedStart != "" {
+			rng = n.SuggestedStart + "-" + n.SuggestedEnd
 		}
 		fmt.Fprintf(t, "%s\t%s\t%s\t%s\t%s\n",
-			g.Name, members, dashIfEmpty(g.Subnet), dashIfEmpty(g.Router), rng)
+			n.Name, members, dashIfEmpty(n.Subnet), dashIfEmpty(n.Router), rng)
 	}
 	if err := t.Flush(); err != nil {
 		return err

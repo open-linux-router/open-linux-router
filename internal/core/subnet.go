@@ -57,7 +57,7 @@ func HostRange(prefix netip.Prefix) (netip.Addr, netip.Addr, bool) {
 }
 
 // FirstHost returns the first assignable address in a prefix — the conventional
-// router address, and what a group gets when nobody says otherwise.
+// router address, and what a network gets when nobody says otherwise.
 //
 // design.md §11.2 makes this a product requirement rather than a convenience:
 // `olr net add iot` has to derive a gateway, and every home network on earth

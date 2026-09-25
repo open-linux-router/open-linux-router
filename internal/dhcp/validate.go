@@ -114,7 +114,7 @@ var renderedOptions = map[string]string{
 //
 // It is pure: no files, no netlink, no root. That is what lets the entire rule
 // set be table-tested and lets `olr dhcp` check a config on a laptop.
-func Validate(c Config, groups GroupView) Result {
+func Validate(c Config, networks NetworkView) Result {
 	var r Result
 
 	if c.Enabled && len(c.Pools) == 0 {
@@ -127,39 +127,39 @@ func Validate(c Config, groups GroupView) Result {
 	// between two of them.
 	subnets := map[string]netip.Prefix{}
 	ranges := map[string][2]netip.Addr{}
-	seenGroup := map[string]int{}
+	seenNetwork := map[string]int{}
 
 	for i, p := range c.Pools {
 		path := fmt.Sprintf("pools[%d]", i)
 
-		if p.Group == "" {
-			r.errorf(path+".group", "required")
+		if p.Network == "" {
+			r.errorf(path+".network", "required")
 			continue
 		}
-		if first, dup := seenGroup[p.Group]; dup {
-			r.errorf(path+".group", "network %q already has a pool at pools[%d]; one pool per network",
-				p.Group, first)
+		if first, dup := seenNetwork[p.Network]; dup {
+			r.errorf(path+".network", "network %q already has a pool at pools[%d]; one pool per network",
+				p.Network, first)
 			continue
 		}
-		seenGroup[p.Group] = i
+		seenNetwork[p.Network] = i
 
-		info, err := groups.Group(p.Group)
+		info, err := networks.Network(p.Network)
 		if err != nil {
-			r.errorf(path+".group", "%v; `olr net show` lists the networks there are", err)
+			r.errorf(path+".network", "%v; `olr net show` lists the networks there are", err)
 			continue
 		}
 		if !info.Up {
-			r.warnf(path+".group", "%q is down; the pool is configured but will not serve until it comes up",
-				p.Group)
+			r.warnf(path+".network", "%q is down; the pool is configured but will not serve until it comes up",
+				p.Network)
 		}
 		if p.IPv4 == nil && p.RA() == RAOff {
 			r.errorf(path, "%q serves neither IPv4 nor IPv6, so it does nothing; "+
-				"give it an ipv4 range or set ipv6.mode", p.Group)
+				"give it an ipv4 range or set ipv6.mode", p.Network)
 		}
 
 		if start, end, ok := validatePoolIPv4(&r, path, p, info); ok {
-			subnets[p.Group] = info.Subnet
-			ranges[p.Group] = [2]netip.Addr{start, end}
+			subnets[p.Network] = info.Subnet
+			ranges[p.Network] = [2]netip.Addr{start, end}
 		}
 		validatePoolIPv6(&r, path, p, info)
 
@@ -192,7 +192,7 @@ const LargePoolWarning = 10000
 func validateCapacity(r *Result, c Config, ranges map[string][2]netip.Addr) {
 	total := 0
 	for _, p := range c.Pools {
-		if rng, ok := ranges[p.Group]; ok {
+		if rng, ok := ranges[p.Network]; ok {
 			total += core.RangeSize(rng[0], rng[1])
 		}
 	}
@@ -212,15 +212,15 @@ func validateCapacity(r *Result, c Config, ranges map[string][2]netip.Addr) {
 // network it is on, not because an interface somewhere happens to hold a
 // different address — a complaint the operator had no way to act on, because
 // nothing in olr could change that address.
-func validatePoolIPv4(r *Result, path string, p Pool, g GroupInfo) (netip.Addr, netip.Addr, bool) {
+func validatePoolIPv4(r *Result, path string, p Pool, n NetworkInfo) (netip.Addr, netip.Addr, bool) {
 	if p.IPv4 == nil {
 		return netip.Addr{}, netip.Addr{}, false
 	}
 	v4 := *p.IPv4
 
-	if !g.HasIPv4() {
+	if !n.HasIPv4() {
 		r.errorf(path+".ipv4", "%q has no IPv4 subnet, so there is nothing to hand out from; "+
-			"give it one with `olr net set %s --subnet <cidr>`", g.Name, g.Name)
+			"give it one with `olr net set %s --subnet <cidr>`", n.Name, n.Name)
 		return netip.Addr{}, netip.Addr{}, false
 	}
 
@@ -241,26 +241,26 @@ func validatePoolIPv4(r *Result, path string, p Pool, g GroupInfo) (netip.Addr, 
 		return netip.Addr{}, netip.Addr{}, false
 	}
 
-	start, end, ok := p.Range(g)
+	start, end, ok := p.Range(n)
 	if !ok {
-		r.errorf(path+".ipv4", "%s has no addresses to hand out", g.Subnet)
+		r.errorf(path+".ipv4", "%s has no addresses to hand out", n.Subnet)
 		return netip.Addr{}, netip.Addr{}, false
 	}
 
-	prefix := g.Subnet
+	prefix := n.Subnet
 	if !prefix.Contains(start) {
-		r.errorf(path+".ipv4.start", "%s is outside %s, the subnet of network %q", start, prefix, g.Name)
+		r.errorf(path+".ipv4.start", "%s is outside %s, the subnet of network %q", start, prefix, n.Name)
 		return netip.Addr{}, netip.Addr{}, false
 	}
 	if !prefix.Contains(end) {
-		r.errorf(path+".ipv4.end", "%s is outside %s, the subnet of network %q", end, prefix, g.Name)
+		r.errorf(path+".ipv4.end", "%s is outside %s, the subnet of network %q", end, prefix, n.Name)
 		return netip.Addr{}, netip.Addr{}, false
 	}
 
 	// The three addresses that cannot be handed to a client.
-	if core.InRange(start, end, g.Router) {
+	if core.InRange(start, end, n.Router) {
 		r.errorf(path+".ipv4", "the range contains %s, which is this router's own address on %q",
-			g.Router, g.Name)
+			n.Router, n.Name)
 	}
 	if network := prefix.Masked().Addr(); core.InRange(start, end, network) {
 		r.errorf(path+".ipv4", "the range contains the network address %s", network)
@@ -297,7 +297,7 @@ func validatePoolIPv4(r *Result, path string, p Pool, g GroupInfo) (netip.Addr, 
 // `constructor:` derives the prefix from the member interface, so what would be
 // validated here is a fact about the uplink's delegation that neither module
 // stores.
-func validatePoolIPv6(r *Result, path string, p Pool, g GroupInfo) {
+func validatePoolIPv6(r *Result, path string, p Pool, n NetworkInfo) {
 	if p.IPv6 == nil {
 		return
 	}
@@ -315,8 +315,8 @@ func validatePoolIPv6(r *Result, path string, p Pool, g GroupInfo) {
 				"they get no DHCPv6 address at all. They still work via the advertised prefix, "+
 				"but anything depending on a DHCPv6 lease will not see them")
 	}
-	if len(g.Members) == 0 {
-		r.warnf(path+".ipv6", "%q has no interface, so nothing can be advertised on it", g.Name)
+	if len(n.Members) == 0 {
+		r.warnf(path+".ipv6", "%q has no interface, so nothing can be advertised on it", n.Name)
 	}
 }
 
@@ -325,19 +325,19 @@ func validatePoolIPv6(r *Result, path string, p Pool, g GroupInfo) {
 // subnets themselves collide, and `link` refuses that separately.
 func validateOverlaps(r *Result, c Config, ranges map[string][2]netip.Addr) {
 	for i := range c.Pools {
-		a, aok := ranges[c.Pools[i].Group]
+		a, aok := ranges[c.Pools[i].Network]
 		if !aok {
 			continue
 		}
 		for j := i + 1; j < len(c.Pools); j++ {
-			b, bok := ranges[c.Pools[j].Group]
+			b, bok := ranges[c.Pools[j].Network]
 			if !bok {
 				continue
 			}
 			if a[0].Compare(b[1]) <= 0 && b[0].Compare(a[1]) <= 0 {
 				r.errorf(fmt.Sprintf("pools[%d]", j),
 					"range %s-%s overlaps pools[%d] (%s) which serves %s-%s",
-					b[0], b[1], i, c.Pools[i].Group, a[0], a[1])
+					b[0], b[1], i, c.Pools[i].Network, a[0], a[1])
 			}
 		}
 	}
@@ -387,17 +387,17 @@ func validateReservations(r *Result, c Config, subnets map[string]netip.Prefix, 
 // must share a subnet with some dhcp-range, though it need not be inside the
 // range itself.
 func validateReservationSubnet(r *Result, path string, res Reservation, subnets map[string]netip.Prefix, ranges map[string][2]netip.Addr) {
-	for group, prefix := range subnets {
+	for network, prefix := range subnets {
 		if !prefix.Contains(res.IP) {
 			continue
 		}
-		if rng, ok := ranges[group]; ok && core.InRange(rng[0], rng[1], res.IP) {
+		if rng, ok := ranges[network]; ok && core.InRange(rng[0], rng[1], res.IP) {
 			// Permitted by dnsmasq, and it does honour the reservation. But the
 			// address is also in the pool it hands out from, so the margin for
 			// error is one dnsmasq bug wide. Say so; do not refuse.
 			r.warnf(path+".ip",
 				"%s is inside %s's dynamic range (%s-%s); reserving an address outside the range removes any chance of a collision",
-				res.IP, group, rng[0], rng[1])
+				res.IP, network, rng[0], rng[1])
 		}
 		return
 	}

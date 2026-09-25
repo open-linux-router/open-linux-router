@@ -318,7 +318,7 @@ func uplinkLinks() StaticView {
 			"enp2s0": {Adopted: true, Up: true},
 			"enp3s0": {Adopted: false, Up: true},
 		},
-		Networks: []GroupInfo{{Name: "lan", Members: []string{"enp1s0"}}},
+		Nets: []NetworkInfo{{Name: "lan", Members: []string{"enp1s0"}}},
 	}
 }
 

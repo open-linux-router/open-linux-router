@@ -138,9 +138,9 @@ type Config struct {
 	// Interfaces assigns an exit per network — §2.5's first tier of the ladder,
 	// and the only one that ships here.
 	//
-	// Keyed by kernel interface name rather than by a group, matching
+	// Keyed by kernel interface name rather than by a network, matching
 	// internal/dhcp's pools and for the reason internal/dns states in as many
-	// words: groups do not exist until the link module lands (design.md
+	// words: networks do not exist until the link module lands (design.md
 	// milestone 1), and inventing a second spelling now would be one more thing
 	// to unpick then. The name of this field changes when link does; the shape
 	// does not.

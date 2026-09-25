@@ -50,7 +50,7 @@ func writePoolsText(w io.Writer, pools []Pool) error {
 	fmt.Fprintln(t, "NETWORK\tIPv4\tIPv6\tLEASE\tGATEWAY\tDNS\tDOMAIN")
 	for _, p := range pools {
 		fmt.Fprintf(t, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			p.Group,
+			p.Network,
 			rangeText(p),
 			p.RA(),
 			p.LeaseTimeOrDefault(),
@@ -84,7 +84,7 @@ func rangeText(p Pool) string {
 
 func writePoolText(w io.Writer, p Pool) error {
 	rows := [][2]string{
-		{"network", p.Group},
+		{"network", p.Network},
 		{"ipv4", rangeText(p)},
 		{"ipv6", string(p.RA())},
 		{"lease", fmt.Sprintf("%s", p.LeaseTimeOrDefault())},
@@ -247,7 +247,7 @@ func writeStatusText(w io.Writer, status statusResponse, leases leasesResponse) 
 		fmt.Fprintln(t, "INTERFACE\tSIZE\tACTIVE\tEXPIRED\tFREE\tUSED")
 		for _, u := range leases.Usage {
 			fmt.Fprintf(t, "%s\t%d\t%d\t%d\t%d\t%d%%\n",
-				u.Group, u.Size, u.Active, u.Expired, u.Free, u.Percent)
+				u.Network, u.Size, u.Active, u.Expired, u.Free, u.Percent)
 		}
 		if err := t.Flush(); err != nil {
 			return err

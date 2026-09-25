@@ -19,7 +19,7 @@ export function DhcpRangesPage() {
   // server kept handing it out on whatever interface it was last given.
   const interfaces = useInterfaces()
   const networks = interfaces.isSuccess
-    ? new Set(interfaces.data.groups.map((g) => g.name))
+    ? new Set(interfaces.data.networks.map((n) => n.name))
     : undefined
   const [editing, setEditing] = useState<Pool | undefined>(undefined)
   const [open, setOpen] = useState(false)
@@ -29,13 +29,13 @@ export function DhcpRangesPage() {
 
   function upsert(pool: Pool) {
     if (!config) return
-    const rest = pools.filter((p) => p.group !== pool.group)
+    const rest = pools.filter((p) => p.network !== pool.network)
     change({ ...config, pools: [...rest, pool] })
   }
 
-  function remove(group: string) {
+  function remove(network: string) {
     if (!config) return
-    change({ ...config, pools: pools.filter((p) => p.group !== group) })
+    change({ ...config, pools: pools.filter((p) => p.network !== network) })
   }
 
   return (
@@ -60,15 +60,15 @@ export function DhcpRangesPage() {
       ) : (
         <List>
           {pools.map((pool) => {
-            const u = leases.data?.usage?.find((x) => x.group === pool.group)
+            const u = leases.data?.usage?.find((x) => x.network === pool.network)
             return (
               <ListRow
-                key={pool.group}
-                title={pool.group}
+                key={pool.network}
+                title={pool.network}
                 subtitle={
-                  networks && !networks.has(pool.group) ? (
+                  networks && !networks.has(pool.network) ? (
                     <span className="text-warning">
-                      There is no network called {pool.group} any more, so this range cannot be
+                      There is no network called {pool.network} any more, so this range cannot be
                       served. Open it to remove it, or add the network back.
                     </span>
                   ) : (
@@ -91,12 +91,12 @@ export function DhcpRangesPage() {
       )}
 
       <PoolDialog
-        key={editing?.group ?? 'new'}
+        key={editing?.network ?? 'new'}
         open={open}
         onOpenChange={setOpen}
         initial={editing}
         onSubmit={upsert}
-        onRemove={editing ? () => remove(editing.group) : undefined}
+        onRemove={editing ? () => remove(editing.network) : undefined}
       />
     </SubPage>
   )

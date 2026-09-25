@@ -43,7 +43,7 @@ const RA_OPTIONS: { value: Exclude<RouterAdvertisementMode, ''>; label: string; 
 
 const RA_LABEL = new Map(RA_OPTIONS.map((o) => [o.value as string, o.label]))
 
-const EMPTY: Pool = { group: '', ipv4: {} }
+const EMPTY: Pool = { network: '', ipv4: {} }
 
 export function PoolDialog({
   open,
@@ -68,8 +68,8 @@ export function PoolDialog({
   // interface — which is what lets the range be checked against a subnet
   // somebody declared rather than one an interface happens to hold.
   const interfaces = useInterfaces()
-  const networks = interfaces.data?.groups ?? []
-  const chosen = networks.find((g) => g.name === draft.group)
+  const networks = interfaces.data?.networks ?? []
+  const chosen = networks.find((n) => n.name === draft.network)
 
   function field<K extends keyof Pool>(key: K, value: Pool[K]) {
     setDraft((d) => ({ ...d, [key]: value }))
@@ -88,7 +88,7 @@ export function PoolDialog({
   // network's subnet, which is both less typing and the safer answer — see the
   // hint under the fields.
   const servesSomething = draft.ipv4 !== undefined || (draft.ipv6?.mode ?? 'off') !== 'off'
-  const complete = draft.group.trim() !== '' && servesSomething
+  const complete = draft.network.trim() !== '' && servesSomething
 
   return (
     <Dialog
@@ -100,7 +100,7 @@ export function PoolDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{editing ? `Edit ${initial.group}` : 'Add addresses'}</DialogTitle>
+          <DialogTitle>{editing ? `Edit ${initial.network}` : 'Add addresses'}</DialogTitle>
           <DialogDescription>
             What a network hands out. IPv4 and IPv6 are set separately — a
             network can do either, or both.
@@ -109,10 +109,10 @@ export function PoolDialog({
 
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="pool-group">Network</Label>
+            <Label htmlFor="pool-network">Network</Label>
             {editing ? (
               <>
-                <Input id="pool-group" value={draft.group} disabled />
+                <Input id="pool-network" value={draft.network} disabled />
                 <p className="text-xs text-muted-foreground">
                   The network identifies this pool and cannot be changed. Remove and re-add
                   to move it.
@@ -120,7 +120,7 @@ export function PoolDialog({
               </>
             ) : networks.length === 0 ? (
               <p
-                id="pool-group"
+                id="pool-network"
                 className="rounded-lg border border-dashed px-3 py-4 text-center text-sm text-muted-foreground"
               >
                 No network yet. Create one under Networks — it is where the subnet is
@@ -128,17 +128,17 @@ export function PoolDialog({
               </p>
             ) : (
               <>
-                <Select value={draft.group} onValueChange={(name) => field('group', name ?? '')}>
-                  <SelectTrigger id="pool-group" className="w-full">
+                <Select value={draft.network} onValueChange={(name) => field('network', name ?? '')}>
+                  <SelectTrigger id="pool-network" className="w-full">
                     <SelectValue placeholder="Choose a network" />
                   </SelectTrigger>
                   <SelectContent>
-                    {networks.map((g) => (
-                      <SelectItem key={g.name} value={g.name}>
+                    {networks.map((n) => (
+                      <SelectItem key={n.name} value={n.name}>
                         <span className="flex flex-col gap-0.5">
-                          <span className="font-mono">{g.name}</span>
+                          <span className="font-mono">{n.name}</span>
                           <span className="text-xs text-muted-foreground">
-                            {g.subnet ?? 'no IPv4 subnet'}
+                            {n.subnet ?? 'no IPv4 subnet'}
                           </span>
                         </span>
                       </SelectItem>
@@ -358,7 +358,7 @@ function splitList(value: string): string[] | undefined {
 function normalise(pool: Pool): Pool {
   const out: Pool = {
     ...pool,
-    group: pool.group.trim(),
+    network: pool.network.trim(),
     lease_time: pool.lease_time?.trim() || undefined,
     gateway: pool.gateway?.trim() || undefined,
     domain: pool.domain?.trim() || undefined,

@@ -214,7 +214,7 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 	// Validated before the lock is taken. Validation is pure (§5.3.1), so
 	// holding the lock to do it would only make a bad request slow down a good
 	// one, and a 422 is more useful than a plan that cannot be applied.
-	if res := Validate(cfg, h.Applier.Groups); !res.OK() {
+	if res := Validate(cfg, h.Applier.Networks); !res.OK() {
 		core.WriteError(w, http.StatusUnprocessableEntity,
 			"invalid dhcp configuration", problems(res.Errors)...)
 		return
@@ -318,7 +318,7 @@ func (h HTTP) plan(r *http.Request, cfg Config) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	return BuildPlan(h.Applier.Backend, cfg, h.Applier.Groups, obs, time.Now())
+	return BuildPlan(h.Applier.Backend, cfg, h.Applier.Networks, obs, time.Now())
 }
 
 // --- observed -------------------------------------------------------------

@@ -129,8 +129,8 @@ func TestNormalizeMAC(t *testing.T) {
 func TestNormalizeIsCanonical(t *testing.T) {
 	c := Config{
 		Pools: []Pool{
-			{Group: "guest", IPv4: &PoolIPv4{Start: addr(t, "10.10.0.10"), End: addr(t, "10.10.0.20")}},
-			{Group: "lan", IPv4: &PoolIPv4{Start: addr(t, "192.168.1.100"), End: addr(t, "192.168.1.200")}},
+			{Network: "guest", IPv4: &PoolIPv4{Start: addr(t, "10.10.0.10"), End: addr(t, "10.10.0.20")}},
+			{Network: "lan", IPv4: &PoolIPv4{Start: addr(t, "192.168.1.100"), End: addr(t, "192.168.1.200")}},
 		},
 		Reservations: []Reservation{
 			{MAC: "FF:EE:DD:CC:BB:AA", IP: addr(t, "192.168.1.50")},
@@ -139,7 +139,7 @@ func TestNormalizeIsCanonical(t *testing.T) {
 	}
 	c.Normalize()
 
-	if c.Pools[0].Group != "guest" || c.Pools[1].Group != "lan" {
+	if c.Pools[0].Network != "guest" || c.Pools[1].Network != "lan" {
 		t.Errorf("pools not sorted by network: %v", c.Pools)
 	}
 	if c.Reservations[0].MAC != "aa:bb:cc:dd:ee:ff" {
@@ -168,7 +168,7 @@ func TestConfigRoundTripsThroughJSON(t *testing.T) {
 	original := Config{
 		Enabled: true,
 		Pools: []Pool{{
-			Group:     "lan",
+			Network:   "lan",
 			IPv4:      &PoolIPv4{Start: addr(t, "192.168.1.100"), End: addr(t, "192.168.1.200")},
 			IPv6:      &PoolIPv6{Mode: RASLAAC},
 			LeaseTime: lease,
@@ -237,7 +237,7 @@ func TestMissingSectionIsEmptyNotAnError(t *testing.T) {
 func TestCloneDoesNotShareBackingArrays(t *testing.T) {
 	gw := addr(t, "192.168.1.254")
 	original := Config{Pools: []Pool{{
-		Group:   "lan",
+		Network: "lan",
 		Gateway: &gw,
 		DNS:     []netip.Addr{addr(t, "1.1.1.1")},
 		Options: []Option{{Option: "42", Value: "x"}},
@@ -288,5 +288,50 @@ func TestPoolAndReservationAccessors(t *testing.T) {
 	}
 	if c.RemovePool("lan") {
 		t.Error("RemovePool reported success twice")
+	}
+}
+
+// A pool written before the network stopped being called `group` still loads,
+// alongside one written after — a box whose pools were added on both sides of
+// the upgrade has exactly that document.
+func TestUnmarshalReadsThePoolsOldNetworkKey(t *testing.T) {
+	const old = `{"enabled":true,"pools":[` +
+		`{"group":"lan","ipv4":{"start":"192.168.1.100","end":"192.168.1.200"}},` +
+		`{"network":"guest"}]}`
+	if !HasLegacyKeys([]byte(old)) {
+		t.Error("HasLegacyKeys missed a pool's `group`")
+	}
+	c, err := UnmarshalConfig([]byte(old))
+	if err != nil {
+		t.Fatalf("UnmarshalConfig: %v", err)
+	}
+	if len(c.Legacy) != 0 {
+		t.Errorf("read as a pre-0.3 document: %+v", c.Legacy)
+	}
+	p, ok := c.Pool("lan")
+	if !ok || p.IPv4 == nil || p.IPv4.Start.String() != "192.168.1.100" {
+		t.Fatalf("pools = %+v, want lan's range", c.Pools)
+	}
+	if _, ok := c.Pool("guest"); !ok {
+		t.Errorf("the pool already in the new shape was lost: %+v", c.Pools)
+	}
+
+	data, err := MarshalConfig(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), `"group"`) || HasLegacyKeys(data) {
+		t.Errorf("marshalled in the old shape: %s", data)
+	}
+}
+
+func TestUnmarshalRefusesBothPoolNetworkKeys(t *testing.T) {
+	const both = `{"enabled":true,"pools":[{"network":"lan"},{"group":"lan","network":"guest"}]}`
+	_, err := UnmarshalConfig([]byte(both))
+	if err == nil {
+		t.Fatal("accepted a pool carrying both `group` and `network`")
+	}
+	if !strings.Contains(err.Error(), "pools[1]") {
+		t.Errorf("err = %v, want it to name pools[1]", err)
 	}
 }

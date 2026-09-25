@@ -49,12 +49,12 @@ type interfaceView struct {
 	Address string `json:"address,omitempty"`
 	Subnet  string `json:"subnet,omitempty"`
 
-	// Group is the network this interface carries, empty if it carries none.
+	// Network is the network this interface carries, empty if it carries none.
 	//
-	// The reverse of a group's member list, and what lets an interface row say
+	// The reverse of a network's member list, and what lets an interface row say
 	// what it is *for*. Before networks existed the only available answer to
 	// "what is ens18 for" was whatever address it happened to be holding.
-	Group string `json:"group,omitempty"`
+	Network string `json:"network,omitempty"`
 }
 
 func viewInterface(info Info, observed map[string]Interface, cfg Config) interfaceView {
@@ -78,19 +78,19 @@ func viewInterface(info Info, observed map[string]Interface, cfg Config) interfa
 		v.Address = prefix.Addr().String()
 		v.Subnet = prefix.Masked().String()
 	}
-	if g, ok := cfg.GroupFor(info.Name); ok {
-		v.Group = g.Name
+	if n, ok := cfg.NetworkFor(info.Name); ok {
+		v.Network = n.Name
 	}
 	return v
 }
 
-// groupView is one network as the API publishes it.
+// networkView is one network as the API publishes it.
 //
 // It carries the derived range alongside the subnet because every caller wants
 // it and none of them should compute it: `dhcp` derives a pool from it and the
 // form prefills from it, and two implementations of §11.2's "leave a static
 // block free" rule would eventually disagree about where the block ends.
-type groupView struct {
+type networkView struct {
 	Name    string   `json:"name"`
 	Members []string `json:"members"`
 
@@ -116,26 +116,26 @@ type groupView struct {
 	Present bool `json:"present"`
 }
 
-func viewGroup(g Group, observed map[string]Interface) groupView {
-	v := groupView{
-		Name:    g.Name,
-		Members: slices.Clone(g.Members),
-		Present: len(g.Members) > 0,
+func viewNetwork(n Network, observed map[string]Interface) networkView {
+	v := networkView{
+		Name:    n.Name,
+		Members: slices.Clone(n.Members),
+		Present: len(n.Members) > 0,
 	}
 	if v.Members == nil {
 		v.Members = []string{}
 	}
-	for _, m := range g.Members {
+	for _, m := range n.Members {
 		if _, ok := observed[m]; !ok {
 			v.Present = false
 		}
 	}
-	if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
-		router := g.IPv4.RouterAddr()
-		v.Subnet = g.IPv4.Subnet.String()
+	if n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
+		router := n.IPv4.RouterAddr()
+		v.Subnet = n.IPv4.Subnet.String()
 		v.Router = router.String()
-		v.RouterExplicit = g.IPv4.Router != nil
-		if start, end, ok := core.SuggestRange(g.IPv4.Subnet, router); ok {
+		v.RouterExplicit = n.IPv4.Router != nil
+		if start, end, ok := core.SuggestRange(n.IPv4.Subnet, router); ok {
 			v.SuggestedStart, v.SuggestedEnd = start.String(), end.String()
 		}
 	}
@@ -145,11 +145,11 @@ func viewGroup(g Group, observed map[string]Interface) groupView {
 type listResponse struct {
 	Interfaces []interfaceView `json:"interfaces"`
 
-	// Groups are the networks configured on this box, alongside the interfaces
+	// Networks are the networks configured on this box, alongside the interfaces
 	// rather than behind a second request: every surface that renders one wants
 	// the other in the same breath, and two round trips would let them be read
 	// at two different instants.
-	Groups []groupView `json:"groups"`
+	Networks []networkView `json:"networks"`
 
 	// Problems are the findings against the stored set — an adopted name with
 	// no interface behind it, a network whose member does not exist. Reported
@@ -169,7 +169,7 @@ type listResponse struct {
 // The field names are identical so that a client's Plan type and its plan
 // preview render any module's answer without a second implementation.
 //
-// The impact stopped being a constant `none` when groups landed. Two kinds of
+// The impact stopped being a constant `none` when networks landed. Two kinds of
 // change now share one plan and they could not be further apart: adopting an
 // interface still does nothing at all to the box, while renumbering a network
 // takes every client's address away and may take the operator's own session
@@ -250,31 +250,31 @@ func buildPlan(stored, desired Config, observed []Interface, opts Options) planV
 	}
 
 	// --- networks: keyed objects, and these do reach the box ---
-	for _, g := range desired.Groups {
-		before, existed := stored.Group(g.Name)
+	for _, n := range desired.Networks {
+		before, existed := stored.Network(n.Name)
 		switch {
 		case !existed:
 			plan.Changes = append(plan.Changes, changeView{
-				Path: groupPath(g.Name), Kind: kindCreate, Impact: impactRestart,
-				Diff: describeGroup("+ ", g),
+				Path: networkPath(n.Name), Kind: kindCreate, Impact: impactRestart,
+				Diff: describeNetwork("+ ", n),
 			})
-		case !sameGroup(before, g):
+		case !sameNetwork(before, n):
 			plan.Changes = append(plan.Changes, changeView{
-				Path: groupPath(g.Name), Kind: kindUpdate, Impact: groupImpact(before, g),
-				Diff: describeGroup("- ", before) + describeGroup("+ ", g),
+				Path: networkPath(n.Name), Kind: kindUpdate, Impact: networkImpact(before, n),
+				Diff: describeNetwork("- ", before) + describeNetwork("+ ", n),
 			})
 		}
 	}
-	for _, g := range stored.Groups {
-		if _, kept := desired.Group(g.Name); !kept {
+	for _, n := range stored.Networks {
+		if _, kept := desired.Network(n.Name); !kept {
 			// Removing a network takes the router's address off the interface,
 			// which is every bit as disruptive as renumbering it — unless the
 			// address is being kept for the uplink to take over, when what goes
 			// is only what this box serves there.
 			plan.Changes = append(plan.Changes, changeView{
-				Path: groupPath(g.Name), Kind: kindDelete,
+				Path: networkPath(n.Name), Kind: kindDelete,
 				Impact: pick(opts.KeepAddresses, impactRestart, impactDisruptive),
-				Diff:   describeGroup("- ", g),
+				Diff:   describeNetwork("- ", n),
 			})
 		}
 	}
@@ -321,8 +321,8 @@ func buildPlan(stored, desired Config, observed []Interface, opts Options) planV
 	return plan
 }
 
-// sameGroup reports whether two networks are configured identically.
-func sameGroup(a, b Group) bool {
+// sameNetwork reports whether two networks are configured identically.
+func sameNetwork(a, b Network) bool {
 	if a.Name != b.Name || !slices.Equal(a.Members, b.Members) {
 		return false
 	}
@@ -335,12 +335,12 @@ func sameGroup(a, b Group) bool {
 	return a.IPv4.Subnet == b.IPv4.Subnet && a.IPv4.RouterAddr() == b.IPv4.RouterAddr()
 }
 
-// groupImpact classifies a change to an existing network in client terms.
+// networkImpact classifies a change to an existing network in client terms.
 //
 // The question is only ever "does anything on this network lose the address it
 // is holding". Renumbering the subnet does; adding an IPv4 block to a network
 // that had none does not, because there was nothing there to lose.
-func groupImpact(before, after Group) string {
+func networkImpact(before, after Network) string {
 	switch {
 	case !slices.Equal(before.Members, after.Members):
 		return impactDisruptive
@@ -357,23 +357,23 @@ func groupImpact(before, after Group) string {
 	return impactNone
 }
 
-// describeGroup renders a network as diff lines.
-func describeGroup(sign string, g Group) string {
+// describeNetwork renders a network as diff lines.
+func describeNetwork(sign string, n Network) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%snetwork %s\n", sign, g.Name)
-	if len(g.Members) > 0 {
-		fmt.Fprintf(&b, "%s  on %s\n", sign, strings.Join(g.Members, ", "))
+	fmt.Fprintf(&b, "%snetwork %s\n", sign, n.Name)
+	if len(n.Members) > 0 {
+		fmt.Fprintf(&b, "%s  on %s\n", sign, strings.Join(n.Members, ", "))
 	}
-	if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
-		fmt.Fprintf(&b, "%s  ipv4 %s, this router at %s\n", sign, g.IPv4.Subnet, g.IPv4.RouterAddr())
+	if n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
+		fmt.Fprintf(&b, "%s  ipv4 %s, this router at %s\n", sign, n.IPv4.Subnet, n.IPv4.RouterAddr())
 	} else {
 		fmt.Fprintf(&b, "%s  no ipv4\n", sign)
 	}
 	return b.String()
 }
 
-func itemPath(name string) string  { return "adopted[" + name + "]" }
-func groupPath(name string) string { return "groups[" + name + "]" }
+func itemPath(name string) string    { return "adopted[" + name + "]" }
+func networkPath(name string) string { return "networks[" + name + "]" }
 
 // pick is a conditional expression, for the places where a three-line if would
 // only separate a value from the condition that chooses it.

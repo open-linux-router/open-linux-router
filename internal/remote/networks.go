@@ -33,7 +33,7 @@ type NetworkInfo struct {
 	Name string `json:"name"`
 
 	// Subnet is the network's prefix. Invalid for a network that serves no
-	// IPv4, which is legal (link.Group.IPv4 is a pointer) and simply means
+	// IPv4, which is legal (link.Network.IPv4 is a pointer) and simply means
 	// there is nothing here to route home.
 	Subnet netip.Prefix `json:"subnet,omitempty"`
 }

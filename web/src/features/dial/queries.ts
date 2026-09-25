@@ -117,7 +117,7 @@ export function useUplinkEditor() {
     const link = await api.get<LinkConfig>('/api/link/config')
     await api.put<LinkApplyResult>('/api/link/config?keep_addresses=true', {
       ...link,
-      groups: (link.groups ?? []).filter((g) => g.name !== network),
+      networks: (link.networks ?? []).filter((n) => n.name !== network),
     })
     // The page's network list, and the ranges that may have been on it.
     await queryClient.invalidateQueries({ queryKey: ['link'] })

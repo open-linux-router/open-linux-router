@@ -19,8 +19,8 @@ import { UplinkCard } from '@/features/dial/uplink-card'
 import { InterfacesCard } from '@/features/link/interfaces-card'
 import { NetworkDialog } from '@/features/link/network-dialog'
 import { useNetworkEditor } from '@/features/link/use-networks'
-import type { GroupRow } from '@/lib/api-types'
-import type { Group } from '@/lib/config-types'
+import type { NetworkRow } from '@/lib/api-types'
+import type { Network } from '@/lib/config-types'
 
 /**
  * Everything about this router's own interfaces: which ones it has been given,
@@ -63,7 +63,7 @@ export function NetworksPage() {
   // Read here so a release can name the ranges it is about to invalidate; the
   // card joins the two and olr never guesses on the operator's behalf.
   const dhcp = useDhcpConfig()
-  const [editing, setEditing] = useState<Group | undefined>(undefined)
+  const [editing, setEditing] = useState<Network | undefined>(undefined)
   const [open, setOpen] = useState(false)
 
   if (editor.isPending) return <PageSkeleton />
@@ -77,17 +77,17 @@ export function NetworksPage() {
     )
   }
 
-  const stored = editor.config?.groups ?? []
-  const taken = new Set(stored.flatMap((g) => g.members))
+  const stored = editor.config?.networks ?? []
+  const taken = new Set(stored.flatMap((n) => n.members))
 
-  function upsert(group: Group) {
-    const rest = stored.filter((g) => g.name !== group.name)
-    editor.save([...rest, group])
+  function upsert(network: Network) {
+    const rest = stored.filter((n) => n.name !== network.name)
+    editor.save([...rest, network])
     setOpen(false)
   }
 
   function remove(name: string) {
-    editor.save(stored.filter((g) => g.name !== name))
+    editor.save(stored.filter((n) => n.name !== name))
     setOpen(false)
   }
 
@@ -135,21 +135,21 @@ export function NetworksPage() {
           </Button>
         </div>
 
-        {editor.groups.length === 0 ? (
+        {editor.networks.length === 0 ? (
           <ListEmpty>
             No networks yet. Add one to say what subnet this router serves — an address range
             needs a network to sit in.
           </ListEmpty>
         ) : (
           <List>
-            {editor.groups.map((g) => (
+            {editor.networks.map((n) => (
               <ListRow
-                key={g.name}
-                title={g.name}
-                subtitle={subtitleOf(g)}
-                trailing={g.members.join(', ') || 'no interface'}
+                key={n.name}
+                title={n.name}
+                subtitle={subtitleOf(n)}
+                trailing={n.members.join(', ') || 'no interface'}
                 onSelect={() => {
-                  setEditing(stored.find((s) => s.name === g.name))
+                  setEditing(stored.find((s) => s.name === n.name))
                   setOpen(true)
                 }}
               />
@@ -168,7 +168,7 @@ export function NetworksPage() {
             on the box already provides the default route.
           </p>
         </div>
-        <UplinkCard interfaces={editor.interfaces} groups={editor.groups} />
+        <UplinkCard interfaces={editor.interfaces} networks={editor.networks} />
       </section>
 
       {editor.problems.length > 0 && (
@@ -208,10 +208,10 @@ export function NetworksPage() {
  * the answer to "so what will DHCP hand out" — asked on this page far more
  * often than it is asked on the DHCP one.
  */
-function subtitleOf(g: GroupRow): string {
-  if (!g.subnet) return 'No IPv4 — router advertisement only'
-  const parts = [`${g.subnet}, this router at ${g.router}`]
-  if (g.suggested_start) parts.push(`range ${g.suggested_start}–${g.suggested_end}`)
+function subtitleOf(n: NetworkRow): string {
+  if (!n.subnet) return 'No IPv4 — router advertisement only'
+  const parts = [`${n.subnet}, this router at ${n.router}`]
+  if (n.suggested_start) parts.push(`range ${n.suggested_start}–${n.suggested_end}`)
   return parts.join(' · ')
 }
 

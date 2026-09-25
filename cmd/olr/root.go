@@ -47,8 +47,8 @@ func newRoot() *cobra.Command {
 	// --help` a description of the tree rather than of the modules.
 	//
 	// `net` in particular is top-level rather than under `olr link` because §4.4
-	// makes "network" the operator's word for the object the schema calls a
-	// group, and §11.2 spells the acceptance criterion `olr net add iot`.
+	// makes the network an object of its own rather than a property of an
+	// interface, and §11.2 spells the acceptance criterion `olr net add iot`.
 	root.AddCommand(link.OperationCommands()...)
 	root.AddCommand(link.NetCommand())
 	root.AddCommand(system.OperationCommands()...)

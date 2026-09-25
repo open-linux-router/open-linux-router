@@ -4,7 +4,7 @@
 // # What this is, and what it is not
 //
 // design.md §9 milestone 1 owes a `link` module that brings up interfaces,
-// carries addressing, and lands the group object (§4.4) every module after it
+// carries addressing, and lands the network object (§4.4) every module after it
 // keys off. This is now most of that module:
 //
 //   - **Adoption** — the list of interface names the operator handed over. Pure
@@ -12,8 +12,8 @@
 //     adopt-only rule (§3.4, §7) was being enforced by three modules against a
 //     fact that had nowhere to live, and a safety rule nobody can satisfy is
 //     not a safety rule.
-//   - **Groups** — the networks (§4.4). A group names a subnet and this box's
-//     address on it, and applying one *does* reach the kernel. This is the half
+//   - **Networks** (§4.4). A network names a subnet and this box's address on
+//     it, and applying one *does* reach the kernel. This is the half
 //     that was missing, and its absence had a specific cost: `dhcp` could only
 //     validate a range against whatever address an interface had been given
 //     from outside olr, so an operator who wanted a different subnet met an
@@ -25,13 +25,13 @@
 // interface away from NetworkManager, systemd-networkd or ifupdown. The last of
 // those has a cost design.md §7 states: until it lands, a member interface has
 // two managers that do not know about each other, and only the operator can
-// make them agree — docs/install.md says how. `Group.Members` is a list so that
+// make them agree — docs/install.md says how. `Network.Members` is a list so that
 // the day bridging lands the schema is already right, but Validate requires
 // exactly one member until something exists that can create a bridge device.
 //
 // The observed half of an interface's facts — its current addresses, whether it
 // is up — is still read from the kernel per request and never stored. There is
-// no copy to drift (§4.5). What a group stores is *intent*: the subnet we want,
+// no copy to drift (§4.5). What a network stores is *intent*: the subnet we want,
 // not the subnet that is there. Apply is what closes the gap between them, and
 // the difference between the two is drift rather than a second opinion.
 package link
@@ -56,17 +56,17 @@ const ModuleName = "link"
 // the complaint to a place with less context.
 const MaxInterfaceNameLen = 15
 
-// MaxGroupNameLen bounds a network name.
+// MaxNetworkNameLen bounds a network name.
 //
 // dnsmasq tags are built from it (`dhcp-range=set:<name>,...`), it appears in a
 // URL path, and it is typed on a command line. 32 is comfortably more than any
 // of those need and short enough that a list of them lines up in a terminal.
-const MaxGroupNameLen = 32
+const MaxNetworkNameLen = 32
 
 // Config is the link module's intent.
 //
 // One field, and it is a list of names rather than a list of objects. That is a
-// bet worth stating: the day this grows an address or a group it becomes a list
+// bet worth stating: the day this grows an address or a network it becomes a list
 // of structs, and the migration is a shim in UnmarshalConfig. Making it a struct
 // today to avoid that would mean inventing the field set §10 decision 7 says is
 // still open, in the module least able to change it later.
@@ -80,25 +80,28 @@ type Config struct {
 	// against its own field, rather than guarded here; see Validate.
 	Adopted []string `json:"adopted,omitempty"`
 
-	// Groups are the networks this box serves (design.md §4.4).
+	// Networks are the LANs this box serves (design.md §4.4).
 	//
-	// Unlike Adopted, a group *is* configuration: it says what the subnet is
+	// Unlike Adopted, a network *is* configuration: it says what the subnet is
 	// and what address this router holds on it, and applying one writes that
-	// address to the kernel. That is the whole point — before groups existed
+	// address to the kernel. That is the whole point — before networks existed
 	// there was nowhere in olr to say "this LAN is 172.16.1.0/24", so `dhcp`
 	// had to validate a range against whatever address the interface happened
 	// to have been given from outside olr, and an operator who wanted a
 	// different subnet met an error with no page behind it.
-	Groups []Group `json:"groups,omitempty"`
+	Networks []Network `json:"networks,omitempty"`
 }
 
-// Group is one network: the object `dhcp`, `dns` and later `firewall` and
+// Network is one network: the object `dhcp`, `dns` and later `firewall` and
 // `wifi` all key off (design.md §4.4).
 //
-// "Group" is the word the schema and the API use; **network** is the word the
-// operator sees (`olr net add iot`). One object, one owner, and the second word
-// is a label on the common path rather than a second model.
-type Group struct {
+// One word at every layer — the schema, the API, `olr net add iot` and the page
+// all say *network*. It used to be `group` below the UI, and a word the
+// operator never sees is a word every reader of the schema has to translate;
+// "group" is now kept for sets of devices, which is what it sounds like. A
+// document still carrying the old keys is read by UnmarshalConfig and
+// rewritten once at startup.
+type Network struct {
 	// Name is the primary key, and it is operator-chosen on purpose. `vlan30`
 	// is an implementation detail; `guest` is the thing somebody named and the
 	// thing that survives being moved to a different bridge.
@@ -106,7 +109,7 @@ type Group struct {
 
 	// Members are the adopted interfaces this network lives on.
 	//
-	// A list because §4.4 says a group has bridge members, and the day bridging
+	// A list because §4.4 says a network has bridge members, and the day bridging
 	// lands this field is already the right shape. Until then Validate requires
 	// exactly one: more than one member needs a bridge device that something
 	// has to create, and inventing the schema for that without building it
@@ -116,7 +119,7 @@ type Group struct {
 	// IPv4 is nil for a network that serves no IPv4 at all — which is a real
 	// configuration now that `dhcp` can serve RA on its own, and was not
 	// expressible before.
-	IPv4 *GroupIPv4 `json:"ipv4,omitempty"`
+	IPv4 *NetworkIPv4 `json:"ipv4,omitempty"`
 
 	// IPv6 is deliberately absent. dnsmasq's `constructor:` derives the v6
 	// prefix from the member's own address, so a delegated prefix that changes
@@ -127,8 +130,8 @@ type Group struct {
 	// goes here when it is built; nothing about this struct has to move.
 }
 
-// GroupIPv4 is a network's IPv4 addressing.
-type GroupIPv4 struct {
+// NetworkIPv4 is a network's IPv4 addressing.
+type NetworkIPv4 struct {
 	// Subnet is the network, as the operator thinks of it: 172.16.1.0/24.
 	//
 	// This is the field whose absence started all of this. It is stored intent,
@@ -144,67 +147,67 @@ type GroupIPv4 struct {
 }
 
 // RouterAddr resolves the stored or derived router address.
-func (g GroupIPv4) RouterAddr() netip.Addr {
-	if g.Router != nil && g.Router.IsValid() {
-		return *g.Router
+func (n NetworkIPv4) RouterAddr() netip.Addr {
+	if n.Router != nil && n.Router.IsValid() {
+		return *n.Router
 	}
-	addr, _ := core.FirstHost(g.Subnet)
+	addr, _ := core.FirstHost(n.Subnet)
 	return addr
 }
 
 // RouterPrefix is the router address with the network's mask — the form
 // netlink wants when adding an address to an interface.
-func (g GroupIPv4) RouterPrefix() netip.Prefix {
-	return netip.PrefixFrom(g.RouterAddr(), g.Subnet.Bits())
+func (n NetworkIPv4) RouterPrefix() netip.Prefix {
+	return netip.PrefixFrom(n.RouterAddr(), n.Subnet.Bits())
 }
 
-// Group returns a network by name.
-func (c Config) Group(name string) (Group, bool) {
-	i := slices.IndexFunc(c.Groups, func(g Group) bool { return g.Name == name })
+// Network returns a network by name.
+func (c Config) Network(name string) (Network, bool) {
+	i := slices.IndexFunc(c.Networks, func(n Network) bool { return n.Name == name })
 	if i < 0 {
-		return Group{}, false
+		return Network{}, false
 	}
-	return c.Groups[i], true
+	return c.Networks[i], true
 }
 
-// SetGroup adds or replaces a network, keyed by name.
-func (c *Config) SetGroup(g Group) {
-	if i := slices.IndexFunc(c.Groups, func(e Group) bool { return e.Name == g.Name }); i >= 0 {
-		c.Groups[i] = g
+// SetNetwork adds or replaces a network, keyed by name.
+func (c *Config) SetNetwork(n Network) {
+	if i := slices.IndexFunc(c.Networks, func(e Network) bool { return e.Name == n.Name }); i >= 0 {
+		c.Networks[i] = n
 		return
 	}
-	c.Groups = append(c.Groups, g)
+	c.Networks = append(c.Networks, n)
 	c.Normalize()
 }
 
-// RemoveGroup drops a network, reporting whether there was one.
+// RemoveNetwork drops a network, reporting whether there was one.
 //
 // It does not check whether `dhcp` still references it. That is the same
 // asymmetry Adopted has and it is deliberate: the module that stored the
 // reference is the one that can explain what breaks, and it reports the
 // problem against its own field. Guarding here would mean `link` importing
 // every module that reads it, which is exactly the arrow §4.1 forbids.
-func (c *Config) RemoveGroup(name string) bool {
-	i := slices.IndexFunc(c.Groups, func(g Group) bool { return g.Name == name })
+func (c *Config) RemoveNetwork(name string) bool {
+	i := slices.IndexFunc(c.Networks, func(n Network) bool { return n.Name == name })
 	if i < 0 {
 		return false
 	}
-	c.Groups = slices.Delete(c.Groups, i, i+1)
+	c.Networks = slices.Delete(c.Networks, i, i+1)
 	return true
 }
 
-// GroupFor returns the network an interface belongs to.
+// NetworkFor returns the network an interface belongs to.
 //
 // The reverse lookup, for the surfaces that start from an interface row — the
 // interface list has to say "ens18 carries lan", and without this it would have
-// to walk every group itself.
-func (c Config) GroupFor(iface string) (Group, bool) {
-	for _, g := range c.Groups {
-		if slices.Contains(g.Members, iface) {
-			return g, true
+// to walk every network itself.
+func (c Config) NetworkFor(iface string) (Network, bool) {
+	for _, n := range c.Networks {
+		if slices.Contains(n.Members, iface) {
+			return n, true
 		}
 	}
-	return Group{}, false
+	return Network{}, false
 }
 
 // Normalize puts the config in canonical form: trimmed, deduplicated, sorted.
@@ -238,28 +241,28 @@ func (c *Config) Normalize() {
 		c.Adopted = out
 	}
 
-	c.normalizeGroups()
+	c.normalizeNetworks()
 }
 
-// normalizeGroups canonicalises the network list: names and members trimmed,
+// normalizeNetworks canonicalises the network list: names and members trimmed,
 // members deduplicated, both sorted.
 //
 // The subnet is masked as well, so that `172.16.1.5/24` typed into a form is
 // stored as `172.16.1.0/24`. Without that the same network could be written two
 // ways, and every downstream byte comparison would call the difference drift.
-func (c *Config) normalizeGroups() {
-	out := make([]Group, 0, len(c.Groups))
+func (c *Config) normalizeNetworks() {
+	out := make([]Network, 0, len(c.Networks))
 	seen := map[string]bool{}
-	for _, g := range c.Groups {
-		g.Name = strings.TrimSpace(g.Name)
-		if g.Name == "" || seen[g.Name] {
+	for _, n := range c.Networks {
+		n.Name = strings.TrimSpace(n.Name)
+		if n.Name == "" || seen[n.Name] {
 			continue
 		}
-		seen[g.Name] = true
+		seen[n.Name] = true
 
-		members := make([]string, 0, len(g.Members))
+		members := make([]string, 0, len(n.Members))
 		member := map[string]bool{}
-		for _, m := range g.Members {
+		for _, m := range n.Members {
 			m = strings.TrimSpace(m)
 			if m == "" || member[m] {
 				continue
@@ -271,10 +274,10 @@ func (c *Config) normalizeGroups() {
 		if len(members) == 0 {
 			members = nil
 		}
-		g.Members = members
+		n.Members = members
 
-		if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
-			v4 := *g.IPv4
+		if n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
+			v4 := *n.IPv4
 			v4.Subnet = v4.Subnet.Masked()
 			// An explicit router that equals what would be derived is dropped,
 			// so the stored file says `.1` exactly once — in the subnet — and a
@@ -285,37 +288,37 @@ func (c *Config) normalizeGroups() {
 					v4.Router = nil
 				}
 			}
-			g.IPv4 = &v4
+			n.IPv4 = &v4
 		}
 
-		out = append(out, g)
+		out = append(out, n)
 	}
-	slices.SortStableFunc(out, func(a, b Group) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortStableFunc(out, func(a, b Network) int { return strings.Compare(a.Name, b.Name) })
 
 	if len(out) == 0 {
-		c.Groups = nil
+		c.Networks = nil
 		return
 	}
-	c.Groups = out
+	c.Networks = out
 }
 
 // Clone deep-copies the config, so a proposal can be diffed against the stored
 // one without either sharing a backing array.
 func (c Config) Clone() Config {
 	out := Config{Adopted: slices.Clone(c.Adopted)}
-	if c.Groups != nil {
-		out.Groups = make([]Group, len(c.Groups))
-		for i, g := range c.Groups {
-			g.Members = slices.Clone(g.Members)
-			if g.IPv4 != nil {
-				v4 := *g.IPv4
+	if c.Networks != nil {
+		out.Networks = make([]Network, len(c.Networks))
+		for i, n := range c.Networks {
+			n.Members = slices.Clone(n.Members)
+			if n.IPv4 != nil {
+				v4 := *n.IPv4
 				if v4.Router != nil {
 					addr := *v4.Router
 					v4.Router = &addr
 				}
-				g.IPv4 = &v4
+				n.IPv4 = &v4
 			}
-			out.Groups[i] = g
+			out.Networks[i] = n
 		}
 	}
 	return out
@@ -354,14 +357,24 @@ func (c *Config) Release(name string) bool {
 }
 
 // Empty reports whether the module has been configured at all.
-func (c Config) Empty() bool { return len(c.Adopted) == 0 && len(c.Groups) == 0 }
+func (c Config) Empty() bool { return len(c.Adopted) == 0 && len(c.Networks) == 0 }
 
 // UnmarshalConfig parses a config, rejecting unknown fields.
 //
 // Strict for the reason internal/dhcp/config.go gives: a typo'd key that is
 // silently ignored produces a box that is quietly not doing what its config
 // says, and here it would produce one that quietly adopted nothing.
+//
+// The one key it translates rather than refuses is `groups`, which is what
+// Networks was called until the word was freed for sets of devices. A key we
+// used to write is not a typo, and refusing it would be a box that stops
+// loading its own file on upgrade. See HasLegacyKeys for the other half.
 func UnmarshalConfig(data []byte) (Config, error) {
+	data, _, err := renameLegacyKeys(data)
+	if err != nil {
+		return Config{}, fmt.Errorf("parsing link config: %w", err)
+	}
+
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 
@@ -371,6 +384,26 @@ func UnmarshalConfig(data []byte) (Config, error) {
 	}
 	c.Normalize()
 	return c, nil
+}
+
+// legacyNetworksKey is what Networks was stored as before the rename.
+const legacyNetworksKey = "groups"
+
+// renameLegacyKeys rewrites the old spelling of Networks to the current one.
+func renameLegacyKeys(data []byte) ([]byte, bool, error) {
+	return core.RenameKey(data, legacyNetworksKey, "networks")
+}
+
+// HasLegacyKeys reports whether a stored subtree still spells Networks the old
+// way.
+//
+// UnmarshalConfig reads such a subtree without complaint, which is exactly why
+// something else has to ask: internal/daemon checks this at startup and
+// rewrites the document once, so that `olr.json` — the file design.md §10 says
+// you SSH in and read — does not keep a key no current page or command uses.
+func HasLegacyKeys(data []byte) bool {
+	_, renamed, _ := renameLegacyKeys(data)
+	return renamed
 }
 
 // MarshalConfig renders this module's subtree of the document.

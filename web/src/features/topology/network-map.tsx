@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import { useInterfaces } from '@/features/link/queries'
-import type { AssignmentStatus, DeviceRow, ExitStatus, GroupRow } from '@/lib/api-types'
+import type { AssignmentStatus, DeviceRow, ExitStatus, NetworkRow } from '@/lib/api-types'
 import type { Pool } from '@/lib/config-types'
 import { cn } from '@/lib/utils'
 
@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
  * uniform tree is worth.
  *
  * A way out is not a node either, and more strongly: "No internet" is a rule,
- * not a hop. It rides in the group's header as a chip, so a network carries
+ * not a hop. It rides in the container's header as a chip, so a network carries
  * where it goes out as a property rather than an edge — which also keeps the
  * picture a tree, since two networks sharing one exit would otherwise need two
  * edges converging on one box.
@@ -45,7 +45,7 @@ export function NetworkMap({
   filter?: string
   onSelect?: (device: DeviceRow) => void
 }) {
-  // Filtering hides devices, never groups: a network whose every device was
+  // Filtering hides devices, never networks: a network whose every device was
   // filtered out still shows, because "nothing of yours is on iot0" is an answer
   // and an absent iot0 is not.
   const devices = useMemo(() => {
@@ -63,15 +63,15 @@ export function NetworkMap({
   // (keyed by interface). Read here rather than passed in because every caller
   // of this component would otherwise have to fetch it only to hand it back.
   const interfaces = useInterfaces()
-  const networks = interfaces.data?.groups
+  const networks = interfaces.data?.networks
 
-  const groups = useMemo(
-    () => buildGroups(devices, assignments, exits, pools, networks),
+  const containers = useMemo(
+    () => buildContainers(devices, assignments, exits, pools, networks),
     [devices, assignments, exits, pools, networks],
   )
 
   if (pending) return <Skeleton className="h-64 w-full rounded-xl" />
-  if (groups.length === 0) {
+  if (containers.length === 0) {
     return (
       <div className="rounded-xl border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
         No networks yet.
@@ -90,7 +90,7 @@ export function NetworkMap({
       <div className="h-5 w-px bg-border" aria-hidden />
 
       {/*
-        One bounding box rather than a rail with a stub per group.
+        One bounding box rather than a rail with a stub per network.
         A rail has to be re-drawn for every wrapped row, and the second row's
         stubs then rise into empty space — a line to nowhere on any network with
         more than two of these. Nesting the boxes says the same thing (these are
@@ -98,9 +98,9 @@ export function NetworkMap({
         diagram does anyway.
       */}
       <ul className="grid w-full gap-3 rounded-xl border border-dashed p-3 sm:grid-cols-2">
-        {groups.map((group) => (
-          <li key={group.key} className="min-w-0">
-            <NetworkGroup group={group} onSelect={onSelect} />
+        {containers.map((container) => (
+          <li key={container.key} className="min-w-0">
+            <NetworkContainer container={container} onSelect={onSelect} />
           </li>
         ))}
       </ul>
@@ -110,7 +110,7 @@ export function NetworkMap({
 
 /* -------------------------------------------------------------------------- */
 
-interface Group {
+interface Container {
   key: string
   name: string
   devices: DeviceRow[]
@@ -123,13 +123,13 @@ interface Group {
   kind: 'network' | 'unplaced' | 'unseen'
 }
 
-function buildGroups(
+function buildContainers(
   devices: DeviceRow[],
   assignments?: AssignmentStatus[],
   exits?: ExitStatus[],
   pools?: Pool[],
-  networks?: GroupRow[],
-): Group[] {
+  networks?: NetworkRow[],
+): Container[] {
   // Networks are the union of what gateway knows and what dhcp serves: one with
   // a pool but no assignment has no way out chosen yet, one with an assignment
   // but no pool is served statically, and the intersection would drop both.
@@ -141,20 +141,20 @@ function buildGroups(
   // off networks too — design.md §4.4's remaining retrofit — this is where the
   // two vocabularies meet, and it has to be exactly one place: two nodes for
   // one network, called `lan` and `bridge0`, is the bug this shape prevents.
-  const groupOfInterface = new Map(
-    (networks ?? []).flatMap((g) => g.members.map((m) => [m, g.name] as const)),
+  const networkOfInterface = new Map(
+    (networks ?? []).flatMap((n) => n.members.map((m) => [m, n.name] as const)),
   )
   const assignmentOf = new Map(
-    (assignments ?? []).map((a) => [groupOfInterface.get(a.interface) ?? a.interface, a] as const),
+    (assignments ?? []).map((a) => [networkOfInterface.get(a.interface) ?? a.interface, a] as const),
   )
-  const poolOf = new Map((pools ?? []).map((p) => [p.group, p] as const))
+  const poolOf = new Map((pools ?? []).map((p) => [p.network, p] as const))
 
   const names = new Set<string>()
   for (const name of assignmentOf.keys()) names.add(name)
   for (const name of poolOf.keys()) names.add(name)
   for (const d of devices) if (d.network) names.add(d.network)
 
-  const groups: Group[] = [...names].map((name) => {
+  const containers: Container[] = [...names].map((name) => {
     const assignment = assignmentOf.get(name)
     const exit = assignment?.exit || ''
     const status = exit ? exits?.find((e) => e.name === exit) : undefined
@@ -174,11 +174,11 @@ function buildGroups(
   })
 
   // Busiest first, so the network the household lives on leads.
-  groups.sort((a, b) => b.devices.length - a.devices.length || a.name.localeCompare(b.name))
+  containers.sort((a, b) => b.devices.length - a.devices.length || a.name.localeCompare(b.name))
 
   const unplaced = devices.filter((d) => !d.network && d.seen)
   if (unplaced.length) {
-    groups.push({
+    containers.push({
       key: ' unplaced',
       name: 'Not on a known network',
       devices: unplaced,
@@ -188,11 +188,11 @@ function buildGroups(
     })
   }
 
-  // Stored but never observed. Without a group of its own, a device somebody
+  // Stored but never observed. Without a container of its own, a device somebody
   // typed in by hand would appear nowhere at all.
   const unseen = devices.filter((d) => !d.seen)
   if (unseen.length) {
-    groups.push({
+    containers.push({
       key: ' unseen',
       name: 'Never seen',
       devices: unseen,
@@ -202,42 +202,42 @@ function buildGroups(
     })
   }
 
-  return groups
+  return containers
 }
 
 /* -------------------------------------------------------------------------- */
 
-function NetworkGroup({
-  group,
+function NetworkContainer({
+  container,
   onSelect,
 }: {
-  group: Group
+  container: Container
   onSelect?: (device: DeviceRow) => void
 }) {
-  const here = group.devices.filter((d) => d.online).length
-  const real = group.kind === 'network'
+  const here = container.devices.filter((d) => d.online).length
+  const real = container.kind === 'network'
 
   return (
     <section
       className={cn(
         'h-full rounded-xl border p-3',
         real ? 'bg-muted/40' : 'border-dashed',
-        group.down && 'border-destructive/50 bg-destructive/5',
+        container.down && 'border-destructive/50 bg-destructive/5',
       )}
     >
       <header className="mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
         <span className={cn('text-sm font-medium', !real && 'text-muted-foreground')}>
-          {group.name}
+          {container.name}
         </span>
         <span className="text-xs text-muted-foreground">
-          {group.devices.length === 0 ? 'empty' : `${here}/${group.devices.length} here`}
+          {container.devices.length === 0 ? 'empty' : `${here}/${container.devices.length} here`}
         </span>
-        {real && <ExitChip group={group} />}
+        {real && <ExitChip container={container} />}
       </header>
 
-      {group.devices.length > 0 && (
+      {container.devices.length > 0 && (
         <ul className="grid gap-1.5 sm:grid-cols-2">
-          {group.devices.map((device) => (
+          {container.devices.map((device) => (
             <li key={device.mac}>
               <DeviceTile device={device} onSelect={onSelect} />
             </li>
@@ -255,24 +255,24 @@ function NetworkGroup({
  * would need two edges into one box. Inheritance is a dashed outline rather than
  * the words "from the box-wide setting" — same fact, no sentence.
  */
-function ExitChip({ group }: { group: Group }) {
-  const label = group.exit || 'direct'
-  const unchecked = Boolean(group.exit) && !group.status?.probed
+function ExitChip({ container }: { container: Container }) {
+  const label = container.exit || 'direct'
+  const unchecked = Boolean(container.exit) && !container.status?.probed
 
   return (
     <span
-      title={group.inherited ? 'Follows the box-wide setting' : `Set on ${group.name}`}
+      title={container.inherited ? 'Follows the box-wide setting' : `Set on ${container.name}`}
       className={cn(
         'ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-xs',
-        group.inherited && 'border-dashed',
-        group.down ? 'border-destructive/50 text-destructive' : 'bg-background text-muted-foreground',
+        container.inherited && 'border-dashed',
+        container.down ? 'border-destructive/50 text-destructive' : 'bg-background text-muted-foreground',
       )}
     >
       <span
         aria-hidden
         className={cn(
           'size-1.5 rounded-full',
-          group.down ? 'bg-destructive' : unchecked ? 'bg-muted-foreground/40' : 'bg-success',
+          container.down ? 'bg-destructive' : unchecked ? 'bg-muted-foreground/40' : 'bg-success',
         )}
       />
       {label}

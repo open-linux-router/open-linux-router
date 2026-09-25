@@ -25,7 +25,7 @@ func hostStore(t *testing.T, document string) *core.Store {
 // address to, and the box's resolvers only from a static uplink.
 func TestHostDesiredJoinsNetworksAndTheUplink(t *testing.T) {
 	store := hostStore(t, `{
-		"link": {"adopted": ["ens18", "ens19", "ens20"], "groups": [
+		"link": {"adopted": ["ens18", "ens19", "ens20"], "networks": [
 			{"name": "lan", "members": ["ens19"], "ipv4": {"subnet": "172.16.1.0/24"}},
 			{"name": "bare", "members": ["ens20"]}
 		]},

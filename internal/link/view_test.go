@@ -34,32 +34,32 @@ func TestViewInterfaceCarriesTheSubnetHalves(t *testing.T) {
 func TestViewInterfaceNamesItsNetwork(t *testing.T) {
 	observed := testInterfaces(t)
 	cfg := Config{
-		Adopted: []string{"lan0"},
-		Groups:  []Group{{Name: "lan", Members: []string{"lan0"}}},
+		Adopted:  []string{"lan0"},
+		Networks: []Network{{Name: "lan", Members: []string{"lan0"}}},
 	}
 
-	withGroup := viewInterface(find(t, Join(cfg, observed), "lan0"), observedByName(observed), cfg)
-	if withGroup.Group != "lan" {
-		t.Errorf("Group = %q, want lan", withGroup.Group)
+	withNetwork := viewInterface(find(t, Join(cfg, observed), "lan0"), observedByName(observed), cfg)
+	if withNetwork.Network != "lan" {
+		t.Errorf("Network = %q, want lan", withNetwork.Network)
 	}
 	without := viewInterface(find(t, Join(cfg, observed), "lan1"), observedByName(observed), cfg)
-	if without.Group != "" {
-		t.Errorf("Group = %q for an interface in no network, want empty", without.Group)
+	if without.Network != "" {
+		t.Errorf("Network = %q for an interface in no network, want empty", without.Network)
 	}
 }
 
 // The derived range is published with the network rather than left to each
 // client, so that `dhcp`, the form and the CLI cannot end up with three
 // opinions about where the static block ends.
-func TestViewGroupPublishesTheDerivedRange(t *testing.T) {
+func TestViewNetworkPublishesTheDerivedRange(t *testing.T) {
 	observed := testInterfaces(t)
-	g := Group{
+	n := Network{
 		Name:    "lan",
 		Members: []string{"lan0"},
-		IPv4:    &GroupIPv4{Subnet: netip.MustParsePrefix("172.16.1.0/24")},
+		IPv4:    &NetworkIPv4{Subnet: netip.MustParsePrefix("172.16.1.0/24")},
 	}
 
-	v := viewGroup(g, observedByName(observed))
+	v := viewNetwork(n, observedByName(observed))
 	switch {
 	case v.Subnet != "172.16.1.0/24":
 		t.Errorf("Subnet = %q", v.Subnet)
@@ -75,11 +75,11 @@ func TestViewGroupPublishesTheDerivedRange(t *testing.T) {
 // A network whose member is not on this machine is a row that still has to be
 // shown — it is the typo case and the not-plugged-in-yet case — but it must not
 // look like one that is working.
-func TestViewGroupReportsAnAbsentMember(t *testing.T) {
+func TestViewNetworkReportsAnAbsentMember(t *testing.T) {
 	observed := testInterfaces(t)
-	g := Group{Name: "lan", Members: []string{"nosuch0"}}
+	n := Network{Name: "lan", Members: []string{"nosuch0"}}
 
-	if v := viewGroup(g, observedByName(observed)); v.Present {
+	if v := viewNetwork(n, observedByName(observed)); v.Present {
 		t.Error("Present is true for a network whose member does not exist")
 	}
 }
@@ -123,10 +123,10 @@ func TestBuildPlanShowsTheAddressBeingRemoved(t *testing.T) {
 	stored := Config{Adopted: []string{"lan0"}}
 	desired := Config{
 		Adopted: []string{"lan0"},
-		Groups: []Group{{
+		Networks: []Network{{
 			Name:    "lan",
 			Members: []string{"lan0"},
-			IPv4:    &GroupIPv4{Subnet: netip.MustParsePrefix("172.16.1.0/24")},
+			IPv4:    &NetworkIPv4{Subnet: netip.MustParsePrefix("172.16.1.0/24")},
 		}},
 	}
 
@@ -157,10 +157,10 @@ func TestBuildPlanShowsTheAddressBeingRemoved(t *testing.T) {
 func TestBuildPlanDoesNotCallAFirstAddressDisruptive(t *testing.T) {
 	cfg := Config{
 		Adopted: []string{"lan1"},
-		Groups: []Group{{
+		Networks: []Network{{
 			Name:    "lan",
 			Members: []string{"lan1"},
-			IPv4:    &GroupIPv4{Subnet: netip.MustParsePrefix("172.16.1.0/24")},
+			IPv4:    &NetworkIPv4{Subnet: netip.MustParsePrefix("172.16.1.0/24")},
 		}},
 	}
 
@@ -176,10 +176,10 @@ func TestBuildPlanDoesNotCallAFirstAddressDisruptive(t *testing.T) {
 func TestBuildPlanSeesDriftAgainstAnUnchangedConfig(t *testing.T) {
 	cfg := Config{
 		Adopted: []string{"lan1"},
-		Groups: []Group{{
+		Networks: []Network{{
 			Name:    "lan",
 			Members: []string{"lan1"},
-			IPv4:    &GroupIPv4{Subnet: netip.MustParsePrefix("172.16.1.0/24")},
+			IPv4:    &NetworkIPv4{Subnet: netip.MustParsePrefix("172.16.1.0/24")},
 		}},
 	}
 

@@ -12,7 +12,7 @@ var planNow = time.Unix(1767225000, 0).UTC()
 // state, i.e. "this config is exactly what is running".
 func observe(t *testing.T, c Config, running bool, leases ...Lease) Observed {
 	t.Helper()
-	rendered, err := NewDnsmasq(DefaultPaths()).Render(c, testGroups())
+	rendered, err := NewDnsmasq(DefaultPaths()).Render(c, testNetworks())
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -25,7 +25,7 @@ func observe(t *testing.T, c Config, running bool, leases ...Lease) Observed {
 
 func buildPlan(t *testing.T, desired Config, obs Observed) Plan {
 	t.Helper()
-	plan, err := BuildPlan(NewDnsmasq(DefaultPaths()), desired, testGroups(), obs, planNow)
+	plan, err := BuildPlan(NewDnsmasq(DefaultPaths()), desired, testNetworks(), obs, planNow)
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}
@@ -339,7 +339,7 @@ func TestPlanRefusesAnInvalidConfig(t *testing.T) {
 	obs := observe(t, c, true)
 	c.Pools[0].IPv4.Start = addr(t, "10.0.0.5") // outside the lan network's subnet
 
-	plan, err := BuildPlan(NewDnsmasq(DefaultPaths()), c, testGroups(), obs, planNow)
+	plan, err := BuildPlan(NewDnsmasq(DefaultPaths()), c, testNetworks(), obs, planNow)
 	if err == nil {
 		t.Fatal("BuildPlan accepted a config whose range is outside its network's subnet")
 	}
@@ -469,7 +469,7 @@ func TestDisablingDropsEveryLeaseIncludingIPv6(t *testing.T) {
 	if plan.Impact != ImpactDisruptive {
 		t.Errorf("Impact = %s, want disruptive", plan.Impact)
 	}
-	if dropped := Dropped(desired, testGroups(), obs.Leases, planNow); len(dropped) != 2 {
+	if dropped := Dropped(desired, testNetworks(), obs.Leases, planNow); len(dropped) != 2 {
 		t.Errorf("dropped %d leases, want both", len(dropped))
 	}
 }

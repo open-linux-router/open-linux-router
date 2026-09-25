@@ -45,7 +45,7 @@ type NetworkView interface {
 // Network is one of this router's networks: the name an operator gave it, the
 // interfaces it lives on, and the range served there.
 //
-// Keyed by name rather than by interface since design.md §4.4's group landed.
+// Keyed by name rather than by interface since design.md §4.4's network landed.
 // The distinction is not cosmetic here — this is the value that reaches the
 // device list and the topology map as "which network is this on", so naming it
 // by kernel interface meant the operator called a network `lan` everywhere

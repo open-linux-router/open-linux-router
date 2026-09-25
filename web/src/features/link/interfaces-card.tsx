@@ -26,7 +26,7 @@ import {
   useRemoveAddress,
 } from '@/features/link/queries'
 import { ApiError } from '@/lib/api'
-import type { GroupRow, InterfaceRow } from '@/lib/api-types'
+import type { NetworkRow, InterfaceRow } from '@/lib/api-types'
 import type { DhcpConfig, Pool } from '@/lib/config-types'
 import { cn } from '@/lib/utils'
 
@@ -82,7 +82,7 @@ export function InterfacesCard({
    * The whole stored document goes on the wire, not just the field this card
    * owns. `PUT /api/link/config` is `BodyFull` — it *replaces* the module's
    * config — so a body of `{adopted}` alone deleted every network, and deleted
-   * them silently in the worst possible way: PlanAddrs walks the groups, so an
+   * them silently in the worst possible way: PlanAddrs walks the networks, so an
    * empty list produced no kernel steps at all, and each interface kept the
    * address whose reason for existing had just been thrown away. Flipping one
    * switch here showed a success toast and lost the network on a different NIC.
@@ -135,7 +135,7 @@ export function InterfacesCard({
     // makes the network invalid, and the pool on it with it, so the next apply
     // fails with a message about adoption. Asking first is cheaper than
     // explaining that.
-    if (poolsOn(dhcp, interfaces.data?.groups, row.name).length > 0) {
+    if (poolsOn(dhcp, interfaces.data?.networks, row.name).length > 0) {
       setConfirming(row)
       return
     }
@@ -172,7 +172,7 @@ export function InterfacesCard({
                 // member is its network's, and the uplink's leftovers are
                 // offered on its own card, beside the address it does claim.
                 onRemoveAddress={
-                  row.adopted && !row.group && row.name !== uplinkName
+                  row.adopted && !row.network && row.name !== uplinkName
                     ? (address) => setRemoving({ iface: row.name, address })
                     : undefined
                 }
@@ -203,7 +203,7 @@ export function InterfacesCard({
 
       <ReleaseDialog
         row={confirming}
-        pools={poolsOn(dhcp, interfaces.data?.groups, confirming?.name)}
+        pools={poolsOn(dhcp, interfaces.data?.networks, confirming?.name)}
         onCancel={() => setConfirming(null)}
         onConfirm={() => {
           if (confirming) release(confirming)
@@ -228,7 +228,7 @@ export function InterfacesCard({
  */
 function roleOf(row: InterfaceRow, uplink: string | undefined): string | undefined {
   if (row.name === uplink) return 'uplink'
-  return row.group
+  return row.network
 }
 
 function InterfaceItem({
@@ -354,14 +354,14 @@ function describeState(row: InterfaceRow): {
  */
 function poolsOn(
   dhcp: DhcpConfig | undefined,
-  groups: GroupRow[] | undefined,
+  networks: NetworkRow[] | undefined,
   name: string | undefined,
 ) {
   if (!dhcp || !name) return []
   const onThisInterface = new Set(
-    (groups ?? []).filter((g) => g.members.includes(name)).map((g) => g.name),
+    (networks ?? []).filter((n) => n.members.includes(name)).map((n) => n.name),
   )
-  return (dhcp.pools ?? []).filter((p) => onThisInterface.has(p.group))
+  return (dhcp.pools ?? []).filter((p) => onThisInterface.has(p.network))
 }
 
 function ReleaseDialog({
@@ -393,8 +393,8 @@ function ReleaseDialog({
 
         <ul className="space-y-1 font-mono text-xs text-muted-foreground">
           {pools.map((p) => (
-            <li key={p.group}>
-              {p.group}
+            <li key={p.network}>
+              {p.network}
             </li>
           ))}
         </ul>

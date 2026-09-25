@@ -13,7 +13,7 @@ import (
 // introduction happens at the one place that already knows the whole module
 // list.
 //
-// Keyed by network rather than by interface, like dhcpGroupView and unlike the
+// Keyed by network rather than by interface, like dhcpNetworkView and unlike the
 // four that still read interfaces. That is right for the same reason: what a
 // dial-in client needs pushed into its tunnel is *the subnets somebody
 // declared*, not the addresses some interface happens to hold — and a client
@@ -25,18 +25,18 @@ import (
 type remoteNetworks struct{ facts link.Facts }
 
 // Networks implements remote.NetworkView.
-func (n remoteNetworks) Networks() ([]remote.NetworkInfo, error) {
-	groups, err := n.facts.Groups()
+func (r remoteNetworks) Networks() ([]remote.NetworkInfo, error) {
+	networks, err := r.facts.Networks()
 	if err != nil {
 		return nil, err
 	}
-	out := make([]remote.NetworkInfo, 0, len(groups))
-	for _, g := range groups {
+	out := make([]remote.NetworkInfo, 0, len(networks))
+	for _, n := range networks {
 		// `Up` is dropped on the way through, deliberately. Whether a network's
 		// interface is up right now says nothing about whether its subnet
 		// belongs in a client configuration — the phone is being handed a route
 		// for the next six months, not for this second.
-		out = append(out, remote.NetworkInfo{Name: g.Name, Subnet: g.Subnet})
+		out = append(out, remote.NetworkInfo{Name: n.Name, Subnet: n.Subnet})
 	}
 	return out, nil
 }

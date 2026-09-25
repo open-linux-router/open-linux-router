@@ -492,7 +492,7 @@ func (h HTTP) getInterfaces(w http.ResponseWriter, r *http.Request) {
 	list := Join(cfg, observed)
 	resp := listResponse{
 		Interfaces: make([]interfaceView, 0, len(list)),
-		Groups:     make([]groupView, 0, len(cfg.Groups)),
+		Networks:   make([]networkView, 0, len(cfg.Networks)),
 		Problems:   problems(append(res.Errors, res.Warnings...)),
 		AsOf:       now,
 	}
@@ -502,8 +502,8 @@ func (h HTTP) getInterfaces(w http.ResponseWriter, r *http.Request) {
 	for _, info := range list {
 		resp.Interfaces = append(resp.Interfaces, viewInterface(info, byName, cfg))
 	}
-	for _, g := range cfg.Groups {
-		resp.Groups = append(resp.Groups, viewGroup(g, byName))
+	for _, n := range cfg.Networks {
+		resp.Networks = append(resp.Networks, viewNetwork(n, byName))
 	}
 
 	core.WriteJSON(w, http.StatusOK, resp)

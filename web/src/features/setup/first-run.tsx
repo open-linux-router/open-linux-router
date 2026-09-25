@@ -41,7 +41,7 @@ export function FirstRun() {
   if (!interfaces.data || !dhcp.data || !dns.data) return null
 
   const adopted = interfaces.data.interfaces.filter((i) => i.adopted)
-  const networks = interfaces.data.groups
+  const networks = interfaces.data.networks
   const serving = dhcp.data.enabled || dns.data.enabled
   if (adopted.length > 0 && serving) return null
 
@@ -75,7 +75,7 @@ export function FirstRun() {
               ? 'Nothing can be served on an interface until you hand it over. Switching one on changes nothing by itself.'
               : networks.length === 0
                 ? `${adopted.map((i) => i.name).join(', ')} — yours to configure. Now say what subnet it serves.`
-                : networks.map((g) => `${g.name} on ${g.members.join(', ')}`).join(' · ')
+                : networks.map((n) => `${n.name} on ${n.members.join(', ')}`).join(' · ')
           }
           action={{
             to: '/networks',

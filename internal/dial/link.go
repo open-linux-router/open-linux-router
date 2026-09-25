@@ -24,7 +24,7 @@ import (
 // the ordinary state of a WAN link that has not come up yet, and saying so is
 // different from saying the interface does not exist.
 //
-// Groups is the one thing this view has that the narrow four do not, and it is
+// Networks is the one thing this view has that the narrow four do not, and it is
 // here for a boundary rather than for a feature: the uplink's interface must
 // not also be a `link` network's member (Uplink.Interface), and the only way to
 // check that is to see the networks. It is the same read `dhcp` does, through
@@ -37,16 +37,16 @@ type LinkView interface {
 	// the CLI's completion and by nothing that decides anything.
 	Interfaces() ([]LinkInfo, error)
 
-	// Groups lists the networks this box serves.
-	Groups() ([]GroupInfo, error)
+	// Networks lists the networks this box serves.
+	Networks() ([]NetworkInfo, error)
 }
 
-// GroupInfo is one of `link`'s networks, narrowed to what `dial` reads.
+// NetworkInfo is one of `link`'s networks, narrowed to what `dial` reads.
 //
 // Two fields and no observed half, because `dial` never asks whether a network
 // is working — it asks whether one already claims the interface an uplink is
 // about to take, and what to call it in the refusal.
-type GroupInfo struct {
+type NetworkInfo struct {
 	// Name is the network's name, as the operator typed it.
 	Name string
 
@@ -54,14 +54,14 @@ type GroupInfo struct {
 	Members []string
 }
 
-// groupFor returns the network that claims an interface, if one does.
-func groupFor(groups []GroupInfo, iface string) (GroupInfo, bool) {
-	for _, g := range groups {
-		if slices.Contains(g.Members, iface) {
-			return g, true
+// networkFor returns the network that claims an interface, if one does.
+func networkFor(networks []NetworkInfo, iface string) (NetworkInfo, bool) {
+	for _, n := range networks {
+		if slices.Contains(n.Members, iface) {
+			return n, true
 		}
 	}
-	return GroupInfo{}, false
+	return NetworkInfo{}, false
 }
 
 // LinkInfo is the subset of an interface's state a published address depends
@@ -148,15 +148,17 @@ func (s StaticLinks) Interfaces() ([]LinkInfo, error) {
 	return out, nil
 }
 
-// Groups implements LinkView, reporting none.
-func (StaticLinks) Groups() ([]GroupInfo, error) { return nil, nil }
+// Networks implements LinkView, reporting none.
+func (StaticLinks) Networks() ([]NetworkInfo, error) { return nil, nil }
 
 // StaticView is a LinkView with networks as well as interfaces, for the tests
 // that need both — chiefly the refusal that stops an uplink taking an interface
 // a network already carries.
 type StaticView struct {
-	Links    StaticLinks
-	Networks []GroupInfo
+	Links StaticLinks
+
+	// Nets rather than Networks, which is the method this field backs.
+	Nets []NetworkInfo
 }
 
 // Interface implements LinkView.
@@ -165,5 +167,5 @@ func (v StaticView) Interface(name string) (LinkInfo, error) { return v.Links.In
 // Interfaces implements LinkView.
 func (v StaticView) Interfaces() ([]LinkInfo, error) { return v.Links.Interfaces() }
 
-// Groups implements LinkView.
-func (v StaticView) Groups() ([]GroupInfo, error) { return v.Networks, nil }
+// Networks implements LinkView.
+func (v StaticView) Networks() ([]NetworkInfo, error) { return v.Nets, nil }

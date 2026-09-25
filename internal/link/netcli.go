@@ -11,12 +11,12 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/cli"
 )
 
-// `olr net` — the operator-facing half of the group object.
+// `olr net` — the operator-facing half of the network object.
 //
-// design.md §4.4 settles the vocabulary: `group` is what the schema and the API
-// call it, **network** is what the operator sees. That is progressive disclosure
-// (§1), not two models — this file is a spelling of the same object the REST
-// surface publishes as `groups`.
+// design.md §4.4 settles the vocabulary: the object is a *network* at every
+// layer, so this file is a spelling of the same object the REST surface
+// publishes as `networks`, and `net` is only the short form of the word — not a
+// second model.
 //
 // §11.2 sets the bar for `add` and states it as a test rather than an
 // aspiration: creating a network must take only a name. If it needs four flags,
@@ -53,9 +53,9 @@ func netShowCommand() *cobra.Command {
 				return err
 			}
 			if cli.IsJSON(c) {
-				return cli.JSON(c.OutOrStdout(), resp.Groups)
+				return cli.JSON(c.OutOrStdout(), resp.Networks)
 			}
-			return writeGroupsText(c.OutOrStdout(), resp)
+			return writeNetworksText(c.OutOrStdout(), resp)
 		}
 	})
 }
@@ -95,14 +95,14 @@ func netAddCommand() *cobra.Command {
 		c.RunE = func(c *cobra.Command, args []string) error {
 			return mutateNet(c, func(cfg *Config, resp listResponse) (string, error) {
 				name := args[0]
-				if _, exists := cfg.Group(name); exists {
+				if _, exists := cfg.Network(name); exists {
 					return "", fmt.Errorf("a network called %q already exists; use `olr net set %s` to change it", name, name)
 				}
-				g := Group{Name: name}
-				if err := applyNetFlags(&g, f, cfg, resp, true); err != nil {
+				n := Network{Name: name}
+				if err := applyNetFlags(&n, f, cfg, resp, true); err != nil {
 					return "", err
 				}
-				cfg.SetGroup(g)
+				cfg.SetNetwork(n)
 				return fmt.Sprintf(
 					"Add an address range with `olr dhcp add pool %s`.", name), nil
 			})
@@ -123,20 +123,20 @@ func netSetCommand() *cobra.Command {
 		c.Args = cobra.ExactArgs(1)
 		c.RunE = func(c *cobra.Command, args []string) error {
 			return mutateNet(c, func(cfg *Config, resp listResponse) (string, error) {
-				g, ok := cfg.Group(args[0])
+				n, ok := cfg.Network(args[0])
 				if !ok {
 					return "", fmt.Errorf("no network called %q; `olr net show` lists the ones there are", args[0])
 				}
-				if err := applyNetFlags(&g, f, cfg, resp, false); err != nil {
+				if err := applyNetFlags(&n, f, cfg, resp, false); err != nil {
 					return "", err
 				}
-				cfg.SetGroup(g)
+				cfg.SetNetwork(n)
 				return "Clients renew on their own schedule; a client that is already up keeps its old address until then.", nil
 			})
 		}
 	})
 	f.bind(c)
-	c.ValidArgsFunction = cli.CompleteArgs(groupNames)
+	c.ValidArgsFunction = cli.CompleteArgs(networkNames)
 	return c
 }
 
@@ -150,14 +150,14 @@ func netRemoveCommand() *cobra.Command {
 		c.Args = cobra.ExactArgs(1)
 		c.RunE = func(c *cobra.Command, args []string) error {
 			return mutateNet(c, func(cfg *Config, _ listResponse) (string, error) {
-				if !cfg.RemoveGroup(args[0]) {
+				if !cfg.RemoveNetwork(args[0]) {
 					return "", fmt.Errorf("no network called %q", args[0])
 				}
 				return "Any address range on this network will be refused until the network exists again.", nil
 			})
 		}
 	})
-	c.ValidArgsFunction = cli.CompleteArgs(groupNames)
+	c.ValidArgsFunction = cli.CompleteArgs(networkNames)
 	return c
 }
 
@@ -166,28 +166,28 @@ func netRemoveCommand() *cobra.Command {
 // `creating` decides whether an absent flag means "derive it" or "leave it
 // alone". That distinction is the whole difference between add and set: `olr
 // net set lan --router 172.16.1.254` must not silently re-derive the subnet.
-func applyNetFlags(g *Group, f *netFlags, cfg *Config, resp listResponse, creating bool) error {
+func applyNetFlags(n *Network, f *netFlags, cfg *Config, resp listResponse, creating bool) error {
 	if f.member != "" {
-		g.Members = []string{f.member}
+		n.Members = []string{f.member}
 	} else if creating {
 		member, err := deriveMember(cfg, resp)
 		if err != nil {
 			return err
 		}
-		g.Members = []string{member}
+		n.Members = []string{member}
 	}
 
 	if f.noSubnet {
 		if f.subnet != "" || f.router != "" {
 			return fmt.Errorf("--no-subnet cannot be combined with --subnet or --router")
 		}
-		g.IPv4 = nil
+		n.IPv4 = nil
 		return nil
 	}
 
-	v4 := GroupIPv4{}
-	if g.IPv4 != nil {
-		v4 = *g.IPv4
+	v4 := NetworkIPv4{}
+	if n.IPv4 != nil {
+		v4 = *n.IPv4
 	}
 
 	switch {
@@ -220,7 +220,7 @@ func applyNetFlags(g *Group, f *netFlags, cfg *Config, resp listResponse, creati
 		v4.Router = &addr
 	}
 
-	g.IPv4 = &v4
+	n.IPv4 = &v4
 	return nil
 }
 
@@ -233,7 +233,7 @@ func applyNetFlags(g *Group, f *netFlags, cfg *Config, resp listResponse, creati
 func deriveMember(cfg *Config, resp listResponse) (string, error) {
 	var free []string
 	for _, name := range cfg.Adopted {
-		if _, taken := cfg.GroupFor(name); !taken {
+		if _, taken := cfg.NetworkFor(name); !taken {
 			free = append(free, name)
 		}
 	}
@@ -271,8 +271,8 @@ func nextFreeSubnet(cfg *Config) (netip.Prefix, error) {
 	for _, candidate := range candidateSubnets {
 		prefix := netip.MustParsePrefix(candidate)
 		taken := false
-		for _, g := range cfg.Groups {
-			if g.IPv4 != nil && g.IPv4.Subnet.IsValid() && g.IPv4.Subnet.Overlaps(prefix) {
+		for _, n := range cfg.Networks {
+			if n.IPv4 != nil && n.IPv4.Subnet.IsValid() && n.IPv4.Subnet.Overlaps(prefix) {
 				taken = true
 				break
 			}
@@ -337,15 +337,15 @@ func mutateNet(c *cobra.Command, edit func(*Config, listResponse) (string, error
 	return err
 }
 
-// groupNames completes a network argument from what exists.
-func groupNames(c *cobra.Command) ([]string, error) {
+// networkNames completes a network argument from what exists.
+func networkNames(c *cobra.Command) ([]string, error) {
 	cfg, err := loadConfig(c)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]string, 0, len(cfg.Groups))
-	for _, g := range cfg.Groups {
-		out = append(out, g.Name)
+	out := make([]string, 0, len(cfg.Networks))
+	for _, n := range cfg.Networks {
+		out = append(out, n.Name)
 	}
 	slices.Sort(out)
 	return out, nil

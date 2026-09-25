@@ -10,7 +10,11 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/link"
 )
 
-// Migrating a pre-0.3 document, in the one place that can.
+// Migrating an old document, in the one place that can.
+//
+// Two conversions live here, and they share a write rather than a reason.
+//
+// # Pools keyed by interface (pre-0.3)
 //
 // A pool used to be keyed by kernel interface and to carry its own IPv4 range.
 // It is now keyed by a network, and the network owns the subnet. Converting the
@@ -36,12 +40,25 @@ import (
 // IPv4 address the network is created without a subnet, which validates as a
 // warning rather than an error and leaves the operator a row to fix instead of
 // a parse failure.
+//
+// # The network spelled `group` (pre-rename)
+//
+// The network object was called `group` in the schema, the API and the code
+// while every page and command called it a network. The word is now kept for
+// sets of devices, so the stored keys moved: `link.groups` became
+// `link.networks` and a pool's `group` became `network`. Reading the old keys
+// is each module's job, and each does it while parsing (link.UnmarshalConfig,
+// dhcp.UnmarshalConfig). Writing the new ones back is this file's, for the same
+// reason as above — one conversion, written once, keeps the file honest — and a
+// pre-0.3 document goes through both conversions in the same write, since the
+// pools and networks it creates are marshalled in the current shape anyway.
 
-// migrateDocument converts a pre-0.3 configuration in place, returning whether
+// migrateDocument converts an old configuration in place, returning whether
 // anything changed.
 //
 // It is idempotent: a document already in the current shape parses as one, so
-// dhcp.Config.Legacy is empty and there is nothing to do.
+// dhcp.Config.Legacy is empty, neither module reports an old key, and there is
+// nothing to do. Everything it changes is written in one store.Save.
 func migrateDocument(store *core.Store, facts link.Facts, log *slog.Logger) (bool, error) {
 	doc, err := store.Load()
 	if err != nil {
@@ -52,7 +69,11 @@ func migrateDocument(store *core.Store, facts link.Facts, log *slog.Logger) (boo
 	if err != nil {
 		return false, err
 	}
-	if len(dhcpCfg.Legacy) == 0 {
+
+	rewriteLink := hasLegacyKeys(doc, link.ModuleName, link.HasLegacyKeys)
+	rewriteDhcp := hasLegacyKeys(doc, dhcp.ModuleName, dhcp.HasLegacyKeys)
+	legacyPools := len(dhcpCfg.Legacy) > 0
+	if !legacyPools && !rewriteLink && !rewriteDhcp {
 		return false, nil
 	}
 
@@ -61,13 +82,69 @@ func migrateDocument(store *core.Store, facts link.Facts, log *slog.Logger) (boo
 		return false, err
 	}
 
+	if legacyPools {
+		if err := migratePools(&linkCfg, &dhcpCfg, facts, log); err != nil {
+			return false, err
+		}
+		// Both, whatever the keys said: the pools were re-keyed and the
+		// networks they name were created, and neither half is any use alone.
+		rewriteLink, rewriteDhcp = true, true
+	}
+
+	// Only the subtrees that changed are set. Re-marshalling one that had
+	// nothing to convert would at best rewrite it identically, and a module
+	// with no subtree at all would gain one it never had.
+	if rewriteLink {
+		linkData, err := link.MarshalConfig(linkCfg)
+		if err != nil {
+			return false, err
+		}
+		doc.Set(link.ModuleName, linkData)
+	}
+	if rewriteDhcp {
+		dhcpData, err := dhcp.MarshalConfig(dhcpCfg)
+		if err != nil {
+			return false, err
+		}
+		doc.Set(dhcp.ModuleName, dhcpData)
+	}
+
+	// Both modules in one write. The store is a single document and a single
+	// rename (core/store.go), so there is no window where the pools are keyed by
+	// network and the networks do not exist yet — which would be a box that
+	// refuses to serve DHCP until somebody noticed.
+	if err := store.Save(doc); err != nil {
+		return false, fmt.Errorf("storing the migrated configuration in %s: %w", store.Path(), err)
+	}
+
+	if legacyPools {
+		log.Info("migrated dhcp pools onto networks",
+			"pools", len(dhcpCfg.Pools), "networks", len(linkCfg.Networks))
+	} else {
+		log.Info("renamed the stored network keys from group to network",
+			"link", rewriteLink, "dhcp", rewriteDhcp)
+	}
+	return true, nil
+}
+
+// hasLegacyKeys asks a module whether its stored subtree still uses a key the
+// module has since renamed. A document without the subtree has nothing to
+// rename.
+func hasLegacyKeys(doc core.Document, module string, check func([]byte) bool) bool {
+	raw, ok := doc.Raw(module)
+	return ok && check(raw)
+}
+
+// migratePools creates a network for each interface a pre-0.3 pool was keyed
+// by, and keys the pool by it.
+func migratePools(linkCfg *link.Config, dhcpCfg *dhcp.Config, facts link.Facts, log *slog.Logger) error {
 	observed, err := facts.Interfaces()
 	if err != nil {
 		// Without the interface list there is no subnet to give the networks,
 		// and a migration that silently dropped every subnet would renumber the
 		// box on the next apply. Refusing leaves the old document intact and
 		// readable, which is the recoverable failure.
-		return false, fmt.Errorf("reading interfaces to migrate the dhcp pools: %w", err)
+		return fmt.Errorf("reading interfaces to migrate the dhcp pools: %w", err)
 	}
 	prefixes := map[string]netip.Prefix{}
 	for _, info := range observed {
@@ -87,52 +164,30 @@ func migrateDocument(store *core.Store, facts link.Facts, log *slog.Logger) (boo
 		// would be us inventing a name they never chose for a network they
 		// already have.
 		name := iface
-		if _, exists := linkCfg.Group(name); !exists {
-			g := link.Group{Name: name, Members: []string{iface}}
+		if _, exists := linkCfg.Network(name); !exists {
+			n := link.Network{Name: name, Members: []string{iface}}
 			if prefix, ok := prefixes[iface]; ok {
 				// The address the interface holds *now*, so this migration
 				// changes nothing on the box. A router address different from
 				// the one already configured would move it on the next apply.
 				router := prefix.Addr()
-				g.IPv4 = &link.GroupIPv4{Subnet: prefix.Masked(), Router: &router}
+				n.IPv4 = &link.NetworkIPv4{Subnet: prefix.Masked(), Router: &router}
 			} else {
 				log.Warn("migrated a dhcp pool whose interface has no IPv4 address",
 					"interface", iface, "network", name)
 			}
-			linkCfg.SetGroup(g)
+			linkCfg.SetNetwork(n)
 			// A pool on an interface nobody adopted could not have been applied,
 			// but it could have been stored — and dropping the adoption here
 			// would turn a config that was merely invalid into one that is
 			// invalid for a second, more confusing reason.
 			linkCfg.Adopt(iface)
 		}
-		dhcpCfg.Pools[i].Group = name
+		dhcpCfg.Pools[i].Network = name
 	}
 
 	dhcpCfg.Legacy = nil
 	dhcpCfg.Normalize()
 	linkCfg.Normalize()
-
-	linkData, err := link.MarshalConfig(linkCfg)
-	if err != nil {
-		return false, err
-	}
-	dhcpData, err := dhcp.MarshalConfig(dhcpCfg)
-	if err != nil {
-		return false, err
-	}
-
-	// Both modules in one write. The store is a single document and a single
-	// rename (core/store.go), so there is no window where the pools are keyed by
-	// network and the networks do not exist yet — which would be a box that
-	// refuses to serve DHCP until somebody noticed.
-	doc.Set(link.ModuleName, linkData)
-	doc.Set(dhcp.ModuleName, dhcpData)
-	if err := store.Save(doc); err != nil {
-		return false, fmt.Errorf("storing the migrated configuration in %s: %w", store.Path(), err)
-	}
-
-	log.Info("migrated dhcp pools onto networks",
-		"pools", len(dhcpCfg.Pools), "networks", len(linkCfg.Groups))
-	return true, nil
+	return nil
 }

@@ -35,40 +35,40 @@ import (
 // the two in step — an operator who renumbered an interface got pools validated
 // against the address it used to have.
 
-// dhcpGroupView is the dhcp module's window onto link's networks.
+// dhcpNetworkView is the dhcp module's window onto link's networks.
 //
 // The only one of these adapters keyed by network rather than by interface, and
 // deliberately so: a DHCP pool serves a network, and what it needs to know is
 // the subnet somebody declared — not the address an interface happens to hold.
 // The other four still read interfaces because what they configure really is
 // per-interface; moving them is a separate retrofit (design.md §4.4).
-type dhcpGroupView struct{ facts link.Facts }
+type dhcpNetworkView struct{ facts link.Facts }
 
-func (l dhcpGroupView) Group(name string) (dhcp.GroupInfo, error) {
-	info, err := l.facts.Group(name)
+func (l dhcpNetworkView) Network(name string) (dhcp.NetworkInfo, error) {
+	info, err := l.facts.Network(name)
 	if err != nil {
 		// The sentinel is re-wrapped as the consumer's own, so that a caller
-		// testing errors.Is against dhcp.ErrNoSuchGroup still gets a true
+		// testing errors.Is against dhcp.ErrNoSuchNetwork still gets a true
 		// answer. Passing ours through would make that test silently false.
-		return dhcp.GroupInfo{}, fmt.Errorf("%q: %w", name, dhcp.ErrNoSuchGroup)
+		return dhcp.NetworkInfo{}, fmt.Errorf("%q: %w", name, dhcp.ErrNoSuchNetwork)
 	}
-	return dhcpGroup(info), nil
+	return dhcpNetworkInfo(info), nil
 }
 
-func (l dhcpGroupView) Groups() ([]dhcp.GroupInfo, error) {
-	all, err := l.facts.Groups()
+func (l dhcpNetworkView) Networks() ([]dhcp.NetworkInfo, error) {
+	all, err := l.facts.Networks()
 	if err != nil {
 		return nil, err
 	}
-	out := make([]dhcp.GroupInfo, 0, len(all))
+	out := make([]dhcp.NetworkInfo, 0, len(all))
 	for _, info := range all {
-		out = append(out, dhcpGroup(info))
+		out = append(out, dhcpNetworkInfo(info))
 	}
 	return out, nil
 }
 
-func dhcpGroup(info link.GroupInfo) dhcp.GroupInfo {
-	return dhcp.GroupInfo{
+func dhcpNetworkInfo(info link.NetworkInfo) dhcp.NetworkInfo {
+	return dhcp.NetworkInfo{
 		Name:    info.Name,
 		Members: info.Members,
 		Subnet:  info.Subnet,
@@ -146,18 +146,18 @@ func (l gatewayLinkView) Interfaces() ([]gateway.LinkInfo, error) {
 // Networks implements gateway.LinkView: the subnets link declares, which is
 // what the egress masquerade's source set is built from.
 //
-// Intent rather than observation — `link.Facts.Groups` reads the stored
+// Intent rather than observation — `link.Facts.Networks` reads the stored
 // networks — which is design.md §4.1's instruction that dependents read a
-// *group* and do not restate a subnet link already owns.
+// *network* and do not restate a subnet link already owns.
 func (l gatewayLinkView) Networks() ([]netip.Prefix, error) {
-	all, err := l.facts.Groups()
+	all, err := l.facts.Networks()
 	if err != nil {
 		return nil, err
 	}
 	out := make([]netip.Prefix, 0, len(all))
-	for _, g := range all {
-		if g.Subnet.IsValid() {
-			out = append(out, g.Subnet.Masked())
+	for _, n := range all {
+		if n.Subnet.IsValid() {
+			out = append(out, n.Subnet.Masked())
 		}
 	}
 	return out, nil
@@ -275,14 +275,14 @@ func (l dialLinkView) Interfaces() ([]dial.LinkInfo, error) {
 	return out, nil
 }
 
-func (l dialLinkView) Groups() ([]dial.GroupInfo, error) {
-	all, err := l.facts.Groups()
+func (l dialLinkView) Networks() ([]dial.NetworkInfo, error) {
+	all, err := l.facts.Networks()
 	if err != nil {
 		return nil, err
 	}
-	out := make([]dial.GroupInfo, 0, len(all))
+	out := make([]dial.NetworkInfo, 0, len(all))
 	for _, info := range all {
-		out = append(out, dial.GroupInfo{Name: info.Name, Members: info.Members})
+		out = append(out, dial.NetworkInfo{Name: info.Name, Members: info.Members})
 	}
 	return out, nil
 }
@@ -338,9 +338,9 @@ func hostDesired(store *core.Store) (host.Desired, error) {
 	if err != nil {
 		return d, err
 	}
-	for _, g := range lcfg.Groups {
-		if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
-			d.IPv4 = append(d.IPv4, g.Members...)
+	for _, n := range lcfg.Networks {
+		if n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
+			d.IPv4 = append(d.IPv4, n.Members...)
 		}
 	}
 	dcfg, err := dial.Applier{Store: store}.Load()

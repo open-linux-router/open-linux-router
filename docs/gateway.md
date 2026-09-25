@@ -132,8 +132,10 @@ sentence with the preposition doing the work:
 Internet via  [ Proxy ▾ ]        上网经由  [ Proxy ▾ ]
 ```
 
-Same construction as `group` / "network" (§4.4) — one object, two registers,
-progressive disclosure rather than two models.
+Progressive disclosure (design.md §1) — one object, two registers, rather than
+two models. The network used to be the other example of this, called `group`
+below the UI; it is now *network* at every layer (design.md §4.4), so `exit` is
+the one that stands alone.
 
 Rejected: **`gateway`**, which already means "next hop" specifically while this
 object has three forms that are not one, and which is an engineer's word of the
@@ -158,15 +160,15 @@ simulating evaluation, and rules shadow each other invisibly.
 ### 2.1 The ladder
 
 ```
-box default  →  network (group)  →  tag  →  device
-                                            most specific wins
+box default  →  network  →  group  →  device
+                                      most specific wins
 ```
 
 The two cases that motivated this:
 
 - *IoT devices go direct* — the IoT network keeps the default. Nothing to
   configure; it is already right.
-- *Phones go through Proxy* — the `Phones` tag gets `Internet via: Proxy`. One
+- *Phones go through Proxy* — the `Phones` group gets `Internet via: Proxy`. One
   setting.
 
 And the case an ordered list handles badly falls out for free: *everything
@@ -174,7 +176,7 @@ through Proxy except the NAS* is `default: Proxy` plus one device set back. No
 negation, no rule at position 1 that everyone forgets.
 
 Nothing is draggable and there is no precedence to learn. We derive the kernel
-ordering — device marks, then tag, then network, then default — deterministically
+ordering — device marks, then group, then network, then default — deterministically
 from the ladder.
 
 ### 2.2 Effective value, with its source
@@ -183,7 +185,7 @@ Inheritance is unusable if the answer is not visible:
 
 ```
 Living Room TV
-  Internet via   Proxy          from tag "Phones"        [override]
+  Internet via   Proxy          from group "Phones"      [override]
   Status         ● via Proxy · 14 GB this month
 ```
 
@@ -201,12 +203,19 @@ from the screen, so the plan step refuses:
 
 §5.6's *refuse, do not disable*, one level down.
 
+**Groups are exclusive, so this one cannot arise.** The tier was *tags* when
+this section was written, and a device could carry two. It is now *groups*
+(design.md §4.4), and every device is in exactly one, so there is one group
+setting per device and nothing to refuse — the conflict is prevented where it
+would be stored rather than caught at plan time. The rule stands for whatever
+can still genuinely conflict.
+
 ### 2.4 Three objects, three questions
 
 | Object | Answers | Scope |
 |---|---|---|
 | **Exit** | how traffic leaves | — |
-| **`Internet via`** assignment | who uses which exit | per network / tag / device |
+| **`Internet via`** assignment | who uses which exit | per network / group / device |
 | **Static route** | how to reach one specific place | everyone |
 
 Only the second is per-source, which is why only it needs the ladder and the
@@ -223,13 +232,13 @@ route; the second is the `blocked` exit.
 
 ### 2.5 Staging
 
-The full ladder depends on devices and tags, and who owns the device inventory is
+The full ladder depends on devices and groups, and who owns the device inventory is
 §10 open decision 6 — the one design.md already calls the most urgent. So:
 
-- **First: network-level assignment.** Needs only groups, which milestone 1
+- **First: network-level assignment.** Needs only networks, which milestone 1
   delivers. Covers the motivating case if phones sit on their own network or
   SSID, which is a reasonable recommendation regardless.
-- **Then: tag and device overrides**, refining the same field. The mental model
+- **Then: group and device overrides**, refining the same field. The mental model
   does not change, because *most specific wins* was true from the first version.
 
 ---
@@ -438,7 +447,7 @@ things argue against it while the module is young:
 - It has to be set on **both** the arrival and the departure interface to pass a
   packet *and its reply*, so "the LAN interface" is not the answer; the set is
   "every interface any traffic we route enters or leaves by", which is a list
-  this module does not reliably have until `link` grows groups (§2.5).
+  this module does not reliably have until `link` grows networks (§2.5).
 - Any third party writing the global key resets every per-device value
   underneath us. Docker, libvirt and k8s all do this on startup. The narrow
   write is the one more likely to be silently undone.
@@ -511,10 +520,10 @@ us; locally-originated traffic is untouched, which it should be because its
 source is already the uplink's own address; and `nft list table inet olr_nat` at
 2am says *whose* traffic this rule is for.
 
-The subnets come from `link`'s groups — **intent, not the addresses observed on
+The subnets come from `link`'s networks — **intent, not the addresses observed on
 an interface**. A network that has been declared and whose interface has not come
 up yet still gets its rule, which is the same reason `dhcp` validates a range
-against a group rather than against a NIC.
+against a network rather than against a NIC.
 
 #### Not keyed on an exit existing
 
@@ -577,7 +586,7 @@ proxy that won — a thing olr cannot see, explain, or show in a diff.
 
 **So the division is by layer, and each side does the part it can do well.**
 olr decides *which traffic reaches the proxy at all*: `Internet via` per network,
-tag or device (§2). The proxy decides *what to do with it*, by name, using its
+group or device (§2). The proxy decides *what to do with it*, by name, using its
 own configuration. Neither needs to know the other's rules.
 
 ### 4.1 What the operator does instead
@@ -966,7 +975,7 @@ any work.
 | | | |
 |---|---|---|
 | **v1** | exits: `next_hop`, `interface`, `blocked` | `interface` is nearly free once `next_hop` exists, and it is how WireGuard and Tailscale arrive |
-| | `Internet via` at **network** level | tag and device tiers wait on §10 #6 |
+| | `Internet via` at **network** level | group and device tiers wait on §10 #6 |
 | | nft classify + RPDB, documented mark/priority/table ranges | |
 | | `net.ipv4.ip_forward`, written and read back | §3.8 — the module programs the forwarding path, so it owns whether the box forwards |
 | | per-exit health probe, `block` on failure | dns:§1.2 depends on it |
@@ -976,8 +985,8 @@ any work.
 | | **port forwards, and hairpin NAT** | `docs/port-forwarding.md`, moved here from the deleted `firewall` module |
 | **v2** | `local_socket` (TPROXY) | wants dns:§2.1's return-path answer settled first |
 | | IPv6 forwarding | §3.8 — needs `accept_ra=2` on the uplink; `dial.Uplink` now exists, so this waits only on the work |
-| | per-interface `conf.<dev>.forwarding` in place of the global key | §3.8 — the narrower write, once `link`'s groups say which interfaces traffic enters and leaves by |
-| | tag and device tiers of the ladder | |
+| | per-interface `conf.<dev>.forwarding` in place of the global key | §3.8 — the narrower write, once `link`'s networks say which interfaces traffic enters and leaves by |
+| | group and device tiers of the ladder | |
 | | conntrack-derived per-flow detail | |
 | **Later** | multi-WAN failover policy beyond `block` / `direct` | hysteresis and probe design are their own scope |
 | | an advanced source+destination rule list | the only thing the ladder cannot express |
@@ -1055,7 +1064,7 @@ any work.
 2. **SNAT toward next-hop exits, or a dedicated segment** (§5.3, dns:§7.2).
    Determines whether accounting sees both directions and whether `ct mark`
    restore works at all. Leaning SNAT, as a per-exit field.
-3. **Who owns the device inventory** (§10 #6). Gates the tag and device tiers of
+3. **Who owns the device inventory** (§10 #6). Gates the group and device tiers of
    the ladder, and per-device statistics ownership with it.
 4. **Time-series storage** (§10 #5). Now with two workloads voting — these
    counters and dns:§7.5's query log.

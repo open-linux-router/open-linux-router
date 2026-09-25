@@ -198,7 +198,7 @@ export interface DhcpConfig {
   extra_dnsmasq_conf?: string
 }
 export interface Pool {
-  group: string
+  network: string
   ipv4?: PoolIPv4
   ipv6?: PoolIPv6
   lease_time?: Duration
@@ -350,14 +350,14 @@ export interface UpstreamIngress {
 }
 export interface LinkConfig {
   adopted?: string[]
-  groups?: Group[]
+  networks?: Network[]
 }
-export interface Group {
+export interface Network {
   name: string
   members: string[]
-  ipv4?: GroupIPv4
+  ipv4?: NetworkIPv4
 }
-export interface GroupIPv4 {
+export interface NetworkIPv4 {
   subnet: IPPrefix2
   router?: IPAddress8
 }

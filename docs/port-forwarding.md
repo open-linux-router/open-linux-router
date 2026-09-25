@@ -70,7 +70,7 @@ for a better word. A box can have two uplinks, and a forward that silently
 applied to both would be a policy nobody wrote. Naming the interface makes the
 scope of the rule exactly as wide as the operator said it was — and it is the
 same staging argument `gateway:`§2.5 makes: the field becomes a network name
-when `link` grows groups, and the stored document does not change shape.
+when `link` grows networks, and the stored document does not change shape.
 
 ### 1.2 The destination is an address, not a device
 
@@ -547,7 +547,7 @@ validation says why.
 
 1. **Whether `in` should accept "any uplink" once `dial` lands.** Today it names
    one interface. A box with a failover WAN wants both, and the honest spelling
-   of that is a group, not a wildcard — so it waits on `link`'s groups rather
+   of that is a network, not a wildcard — so it waits on `link`'s networks rather
    than getting a special value now.
 
 2. **Whether the local-port conflict check should be a refusal for the port the
@@ -584,10 +584,10 @@ validation says why.
    forward on the first one is worse than not supporting two.
 
 6. **§10.1's precondition has arrived and this has not noticed.** It
-   defers "any uplink" to `link`'s groups rather than a special value; `link`
-   now has them (`internal/link/config.go`, `Group` with `Members`), while
+   defers "any uplink" to `link`'s networks rather than a special value; `link`
+   now has them (`internal/link/config.go`, `Network` with `Members`), while
    the forwards' `LinkView` still asks only about interfaces by
-   name. `design.md` §4.1 is explicit that dependents read a *group* and "do not
+   name. `design.md` §4.1 is explicit that dependents read a *network* and "do not
    read interface names", so this is drift against the stated architecture
    rather than a preference. Noted here so §10.1 is re-opened rather than
    quietly stale.

@@ -258,8 +258,8 @@ export interface Lease {
 }
 
 export interface PoolUsage {
-  /** The network this describes — internal/dhcp Usage.Group. */
-  group: string
+  /** The network this describes — internal/dhcp Usage.Network. */
+  network: string
   size: number
   active: number
   expired: number
@@ -320,19 +320,19 @@ export interface InterfaceRow {
 
   /**
    * The network this interface carries, absent if it carries none. The reverse
-   * of a group's member list, and what lets a row say what the NIC is *for*.
+   * of a network's member list, and what lets a row say what the NIC is *for*.
    */
-  group?: string
+  network?: string
 }
 
 /**
- * One network as the API publishes it — internal/link groupView.
+ * One network as the API publishes it — internal/link networkView.
  *
  * `subnet`/`router` are intent; `InterfaceRow.subnet` is observation. The two
  * disagreeing is drift, which is why both are published rather than one being
  * derived from the other.
  */
-export interface GroupRow {
+export interface NetworkRow {
   name: string
   members: string[]
   subnet?: string
@@ -354,7 +354,7 @@ export interface GroupRow {
 
 export interface InterfaceList {
   interfaces: InterfaceRow[]
-  groups: GroupRow[]
+  networks: NetworkRow[]
   problems?: Problem[]
   as_of: string
 }

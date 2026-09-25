@@ -148,9 +148,9 @@ func TestUsageOf(t *testing.T) {
 		{IP: addr(t, "10.10.0.5"), Expires: now.Add(time.Hour)},      // another pool
 	}
 
-	u := UsageOf(pool, mustGroup(t, "lan"), leases, now)
-	if u.Group != "lan" {
-		t.Errorf("Group = %q", u.Group)
+	u := UsageOf(pool, mustNetwork(t, "lan"), leases, now)
+	if u.Network != "lan" {
+		t.Errorf("Network = %q", u.Network)
 	}
 	if u.Size != 101 {
 		t.Errorf("Size = %d, want 101", u.Size)

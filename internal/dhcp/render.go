@@ -207,13 +207,13 @@ func (d Dnsmasq) reloadable(path string) bool {
 }
 
 // Render is pure: same config and same link facts, same bytes.
-func (d Dnsmasq) Render(c Config, groups GroupView) (Rendered, error) {
+func (d Dnsmasq) Render(c Config, networks NetworkView) (Rendered, error) {
 	c = c.Clone()
 	c.Normalize()
 
 	var out Rendered
 
-	main, err := d.renderMain(c, groups)
+	main, err := d.renderMain(c, networks)
 	if err != nil {
 		return Rendered{}, err
 	}
@@ -228,7 +228,7 @@ func (d Dnsmasq) Render(c Config, groups GroupView) (Rendered, error) {
 			continue
 		}
 		out.add(File{
-			Path:       d.Paths.OptsDir + "/" + p.Group + ".conf",
+			Path:       d.Paths.OptsDir + "/" + p.Network + ".conf",
 			Mode:       0o644,
 			Data:       opts,
 			Reloadable: true,
@@ -253,7 +253,7 @@ func (d Dnsmasq) Render(c Config, groups GroupView) (Rendered, error) {
 	return out, nil
 }
 
-func (d Dnsmasq) renderMain(c Config, groups GroupView) ([]byte, error) {
+func (d Dnsmasq) renderMain(c Config, networks NetworkView) ([]byte, error) {
 	var b strings.Builder
 	b.WriteString(d.header("dnsmasq configuration for the olr dhcp module"))
 
@@ -301,7 +301,7 @@ dhcp-authoritative
 # addresses. Sized from the configured pools instead, and never lowered below
 # dnsmasq's default so this can only ever raise the ceiling.
 dhcp-lease-max=%d
-`, leaseMax(c, groups))
+`, leaseMax(c, networks))
 
 	if !c.Enabled {
 		b.WriteString(`
@@ -312,12 +312,12 @@ dhcp-lease-max=%d
 
 	wantsRA := false
 	for _, p := range c.Pools {
-		info, err := groups.Group(p.Group)
+		info, err := networks.Network(p.Network)
 		if err != nil {
-			return nil, fmt.Errorf("rendering pool %q: %w", p.Group, err)
+			return nil, fmt.Errorf("rendering pool %q: %w", p.Network, err)
 		}
 
-		fmt.Fprintf(&b, "\n# network: %s\n", p.Group)
+		fmt.Fprintf(&b, "\n# network: %s\n", p.Network)
 		for _, member := range info.Members {
 			fmt.Fprintf(&b, "interface=%s\n", member)
 		}
@@ -329,7 +329,7 @@ dhcp-lease-max=%d
 			start, end, ok := p.Range(info)
 			if !ok {
 				return nil, fmt.Errorf("rendering pool %q: no IPv4 range, and none could be derived from %s",
-					p.Group, info.Subnet)
+					p.Network, info.Subnet)
 			}
 			derived := ""
 			if !p.IPv4.Explicit() {
@@ -338,7 +338,7 @@ dhcp-lease-max=%d
 			// The netmask is optional for a directly connected network, but
 			// stating it removes dnsmasq's class-based guess as a failure mode.
 			fmt.Fprintf(&b, "dhcp-range=set:%s,%s,%s,%s,%s%s\n",
-				p.Group, start, end, netmaskOf(info.Subnet), p.LeaseTimeOrDefault().Seconds(), derived)
+				p.Network, start, end, netmaskOf(info.Subnet), p.LeaseTimeOrDefault().Seconds(), derived)
 		}
 
 		if ra := p.RA(); ra != RAOff {
@@ -347,7 +347,7 @@ dhcp-lease-max=%d
 			// One IPv6 range per member: `constructor:` names an interface, so a
 			// network on two of them needs one line each.
 			for _, member := range info.Members {
-				fmt.Fprintf(&b, "dhcp-range=set:%s,%s\n", p.Group, raRange(ra, member, p))
+				fmt.Fprintf(&b, "dhcp-range=set:%s,%s\n", p.Network, raRange(ra, member, p))
 			}
 		}
 	}
@@ -392,10 +392,10 @@ const StatefulRASize = 0x100
 // outside its pool's range and so cost an extra lease — and every stateful
 // DHCPv6 range. That total is a true upper bound: dnsmasq reuses a lease record
 // when an expired one is handed out again, so nothing accumulates beyond it.
-func leaseMax(c Config, groups GroupView) int {
+func leaseMax(c Config, networks NetworkView) int {
 	total := len(c.Reservations)
 	for _, p := range c.Pools {
-		if info, err := groups.Group(p.Group); err == nil {
+		if info, err := networks.Network(p.Network); err == nil {
 			if start, end, ok := p.Range(info); ok {
 				total += core.RangeSize(start, end)
 			}
@@ -447,7 +447,7 @@ func raComment(mode RAMode) string {
 // carries.
 func (d Dnsmasq) renderOptions(p Pool) ([]byte, error) {
 	var lines []string
-	tag := "tag:" + p.Group
+	tag := "tag:" + p.Network
 
 	// A nil Gateway or DNS renders nothing on purpose. dnsmasq's own default
 	// for both is the address of the machine it runs on, which is exactly what
@@ -485,7 +485,7 @@ func (d Dnsmasq) renderOptions(p Pool) ([]byte, error) {
 	}
 
 	var b strings.Builder
-	b.WriteString(d.header("DHCP options for " + p.Group))
+	b.WriteString(d.header("DHCP options for " + p.Network))
 	b.WriteString("\n")
 	for _, l := range lines {
 		b.WriteString(l)

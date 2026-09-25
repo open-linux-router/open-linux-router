@@ -89,7 +89,7 @@ differently.
 
 | | Gateway leg | Resolver leg |
 |---|---|---|
-| Buys | Packets reach the box at all: per-source `Internet via`, IP/GEOIP rules, byte accounting | Blocklists, per-tag blocking, the query log, and exact names for the proxy's own domain rules |
+| Buys | Packets reach the box at all: per-source `Internet via`, IP/GEOIP rules, byte accounting | Blocklists, per-group blocking, the query log, and exact names for the proxy's own domain rules |
 | Missing | Nothing works; the box never sees the traffic | Domain policy silently does not apply |
 | Fails | Loudly | **Silently** |
 
@@ -150,7 +150,7 @@ the common case rather than the adversarial one.
 ## 3. Why we do not use unbound's forwarding
 
 `forward-zone` is instance-global. Views carry `local-zone`, so per-client
-*blocking* is native and per-tag parental controls are nearly free; views do not
+*blocking* is native and per-group parental controls are nearly free; views do not
 carry forwarding, so **per-client upstream selection is not expressible in
 unbound**. (Established from documentation, not verified against the build in
 trixie. It is load-bearing — confirm before relying on it.)
@@ -578,7 +578,7 @@ or we have shipped an amplifier.
 
 | | | |
 |---|---|---|
-| **v1** | resolver leg: DNAT hijack of forwarded `:53`, upstream = unbound, per-group policy | built; policy keys off client prefixes until `link` lands groups |
+| **v1** | resolver leg: DNAT hijack of forwarded `:53`, upstream = unbound, per-network policy | built; policy keys off client prefixes until `link` lands networks |
 | | passthrough relay with tee, query log, domain→IP map | the observability case is the whole reason to own :53 |
 | | per-client blocking, DoT `:853` drop | built **in the relay**, not in unbound views — §4.4; the block is what protects everything else |
 | | local names under a local domain | built **in unbound**, not the relay — §4.6, which is the same question answered the other way |
@@ -652,7 +652,7 @@ what we do not cover instead of implying coverage we do not have.
   flushed. Acceptable for the field it is, and the one thing to revisit if
   naming devices turns out to be a weekly activity: a separate included file
   would make it a reload, at the cost of a mechanism nothing else needs.
-- **Policies key off client prefixes, not groups.** `link` has not landed, so
+- **Policies key off client prefixes, not networks.** `link` has not landed, so
   this is the same stand-in `internal/dhcp` makes by keying pools off kernel
   interface names, and it changes shape at the same time.
 - **The query log is of *answered* queries.** A query that never gets an answer

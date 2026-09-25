@@ -13,13 +13,13 @@ import (
 // against is a statically configured device inside the dynamic range, and
 // dnsmasq has no exclusion primitive.
 func TestAPoolWithNoRangeDerivesOneFromItsNetwork(t *testing.T) {
-	c := Config{Enabled: true, Pools: []Pool{{Group: "lan", IPv4: &PoolIPv4{}}}}
+	c := Config{Enabled: true, Pools: []Pool{{Network: "lan", IPv4: &PoolIPv4{}}}}
 
-	if res := Validate(c, testGroups()); !res.OK() {
+	if res := Validate(c, testNetworks()); !res.OK() {
 		t.Fatalf("refused a pool with no explicit range: %v", res.Errors)
 	}
 
-	start, end, ok := c.Pools[0].Range(mustGroup(t, "lan"))
+	start, end, ok := c.Pools[0].Range(mustNetwork(t, "lan"))
 	if !ok {
 		t.Fatal("no range was derived")
 	}
@@ -31,7 +31,7 @@ func TestAPoolWithNoRangeDerivesOneFromItsNetwork(t *testing.T) {
 // The derived range must leave the low block free, or the whole reason for
 // deriving it is gone.
 func TestTheDerivedRangeLeavesTheStaticBlockFree(t *testing.T) {
-	start, _, ok := Pool{Group: "lan", IPv4: &PoolIPv4{}}.Range(mustGroup(t, "lan"))
+	start, _, ok := Pool{Network: "lan", IPv4: &PoolIPv4{}}.Range(mustNetwork(t, "lan"))
 	if !ok {
 		t.Fatal("no range was derived")
 	}
@@ -43,11 +43,11 @@ func TestTheDerivedRangeLeavesTheStaticBlockFree(t *testing.T) {
 // An explicit range wins. Somebody who typed one is not asking for our opinion,
 // and silently replacing it would renumber a working network.
 func TestAnExplicitRangeIsNotOverridden(t *testing.T) {
-	p := Pool{Group: "lan", IPv4: &PoolIPv4{
+	p := Pool{Network: "lan", IPv4: &PoolIPv4{
 		Start: addr(t, "192.168.1.10"),
 		End:   addr(t, "192.168.1.20"),
 	}}
-	start, end, _ := p.Range(mustGroup(t, "lan"))
+	start, end, _ := p.Range(mustNetwork(t, "lan"))
 	if start.String() != "192.168.1.10" || end.String() != "192.168.1.20" {
 		t.Errorf("range = %s-%s, want the typed 192.168.1.10-192.168.1.20", start, end)
 	}
@@ -58,15 +58,15 @@ func TestAnExplicitRangeIsNotOverridden(t *testing.T) {
 // Start and End, so this shape did not exist.
 func TestANetworkCanServeIPv6Only(t *testing.T) {
 	c := Config{Enabled: true, Pools: []Pool{{
-		Group: "v6only",
-		IPv6:  &PoolIPv6{Mode: RASLAAC},
+		Network: "v6only",
+		IPv6:    &PoolIPv6{Mode: RASLAAC},
 	}}}
 
-	if res := Validate(c, testGroups()); !res.OK() {
+	if res := Validate(c, testNetworks()); !res.OK() {
 		t.Fatalf("refused an IPv6-only pool: %v", res.Errors)
 	}
 
-	rendered, err := NewDnsmasq(DefaultPaths()).Render(c, testGroups())
+	rendered, err := NewDnsmasq(DefaultPaths()).Render(c, testNetworks())
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestANetworkCanServeIPv6Only(t *testing.T) {
 // The mirror image: IPv4 with no IPv6 must render no `dhcp-range=::` line and
 // no enable-ra, or every box would advertise itself as an IPv6 router.
 func TestANetworkCanServeIPv4Only(t *testing.T) {
-	rendered, err := NewDnsmasq(DefaultPaths()).Render(validConfig(t), testGroups())
+	rendered, err := NewDnsmasq(DefaultPaths()).Render(validConfig(t), testNetworks())
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -103,9 +103,9 @@ func TestANetworkCanServeIPv4Only(t *testing.T) {
 // newly expressible — so it needs a rule of its own rather than falling through
 // as valid.
 func TestAPoolMustServeSomething(t *testing.T) {
-	c := Config{Enabled: true, Pools: []Pool{{Group: "lan"}}}
+	c := Config{Enabled: true, Pools: []Pool{{Network: "lan"}}}
 
-	res := Validate(c, testGroups())
+	res := Validate(c, testNetworks())
 	if res.OK() {
 		t.Fatal("accepted a pool that serves neither IPv4 nor IPv6")
 	}
@@ -122,7 +122,7 @@ func TestStatefulDHCPv6WarnsAboutAndroid(t *testing.T) {
 	c := validConfig(t)
 	c.Pools[0].IPv6 = &PoolIPv6{Mode: RAStateful}
 
-	res := Validate(c, testGroups())
+	res := Validate(c, testNetworks())
 	if !res.OK() {
 		t.Fatalf("refused stateful DHCPv6, which is a supported advanced mode: %v", res.Errors)
 	}
@@ -137,8 +137,8 @@ func TestStatefulDHCPv6WarnsAboutAndroid(t *testing.T) {
 func TestValidationNeedsNoObservedState(t *testing.T) {
 	// A fixture with no `Up` anywhere: every network is down as far as this
 	// view is concerned, and nothing that decides validity may depend on it.
-	down := StaticGroups{}
-	for name, info := range testGroups() {
+	down := StaticNetworks{}
+	for name, info := range testNetworks() {
 		info.Up = false
 		down[name] = info
 	}
@@ -152,13 +152,13 @@ func TestValidationNeedsNoObservedState(t *testing.T) {
 // pointed at the old name has to say so against its own field — the asymmetry
 // `link` relies on when it refuses to check other modules' references.
 func TestAPoolOnAMissingNetworkNamesTheNetwork(t *testing.T) {
-	c := Config{Enabled: true, Pools: []Pool{{Group: "renamed", IPv4: &PoolIPv4{}}}}
+	c := Config{Enabled: true, Pools: []Pool{{Network: "renamed", IPv4: &PoolIPv4{}}}}
 
-	res := Validate(c, testGroups())
+	res := Validate(c, testNetworks())
 	if res.OK() {
 		t.Fatal("accepted a pool pointing at a network that does not exist")
 	}
-	if !hasProblem(res.Errors, "pools[0].group", "olr net show") {
+	if !hasProblem(res.Errors, "pools[0].network", "olr net show") {
 		t.Errorf("the error does not say where to look: %s", problemStrings(res.Errors))
 	}
 }

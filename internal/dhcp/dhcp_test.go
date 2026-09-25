@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-// testGroups is the fake set of networks every test in this package plans
+// testNetworks is the fake set of networks every test in this package plans
 // against.
 //
 // It is the reason the whole validation and rendering surface is testable
-// without root, without netlink and without a second NIC: GroupView is declared
+// without root, without netlink and without a second NIC: NetworkView is declared
 // by this module (link.go), so the facts it depends on can simply be stated.
 //
 // It got smaller when pools moved off interfaces. It used to carry observed
@@ -18,8 +18,8 @@ import (
 // its subnet, so a fixture is now the three fields a rule actually consults.
 // There is no unadopted entry any more either — being in a network means having
 // been adopted, and `link` is where that is enforced.
-func testGroups() StaticGroups {
-	return StaticGroups{
+func testNetworks() StaticNetworks {
+	return StaticNetworks{
 		"lan": {
 			Members: []string{"br-lan"}, Up: true,
 			Subnet: netip.MustParsePrefix("192.168.1.0/24"),
@@ -57,7 +57,7 @@ func addr(t *testing.T, s string) netip.Addr {
 func lanPool(t *testing.T) Pool {
 	t.Helper()
 	return Pool{
-		Group: "lan",
+		Network: "lan",
 		IPv4: &PoolIPv4{
 			Start: addr(t, "192.168.1.100"),
 			End:   addr(t, "192.168.1.200"),
@@ -93,11 +93,11 @@ func problemStrings(problems []Problem) string {
 	return strings.Join(out, "\n    ")
 }
 
-// mustGroup resolves a fixture network, failing the test rather than the
+// mustNetwork resolves a fixture network, failing the test rather than the
 // assertion that uses it.
-func mustGroup(t *testing.T, name string) GroupInfo {
+func mustNetwork(t *testing.T, name string) NetworkInfo {
 	t.Helper()
-	info, err := testGroups().Group(name)
+	info, err := testNetworks().Network(name)
 	if err != nil {
 		t.Fatalf("no fixture network %q: %v", name, err)
 	}

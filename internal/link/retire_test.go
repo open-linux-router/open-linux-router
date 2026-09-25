@@ -19,9 +19,9 @@ import (
 func lanOn(member string) Config {
 	return Config{
 		Adopted: []string{"lan0", "lan1"},
-		Groups: []Group{{
+		Networks: []Network{{
 			Name: "lan", Members: []string{member},
-			IPv4: &GroupIPv4{Subnet: netip.MustParsePrefix("192.168.1.0/24")},
+			IPv4: &NetworkIPv4{Subnet: netip.MustParsePrefix("192.168.1.0/24")},
 		}},
 	}
 }
@@ -39,7 +39,7 @@ func TestRemovingANetworkRetiresItsRouterAddress(t *testing.T) {
 
 	// An interface still in some network is that network's apply's business.
 	moved := lanOn("lan0")
-	moved.Groups[0].Name = "home"
+	moved.Networks[0].Name = "home"
 	if got := RetiredFor(before, moved); len(got) != 0 {
 		t.Errorf("a member that moved networks was retired: %+v", got)
 	}
@@ -66,15 +66,15 @@ func TestThePlanShowsARemovedNetworksAddressComingOff(t *testing.T) {
 	if _, ok := linkChangeAt(kept, "interfaces[lan0]"); ok {
 		t.Errorf("keep_addresses still planned a removal: %+v", kept.Changes)
 	}
-	if group, _ := linkChangeAt(kept, "groups[lan]"); group.Impact != impactRestart {
-		t.Errorf("a removal keeping its address is %q, want %q", group.Impact, impactRestart)
+	if network, _ := linkChangeAt(kept, "networks[lan]"); network.Impact != impactRestart {
+		t.Errorf("a removal keeping its address is %q, want %q", network.Impact, impactRestart)
 	}
 }
 
 // Apply hands the writer the retirement — even when no network is left, which
 // used to mean the writer was not called at all.
 func TestApplyRetiresUnlessAskedToKeep(t *testing.T) {
-	document := `{"link": {"adopted": ["lan0", "lan1"], "groups": [{"name": "lan", "members": ["lan0"],
+	document := `{"link": {"adopted": ["lan0", "lan1"], "networks": [{"name": "lan", "members": ["lan0"],
 		"ipv4": {"subnet": "192.168.1.0/24"}}]}}`
 	after := Config{Adopted: []string{"lan0", "lan1"}}
 
@@ -97,7 +97,7 @@ func removalApplier(t *testing.T) (Applier, *RecordingWriter) {
 	t.Helper()
 	w := &RecordingWriter{}
 	return Applier{
-		Store: storeWith(t, `{"link": {"adopted": ["lan0", "lan1"], "groups": [{"name": "lan",
+		Store: storeWith(t, `{"link": {"adopted": ["lan0", "lan1"], "networks": [{"name": "lan",
 			"members": ["lan0"], "ipv4": {"subnet": "192.168.1.0/24", "router": "192.168.1.2"}}]}}`),
 		Source: staticSource(
 			Interface{Name: "lan0", Up: true, Prefixes: prefixes(t, "192.168.1.2/24")},

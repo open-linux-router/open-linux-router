@@ -132,7 +132,7 @@ overstates its own payoff is worse than a smaller true one.
 
 | | What it actually costs | |
 |---|---|---|
-| `gateway`'s `Internet via` | **nothing — it already works** | assignments are keyed by kernel interface (`internal/gateway/config.go`), so `olr gateway set via wg0 <exit>` sends a peer's traffic out a chosen exit today. gateway:§2.5 will re-key these to network names eventually; until it does, the absence of a group is not felt |
+| `gateway`'s `Internet via` | **nothing — it already works** | assignments are keyed by kernel interface (`internal/gateway/config.go`), so `olr gateway set via wg0 <exit>` sends a peer's traffic out a chosen exit today. gateway:§2.5 will re-key these to network names eventually; until it does, the absence of a network is not felt |
 | `dns` answering `phone.home.example.com` | **one command, the same one every other device costs** | `olr dns add host phone --address 10.6.0.2` |
 | a peer appearing in `devices` | **blocked, and not on this module** | §3.3 |
 
@@ -199,18 +199,18 @@ skipped — `wg0` is **never added to `link.Adopted`**. Adoption is the operator
 consenting to hand over *their* NIC (`design.md` §7); `wg0` is olr's own, and
 there is nothing for anyone to consent to.
 
-**And the group is not registered with `link` at all, which is a reversal of
+**And the network is not registered with `link` at all, which is a reversal of
 what this section first said.** The plan was to register it once a consumer
 existed. Going to find that consumer is what produced the table above: `gateway`
 does not need one, `dns` must not have one, and `devices` cannot use one. What
 is left is a registration with no reader — and one active cost, because `dhcp`
-keys off `link`'s groups, so a registered dial-in network would show up on the
+keys off `link`'s networks, so a registered dial-in network would show up on the
 DHCP page offering to serve addresses on a network whose addresses are not
 served at all (§3.2).
 
 So `remote` owns the interface, its address and the segment, and `link` is not
 told. The day something needs to name this network, the thing to weigh is
-whether `link` grows a notion of a group it does not address — not whether to
+whether `link` grows a notion of a network it does not address — not whether to
 paper over it here.
 
 ### 3.2 The asymmetry that has to be said out loud
@@ -658,7 +658,7 @@ behalf.
 | **v2** | SOCKS5, as the third parallel object | the second instance settled the shape; the third should need no new argument |
 | | per-device keys for the proxy, through SIP022's multi-user extension | §7.5.1 — buys real revocation, costs client support that cannot be verified from here |
 | | a WebUI section for the proxy | the page covers the tunnel only |
-| | registering the dial-in segment as a group, so `devices` and `dns` see peers | §3.1 |
+| | registering the dial-in segment as a network, so `devices` and `dns` see peers | §3.1 |
 | | a QR code for the client configuration | the phone case, and the reason `add peer` returns the file rather than a path |
 | | pre-shared keys per peer | escape hatch until then |
 | | a reachability check on the home prefixes | §8 row 3 |
@@ -735,7 +735,7 @@ behalf.
    a foundation-module decision and wants its own argument; the open question is
    whether it is worth making, not how to work around it here.
 
-   What was *closed* by going and looking: the group registration this section
+   What was *closed* by going and looking: the network registration this section
    used to ask for is not wanted (§3.1), and `dns` naming is one command rather
    than a mechanism (§3).
 

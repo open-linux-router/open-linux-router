@@ -79,23 +79,23 @@ func TestMigrateCreatesANetworkForEachLegacyPool(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g, ok := linkCfg.Group("lan0")
+	n, ok := linkCfg.Network("lan0")
 	if !ok {
-		t.Fatalf("no network was created; groups = %+v", linkCfg.Groups)
+		t.Fatalf("no network was created; networks = %+v", linkCfg.Networks)
 	}
-	if len(g.Members) != 1 || g.Members[0] != "lan0" {
-		t.Errorf("Members = %v, want [lan0]", g.Members)
+	if len(n.Members) != 1 || n.Members[0] != "lan0" {
+		t.Errorf("Members = %v, want [lan0]", n.Members)
 	}
 
 	// The subnet the interface *already has*, so applying the migrated config
 	// is a no-op on a box that was working. Anything else renumbers a network
 	// because olr was upgraded.
-	if g.IPv4 == nil || g.IPv4.Subnet.String() != "192.168.1.0/24" {
-		t.Fatalf("IPv4 = %+v, want the interface's own 192.168.1.0/24", g.IPv4)
+	if n.IPv4 == nil || n.IPv4.Subnet.String() != "192.168.1.0/24" {
+		t.Fatalf("IPv4 = %+v, want the interface's own 192.168.1.0/24", n.IPv4)
 	}
-	if g.IPv4.RouterAddr().String() != "192.168.1.2" {
+	if n.IPv4.RouterAddr().String() != "192.168.1.2" {
 		t.Errorf("router = %s, want the address lan0 already holds (192.168.1.2)",
-			g.IPv4.RouterAddr())
+			n.IPv4.RouterAddr())
 	}
 
 	if len(dhcpCfg.Pools) != 1 {
@@ -103,8 +103,8 @@ func TestMigrateCreatesANetworkForEachLegacyPool(t *testing.T) {
 	}
 	p := dhcpCfg.Pools[0]
 	switch {
-	case p.Group != "lan0":
-		t.Errorf("Group = %q, want lan0", p.Group)
+	case p.Network != "lan0":
+		t.Errorf("Network = %q, want lan0", p.Network)
 	case p.IPv4 == nil:
 		t.Fatal("the IPv4 range was dropped")
 	// Carried across explicitly rather than left to be derived: devices hold
@@ -138,7 +138,7 @@ func TestMigratedConfigValidates(t *testing.T) {
 
 	doc, _ := store.Load()
 	dhcpCfg, _ := dhcp.FromDocument(doc)
-	if res := dhcp.Validate(dhcpCfg, dhcpGroupView{facts: facts}); !res.OK() {
+	if res := dhcp.Validate(dhcpCfg, dhcpNetworkView{facts: facts}); !res.OK() {
 		t.Errorf("the migrated config does not validate: %v", res.Errors)
 	}
 }
@@ -177,8 +177,8 @@ func TestMigrateIsIdempotent(t *testing.T) {
 
 func TestMigrateLeavesACurrentDocumentAlone(t *testing.T) {
 	const current = `{"link":{"adopted":["lan0"],` +
-		`"groups":[{"name":"lan","members":["lan0"],"ipv4":{"subnet":"192.168.1.0/24"}}]},` +
-		`"dhcp":{"enabled":true,"pools":[{"group":"lan"}]}}`
+		`"networks":[{"name":"lan","members":["lan0"],"ipv4":{"subnet":"192.168.1.0/24"}}]},` +
+		`"dhcp":{"enabled":true,"pools":[{"network":"lan"}]}}`
 
 	store := storeWith(t, current)
 	facts := testFacts(t, "")
@@ -210,12 +210,12 @@ func TestMigrateKeepsAPoolWhoseInterfaceHasNoAddress(t *testing.T) {
 
 	doc, _ := store.Load()
 	linkCfg, _ := link.FromDocument(doc)
-	g, ok := linkCfg.Group("nosuch0")
+	n, ok := linkCfg.Network("nosuch0")
 	if !ok {
 		t.Fatal("no network was created for the pool")
 	}
-	if g.IPv4 != nil {
-		t.Errorf("invented a subnet for an interface with no address: %+v", g.IPv4)
+	if n.IPv4 != nil {
+		t.Errorf("invented a subnet for an interface with no address: %+v", n.IPv4)
 	}
 	// Adoption comes along: the pool could not have been applied without it,
 	// and dropping it turns a merely-invalid config into a confusingly-invalid
@@ -242,10 +242,117 @@ func TestMigrateWritesBothModulesAtOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(raw)
-	if !strings.Contains(text, `"groups"`) || !strings.Contains(text, `"group"`) {
+	if !strings.Contains(text, `"networks"`) || !strings.Contains(text, `"network"`) {
 		t.Errorf("the file has one half of the migration but not the other:\n%s", text)
 	}
 	if strings.Contains(text, `"interface"`) {
 		t.Errorf("the old key survived the rewrite:\n%s", text)
+	}
+	// A pre-0.3 document goes all the way to the current keys in the same
+	// write, not to the spelling that was current when 0.3 shipped.
+	if strings.Contains(text, `"groups"`) || strings.Contains(text, `"group"`) {
+		t.Errorf("the pre-0.3 migration wrote the network's old name:\n%s", text)
+	}
+}
+
+// The document every box that ran a version before the rename has: networks
+// under `groups`, and each pool naming its network as `group`.
+const groupKeyedDocument = `{
+  "link": {
+    "adopted": ["lan0"],
+    "groups": [{"name": "lan", "members": ["lan0"], "ipv4": {"subnet": "192.168.1.0/24"}}]
+  },
+  "dhcp": {
+    "enabled": true,
+    "pools": [{"group": "lan", "ipv4": {"start": "192.168.1.100", "end": "192.168.1.200"}}]
+  }
+}`
+
+func TestMigrateRenamesTheNetworkKeys(t *testing.T) {
+	store := storeWith(t, groupKeyedDocument)
+	facts := testFacts(t, "")
+	facts.Store = store
+
+	changed, err := migrateDocument(store, facts, quietLogger())
+	if err != nil {
+		t.Fatalf("migrateDocument: %v", err)
+	}
+	if !changed {
+		t.Fatal("reported no change for a document spelling the network `group`")
+	}
+
+	raw, err := os.ReadFile(store.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	if strings.Contains(text, `"groups"`) || strings.Contains(text, `"group"`) {
+		t.Errorf("an old key survived the rewrite:\n%s", text)
+	}
+	if !strings.Contains(text, `"networks"`) || !strings.Contains(text, `"network"`) {
+		t.Errorf("the new keys were not written:\n%s", text)
+	}
+
+	// Nothing but the spelling moved: the network, its subnet, and the pool's
+	// range are what they were.
+	doc, _ := store.Load()
+	linkCfg, err := link.FromDocument(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, ok := linkCfg.Network("lan")
+	if !ok || n.IPv4 == nil || n.IPv4.Subnet.String() != "192.168.1.0/24" {
+		t.Fatalf("network = %+v, want lan on 192.168.1.0/24", linkCfg.Networks)
+	}
+	dhcpCfg, err := dhcp.FromDocument(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := dhcpCfg.Pool("lan")
+	if !ok || p.IPv4 == nil || p.IPv4.Start.String() != "192.168.1.100" {
+		t.Fatalf("pools = %+v, want lan's range carried across", dhcpCfg.Pools)
+	}
+	if res := dhcp.Validate(dhcpCfg, dhcpNetworkView{facts: facts}); !res.OK() {
+		t.Errorf("the renamed config does not validate: %v", res.Errors)
+	}
+
+	again, err := migrateDocument(store, facts, quietLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again {
+		t.Error("reported a change on the second run")
+	}
+	after, _ := os.ReadFile(store.Path())
+	if string(after) != text {
+		t.Errorf("the second run rewrote the file:\n%s\nthen\n%s", text, after)
+	}
+}
+
+// Only the subtree that carried an old key is rewritten. A box with networks
+// and no dhcp configuration must not gain a dhcp section because of a rename in
+// link.
+func TestMigrateRenamesOnlyTheSubtreeThatNeedsIt(t *testing.T) {
+	const linkOnly = `{"link":{"adopted":["lan0"],` +
+		`"groups":[{"name":"lan","members":["lan0"],"ipv4":{"subnet":"192.168.1.0/24"}}]}}`
+
+	store := storeWith(t, linkOnly)
+	facts := testFacts(t, "")
+	facts.Store = store
+
+	changed, err := migrateDocument(store, facts, quietLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("reported no change for a link subtree spelling the network `group`")
+	}
+	doc, _ := store.Load()
+	if _, ok := doc.Raw(dhcp.ModuleName); ok {
+		t.Error("renaming link's key created a dhcp section")
+	}
+	raw, _ := doc.Raw(link.ModuleName)
+	if link.HasLegacyKeys(raw) {
+		t.Errorf("link still carries the old key: %s", raw)
 	}
 }

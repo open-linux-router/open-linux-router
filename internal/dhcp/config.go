@@ -33,7 +33,7 @@ type Config struct {
 	Enabled bool `json:"enabled"`
 
 	// Pools holds at most one pool per network (design.md §11.4 — multiple
-	// pools per group is permanently the escape hatch's job).
+	// pools per network is permanently the escape hatch's job).
 	Pools []Pool `json:"pools,omitempty"`
 
 	// Reservations are deliberately global rather than nested under a pool.
@@ -81,12 +81,12 @@ type Config struct {
 // only RA. The old Pool required IPv4 Start and End, so "no v4 here, just
 // advertise the prefix" could not be written down at all.
 type Pool struct {
-	// Group is the pool's primary key: the network it serves (design.md §4.4).
+	// Network is the pool's primary key: the network it serves (design.md §4.4).
 	//
 	// It used to be the kernel interface name — the thing §4.4 calls an
 	// implementation detail. Keying on it meant a range was checked against
 	// whatever address the interface had been given from outside olr.
-	Group string `json:"group"`
+	Network string `json:"network"`
 
 	// IPv4 is nil for a network that hands out no IPv4 addresses.
 	IPv4 *PoolIPv4 `json:"ipv4,omitempty"`
@@ -130,7 +130,7 @@ type Pool struct {
 // PoolIPv4 is the dynamic IPv4 range a network hands out.
 type PoolIPv4 struct {
 	// Start and End bound the range, inclusive. Both absent means "derive it
-	// from the network's subnet" (design.md §11.2) — see GroupInfo.DerivedRange
+	// from the network's subnet" (design.md §11.2) — see NetworkInfo.DerivedRange
 	// for why deriving is a safety property rather than a convenience.
 	//
 	// They are checked against the network's *stored* subnet. Nothing here
@@ -182,14 +182,14 @@ func (p Pool) ServesIPv4() bool { return p.IPv4 != nil }
 // One place rather than three. The renderer, the validator and the lease
 // accounting all need the resolved range, and a derived value computed
 // separately in each is a derived value that eventually differs in one.
-func (p Pool) Range(g GroupInfo) (netip.Addr, netip.Addr, bool) {
+func (p Pool) Range(n NetworkInfo) (netip.Addr, netip.Addr, bool) {
 	if p.IPv4 == nil {
 		return netip.Addr{}, netip.Addr{}, false
 	}
 	if p.IPv4.Explicit() {
 		return p.IPv4.Start, p.IPv4.End, p.IPv4.Start.IsValid() && p.IPv4.End.IsValid()
 	}
-	return g.DerivedRange()
+	return n.DerivedRange()
 }
 
 // Reservation pins one client to one address.
@@ -395,7 +395,7 @@ func (c *Config) Normalize() {
 		}
 	}
 	slices.SortStableFunc(c.Pools, func(a, b Pool) int {
-		return strings.Compare(a.Group, b.Group)
+		return strings.Compare(a.Network, b.Network)
 	})
 	slices.SortStableFunc(c.Reservations, func(a, b Reservation) int {
 		if n := strings.Compare(a.MAC, b.MAC); n != 0 {
@@ -433,17 +433,17 @@ func (c Config) Clone() Config {
 }
 
 // Pool returns the pool for a network.
-func (c Config) Pool(group string) (Pool, bool) {
-	i := slices.IndexFunc(c.Pools, func(p Pool) bool { return p.Group == group })
+func (c Config) Pool(network string) (Pool, bool) {
+	i := slices.IndexFunc(c.Pools, func(p Pool) bool { return p.Network == network })
 	if i < 0 {
 		return Pool{}, false
 	}
 	return c.Pools[i], true
 }
 
-// SetPool adds or replaces the pool for p.Group.
+// SetPool adds or replaces the pool for p.Network.
 func (c *Config) SetPool(p Pool) {
-	if i := slices.IndexFunc(c.Pools, func(e Pool) bool { return e.Group == p.Group }); i >= 0 {
+	if i := slices.IndexFunc(c.Pools, func(e Pool) bool { return e.Network == p.Network }); i >= 0 {
 		c.Pools[i] = p
 		return
 	}
@@ -452,8 +452,8 @@ func (c *Config) SetPool(p Pool) {
 }
 
 // RemovePool drops a network's pool, reporting whether there was one.
-func (c *Config) RemovePool(group string) bool {
-	i := slices.IndexFunc(c.Pools, func(p Pool) bool { return p.Group == group })
+func (c *Config) RemovePool(network string) bool {
+	i := slices.IndexFunc(c.Pools, func(p Pool) bool { return p.Network == network })
 	if i < 0 {
 		return false
 	}
@@ -523,7 +523,17 @@ func MarshalConfig(c Config) ([]byte, error) {
 // see LegacyPool. Strictness and migration are not in tension here: a key we
 // used to write is not a typo, and the alternative is a box that stops serving
 // DHCP on upgrade with a parse error naming a field the operator never typed.
+//
+// The other exception is a pool's `group`, which is what Network was called
+// until the word was freed for sets of devices. It is renamed before the strict
+// decode, for the same reason and with the same second half as the link
+// module's `groups`: see HasLegacyKeys.
 func UnmarshalConfig(data []byte) (Config, error) {
+	data, _, err := renameLegacyKeys(data)
+	if err != nil {
+		return Config{}, fmt.Errorf("parsing dhcp config: %w", err)
+	}
+
 	dec := json.NewDecoder(strings.NewReader(string(data)))
 	dec.DisallowUnknownFields()
 	var c Config
@@ -537,6 +547,65 @@ func UnmarshalConfig(data []byte) (Config, error) {
 	}
 	c.Normalize()
 	return c, nil
+}
+
+// legacyNetworkKey is what Pool.Network was stored as before the rename.
+const legacyNetworkKey = "group"
+
+// renameLegacyKeys rewrites every pool's old spelling of Network to the
+// current one, reporting whether any pool had it.
+//
+// Per pool rather than all or nothing, so that a document where one pool was
+// added after the upgrade and one was not still reads. A pool carrying both
+// spellings is refused and named by its index, which is what the operator
+// needs to find it.
+func renameLegacyKeys(data []byte) ([]byte, bool, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(data, &obj); err != nil || obj == nil {
+		return data, false, nil
+	}
+	raw, ok := obj["pools"]
+	if !ok {
+		return data, false, nil
+	}
+	var pools []json.RawMessage
+	if err := json.Unmarshal(raw, &pools); err != nil {
+		return data, false, nil
+	}
+
+	renamed := false
+	for i, p := range pools {
+		out, ok, err := core.RenameKey(p, legacyNetworkKey, "network")
+		if err != nil {
+			return data, false, fmt.Errorf("pools[%d]: %w", i, err)
+		}
+		if ok {
+			pools[i] = out
+			renamed = true
+		}
+	}
+	if !renamed {
+		return data, false, nil
+	}
+
+	encoded, err := json.Marshal(pools)
+	if err != nil {
+		return data, false, err
+	}
+	obj["pools"] = encoded
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return data, false, err
+	}
+	return out, true, nil
+}
+
+// HasLegacyKeys reports whether a stored subtree still has a pool spelling its
+// network the old way. internal/daemon asks at startup and rewrites the
+// document once; see the link module's HasLegacyKeys for why it has to ask.
+func HasLegacyKeys(data []byte) bool {
+	_, renamed, _ := renameLegacyKeys(data)
+	return renamed
 }
 
 // LegacyPool is a pool as written before networks existed: keyed by kernel
@@ -571,7 +640,7 @@ type legacyConfig struct {
 // converted so that the caller can finish the job.
 //
 // The conversion is deliberately incomplete, and that is the honest shape for
-// it. A pool's `interface` names a kernel interface; a pool's `group` names a
+// it. A pool's `interface` names a kernel interface; a pool's `network` names a
 // network, and this module does not own networks and cannot invent one. So the
 // range, lease, options and IPv6 mode are carried across here, the interface
 // name is parked in Legacy, and internal/daemon — the one place that sees both
@@ -606,7 +675,7 @@ func unmarshalLegacy(data []byte) (Config, []LegacyPool, bool) {
 // Convert turns a legacy pool into the current shape, minus its key.
 func (p LegacyPool) Convert() Pool {
 	out := Pool{
-		// Group is left empty on purpose; only the daemon can supply it.
+		// Network is left empty on purpose; only the daemon can supply it.
 		LeaseTime: p.LeaseTime,
 		Gateway:   p.Gateway,
 		DNS:       p.DNS,

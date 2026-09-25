@@ -223,7 +223,7 @@ func LoadFile(path string) (Source, error) {
 	return func() ([]Interface, error) { return out, nil }, nil
 }
 
-// GroupInfo is one network joined to the state of its members.
+// NetworkInfo is one network joined to the state of its members.
 //
 // The stored half is the network — name, members, subnet, router address. The
 // observed half is exactly one boolean: whether every member is up. That
@@ -231,7 +231,7 @@ func LoadFile(path string) (Source, error) {
 // this network" gets an answer that does not depend on the machine, which is
 // what lets `dhcp` validate a range without a kernel; a consumer asking "is it
 // working" still gets the truth, read fresh.
-type GroupInfo struct {
+type NetworkInfo struct {
 	Name    string
 	Members []string
 
@@ -244,8 +244,8 @@ type GroupInfo struct {
 	Up bool
 }
 
-// Groups returns every configured network, joined to its members' state.
-func (f Facts) Groups() ([]GroupInfo, error) {
+// Networks returns every configured network, joined to its members' state.
+func (f Facts) Networks() ([]NetworkInfo, error) {
 	observed, err := f.source()()
 	if err != nil {
 		return nil, err
@@ -260,40 +260,40 @@ func (f Facts) Groups() ([]GroupInfo, error) {
 		byName[iface.Name] = iface
 	}
 
-	out := make([]GroupInfo, 0, len(cfg.Groups))
-	for _, g := range cfg.Groups {
-		info := GroupInfo{
-			Name:    g.Name,
-			Members: slices.Clone(g.Members),
-			Up:      len(g.Members) > 0,
+	out := make([]NetworkInfo, 0, len(cfg.Networks))
+	for _, n := range cfg.Networks {
+		info := NetworkInfo{
+			Name:    n.Name,
+			Members: slices.Clone(n.Members),
+			Up:      len(n.Members) > 0,
 		}
-		for _, m := range g.Members {
+		for _, m := range n.Members {
 			if iface, ok := byName[m]; !ok || !iface.Up {
 				info.Up = false
 			}
 		}
-		if g.IPv4 != nil && g.IPv4.Subnet.IsValid() {
-			info.Subnet = g.IPv4.Subnet
-			info.Router = g.IPv4.RouterAddr()
+		if n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
+			info.Subnet = n.IPv4.Subnet
+			info.Router = n.IPv4.RouterAddr()
 		}
 		out = append(out, info)
 	}
 	return out, nil
 }
 
-// ErrNoSuchGroup is returned by Group for an unknown name.
-var ErrNoSuchGroup = errors.New("no such network")
+// ErrNoSuchNetwork is returned by Network for an unknown name.
+var ErrNoSuchNetwork = errors.New("no such network")
 
-// Group returns one network, or ErrNoSuchGroup.
-func (f Facts) Group(name string) (GroupInfo, error) {
-	all, err := f.Groups()
+// Network returns one network, or ErrNoSuchNetwork.
+func (f Facts) Network(name string) (NetworkInfo, error) {
+	all, err := f.Networks()
 	if err != nil {
-		return GroupInfo{}, err
+		return NetworkInfo{}, err
 	}
-	for _, g := range all {
-		if g.Name == name {
-			return g, nil
+	for _, n := range all {
+		if n.Name == name {
+			return n, nil
 		}
 	}
-	return GroupInfo{}, fmt.Errorf("%q: %w", name, ErrNoSuchGroup)
+	return NetworkInfo{}, fmt.Errorf("%q: %w", name, ErrNoSuchNetwork)
 }

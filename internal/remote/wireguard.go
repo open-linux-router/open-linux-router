@@ -93,7 +93,7 @@ type WireGuard struct {
 
 	// Address is this box's own address on the dial-in network. Nil derives the
 	// first host address, which is `.1` on every ordinary prefix — the same
-	// rule link.GroupIPv4 uses, deliberately, so the two kinds of network do
+	// rule link.NetworkIPv4 uses, deliberately, so the two kinds of network do
 	// not answer "where is the router" differently.
 	Address *netip.Addr `json:"address,omitempty"`
 

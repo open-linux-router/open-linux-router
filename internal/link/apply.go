@@ -342,9 +342,9 @@ func (a Applier) RemoveAddress(ctx context.Context, iface string, p netip.Prefix
 		return nil, fmt.Errorf("%w: %q has not been handed to olr; switch it on under Interfaces first",
 			ErrNotAdopted, iface)
 	}
-	if g, ok := cfg.GroupFor(iface); ok {
+	if n, ok := cfg.NetworkFor(iface); ok {
 		return nil, fmt.Errorf("%w: %s carries the network %q, which decides this interface's "+
-			"addresses — change the network instead", ErrNetworkOwned, iface, g.Name)
+			"addresses — change the network instead", ErrNetworkOwned, iface, n.Name)
 	}
 	for _, c := range claims {
 		if c.Interface == iface && c.Address == p {

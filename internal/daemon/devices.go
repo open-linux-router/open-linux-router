@@ -111,7 +111,7 @@ func (d dhcpNetworks) Networks(_ context.Context) ([]devices.Network, error) {
 
 	out := make([]devices.Network, 0, len(cfg.Pools))
 	for _, p := range cfg.Pools {
-		info, err := d.applier.Groups.Group(p.Group)
+		info, err := d.applier.Networks.Network(p.Network)
 		if err != nil {
 			continue
 		}
@@ -123,7 +123,7 @@ func (d dhcpNetworks) Networks(_ context.Context) ([]devices.Network, error) {
 			continue
 		}
 		out = append(out, devices.Network{
-			Name:    p.Group,
+			Name:    p.Network,
 			Members: info.Members,
 			Start:   start,
 			End:     end,

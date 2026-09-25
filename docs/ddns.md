@@ -243,7 +243,7 @@ reasoning rather than the list:
 
 A credential is not a list, and it cannot be resolved by asking a binary. The
 obvious move from there is a shared object — one owner, both modules
-referencing it, the way design.md §4.4 does it for group and device.
+referencing it, the way design.md §4.4 does it for network and device.
 
 **That move was considered and refused**, and the refusal is design.md §3.4's
 *everything is data* rule. A credential is not a special kind of field; it is a

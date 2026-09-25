@@ -189,7 +189,7 @@ func testUplink() Uplink {
 	}
 }
 
-// The difference from link.GroupIPv4.Subnet, which *is* masked. Masking this
+// The difference from link.NetworkIPv4.Subnet, which *is* masked. Masking this
 // one would quietly turn the box's own address into the network address —
 // something netlink accepts and nothing can reach.
 func TestTheUplinkAddressKeepsItsHostBits(t *testing.T) {

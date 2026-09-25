@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { GroupRow, InterfaceRow, Uplink, UplinkStatus } from '@/lib/api-types'
+import type { NetworkRow, InterfaceRow, Uplink, UplinkStatus } from '@/lib/api-types'
 
 /**
  * Set how this router reaches the internet.
@@ -47,7 +47,7 @@ export function UplinkDialog({
   onOpenChange,
   initial,
   interfaces,
-  groups,
+  networks,
   onSubmit,
 }: {
   open: boolean
@@ -55,7 +55,7 @@ export function UplinkDialog({
   /** Undefined when there is no uplink yet. */
   initial?: UplinkStatus
   interfaces: InterfaceRow[]
-  groups: GroupRow[]
+  networks: NetworkRow[]
   /** `replacing` names the network the chosen interface carries, which goes. */
   onSubmit: (uplink: Uplink, replacing?: string) => void
 }) {
@@ -66,7 +66,7 @@ export function UplinkDialog({
 
   // Only adopted interfaces (design.md §3.4).
   const available = interfaces.filter((i) => i.adopted && !i.loopback)
-  const replacing = groups.find((g) => g.name === available.find((i) => i.name === iface)?.group)
+  const replacing = networks.find((n) => n.name === available.find((i) => i.name === iface)?.network)
   const kept = replacing ? routerPrefix(replacing) : undefined
 
   function choose(name: string) {
@@ -75,8 +75,8 @@ export function UplinkDialog({
     // offer — over a blank field, or over the previous uplink's address when
     // the uplink is moving, since that one is about to come off. Anything the
     // operator typed stays.
-    const group = groups.find((g) => g.name === interfaces.find((i) => i.name === name)?.group)
-    const prefix = group ? routerPrefix(group) : undefined
+    const network = networks.find((n) => n.name === interfaces.find((i) => i.name === name)?.network)
+    const prefix = network ? routerPrefix(network) : undefined
     if (prefix && (address.trim() === '' || address === initial?.address)) setAddress(prefix)
   }
 
@@ -105,8 +105,8 @@ export function UplinkDialog({
                 {available.map((i) => (
                   <SelectItem key={i.name} value={i.name}>
                     {i.name}
-                    {i.group
-                      ? ` — carries the network ${i.group}`
+                    {i.network
+                      ? ` — carries the network ${i.network}`
                       : i.address
                         ? ` — currently ${i.address}`
                         : ' — no address'}
@@ -232,9 +232,9 @@ export function UplinkDialog({
 
 /** A network's router address with the subnet's mask — 192.168.1.2/24 — or
  * undefined for a network that serves no IPv4. */
-function routerPrefix(g: GroupRow): string | undefined {
-  if (!g.router || !g.subnet) return undefined
-  return `${g.router}/${g.subnet.split('/')[1]}`
+function routerPrefix(n: NetworkRow): string | undefined {
+  if (!n.router || !n.subnet) return undefined
+  return `${n.router}/${n.subnet.split('/')[1]}`
 }
 
 /** Splits a typed list on commas or spaces. Undefined when nothing was typed,

@@ -19,15 +19,15 @@ import (
 // to validate a range against stored intent instead of against an observation,
 // and this is where that intent becomes checkable.
 
-func group(name, subnet string, members ...string) Group {
-	g := Group{Name: name, Members: members}
+func network(name, subnet string, members ...string) Network {
+	n := Network{Name: name, Members: members}
 	if subnet != "" {
-		g.IPv4 = &GroupIPv4{Subnet: netip.MustParsePrefix(subnet)}
+		n.IPv4 = &NetworkIPv4{Subnet: netip.MustParsePrefix(subnet)}
 	}
-	return g
+	return n
 }
 
-func validateGroup(t *testing.T, cfg Config) Result {
+func validateNetwork(t *testing.T, cfg Config) Result {
 	t.Helper()
 	cfg.Normalize()
 	return Validate(cfg, testInterfaces(t))
@@ -45,12 +45,12 @@ func firstError(r Result) string {
 // difference drift.
 func TestNormalizeMasksTheSubnet(t *testing.T) {
 	cfg := Config{
-		Adopted: []string{"lan0"},
-		Groups:  []Group{group("lan", "172.16.1.5/24", "lan0")},
+		Adopted:  []string{"lan0"},
+		Networks: []Network{network("lan", "172.16.1.5/24", "lan0")},
 	}
 	cfg.Normalize()
 
-	if got := cfg.Groups[0].IPv4.Subnet.String(); got != "172.16.1.0/24" {
+	if got := cfg.Networks[0].IPv4.Subnet.String(); got != "172.16.1.0/24" {
 		t.Errorf("subnet = %s, want 172.16.1.0/24", got)
 	}
 }
@@ -64,16 +64,16 @@ func TestNormalizeDropsARouterThatMatchesTheDefault(t *testing.T) {
 
 	cfg := Config{
 		Adopted: []string{"lan0", "lan1"},
-		Groups: []Group{
-			{Name: "a", Members: []string{"lan0"}, IPv4: &GroupIPv4{
+		Networks: []Network{
+			{Name: "a", Members: []string{"lan0"}, IPv4: &NetworkIPv4{
 				Subnet: netip.MustParsePrefix("172.16.1.0/24"), Router: &derived}},
-			{Name: "b", Members: []string{"lan1"}, IPv4: &GroupIPv4{
+			{Name: "b", Members: []string{"lan1"}, IPv4: &NetworkIPv4{
 				Subnet: netip.MustParsePrefix("172.16.2.0/24"), Router: &pinned}},
 		},
 	}
 	cfg.Normalize()
 
-	a, _ := cfg.Group("a")
+	a, _ := cfg.Network("a")
 	if a.IPv4.Router != nil {
 		t.Errorf("a pinned the derived address %s instead of leaving it derived", *a.IPv4.Router)
 	}
@@ -81,28 +81,28 @@ func TestNormalizeDropsARouterThatMatchesTheDefault(t *testing.T) {
 		t.Errorf("a resolves to %s, want 172.16.1.1", a.IPv4.RouterAddr())
 	}
 
-	b, _ := cfg.Group("b")
+	b, _ := cfg.Network("b")
 	if b.IPv4.Router == nil || b.IPv4.Router.String() != "172.16.2.254" {
 		t.Errorf("b lost its explicitly pinned router address")
 	}
 }
 
-func TestCloneDoesNotShareGroupState(t *testing.T) {
+func TestCloneDoesNotShareNetworkState(t *testing.T) {
 	pinned := netip.MustParseAddr("172.16.1.9")
 	original := Config{
 		Adopted: []string{"lan0"},
-		Groups: []Group{{Name: "lan", Members: []string{"lan0"}, IPv4: &GroupIPv4{
+		Networks: []Network{{Name: "lan", Members: []string{"lan0"}, IPv4: &NetworkIPv4{
 			Subnet: netip.MustParsePrefix("172.16.1.0/24"), Router: &pinned}}},
 	}
 
 	clone := original.Clone()
-	clone.Groups[0].Members[0] = "other0"
-	*clone.Groups[0].IPv4.Router = netip.MustParseAddr("172.16.1.99")
+	clone.Networks[0].Members[0] = "other0"
+	*clone.Networks[0].IPv4.Router = netip.MustParseAddr("172.16.1.99")
 
-	if original.Groups[0].Members[0] != "lan0" {
+	if original.Networks[0].Members[0] != "lan0" {
 		t.Error("editing the clone's members changed the original")
 	}
-	if original.Groups[0].IPv4.Router.String() != "172.16.1.9" {
+	if original.Networks[0].IPv4.Router.String() != "172.16.1.9" {
 		t.Error("editing the clone's router address changed the original")
 	}
 }
@@ -110,7 +110,7 @@ func TestCloneDoesNotShareGroupState(t *testing.T) {
 // design.md §3.4 is adopt-only. Writing an address onto an interface nobody
 // handed us is a larger version of the exact surprise that rule forbids.
 func TestValidateRefusesANetworkOnAnUnadoptedInterface(t *testing.T) {
-	res := validateGroup(t, Config{Groups: []Group{group("lan", "172.16.1.0/24", "lan0")}})
+	res := validateNetwork(t, Config{Networks: []Network{network("lan", "172.16.1.0/24", "lan0")}})
 	if res.OK() {
 		t.Fatal("accepted a network on an interface nobody adopted")
 	}
@@ -119,13 +119,13 @@ func TestValidateRefusesANetworkOnAnUnadoptedInterface(t *testing.T) {
 	}
 }
 
-// The schema allows several members because §4.4 says a group has bridge
+// The schema allows several members because §4.4 says a network has bridge
 // members, but nothing creates a bridge yet — and two interfaces in one subnet
 // without one is a broken network rather than a configured one.
 func TestValidateRefusesMultipleMembersUntilBridgingExists(t *testing.T) {
-	res := validateGroup(t, Config{
-		Adopted: []string{"lan0", "lan1"},
-		Groups:  []Group{group("lan", "172.16.1.0/24", "lan0", "lan1")},
+	res := validateNetwork(t, Config{
+		Adopted:  []string{"lan0", "lan1"},
+		Networks: []Network{network("lan", "172.16.1.0/24", "lan0", "lan1")},
 	})
 	if res.OK() {
 		t.Fatal("accepted a two-member network")
@@ -136,11 +136,11 @@ func TestValidateRefusesMultipleMembersUntilBridgingExists(t *testing.T) {
 }
 
 func TestValidateRefusesAnInterfaceInTwoNetworks(t *testing.T) {
-	res := validateGroup(t, Config{
+	res := validateNetwork(t, Config{
 		Adopted: []string{"lan0"},
-		Groups: []Group{
-			group("a", "172.16.1.0/24", "lan0"),
-			group("b", "172.16.2.0/24", "lan0"),
+		Networks: []Network{
+			network("a", "172.16.1.0/24", "lan0"),
+			network("b", "172.16.2.0/24", "lan0"),
 		},
 	})
 	if res.OK() {
@@ -151,11 +151,11 @@ func TestValidateRefusesAnInterfaceInTwoNetworks(t *testing.T) {
 // Overlapping subnets mean the routing table has two entries that match, and
 // which one wins is not something any surface above here could explain.
 func TestValidateRefusesOverlappingSubnets(t *testing.T) {
-	res := validateGroup(t, Config{
+	res := validateNetwork(t, Config{
 		Adopted: []string{"lan0", "lan1"},
-		Groups: []Group{
-			group("a", "10.0.0.0/8", "lan0"),
-			group("b", "10.1.2.0/24", "lan1"),
+		Networks: []Network{
+			network("a", "10.0.0.0/8", "lan0"),
+			network("b", "10.1.2.0/24", "lan1"),
 		},
 	})
 	if res.OK() {
@@ -174,10 +174,10 @@ func TestValidateRefusesARouterOutsideItsSubnet(t *testing.T) {
 	} {
 		t.Run(router, func(t *testing.T) {
 			addr := netip.MustParseAddr(router)
-			g := group("lan", "172.16.1.0/24", "lan0")
-			g.IPv4.Router = &addr
+			n := network("lan", "172.16.1.0/24", "lan0")
+			n.IPv4.Router = &addr
 
-			res := validateGroup(t, Config{Adopted: []string{"lan0"}, Groups: []Group{g}})
+			res := validateNetwork(t, Config{Adopted: []string{"lan0"}, Networks: []Network{n}})
 			if res.OK() {
 				t.Fatalf("accepted %s as the router address of 172.16.1.0/24", router)
 			}
@@ -188,9 +188,9 @@ func TestValidateRefusesARouterOutsideItsSubnet(t *testing.T) {
 // /31 and /32 have no host addresses, so there is no router address to assign
 // and nothing for DHCP to hand out.
 func TestValidateRefusesASubnetWithNoHostAddresses(t *testing.T) {
-	res := validateGroup(t, Config{
-		Adopted: []string{"lan0"},
-		Groups:  []Group{group("lan", "172.16.1.0/31", "lan0")},
+	res := validateNetwork(t, Config{
+		Adopted:  []string{"lan0"},
+		Networks: []Network{network("lan", "172.16.1.0/31", "lan0")},
 	})
 	if res.OK() {
 		t.Fatal("accepted a /31 as a network")
@@ -200,9 +200,9 @@ func TestValidateRefusesASubnetWithNoHostAddresses(t *testing.T) {
 // Lowercase only, because `guest` and `Guest` being two networks is a trap
 // nobody would find funny at three in the morning.
 func TestValidateRefusesAnUppercaseName(t *testing.T) {
-	res := validateGroup(t, Config{
-		Adopted: []string{"lan0"},
-		Groups:  []Group{group("Guest", "172.16.1.0/24", "lan0")},
+	res := validateNetwork(t, Config{
+		Adopted:  []string{"lan0"},
+		Networks: []Network{network("Guest", "172.16.1.0/24", "lan0")},
 	})
 	if res.OK() {
 		t.Fatal("accepted an uppercase network name")
@@ -213,9 +213,9 @@ func TestValidateRefusesAnUppercaseName(t *testing.T) {
 // expressible — but it is far more often a half-finished config, so it warns
 // rather than passing silently.
 func TestValidateWarnsButAcceptsANetworkWithNoIPv4(t *testing.T) {
-	res := validateGroup(t, Config{
-		Adopted: []string{"lan0"},
-		Groups:  []Group{group("lan", "", "lan0")},
+	res := validateNetwork(t, Config{
+		Adopted:  []string{"lan0"},
+		Networks: []Network{network("lan", "", "lan0")},
 	})
 	if !res.OK() {
 		t.Fatalf("refused a network with no IPv4: %s", firstError(res))
@@ -257,8 +257,8 @@ func TestValidatePointsAnAddresslessInterfaceAtNetAdd(t *testing.T) {
 // better be exactly what the comment on PlanAddrs says it is.
 func TestPlanAddrsReplacesAForeignAddressOnAMember(t *testing.T) {
 	cfg := Config{
-		Adopted: []string{"lan0"},
-		Groups:  []Group{group("lan", "172.16.1.0/24", "lan0")},
+		Adopted:  []string{"lan0"},
+		Networks: []Network{network("lan", "172.16.1.0/24", "lan0")},
 	}
 
 	plans := PlanAddrs(cfg, testInterfaces(t))
@@ -287,8 +287,8 @@ func TestPlanAddrsLeavesIPv6Alone(t *testing.T) {
 	}
 
 	cfg := Config{
-		Adopted: []string{"lan0"},
-		Groups:  []Group{group("lan", "172.16.1.0/24", "lan0")},
+		Adopted:  []string{"lan0"},
+		Networks: []Network{network("lan", "172.16.1.0/24", "lan0")},
 	}
 	for _, p := range PlanAddrs(cfg, observed) {
 		for _, r := range p.Remove {
@@ -309,8 +309,8 @@ func TestPlanAddrsIsEmptyWhenTheKernelAlreadyAgrees(t *testing.T) {
 	}
 
 	cfg := Config{
-		Adopted: []string{"lan1"},
-		Groups:  []Group{group("lan", "172.16.1.0/24", "lan1")},
+		Adopted:  []string{"lan1"},
+		Networks: []Network{network("lan", "172.16.1.0/24", "lan1")},
 	}
 	if plans := PlanAddrs(cfg, observed); len(plans) != 0 {
 		t.Errorf("planned %+v against a kernel that already matches", plans)
@@ -321,8 +321,8 @@ func TestPlanAddrsIsEmptyWhenTheKernelAlreadyAgrees(t *testing.T) {
 // a plan whose every line is going to fail.
 func TestPlanAddrsSkipsAnAbsentMember(t *testing.T) {
 	cfg := Config{
-		Adopted: []string{"nosuch0"},
-		Groups:  []Group{group("lan", "172.16.1.0/24", "nosuch0")},
+		Adopted:  []string{"nosuch0"},
+		Networks: []Network{network("lan", "172.16.1.0/24", "nosuch0")},
 	}
 	if plans := PlanAddrs(cfg, testInterfaces(t)); len(plans) != 0 {
 		t.Errorf("planned %+v for an interface this machine does not have", plans)
@@ -350,8 +350,8 @@ func TestApplyProgramsTheNetworksAddress(t *testing.T) {
 	a := Applier{Store: storeWith(t, ""), Source: staticSource(testInterfaces(t)...), Writer: w}
 
 	cfg := Config{
-		Adopted: []string{"lan0"},
-		Groups:  []Group{group("lan", "172.16.1.0/24", "lan0")},
+		Adopted:  []string{"lan0"},
+		Networks: []Network{network("lan", "172.16.1.0/24", "lan0")},
 	}
 	if _, err := a.Apply(t.Context(), cfg); err != nil {
 		t.Fatalf("apply failed: %v", err)
@@ -377,8 +377,8 @@ func TestApplyStoresIntentEvenWhenTheKernelRefuses(t *testing.T) {
 	a := Applier{Store: storeWith(t, ""), Source: staticSource(testInterfaces(t)...), Writer: w}
 
 	cfg := Config{
-		Adopted: []string{"lan0"},
-		Groups:  []Group{group("lan", "172.16.1.0/24", "lan0")},
+		Adopted:  []string{"lan0"},
+		Networks: []Network{network("lan", "172.16.1.0/24", "lan0")},
 	}
 	if _, err := a.Apply(t.Context(), cfg); err == nil {
 		t.Fatal("apply reported success although the kernel refused")
@@ -388,7 +388,7 @@ func TestApplyStoresIntentEvenWhenTheKernelRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := stored.Group("lan"); !ok {
+	if _, ok := stored.Network("lan"); !ok {
 		t.Error("the network was not stored, so the failure left nothing to retry or inspect")
 	}
 }
@@ -403,8 +403,8 @@ func TestRestorePutsTheAddressBackAfterAReboot(t *testing.T) {
 	a := Applier{Store: storeWith(t, ""), Source: staticSource(testInterfaces(t)...), Writer: w}
 
 	cfg := Config{
-		Adopted: []string{"lan0"},
-		Groups:  []Group{group("lan", "172.16.1.0/24", "lan0")},
+		Adopted:  []string{"lan0"},
+		Networks: []Network{network("lan", "172.16.1.0/24", "lan0")},
 	}
 	if _, err := a.Apply(t.Context(), cfg); err != nil {
 		t.Fatalf("apply failed: %v", err)
@@ -432,7 +432,7 @@ func TestRestorePutsTheAddressBackAfterAReboot(t *testing.T) {
 // change has said what an interface's addressing is; startup has been told
 // nothing and is racing every other address source on the box. Until `link`
 // grows the WAN/LAN split PlanAddrs already assumes, a one-armed router
-// carries its uplink address on a group member — and a restore that removed it
+// carries its uplink address on a network member — and a restore that removed it
 // would take the box off the network on every boot, with the only way back
 // being physical.
 func TestRestoreNeverTakesAnAddressOffTheBox(t *testing.T) {
@@ -440,8 +440,8 @@ func TestRestoreNeverTakesAnAddressOffTheBox(t *testing.T) {
 	a := Applier{Store: storeWith(t, ""), Source: staticSource(testInterfaces(t)...), Writer: w}
 
 	cfg := Config{
-		Adopted: []string{"lan0"},
-		Groups:  []Group{group("lan", "172.16.1.0/24", "lan0")},
+		Adopted:  []string{"lan0"},
+		Networks: []Network{network("lan", "172.16.1.0/24", "lan0")},
 	}
 	if _, err := a.Apply(t.Context(), cfg); err != nil {
 		t.Fatalf("apply failed: %v", err)
@@ -499,8 +499,8 @@ func TestRestoreDoesNotRewriteTheDocument(t *testing.T) {
 	a := Applier{Store: store, Source: staticSource(testInterfaces(t)...), Writer: w}
 
 	cfg := Config{
-		Adopted: []string{"lan0"},
-		Groups:  []Group{group("lan", "172.16.1.0/24", "lan0")},
+		Adopted:  []string{"lan0"},
+		Networks: []Network{network("lan", "172.16.1.0/24", "lan0")},
 	}
 	if _, err := a.Apply(t.Context(), cfg); err != nil {
 		t.Fatalf("apply failed: %v", err)
@@ -523,5 +523,43 @@ func TestRestoreDoesNotRewriteTheDocument(t *testing.T) {
 	}
 	if !info.ModTime().Equal(old) {
 		t.Errorf("restore rewrote the configuration document (mtime moved to %v)", info.ModTime())
+	}
+}
+
+// A document written before the network stopped being called `group` still
+// loads. Refusing it would be a box that cannot read its own file on upgrade;
+// internal/daemon rewrites it in the new shape once olrd starts.
+func TestUnmarshalReadsTheOldNetworksKey(t *testing.T) {
+	const old = `{"adopted":["lan0"],"groups":[{"name":"lan","members":["lan0"],"ipv4":{"subnet":"172.16.1.0/24"}}]}`
+	if !HasLegacyKeys([]byte(old)) {
+		t.Error("HasLegacyKeys missed `groups`")
+	}
+	cfg, err := UnmarshalConfig([]byte(old))
+	if err != nil {
+		t.Fatalf("UnmarshalConfig: %v", err)
+	}
+	n, ok := cfg.Network("lan")
+	if !ok || n.IPv4 == nil || n.IPv4.Subnet.String() != "172.16.1.0/24" {
+		t.Fatalf("networks = %+v, want lan on 172.16.1.0/24", cfg.Networks)
+	}
+
+	data, err := MarshalConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), `"groups"`) || !strings.Contains(string(data), `"networks"`) {
+		t.Errorf("marshalled in the old shape: %s", data)
+	}
+	if HasLegacyKeys(data) {
+		t.Errorf("HasLegacyKeys reports the current shape as old: %s", data)
+	}
+}
+
+// Both spellings at once means somebody edited the file by hand after the
+// rename. Which one they meant is not ours to guess.
+func TestUnmarshalRefusesBothNetworksKeys(t *testing.T) {
+	const both = `{"groups":[{"name":"a","members":["lan0"]}],"networks":[{"name":"b","members":["lan1"]}]}`
+	if _, err := UnmarshalConfig([]byte(both)); err == nil {
+		t.Fatal("accepted a document carrying both `groups` and `networks`")
 	}
 }

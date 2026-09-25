@@ -409,16 +409,16 @@ func poolCommand(mode string) *cobra.Command {
 			"--ipv6 says what to advertise, and a network can do either or both.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
-			group := args[0]
+			network := args[0]
 			return mutate(c, func(cfg *Config) error {
-				pool, exists := cfg.Pool(group)
+				pool, exists := cfg.Pool(network)
 				switch {
 				case mode == "add" && exists:
-					return fmt.Errorf("%s already has a pool; use `olr dhcp set pool %s` to change it", group, group)
+					return fmt.Errorf("%s already has a pool; use `olr dhcp set pool %s` to change it", network, network)
 				case mode == "set" && !exists:
-					return fmt.Errorf("%s has no pool; use `olr dhcp add pool %s` to create one", group, group)
+					return fmt.Errorf("%s has no pool; use `olr dhcp add pool %s` to create one", network, network)
 				}
-				pool.Group = group
+				pool.Network = network
 				if mode == "add" && pool.IPv4 == nil && !flags.noRange {
 					// Adding a pool without saying anything means "hand out v4
 					// addresses here", with the range derived. Requiring
@@ -779,8 +779,8 @@ func raModeNames() []string {
 // with it the habit of naming what does exist — this module used to say
 // "br-lan has no pool" and leave the operator to go and look.
 
-func unknownPool(cfg *Config, group string) error {
-	return cli.UnknownObject("pool", group, "olr dhcp add pool <network>", poolNames(cfg))
+func unknownPool(cfg *Config, network string) error {
+	return cli.UnknownObject("pool", network, "olr dhcp add pool <network>", poolNames(cfg))
 }
 
 func unknownReservation(cfg *Config, mac string) error {
@@ -790,7 +790,7 @@ func unknownReservation(cfg *Config, mac string) error {
 func poolNames(cfg *Config) []string {
 	out := make([]string, 0, len(cfg.Pools))
 	for _, p := range cfg.Pools {
-		out = append(out, p.Group)
+		out = append(out, p.Network)
 	}
 	return out
 }

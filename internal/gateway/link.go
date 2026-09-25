@@ -33,9 +33,9 @@ type LinkView interface {
 	//
 	// Intent, not the addresses observed on an interface. A network that has
 	// been declared and whose interface has not come up yet still gets its
-	// rule, which is the same reason `dhcp` validates a range against a group
+	// rule, which is the same reason `dhcp` validates a range against a network
 	// rather than against a NIC — and it is design.md §4.1's own instruction
-	// that dependents read a *group* rather than restating a subnet link
+	// that dependents read a *network* rather than restating a subnet link
 	// already owns.
 	Networks() ([]netip.Prefix, error)
 }
@@ -185,7 +185,7 @@ func (s StaticLinks) Interfaces() ([]LinkInfo, error) {
 // Derived from the adopted interfaces' prefixes rather than from declared
 // networks, because a map keyed by interface has nowhere to put the latter.
 // That is a test affordance and not the shape the daemon uses — internal/daemon
-// reads link's groups, which is what design.md §4.1 asks for.
+// reads link's networks, which is what design.md §4.1 asks for.
 func (s StaticLinks) Networks() ([]netip.Prefix, error) {
 	var out []netip.Prefix
 	all, err := s.Interfaces()

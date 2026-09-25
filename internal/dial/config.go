@@ -171,7 +171,7 @@ type UplinkIPv4 struct {
 	// 192.168.2.9/24, host bits and all.
 	//
 	// Deliberately **not** masked by Normalize, which is the opposite of what
-	// link.GroupIPv4.Subnet does one module away, and the two look alike enough
+	// link.NetworkIPv4.Subnet does one module away, and the two look alike enough
 	// that the difference is worth stating. That field is a network and the
 	// operator thinks of it as one, so masking 192.168.1.1/24 down to
 	// 192.168.1.0/24 removes a typo. This field is an address; masking it would

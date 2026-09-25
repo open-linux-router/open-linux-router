@@ -96,11 +96,11 @@ func testApplier(t *testing.T) (Applier, *fakeService) {
 	}
 	svc := &fakeService{}
 	return Applier{
-		Backend: NewDnsmasq(paths),
-		Groups:  testGroups(),
-		Service: svc,
-		Paths:   paths,
-		Store:   core.NewStore(filepath.Join(root, "olr.json"), ModuleName),
+		Backend:  NewDnsmasq(paths),
+		Networks: testNetworks(),
+		Service:  svc,
+		Paths:    paths,
+		Store:    core.NewStore(filepath.Join(root, "olr.json"), ModuleName),
 		// Pinned rather than left to PortConflict, which would read the build
 		// machine's /proc and make these tests depend on whether anything
 		// happens to be serving DHCP there.
@@ -392,7 +392,7 @@ func TestApplyStoresIntentEvenWhenTheServiceFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(stored.Pools) != 1 || stored.Pools[0].Group != "lan" {
+	if len(stored.Pools) != 1 || stored.Pools[0].Network != "lan" {
 		t.Errorf("intent was not stored before the failure: %+v", stored)
 	}
 }

@@ -20,9 +20,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { InterfaceRow } from '@/lib/api-types'
-import type { Group } from '@/lib/config-types'
+import type { Network } from '@/lib/config-types'
 
-const EMPTY: Group = { name: '', members: [], ipv4: { subnet: '' } }
+const EMPTY: Network = { name: '', members: [], ipv4: { subnet: '' } }
 
 /**
  * Create or edit a network.
@@ -49,14 +49,14 @@ export function NetworkDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Undefined when adding. */
-  initial?: Group
+  initial?: Network
   interfaces: InterfaceRow[]
   /** Interfaces already carrying another network. */
   taken: Set<string>
-  onSubmit: (group: Group) => void
+  onSubmit: (network: Network) => void
   onRemove?: () => void
 }) {
-  const [draft, setDraft] = useState<Group>(initial ?? EMPTY)
+  const [draft, setDraft] = useState<Network>(initial ?? EMPTY)
   const editing = initial !== undefined
   const member = draft.members[0] ?? ''
   const chosen = interfaces.find((i) => i.name === member)
@@ -71,10 +71,10 @@ export function NetworkDialog({
   const derivedRouter = deriveRouter(draft.ipv4?.subnet ?? '')
   const valid = draft.name.trim() !== '' && member !== ''
 
-  function set(patch: Partial<Group>) {
+  function set(patch: Partial<Network>) {
     setDraft((d) => ({ ...d, ...patch }))
   }
-  function setIPv4(patch: Partial<NonNullable<Group['ipv4']>>) {
+  function setIPv4(patch: Partial<NonNullable<Network['ipv4']>>) {
     setDraft((d) => ({ ...d, ipv4: { subnet: '', ...d.ipv4, ...patch } }))
   }
 
