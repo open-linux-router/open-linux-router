@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import { BlockerAlerts } from '@/components/layout/blockers'
 import { StatusStrip } from '@/components/layout/status-strip'
+import { SubPage } from '@/components/layout/sub-page'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -68,7 +69,7 @@ export function RemotePage() {
   const change = (c: RemoteChangeRequest) => applier.submit(c)
 
   return (
-    <div className="space-y-6">
+    <SubPage section="/advanced" slug="remote">
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />
@@ -224,7 +225,7 @@ export function RemotePage() {
         <ClientConfigDialog result={applier.issued} onClose={applier.dismissIssued} />
       )}
       <ConfirmDialog applier={applier} />
-    </div>
+    </SubPage>
   )
 }
 

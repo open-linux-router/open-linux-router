@@ -14,11 +14,13 @@ import { DnsEnforcementPage } from '@/routes/dns/enforcement'
 import { DnsListeningPage } from '@/routes/dns/listening'
 import { DnsNamesPage } from '@/routes/dns/names'
 import { DnsResolvingPage } from '@/routes/dns/resolving'
-import { ForwardsPage } from '@/routes/gateway/forwards'
-import { FilteringPage } from '@/routes/gateway/filtering'
-import { IngressPage } from '@/routes/ingress'
+import { AdvancedPage } from '@/routes/advanced/index'
+import { DdnsPage } from '@/routes/advanced/ddns'
+import { FilteringPage } from '@/routes/advanced/filtering'
+import { ForwardsPage } from '@/routes/advanced/forwards'
+import { IngressPage } from '@/routes/advanced/ingress'
+import { RemotePage } from '@/routes/advanced/remote'
 import { NetworksPage } from '@/routes/networks'
-import { RemotePage } from '@/routes/remote'
 import { OverviewPage } from '@/routes/overview'
 import { GatewayPage } from '@/routes/gateway/index'
 import { GatewayExitsPage } from '@/routes/gateway/exits'
@@ -35,10 +37,8 @@ export function App() {
           <Route path="gateway">
             <Route index element={<GatewayPage />} />
             <Route path="exits" element={<GatewayExitsPage />} />
-            <Route path="forwards" element={<ForwardsPage />} />
             <Route path="usage" element={<GatewayUsagePage />} />
             <Route path="unmanaged" element={<GatewayUnmanagedPage />} />
-            <Route path="filtering" element={<FilteringPage />} />
           </Route>
           <Route path="dhcp">
             <Route index element={<DhcpPage />} />
@@ -61,8 +61,14 @@ export function App() {
             <Route path="enforcement" element={<DnsEnforcementPage />} />
             <Route path="advanced" element={<DnsAdvancedPage />} />
           </Route>
-          <Route path="remote" element={<RemotePage />} />
-          <Route path="ingress" element={<IngressPage />} />
+          <Route path="advanced">
+            <Route index element={<AdvancedPage />} />
+            <Route path="forwards" element={<ForwardsPage />} />
+            <Route path="filtering" element={<FilteringPage />} />
+            <Route path="ddns" element={<DdnsPage />} />
+            <Route path="remote" element={<RemotePage />} />
+            <Route path="ingress" element={<IngressPage />} />
+          </Route>
 
           {/* The addresses that moved. Redirected rather than deleted: a
               bookmark or a link in someone's notes should land where the thing
@@ -71,10 +77,14 @@ export function App() {
               followed by people reading an older copy for a while yet. */}
           <Route path="internet" element={<Navigate to="/gateway" replace />} />
           {/* The firewall section is gone: it held port forwarding and no
-              filtering, and both halves now live under Gateway, which is the
-              module that owns the boundary in either direction. */}
-          <Route path="firewall" element={<Navigate to="/gateway/forwards" replace />} />
-          <Route path="firewall/unmanaged" element={<Navigate to="/gateway/filtering" replace />} />
+              filtering. Both halves went to Gateway, and then on to Advanced
+              with the rest of what reaches in from outside. */}
+          <Route path="firewall" element={<Navigate to="/advanced/forwards" replace />} />
+          <Route path="firewall/unmanaged" element={<Navigate to="/advanced/filtering" replace />} />
+          <Route path="gateway/forwards" element={<Navigate to="/advanced/forwards" replace />} />
+          <Route path="gateway/filtering" element={<Navigate to="/advanced/filtering" replace />} />
+          <Route path="remote" element={<Navigate to="/advanced/remote" replace />} />
+          <Route path="ingress" element={<Navigate to="/advanced/ingress" replace />} />
           <Route path="devices" element={<Navigate to="/" replace />} />
           <Route path="dhcp/interfaces" element={<Navigate to="/networks" replace />} />
 

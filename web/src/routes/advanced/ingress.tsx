@@ -2,6 +2,7 @@ import { AlertTriangle, ExternalLink, Plus, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 
 import { StatusStrip } from '@/components/layout/status-strip'
+import { SubPage } from '@/components/layout/sub-page'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -66,7 +67,7 @@ export function IngressPage() {
   const change = (c: IngressChange) => applier.submit(c)
 
   return (
-    <div className="space-y-6">
+    <SubPage section="/advanced" slug="ingress">
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />
@@ -219,7 +220,7 @@ export function IngressPage() {
       />
 
       <ConfirmDialog applier={applier} />
-    </div>
+    </SubPage>
   )
 }
 

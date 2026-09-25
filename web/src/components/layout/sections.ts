@@ -1,12 +1,4 @@
-import {
-  Activity,
-  Globe,
-  KeyRound,
-  Link2,
-  Network,
-  Router,
-  Waypoints,
-} from 'lucide-react'
+import { Activity, Globe, Network, Router, SlidersHorizontal, Waypoints } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /**
@@ -43,18 +35,27 @@ import type { LucideIcon } from 'lucide-react'
  * three different registers.
  *
  * There is no Firewall section, and its absence is deliberate rather than
- * pending. The section used to hold port forwarding and no filtering at all;
- * both halves are under Gateway now, which is the module that owns the boundary
- * in either direction (docs/port-forwarding.md §0). A label promising a
- * firewall over a page that has none was the thing worth losing.
+ * pending. The section used to hold port forwarding and no filtering at all; a
+ * label promising a firewall over a page that has none was the thing worth
+ * losing. Port forwards are under Advanced now, with the page about somebody
+ * else's filtering that explains a forward which does not reach.
+ *
+ * Advanced is the one section that is not a module, and that is the point of
+ * it. The five above are what every router has, and the order an operator sets
+ * them up in. What is under Advanced is what a house network can go years
+ * without: letting the internet in to one device, a public name kept pointing
+ * here, dialling in, and publishing services by name. Each used to be a
+ * section of its own, which put the rarely-visited half of the app level with
+ * the half every visit is about — and on a phone made the tab bar seven wide.
+ * They read as one group anyway: all four are about reaching in from outside.
  *
  * Devices is absent because it is not a section: the device list is the body of
  * the overview. Filing it under DHCP was considered and rejected — the
  * statically-addressed printer has never held a lease, and would have lived on
  * a page named for the protocol that has never seen it.
  *
- * Ingress is the exception, and it is kept rather than argued away:
- * the mechanism name is jargon borrowed from Kubernetes, and most people running
+ * Ingress keeps its name under Advanced, and it is kept rather than argued
+ * away: the mechanism name is jargon borrowed from Kubernetes, and most people running
  * a house network have never met it. It is kept anyway, because every other
  * label here is exactly its module's name and `olr ingress` is the command —
  * breaking that one-to-one mapping costs more than the word costs. "Services"
@@ -117,19 +118,13 @@ export const SECTIONS: Section[] = [
     label: 'Gateway',
     icon: Waypoints,
     end: false,
-    blurb: 'The boundary with the internet: where traffic goes out, and what comes in.',
+    blurb: 'The boundary with the internet: which way traffic goes out, and how much of it.',
     groups: [
       {
         slug: 'exits',
         label: 'Ways out',
         blurb:
           'Somewhere this router can hand traffic to — another box on your network, a VPN or proxy connection, or nowhere at all.',
-      },
-      {
-        slug: 'forwards',
-        label: 'Port forwards',
-        blurb:
-          'Let something on the internet reach one device here. This is a translation, not a firewall permission — olr has no filtering policy for it to be an exception to.',
       },
       {
         slug: 'usage',
@@ -143,12 +138,6 @@ export const SECTIONS: Section[] = [
         // else's rules are shown so a hand-rolled setup is legible rather than
         // mysterious.
         blurb: 'Rules another program put in place. olr leaves them alone.',
-      },
-      {
-        slug: 'filtering',
-        label: 'Filtering this router does not manage',
-        blurb:
-          'Another program on this box drops traffic passing through the router by default. olr cannot override that, so a forward may be correct and still not reach.',
       },
     ],
   },
@@ -224,31 +213,50 @@ export const SECTIONS: Section[] = [
     ],
   },
   {
-    // Next to the gateway, because the two of them are the same question asked
-    // twice: what may come in. A port forward lets the internet reach one
-    // thing; this lets you reach all of it.
-    to: '/remote',
-    label: 'Remote access',
-    icon: KeyRound,
+    to: '/advanced',
+    label: 'Advanced',
+    icon: SlidersHorizontal,
     end: false,
-    blurb: 'Reach your whole network from outside it, from your own devices.',
-    // No sub-pages. Everything here is either live — who is connected, and when
-    // they last were — or a setting that is set once and never revisited, and
-    // there are three of those. A settings page holding three fields would be a
-    // level of navigation charging rent.
-    groups: [],
-  },
-  {
-    to: '/ingress',
-    label: 'Ingress',
-    icon: Link2,
-    end: false,
-    blurb: 'Reach what is running on your network by name, over https.',
-    // No sub-pages. Both things on this screen are live rather than settings —
-    // the addresses, and a certificate whose expiry is the only number on the
-    // page that will be different tomorrow. Filing the certificate one level
-    // down would hide the renewal failure that is silent for weeks.
-    groups: [],
+    blurb: 'Reaching your network from outside it.',
+    groups: [
+      {
+        slug: 'forwards',
+        label: 'Port forwards',
+        blurb:
+          'Let something on the internet reach one device here. This is a translation, not a firewall permission — olr has no filtering policy for it to be an exception to.',
+      },
+      {
+        // Not a row on the landing page: it is reached from the forwards page,
+        // and only when there is something on it.
+        slug: 'filtering',
+        label: 'Filtering this router does not manage',
+        blurb:
+          'Another program on this box drops traffic passing through the router by default. olr cannot override that, so a forward may be correct and still not reach.',
+      },
+      {
+        slug: 'ddns',
+        label: 'Dynamic DNS',
+        blurb:
+          'Public names this router keeps pointing at itself, so they follow your address when your internet provider changes it.',
+      },
+      {
+        // Everything on this page is either live — who is connected, and when
+        // they last were — or a setting set once and never revisited, and there
+        // are three of those. They open in dialogs rather than a level below.
+        slug: 'remote',
+        label: 'Remote access',
+        blurb: 'Reach your whole network from outside it, from your own devices.',
+      },
+      {
+        // Both things on this page are live rather than settings — the
+        // addresses, and a certificate whose expiry is the only number here
+        // that will be different tomorrow. Filing the certificate one level
+        // further down would hide the renewal failure that is silent for weeks.
+        slug: 'ingress',
+        label: 'Ingress',
+        blurb: 'Reach what is running on your network by name, over https.',
+      },
+    ],
   },
 ]
 

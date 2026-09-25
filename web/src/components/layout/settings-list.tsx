@@ -19,10 +19,17 @@ import { groupOf } from '@/components/layout/sections'
  */
 export function SettingsList({
   section,
+  heading = 'Settings',
   rows,
 }: {
   /** The section's path, e.g. `/dns`. */
   section: string
+  /**
+   * Null for a section whose rows are not settings but the whole of it —
+   * Advanced, where each row is a feature of its own and the heading would
+   * mislabel all four.
+   */
+  heading?: string | null
   rows: {
     slug: string
     /** What this setting currently says, in the operator's words. */
@@ -31,7 +38,7 @@ export function SettingsList({
 }) {
   return (
     <section className="space-y-2">
-      <h2 className="px-1 text-sm font-medium text-muted-foreground">Settings</h2>
+      {heading && <h2 className="px-1 text-sm font-medium text-muted-foreground">{heading}</h2>}
       <List>
         {rows.map(({ slug, value }) => {
           const { group } = groupOf(section, slug)

@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import { SettingsList } from '@/components/layout/settings-list'
 import { StatusStrip } from '@/components/layout/status-strip'
+import { SubPage } from '@/components/layout/sub-page'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ApplyOutcome, useForwardsEditor } from '@/features/nat/editor'
@@ -12,7 +13,7 @@ import { forwardsChange, useForwardsStatus } from '@/features/nat/queries'
 import type { Forward } from '@/lib/config-types'
 
 /**
- * Port forwards, on their own page under Gateway.
+ * Port forwards, on their own page under Advanced.
  *
  * One kind of object and looking at it is the whole visit, so the forwards are
  * the page rather than a row leading to one. The only thing behind a row here
@@ -31,7 +32,7 @@ export function ForwardsPage() {
   const foreign = status.data?.foreign ?? []
 
   return (
-    <div className="space-y-6">
+    <SubPage section="/advanced" slug="forwards">
       <ApplyOutcome applier={applier} />
 
       {status.data && !status.data.known && (
@@ -100,10 +101,10 @@ export function ForwardsPage() {
 
       {foreign.length > 0 && (
         <SettingsList
-          section="/gateway"
+          section="/advanced"
           rows={[
             {
-              slug: 'unmanaged',
+              slug: 'filtering',
               value: `${foreign.length} chain${foreign.length === 1 ? '' : 's'}`,
             },
           ]}
@@ -130,6 +131,6 @@ export function ForwardsPage() {
           }}
         />
       )}
-    </div>
+    </SubPage>
   )
 }

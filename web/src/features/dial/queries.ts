@@ -5,12 +5,13 @@ import { toast } from 'sonner'
 import { ApiError, api } from '@/lib/api'
 import type {
   DialApplyResult,
+  DialStatus,
   LinkApplyResult,
   Plan,
   Uplink,
   UplinkResponse,
 } from '@/lib/api-types'
-import type { LinkConfig } from '@/lib/config-types'
+import type { DialConfig, LinkConfig, Record as DdnsRecord } from '@/lib/config-types'
 
 // Polling, for the reason features/dhcp/queries.ts gives about /api/events.
 // It earns it harder here than elsewhere: half of what this endpoint returns is
@@ -20,7 +21,17 @@ const OBSERVED_REFETCH_MS = 5000
 
 export const dialKeys = {
   uplink: ['dial', 'uplink'] as const,
+  config: ['dial', 'config'] as const,
+  status: ['dial', 'status'] as const,
 }
+
+/**
+ * How often the dynamic DNS page asks again. Slower than the uplink's: a record
+ * is re-read every few minutes at most, so nothing on that page moves faster
+ * than this — but a record that was just saved does get its first check within
+ * seconds, and an operator watching for it should not have to reload.
+ */
+const RECORDS_REFETCH_MS = 15_000
 
 export function useUplink() {
   return useQuery({
@@ -28,6 +39,75 @@ export function useUplink() {
     queryFn: () => api.get<UplinkResponse>('/api/dial/uplink'),
     refetchInterval: OBSERVED_REFETCH_MS,
   })
+}
+
+/** The records, with every credential masked. */
+export function useDialConfig() {
+  return useQuery({
+    queryKey: dialKeys.config,
+    queryFn: () => api.get<DialConfig>('/api/dial/config'),
+  })
+}
+
+export function useDialStatus() {
+  return useQuery({
+    queryKey: dialKeys.status,
+    queryFn: () => api.get<DialStatus>('/api/dial/status'),
+    refetchInterval: RECORDS_REFETCH_MS,
+  })
+}
+
+/**
+ * Adding, changing and removing dynamic DNS records.
+ *
+ * No plan-first step, unlike the uplink below: a record never touches this box,
+ * so the server never calls its plan disruptive and there is nothing to stop
+ * for. What the plan does carry is worth showing all the same — adding a record
+ * says which third party this box now talks to on a timer, and removing one
+ * says the name stays at the provider, frozen. Both arrive as warnings on the
+ * result and go into the toast, which is the moment they are true.
+ *
+ * One route per record rather than PUT /config, for the reason the server gives:
+ * RFC 7386 replaces an array wholesale, and splicing the list here would be two
+ * requests where the apply lock covers only the second.
+ */
+export function useRecordEditor() {
+  const queryClient = useQueryClient()
+
+  const apply = useMutation({
+    mutationFn: ({ name, record }: { name: string; record: DdnsRecord | null }) => {
+      const path = `/api/dial/records/${encodeURIComponent(name)}`
+      return record === null
+        ? api.delete<DialApplyResult>(path)
+        : api.put<DialApplyResult>(path, record)
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['dial'] }),
+  })
+
+  async function send(name: string, record: DdnsRecord | null) {
+    try {
+      const result = await apply.mutateAsync({ name, record })
+      const notes = result.plan.warnings?.map((w) => w.message).join('\n')
+      toast.success(
+        record === null
+          ? `${name} is no longer kept current`
+          : result.plan.empty
+            ? 'Nothing to change'
+            : `${name} saved`,
+        notes ? { description: notes } : undefined,
+      )
+      return true
+    } catch (error) {
+      reportError(error)
+      return false
+    }
+  }
+
+  return {
+    busy: apply.isPending,
+    save: (record: DdnsRecord) => send(record.name, record),
+    remove: (name: string) => send(name, null),
+  }
 }
 
 /**

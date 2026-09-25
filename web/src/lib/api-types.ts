@@ -481,6 +481,53 @@ export interface DialApplyResult {
   error?: { message: string; problems?: Problem[] }
 }
 
+// --- dial: dynamic DNS -------------------------------------------------------
+
+/**
+ * One public name as `GET /api/dial/status` reports it — internal/dial
+ * recordView.
+ *
+ * Flat, and deliberately: docs/ddns.md §6 asks three separate questions — was
+ * the address read, what was it, did the provider take it — and the failure
+ * worth seeing is the one where the first two are fine and the third has been
+ * refusing for days. Every timestamp is absent until the thing has happened,
+ * never a zero time.
+ */
+export interface RecordStatus {
+  name: string
+  provider: string
+  source: 'interface' | 'reflector'
+  /** The interface or endpoint the address is read from. */
+  from?: string
+
+  checked?: string
+  check_error?: string
+
+  address?: string
+  /** The address read is in 100.64.0.0/10: the ISP's NAT, not this router. */
+  cgnat?: boolean
+
+  published?: string
+  published_address?: string
+  publish_error?: string
+
+  failures?: number
+  retry?: string
+
+  problems?: Problem[]
+  /**
+   * The publisher has a loop for this record. False with no problems is the
+   * moment right after a write, before olrd has picked the config up.
+   */
+  watched: boolean
+}
+
+export interface DialStatus {
+  uplink?: UplinkStatus
+  records: RecordStatus[]
+  as_of: string
+}
+
 // --- devices ---------------------------------------------------------------
 
 /**

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -79,8 +80,11 @@ export function SettingsDialog({
             />
             <p className="text-xs text-muted-foreground">
               The name or address your devices dial from outside. If a name already follows this
-              router&rsquo;s address, use it — that is what the DDNS records keep current. Add
-                It is shared by every way in, so give the host alone.
+              router&rsquo;s address, use it — keeping one current is what{' '}
+              <Link to="/advanced/ddns" className="underline underline-offset-2">
+                Dynamic DNS
+              </Link>{' '}
+              is for. It is shared by every way in, so give the host alone.
             </p>
           </div>
 
