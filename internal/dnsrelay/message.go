@@ -132,6 +132,58 @@ func Synthesize(query []byte, response string) ([]byte, error) {
 	return b.Finish()
 }
 
+// Answer builds the response for a name this box serves itself (published.go).
+//
+// A and AAAA get the addresses of that family; every other type gets NODATA —
+// the name exists, it has no record of that type. That matters more than it
+// looks: browsers ask for HTTPS records alongside A, and relaying that question
+// upstream would ask the internet about a name this box has just claimed.
+// Authoritative, because for these names it is.
+func Answer(query []byte, addrs []netip.Addr, ttl uint32) ([]byte, error) {
+	var p dnsmessage.Parser
+	header, err := p.Start(query)
+	if err != nil {
+		return nil, fmt.Errorf("parsing header: %w", err)
+	}
+	q, err := p.Question()
+	if err != nil {
+		return nil, fmt.Errorf("parsing question: %w", err)
+	}
+
+	b := dnsmessage.NewBuilder(nil, dnsmessage.Header{
+		ID:                 header.ID,
+		Response:           true,
+		OpCode:             header.OpCode,
+		Authoritative:      true,
+		RecursionDesired:   header.RecursionDesired,
+		RecursionAvailable: true,
+	})
+	b.EnableCompression()
+	if err := b.StartQuestions(); err != nil {
+		return nil, err
+	}
+	if err := b.Question(q); err != nil {
+		return nil, err
+	}
+	if err := b.StartAnswers(); err != nil {
+		return nil, err
+	}
+
+	rh := dnsmessage.ResourceHeader{Name: q.Name, Class: q.Class, TTL: ttl}
+	for _, a := range addrs {
+		switch {
+		case q.Type == dnsmessage.TypeA && a.Is4():
+			err = b.AResource(rh, dnsmessage.AResource{A: a.As4()})
+		case q.Type == dnsmessage.TypeAAAA && a.Is6() && !a.Is4In6():
+			err = b.AAAAResource(rh, dnsmessage.AAAAResource{AAAA: a.As16()})
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return b.Finish()
+}
+
 // Observation is what one response tells us, parsed from a copy.
 type Observation struct {
 	// Name is the QNAME. Everything below is attributed to it, never to the

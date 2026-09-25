@@ -118,7 +118,7 @@ func freePort(t *testing.T) netip.AddrPort {
 }
 
 // startRelay runs a relay against a fake upstream and returns where to reach it.
-func startRelay(t *testing.T, cfg Config, policies []Policy) (*Relay, netip.AddrPort) {
+func startRelay(t *testing.T, cfg Config, policies []Policy, opts ...func(*Relay)) (*Relay, netip.AddrPort) {
 	t.Helper()
 
 	if cfg.PolicyDir == "" && len(policies) > 0 {
@@ -142,6 +142,10 @@ func startRelay(t *testing.T, cfg Config, policies []Policy) (*Relay, netip.Addr
 	relay, err := New(cfg, logger)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Before Run, so nothing races the query path for the field.
+	for _, opt := range opts {
+		opt(relay)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

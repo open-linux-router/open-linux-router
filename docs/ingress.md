@@ -149,9 +149,30 @@ open. Both halves were wrong, because the second one already exists.
 `dns` owns a **local domain** and a set of **local names**, and renders them as
 an unbound `local-zone "<domain>." static` zone — this box answers the whole
 suffix itself and forwards none of it. That is how a device is reachable by
-name rather than by an address somebody memorised. So there is no override to
-build and nothing to ask for: a published service is one more name in a
-namespace that is already served.
+name rather than by an address somebody memorised. A published service is one
+more name in that namespace.
+
+**This section used to end there, and the names did not resolve.** Nothing
+put a published name into `dns`: the local zone held only `dns`'s own hosts,
+so a query for `nas.<domain>` fell through to the internet. An operator who
+had added a public record pointing at the router got nothing either, because
+unbound's rebinding protection strips a private address from a public answer —
+correctly. The first real deployment served the certificate and the proxy
+perfectly on :443, and nobody on the LAN could reach it by name.
+
+So `dns` now reads the published names (a `PublishedView`, adapted in
+internal/daemon) and renders them for its relay, which answers each one itself
+with **this box's address on the network the query arrived on** — the address
+of the interface it came in on, as the hijack rule's `redirect` means "this box,
+as seen from here". Not unbound's `local-data`: that holds one fixed answer per
+name, and every query unbound sees arrives from the relay on loopback, so it
+cannot tell a client on one LAN from a client on another.
+internal/dnsrelay/published.go has the rest, including why AAAA is answered
+only to a query that itself arrived over IPv6.
+
+The file the names land in is re-read on SIGHUP, so `ingress` re-applying `dns`
+after publishing a name reloads the relay and interrupts nobody (design.md
+§4.1's dependents).
 
 ### 3.1 What that makes true
 
@@ -253,7 +274,11 @@ The record exists. The CA can see it. We cannot, and never will:
 
 The fix is one line and the module must never render the file without it:
 **pin the propagation check to public resolvers.** Two of them, from different
-operators, so that one being down does not stall a renewal. This is the single
+operators — but not for redundancy. Caddy asks each listed resolver in turn and
+an unreachable one fails the check, so every entry has to be reachable from the
+box. The defaults are 1.1.1.1 and 8.8.8.8, chosen for being reachable from the
+most networks: the original 9.9.9.9 is dropped by at least one ISP, and a box
+behind it timed out on every attempt and never got a certificate. This is the single
 lookup on the box that must not use the box's own resolver, and it is stated
 here because the next person to touch the renderer will otherwise see a
 hardcoded pair of public IPs and reasonably try to remove them.
@@ -445,9 +470,26 @@ it is tempting. It is rejected in §10: config that lives only in a running
 process is not revisioned, not readable over SSH during an outage, and not
 single-source. File plus reload keeps this module identical to every other one.
 
-Having rejected it, the renderer also turns it **off**. An endpoint we have
-decided never to use is not a feature left available for later; it is an
-unauthenticated local control surface kept for nobody's benefit.
+It cannot be turned **off**, though, and an earlier version of this section
+said it should. `caddy reload` is a client of the admin endpoint — it reads
+the file, adapts it, and POSTs the result to the running process — so a
+rendered `admin off` left the unit's `ExecReload` with nothing to talk to.
+The first start worked, and every edit after it failed at "reload", which on a
+real box was the second service anyone tried to publish.
+
+So the endpoint stays, used for exactly that and nothing else, and it listens
+on a unix socket (`/run/olr/ingress/admin.sock`) instead of Caddy's default
+`localhost:2019`. A loopback TCP port is reachable by every local user; the
+socket sits in the unit's own root-only runtime directory and Caddy creates it
+owner-only. That keeps the property the original decision was after — no
+local control surface for anybody but the unit — without breaking the reload
+that §5's impact ladder is built on.
+
+Moving the endpoint is the one Caddyfile change a reload cannot deliver, since
+the reload has to reach the process at the old address. The plan treats a
+change to the `admin` line as a restart for that reason, which is what takes a
+box upgraded from `admin off` across the gap without anyone restarting the unit
+by hand.
 
 ### 7.2a Comments are not changes
 
@@ -487,7 +529,8 @@ being visible. By the time symptoms appear the cause is a month old.
 | Upstream address moved | Stanza proxies to whoever took the address | Prevented at write time by §1.2, not detected after |
 | `:80`/`:443` taken | Unit fails to start | Caught at preflight (§6), by the process name |
 | Issuance blocked by our own resolver | Nothing ever gets a certificate, with no failing component | Prevented by §4.2's pinned resolvers; it must not be possible to render the file without them |
-| A published name is also a device's name | **Silent.** `dns` answers with the device's own address and the request never reaches the proxy. The Caddyfile is correct the whole time | Prevented at write time — the two live in one namespace and the resolver wins |
+| A pinned resolver is unreachable from this network | Nothing ever gets a certificate; the status page says "normal for a few minutes" indefinitely, and only the journal names the resolver (`dial tcp …:53: i/o timeout`) | Not prevented. Defaults chosen for reachability (§4.2); the remedy is replacing the entry in `resolvers` |
+| A published name is also a device's name | **Silent.** One of the two answers and the other is unreachable by name — today the published name, since the relay answers it before unbound sees the query. Nothing errors either way | Prevented at write time — the two live in one namespace |
 
 The first row is the one that will actually bite people, and it is why
 certificate expiry deserves a place in the module's status output rather than
@@ -601,7 +644,10 @@ The boundary §2 said had to be drawn here.
    wildcard site block, `admin off`, `tls { resolvers … }`, the per-service
    `host` matcher, `handle`, `abort`, and the `transport http { tls
    tls_insecure_skip_verify }` form for an https upstream — and the output of
-   `caddy list-modules` parses as expected. The refusal path was exercised for real,
+   `caddy list-modules` parses as expected. What that did not exercise was
+   `caddy reload`, and `admin off` — which validates fine — broke it on every
+   box (§7.2). Reload through the admin socket was since verified against
+   caddy v2.11.4. The refusal path was exercised for real,
    not simulated: the check ran, rejected the config for the right reason, wrote
    nothing to the live path and asked systemd for nothing.
 

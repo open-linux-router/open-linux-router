@@ -105,13 +105,21 @@ type Certificate struct {
 // DefaultResolvers are public resolvers used only for ACME propagation checks.
 //
 // Two, from different operators, because this is the one lookup on the box that
-// must not depend on our own resolver (see Certificate.Resolvers) and a single
-// third party being down should not stop a renewal.
+// must not depend on our own resolver (see Certificate.Resolvers).
+//
+// **Two is not redundancy**, which is the opposite of what this comment used to
+// claim. Caddy's propagation check asks every listed resolver in turn, and an
+// unreachable one fails the check outright: a real box behind an ISP that drops
+// traffic to 9.9.9.9 logged `dial tcp 9.9.9.9:53: i/o timeout` on every attempt
+// and never obtained a certificate, while 1.1.1.1 beside it answered fine. So
+// the list is chosen for being reachable from the most networks, not for
+// diversity, and an operator on a network that blocks one of these replaces it
+// in `resolvers` rather than adding to it.
 //
 // This is not a privacy leak worth worrying about: the only names asked are
 // `_acme-challenge` records the operator is simultaneously publishing to the
 // public DNS, and the CA is about to query them from the outside anyway.
-var DefaultResolvers = []string{"1.1.1.1", "9.9.9.9"}
+var DefaultResolvers = []string{"1.1.1.1", "8.8.8.8"}
 
 // ResolversOrDefault resolves the empty case.
 func (c Certificate) ResolversOrDefault() []string {

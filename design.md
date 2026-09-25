@@ -532,12 +532,24 @@ link ──┬─→ dial ──┬─→ dns      (upstream resolvers)
        │          └─→ qos
        ├─→ gateway
        └─→ wifi
+
+dns ────→ ingress  (local domain, local names)
+ingress ─→ dns     (published names, one-way publish)
 ```
 
 **When a cycle appears, invert one side into a fact subscription.** The real
 case: `dhcp` wants to register lease hostnames in `dns`, and `dns` wants lease
 data. Direction is fixed — `dhcp` *publishes* leases, `dns` *subscribes*.
 (This is precisely why dnsmasq fuses the two; see §4.2.)
+
+`ingress` and `dns` are the second such pair. `ingress` reads the local domain
+and the names already taken, because a published name lives under that domain
+and must not collide with a device's. `dns` has to *answer* the published
+names, or they are served on :443 and unreachable by name. Direction as for
+`dhcp`: `ingress` publishes its names, `dns` subscribes and renders them for its
+relay, and `ingress` re-applies `dns` after its own apply. The reverse arrow is
+read-only and not followed — a changed local domain leaves the Caddyfile on the
+old one until ingress is re-applied, and shows as ingress drift until then.
 
 **An arrow is walked when the fact at its tail changes.** Reading through an
 API keeps two copies of a fact from existing; it does not keep a *programmed*
@@ -550,8 +562,8 @@ that dependent, in the same operation and under the same lock: one no-op
 apply per arrow, and a step reported for the ones that were not. §5.2 still
 holds — this is a sequence of independent applies, not a transaction, and a
 half-applied change follows nothing until it is re-run. The dependents a
-change reaches are `dhcp` and `gateway`, and internal/daemon's `dependents.go`
-is the list.
+change reaches are `dhcp` and `gateway` (from `link` and `dial`) and `dns` (from
+`ingress`), and internal/daemon's `dependents.go` is the list.
 
 ### 4.2 One backend, one owner
 

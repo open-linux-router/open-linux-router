@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/open-linux-router/open-linux-router/internal/dns"
+	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/packaging"
 )
 
@@ -84,6 +85,32 @@ func TestTheDropInNamesTheSamePaths(t *testing.T) {
 	}
 	if !anyDirective(body, "ExecStartPre=", "-a "+paths.TrustAnchor) {
 		t.Errorf("the olr-dns drop-in does not bootstrap the anchor at %s:\n%s", paths.TrustAnchor, body)
+	}
+}
+
+// The proxy's reload talks to the admin socket the ingress module renders.
+//
+// This pairing broke once already, in the other direction: the renderer turned
+// the admin endpoint off and the unit kept reloading through it, so every edit
+// after the first start failed. Nothing in either file alone looks wrong, which
+// is what makes it a test rather than a comment. The drop-in is held to the
+// same answer, because it replaces ExecReload wholesale.
+func TestTheProxyReloadsThroughTheSocketIngressRenders(t *testing.T) {
+	paths := ingress.DefaultPaths()
+	want := "--address unix/" + paths.Admin
+
+	unit := unitNamed(t, "olr-caddy.service")
+	if !anyDirective(unit, "ExecReload=", want) {
+		t.Errorf("no ExecReload line reloads through %s:\n%s", paths.Admin, execLines(unit))
+	}
+	if !anyDirective(unit, "RuntimeDirectory=", strings.TrimPrefix(filepath.Dir(paths.Admin), "/run/")) {
+		t.Errorf("no RuntimeDirectory= line creates %s:\n%s", filepath.Dir(paths.Admin), unit)
+	}
+
+	for _, d := range packaging.DropIns(packaging.Tools{Caddy: "/usr/bin/caddy"}) {
+		if !anyDirective(string(d.Data), "ExecReload=", want) {
+			t.Errorf("the drop-in's ExecReload does not reload through %s:\n%s", paths.Admin, d.Data)
+		}
 	}
 }
 

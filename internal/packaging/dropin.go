@@ -24,9 +24,13 @@ const (
 	dhcpConf    = "/etc/open-linux-router/rendered/dhcp/dnsmasq.conf"
 	dnsHijack   = "/etc/open-linux-router/rendered/dns/hijack.nft"
 	ingressConf = "/etc/open-linux-router/rendered/ingress/Caddyfile"
-	dropInName  = "10-path.conf"
-	dropInDir   = "/etc/systemd/system"
-	dropInBlurb = "# Written by `olr enable`: %s is not at the path this unit assumes.\n"
+	// ingressAdmin is the proxy's admin socket, in the form `--address`
+	// takes. Without it `caddy reload` dials localhost:2019, where nothing
+	// listens (docs/ingress.md §7.2).
+	ingressAdmin = "unix//run/olr/ingress/admin.sock"
+	dropInName   = "10-path.conf"
+	dropInDir    = "/etc/systemd/system"
+	dropInBlurb  = "# Written by `olr enable`: %s is not at the path this unit assumes.\n"
 
 	// These two are not under /etc/open-linux-router with the rest, and the
 	// reason is the daemon rather than the module: Debian confines
@@ -165,7 +169,8 @@ func ingressDropIn(t Tools) *DropIn {
 	b.WriteString("ExecStart=\n")
 	fmt.Fprintf(&b, "ExecStart=%s run --config %s --adapter caddyfile\n", t.Caddy, ingressConf)
 	b.WriteString("ExecReload=\n")
-	fmt.Fprintf(&b, "ExecReload=%s reload --config %s --adapter caddyfile --force\n", t.Caddy, ingressConf)
+	fmt.Fprintf(&b, "ExecReload=%s reload --config %s --adapter caddyfile --force --address %s\n",
+		t.Caddy, ingressConf, ingressAdmin)
 	return dropIn("olr-caddy.service", b.String())
 }
 

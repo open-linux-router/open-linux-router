@@ -236,7 +236,7 @@ func setCommand() *cobra.Command {
 		c.Flags().StringVar(&email, "email", "", "contact address for certificate-expiry warnings")
 		// StringArray, not StringSlice (docs/cli.md R5): Slice splits on commas.
 		c.Flags().StringArrayVar(&resolvers, "resolver", nil,
-			"public resolver for the certificate propagation check, repeatable (default 1.1.1.1 and 9.9.9.9)")
+			"public resolver for the certificate propagation check, repeatable (default 1.1.1.1 and 8.8.8.8)")
 		c.Flags().StringVar(&raw, "raw-caddyfile", "", "extra Caddyfile configuration, appended verbatim")
 		c.Flags().BoolVar(&clearRaw, "no-raw-caddyfile", false, "remove the extra Caddyfile configuration")
 

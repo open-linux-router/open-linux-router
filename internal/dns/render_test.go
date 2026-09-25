@@ -14,7 +14,7 @@ func testBackend(t *testing.T) Backend {
 
 func renderOne(t *testing.T, b Backend, c Config, path string) string {
 	t.Helper()
-	out, err := b.Render(c, testLinks())
+	out, err := b.Render(c, testLinks(), nil)
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -50,11 +50,11 @@ func TestRenderIsDeterministic(t *testing.T) {
 	}
 	cfg.Hijack = Hijack{Enabled: true, Interfaces: []string{"lan0"}, BlockDoT: true}
 
-	first, err := b.Render(cfg, testLinks())
+	first, err := b.Render(cfg, testLinks(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := b.Render(cfg, testLinks())
+	second, err := b.Render(cfg, testLinks(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestRenderedFilesCarryAnOwnershipHeader(t *testing.T) {
 	cfg := validConfig()
 	cfg.Hijack = Hijack{Enabled: true, Interfaces: []string{"lan0"}}
 
-	out, err := b.Render(cfg, testLinks())
+	out, err := b.Render(cfg, testLinks(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestRenderPoliciesAreReloadable(t *testing.T) {
 	cfg := validConfig()
 	cfg.Policies = []Policy{{Name: "kids", Block: []string{"example.com"}}}
 
-	out, err := b.Render(cfg, testLinks())
+	out, err := b.Render(cfg, testLinks(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +335,7 @@ func TestRenderHijack(t *testing.T) {
 
 func TestRenderHijackIsAbsentWhenOff(t *testing.T) {
 	b := testBackend(t)
-	out, err := b.Render(validConfig(), testLinks())
+	out, err := b.Render(validConfig(), testLinks(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

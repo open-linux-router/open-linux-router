@@ -56,7 +56,19 @@ ExecStart=/usr/lib/open-linux-router/caddy run --config /etc/open-linux-router/r
 # running one. Without it, a reload after a change olr considered cosmetic would
 # be a silent no-op — and more to the point, a reload issued to recover from a
 # hand-edited running state would do nothing at all.
-ExecReload=/usr/lib/open-linux-router/caddy reload --config /etc/open-linux-router/rendered/ingress/Caddyfile --adapter caddyfile --force
+#
+# --address because reload is a client of Caddy's admin endpoint, and the
+# rendered Caddyfile puts that endpoint on the socket below rather than on
+# localhost:2019 (docs/ingress.md §7.2). It used to render `admin off`, which
+# left this line with nothing to talk to: every reload failed.
+ExecReload=/usr/lib/open-linux-router/caddy reload --config /etc/open-linux-router/rendered/ingress/Caddyfile --adapter caddyfile --force --address unix//run/olr/ingress/admin.sock
+
+# Where that socket lives. olr/ingress rather than olr, for the reason olr-dnsd
+# gives: systemd deletes a RuntimeDirectory when its unit stops, and /run/olr is
+# olrd's. 0700 because the socket is a control surface, and root is the only
+# thing that should reach it.
+RuntimeDirectory=olr/ingress
+RuntimeDirectoryMode=0700
 
 # The DNS provider credential, kept out of the Caddyfile so that the file olr
 # shows an operator — in `olr ingress plan`, in a diff, in a bug report — never

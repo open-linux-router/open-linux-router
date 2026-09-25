@@ -7,6 +7,7 @@ import (
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
+	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
 )
@@ -132,6 +133,26 @@ func natDependent(a nat.Applier) dependent {
 			return false, err
 		}
 		res, _, err := a.Apply(ctx, cfg)
+		return !res.Plan.Empty(), err
+	}}
+}
+
+// dnsDependent re-renders the names the relay answers for this box, after
+// `ingress` published or withdrew one.
+//
+// A SIGHUP to the relay and nothing else: the file is reloadable and the
+// resolver never reads it (internal/dns/published.go). A dns that is switched
+// off is left alone — re-applying it here would be the way to start it.
+func dnsDependent(a dns.Applier) dependent {
+	return dependent{name: dns.ModuleName, apply: func(ctx context.Context) (bool, error) {
+		cfg, err := a.Load()
+		if err != nil {
+			return false, err
+		}
+		if !cfg.Enabled {
+			return false, nil
+		}
+		res, err := a.Apply(ctx, cfg)
 		return !res.Plan.Empty(), err
 	}}
 }

@@ -45,6 +45,12 @@ type Paths struct {
 	// be wiped casually — an operator who deletes it is re-issuing from the CA
 	// and has rate limits waiting for them.
 	Data string
+
+	// Admin is the unix socket Caddy's admin endpoint listens on, and the only
+	// place it listens. `caddy reload` is a client of that endpoint, so this is
+	// what the unit's ExecReload names — the two must agree, and
+	// internal/packaging's tests hold them to it.
+	Admin string
 }
 
 // DefaultPaths is the on-disk layout for a real install.
@@ -58,6 +64,10 @@ func RootedPaths(root string) Paths {
 		Conf: filepath.Join(rendered, "Caddyfile"),
 		Env:  filepath.Join(rendered, "caddy.env"),
 		Data: filepath.Join(root, "/var/lib/open-linux-router/ingress"),
+		// Under the unit's own RuntimeDirectory, olr/ingress, mode 0700: root
+		// only, and cleared by systemd when the proxy stops, so a socket can
+		// never outlive the process that answers on it.
+		Admin: filepath.Join(root, "/run/olr/ingress/admin.sock"),
 	}
 }
 
@@ -253,17 +263,27 @@ func (c Caddy) globals(b *strings.Builder, cfg Config) {
 	b.WriteString("\n{\n")
 
 	// Caddy's admin API can mutate configuration without touching this file.
-	// docs/ingress.md §7.2 rejects using it — config that lives only in a
-	// running process is not revisioned and not readable over SSH during an
-	// outage — and having rejected it, leaving the endpoint listening would be
-	// an unauthenticated local control surface kept for nobody's benefit.
-	b.WriteString("\tadmin off\n")
+	// docs/ingress.md §7.2 rejects using it that way — config that lives only
+	// in a running process is not revisioned and not readable over SSH during
+	// an outage — but it cannot be turned off, because `caddy reload` is
+	// itself a client of it. `admin off` was tried and every reload after the
+	// first start failed, which is every edit to a published service.
+	//
+	// So it listens on a unix socket rather than on localhost:2019. A TCP port
+	// on loopback is reachable by every local user; this socket sits in a
+	// root-only directory and Caddy creates it owner-only besides. What is left
+	// is the channel the unit's ExecReload uses, reachable by nobody else.
+	fmt.Fprintf(b, "\tadmin %s\n", adminAddress(c.Paths.Admin))
 
 	if cfg.Certificate.Email != "" {
 		fmt.Fprintf(b, "\temail %s\n", cfg.Certificate.Email)
 	}
 	b.WriteString("}\n")
 }
+
+// adminAddress spells a socket path the way both the `admin` option and
+// `caddy reload --address` take it.
+func adminAddress(socket string) string { return "unix/" + socket }
 
 func (c Caddy) tls(b *strings.Builder, cfg Config, site string) {
 	b.WriteString("\n\t# One wildcard certificate serves every published name, which is what\n")

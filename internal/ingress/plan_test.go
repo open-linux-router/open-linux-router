@@ -130,6 +130,48 @@ func TestPlanChangingTheTokenRestarts(t *testing.T) {
 	}
 }
 
+// A box upgraded from an olr that rendered `admin off` has a proxy with no admin
+// endpoint, and a reload is delivered through that endpoint. The first apply
+// after the upgrade has to restart, or it fails at the reload and so does every
+// one after it.
+func TestPlanMovingTheAdminEndpointRestarts(t *testing.T) {
+	b := testBackend(t)
+	c := good()
+	obs := renderInto(t, b, c)
+
+	current := string(obs.Files[b.Paths.Conf])
+	directive := "admin " + adminAddress(b.Paths.Admin)
+	if !strings.Contains(current, directive) {
+		t.Fatalf("fixture: rendered Caddyfile has no %q:\n%s", directive, current)
+	}
+	obs.Files[b.Paths.Conf] = []byte(strings.Replace(current, directive, "admin off", 1))
+
+	p := plan(t, b, c, obs)
+	if p.Action != ActionRestart {
+		t.Fatalf("action = %s, want restart: a reload cannot reach a proxy whose admin "+
+			"endpoint is elsewhere", p.Action)
+	}
+	if !strings.Contains(strings.Join(p.Reasons, " "), "admin socket") {
+		t.Errorf("the restart should say why, got %v", p.Reasons)
+	}
+}
+
+// And the ordinary edit after that is a reload again: the rule is about the
+// admin line, not about the Caddyfile.
+func TestPlanAddingAServiceAfterTheMoveStillReloads(t *testing.T) {
+	b := testBackend(t)
+	before := good()
+	obs := renderInto(t, b, before)
+
+	desired := before.Clone()
+	desired.Services = append(desired.Services, Service{
+		Name: "wiki", Upstream: Upstream{Host: "192.168.1.50", Port: 3001},
+	})
+	if p := plan(t, b, desired, obs); p.Action != ActionReload {
+		t.Fatalf("action = %s, want reload", p.Action)
+	}
+}
+
 // Removing a published name takes a URL away from whoever was using it, which is
 // not recoverable by retrying.
 func TestPlanRemovingAServiceIsDisruptive(t *testing.T) {

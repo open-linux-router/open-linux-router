@@ -167,7 +167,7 @@ func (r *Relay) serveUDP(ctx context.Context, conn udpConn) {
 
 		go func() {
 			at := time.Now()
-			res, err := r.resolve(ctx, client, query, false)
+			res, err := r.resolve(ctx, client, query, false, arrivalFrom(replyFrom))
 			if err != nil {
 				r.logger.Warn("could not resolve", "client", client, "error", err)
 				return
@@ -213,6 +213,14 @@ func (r *Relay) serveTCP(ctx context.Context, ln *net.TCPListener) {
 func (r *Relay) serveTCPConn(ctx context.Context, conn net.Conn, client netip.Addr) {
 	defer conn.Close()
 
+	// A connection's local address is fixed at accept, so this is where every
+	// query on it arrived. No interface index: systemLocalAddrs finds the
+	// interface by the address instead.
+	var local arrival
+	if a, ok := conn.LocalAddr().(*net.TCPAddr); ok {
+		local.addr = a.AddrPort().Addr().Unmap()
+	}
+
 	for {
 		if err := conn.SetReadDeadline(time.Now().Add(tcpIdleTimeout)); err != nil {
 			return
@@ -227,7 +235,7 @@ func (r *Relay) serveTCPConn(ctx context.Context, conn net.Conn, client netip.Ad
 		r.clients.Seen(client, time.Now())
 
 		at := time.Now()
-		res, err := r.resolve(ctx, client, query, true)
+		res, err := r.resolve(ctx, client, query, true, local)
 		if err != nil {
 			r.logger.Warn("could not resolve", "client", client, "error", err)
 			return

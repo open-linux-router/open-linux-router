@@ -2,6 +2,7 @@ package ingress
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -29,6 +30,13 @@ type HTTP struct {
 
 	// Events is where an applied change is announced so the UI can re-read.
 	Events *core.Events
+
+	// Dependents re-applies the modules built from what this one publishes —
+	// `dns`, whose relay answers every published name with this box's address
+	// (internal/dns/published.go). Without it a new service is served on :443
+	// and cannot be found by name until something else re-applies dns. Nil
+	// outside olrd.
+	Dependents func(ctx context.Context) []core.Step
 }
 
 // Routes is the module's surface, declared as data so it can be enumerated
@@ -370,6 +378,15 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 		}
 
 		result, applyErr = h.Applier.ApplyPlanned(r.Context(), cfg, plan)
+		// Followed even when the proxy's own plan was empty: enabling a module
+		// whose files were already rendered changes nothing here and still
+		// changes which names DNS should answer. The dependent is a no-op
+		// apply when it has nothing to do.
+		if applyErr == nil && h.Dependents != nil {
+			for _, s := range h.Dependents(r.Context()) {
+				result.Steps = append(result.Steps, Step{Description: s.Description, Done: s.Done, Error: s.Error})
+			}
+		}
 		stored, _ = h.Applier.Load()
 		return nil
 	}); lockErr != nil {

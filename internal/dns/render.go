@@ -69,6 +69,10 @@ type Paths struct {
 	// makes editing a blocklist free.
 	PolicyDir string
 
+	// Published lists the names `ingress` publishes, which the relay answers
+	// with this box's own address (published.go). Re-read on SIGHUP.
+	Published string
+
 	// HijackNFT is the nftables ruleset the relay's unit loads once the relay
 	// is bound.
 	HijackNFT string
@@ -110,6 +114,7 @@ func RootedPaths(root string) Paths {
 		UnboundConf:   filepath.Join(unbound, "unbound.conf"),
 		RelayConf:     filepath.Join(rendered, "relay.json"),
 		PolicyDir:     filepath.Join(rendered, "policy.d"),
+		Published:     filepath.Join(rendered, "published.json"),
 		HijackNFT:     filepath.Join(rendered, "hijack.nft"),
 		TrustAnchor:   filepath.Join(anchor, "root.key"),
 		ObserveSocket: filepath.Join(root, "/run/olr/dns/observe.sock"),
@@ -253,7 +258,7 @@ func (Backend) Canonical(data []byte) []byte {
 // SIGHUP. Used by the planner to tell a reload from a restart, including for
 // stray files no longer rendered by the current config.
 func (b Backend) reloadable(path string) bool {
-	return strings.HasPrefix(path, b.Paths.PolicyDir+"/")
+	return strings.HasPrefix(path, b.Paths.PolicyDir+"/") || path == b.Paths.Published
 }
 
 // unitFor reports which backend reads a path, for a file the current config no
@@ -268,8 +273,9 @@ func (b Backend) unitFor(path string) string {
 	return ""
 }
 
-// Render is pure: same config and same link facts, same bytes.
-func (b Backend) Render(c Config, links LinkView) (Rendered, error) {
+// Render is pure: same config, same link facts and same published names, same
+// bytes. A nil PublishedView publishes nothing.
+func (b Backend) Render(c Config, links LinkView, published PublishedView) (Rendered, error) {
 	c = c.Clone()
 	c.Normalize()
 
@@ -302,6 +308,14 @@ func (b Backend) Render(c Config, links LinkView) (Rendered, error) {
 			Reloadable: true,
 			Unit:       b.RelayUnit(),
 		})
+	}
+
+	pub, err := b.renderPublished(c, published)
+	if err != nil {
+		return Rendered{}, err
+	}
+	if pub != nil {
+		out.add(*pub)
 	}
 
 	if c.Hijack.Enabled {
@@ -577,6 +591,7 @@ func (b Backend) renderRelay(c Config, links LinkView) ([]byte, error) {
 		AllowFrom:       allow,
 		Upstream:        DefaultResolver,
 		PolicyDir:       b.Paths.PolicyDir,
+		PublishedFile:   b.Paths.Published,
 		ObserveSocket:   b.Paths.ObserveSocket,
 		QueryLogEntries: 0,
 	}

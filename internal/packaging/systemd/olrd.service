@@ -60,9 +60,20 @@ StateDirectory=open-linux-router
 RuntimeDirectory=olr
 RuntimeDirectoryMode=0755
 
-# /run/olr is cleared on stop, but the guard snapshots under it are meant to be
-# lost on reboot anyway (§5.5): a box that came back up is reachable by
-# definition, so replaying an expired guard would revert a change that was fine.
+# Kept across a stop, because /run/olr is not only olrd's. The backends' runtime
+# directories — olr/dns, olr/dhcp — live under it, and systemd clears a
+# RuntimeDirectory recursively. Without this, every restart of olrd (every
+# upgrade) unlinked the running relay's observe socket out from under it: DNS
+# kept answering, and the query log went silently empty until olr-dnsd happened
+# to restart. That is the backend depending on olrd's lifecycle, which §3.5
+# forbids.
+#
+# It is also what the §5.5 guard needs: a snapshot that is meant to survive olrd
+# crashing cannot live in a directory olrd's own stop deletes. /run is still
+# cleared on reboot, which is the only lifetime a snapshot should have — a box
+# that came back up is reachable by definition. A socket left behind is cleared
+# by core.ListenUnix on the next start.
+RuntimeDirectoryPreserve=yes
 
 [Install]
 WantedBy=multi-user.target

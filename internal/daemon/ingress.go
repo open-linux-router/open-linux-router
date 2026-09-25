@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/devices"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
@@ -121,4 +122,35 @@ func deviceInfo(r devices.Resolved) ingress.DeviceInfo {
 	}
 	info.Addr = v6
 	return info
+}
+
+// dnsPublished is dns's window onto the names ingress publishes — the other
+// direction across the same pair, and the reason this file is not only
+// ingress's any more.
+//
+// Read straight from the store rather than through ingress's Applier, which is
+// constructed after dns's: the fact is ingress's stored intent and nothing
+// else, so there is no running state to ask. Disabled publishes nothing,
+// because nothing is serving the names.
+type dnsPublished struct {
+	store *core.Store
+}
+
+func (p dnsPublished) Published() ([]string, error) {
+	doc, err := p.store.Load()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := ingress.FromDocument(doc)
+	if err != nil {
+		return nil, err
+	}
+	if !cfg.Enabled {
+		return nil, nil
+	}
+	names := make([]string, 0, len(cfg.Services))
+	for _, s := range cfg.Services {
+		names = append(names, s.Name)
+	}
+	return names, nil
 }

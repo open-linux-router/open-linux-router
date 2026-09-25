@@ -34,6 +34,10 @@ type Applier struct {
 	// where the reason it never reaches the renderer is written down.
 	Reservations ReservationView
 
+	// Published is the window onto the names `ingress` publishes, which the
+	// relay answers itself (published.go). Nil publishes nothing.
+	Published PublishedView
+
 	// Resolver supervises unbound; Relay supervises our own olr-dnsd.
 	//
 	// Two, because this module drives two daemons and they fail differently. A
@@ -245,7 +249,7 @@ func (a Applier) Plan(ctx context.Context, desired Config) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	return BuildPlan(a.Backend, desired, a.Links, a.Reservations, obs, time.Now())
+	return BuildPlan(a.Backend, desired, a.Links, a.Reservations, a.Published, obs, time.Now())
 }
 
 // Drift reports what has changed underneath stored intent.
@@ -269,7 +273,7 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	plan, err := BuildPlan(a.Backend, desired, a.Links, a.Reservations, obs, time.Now())
+	plan, err := BuildPlan(a.Backend, desired, a.Links, a.Reservations, a.Published, obs, time.Now())
 	if err != nil {
 		return ApplyResult{Plan: plan}, err
 	}
@@ -343,7 +347,7 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 		}
 	}
 
-	rendered, err := a.Backend.Render(desired, a.Links)
+	rendered, err := a.Backend.Render(desired, a.Links, a.Published)
 	if err != nil {
 		return result, err
 	}

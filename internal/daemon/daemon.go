@@ -219,6 +219,7 @@ func run(args []string) error {
 	if err != nil {
 		return fmt.Errorf("initialising dns: %w", err)
 	}
+	dnsApplier.Published = dnsPublished{store: store}
 	if opts.root != "" {
 		logger.Warn("running against a relocated root; this is a development mode",
 			"root", opts.root)
@@ -464,6 +465,9 @@ func run(args []string) error {
 		Applier: ingressApplier,
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
+		Dependents: func(ctx context.Context) []core.Step {
+			return applyDependents(ctx, logger, dnsDependent(dnsApplier))
+		},
 	}.Routes(), ingress.Config{})
 
 	// --- routes -----------------------------------------------------------

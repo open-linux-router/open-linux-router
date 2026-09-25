@@ -204,12 +204,16 @@ tarball: web cross ## Build the single-binary tarballs, for what the .deb does n
 	@# Still a .tar.gz rather than a bare binary because the Go executable
 	@# compresses better than three to one, and the only cost is one command
 	@# the reader was going to type anyway.
+	@#
+	@# COPYFILE_DISABLE because macOS's tar otherwise adds an AppleDouble ._olr
+	@# beside the binary; --no-xattrs because GNU tar on the box warns about
+	@# the provenance xattr headers it would otherwise carry.
 	for arch in $(ARCHES); do \
 	  stage=$(DIST)/tarball-$$arch; \
 	  rm -rf $$stage && mkdir -p $$stage; \
 	  cp $(DIST)/$(BIN)-linux-$$arch $$stage/$(BIN); \
 	  chmod +x $$stage/$(BIN); \
-	  tar -C $$stage -czf $(DIST)/olr-$(PKGVERSION)-linux-$$arch.tar.gz $(BIN) || exit 1; \
+	  COPYFILE_DISABLE=1 tar --no-xattrs -C $$stage -czf $(DIST)/olr-$(PKGVERSION)-linux-$$arch.tar.gz $(BIN) || exit 1; \
 	  rm -rf $$stage; \
 	done
 	@ls -1 $(DIST)/*.tar.gz 2>/dev/null || true

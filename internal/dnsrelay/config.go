@@ -67,6 +67,11 @@ type Config struct {
 	// PolicyDir holds one JSON file per policy, re-read on SIGHUP.
 	PolicyDir string `json:"policy_dir,omitempty"`
 
+	// PublishedFile names the names this box answers for itself
+	// (published.go), re-read on SIGHUP with the policies. A missing file
+	// means none.
+	PublishedFile string `json:"published_file,omitempty"`
+
 	// ObserveSocket is the unix socket serving the query log and name map.
 	// Empty disables it, and then nothing can read what the relay saw.
 	ObserveSocket string `json:"observe_socket,omitempty"`

@@ -34,14 +34,17 @@ const (
 	// ImpactRestart bounces the process, which **drops every connection through
 	// the proxy**.
 	//
-	// It is reached by one thing, and the reason is worth stating because the
-	// file that causes it looks as reloadable as any other: the provider
+	// It is reached by two things. The first is worth stating because the file
+	// that causes it looks as reloadable as any other: the provider
 	// credential lives in an environment file, systemd applies EnvironmentFile=
 	// when it *starts* a process, and `caddy reload` re-reads the Caddyfile
 	// without re-reading the environment. So a new token that is only reloaded
 	// is a new token that is not in use — the proxy keeps running with the old
 	// one and nothing reports a problem until the next renewal fails, weeks
 	// later. Restarting is the honest way to make the credential take effect.
+	//
+	// The second is a change to the admin endpoint's address, which is the
+	// channel a reload travels over — see BuildPlan.
 	ImpactRestart
 
 	// ImpactDisruptive takes a published name away from whoever is using it.
@@ -161,6 +164,18 @@ func (o Observed) Served(confPath string) []string {
 	return servedNames(o.Files[confPath])
 }
 
+// adminDirective returns the global `admin` line of a rendered Caddyfile, or ""
+// when there is none. Like servedNames it reads only our own output.
+func adminDirective(data []byte) string {
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) > 0 && fields[0] == "admin" {
+			return strings.Join(fields, " ")
+		}
+	}
+	return ""
+}
+
 // servedNames extracts the published hostnames from a rendered Caddyfile.
 //
 // It parses our own output and only our own output — the `@svc_… host <fqdn>`
@@ -274,6 +289,16 @@ func BuildPlan(b Caddy, desired Config, dns DNSView, devices DeviceView, obs Obs
 			// only picked up by a process start.
 			impact = ImpactRestart
 			needsRestart = true
+		case f.Path == b.Paths.Conf && adminDirective(before) != adminDirective(f.Data):
+			// A reload is delivered over the admin endpoint, so a change to
+			// where that endpoint is cannot be delivered by one: the running
+			// process is not listening where the reload will knock. The case
+			// that makes this real is an upgrade from an olr that rendered
+			// `admin off` — without this the first edit after it fails with
+			// "reload failed" and keeps failing until somebody restarts the
+			// unit by hand.
+			impact = ImpactRestart
+			needsRestart = true
 		default:
 			impact = ImpactReload
 		}
@@ -371,8 +396,14 @@ func classify(b Caddy, desired Config, plan Plan, dns DNSView, obs Observed) (Im
 	}
 
 	if impact >= ImpactRestart && plan.Action == ActionRestart {
+		why := "to move its admin socket, which is how later changes are reloaded"
+		for _, c := range plan.Changes {
+			if c.Path == b.Paths.Env && c.Impact == ImpactRestart {
+				why = "to pick up the new credential"
+			}
+		}
 		reasons = append(reasons,
-			"the proxy restarts to pick up the new credential, which drops connections in flight")
+			"the proxy restarts "+why+", which drops connections in flight")
 	}
 
 	return impact, reasons

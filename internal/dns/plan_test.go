@@ -12,7 +12,7 @@ import (
 // test can start from "already applied" and change one thing.
 func observedFor(t *testing.T, b Backend, c Config, running bool) Observed {
 	t.Helper()
-	rendered, err := b.Render(c, testLinks())
+	rendered, err := b.Render(c, testLinks(), nil)
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -30,7 +30,7 @@ func observedFor(t *testing.T, b Backend, c Config, running bool) Observed {
 
 func planFor(t *testing.T, b Backend, cfg Config, obs Observed) Plan {
 	t.Helper()
-	plan, err := BuildPlan(b, cfg, testLinks(), nil, obs, time.Now())
+	plan, err := BuildPlan(b, cfg, testLinks(), nil, nil, obs, time.Now())
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestBuildPlanRefusesAnInvalidConfig(t *testing.T) {
 	// is now the ordinary default and means the wildcard.
 	bad.Listen = []netip.AddrPort{netip.MustParseAddrPort("10.9.9.9:53")}
 
-	if _, err := BuildPlan(b, bad, testLinks(), nil, Observed{}, time.Now()); err == nil {
+	if _, err := BuildPlan(b, bad, testLinks(), nil, nil, Observed{}, time.Now()); err == nil {
 		t.Fatal("planning succeeded against a config that cannot be applied")
 	}
 }

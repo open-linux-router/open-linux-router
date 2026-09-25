@@ -63,7 +63,7 @@ func TestRenderPublishesOneWildcardSite(t *testing.T) {
 // whose DNS is working exactly as designed.
 func TestRenderAlwaysPinsACMEResolvers(t *testing.T) {
 	got := conf(t, renderGood(t, nil))
-	if !strings.Contains(got, "resolvers 1.1.1.1 9.9.9.9") {
+	if !strings.Contains(got, "resolvers 1.1.1.1 8.8.8.8") {
 		t.Fatalf("the propagation check must not use this box's own resolver:\n%s", got)
 	}
 }
@@ -106,10 +106,20 @@ func TestRenderClosesUnpublishedNames(t *testing.T) {
 	}
 }
 
-func TestRenderDisablesTheAdminAPI(t *testing.T) {
-	got := conf(t, renderGood(t, nil))
-	if !strings.Contains(got, "admin off") {
-		t.Fatalf("docs/ingress.md §7.2 rejects the admin API; leaving it listening is a control surface for nobody:\n%s", got)
+// The admin endpoint stays, because `caddy reload` is its client, but only on a
+// unix socket. The default, localhost:2019, is reachable by every local user.
+func TestRenderPutsTheAdminAPIOnASocketOnly(t *testing.T) {
+	b := NewCaddy(RootedPaths(t.TempDir()))
+	out, err := b.Render(good(), goodDNS(), goodDevices())
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	got := conf(t, out)
+	if strings.Contains(got, "admin off") {
+		t.Fatalf("admin off leaves `caddy reload` with nothing to talk to (docs/ingress.md §7.2):\n%s", got)
+	}
+	if want := "admin unix/" + b.Paths.Admin; !strings.Contains(got, want) {
+		t.Fatalf("want %q, so the admin API is a socket rather than a TCP port:\n%s", want, got)
 	}
 }
 
