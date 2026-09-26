@@ -81,30 +81,25 @@ function DesktopNav() {
 }
 
 /**
- * The page's title, written once for all of them.
+ * The page's title, for a screen reader only.
  *
- * Every route opened with its own copy of this markup, which meant four places
- * for a heading level or a text size to go its own way. It is the shell's now:
- * a page renders its content and nothing else.
+ * It used to be drawn — the section's name and a one-line blurb — at the top of
+ * every landing page. Directly under a bar that already underlines that same
+ * name, it said "Overview" twice and pushed the status strip, the thing a page
+ * is opened for, down by two lines. A sighted operator knows where they are
+ * from the bar; a screen reader still needs a level-one heading to land on.
  *
- * An address outside the table — the 404 — gets no title band. It is not a
- * section, and a heading saying so would only repeat the message the page is
- * already showing.
+ * An address outside the table — the 404 — gets none. It is not a section, and
+ * it carries its own heading.
  */
 function PageHeader() {
   const { pathname } = useLocation()
   const section = sectionOf(pathname)
-  // Only on a section's own landing page. A sub-page renders its own header,
-  // with the back link and the explanation for the setting it holds, and two
-  // stacked titles would say "DNS / Blocking" in two different type scales.
+  // Only on a section's own landing page. A sub-page renders its own, visible
+  // header — its name is not in the bar, and it needs the back link.
   if (!section || pathname !== section.to) return null
 
-  return (
-    <header>
-      <h1 className="text-2xl font-semibold tracking-tight">{section.label}</h1>
-      <p className="text-sm text-muted-foreground">{section.blurb}</p>
-    </header>
-  )
+  return <h1 className="sr-only">{section.label}</h1>
 }
 
 /**

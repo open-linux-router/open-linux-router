@@ -75,12 +75,6 @@ export interface Section {
   label: string
   icon: LucideIcon
   end: boolean
-  /**
-   * One line, under the section's title. Deliberately short: a landing page
-   * opens with a status strip that says what is actually happening, and a
-   * paragraph above it would be read first and mean less.
-   */
-  blurb: string
   groups: SettingGroup[]
 }
 
@@ -90,7 +84,6 @@ export const SECTIONS: Section[] = [
     label: 'Overview',
     icon: Activity,
     end: true,
-    blurb: 'Your network, and anything that needs you.',
     groups: [],
   },
   {
@@ -109,8 +102,6 @@ export const SECTIONS: Section[] = [
     // the page the nav already calls first — reachable only by opening a
     // section listed *after* it and going one level down. An operator with two
     // NICs to set up could not find it, which is the whole bug in one sentence.
-    blurb:
-      'The interfaces this router has been given, the subnets they carry, and how the router itself gets online.',
     groups: [],
   },
   {
@@ -118,7 +109,6 @@ export const SECTIONS: Section[] = [
     label: 'Gateway',
     icon: Waypoints,
     end: false,
-    blurb: 'The boundary with the internet: which way traffic goes out, and how much of it.',
     groups: [
       {
         slug: 'exits',
@@ -146,7 +136,6 @@ export const SECTIONS: Section[] = [
     label: 'DHCP',
     icon: Network,
     end: false,
-    blurb: 'Devices that join your network get an address from this router.',
     groups: [
       {
         slug: 'ranges',
@@ -174,7 +163,6 @@ export const SECTIONS: Section[] = [
     label: 'DNS',
     icon: Globe,
     end: false,
-    blurb: 'Every device on your network looks up names through this router.',
     groups: [
       {
         slug: 'blocking',
@@ -217,7 +205,6 @@ export const SECTIONS: Section[] = [
     label: 'Advanced',
     icon: SlidersHorizontal,
     end: false,
-    blurb: 'Reaching your network from outside it.',
     groups: [
       {
         slug: 'forwards',

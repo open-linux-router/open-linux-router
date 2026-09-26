@@ -92,10 +92,8 @@ export function NetworksPage() {
   }
 
   return (
-    // No page header. components/layout/app-shell renders the section's title
-    // and blurb on a section's own landing page, and this page was drawing a
-    // second identical <h1> underneath it — two "Networks" headings, one above
-    // the other, since the day the section was added.
+    // No page header. The bar already names the section, and
+    // components/layout/app-shell gives a screen reader its <h1>.
     <div className="space-y-6">
       <PartialApply editor={editor} />
 
