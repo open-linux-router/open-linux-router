@@ -12,7 +12,8 @@
 //
 // Device groups were added the same way and for the same reason:
 // `DevicesConfig.groups`, `Device.group` and `DevicesGroup`, spelled the way
-// internal/devices/config.go marshals them.
+// internal/devices/config.go marshals them. So was `DevicesGroup.parent`, when
+// groups learned to nest.
 
 /**
  * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
@@ -204,10 +205,14 @@ export interface Device {
   group?: string
 }
 /**
- * One set of devices. Only a name today; renaming carries every member along.
+ * One set of devices. Renaming carries every member and subgroup along.
  */
 export interface DevicesGroup {
   name: string
+  /**
+   * The group this one sits inside, or absent for a group at the top. At most four levels deep, and never inside itself.
+   */
+  parent?: string
 }
 export interface DhcpConfig {
   enabled: boolean

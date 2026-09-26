@@ -164,6 +164,12 @@ box default  →  network  →  group  →  device
                                       most specific wins
 ```
 
+Groups nest (design.md §4.4), so the group rung may be several: `Serving` →
+`VMs` → `Lab`. That changes nothing about the rule — every device has exactly
+one group and every group one parent, so the rungs still form a single chain,
+and the nearest one that says something wins. A setting on `Serving` reaches a
+machine in `Lab` unless `VMs` or `Lab` says otherwise.
+
 The two cases that motivated this:
 
 - *IoT devices go direct* — the IoT network keeps the default. Nothing to
@@ -186,6 +192,7 @@ Inheritance is unusable if the answer is not visible:
 ```
 Living Room TV
   Internet via   Proxy          from group "Phones"      [override]
+  (nested: "from group Serving › VMs", the rung that set it, as a path)
   Status         ● via Proxy · 14 GB this month
 ```
 

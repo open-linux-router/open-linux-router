@@ -221,14 +221,20 @@ func buildPlan(stored, desired Config) planView {
 		}
 	}
 
-	// Groups have nothing but a name, so a group is either there or not — a
-	// rename reads as one removed and one added, with its members' updates
-	// listed above.
+	// A group is keyed by name, so a rename reads as one removed and one
+	// added, with its members' updates listed above; a move is an update.
 	for _, g := range desired.Groups {
-		if _, ok := stored.FindGroup(g.Name); !ok {
+		old, ok := stored.FindGroup(g.Name)
+		switch {
+		case !ok:
 			plan.Changes = append(plan.Changes, changeView{
 				Path: groupPath(g.Name), Kind: kindCreate, Impact: impactNone,
-				Diff: "+ group: " + g.Name + "\n",
+				Diff: describeGroup(g, "+"),
+			})
+		case old.Parent != g.Parent:
+			plan.Changes = append(plan.Changes, changeView{
+				Path: groupPath(g.Name), Kind: kindUpdate, Impact: impactNone,
+				Diff: describeGroup(old, "-") + describeGroup(g, "+"),
 			})
 		}
 	}
@@ -236,7 +242,7 @@ func buildPlan(stored, desired Config) planView {
 		if _, ok := desired.FindGroup(g.Name); !ok {
 			plan.Changes = append(plan.Changes, changeView{
 				Path: groupPath(g.Name), Kind: kindDelete, Impact: impactNone,
-				Diff: "- group: " + g.Name + "\n",
+				Diff: describeGroup(g, "-"),
 			})
 		}
 	}
@@ -246,6 +252,14 @@ func buildPlan(stored, desired Config) planView {
 }
 
 func groupPath(name string) string { return fmt.Sprintf("groups[%s]", name) }
+
+func describeGroup(g Group, prefix string) string {
+	out := fmt.Sprintf("%s group: %s\n", prefix, g.Name)
+	if g.Parent != "" {
+		out += fmt.Sprintf("%s parent: %s\n", prefix, g.Parent)
+	}
+	return out
+}
 
 func path(mac string) string { return fmt.Sprintf("devices[%s]", mac) }
 

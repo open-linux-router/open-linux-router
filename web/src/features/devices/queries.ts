@@ -84,9 +84,14 @@ function useDevicesMutation<T>(fn: (vars: T) => Promise<DevicesApplyResult>) {
   })
 }
 
-/** Creates a group. Creating one that already exists is a no-op, not an error. */
+/**
+ * Creates a group, inside another when a parent is given. Creating one that
+ * already exists is a no-op, not an error.
+ */
 export function useCreateDeviceGroup() {
-  return useDevicesMutation((name: string) => api.put<DevicesApplyResult>(groupPath(name), {}))
+  return useDevicesMutation(({ name, parent }: { name: string; parent?: string }) =>
+    api.put<DevicesApplyResult>(groupPath(name), parent ? { parent } : {}),
+  )
 }
 
 /** Renames a group; its members follow on the server. */
@@ -96,7 +101,22 @@ export function useRenameDeviceGroup() {
   )
 }
 
-/** Deletes a group. Its members become ungrouped rather than the delete being refused. */
+/**
+ * Moves a group inside another, or to the top with an empty parent. Its
+ * members and subgroups travel with it; the server refuses a move that would
+ * put a group inside itself or nest deeper than four levels.
+ */
+export function useMoveDeviceGroup() {
+  return useDevicesMutation(({ name, parent }: { name: string; parent: string }) =>
+    api.put<DevicesApplyResult>(groupPath(name), { parent }),
+  )
+}
+
+/**
+ * Deletes a group. What it held moves up one level — its devices and
+ * subgroups go to its parent, or to the top — rather than the delete being
+ * refused.
+ */
 export function useDeleteDeviceGroup() {
   return useDevicesMutation((name: string) => api.delete<DevicesApplyResult>(groupPath(name)))
 }

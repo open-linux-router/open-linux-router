@@ -24,6 +24,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { CategoryPicker } from '@/features/devices/category-picker'
 import { DeviceIcon } from '@/features/devices/device-icon'
+import { groupOptions } from '@/features/devices/group-tree'
 import { categoryLabel } from '@/features/devices/icons'
 import type { DeviceRow } from '@/lib/api-types'
 import type { Device, DeviceCategory, DevicesGroup } from '@/lib/config-types'
@@ -151,9 +152,11 @@ export function DeviceDetail({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NO_GROUP}>None</SelectItem>
-                {groups.map((g) => (
+                {/* In tree order and indented by depth: a flat alphabetical
+                    list would put Lab nowhere near the VMs it sits inside. */}
+                {groupOptions(groups).map((g) => (
                   <SelectItem key={g.name} value={g.name}>
-                    {g.name}
+                    <span style={{ paddingLeft: g.depth * 12 }}>{g.name}</span>
                   </SelectItem>
                 ))}
               </SelectContent>

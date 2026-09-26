@@ -19,7 +19,6 @@ import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
@@ -40,7 +39,12 @@ import { useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
 import { useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
-import { NetworkMap, NO_NETWORK, Rates } from '@/features/topology/network-map'
+import { useMapDensity } from '@/features/topology/density'
+import type { Density } from '@/features/topology/layout'
+import { DensityToggle } from '@/features/topology/density-toggle'
+import { NO_NETWORK } from '@/features/topology/model'
+import { NetworkMap } from '@/features/topology/network-map'
+import { Rates } from '@/features/topology/nodes'
 import { useTrafficView, type TrafficView } from '@/features/topology/traffic'
 import type { DeviceRow, DhcpStatus, DnsStatus, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
 import { cn, formatBytes } from '@/lib/utils'
@@ -86,6 +90,10 @@ export function OverviewPage() {
   const groupActions = useGroupActions()
   const [filter, setFilter] = useState('')
   const [network, setNetwork] = useState('')
+  const [chosen, setDensity] = useMapDensity()
+  // What the map actually drew when left to choose, so the toggle shows the
+  // truth rather than a default the map overrode.
+  const [drawn, setDrawn] = useState<Density>('detail')
 
   // The filter offers the networks devices are actually on, not every network
   // the box has: choosing one with nobody on it would only empty the map.
@@ -134,13 +142,9 @@ export function OverviewPage() {
       <Card>
         <CardHeader>
           <CardTitle>Your network</CardTitle>
-          {/* One line, not five. The caveat still has to be here — the diagram
-              would otherwise be read as wiring — but an operator who wanted the
-              long version would go looking, and one who did not was paying for
-              it on every visit. */}
-          <CardDescription>Your devices in the groups you made. Logical layout, not wiring.</CardDescription>
-          <CardAction>
-            <Button variant="outline" size="sm" onClick={groupActions.create}>
+          <CardAction className="flex items-center gap-2">
+            <DensityToggle value={chosen ?? drawn} onChange={setDensity} />
+            <Button variant="outline" size="sm" onClick={() => groupActions.create()}>
               <Plus aria-hidden /> New group
             </Button>
           </CardAction>
@@ -194,10 +198,13 @@ export function OverviewPage() {
             pending={devices.isPending}
             filter={filter}
             network={network}
+            density={chosen ?? 'auto'}
+            onDensity={setDrawn}
             onSelect={actions.select}
             onCreateGroup={groupActions.create}
             onRenameGroup={groupActions.rename}
             onDeleteGroup={groupActions.remove}
+            onMoveGroup={groupActions.moveGroup}
             onMoveDevice={groupActions.move}
           />
 

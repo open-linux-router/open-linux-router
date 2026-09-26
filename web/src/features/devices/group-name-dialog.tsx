@@ -11,10 +11,22 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { groupOptions, MAX_GROUP_DEPTH } from '@/features/devices/group-tree'
 import { describeError } from '@/features/devices/queries'
+import type { DevicesGroup } from '@/lib/config-types'
 
 /** internal/devices/config.go MaxGroupNameLen. The server is still the judge. */
 const MAX_GROUP_NAME = 32
+
+/** The parent Select's value for "at the top", which no trimmed name can be. */
+const TOP = ' top'
 
 /**
  * The one form both creating and renaming use: a name.
@@ -26,25 +38,38 @@ const MAX_GROUP_NAME = 32
  */
 export function GroupNameDialog({
   from,
+  parent: initialParent = '',
+  groups = [],
   busy,
   onOpenChange,
   onSubmit,
 }: {
   /** Undefined when creating. */
   from?: string
+  /** Where a new group goes, preselected; empty for the top. */
+  parent?: string
+  /** Every group, for the parent picker. Only asked for when creating. */
+  groups?: DevicesGroup[]
   busy: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (name: string) => Promise<void>
+  onSubmit: (name: string, parent: string) => Promise<void>
 }) {
   const [name, setName] = useState(from ?? '')
+  const [parent, setParent] = useState(initialParent)
   const [error, setError] = useState<string | null>(null)
   const trimmed = name.trim()
   const tooLong = [...trimmed].length > MAX_GROUP_NAME
 
+  // Only where a new group can go: a parent already at the deepest level
+  // would make a group the server refuses. Moving an existing group is its own
+  // menu, so renaming never shows this at all.
+  const parents = from === undefined ? groupOptions(groups).filter((g) => g.depth < MAX_GROUP_DEPTH - 1) : []
+  const depthOf = new Map(parents.map((g) => [g.name, g.depth]))
+
   async function submit() {
     setError(null)
     try {
-      await onSubmit(trimmed)
+      await onSubmit(trimmed, parent)
     } catch (e) {
       setError(describeError(e))
     }
@@ -90,6 +115,28 @@ export function GroupNameDialog({
               <p className="text-xs text-destructive">{error}</p>
             ) : null}
           </div>
+
+          {parents.length > 0 && (
+            <div className="grid gap-2">
+              <Label htmlFor="group-parent">Inside</Label>
+              <Select value={parent || TOP} onValueChange={(v) => setParent(!v || v === TOP ? '' : v)}>
+                <SelectTrigger id="group-parent" className="w-full">
+                  <SelectValue>
+                    {(value: string) => (value === TOP || !value ? 'Nothing — a top-level group' : value)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={TOP}>Nothing — a top-level group</SelectItem>
+                  {parents.map((g) => (
+                    <SelectItem key={g.name} value={g.name}>
+                      {/* Indented by depth, so a subgroup reads as one. */}
+                      <span style={{ paddingLeft: (depthOf.get(g.name) ?? 0) * 12 }}>{g.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>

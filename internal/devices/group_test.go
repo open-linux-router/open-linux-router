@@ -290,3 +290,127 @@ func TestHTTPMovesADeviceBetweenGroups(t *testing.T) {
 		t.Fatalf("bad mac: status %d", w.Code)
 	}
 }
+
+// --- nesting ---------------------------------------------------------------
+
+func nestedConfig() Config {
+	return Config{
+		Groups: []Group{
+			{Name: "Serving"},
+			{Name: "VMs", Parent: "Serving"},
+			{Name: "Lab", Parent: "VMs"},
+		},
+		Devices: []Device{
+			{MAC: nasMAC, Group: "Serving"},
+			{MAC: phoneMAC, Group: "VMs"},
+		},
+	}
+}
+
+func TestNestedGroupsValidate(t *testing.T) {
+	c := nestedConfig()
+	c.Normalize()
+	if res := Validate(c); !res.OK() {
+		t.Fatal(res.Err())
+	}
+	if got := c.Ancestors("Lab"); strings.Join(got, ">") != "VMs>Serving" {
+		t.Fatalf("ancestors = %v", got)
+	}
+}
+
+func TestNestingRefusals(t *testing.T) {
+	cases := []struct {
+		name   string
+		groups []Group
+	}{
+		{"missing parent", []Group{{Name: "A", Parent: "Nope"}}},
+		{"inside itself", []Group{{Name: "A", Parent: "A"}}},
+		{"cycle of two", []Group{{Name: "A", Parent: "B"}, {Name: "B", Parent: "A"}}},
+		{"too deep", []Group{
+			{Name: "L1"}, {Name: "L2", Parent: "L1"}, {Name: "L3", Parent: "L2"},
+			{Name: "L4", Parent: "L3"}, {Name: "L5", Parent: "L4"},
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Config{Groups: tc.groups}
+			c.Normalize()
+			res := Validate(c)
+			if res.OK() {
+				t.Fatal("accepted")
+			}
+			if !strings.HasSuffix(res.Errors[0].Path, ".parent") {
+				t.Fatalf("error at %q: %v", res.Errors[0].Path, res.Errors)
+			}
+		})
+	}
+}
+
+func TestMissingAncestorIsNotACycle(t *testing.T) {
+	c := Config{Groups: []Group{{Name: "A", Parent: "B"}, {Name: "B", Parent: "Gone"}}}
+	c.Normalize()
+	for _, p := range Validate(c).Errors {
+		if strings.Contains(p.Message, "inside itself") {
+			t.Fatalf("a missing ancestor was reported as a cycle: %v", p)
+		}
+	}
+}
+
+func TestRenameCarriesSubgroups(t *testing.T) {
+	c := nestedConfig()
+	c.RenameGroup("VMs", "Machines")
+	if g, _ := c.FindGroup("Lab"); g.Parent != "Machines" {
+		t.Fatalf("subgroup parent = %q", g.Parent)
+	}
+	if d, _ := c.Find(phoneMAC); d.Group != "Machines" {
+		t.Fatalf("member group = %q", d.Group)
+	}
+	if res := Validate(c); !res.OK() {
+		t.Fatal(res.Err())
+	}
+}
+
+func TestRemoveMovesContentsUpOneLevel(t *testing.T) {
+	c := nestedConfig()
+	c.RemoveGroup("VMs")
+	if g, _ := c.FindGroup("Lab"); g.Parent != "Serving" {
+		t.Fatalf("subgroup parent = %q, want Serving", g.Parent)
+	}
+	if d, _ := c.Find(phoneMAC); d.Group != "Serving" {
+		t.Fatalf("device group = %q, want Serving", d.Group)
+	}
+	if res := Validate(c); !res.OK() {
+		t.Fatal(res.Err())
+	}
+}
+
+func TestHTTPMovesAGroup(t *testing.T) {
+	h, a := groupsHandler(t, nestedConfig())
+
+	if w := send(t, h, "PUT", "/groups/Lab", `{"parent":""}`); w.Code != http.StatusOK {
+		t.Fatalf("move to top: status %d: %s", w.Code, w.Body)
+	}
+	if g, _ := stored(t, a).FindGroup("Lab"); g.Parent != "" {
+		t.Fatalf("parent = %q", g.Parent)
+	}
+
+	if w := send(t, h, "PUT", "/groups/Serving", `{"parent":"VMs"}`); w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("move inside own child: status %d: %s", w.Code, w.Body)
+	}
+
+	// Absent parent leaves it where it is.
+	if w := send(t, h, "PUT", "/groups/VMs", `{"name":"Machines"}`); w.Code != http.StatusOK {
+		t.Fatalf("rename: status %d", w.Code)
+	}
+	if g, _ := stored(t, a).FindGroup("Machines"); g.Parent != "Serving" {
+		t.Fatalf("rename moved the group: parent = %q", g.Parent)
+	}
+
+	// Create straight into a parent.
+	if w := send(t, h, "PUT", "/groups/Cameras", `{"parent":"Serving"}`); w.Code != http.StatusOK {
+		t.Fatalf("create nested: status %d: %s", w.Code, w.Body)
+	}
+	if g, _ := stored(t, a).FindGroup("Cameras"); g.Parent != "Serving" {
+		t.Fatalf("parent = %q", g.Parent)
+	}
+}

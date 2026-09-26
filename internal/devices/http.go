@@ -66,13 +66,13 @@ func (h HTTP) Routes() []core.Route {
 		// the lock, calling config.go.
 		{
 			Method: "PUT", Path: "/groups/{name}",
-			Summary:  "Create a device group, or rename one by sending a different name in the body.",
+			Summary:  "Create a device group; rename it by sending a different name, or move it inside another by sending a parent.",
 			Mutating: true,
 			Handler:  h.putGroup,
 		},
 		{
 			Method: "DELETE", Path: "/groups/{name}",
-			Summary:  "Remove a device group; its devices become ungrouped.",
+			Summary:  "Remove a device group; its devices and subgroups move up to its parent.",
 			Mutating: true,
 			Handler:  h.deleteGroup,
 		},
@@ -240,14 +240,20 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 
 // groupBody is the body of PUT /groups/{name}. An omitted name means the one in
 // the path, so creating a group does not have to say it twice.
+//
+// Parent is a pointer because absent and empty mean different things: absent
+// leaves the group where it is, and empty moves it to the top.
 type groupBody struct {
-	Name string `json:"name"`
+	Name   string  `json:"name"`
+	Parent *string `json:"parent"`
 }
 
-// putGroup creates a group, or renames one when the body names another.
+// putGroup creates a group, renames one when the body names another, and moves
+// one when the body names a parent.
 //
 // Creating one that already exists is a no-op rather than a conflict: the
-// request says "there should be a group called this", and there is.
+// request says "there should be a group called this", and there is. A move
+// that would put a group inside itself is refused by Validate, with the path.
 func (h HTTP) putGroup(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
@@ -262,22 +268,27 @@ func (h HTTP) putGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.mutate(w, r, func(cfg *Config) error {
-		if to == name {
-			if _, ok := cfg.FindGroup(name); !ok {
-				cfg.UpsertGroup(Group{Name: name})
-			}
-			return nil
-		}
 		if _, ok := cfg.FindGroup(name); !ok {
-			return notFound(fmt.Errorf("there is no group called %q; %s", name, knownGroups(*cfg)))
+			if to != name {
+				return notFound(fmt.Errorf("there is no group called %q; %s", name, knownGroups(*cfg)))
+			}
+			cfg.UpsertGroup(Group{Name: name})
 		}
-		// Changing only the case of a name is a rename too, so the clash check
-		// is on the exact name: "iot" → "IoT" must not collide with itself.
-		if _, taken := cfg.FindGroup(to); taken {
-			return badRequest(fmt.Errorf(
-				"cannot rename %q to %q: there is already a group called %q", name, to, to))
+		if to != name {
+			// Changing only the case of a name is a rename too, so the clash
+			// check is on the exact name: "iot" → "IoT" must not collide with
+			// itself.
+			if _, taken := cfg.FindGroup(to); taken {
+				return badRequest(fmt.Errorf(
+					"cannot rename %q to %q: there is already a group called %q", name, to, to))
+			}
+			cfg.RenameGroup(name, to)
 		}
-		cfg.RenameGroup(name, to)
+		if body.Parent != nil {
+			g, _ := cfg.FindGroup(to)
+			g.Parent = strings.TrimSpace(*body.Parent)
+			cfg.UpsertGroup(g)
+		}
 		return nil
 	})
 }

@@ -663,8 +663,17 @@ is in exactly one, so a policy set on a group never has to be reconciled against
 another group's. Groups cut across networks and are a different concept
 entirely. They need their own word: using one word for both forecloses the
 other, and a rule that applies to "the kids' iPads wherever they connect" is not
-a rule about a network. Not built yet; this word used to be "tag", and exclusive
-membership is what "group" says that "tag" did not.
+a rule about a network. This word used to be "tag", and exclusive membership is
+what "group" says that "tag" did not.
+
+Groups **nest**: a group may sit inside one other group ("VMs" inside
+"Serving"), up to four levels, and a device may sit in a group that also holds
+subgroups. Nesting is cheap *because* membership is exclusive — a device has
+one group and a group one parent, so from any device there is exactly one chain
+upward, and a policy resolves by walking it. Overlapping sets would have needed
+a tie-break at every level; a chain needs none. Built in `devices` as a name
+and a parent on each group and a group name on each device; no group carries a
+policy yet.
 
 ### 4.5 Own the model, never the state
 

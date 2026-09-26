@@ -157,6 +157,43 @@ func validateGroups(c Config, r *Result) {
 		}
 		seen[key] = i
 	}
+
+	for i, g := range c.Groups {
+		if g.Parent == "" {
+			continue
+		}
+		path := fmt.Sprintf("groups[%d].parent", i)
+		if _, ok := c.FindGroup(g.Parent); !ok {
+			r.errorf(path, "there is no group called %q to put %q inside; %s", g.Parent, g.Name, knownGroups(c))
+			continue
+		}
+		if inCycle(c, g.Name) {
+			r.errorf(path, "%q cannot sit inside %q: that would put it inside itself", g.Name, g.Parent)
+			continue
+		}
+		if depth := len(c.Ancestors(g.Name)) + 1; depth > MaxGroupDepth {
+			r.errorf(path, "%q would be %d levels deep; groups nest at most %d levels",
+				g.Name, depth, MaxGroupDepth)
+		}
+	}
+}
+
+// inCycle reports whether walking up from a group ever comes back to a group
+// already passed. Ancestors stops at exactly that repeat, so the walk ended on
+// a cycle when the last group it reached — the group itself, if the chain is
+// empty — still has a parent that exists. A group that is its own parent is
+// the one-step case of the same thing.
+func inCycle(c Config, name string) bool {
+	last := name
+	if chain := c.Ancestors(name); len(chain) > 0 {
+		last = chain[len(chain)-1]
+	}
+	top, _ := c.FindGroup(last)
+	if top.Parent == "" {
+		return false
+	}
+	_, exists := c.FindGroup(top.Parent)
+	return exists
 }
 
 // knownGroups finishes an unknown-group message with the names that would

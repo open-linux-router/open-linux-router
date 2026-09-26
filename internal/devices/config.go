@@ -55,8 +55,25 @@ type Config struct {
 type Group struct {
 	// Name is the key, operator-chosen, and renamable: RenameGroup carries
 	// every member along, so a rename is never a group that quietly emptied.
+	// Unique across every level, not only among siblings, so that a device or
+	// another group can name one without spelling out its path.
 	Name string `json:"name"`
+
+	// Parent names the group this one sits inside, or is empty for a group at
+	// the top.
+	//
+	// Nesting is a tree and cannot be anything else, which is what makes it
+	// cheap: a group has one parent and a device one group, so from any device
+	// there is exactly one chain upward — device, group, its parent, and so on.
+	// That chain is the ladder gateway.md §2.1 describes with more rungs, and
+	// "the nearest rung that says something wins" needs no tie-break on a
+	// chain. Sets that could overlap would have needed one at every level.
+	Parent string `json:"parent,omitempty"`
 }
+
+// MaxGroupDepth bounds nesting. Deeper than this is a filing system rather
+// than a description of a home network, and every level is a row on the map.
+const MaxGroupDepth = 4
 
 // Device is what a human has said about one client on the network.
 //
@@ -182,6 +199,7 @@ func (c *Config) Normalize() {
 	// one would drop whatever made them type the other.
 	for i := range c.Groups {
 		c.Groups[i].Name = strings.TrimSpace(c.Groups[i].Name)
+		c.Groups[i].Parent = strings.TrimSpace(c.Groups[i].Parent)
 	}
 	slices.SortStableFunc(c.Groups, func(a, b Group) int {
 		return strings.Compare(a.Name, b.Name)
@@ -279,6 +297,11 @@ func (c *Config) RenameGroup(from, to string) bool {
 		return false
 	}
 	c.Groups[i].Name = to
+	for j := range c.Groups {
+		if c.Groups[j].Parent == from {
+			c.Groups[j].Parent = to
+		}
+	}
 	for j := range c.Devices {
 		if c.Devices[j].Group == from {
 			c.Devices[j].Group = to
@@ -288,28 +311,53 @@ func (c *Config) RenameGroup(from, to string) bool {
 	return true
 }
 
-// RemoveGroup drops a group and takes its members out of it, reporting whether
-// it existed.
+// RemoveGroup drops a group, reporting whether it existed. What it held moves
+// up one level: its devices and its subgroups go to its parent, or to the top
+// when it had none.
 //
-// Members are released rather than the delete refused, which is the opposite of
+// Up one level rather than out altogether, because deleting "VMs" inside
+// "Serving" says nothing about whether those machines are still serving —
+// only that the operator no longer wants the finer split.
+//
+// Members are moved rather than the delete refused, which is the opposite of
 // what gateway does for an exit still in use. The difference is what a group
-// carries: today it only arranges the map, so emptying it disconnects nothing
-// and the devices simply show as ungrouped. The day a group carries a policy,
-// deleting one changes where its members' traffic goes, and this should refuse
-// the way gateway's Remove does.
+// carries: today it only arranges the map, so moving its members disconnects
+// nothing. The day a group carries a policy, deleting one changes where its
+// members' traffic goes, and this should refuse the way gateway's Remove does.
 func (c *Config) RemoveGroup(name string) bool {
 	i := slices.IndexFunc(c.Groups, func(g Group) bool { return g.Name == name })
 	if i < 0 {
 		return false
 	}
+	parent := c.Groups[i].Parent
 	c.Groups = slices.Delete(c.Groups, i, i+1)
+	for j := range c.Groups {
+		if c.Groups[j].Parent == name {
+			c.Groups[j].Parent = parent
+		}
+	}
 	for j := range c.Devices {
 		if c.Devices[j].Group == name {
-			c.Devices[j].Group = ""
+			c.Devices[j].Group = parent
 		}
 	}
 	c.Normalize()
 	return true
+}
+
+// Ancestors returns the chain above a group, nearest first, stopping short of
+// a cycle or a missing parent rather than looping — Validate is what reports
+// those, and it needs this to terminate in order to.
+func (c Config) Ancestors(name string) []string {
+	var out []string
+	seen := map[string]bool{name: true}
+	g, ok := c.FindGroup(name)
+	for ok && g.Parent != "" && !seen[g.Parent] {
+		out = append(out, g.Parent)
+		seen[g.Parent] = true
+		g, ok = c.FindGroup(g.Parent)
+	}
+	return out
 }
 
 // SetDeviceGroup puts a device in a group, or takes it out of every group when
