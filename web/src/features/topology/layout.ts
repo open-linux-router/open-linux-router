@@ -31,16 +31,26 @@ import type { DeviceRow } from '@/lib/api-types'
  * folded: a network of a few dozen devices is seen whole.
  *
  * **Harmony is a grid.** Every top-level container is the same width, on
- * columns the page shares; every container in a row is the same height; inside
- * each, devices sit in two columns and a subgroup takes the full width. An
- * earlier version sized each container to its contents by scoring shapes, and
- * the result was a row of boxes that were each reasonable and together a mess —
- * no two edges lined up. Uniform is calmer than optimal.
+ * columns the page shares, and the rows of the grid start level. Inside each,
+ * devices are one list, a row apiece and edge to edge, and a subgroup is an
+ * inset box of its own beneath it. An earlier version sized each container to
+ * its contents by scoring shapes, and the result was a row of boxes that were
+ * each reasonable and together a mess — no two edges lined up. Uniform is
+ * calmer than optimal. A container is as tall as its list, though: stretching
+ * a group of one to the height of its neighbour of ten was a card of empty
+ * white.
  *
- * **Lines reach one row.** Groups that fit in one row each get a curve from
- * the router, thickness by traffic. More than one row is drawn as a grid inside
- * one outline with one link, because a line to a second row would have to pass
- * between the cards of the first.
+ * **Lines reach one row, then run down columns.** Each column of the grid gets
+ * a curve from the router into its first container, thickness by the whole
+ * column's traffic, and every container below hangs off the one above it by a
+ * short straight line. No line passes between two cards to reach a third —
+ * which is what a curve from the router to a second-row card would have to do.
+ * An earlier version drew more than one row inside one outline with a single
+ * link into it, which put a box around boxes around lists.
+ *
+ * **Ways out are above the router.** The exits the router sends traffic to are
+ * drawn as their own nodes over it, each with a line down into it: the picture
+ * reads top to bottom as the internet, the router, the house.
  */
 
 export type Density = 'compact' | 'detail'
@@ -54,6 +64,10 @@ export interface NodeSize {
   h: number
   /** Children a container shows before folding the rest. */
   k: number
+  /** A device's height as a row of a container's list. */
+  row: number
+  /** The narrowest a top-level container may be. */
+  list: number
 }
 
 /**
@@ -64,8 +78,8 @@ export interface NodeSize {
  */
 export function nodeSize(density: Density, counting: boolean): NodeSize {
   return density === 'compact'
-    ? { minW: 168, w: 144, maxW: 184, h: 40, k: 16 }
-    : { minW: 208, w: 232, maxW: 288, h: counting ? 68 : 56, k: 10 }
+    ? { minW: 168, w: 144, maxW: 184, h: 40, k: 16, row: 44, list: 248 }
+    : { minW: 208, w: 232, maxW: 288, h: counting ? 68 : 56, k: 10, row: 56, list: 288 }
 }
 
 /** Below this the map stops branching and stacks. */
@@ -130,8 +144,25 @@ export interface Hidden {
 }
 
 export type Item =
-  | { kind: 'group'; key: string; group: MapGroup; box: Box; variant: GroupVariant; open: boolean }
-  | { kind: 'device'; key: string; device: DeviceRow; box: Box }
+  | {
+      kind: 'group'
+      key: string
+      group: MapGroup
+      box: Box
+      variant: GroupVariant
+      open: boolean
+      /** A container inside another, drawn one step quieter. */
+      nested?: boolean
+    }
+  | {
+      kind: 'device'
+      key: string
+      device: DeviceRow
+      box: Box
+      /** Present when the device is a row of a container's list rather than a card of its own. */
+      row?: { first: boolean }
+    }
+  | { kind: 'exit'; key: string; box: Box; name: string }
   | {
       kind: 'more'
       key: string
@@ -161,6 +192,8 @@ export interface Link {
   dashed?: boolean
   /** For links to groups set aside while another is focused. */
   faint?: boolean
+  /** For the line from a way out that is not answering. */
+  fault?: boolean
 }
 
 export interface Rail {
@@ -186,12 +219,13 @@ export interface Layout {
   items: Item[]
   links: Link[]
   rail?: Rail
-  /**
-   * The outline round a wall of groups — drawn when the groups need more than
-   * one row, so the router has one thing to link to. Not a node: it is not
-   * clickable and has nothing of its own to say.
-   */
-  frame?: Box
+}
+
+/** A way out, as the layout needs it: a name, whether it answers, how busy it is. */
+export interface ExitInput {
+  name: string
+  down: boolean
+  weight: number
 }
 
 export interface LayoutInput {
@@ -204,6 +238,8 @@ export interface LayoutInput {
   focus?: string
   counting: boolean
   rated: boolean
+  /** Drawn above the router, in this order. */
+  exits?: ExitInput[]
 }
 
 /** The expansion key of the router's own "+N more groups". */
@@ -212,9 +248,71 @@ export const TOP_KEY = ' top'
 export const fanKey = (key: string) => `fan:${key}`
 
 export function layout(input: LayoutInput): Layout {
-  if (input.width < NARROW) return layoutNarrow(input)
-  if (input.focus && input.tree.byKey.has(input.focus)) return layoutFocus(input, input.focus)
-  return layoutTree(input)
+  const below =
+    input.width < NARROW
+      ? layoutNarrow(input)
+      : input.focus && input.tree.byKey.has(input.focus)
+        ? layoutFocus(input, input.focus)
+        : layoutTree(input)
+  return withExits(below, input)
+}
+
+/* -------------------------------------------------------------------------- */
+/* Ways out                                                                    */
+/* -------------------------------------------------------------------------- */
+
+const EXIT_W = 208
+const EXIT_MIN_W = 150
+export const EXIT_H = 52
+const EXIT_ROW_GAP = 12
+const EXIT_DROP = 48
+
+/**
+ * The ways out, in a row over the router, and everything else moved down to
+ * make room. Done after the rest is laid out rather than inside each layout,
+ * because it is the same band on every one of them: the wide map centres it on
+ * the router, the narrow one starts it at the left edge where the router is.
+ *
+ * Several rows only when one will not hold them, which on a router is a phone
+ * with more than two.
+ */
+function withExits(below: Layout, input: LayoutInput): Layout {
+  const exits = input.exits ?? []
+  if (exits.length === 0) return below
+  const A = input.width
+  const gap = below.narrow ? 12 : 40
+  const perRow = Math.max(1, Math.floor((A + gap) / (EXIT_MIN_W + gap)))
+  const rows = chunk(exits, perRow)
+  const across = Math.min(perRow, exits.length)
+  const w = Math.min(EXIT_W, (A - (across - 1) * gap) / across)
+  const band = rows.length * EXIT_H + (rows.length - 1) * EXIT_ROW_GAP + EXIT_DROP
+
+  const down = (b: Box): Box => ({ ...b, y: b.y + band })
+  const router = down(below.router)
+  const items: Item[] = []
+  const links: Link[] = []
+  const heaviest = Math.max(0, ...exits.map((e) => e.weight))
+  const centre = router.x + router.w / 2
+
+  rows.forEach((row, r) => {
+    const rowW = row.length * w + (row.length - 1) * gap
+    const x0 = below.narrow ? 0 : Math.max(0, Math.min(A - rowW, centre - rowW / 2))
+    row.forEach((e, i) => {
+      const box = { x: x0 + i * (w + gap), y: r * (EXIT_H + EXIT_ROW_GAP), w, h: EXIT_H }
+      items.push({ kind: 'exit', key: `x:${e.name}`, box, name: e.name })
+      links.push(link(`x:${e.name}`, box, router, edgeWidth(e.weight, heaviest, input.rated), { fault: e.down }))
+    })
+  })
+
+  for (const item of below.items) items.push({ ...item, box: down(item.box) } as Item)
+  for (const l of below.links) links.push({ ...l, y0: l.y0 + band, y1: l.y1 + band })
+  const rail = below.rail && {
+    ...below.rail,
+    y0: below.rail.y0 + band,
+    y1: below.rail.y1 + band,
+    dots: below.rail.dots.map((d) => ({ ...d, y: d.y + band })),
+  }
+  return { ...below, height: below.height + band, router, items, links, rail }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -227,7 +325,6 @@ interface Plan {
   w: number
   h: number
   cost: number
-  cols: number
   devices: DeviceRow[]
   /** Subgroups, as rows of plans. */
   shelves: Plan[][]
@@ -249,8 +346,6 @@ interface Ctx {
   cache: Map<string, Plan[]>
 }
 
-const gridSpan = (n: number, size: number, gap: number) => (n > 0 ? n * size + (n - 1) * gap : 0)
-
 function chunk<T>(list: T[], size: number): T[][] {
   const out: T[][] = []
   for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size))
@@ -259,6 +354,43 @@ function chunk<T>(list: T[], size: number): T[][] {
 
 function hintHeight(narrow: boolean) {
   return narrow ? 92 : 56
+}
+
+/** One piece of a container's body. The list runs edge to edge; everything else is inset. */
+type Block =
+  | { kind: 'note'; h: number }
+  | { kind: 'list'; h: number }
+  | { kind: 'shelf'; h: number; shelf: Plan[] }
+  | { kind: 'more'; h: number }
+
+function blocks(plan: Pick<Plan, 'note' | 'devices' | 'shelves' | 'more'>, ctx: Ctx): Block[] {
+  const out: Block[] = []
+  if (plan.note) out.push({ kind: 'note', h: plan.note === 'hint' ? hintHeight(ctx.narrow) : EMPTY_H })
+  if (plan.devices.length > 0) out.push({ kind: 'list', h: plan.devices.length * ctx.node.row })
+  for (const shelf of plan.shelves) out.push({ kind: 'shelf', h: Math.max(...shelf.map((p) => p.h)), shelf })
+  if (plan.more) out.push({ kind: 'more', h: MORE_H })
+  return out
+}
+
+/**
+ * Where each block starts, and how tall the body is. An inset block keeps PAD
+ * from the edges and SUB_GAP from another inset block; the list touches the
+ * body's edges, so a body that is only a list has no padding at all.
+ */
+function stack(list: Block[]): { tops: number[]; h: number } {
+  let y = 0
+  let prev: 'inset' | 'flush' | undefined
+  const tops = list.map((b) => {
+    const kind = b.kind === 'list' ? 'flush' : 'inset'
+    if (kind === 'inset') y += prev === 'inset' ? SUB_GAP : PAD
+    else if (prev === 'inset') y += PAD
+    const top = y
+    y += b.h
+    prev = kind
+    return top
+  })
+  if (prev === 'inset') y += PAD
+  return { tops, h: y }
 }
 
 /**
@@ -283,109 +415,86 @@ function narrowPlan(g: MapGroup, width: number, ctx: Ctx): Plan {
   const note = g.key === ctx.hint ? 'hint' : n === 0 ? 'empty' : undefined
 
   const inner = width - 2 * PAD
-  const cols = sd > 0 ? Math.max(1, Math.floor((inner + GAP) / (node.w + GAP))) : 0
   const subs = g.groups.slice(0, sg).map((sub) => narrowPlan(sub, inner, ctx))
-  const rows = cols > 0 ? Math.ceil(sd / cols) : 0
-  const parts = [
-    gridSpan(rows, node.h, GAP),
-    subs.reduce((t, p) => t + p.h, 0) + Math.max(0, subs.length - 1) * SUB_GAP,
-    note === 'hint' ? hintHeight(true) : note ? EMPTY_H : 0,
-  ].filter((p) => p > 0)
-  let bodyH = parts.reduce((t, p) => t + p, 0) + Math.max(0, parts.length - 1) * SUB_GAP
-  if (more) bodyH += (bodyH > 0 ? GAP : 0) + MORE_H
-  return {
+  const plan: Plan = {
     group: g,
     w: width,
-    h: HEAD + bodyH + PAD,
+    h: 0,
     cost: 0,
-    cols,
     devices: g.devices.slice(0, sd),
     shelves: subs.map((p) => [p]),
     more,
     note,
   }
+  plan.h = HEAD + stack(blocks(plan, ctx)).h
+  return plan
 }
 
 /**
  * Puts a planned container and everything in it at (x, y), `w` wide — which
- * may be wider than the plan, in which case nodes and subgroups stretch to
+ * may be wider than the plan, in which case its list and subgroups stretch to
  * fill it — and at least `minH` tall.
  */
-function place(plan: Plan, x: number, y: number, w: number, minH: number, ctx: Ctx, out: Item[]) {
+function place(plan: Plan, x: number, y: number, w: number, minH: number, ctx: Ctx, out: Item[], nested = false) {
   const { node } = ctx
-  const h = Math.max(plan.h, minH)
+  const body = blocks(plan, ctx)
+  const { tops, h: bodyH } = stack(body)
   out.push({
     kind: 'group',
     key: plan.group.key,
     group: plan.group,
-    box: { x, y, w, h },
+    box: { x, y, w, h: Math.max(HEAD + bodyH, minH) },
     variant: 'container',
     open: ctx.expanded.has(plan.group.key),
+    nested,
   })
 
   const inner = w - 2 * PAD
-  let cy = y + HEAD
-  const gap = () => (cy > y + HEAD ? SUB_GAP : 0)
-
-  // The note leads: a hint about making groups is read before the devices,
-  // and "nothing in it yet" is the whole body anyway.
-  if (plan.note) {
-    const nh = plan.note === 'hint' ? hintHeight(ctx.narrow) : EMPTY_H
-    out.push({ kind: 'note', key: `note:${plan.group.key}`, box: { x: x + PAD, y: cy, w: inner, h: nh }, note: plan.note })
-    cy += nh
-  }
-
-  if (plan.cols > 0) {
-    cy += gap()
-    const fill = (inner - (plan.cols - 1) * GAP) / plan.cols
-    const nw = ctx.narrow ? fill : Math.min(node.maxW, fill)
-    plan.devices.forEach((d, i) => {
-      const col = i % plan.cols
-      const row = Math.floor(i / plan.cols)
-      out.push({
-        kind: 'device',
-        key: `d:${d.mac}`,
-        device: d,
-        box: { x: x + PAD + col * (nw + GAP), y: cy + row * (node.h + GAP), w: nw, h: node.h },
-      })
-    })
-    cy += gridSpan(Math.ceil(plan.devices.length / plan.cols), node.h, GAP)
-  }
-
-  for (const shelf of plan.shelves) {
-    cy += gap()
-    const natural = shelf.reduce((t, p) => t + p.w, 0)
-    const spare = inner - natural - (shelf.length - 1) * SUB_GAP
-    const shelfH = Math.max(...shelf.map((p) => p.h))
-    let sx = x + PAD
-    for (const p of shelf) {
-      // Spare width is shared in proportion, so a shelf fills its container
-      // and the boxes in it keep their relative sizes — but no box grows past
-      // what its own nodes can stretch to fill, because a subgroup of two
-      // stretched across a parent of eight is mostly empty frame. Heights are
-      // evened out so a shelf reads as one row.
-      const reach = p.cols > 0 ? p.cols * node.maxW + (p.cols - 1) * GAP + 2 * PAD : p.w
-      const sw = ctx.narrow
-        ? p.w + (spare * p.w) / natural
-        : Math.min(p.w + (spare * p.w) / natural, Math.max(p.w, reach))
-      place(p, sx, cy, sw, shelfH, ctx, out)
-      sx += sw + SUB_GAP
+  body.forEach((b, i) => {
+    const top = y + HEAD + tops[i]
+    switch (b.kind) {
+      // The note leads: a hint about making groups is read before the
+      // devices, and "nothing in it yet" is the whole body anyway.
+      case 'note':
+        out.push({ kind: 'note', key: `note:${plan.group.key}`, box: { x: x + PAD, y: top, w: inner, h: b.h }, note: plan.note! })
+        break
+      case 'list':
+        plan.devices.forEach((d, j) => {
+          out.push({
+            kind: 'device',
+            key: `d:${d.mac}`,
+            device: d,
+            box: { x, y: top + j * node.row, w, h: node.row },
+            row: { first: j === 0 },
+          })
+        })
+        break
+      case 'shelf': {
+        // Spare width is shared in proportion, so a shelf fills its container
+        // and the boxes in it keep their relative sizes.
+        const natural = b.shelf.reduce((t, p) => t + p.w, 0)
+        const spare = inner - natural - (b.shelf.length - 1) * SUB_GAP
+        let sx = x + PAD
+        for (const p of b.shelf) {
+          const sw = p.w + (spare * p.w) / natural
+          place(p, sx, top, sw, b.h, ctx, out, true)
+          sx += sw + SUB_GAP
+        }
+        break
+      }
+      case 'more':
+        out.push({
+          kind: 'more',
+          key: `more:${plan.group.key}`,
+          box: { x: x + PAD, y: top, w: inner, h: b.h },
+          variant: 'row',
+          target: plan.group.key,
+          open: plan.more!.open,
+          hidden: plan.more!.hidden,
+        })
+        break
     }
-    cy += shelfH
-  }
-
-  if (plan.more) {
-    cy += cy > y + HEAD ? GAP : 0
-    out.push({
-      kind: 'more',
-      key: `more:${plan.group.key}`,
-      box: { x: x + PAD, y: cy, w: inner, h: MORE_H },
-      variant: 'row',
-      target: plan.group.key,
-      open: plan.more.open,
-      hidden: plan.more.hidden,
-    })
-  }
+  })
 }
 
 function makeCtx(input: LayoutInput, narrow: boolean): Ctx {
@@ -425,14 +534,9 @@ function layoutTree(input: LayoutInput): Layout {
   // containers — so two groups are two columns, centred, not two cards pinned
   // to the left of a three-column grid.
   const colMin = containerWidth(ctx)
-  const fitIn = (w: number) => Math.max(1, Math.min(MAX_COLS, Math.floor((w + ROW_GAP) / (colMin + ROW_GAP))))
-  // More than one row is drawn inside an outline, which needs its padding
-  // inside the map's width rather than hanging off both sides of it.
-  const wall = top.length > fitIn(A)
-  const room = wall ? A - 2 * FRAME_PAD : A
-  const fit = fitIn(room)
+  const fit = Math.max(1, Math.min(MAX_COLS, Math.floor((A + ROW_GAP) / (colMin + ROW_GAP))))
   const cols = Math.min(fit, Math.max(1, top.length))
-  const colW = (Math.min(room, fit * COL_MAX + (fit - 1) * ROW_GAP) - (fit - 1) * ROW_GAP) / fit
+  const colW = (Math.min(A, fit * COL_MAX + (fit - 1) * ROW_GAP) - (fit - 1) * ROW_GAP) / fit
   const rows = chunk(top, cols)
 
   // Past SHOW_ALL devices, rows beyond the first fold into "+N more groups"
@@ -444,29 +548,38 @@ function layoutTree(input: LayoutInput): Layout {
 
   const gridW = cols * colW + (cols - 1) * ROW_GAP
   const x0 = (A - gridW) / 2
-  let y = rowY + (wall ? FRAME_PAD : 0)
-  const heaviest = Math.max(0, ...top.map((g) => g.weight))
+  // A line into a column carries the whole column's traffic: everything in it
+  // hangs off that one line.
+  const load = Array.from({ length: cols }, (_, c) =>
+    shownRows.reduce((t, row) => t + Math.max(0, row[c]?.weight ?? 0), 0),
+  )
+  const chained = shownRows.length > 1
+  const heaviest = chained ? Math.max(0, ...load) : Math.max(0, ...top.map((g) => g.weight))
+  const above: Box[] = []
+  let y = rowY
 
   for (const row of shownRows) {
     const plans = row.map((g) => gridPlan(g, colW, ctx))
-    // One height per row, the tallest: the grid reads as rows of equal cards.
-    const rh = Math.max(...plans.map((p) => p.h))
-    // A short last row is centred under the grid rather than left-aligned,
-    // the way a single row is centred under the router.
-    let x = x0 + ((cols - row.length) * (colW + ROW_GAP)) / 2
-    for (const p of plans) {
-      place(p, x, y, colW, rh, ctx, items)
-      if (!wall) {
-        links.push(
-          link(p.group.key, router, { x, y, w: colW, h: rh }, edgeWidth(p.group.weight, heaviest, input.rated), {
-            dashed: tree.grouped && p.group.key === OTHER_KEY,
-          }),
-        )
-      }
+    // A single row is centred under the router. Once there are columns to run
+    // down, a short last row keeps to them instead, so each card sits straight
+    // under the one it hangs from.
+    let x = chained ? x0 : x0 + ((cols - row.length) * (colW + ROW_GAP)) / 2
+    plans.forEach((p, c) => {
+      place(p, x, y, colW, 0, ctx, items)
+      const box = { x, y, w: colW, h: p.h }
+      const dashed = tree.grouped && p.group.key === OTHER_KEY
+      const weight = chained ? load[c] : p.group.weight
+      links.push(
+        above[c]
+          ? link(p.group.key, above[c], box, EDGE_MIN, { dashed })
+          : link(p.group.key, router, box, edgeWidth(weight, heaviest, input.rated), { dashed }),
+      )
+      above[c] = box
       x += colW + ROW_GAP
-    }
-    y += rh + ROW_GAP
+    })
+    y += Math.max(...plans.map((p) => p.h)) + (chained ? CHAIN_GAP_ROWS : ROW_GAP)
   }
+  if (chained) y += ROW_GAP - CHAIN_GAP_ROWS
 
   if (hidden.length > 0 || (openTop && everyone > SHOW_ALL && rows.length > 1)) {
     const box = { x: x0, y, w: gridW, h: MORE_H }
@@ -484,30 +597,20 @@ function layoutTree(input: LayoutInput): Layout {
     y += MORE_H + ROW_GAP
   }
 
-  let frame: Box | undefined
-  if (wall) {
-    // More than one row: one outline round the grid and one link to it. A
-    // line to a second row would have to pass between the cards of the first.
-    frame = { x: x0 - FRAME_PAD, y: rowY, w: gridW + 2 * FRAME_PAD, h: y - ROW_GAP + FRAME_PAD - rowY }
-    const load = top.reduce((t, g) => t + Math.max(0, g.weight), 0)
-    links.push(link('frame', router, frame, edgeWidth(load, load, input.rated)))
-  }
-
-  const out = finish(input, false, router, items, links, !wall && hidden.length === 0 && !anyFold(items))
-  out.frame = frame
-  return out
+  return finish(input, false, router, items, links, hidden.length === 0 && !anyFold(items))
 }
 
 /** Past this many devices, rows of groups after the first start folded. */
 const SHOW_ALL = 80
-const FRAME_PAD = 16
+/** Between rows of containers, where the line from one card down to the next runs. */
+const CHAIN_GAP_ROWS = 32
 /** Containers per row at most, and how wide one may grow. */
 const MAX_COLS = 4
 const COL_MAX = 400
 
-/** The narrowest a container may be: two columns of nodes and its padding. */
+/** The narrowest a container may be: room for its list's names and rates. */
 function containerWidth(ctx: Ctx) {
-  return 2 * ctx.node.w + GAP + 2 * PAD
+  return ctx.node.list
 }
 
 function anyFold(items: Item[]) {
@@ -515,9 +618,8 @@ function anyFold(items: Item[]) {
 }
 
 /**
- * A container at a given width: its devices in two columns (one, if the width
- * cannot take two), then each subgroup as a full-width box of its own, then
- * the fold. Nothing is chosen by score — every container is laid out the same
+ * A container at a given width: its devices as one list, then each subgroup
+ * as a full-width box of its own, then the fold. Nothing is chosen by score — every container is laid out the same
  * way, which is what lets a row of them line up.
  */
 function gridPlan(g: MapGroup, w: number, ctx: Ctx): Plan {
@@ -538,30 +640,21 @@ function gridPlan(g: MapGroup, w: number, ctx: Ctx): Plan {
   const folded = hidden.devices + hidden.groups > 0
   const more = folded ? { hidden, open: false } : userOpen && n > k ? { hidden, open: true } : undefined
 
-  const cols = sd === 0 ? 0 : inner >= 2 * node.minW + GAP || inner >= 2 * node.w + GAP ? 2 : 1
   const subs = g.groups.slice(0, sg).map((sub) => gridPlan(sub, inner, ctx))
-
   const note = g.key === ctx.hint ? 'hint' : n === 0 ? 'empty' : undefined
-  const parts = [
-    note ? (note === 'hint' ? hintHeight(ctx.narrow) : EMPTY_H) : 0,
-    cols > 0 ? gridSpan(Math.ceil(sd / cols), node.h, GAP) : 0,
-    ...subs.map((p) => p.h),
-  ].filter((p) => p > 0)
-  let bodyH = parts.reduce((t, p) => t + p, 0) + Math.max(0, parts.length - 1) * SUB_GAP
-  if (more) bodyH += (bodyH > 0 ? GAP : 0) + MORE_H
-
-  return {
+  const plan: Plan = {
     group: g,
     w,
-    h: HEAD + bodyH + PAD,
+    h: 0,
     cost: 0,
-    cols,
     devices: g.devices.slice(0, sd),
     shelves: subs.map((p) => [p]),
     more,
     note,
     open,
   }
+  plan.h = HEAD + stack(blocks(plan, ctx)).h
+  return plan
 }
 
 /* -------------------------------------------------------------------------- */
@@ -798,7 +891,7 @@ function nothingNote(A: number, y: number): Item {
  * are heading, rather than all from one point: from one point the thick ones
  * lie on top of each other for their first inch.
  */
-function link(key: string, from: Box, to: Box, width: number, opts: { dashed?: boolean; faint?: boolean } = {}): Link {
+function link(key: string, from: Box, to: Box, width: number, opts: { dashed?: boolean; faint?: boolean; fault?: boolean } = {}): Link {
   const px = from.x + from.w / 2
   const cx = to.x + to.w / 2
   const reach = Math.max(0, from.w / 2 - 16)

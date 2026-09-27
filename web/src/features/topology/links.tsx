@@ -14,7 +14,9 @@ import { cn } from '@/lib/utils'
  * interpolate into a path the whole way.
  *
  * Neutral, like everything on the map. Thickness is the traffic; colour would
- * only be a second, weaker way of saying it.
+ * only be a second, weaker way of saying it. The one exception is the one
+ * colour means everywhere else: the line from a way out that is not answering
+ * is red.
  */
 export function Links({ links, rail, transition }: { links: Link[]; rail?: Rail; transition: Transition }) {
   return (
@@ -33,7 +35,7 @@ export function Links({ links, rail, transition }: { links: Link[]; rail?: Rail;
               stroke="currentColor"
               strokeLinecap="round"
               strokeDasharray={l.dashed ? '2 5' : undefined}
-              className={cn(l.faint ? 'text-foreground/12' : 'text-foreground/20')}
+              className={cn(l.fault ? 'text-destructive/60' : l.faint ? 'text-foreground/12' : 'text-foreground/20')}
             />
           )
         })}

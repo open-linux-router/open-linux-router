@@ -1,36 +1,9 @@
-import {
-  AlertTriangle,
-  ArrowDownUp,
-  ChevronRight,
-  Info,
-  MonitorSmartphone,
-  Plus,
-  Search,
-  SearchCheck,
-  Waypoints,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { AlertTriangle, ArrowDown, ArrowUp, Check, ChevronRight, Info } from 'lucide-react'
+import { useState } from 'react'
 import { Link } from 'react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { useDeviceActions } from '@/features/devices/device-actions'
 import { useGroupActions } from '@/features/devices/group-actions'
 import { useDeviceList, useDevicesConfig } from '@/features/devices/queries'
@@ -39,15 +12,11 @@ import { useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
 import { useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
-import { useMapDensity } from '@/features/topology/density'
-import type { Density } from '@/features/topology/layout'
-import { DensityToggle } from '@/features/topology/density-toggle'
-import { NO_NETWORK } from '@/features/topology/model'
+import { shownExits } from '@/features/topology/model'
 import { NetworkMap } from '@/features/topology/network-map'
-import { Rates } from '@/features/topology/nodes'
 import { useTrafficView, type TrafficView } from '@/features/topology/traffic'
-import type { DeviceRow, DhcpStatus, DnsStatus, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
-import { cn, formatBytes } from '@/lib/utils'
+import type { DeviceRow, DhcpStatus, DnsStatus, ExitStatus, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
+import { cn, formatBytes, formatRate } from '@/lib/utils'
 
 /**
  * What the router is doing, on the page you land on.
@@ -58,10 +27,17 @@ import { cn, formatBytes } from '@/lib/utils'
  * fact it held, a way out that had stopped responding, appeared nowhere.
  *
  * The order is what an operator asks in order: is anything wrong, how much is
- * this network doing, and what is on it. Faults first and never merely implied
- * (design.md §5.6); then the counters; then the tree, which is both the only
- * place three modules' answers are joined into one picture and the only place
- * devices are listed.
+ * this network doing, and what is on it. The answer to the first is the
+ * page's headline — one sentence, and when something is wrong it is that
+ * thing, never a reassurance above a list of faults (design.md §5.6); the
+ * faults follow in full. Then the counters; then the map, which is both the
+ * only place three modules' answers are joined into one picture and the only
+ * place devices are listed.
+ *
+ * The map has no toolbar. A search box, a network filter, a density switch and
+ * a New group button sat between the counters and the picture on every visit,
+ * for things done now and then; the picture chooses its own density, a new
+ * group is made from any device's menu, and the other two have their own pages.
  *
  * The tree is organised by the operator's own groups, and is where they are
  * made, renamed and removed: a group only changes this picture, so the picture
@@ -85,37 +61,41 @@ export function OverviewPage() {
   const traffic = useGatewayTraffic()
   const identity = useDevicesConfig()
   const flows = useTrafficView(traffic.data, traffic.isError)
+  const history = useRateHistory(flows)
 
   const actions = useDeviceActions()
   const groupActions = useGroupActions()
-  const [filter, setFilter] = useState('')
-  const [network, setNetwork] = useState('')
-  const [chosen, setDensity] = useMapDensity()
-  // What the map actually drew when left to choose, so the toggle shows the
-  // truth rather than a default the map overrode.
-  const [drawn, setDrawn] = useState<Density>('detail')
-
-  // The filter offers the networks devices are actually on, not every network
-  // the box has: choosing one with nobody on it would only empty the map.
-  const networks = useMemo(() => {
-    const rows = devices.data?.devices ?? []
-    const names = [...new Set(rows.flatMap((d) => (d.network ? [d.network] : [])))].sort()
-    return { names, unplaced: rows.some((d) => d.seen && !d.network) }
-  }, [devices.data])
 
   const faults = collectFaults(dhcp.data, dns.data, gateway.data)
+  // Only a verdict once every module that can raise a fault has answered:
+  // "running smoothly" said before DNS has reported is a guess. And none on a
+  // box where nothing is switched on — there are no faults because nothing is
+  // running, which is what the first-run panel is there to say.
+  const known = Boolean(dhcp.data && dns.data && gateway.data)
+  const idle = known && !dhcp.data!.enabled && !dns.data!.enabled && !gateway.data!.enabled
 
   return (
     <div className="space-y-6">
-      {/* Above the faults, and above the counters, on exactly the boxes where
-          all three are empty. It renders nothing once the router is doing
-          something. */}
+      {/* Above everything, on exactly the boxes where all three are empty. It
+          renders nothing once the router is doing something. */}
       <FirstRun />
+
+      {!idle && (
+        <Headline
+          faults={faults}
+          known={known}
+          devices={devices.data?.devices}
+          exits={gateway.data?.exits}
+          flows={flows}
+        />
+      )}
 
       {faults.map((fault) => (
         <Alert key={fault.key} variant={fault.tone === 'bad' ? 'destructive' : 'default'}>
           <AlertTriangle />
-          <AlertTitle>{fault.title}</AlertTitle>
+          {/* A single fault is already the headline; saying it twice in a
+              row is the page stammering. */}
+          {faults.length > 1 && <AlertTitle>{fault.title}</AlertTitle>}
           <AlertDescription className="space-y-2">
             <p>{fault.detail}</p>
             {fault.to && (
@@ -137,83 +117,128 @@ export function OverviewPage() {
         gateway={gateway.data}
         traffic={traffic.data}
         flows={flows}
+        history={history}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Your network</CardTitle>
-          <CardAction className="flex items-center gap-2">
-            <DensityToggle value={chosen ?? drawn} onChange={setDensity} />
-            <Button variant="outline" size="sm" onClick={() => groupActions.create()}>
-              <Plus aria-hidden /> New group
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3">
-            <div className="relative min-w-0 basis-full sm:flex-1">
-              <Search
-                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden
-              />
-              <Input
-                className="pl-9"
-                placeholder="Search by name, address or hardware"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                aria-label="Search devices"
-              />
-            </div>
-            {/* Networks are a filter now rather than the shape of the map. It
-                only appears once there is more than one thing to choose. */}
-            {networks.names.length + Number(networks.unplaced) > 1 && (
-              <Select value={network || 'all'} onValueChange={(v) => setNetwork(!v || v === 'all' ? '' : v)}>
-                <SelectTrigger className="w-40" aria-label="Network">
-                  <SelectValue>
-                    {(value: string) =>
-                      value === 'all' ? 'All networks' : value === NO_NETWORK ? 'No network' : value
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All networks</SelectItem>
-                  {networks.names.map((n) => (
-                    <SelectItem key={n} value={n}>
-                      <span className="font-mono">{n}</span>
-                    </SelectItem>
-                  ))}
-                  {networks.unplaced && <SelectItem value={NO_NETWORK}>No network</SelectItem>}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
+      <section aria-label="Your network" className="space-y-4 pt-6">
+        <NetworkMap
+          devices={devices.data?.devices ?? []}
+          groups={identity.data?.groups}
+          traffic={flows}
+          assignments={gateway.data?.assignments}
+          exits={gateway.data?.exits}
+          pools={dhcpConfig.data?.pools}
+          pending={devices.isPending}
+          density="auto"
+          onSelect={actions.select}
+          onCreateGroup={groupActions.create}
+          onRenameGroup={groupActions.rename}
+          onDeleteGroup={groupActions.remove}
+          onMoveGroup={groupActions.moveGroup}
+          onMoveDevice={groupActions.move}
+        />
 
-          <NetworkMap
-            devices={devices.data?.devices ?? []}
-            groups={identity.data?.groups}
-            traffic={flows}
-            assignments={gateway.data?.assignments}
-            exits={gateway.data?.exits}
-            pools={dhcpConfig.data?.pools}
-            pending={devices.isPending}
-            filter={filter}
-            network={network}
-            density={chosen ?? 'auto'}
-            onDensity={setDrawn}
-            onSelect={actions.select}
-            onCreateGroup={groupActions.create}
-            onRenameGroup={groupActions.rename}
-            onDeleteGroup={groupActions.remove}
-            onMoveGroup={groupActions.moveGroup}
-            onMoveDevice={groupActions.move}
-          />
-
-          <TrafficNote traffic={traffic.data} failed={traffic.isError} flows={flows} />
-        </CardContent>
-      </Card>
+        <TrafficNote traffic={traffic.data} failed={traffic.isError} flows={flows} />
+      </section>
 
       {actions.dialogs}
       {groupActions.dialogs}
+    </div>
+  )
+}
+
+/**
+ * The page's one sentence: all is well, or the thing that is not.
+ *
+ * One fault is named; several are counted, and the alerts beneath say what
+ * each one is. The live rates sit beside it once there are two readings to
+ * make a rate from — before that there is nothing honest to show there.
+ */
+function Headline({
+  faults,
+  known,
+  devices,
+  exits,
+  flows,
+}: {
+  faults: Fault[]
+  known: boolean
+  devices?: DeviceRow[]
+  exits?: ExitStatus[]
+  flows: TrafficView
+}) {
+  const bad = faults.some((f) => f.tone === 'bad')
+  const title = !known
+    ? undefined
+    : faults.length === 0
+      ? 'Everything’s running smoothly'
+      : faults.length === 1
+        ? faults[0].title
+        : `${faults.length} things need you`
+
+  const here = devices?.filter((d) => d.online).length
+  const ways = shownExits(exits).filter((e) => e.probed)
+  const facts = [
+    devices && `${here} of ${devices.length} ${devices.length === 1 ? 'device' : 'devices'} here`,
+    ways.length > 0 &&
+      `${ways.filter((e) => e.up).length} of ${ways.length} ${ways.length === 1 ? 'way' : 'ways'} out working`,
+  ].filter(Boolean)
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-8 gap-y-5">
+      <div className="flex min-w-0 flex-1 basis-80 items-center gap-4">
+        {title === undefined ? (
+          <Skeleton className="size-12 shrink-0 rounded-full" />
+        ) : (
+          <span
+            className={cn(
+              'flex size-12 shrink-0 items-center justify-center rounded-full',
+              faults.length === 0
+                ? 'bg-success text-white shadow-[0_6px_20px_-4px] shadow-success/60'
+                : bad
+                  ? 'bg-destructive text-white shadow-[0_6px_20px_-4px] shadow-destructive/50'
+                  : 'bg-muted text-foreground',
+            )}
+          >
+            {faults.length === 0 ? (
+              <Check className="size-6" strokeWidth={2.75} aria-hidden />
+            ) : (
+              <AlertTriangle className="size-5.5" aria-hidden />
+            )}
+          </span>
+        )}
+        <div className="min-w-0">
+          {title === undefined ? (
+            <Skeleton className="h-7 w-72 max-w-full" />
+          ) : (
+            <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-[28px]">{title}</h1>
+          )}
+          {facts.length > 0 && <p className="mt-0.5 text-sm text-muted-foreground sm:text-[15px]">{facts.join(' · ')}</p>}
+        </div>
+      </div>
+
+      {flows.rated && (
+        <div className="flex gap-7">
+          <BigRate label="Download" icon={ArrowDown} rate={flows.total.downRate ?? 0} />
+          <BigRate label="Upload" icon={ArrowUp} rate={flows.total.upRate ?? 0} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BigRate({ label, icon: Icon, rate }: { label: string; icon: typeof ArrowDown; rate: number }) {
+  const [value, unit] = formatRate(rate).split(' ')
+  return (
+    <div>
+      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <Icon className="size-3" aria-hidden />
+        {label}
+      </div>
+      <div className="tabular-nums">
+        <span className="text-[28px] leading-9 font-semibold tracking-tight">{value}</span>
+        <span className="ml-1 text-sm text-muted-foreground">{unit}</span>
+      </div>
     </div>
   )
 }
@@ -368,12 +393,36 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
 /* -------------------------------------------------------------------------- */
 
 /**
+ * The total rate at each reading since the page was opened, newest last.
+ *
+ * olrd keeps no history, so this is the only kind of trend the page can draw
+ * honestly: what this tab has itself seen. It starts empty and fills from the
+ * right; nothing before the first reading is drawn, because nothing before it
+ * was measured.
+ */
+const HISTORY = 60
+
+function useRateHistory(flows: TrafficView): number[] {
+  const [seen, setSeen] = useState<{ total: TrafficView['total'] | null; rates: number[] }>({
+    total: null,
+    rates: [],
+  })
+  // Appended during render when a new reading arrives — the same derive-from-
+  // a-changing-value pattern useTrafficView uses, keyed on the total object,
+  // which is new exactly when a new sample was taken.
+  if (flows.rated && flows.total !== seen.total) {
+    const rate = (flows.total.downRate ?? 0) + (flows.total.upRate ?? 0)
+    setSeen({ total: flows.total, rates: [...seen.rates, rate].slice(-HISTORY) })
+  }
+  return flows.counting ? seen.rates : []
+}
+
+/**
  * What the counters say, one tile each.
  *
- * Only what the data supports. There is no history behind any of these — olrd
- * keeps none — so there are no sparklines and no "+12% from last week", however
- * much a dashboard seems to want them. A trend line drawn from nothing would be
- * the one decoration on the page that is also a lie.
+ * Only what the data supports. The one line on the row is the rate as this
+ * tab has watched it (useRateHistory); there is no "+12% from last week",
+ * because there is no last week to compare with.
  */
 function Stats({
   devices,
@@ -381,100 +430,238 @@ function Stats({
   gateway,
   traffic,
   flows,
+  history,
 }: {
   devices?: DeviceRow[]
   dns?: DnsStatus
   gateway?: GatewayStatus
   traffic?: GatewayTraffic
   flows: TrafficView
+  history: number[]
 }) {
   const here = devices?.filter((d) => d.online).length
-  const probed = (gateway?.exits ?? []).filter((e) => e.probed)
-  const working = probed.filter((e) => e.up).length
   const moved = traffic?.usage.reduce((sum, u) => sum + u.up_bytes + u.down_bytes, 0)
+  const ways = shownExits(gateway?.exits)
+  const rate = flows.rated ? formatRate((flows.total.downRate ?? 0) + (flows.total.upRate ?? 0)).split(' ') : undefined
+  const share = dns?.stats && dns.stats.queries > 0 ? dns.stats.blocked / dns.stats.queries : undefined
 
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
       <Stat
-        icon={MonitorSmartphone}
+        label="Traffic"
+        title="Traffic through the router. Devices talking to each other on the same network are not counted."
+        value={
+          rate ? rate[0] : traffic === undefined ? undefined : traffic.counting && moved !== undefined ? formatBytes(moved) : '—'
+        }
+        unit={rate?.[1]}
+        hint={
+          traffic && !traffic.counting
+            ? 'not being counted'
+            : rate && moved !== undefined
+              ? `${formatBytes(moved)} since counting started`
+              : 'since counting started'
+        }
+      >
+        {history.length > 1 && <Sparkline values={history} />}
+      </Stat>
+      <Stat
         label="Devices here"
         value={here === undefined ? undefined : String(here)}
-        hint={devices ? `of ${devices.length} known` : undefined}
-      />
+        unit={devices ? `of ${devices.length}` : undefined}
+      >
+        {devices && devices.length > 0 && <Presence devices={devices} />}
+      </Stat>
       <Stat
-        icon={SearchCheck}
         label="DNS lookups"
         value={dns ? (dns.stats ? dns.stats.queries.toLocaleString() : '—') : undefined}
-        hint={dns?.stats ? `${dns.stats.blocked.toLocaleString()} blocked` : 'not answering'}
-      />
-      <Stat
-        icon={ArrowDownUp}
-        label="Through the router"
-        value={moved === undefined ? undefined : formatBytes(moved)}
         hint={
-          traffic && !traffic.counting ? (
-            'not being counted'
-          ) : flows.rated ? (
-            // The one live figure on the row, and only once two samples exist.
-            <Rates flow={flows.total} />
-          ) : (
-            'since counting started'
-          )
+          dns?.stats
+            ? <>
+                {dns.stats.blocked.toLocaleString()} blocked
+                {/* The ring says the share on a wide tile; a narrow one has no
+                    room for it beside the figure, so there it joins the words. */}
+                {share !== undefined && <span className="sm:hidden"> · {Math.round(share * 100)}%</span>}
+              </>
+            : 'not answering'
         }
+        aside={share !== undefined ? <Ring share={share} /> : undefined}
       />
-      <Stat
-        icon={Waypoints}
-        label="Ways out working"
-        // "0 of 0" reads as broken on a box with nothing to probe, so an
-        // unprobed set says so rather than showing a ratio nobody measured.
-        value={gateway ? (probed.length === 0 ? '—' : `${working} of ${probed.length}`) : undefined}
-        hint={probed.length === 0 ? 'none being checked' : probed.map((e) => e.name).join(', ')}
-        tone={probed.length > 0 && working < probed.length ? 'text-destructive' : undefined}
-      />
-    </div>
-  )
-}
-
-function Stat({
-  icon: Icon,
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  icon: LucideIcon
-  label: string
-  value?: string
-  hint?: React.ReactNode
-  tone?: string
-}) {
-  return (
-    <div className="flex min-w-0 items-start gap-3 rounded-xl border bg-card p-3 sm:p-4">
-      <span className="hidden size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground sm:flex">
-        <Icon className="size-4.5" aria-hidden />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-xs text-muted-foreground">{label}</div>
-        {value === undefined ? (
-          <Skeleton className="mt-1 h-7 w-16" />
-        ) : (
-          <div className={cn('truncate text-2xl leading-8 font-semibold tabular-nums', tone)}>
-            {value}
-          </div>
-        )}
-        {hint && <div className="truncate text-xs text-muted-foreground">{hint}</div>}
-      </div>
+      <Stat label="Ways out" value={gateway ? (ways.length === 0 ? '—' : undefined) : undefined} loading={!gateway}>
+        {gateway &&
+          (ways.length === 0 ? (
+            <div className="mt-auto text-xs text-muted-foreground">none set up</div>
+          ) : (
+            <ExitList exits={ways} />
+          ))}
+      </Stat>
     </div>
   )
 }
 
 /**
- * What the lines and bars are measuring, or why there are none.
+ * One tile. `value` undefined is still loading, unless the tile says it has
+ * something else to show instead of a figure.
+ */
+function Stat({
+  label,
+  title,
+  value,
+  unit,
+  hint,
+  aside,
+  loading = value === undefined,
+  children,
+}: {
+  label: string
+  title?: string
+  value?: string
+  unit?: string
+  hint?: React.ReactNode
+  aside?: React.ReactNode
+  loading?: boolean
+  children?: React.ReactNode
+}) {
+  return (
+    <div
+      title={title}
+      className="relative flex min-h-32 min-w-0 flex-col overflow-hidden rounded-2xl bg-card p-4 shadow-xs ring-1 ring-foreground/[0.07]"
+    >
+      <div className="truncate text-[13px] font-medium text-muted-foreground">{label}</div>
+      {aside && <div className="absolute top-3.5 right-3.5 hidden sm:block">{aside}</div>}
+      {loading ? (
+        <Skeleton className="mt-2 h-8 w-20" />
+      ) : (
+        value !== undefined && (
+          <div className="mt-1 truncate tabular-nums">
+            <span className="text-[28px] leading-9 font-semibold tracking-tight">{value}</span>
+            {unit && <span className="ml-1 text-sm font-medium text-muted-foreground">{unit}</span>}
+          </div>
+        )
+      )}
+      {hint && <div className="relative z-10 truncate text-xs text-muted-foreground">{hint}</div>}
+      {children}
+    </div>
+  )
+}
+
+/**
+ * The rate as this tab has seen it, as a filled line along the tile's foot,
+ * first reading at the left edge and the latest at the right.
+ */
+function Sparkline({ values }: { values: number[] }) {
+  const W = 300
+  const H = 44
+  // Headroom, so the line stays clear of the words above it.
+  const max = Math.max(...values) * 1.6 || 1
+  const pts = values.map((v, i) => [(i / (values.length - 1)) * W, H - 3 - (v / max) * (H - 6)])
+  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
+  const area = `${line} L${W},${H} L${pts[0][0].toFixed(1)},${H} Z`
+  return (
+    <svg
+      aria-hidden
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      className="pointer-events-none absolute inset-x-0 bottom-0 h-10 w-full text-foreground/40"
+    >
+      <path d={area} className="fill-foreground/[0.05]" />
+      <path d={line} fill="none" stroke="currentColor" strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/**
+ * One dot per device, here ones filled. Past a few dozen the dots stop being
+ * countable and become a bar, which says the same share without pretending
+ * each dot can be told apart.
+ */
+function Presence({ devices }: { devices: DeviceRow[] }) {
+  const here = devices.filter((d) => d.online).length
+  if (devices.length > 40) {
+    return (
+      <div className="mt-auto pt-3">
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full bg-success" style={{ width: `${(here / devices.length) * 100}%` }} />
+        </div>
+      </div>
+    )
+  }
+  const sorted = [...devices].sort((a, b) => Number(b.online) - Number(a.online))
+  return (
+    <div className="mt-auto flex flex-wrap gap-1 pt-3">
+      {sorted.map((d) => (
+        <span
+          key={d.mac}
+          title={`${d.name || d.mac}${d.online ? '' : ' — away'}`}
+          className={cn('size-2 rounded-full', d.online ? 'bg-success' : 'bg-muted-foreground/20')}
+        />
+      ))}
+    </div>
+  )
+}
+
+/** The blocked share of lookups. Neutral: blocking is the resolver working, not a fault. */
+function Ring({ share }: { share: number }) {
+  const r = 20
+  const c = 2 * Math.PI * r
+  return (
+    <svg viewBox="0 0 48 48" className="size-12" role="img" aria-label={`${Math.round(share * 100)}% blocked`}>
+      <circle cx="24" cy="24" r={r} fill="none" strokeWidth="4.5" className="stroke-muted" />
+      <circle
+        cx="24"
+        cy="24"
+        r={r}
+        fill="none"
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeDasharray={`${Math.max(share * c, share > 0 ? 2 : 0)} ${c}`}
+        transform="rotate(-90 24 24)"
+        className="stroke-foreground/70"
+      />
+      <text x="24" y="28" textAnchor="middle" className="fill-foreground text-[11px] font-semibold tabular-nums">
+        {Math.round(share * 100)}%
+      </text>
+    </svg>
+  )
+}
+
+/** Each way out and its state, in the same three words the map uses. */
+function ExitList({ exits }: { exits: ExitStatus[] }) {
+  const shown = exits.slice(0, 3)
+  return (
+    <ul className="mt-auto space-y-1.5 pt-3">
+      {shown.map((e) => {
+        const down = e.probed && !e.up
+        return (
+          <li key={e.name} className="flex items-center gap-2 text-sm">
+            <span
+              aria-hidden
+              className={cn(
+                'size-1.5 shrink-0 rounded-full',
+                down ? 'bg-destructive' : e.probed ? 'bg-success' : 'bg-muted-foreground/30',
+              )}
+            />
+            <span className="min-w-0 flex-1 truncate font-medium">{e.name}</span>
+            <span className={cn('shrink-0 text-xs', down ? 'text-destructive' : 'text-muted-foreground')}>
+              {down ? 'not responding' : e.probed ? 'working' : 'not checked'}
+            </span>
+          </li>
+        )
+      })}
+      {exits.length > shown.length && (
+        <li className="text-xs text-muted-foreground">+{exits.length - shown.length} more</li>
+      )}
+    </ul>
+  )
+}
+
+/**
+ * Why the lines carry no traffic, when they do not.
  *
- * Both halves are said out loud. With counting off, the thin uniform edges are
- * "we do not know", and that needs a sentence and a way to fix it; with it on,
- * the numbers are traffic *through the router*, and a NAS busy serving a
- * laptop down the hall would read as idle without the caveat.
+ * Only then. With counting on, the caveat about what is measured — traffic
+ * through the router, not between two devices on one network — is on the
+ * Traffic tile, where the number it qualifies is; a sentence under the map on
+ * every visit saying the numbers were fine was read once and then only
+ * scrolled past.
  */
 function TrafficNote({
   traffic,
@@ -485,32 +672,17 @@ function TrafficNote({
   failed: boolean
   flows: TrafficView
 }) {
-  if (!traffic && !failed) return null
-
-  if (!flows.counting) {
-    return (
-      <p className="flex items-start gap-2 text-xs text-muted-foreground">
-        <Info className="mt-px size-3.5 shrink-0" aria-hidden />
-        <span>
-          {failed
-            ? 'Traffic counts could not be read, so the lines do not show how busy each group is.'
-            : 'Traffic is not being counted, so the lines do not show how busy each group is.'}{' '}
-          <Link to="/gateway/usage" className="font-medium text-foreground underline-offset-4 hover:underline">
-            Usage settings
-          </Link>
-        </span>
-      </p>
-    )
-  }
-
+  if ((!traffic && !failed) || flows.counting) return null
   return (
     <p className="flex items-start gap-2 text-xs text-muted-foreground">
       <Info className="mt-px size-3.5 shrink-0" aria-hidden />
       <span>
-        {flows.rated
-          ? 'Rates are traffic through the router, averaged between the last two readings.'
-          : 'Totals since counting started; rates appear after the next reading.'}{' '}
-        Devices talking to each other on the same network are not counted.
+        {failed
+          ? 'Traffic counts could not be read, so the lines do not show how busy each group is.'
+          : 'Traffic is not being counted, so the lines do not show how busy each group is.'}{' '}
+        <Link to="/gateway/usage" className="font-medium text-foreground underline-offset-4 hover:underline">
+          Usage settings
+        </Link>
       </span>
     </p>
   )

@@ -33,6 +33,9 @@ export interface TrafficView {
 
   /** One device's share: its addresses' rows, summed across every exit. */
   flowOf: (device: DeviceRow) => Flow | undefined
+
+  /** One way out's share: every address's rows through it. */
+  flowOfExit: (exit: string) => Flow | undefined
 }
 
 /**
@@ -77,7 +80,13 @@ export function useTrafficView(data: GatewayTraffic | undefined, failed: boolean
     const cur = samples.cur
     const counting = Boolean(cur?.counting) && !failed
     if (!cur || !counting) {
-      return { counting: false, rated: false, total: { down: 0, up: 0 }, flowOf: () => undefined }
+      return {
+        counting: false,
+        rated: false,
+        total: { down: 0, up: 0 },
+        flowOf: () => undefined,
+        flowOfExit: () => undefined,
+      }
     }
 
     const prev = samples.prev?.counting ? samples.prev : undefined
@@ -90,6 +99,7 @@ export function useTrafficView(data: GatewayTraffic | undefined, failed: boolean
     }
 
     const byAddress = new Map<string, Flow>()
+    const byExit = new Map<string, Flow>()
     const total: Flow = { down: 0, up: 0, downRate: rated ? 0 : undefined, upRate: rated ? 0 : undefined }
 
     for (const u of cur.usage) {
@@ -100,23 +110,18 @@ export function useTrafficView(data: GatewayTraffic | undefined, failed: boolean
       const dUp = was && u.up_bytes >= was.up ? u.up_bytes - was.up : 0
 
       const key = u.address.toLowerCase()
-      const flow = byAddress.get(key) ?? {
-        down: 0,
-        up: 0,
-        downRate: rated ? 0 : undefined,
-        upRate: rated ? 0 : undefined,
-      }
-      flow.down += u.down_bytes
-      flow.up += u.up_bytes
-      total.down += u.down_bytes
-      total.up += u.up_bytes
-      if (rated) {
-        flow.downRate! += dDown / seconds
-        flow.upRate! += dUp / seconds
-        total.downRate! += dDown / seconds
-        total.upRate! += dUp / seconds
+      const flow = byAddress.get(key) ?? empty(rated)
+      const exit = byExit.get(u.exit) ?? empty(rated)
+      for (const f of [flow, exit, total]) {
+        f.down += u.down_bytes
+        f.up += u.up_bytes
+        if (rated) {
+          f.downRate! += dDown / seconds
+          f.upRate! += dUp / seconds
+        }
       }
       byAddress.set(key, flow)
+      byExit.set(u.exit, exit)
     }
 
     const flowOf = (device: DeviceRow): Flow | undefined => {
@@ -129,8 +134,12 @@ export function useTrafficView(data: GatewayTraffic | undefined, failed: boolean
       return found
     }
 
-    return { counting, rated, total, flowOf }
+    return { counting, rated, total, flowOf, flowOfExit: (exit: string) => byExit.get(exit) }
   }, [samples, failed])
+}
+
+function empty(rated: boolean): Flow {
+  return { down: 0, up: 0, downRate: rated ? 0 : undefined, upRate: rated ? 0 : undefined }
 }
 
 function rowKey(address: string, exit: string) {

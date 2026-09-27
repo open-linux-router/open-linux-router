@@ -1,6 +1,6 @@
 import { effectiveParents } from '@/features/devices/group-tree'
 import { magnitude, sumFlows, type Flow, type TrafficView } from '@/features/topology/traffic'
-import type { DeviceRow } from '@/lib/api-types'
+import type { DeviceRow, ExitStatus } from '@/lib/api-types'
 import type { DevicesGroup } from '@/lib/config-types'
 
 /** The network filter's value for devices on none of this router's networks. */
@@ -236,4 +236,13 @@ export function chainTo(tree: MapTree, key: string): MapGroup[] {
     if (out.length > 8) break
   }
   return out
+}
+
+/**
+ * The ways out worth a node: every one that is checked or carries a network.
+ * A blocking exit nothing is assigned to is a setting, not a way out of the
+ * house, and drawing it above the router would put a dead end in the picture.
+ */
+export function shownExits(exits?: ExitStatus[]): ExitStatus[] {
+  return (exits ?? []).filter((e) => e.via !== 'blocked' || (e.used_by?.length ?? 0) > 0)
 }

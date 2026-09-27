@@ -1,14 +1,17 @@
 import {
   ArrowDown,
   ArrowUp,
+  Ban,
   ChevronDown,
   ChevronUp,
   FolderInput,
   FolderPlus,
+  Globe,
   Layers,
   MoreHorizontal,
   Pencil,
   Plus,
+  Route,
   Router,
   Tag,
   Trash2,
@@ -34,7 +37,7 @@ import { groupOptions, MAX_GROUP_DEPTH, parentChoices } from '@/features/devices
 import type { Density, GroupVariant, Hidden } from '@/features/topology/layout'
 import type { MapGroup } from '@/features/topology/model'
 import { magnitude, type Flow, type TrafficView } from '@/features/topology/traffic'
-import type { DeviceRow } from '@/lib/api-types'
+import type { DeviceRow, ExitStatus } from '@/lib/api-types'
 import type { DevicesGroup } from '@/lib/config-types'
 import { cn, formatBytes, formatRate } from '@/lib/utils'
 
@@ -70,10 +73,12 @@ export interface NetworkInfo {
  */
 export function RouterNode({ networks, traffic }: { networks: NetworkInfo[]; traffic: TrafficView }) {
   return (
-    <div className="min-w-60 rounded-xl border bg-card px-4 py-3 shadow-xs">
+    <div className="min-w-60 rounded-2xl border bg-card px-4 py-3 shadow-sm">
       <div className="flex items-center gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-          <Router className="size-4.5 text-foreground/80" aria-hidden />
+        {/* The one dark tile on the map: this box is the hardware, everything
+            else is a list of what it serves. */}
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-foreground text-background">
+          <Router className="size-5" aria-hidden />
         </span>
         <div className="min-w-0">
           <div className="text-sm font-semibold">This router</div>
@@ -127,6 +132,61 @@ function NetworkChip({ network: n }: { network: NetworkInfo }) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Ways out                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A way out, above the router: its name, whether it answers, and how much is
+ * going through it.
+ *
+ * The three states are the three the gateway can actually report — answering,
+ * not answering, and never checked — and the third is said in words rather
+ * than drawn as a green it has not earned (design.md §5.6). What uses it is on
+ * hover: the line into the router already says it is in use, and a list of
+ * networks on every node was small print.
+ */
+export function ExitNode({ exit, flow, rated }: { exit?: ExitStatus; flow?: Flow; rated: boolean }) {
+  if (!exit) return null
+  const down = exit.probed && !exit.up
+  const Icon = exit.via === 'blocked' ? Ban : exit.via === 'next_hop' ? Route : Globe
+  const users = exit.used_by ?? []
+  const busy = rated && flow && (flow.downRate ?? 0) + (flow.upRate ?? 0) >= 1
+  return (
+    <div
+      title={users.length ? `Used by ${users.join(', ')}` : 'Nothing goes out this way'}
+      className={cn(
+        'flex size-full items-center gap-3 rounded-2xl border bg-card pr-4 pl-2.5 shadow-xs',
+        down && 'border-destructive/50',
+      )}
+    >
+      <span
+        className={cn(
+          'flex size-8 shrink-0 items-center justify-center rounded-full',
+          down ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground/75',
+        )}
+      >
+        <Icon className="size-4" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-sm font-semibold">{exit.name}</span>
+          <span
+            aria-hidden
+            className={cn(
+              'size-1.5 shrink-0 rounded-full',
+              down ? 'bg-destructive' : exit.probed ? 'bg-success' : 'bg-muted-foreground/30',
+            )}
+          />
+        </div>
+        <div className={cn('truncate text-xs', down ? 'text-destructive' : 'text-muted-foreground')}>
+          {down ? 'Not responding' : busy ? <Rates flow={flow} neutral /> : exit.probed ? 'Working' : 'Not checked'}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
 /* Groups                                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -146,6 +206,7 @@ function NetworkChip({ network: n }: { network: NetworkInfo }) {
 export function GroupNode({
   group,
   variant,
+  nested,
   dashed,
   groups,
   actions,
@@ -153,6 +214,8 @@ export function GroupNode({
 }: {
   group: MapGroup
   variant: GroupVariant
+  /** A container inside another: its list sits on a quieter fill. */
+  nested?: boolean
   /** For the bucket beside the operator's groups, which is not one of them. */
   dashed: boolean
   groups: DevicesGroup[]
@@ -203,12 +266,31 @@ export function GroupNode({
     <section
       aria-label={group.title}
       className={cn(
-        '@container relative size-full rounded-xl border',
-        focused ? 'bg-card shadow-sm ring-1 ring-foreground/5' : 'bg-foreground/[0.025] dark:bg-foreground/[0.035]',
-        dashed && 'border-dashed',
+        '@container relative size-full',
+        focused && 'rounded-xl border bg-card shadow-sm ring-1 ring-foreground/5',
+        focused && dashed && 'border-dashed',
       )}
     >
-      <div className={cn('relative flex h-10 items-center gap-2 pl-3.5', focused && !bucket ? 'pr-2' : 'pr-3.5')}>
+      {/* The title sits above the list, not inside a frame round it: a
+          container is its list, and a box round a box round rows was the
+          nesting the eye had to count its way out of. */}
+      {!focused && (
+        <div
+          aria-hidden
+          className={cn(
+            'absolute inset-x-0 top-10 bottom-0 rounded-xl',
+            nested ? 'bg-muted/60 dark:bg-muted/40' : 'bg-card shadow-xs ring-1 ring-foreground/[0.07]',
+            dashed && 'border border-dashed bg-transparent shadow-none ring-0',
+          )}
+        />
+      )}
+      <div
+        className={cn(
+          'relative flex h-10 items-center gap-2',
+          focused ? 'pl-3.5' : 'pl-1.5',
+          focused && !bucket ? 'pr-2' : 'pr-3.5',
+        )}
+      >
         {/* The whole header is the button, with the menu stacked above it —
             a button inside a button is not allowed, and a title that is the
             only click target is a small one. */}
@@ -217,8 +299,8 @@ export function GroupNode({
           onClick={onFocus}
           aria-label={focused ? `Back to every group` : `Focus ${group.title}`}
           className={cn(
-            'absolute inset-0 rounded-[inherit] transition-colors hover:bg-foreground/[0.03]',
-            focused ? 'rounded-xl' : 'rounded-t-xl',
+            'absolute inset-0 transition-colors hover:bg-foreground/[0.03]',
+            focused ? 'rounded-xl' : 'rounded-lg',
             focusRing,
           )}
         />
@@ -226,7 +308,12 @@ export function GroupNode({
             made the map a wall of small print; the line into the card says
             how busy it is, and what can be done to a group is offered once
             somebody has chosen it, by focusing. */}
-        <div className="pointer-events-none relative min-w-0 flex-1 truncate text-[13px] font-medium">
+        <div
+          className={cn(
+            'pointer-events-none relative min-w-0 flex-1 truncate',
+            focused || nested ? 'text-[13px] font-medium' : 'text-[15px] font-semibold tracking-tight',
+          )}
+        >
           {group.title}
         </div>
         {focused && !bucket && <GroupMenu group={group} groups={groups} actions={actions} />}
@@ -349,6 +436,7 @@ function GroupMenu({ group, groups, actions }: { group: MapGroup; groups: Device
 export function DeviceNode({
   device,
   density,
+  row,
   traffic,
   busiest,
   groups,
@@ -356,6 +444,8 @@ export function DeviceNode({
 }: {
   device: DeviceRow
   density: Density
+  /** Drawn as a row of its container's list rather than as a card of its own. */
+  row?: { first: boolean }
   traffic: TrafficView
   busiest: number
   groups: DevicesGroup[]
@@ -366,6 +456,58 @@ export function DeviceNode({
   const flow = traffic.flowOf(device)
   const share = busiest > 0 ? magnitude(flow, traffic.rated) / busiest : 0
   const open = onSelect ? () => onSelect(device) : undefined
+
+  if (row) {
+    return (
+      <div className="group/node relative size-full px-1 py-0.5">
+        {/* Hairlines between rows, inset past the icon the way a settings list
+            draws them, and none above the first. */}
+        {!row.first && <span aria-hidden className="absolute top-0 right-0 left-[60px] h-px bg-border/70" />}
+        <Shell
+          onClick={open}
+          title={name}
+          className={cn(
+            'flex size-full min-w-0 items-center gap-3 rounded-lg px-3 text-left transition-colors',
+            onSelect && 'hover:bg-foreground/[0.035]',
+            focusRing,
+          )}
+        >
+          <DeviceIcon
+            category={device.category}
+            vendor={device.vendor}
+            vendorKey={device.vendor_key}
+            online={device.online}
+            size="sm"
+          />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className={cn('truncate text-sm font-medium', !device.online && 'text-muted-foreground')}>
+              {name}
+            </span>
+            {density === 'detail' && <Address device={device} />}
+          </span>
+          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+            {/* Away is said in words beside the dimmed name, so presence is
+                never colour alone — and a green dot on every row that is fine
+                was the one mark on the list that said nothing. */}
+            {!device.online ? (
+              <span className="text-muted-foreground/70">{device.seen ? 'away' : 'never seen'}</span>
+            ) : traffic.counting ? (
+              <DeviceTraffic flow={flow} rated={traffic.rated} />
+            ) : null}
+          </span>
+        </Shell>
+        {onMoveDevice && (
+          <DeviceMenu
+            device={device}
+            groups={groups}
+            onSelect={onSelect}
+            onMove={onMoveDevice}
+            onCreateGroup={actions.onCreateGroup}
+          />
+        )}
+      </div>
+    )
+  }
 
   const shell = cn(
     'flex size-full min-w-0 items-center rounded-lg border bg-card text-left shadow-xs transition-[border-color,box-shadow]',
@@ -434,7 +576,15 @@ export function DeviceNode({
   return (
     <div className="group/node relative size-full">
       {body}
-      {onMoveDevice && <DeviceMenu device={device} groups={groups} onSelect={onSelect} onMove={onMoveDevice} />}
+      {onMoveDevice && (
+        <DeviceMenu
+          device={device}
+          groups={groups}
+          onSelect={onSelect}
+          onMove={onMoveDevice}
+          onCreateGroup={actions.onCreateGroup}
+        />
+      )}
     </div>
   )
 }
@@ -521,11 +671,14 @@ function DeviceMenu({
   groups,
   onSelect,
   onMove,
+  onCreateGroup,
 }: {
   device: DeviceRow
   groups: DevicesGroup[]
   onSelect?: (device: DeviceRow) => void
   onMove: (device: DeviceRow, group: string) => void
+  /** Where a new top-level group is made, now that the map has no toolbar. */
+  onCreateGroup?: (parent?: string) => void
 }) {
   const options = groupOptions(groups)
   return (
@@ -573,6 +726,14 @@ function DeviceMenu({
                 <DropdownMenuSeparator />
                 <DropdownMenuRadioItem value="">No group</DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
+            )}
+            {onCreateGroup && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => onCreateGroup()}>
+                  <FolderPlus /> New group…
+                </DropdownMenuItem>
+              </>
             )}
           </DropdownMenuSubContent>
         </DropdownMenuSub>

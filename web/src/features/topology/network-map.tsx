@@ -5,9 +5,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useInterfaces } from '@/features/link/queries'
 import { layout, type Box, type Density, type Item, type Layout } from '@/features/topology/layout'
 import { Links } from '@/features/topology/links'
-import { buildTree } from '@/features/topology/model'
+import { buildTree, shownExits } from '@/features/topology/model'
 import {
   DeviceNode,
+  ExitNode,
   GroupNode,
   MoreNode,
   NoteNode,
@@ -21,9 +22,9 @@ import type { AssignmentStatus, DeviceRow, ExitStatus, NetworkRow } from '@/lib/
 import type { DevicesGroup, Pool } from '@/lib/config-types'
 
 /**
- * The network, drawn top-down: this router, then the operator's groups as
- * containers, then the devices in each — and groups inside groups as
- * containers inside containers.
+ * The network, drawn top-down: the ways out, this router, then the operator's
+ * groups as lists of their devices — and groups inside groups as lists inside
+ * lists.
  *
  * It is organised by *group*, not by network. A network is how a device is
  * attached; a group is what the operator thinks it is for ("Serving",
@@ -95,11 +96,12 @@ export function NetworkMap({
     () => buildNetworks(all, assignments, exits, pools, networkRows),
     [all, assignments, exits, pools, networkRows],
   )
+  const ways = useMemo(() => shownExits(exits), [exits])
 
   if (pending) {
     return (
-      <div className="flex flex-col items-center gap-16">
-        <Skeleton className="h-16 w-60 rounded-xl" />
+      <div className="flex flex-col items-center gap-12">
+        <Skeleton className="h-16 w-60 rounded-2xl" />
         <div className="flex w-full justify-center gap-4">
           <Skeleton className="h-56 w-72 rounded-xl" />
           <Skeleton className="h-56 w-72 rounded-xl" />
@@ -115,6 +117,7 @@ export function NetworkMap({
       groups={groups}
       traffic={traffic}
       networks={networks}
+      exits={ways}
       filter={filter}
       network={network}
       density={density}
@@ -145,6 +148,7 @@ function Canvas({
   groups,
   traffic,
   networks,
+  exits,
   filter,
   network,
   density: wanted,
@@ -155,6 +159,7 @@ function Canvas({
   groups: DevicesGroup[]
   traffic: TrafficView
   networks: NetworkInfo[]
+  exits: ExitStatus[]
   filter: string
   network: string
   density: Density | 'auto'
@@ -224,6 +229,16 @@ function Canvas({
   }, [width, settled])
   const transition = settled && !reduced ? MOVE : STILL
 
+  const exitInput = useMemo(
+    () =>
+      exits.map((e) => ({
+        name: e.name,
+        down: e.probed && !e.up,
+        weight: magnitude(traffic.flowOfExit(e.name), traffic.rated),
+      })),
+    [exits, traffic],
+  )
+
   const [geo, density] = useMemo((): [Layout | null, Density] => {
     if (width === 0) return [null, wanted === 'auto' ? 'detail' : wanted]
     const at = (d: Density, f = focus) =>
@@ -236,6 +251,7 @@ function Canvas({
         focus: f,
         counting: traffic.counting,
         rated: traffic.rated,
+        exits: exitInput,
       })
     if (wanted !== 'auto') return [at(wanted), wanted]
     // Decided on the unfocused map. Opening a "+N more" does not count against detail either: it is the
@@ -247,7 +263,7 @@ function Canvas({
     const whole = at('detail', undefined)
     const d: Density = !whole.narrow && !focus && (whole.fits || expanded.size > 0) ? 'detail' : 'compact'
     return [d === 'detail' ? whole : at(d), d]
-  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated])
+  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated, exitInput])
 
   useEffect(() => {
     onDensity?.(density)
@@ -279,6 +295,7 @@ function Canvas({
           <GroupNode
             group={item.group}
             variant={item.variant}
+            nested={item.nested}
             dashed={item.group.name === undefined && tree.grouped}
             groups={groups}
             actions={actions}
@@ -290,6 +307,7 @@ function Canvas({
           <DeviceNode
             device={item.device}
             density={density}
+            row={item.row}
             traffic={traffic}
             busiest={busiest}
             groups={groups}
@@ -311,6 +329,14 @@ function Canvas({
         return <PickNode groups={item.groups} onFocus={setFocus} />
       case 'note':
         return <NoteNode note={item.note} filtering={tree.filtering} onCreateGroup={actions.onCreateGroup} />
+      case 'exit':
+        return (
+          <ExitNode
+            exit={exits.find((e) => e.name === item.name)}
+            flow={traffic.flowOfExit(item.name)}
+            rated={traffic.rated}
+          />
+        )
     }
   }
 
@@ -332,19 +358,6 @@ function Canvas({
         animate={{ height: geo?.height ?? 160 }}
         transition={transition}
       >
-        <AnimatePresence initial={false}>
-          {geo?.frame && (
-            <motion.div
-              key="frame"
-              aria-hidden
-              className="pointer-events-none absolute top-0 left-0 rounded-2xl border bg-muted/25"
-              initial={{ opacity: 0, x: geo.frame.x, y: geo.frame.y, width: geo.frame.w, height: geo.frame.h }}
-              animate={{ opacity: 1, x: geo.frame.x, y: geo.frame.y, width: geo.frame.w, height: geo.frame.h }}
-              exit={{ opacity: 0, transition: { duration: 0.15 } }}
-              transition={transition}
-            />
-          )}
-        </AnimatePresence>
         {geo && <Links links={geo.links} rail={geo.rail} transition={transition} />}
 
         <motion.div
@@ -353,7 +366,7 @@ function Canvas({
           className="absolute top-0 left-0 z-10"
           style={{ maxWidth: width || undefined }}
           initial={false}
-          animate={{ x: geo?.router.x ?? 0, opacity: geo ? 1 : 0 }}
+          animate={{ x: geo?.router.x ?? 0, y: geo?.router.y ?? 0, opacity: geo ? 1 : 0 }}
           transition={transition}
         >
           <RouterNode networks={networks} traffic={traffic} />
