@@ -9,17 +9,21 @@ import (
 )
 
 // Icon is a picture an operator chose for a device, overriding the one its
-// category and vendor would pick. Two shapes are legal:
+// category and vendor would pick. Four shapes are legal:
 //
-//	<vendor>/<category>   a vendor's take on a kind of device: "apple/laptop"
-//	os/<system>           an operating system's mark: "os/debian"
+//	<vendor>/<category>             a vendor's take on a kind of device: "apple/laptop"
+//	<category>/<variant>            one form of a kind of device: "nas/4bay"
+//	<vendor>/<category>/<variant>   one form of a vendor's take: "apple/desktop/mini"
+//	os/<system>                     an operating system's mark: "os/debian"
 //
 // The first is the answer to randomised MACs. A modern phone or laptop hides
 // its maker from the registry, so the Apple pictures a detected vendor would
 // select are unreachable for exactly the devices most likely to be Apple ones;
 // letting the operator say so is the only way to get there. The second is for
 // machines better known by what they run — a Proxmox host, a Debian VM — where
-// a generic server picture says less than the logo does.
+// a generic server picture says less than the logo does. A variant is for a
+// kind of device that comes in shapes too different to share one picture: a
+// NAS with eight bays is not the two-bay box, and a Mac mini is not an iMac.
 //
 // Closed on both halves, like Category and VendorKey, so a stored icon always
 // names something the UI can resolve or deliberately fall back from. Whether a
@@ -42,6 +46,15 @@ var operatingSystems = []string{
 	"freebsd", "proxmox", "openwrt", "raspberrypi",
 }
 
+// variants is the vocabulary of variant pictures, keyed by what they are a
+// variant *of*: a category, or a vendor's take on one. Closed like the rest,
+// and deliberately no wider than the artwork: a variant is a *shape*, so one
+// nobody has drawn would be a word with no picture behind it.
+var variants = map[string][]string{
+	"nas":           {"4bay", "5bay", "6bay", "8bay"},
+	"apple/desktop": {"mini", "studio"},
+}
+
 // OperatingSystems returns the OS vocabulary in display order.
 func OperatingSystems() []string {
 	return slices.Clone(operatingSystems)
@@ -62,10 +75,25 @@ func (i Icon) Validate() error {
 		return nil
 	}
 
-	vendor, category, ok := strings.Cut(s, "/")
-	if !ok {
-		return fmt.Errorf("icon %q is neither <vendor>/<category> nor os/<system>", s)
+	parts := strings.Split(s, "/")
+	if len(parts) == 2 && parts[0] != "" && Category(parts[0]).Valid() {
+		return validateVariant(s, parts[0], parts[1])
 	}
+	if len(parts) == 3 {
+		base := parts[0] + "/" + parts[1]
+		if err := validateVendorCategory(s, parts[0], parts[1]); err != nil {
+			return err
+		}
+		return validateVariant(s, base, parts[2])
+	}
+	if len(parts) != 2 {
+		return fmt.Errorf("icon %q is none of <vendor>/<category>, <category>/<variant>, "+
+			"<vendor>/<category>/<variant> or os/<system>", s)
+	}
+	return validateVendorCategory(s, parts[0], parts[1])
+}
+
+func validateVendorCategory(s, vendor, category string) error {
 	if !slices.Contains(VendorKeys(), VendorKey(vendor)) {
 		return fmt.Errorf("unknown vendor %q in icon %q", vendor, s)
 	}
@@ -74,6 +102,18 @@ func (i Icon) Validate() error {
 	if c := Category(category); c == "" || c == CategoryUnknown || !c.Valid() {
 		return fmt.Errorf("icon %q needs a category after the vendor; valid values are %s",
 			s, joinCategories())
+	}
+	return nil
+}
+
+func validateVariant(s, base, variant string) error {
+	known, ok := variants[base]
+	if !ok {
+		return fmt.Errorf("icon %q: %q has no variants", s, base)
+	}
+	if !slices.Contains(known, variant) {
+		return fmt.Errorf("unknown variant %q in icon %q; valid values are %s",
+			variant, s, strings.Join(known, ", "))
 	}
 	return nil
 }
@@ -87,9 +127,11 @@ func (Icon) JSONSchema() *jsonschema.Schema {
 		Title: "Device picture",
 		Description: "A picture chosen for this device, overriding the one its " +
 			"category and vendor would pick: <vendor>/<category> such as " +
-			"\"apple/laptop\", or os/<system> such as \"os/debian\". Empty " +
+			"\"apple/laptop\", optionally followed by /<variant> such as " +
+			"\"apple/desktop/mini\", <category>/<variant> such as \"nas/4bay\", " +
+			"or os/<system> such as \"os/debian\". Empty " +
 			"means the picture follows category and vendor.",
-		Pattern: `^$|^[a-z0-9-]+/[a-z0-9]+$`,
+		Pattern: `^$|^[a-z0-9-]+/[a-z0-9]+(/[a-z0-9]+)?$`,
 		Default: "",
 	}
 }

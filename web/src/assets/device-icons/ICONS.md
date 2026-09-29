@@ -39,6 +39,18 @@ tile instead — see `vendorInitials` in `features/devices/icons.ts`. That also
 covers all thirty thousand vendors in the IEEE registry rather than the few
 dozen anyone will ever draw, which no set of assets can.
 
+**Variants — one shape of a kind.** Some kinds of device come in shapes too
+different to share a picture: an eight-bay NAS is not the two-bay box, and a
+Mac mini is not the iMac that `apple/desktop` draws. A variant is keyed under
+what it is a shape *of* — `nas/4bay`, `apple/desktop/mini` — and the list is
+closed, in `variants` in `internal/devices/icon.go` and hand-mirrored as
+`VariantKey` in `features/devices/icons.ts`. Detection never picks one; only an
+operator does, from the picker, where brandless variants sit beside their
+category's tile and vendor ones among the brands. Drawn like the tier they
+belong to — a brandless variant is tier 1, Apple's is tier 1.5 — and changed
+from its base in exactly one respect: the NAS set is one prompt with the bay
+count swapped, so the family reads as one product line.
+
 **Tier 2 — model image.** One per specific product, e.g. `synology/ds224plus`,
 overriding its vendor and category icons. **Never text-to-image**: a prompt for
 "Synology DS224+" yields a convincing two-bay NAS that is not a DS224+, and an
@@ -192,12 +204,17 @@ against.
    - **A large screen** (TV, monitor): end the subject with *"The gradient is
      only inside the screen; everything around it is plain pure white."* Without
      it, the first TV came back with the wallpaper as its background.
+     A TV is drawn **wall-mounted, with no stand** — a flat panel with thin
+     even bezels, the way a Sony Bravia hangs. The first set had a pedestal
+     stand, which looked dated: say *"no stand, no feet, nothing below
+     the screen"* or the generator adds one.
 
    The background is white rather than transparent because the generator we
    use rejects the transparency option. The optimiser removes it; see step 2.
 
 2. **Optimise** it into this directory, named exactly after the category, or
-   `<vendor>-<category>` for a vendor icon:
+   `<vendor>-<category>` for a vendor icon, with `-<variant>` appended for a
+   variant (`nas-4bay`, `apple-desktop-mini`):
 
    ```
    node scripts/optimize-icons.mjs <dir-of-masters>
@@ -212,7 +229,9 @@ against.
 3. **Register it** — one line in `IMAGES` in `../../features/devices/icons.ts`.
    A vendor icon is registered under its slash form, `'apple/laptop': appleLaptop`,
    which is what the `IconKey` type checks; the file itself cannot contain a
-   slash, hence the hyphen on disk.
+   slash, hence the hyphen on disk. A
+   variant also needs its name in `variants` in `internal/devices/icon.go`
+   and in `VariantKey`, or the stored value is rejected.
 
 Nothing here is required. A category with no image falls back to its line glyph
 while still showing its own correct label; a vendor with no image falls back to

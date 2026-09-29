@@ -7,6 +7,7 @@ import {
   OS_KEYS,
   OS_MARKS,
   categoryLabel,
+  variantChoices,
 } from '@/features/devices/icons'
 import type { DeviceCategory } from '@/lib/config-types'
 import { cn } from '@/lib/utils'
@@ -25,10 +26,12 @@ export interface IconChoice {
  * is a guess-and-check loop. Showing the pictures makes the choice the same
  * shape as the result.
  *
- * Three kinds of tile, and what each one stores is the whole design:
+ * Four kinds of tile, and what each one stores is the whole design:
  *
  *   - **A category** sets the category and clears any chosen icon, so the
  *     picture goes back to following category and vendor.
+ *   - **A variant** — a 4-bay NAS — sets both too, and sits beside its
+ *     category's own tile, where someone looking for their NAS will look.
  *   - **A vendor's picture** — iPhone, MacBook — sets both: an iPhone *is* a
  *     phone, and the label should say so. This is the only road to the Apple
  *     pictures for a device whose randomised MAC hides who made it, which is
@@ -82,7 +85,7 @@ export function CategoryPicker({
 
       {CATEGORY_GROUPS.map((group) => (
         <Section key={group.label} label={group.label}>
-          {group.categories.map((category) => (
+          {group.categories.flatMap((category) => [
             <Tile
               key={category}
               label={categoryLabel(category)}
@@ -90,8 +93,18 @@ export function CategoryPicker({
               onClick={() => onChange({ category, icon: '' })}
             >
               <DeviceIcon category={category} size="md" />
-            </Tile>
-          ))}
+            </Tile>,
+            ...variantChoices(category).map((choice) => (
+              <Tile
+                key={choice.icon}
+                label={choice.label}
+                selected={value.icon === choice.icon}
+                onClick={() => onChange({ category: choice.category, icon: choice.icon })}
+              >
+                <DeviceIcon icon={choice.icon} category={choice.category} size="md" />
+              </Tile>
+            )),
+          ])}
         </Section>
       ))}
 

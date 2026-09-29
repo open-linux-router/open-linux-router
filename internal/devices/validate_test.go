@@ -143,21 +143,27 @@ func problemStrings(ps []Problem) string {
 }
 
 func TestValidateIcons(t *testing.T) {
-	for _, icon := range []Icon{"", "apple/laptop", "apple/phone", "os/debian", "os/proxmox", "huawei/laptop"} {
+	for _, icon := range []Icon{"", "apple/laptop", "apple/phone", "os/debian", "os/proxmox", "huawei/laptop",
+		"nas/4bay", "nas/8bay", "apple/desktop/mini", "apple/desktop/studio"} {
 		cfg := Config{Devices: []Device{{MAC: "aa:bb:cc:dd:ee:ff", Icon: icon}}}
 		if res := Validate(cfg); !res.OK() {
 			t.Errorf("Validate rejected icon %q: %s", icon, problemStrings(res.Errors))
 		}
 	}
 	for _, icon := range []Icon{
-		"apple",          // a vendor with no kind of thing is what ICONS.md refuses to draw
-		"apple/unknown",  // the same, spelled out
-		"apple/toaster",  // not a category
-		"acme/laptop",    // not a vendor we know
-		"os/beos",        // not an OS we have a mark for
-		"os/",            // nothing after the prefix
-		"../etc/passwd",  // not a vendor either, and must never reach a path
-		"apple/laptop/x", // one slash only
+		"apple",                // a vendor with no kind of thing is what ICONS.md refuses to draw
+		"apple/unknown",        // the same, spelled out
+		"apple/toaster",        // not a category
+		"acme/laptop",          // not a vendor we know
+		"os/beos",              // not an OS we have a mark for
+		"os/",                  // nothing after the prefix
+		"../etc/passwd",        // not a vendor either, and must never reach a path
+		"apple/laptop/x",       // laptops have no variants
+		"apple/desktop/x",      // not a variant of the iMac's category
+		"nas/3bay",             // not a variant anyone drew
+		"router/4bay",          // routers have no variants
+		"dell/desktop/mini",    // the variant is Apple's, not every vendor's
+		"apple/desktop/mini/x", // two slashes at most
 	} {
 		cfg := Config{Devices: []Device{{MAC: "aa:bb:cc:dd:ee:ff", Icon: icon}}}
 		if res := Validate(cfg); res.OK() {

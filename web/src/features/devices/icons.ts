@@ -45,19 +45,26 @@ import camera from '@/assets/device-icons/camera.webp'
 import gameConsole from '@/assets/device-icons/console.webp'
 import desktop from '@/assets/device-icons/desktop.webp'
 import doorbell from '@/assets/device-icons/doorbell.webp'
+import ereader from '@/assets/device-icons/ereader.webp'
 import fridge from '@/assets/device-icons/fridge.webp'
 import hub from '@/assets/device-icons/hub.webp'
 import humidifier from '@/assets/device-icons/humidifier.webp'
 import laptop from '@/assets/device-icons/laptop.webp'
 import light from '@/assets/device-icons/light.webp'
 import nas from '@/assets/device-icons/nas.webp'
+import nas4Bay from '@/assets/device-icons/nas-4bay.webp'
+import nas5Bay from '@/assets/device-icons/nas-5bay.webp'
+import nas6Bay from '@/assets/device-icons/nas-6bay.webp'
+import nas8Bay from '@/assets/device-icons/nas-8bay.webp'
 import phone from '@/assets/device-icons/phone.webp'
 import plug from '@/assets/device-icons/plug.webp'
 import printer from '@/assets/device-icons/printer.webp'
 import router from '@/assets/device-icons/router.webp'
+import sbc from '@/assets/device-icons/sbc.webp'
 import sensor from '@/assets/device-icons/sensor.webp'
 import server from '@/assets/device-icons/server.webp'
 import speaker from '@/assets/device-icons/speaker.webp'
+import networkSwitch from '@/assets/device-icons/switch.webp'
 import tablet from '@/assets/device-icons/tablet.webp'
 import thermostat from '@/assets/device-icons/thermostat.webp'
 import tv from '@/assets/device-icons/tv.webp'
@@ -66,15 +73,48 @@ import vacuum from '@/assets/device-icons/vacuum.webp'
 import washer from '@/assets/device-icons/washer.webp'
 import waterPurifier from '@/assets/device-icons/waterpurifier.webp'
 import watch from '@/assets/device-icons/watch.webp'
+import amazonSpeaker from '@/assets/device-icons/amazon-speaker.webp'
 import appleDesktop from '@/assets/device-icons/apple-desktop.webp'
+import appleDesktopMini from '@/assets/device-icons/apple-desktop-mini.webp'
+import appleDesktopStudio from '@/assets/device-icons/apple-desktop-studio.webp'
 import appleLaptop from '@/assets/device-icons/apple-laptop.webp'
 import applePhone from '@/assets/device-icons/apple-phone.webp'
 import appleSpeaker from '@/assets/device-icons/apple-speaker.webp'
 import appleTablet from '@/assets/device-icons/apple-tablet.webp'
 import appleTv from '@/assets/device-icons/apple-tv.webp'
 import appleWatch from '@/assets/device-icons/apple-watch.webp'
+import brotherPrinter from '@/assets/device-icons/brother-printer.webp'
+import canonPrinter from '@/assets/device-icons/canon-printer.webp'
+import epsonPrinter from '@/assets/device-icons/epson-printer.webp'
+import googlePhone from '@/assets/device-icons/google-phone.webp'
+import googleSpeaker from '@/assets/device-icons/google-speaker.webp'
+import hpPrinter from '@/assets/device-icons/hp-printer.webp'
 import huaweiLaptop from '@/assets/device-icons/huawei-laptop.webp'
+import huaweiPhone from '@/assets/device-icons/huawei-phone.webp'
+import huaweiTablet from '@/assets/device-icons/huawei-tablet.webp'
+import huaweiWatch from '@/assets/device-icons/huawei-watch.webp'
 import lenovoLaptop from '@/assets/device-icons/lenovo-laptop.webp'
+import lgTv from '@/assets/device-icons/lg-tv.webp'
+import microsoftConsole from '@/assets/device-icons/microsoft-console.webp'
+import microsoftLaptop from '@/assets/device-icons/microsoft-laptop.webp'
+import nintendoConsole from '@/assets/device-icons/nintendo-console.webp'
+import raspberryPiSbc from '@/assets/device-icons/raspberry-pi-sbc.webp'
+import samsungFridge from '@/assets/device-icons/samsung-fridge.webp'
+import samsungPhone from '@/assets/device-icons/samsung-phone.webp'
+import samsungTablet from '@/assets/device-icons/samsung-tablet.webp'
+import samsungTv from '@/assets/device-icons/samsung-tv.webp'
+import samsungWasher from '@/assets/device-icons/samsung-washer.webp'
+import samsungWatch from '@/assets/device-icons/samsung-watch.webp'
+import sonosSpeaker from '@/assets/device-icons/sonos-speaker.webp'
+import sonyConsole from '@/assets/device-icons/sony-console.webp'
+import sonyPhone from '@/assets/device-icons/sony-phone.webp'
+import sonyTv from '@/assets/device-icons/sony-tv.webp'
+import synologyNas from '@/assets/device-icons/synology-nas.webp'
+import tpLinkRouter from '@/assets/device-icons/tp-link-router.webp'
+import ubiquitiAccesspoint from '@/assets/device-icons/ubiquiti-accesspoint.webp'
+import xiaomiPhone from '@/assets/device-icons/xiaomi-phone.webp'
+import xiaomiSpeaker from '@/assets/device-icons/xiaomi-speaker.webp'
+import xiaomiVacuum from '@/assets/device-icons/xiaomi-vacuum.webp'
 
 import osAndroid from '@/assets/os-marks/android.svg'
 import osAppleDark from '@/assets/os-marks/apple-dark.svg'
@@ -122,8 +162,8 @@ import osWindows from '@/assets/os-marks/windows.svg'
 // file is a build error rather than a 404 nobody notices.
 
 /**
- * A key into IMAGES: a category on its own, a vendor's take on one, or a vendor
- * with nothing else known about the device.
+ * A key into IMAGES: a category on its own, a vendor's take on one, one shape
+ * of either, or a vendor with nothing else known about the device.
  *
  * The template literal type is doing real work. `apple/laptop` is checked
  * against both vocabularies at compile time, so a key cannot name a vendor that
@@ -131,7 +171,21 @@ import osWindows from '@/assets/os-marks/windows.svg'
  * are also filenames, that is the difference between a build error and a
  * picture which silently never loads.
  */
-type IconKey = DeviceCategory | VendorKey | `${VendorKey}/${DeviceCategory}`
+type IconKey = DeviceCategory | VendorKey | `${VendorKey}/${DeviceCategory}` | VariantKey
+
+/**
+ * A shape of a kind of device too different to share its picture — a NAS with
+ * eight bays, a Mac mini beside the iMac. Hand-mirrored from `variants` in
+ * internal/devices/icon.go, for the reason OsKey is: the icon field is
+ * published as a pattern, so nothing generates this list.
+ */
+type VariantKey =
+  | 'nas/4bay'
+  | 'nas/5bay'
+  | 'nas/6bay'
+  | 'nas/8bay'
+  | 'apple/desktop/mini'
+  | 'apple/desktop/studio'
 
 const IMAGES: Partial<Record<IconKey, string>> = {
   accesspoint: accessPoint,
@@ -142,6 +196,7 @@ const IMAGES: Partial<Record<IconKey, string>> = {
   console: gameConsole,
   desktop,
   doorbell,
+  ereader,
   fridge,
   hub,
   humidifier,
@@ -152,9 +207,11 @@ const IMAGES: Partial<Record<IconKey, string>> = {
   plug,
   printer,
   router,
+  sbc,
   sensor,
   server,
   speaker,
+  switch: networkSwitch,
   tablet,
   thermostat,
   tv,
@@ -164,16 +221,63 @@ const IMAGES: Partial<Record<IconKey, string>> = {
   waterpurifier: waterPurifier,
   watch,
 
-  'apple/desktop': appleDesktop,
-  'apple/laptop': appleLaptop,
-  'apple/phone': applePhone,
-  'apple/speaker': appleSpeaker,
-  'apple/tablet': appleTablet,
-  'apple/tv': appleTv,
-  'apple/watch': appleWatch,
+  'nas/4bay': nas4Bay,
+  'nas/5bay': nas5Bay,
+  'nas/6bay': nas6Bay,
+  'nas/8bay': nas8Bay,
 
+  // In the order the picker shows them: the makers most homes have several
+  // things from first, then one-product vendors, then the cupboard.
+  'apple/phone': applePhone,
+  'apple/tablet': appleTablet,
+  'apple/laptop': appleLaptop,
+  'apple/desktop': appleDesktop,
+  'apple/desktop/mini': appleDesktopMini,
+  'apple/desktop/studio': appleDesktopStudio,
+  'apple/watch': appleWatch,
+  'apple/tv': appleTv,
+  'apple/speaker': appleSpeaker,
+
+  'samsung/phone': samsungPhone,
+  'samsung/tablet': samsungTablet,
+  'samsung/watch': samsungWatch,
+  'samsung/tv': samsungTv,
+  'samsung/fridge': samsungFridge,
+  'samsung/washer': samsungWasher,
+
+  'huawei/phone': huaweiPhone,
+  'huawei/tablet': huaweiTablet,
   'huawei/laptop': huaweiLaptop,
+  'huawei/watch': huaweiWatch,
+
+  'xiaomi/phone': xiaomiPhone,
+  'xiaomi/speaker': xiaomiSpeaker,
+  'xiaomi/vacuum': xiaomiVacuum,
+
+  'sony/phone': sonyPhone,
+  'sony/tv': sonyTv,
+  'sony/console': sonyConsole,
+
+  'google/phone': googlePhone,
+  'google/speaker': googleSpeaker,
+
+  'microsoft/laptop': microsoftLaptop,
+  'microsoft/console': microsoftConsole,
+
   'lenovo/laptop': lenovoLaptop,
+  'lg/tv': lgTv,
+  'nintendo/console': nintendoConsole,
+  'amazon/speaker': amazonSpeaker,
+  'sonos/speaker': sonosSpeaker,
+
+  'synology/nas': synologyNas,
+  'raspberry-pi/sbc': raspberryPiSbc,
+  'tp-link/router': tpLinkRouter,
+  'ubiquiti/accesspoint': ubiquitiAccesspoint,
+  'hp/printer': hpPrinter,
+  'epson/printer': epsonPrinter,
+  'canon/printer': canonPrinter,
+  'brother/printer': brotherPrinter,
 }
 
 /**
@@ -496,22 +600,88 @@ const BRAND_LABELS: Partial<Record<IconKey, string>> = {
   'apple/tablet': 'iPad',
   'apple/laptop': 'MacBook',
   'apple/desktop': 'iMac',
+  'apple/desktop/mini': 'Mac mini',
+  'apple/desktop/studio': 'Mac Studio',
   'apple/watch': 'Apple Watch',
   'apple/tv': 'Apple TV',
   'apple/speaker': 'HomePod',
+
+  'samsung/phone': 'Galaxy phone',
+  'samsung/tablet': 'Galaxy Tab',
+  'samsung/watch': 'Galaxy Watch',
+  'samsung/tv': 'Samsung TV',
+  'samsung/fridge': 'Samsung fridge',
+  'samsung/washer': 'Samsung washer',
+
+  'huawei/phone': 'Huawei phone',
+  'huawei/tablet': 'MatePad',
+  'huawei/laptop': 'MateBook',
+  'huawei/watch': 'Huawei Watch',
+
+  'xiaomi/phone': 'Xiaomi phone',
+  'xiaomi/speaker': 'Xiaomi speaker',
+  'xiaomi/vacuum': 'Xiaomi vacuum',
+
+  'sony/phone': 'Xperia',
+  'sony/tv': 'Bravia',
+  'sony/console': 'PlayStation',
+
+  'google/phone': 'Pixel',
+  'google/speaker': 'Nest speaker',
+
+  'microsoft/laptop': 'Surface',
+  'microsoft/console': 'Xbox',
+
+  'lenovo/laptop': 'ThinkPad',
+  'lg/tv': 'LG TV',
+  'nintendo/console': 'Switch',
+  'amazon/speaker': 'Echo',
+  'sonos/speaker': 'Sonos',
+
+  'synology/nas': 'Synology',
+  'raspberry-pi/sbc': 'Raspberry Pi',
+  'tp-link/router': 'TP-Link router',
+  'ubiquiti/accesspoint': 'UniFi AP',
+  'hp/printer': 'HP printer',
+  'epson/printer': 'Epson printer',
+  'canon/printer': 'Canon printer',
+  'brother/printer': 'Brother printer',
+}
+
+/** What a picker tile stores: the picture, and the category it implies. */
+export interface IconChoiceTile {
+  icon: string
+  category: DeviceCategory
+  label: string
 }
 
 /**
  * Every vendor picture that has been drawn, for the picker. Derived from
  * IMAGES rather than listed, so a new `huawei/phone` shows up in the picker
- * the moment its line is added there.
+ * the moment its line is added there. A vendor's variant — the Mac mini — is
+ * one of these too: it is Apple's, not every desktop's.
  */
-export const BRAND_CHOICES: { icon: string; category: DeviceCategory; label: string }[] = (
-  Object.keys(IMAGES) as IconKey[]
-)
-  .filter((key) => key.includes('/'))
+export const BRAND_CHOICES: IconChoiceTile[] = (Object.keys(IMAGES) as IconKey[])
+  .filter((key) => key.includes('/') && !(key.split('/')[0] in LABELS))
   .map((key) => {
     const [vendor, category] = key.split('/') as [string, DeviceCategory]
     const name = vendor.charAt(0).toUpperCase() + vendor.slice(1)
     return { icon: key, category, label: BRAND_LABELS[key] ?? `${name} ${LABELS[category].toLowerCase()}` }
   })
+
+const VARIANT_LABELS: Partial<Record<VariantKey, string>> = {
+  'nas/4bay': '4-bay NAS',
+  'nas/5bay': '5-bay NAS',
+  'nas/6bay': '6-bay NAS',
+  'nas/8bay': '8-bay NAS',
+}
+
+/**
+ * The brandless variants of each category, shown in the picker right after
+ * the category's own tile — a 4-bay NAS is found where the NAS is.
+ */
+export function variantChoices(category: DeviceCategory): IconChoiceTile[] {
+  return (Object.keys(IMAGES) as IconKey[])
+    .filter((key) => key.startsWith(`${category}/`))
+    .map((key) => ({ icon: key, category, label: VARIANT_LABELS[key as VariantKey] ?? key }))
+}

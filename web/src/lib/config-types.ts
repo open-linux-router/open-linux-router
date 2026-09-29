@@ -56,7 +56,7 @@ export type DeviceCategory =
   | 'switch'
   | 'hub'
 /**
- * A picture chosen for this device, overriding the one its category and vendor would pick: <vendor>/<category> such as "apple/laptop", or os/<system> such as "os/debian". Empty means the picture follows category and vendor.
+ * A picture chosen for this device, overriding the one its category and vendor would pick: <vendor>/<category> such as "apple/laptop", optionally followed by /<variant> such as "apple/desktop/mini", <category>/<variant> such as "nas/4bay", or os/<system> such as "os/debian". Empty means the picture follows category and vendor.
  */
 export type DevicePicture = string
 export type IPAddress = string
