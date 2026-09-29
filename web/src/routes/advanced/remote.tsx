@@ -30,12 +30,14 @@ import { ClientConfigDialog } from '@/features/remote/client-config'
 import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/remote/impact'
 import { PeerDialog } from '@/features/remote/peer-dialog'
 import { ProxyCard } from '@/features/remote/proxy-card'
+import { SocksCard } from '@/features/remote/socks-card'
 import {
   remoteChange,
   useRemoteConfig,
   useRemoteStatus,
   useReapplyRemote,
   useShadowsocksStatus,
+  useSocksStatus,
   type RemoteChangeRequest,
 } from '@/features/remote/queries'
 import { SettingsDialog } from '@/features/remote/settings-dialog'
@@ -46,6 +48,7 @@ export function RemotePage() {
   const config = useRemoteConfig()
   const status = useRemoteStatus()
   const proxy = useShadowsocksStatus()
+  const socks = useSocksStatus()
   const applier = useRemoteApply()
   const reapply = useReapplyRemote()
 
@@ -137,13 +140,13 @@ export function RemotePage() {
         headline={headline(wg.enabled, peers)}
         detail={
           wg.enabled
-            ? 'Your devices reach everything on your network from anywhere, as if they were at home.'
-            : 'These devices are saved but switched off, so none of them can get in.'
+            ? 'Devices connected over WireGuard can reach every address on your network.'
+            : 'WireGuard is off. The devices below are saved, but none of them can connect.'
         }
         dot={!wg.enabled ? 'bg-muted-foreground/40' : dotFor(status.data)}
         control={{
           id: 'remote-enabled',
-          label: 'Allow devices in',
+          label: 'WireGuard',
           checked: wg.enabled,
           busy: applier.busy,
           onChange: (enabled) => change(remoteChange.settings({ enabled })),
@@ -154,9 +157,9 @@ export function RemotePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Devices</CardTitle>
+          <CardTitle>WireGuard devices</CardTitle>
           <CardDescription>
-            One entry per device. Each gets its own key, so removing one leaves the others alone.
+            One entry per device. Each has its own key, so removing one leaves the others alone.
           </CardDescription>
           <CardAction>
             <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
@@ -170,12 +173,13 @@ export function RemotePage() {
         </CardContent>
       </Card>
 
-      {/* Below the tunnel, deliberately. The two are not alternatives and the
-          order says which one an operator usually wants: getting *in* to your own
-          network is the reason this page exists, and borrowing its way *out* is
-          the narrower second thing. Putting them side by side as equals would
-          invite picking one. */}
+      {/* Below WireGuard, deliberately. They are not alternatives and the
+          order says which one an operator usually wants: getting into your own
+          network is the reason this page exists, and the two proxies — internet
+          access through this router, nothing on the network — are the narrower
+          second thing. */}
       <ProxyCard status={proxy.data} applier={applier} />
+      <SocksCard status={socks.data} applier={applier} />
 
       <PeerDialog
         open={adding}
@@ -230,11 +234,11 @@ export function RemotePage() {
 }
 
 function headline(enabled: boolean, peers: RemotePeer[]): string {
-  if (!enabled) return 'Off'
-  if (peers.length === 0) return 'Nobody can get in yet'
+  if (!enabled) return 'WireGuard is off'
+  if (peers.length === 0) return 'WireGuard is on, with no devices yet'
   const online = peers.filter((p) => p.online).length
-  if (online > 0) return `${online} of ${peers.length} connected`
-  return `${peers.length} device${peers.length === 1 ? '' : 's'} can get in`
+  if (online > 0) return `WireGuard: ${online} of ${peers.length} connected`
+  return `WireGuard: ${peers.length} device${peers.length === 1 ? '' : 's'}, none connected`
 }
 
 /**
@@ -265,11 +269,11 @@ function ReachCard({ status, onEdit }: { status?: RemoteStatus; onEdit: () => vo
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <KeyRound className="size-4 text-muted-foreground" />
-          How devices reach this router
+          WireGuard
           {status && !status.endpoint && <Badge variant="destructive">Not set</Badge>}
         </CardTitle>
         <CardDescription>
-          Set once. Every device&rsquo;s configuration is written from it.
+          Server settings. Every device&rsquo;s configuration is generated from these.
         </CardDescription>
         <CardAction>
           <Button size="sm" variant="outline" onClick={onEdit}>
@@ -280,17 +284,20 @@ function ReachCard({ status, onEdit }: { status?: RemoteStatus; onEdit: () => vo
       <CardContent className="space-y-1 text-sm text-muted-foreground">
         {status?.endpoint ? (
           <p>
-            Devices dial <span className="font-mono">{status.endpoint}</span> on UDP/
-            {status.listen_port}, and land on <span className="font-mono">{status.subnet}</span>.
+            Devices connect to <span className="font-mono">{status.endpoint}</span> on UDP port{' '}
+            {status.listen_port} and get addresses in{' '}
+            <span className="font-mono">{status.subnet}</span>.
           </p>
         ) : (
           <p>
-            No public address is set, so no device can be given a working configuration yet. It is
-            the one thing this router cannot work out for itself.
+            No public address is set, so no device can be given a working configuration yet. Set
+            it in Settings — it is the one value this router cannot work out for itself.
           </p>
         )}
         {status?.public_key && (
-          <p className="truncate font-mono text-xs">{status.public_key}</p>
+          <p className="truncate text-xs">
+            Public key <span className="font-mono">{status.public_key}</span>
+          </p>
         )}
       </CardContent>
     </Card>
@@ -307,8 +314,8 @@ function PeerList({
   if (peers.length === 0) {
     return (
       <ListEmpty>
-        No device can dial in yet. Add one and you get a configuration to scan into it — a phone, a
-        laptop, anything that should reach your network from outside.
+        No devices yet. Adding one gives you a WireGuard configuration to scan on a phone or import
+        on a laptop.
       </ListEmpty>
     )
   }

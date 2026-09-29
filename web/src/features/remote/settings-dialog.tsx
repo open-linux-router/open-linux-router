@@ -62,9 +62,9 @@ export function SettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>How devices reach this router</DialogTitle>
+          <DialogTitle>WireGuard settings</DialogTitle>
           <DialogDescription>
-            Set once. Everything a device needs is derived from this.
+            Every device&rsquo;s configuration is generated from these.
           </DialogDescription>
         </DialogHeader>
 

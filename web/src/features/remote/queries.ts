@@ -8,6 +8,7 @@ import type {
   RemoteApplyResult,
   RemotePeers,
   RemoteStatus,
+  SocksStatus,
 } from '@/lib/api-types'
 import type { RemoteConfig } from '@/lib/config-types'
 
@@ -223,7 +224,7 @@ export const shadowsocksChange = {
     method: 'PATCH',
     path: `${base}/shadowsocks/config`,
     body: { enabled },
-    label: enabled ? 'The proxy is on' : 'The proxy is off',
+    label: enabled ? 'Shadowsocks is on' : 'Shadowsocks is off',
   }),
 }
 
@@ -260,5 +261,34 @@ export function useReapplyShadowsocks() {
   return useMutation({
     mutationFn: () => api.send<ProxyApplyResult>('POST', `${base}/shadowsocks/apply`, undefined),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['remote'] }),
+  })
+}
+
+// --- SOCKS5 ------------------------------------------------------------------
+//
+// The same shape as Shadowsocks', because internal/remote gives it the same
+// routes and the same write path. The link is a mutation for the same reason:
+// the response is the credential.
+
+export function useSocksStatus() {
+  return useQuery({
+    queryKey: [...remoteKeys.status, 'socks5'] as const,
+    queryFn: () => api.get<SocksStatus>(`${base}/socks5/status`),
+    refetchInterval: OBSERVED_REFETCH_MS,
+  })
+}
+
+export const socksChange = {
+  enabled: (enabled: boolean): RemoteChangeRequest => ({
+    method: 'PATCH',
+    path: `${base}/socks5/config`,
+    body: { enabled },
+    label: enabled ? 'SOCKS5 is on' : 'SOCKS5 is off',
+  }),
+}
+
+export function useSocksLink() {
+  return useMutation({
+    mutationFn: () => api.get<ProxyLink>(`${base}/socks5/link`),
   })
 }

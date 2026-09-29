@@ -1334,6 +1334,29 @@ export interface ProxyStatus {
 }
 
 /**
+ * Whether the SOCKS5 proxy is installed, running and undrifted —
+ * internal/remote socksStatus. No cipher and no UDP flag; what it has instead
+ * is where it listens, which decides everything about it.
+ */
+export interface SocksStatus {
+  enabled: boolean
+  listen_port: number
+  /** `tunnel`: only reachable from inside WireGuard. `internet`: every interface. */
+  listen: 'tunnel' | 'internet'
+  exposed: boolean
+  /** The daemon's one wording of the plaintext-on-the-internet warning. */
+  warning?: string
+  service?: UnitStatus
+  service_error?: string
+  binary?: string
+  binary_error?: string
+  drifted: boolean
+  drift?: ProxyPlan
+  drift_error?: string
+  as_of: string
+}
+
+/**
  * The client link, from the one route that hands over a credential.
  *
  * Every other read in olr redacts. This one is the exception the redaction

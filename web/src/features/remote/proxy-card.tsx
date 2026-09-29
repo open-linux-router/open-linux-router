@@ -30,8 +30,8 @@ import type { useRemoteApply } from './use-apply'
  * router's address. An operator may well want both, and the only place that
  * distinction can be made clear is where they sit side by side.
  *
- * So the description is not "a Shadowsocks server". It is what the thing does
- * for the person reading it.
+ * So the title is the protocol's plain name, and the description says what a
+ * client gets from it — and what it does not.
  */
 export function ProxyCard({
   status,
@@ -73,12 +73,12 @@ export function ProxyCard({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Globe className="size-4 text-muted-foreground" />
-            Borrow this router&rsquo;s way out
+            Shadowsocks
             <ProxyBadge status={status} />
           </CardTitle>
           <CardDescription>
-            A device gets this router&rsquo;s route to the internet, and no access to anything on
-            the network here. Useful on a network that filters or watches.
+            An encrypted proxy. Clients reach the internet through this router, and nothing on
+            your network.
           </CardDescription>
           <CardAction className="flex items-center gap-2">
             {enabled && !missing && (
@@ -95,7 +95,7 @@ export function ProxyCard({
               checked={enabled}
               onCheckedChange={toggle}
               disabled={applier.busy}
-              aria-label="Turn the proxy on"
+              aria-label="Shadowsocks"
             />
           </CardAction>
         </CardHeader>
@@ -122,8 +122,8 @@ export function ProxyCard({
             </p>
           ) : (
             <p>
-              Off. Turning it on generates a password and starts the server; every device then uses
-              the same link.
+              Off. Turning it on generates a password and starts the server. Every client uses the
+              same link.
             </p>
           )}
 
@@ -148,6 +148,7 @@ export function ProxyCard({
 
       {link && (
         <ProxyLinkDialog
+          protocol="Shadowsocks"
           url={link.url}
           label={link.label}
           open
@@ -158,7 +159,12 @@ export function ProxyCard({
   )
 }
 
-function ProxyBadge({ status }: { status?: ProxyStatus }) {
+/** Shared with the SOCKS5 card: both are a supervised unit and a binary. */
+export function ProxyBadge({
+  status,
+}: {
+  status?: Pick<ProxyStatus, 'enabled' | 'binary_error' | 'service' | 'service_error'>
+}) {
   if (!status) return null
   if (status.binary_error) return <Badge variant="destructive">Not installed</Badge>
   if (!status.enabled) return null

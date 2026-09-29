@@ -232,7 +232,7 @@ export const SECTIONS: Section[] = [
         // are three of those. They open in dialogs rather than a level below.
         slug: 'remote',
         label: 'Remote access',
-        blurb: 'Reach your whole network from outside it, from your own devices.',
+        blurb: 'WireGuard, Shadowsocks and SOCKS5 servers for connecting from outside.',
       },
       {
         // Both things on this page are live rather than settings — the

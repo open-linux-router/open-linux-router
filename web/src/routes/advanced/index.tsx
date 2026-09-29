@@ -71,7 +71,7 @@ function describeRemote(config: RemoteConfig, devices: RemotePeer[]) {
     const online = devices.filter((p) => p.online).length
     parts.push(`${count(devices.length, 'device')}, ${online} connected`)
   }
-  if (config.shadowsocks.enabled) parts.push('proxy on')
+  if (config.shadowsocks.enabled) parts.push('Shadowsocks on')
   return parts.length ? parts.join(' · ') : 'Off'
 }
 

@@ -31,11 +31,14 @@ import {
  * secret, so revoking one device means changing it for all of them.
  */
 export function ProxyLinkDialog({
+  protocol,
   url,
   label,
   open,
   onOpenChange,
 }: {
+  /** Named in the title and the scan hint: "Shadowsocks", "SOCKS5". */
+  protocol: string
   url: string
   label?: string
   open: boolean
@@ -69,9 +72,9 @@ export function ProxyLinkDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Connect a device to the proxy</DialogTitle>
+          <DialogTitle>{protocol} link</DialogTitle>
           <DialogDescription>
-            Every device uses this same link. Changing it disconnects all of them at once.
+            Every client uses this same link. Changing it disconnects all of them at once.
           </DialogDescription>
         </DialogHeader>
 
@@ -84,10 +87,10 @@ export function ProxyLinkDialog({
                 // hold. Nothing in it came off the network.
                 dangerouslySetInnerHTML={{ __html: svg }}
                 role="img"
-                aria-label="Proxy link as a QR code"
+                aria-label={`${protocol} link as a QR code`}
               />
               <p className="text-xs text-muted-foreground">
-                Scan it with a Shadowsocks client on the device.
+                Scan it with a {protocol} client on the device.
               </p>
             </div>
           ) : (
