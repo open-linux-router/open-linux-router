@@ -142,6 +142,7 @@ type Resolved struct {
 	Detected Detected
 
 	Model string
+	Icon  Icon
 	Notes string
 
 	// Group is the operator's group for this device, empty for none. Never
@@ -280,6 +281,7 @@ func resolve(mac string, cfg Config, presence map[string]Presence, fixed map[str
 	if ok {
 		r.Stored = true
 		r.Model = stored.Model
+		r.Icon = stored.Icon
 		r.Notes = stored.Notes
 		r.Group = stored.Group
 	}

@@ -44,6 +44,17 @@ const (
 	CategoryLight      Category = "light"
 	CategoryVacuum     Category = "vacuum"
 
+	// Appliances. The connected white goods a home network fills up with, each
+	// its own word because "sensor" or "plug" would put the wrong picture on a
+	// fridge.
+	CategoryAirPurifier   Category = "airpurifier"
+	CategoryWaterPurifier Category = "waterpurifier"
+	CategoryHumidifier    Category = "humidifier"
+	CategoryAirCon        Category = "aircon"
+	CategoryAirer         Category = "airer"
+	CategoryFridge        Category = "fridge"
+	CategoryWasher        Category = "washer"
+
 	// Computing and peripherals.
 	CategoryPrinter Category = "printer"
 	CategoryNAS     Category = "nas"
@@ -74,6 +85,9 @@ var categories = []Category{
 
 	CategoryCamera, CategoryDoorbell, CategoryThermostat, CategorySensor,
 	CategoryPlug, CategoryLight, CategoryVacuum,
+
+	CategoryAirPurifier, CategoryWaterPurifier, CategoryHumidifier,
+	CategoryAirCon, CategoryAirer, CategoryFridge, CategoryWasher,
 
 	CategoryPrinter, CategoryNAS, CategoryServer, CategorySBC,
 

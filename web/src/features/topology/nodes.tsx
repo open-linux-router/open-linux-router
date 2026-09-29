@@ -39,7 +39,7 @@ import type { MapGroup } from '@/features/topology/model'
 import { magnitude, type Flow, type TrafficView } from '@/features/topology/traffic'
 import type { DeviceRow, ExitStatus } from '@/lib/api-types'
 import type { DevicesGroup } from '@/lib/config-types'
-import { cn, formatBytes, formatRate } from '@/lib/utils'
+import { cn, formatBytes, formatRate, formatRateCompact } from '@/lib/utils'
 
 /**
  * What the map can ask its page to do. All optional: without them the map is
@@ -473,6 +473,7 @@ export function DeviceNode({
           )}
         >
           <DeviceIcon
+            icon={device.icon}
             category={device.category}
             vendor={device.vendor}
             vendorKey={device.vendor_key}
@@ -519,6 +520,7 @@ export function DeviceNode({
     density === 'compact' ? (
       <Shell onClick={open} title={name} className={cn(shell, 'gap-2 pr-2.5 pl-2')}>
         <DeviceIcon
+          icon={device.icon}
           category={device.category}
           vendor={device.vendor}
           vendorKey={device.vendor_key}
@@ -534,6 +536,7 @@ export function DeviceNode({
     ) : (
       <Shell onClick={open} className={cn(shell, 'gap-2.5 px-3')}>
         <DeviceIcon
+          icon={device.icon}
           category={device.category}
           vendor={device.vendor}
           vendorKey={device.vendor_key}
@@ -651,11 +654,13 @@ function DeviceTraffic({ flow, rated }: { flow?: Flow; rated: boolean }) {
   const down = flow.downRate ?? 0
   const up = flow.upRate ?? 0
   if (down + up < 1) return <span className="text-muted-foreground/60">idle</span>
+  // Compact, with the exact figures on hover: the row's width belongs to the
+  // device's name, and a rate only has to say "busy" or "quiet" at a glance.
   return (
-    <>
-      <span className="text-foreground/75">↓{formatRate(down)}</span>
-      <span className="ml-1.5">↑{formatRate(up)}</span>
-    </>
+    <span title={`↓ ${formatRate(down)}  ↑ ${formatRate(up)}`}>
+      <span className="text-foreground/75">↓{formatRateCompact(down)}</span>
+      <span className="ml-1">↑{formatRateCompact(up)}</span>
+    </span>
   )
 }
 

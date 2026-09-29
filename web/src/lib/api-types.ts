@@ -620,6 +620,10 @@ export interface DeviceRow {
   vendor_key?: VendorKey
 
   model?: string
+
+  /** The operator's chosen picture — see Device.icon. Absent means it follows category and vendor. */
+  icon?: string
+
   notes?: string
 
   /**

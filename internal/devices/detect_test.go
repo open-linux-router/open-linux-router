@@ -27,6 +27,13 @@ func TestDetectFromHostname(t *testing.T) {
 		{"PlayStation-5", CategoryConsole},
 		{"front-doorbell", CategoryDoorbell},
 		{"unifi-ap-loft", CategoryAccessPoint},
+		{"zhimi-airpurifier-ma4_miap1234", CategoryAirPurifier},
+		{"yunmi-waterpuri-lx12_mibt4a2c", CategoryWaterPurifier},
+		{"deerma-humidifier-jsq", CategoryHumidifier},
+		{"xiaomi-aircondition-ma2", CategoryAirCon},
+		{"hyd-airer-znlyj_mibt4a2c", CategoryAirer},
+		{"viomi-fridge-v3", CategoryFridge},
+		{"viomi-washer-v5", CategoryWasher},
 	}
 	for _, tc := range tests {
 		got := Detect("aa:bb:cc:dd:ee:ff", tc.hostname)

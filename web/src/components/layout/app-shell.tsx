@@ -9,7 +9,7 @@ export function AppShell() {
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
       <header className="sticky top-0 z-20 border-b bg-background/75 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-2.5 px-4">
+        <div className="mx-auto flex h-14 max-w-[90rem] items-center gap-2.5 px-4">
           <BRAND_ICON className="size-5 shrink-0 text-muted-foreground" aria-hidden />
           <span className="font-semibold tracking-tight">Router</span>
 
@@ -22,7 +22,7 @@ export function AppShell() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+      <main className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-6">
         <div className="space-y-6">
           <PageHeader />
           <Outlet />
@@ -114,7 +114,7 @@ function SiteFooter() {
     <footer className="border-t">
       {/* The tab bar is fixed over the bottom of the viewport, and the footer is
           what now reaches it. */}
-      <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 pt-6 pb-24 text-xs text-muted-foreground sm:flex-row sm:items-center sm:pb-6">
+      <div className="mx-auto flex max-w-[90rem] flex-col gap-1 px-4 pt-6 pb-24 text-xs text-muted-foreground sm:flex-row sm:items-center sm:pb-6">
         <span>Open Linux Router {__APP_VERSION__}</span>
         <a
           href="https://github.com/open-linux-router/open-linux-router"

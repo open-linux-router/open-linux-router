@@ -45,11 +45,11 @@ func TestUnmarshalConfigRoundTrip(t *testing.T) {
 // A mistyped key that silently did nothing would be the worst outcome: a 200,
 // an operator who believes the setting took, and a screen that disagrees.
 func TestUnmarshalConfigRejectsUnknownFields(t *testing.T) {
-	_, err := UnmarshalConfig([]byte(`{"devices": [{"mac": "aa:bb:cc:dd:ee:ff", "icon": "laptop"}]}`))
+	_, err := UnmarshalConfig([]byte(`{"devices": [{"mac": "aa:bb:cc:dd:ee:ff", "colour": "blue"}]}`))
 	if err == nil {
 		t.Fatal("UnmarshalConfig accepted an unknown field")
 	}
-	if !strings.Contains(err.Error(), "icon") {
+	if !strings.Contains(err.Error(), "colour") {
 		t.Errorf("error should name the offending field, got: %v", err)
 	}
 }

@@ -105,6 +105,17 @@ type Device struct {
 	// waiting for the day we serve these from disk.
 	Model string `json:"model,omitempty"`
 
+	// Icon is the picture the operator chose, when the category's own picture
+	// is not the one they want: "apple/laptop" for a Mac whose randomised MAC
+	// hides its maker, or "os/debian" for a VM that is better known by what it
+	// runs than by what it is. Empty means the picture follows category and
+	// vendor as usual.
+	//
+	// Separate from Category on purpose. The category is what the device *is*
+	// and stays its label; the icon is only how it is drawn, so choosing the
+	// Debian mark does not turn a server into something else.
+	Icon Icon `json:"icon,omitempty"`
+
 	// Notes is free text for the operator's own benefit — "in the loft", "belongs
 	// to the upstairs tenant". Never parsed.
 	Notes string `json:"notes,omitempty"`
@@ -186,6 +197,7 @@ func (c *Config) Normalize() {
 		}
 		c.Devices[i].Name = strings.TrimSpace(c.Devices[i].Name)
 		c.Devices[i].Model = strings.ToLower(strings.TrimSpace(c.Devices[i].Model))
+		c.Devices[i].Icon = Icon(strings.ToLower(strings.TrimSpace(string(c.Devices[i].Icon))))
 		c.Devices[i].Notes = strings.TrimSpace(c.Devices[i].Notes)
 		c.Devices[i].Group = strings.TrimSpace(c.Devices[i].Group)
 	}

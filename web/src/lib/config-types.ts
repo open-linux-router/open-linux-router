@@ -13,7 +13,10 @@
 // Device groups were added the same way and for the same reason:
 // `DevicesConfig.groups`, `Device.group` and `DevicesGroup`, spelled the way
 // internal/devices/config.go marshals them. So was `DevicesGroup.parent`, when
-// groups learned to nest.
+// groups learned to nest. `Device.icon` and its `DevicePicture` type, and the
+// appliance categories, were checked against a real `make types` run and match
+// it; that run could not replace the file because its group type is named
+// differently from the `DevicesGroup` the UI imports.
 
 /**
  * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
@@ -37,6 +40,13 @@ export type DeviceCategory =
   | 'plug'
   | 'light'
   | 'vacuum'
+  | 'airpurifier'
+  | 'waterpurifier'
+  | 'humidifier'
+  | 'aircon'
+  | 'airer'
+  | 'fridge'
+  | 'washer'
   | 'printer'
   | 'nas'
   | 'server'
@@ -45,6 +55,10 @@ export type DeviceCategory =
   | 'accesspoint'
   | 'switch'
   | 'hub'
+/**
+ * A picture chosen for this device, overriding the one its category and vendor would pick: <vendor>/<category> such as "apple/laptop", or os/<system> such as "os/debian". Empty means the picture follows category and vendor.
+ */
+export type DevicePicture = string
 export type IPAddress = string
 export type IPAddress1 = string
 /**
@@ -198,6 +212,7 @@ export interface Device {
   name?: string
   category?: DeviceCategory
   model?: string
+  icon?: DevicePicture
   notes?: string
   /**
    * The one group this device is in, or absent for none. Must name an existing group.

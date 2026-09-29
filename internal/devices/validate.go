@@ -114,6 +114,10 @@ func Validate(c Config) Result {
 			}
 		}
 
+		if err := d.Icon.Validate(); err != nil {
+			r.errorf(path+".icon", "%v", err)
+		}
+
 		if n := utf8.RuneCountInString(d.Notes); n > MaxNotesLen {
 			r.errorf(path+".notes", "notes are %d characters; the limit is %d", n, MaxNotesLen)
 		}

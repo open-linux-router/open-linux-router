@@ -83,6 +83,21 @@ type hostnameRule struct {
 // name with separators stripped, which is what lets "appletv" match a host
 // announcing itself as "Apple-TV-Living-Room".
 var hostnameRules = []hostnameRule{
+	// Appliances. Mostly Xiaomi-ecosystem hostnames, which name the product
+	// in the second token: "zhimi-airpurifier-ma4", "yunmi-waterpuri-lx12".
+	// "airer" is exact so it cannot match inside a longer word; it is a
+	// clothes-drying rack ("hyd-airer-znlyj"), not an air purifier.
+	//
+	// First in the table because the vendor usually leads the hostname, and
+	// "xiaomi" below would otherwise file an air conditioner as a phone.
+	{"airpurifier", CategoryAirPurifier, false},
+	{"waterpuri", CategoryWaterPurifier, false},
+	{"humidifier", CategoryHumidifier, false},
+	{"aircondition", CategoryAirCon, false},
+	{"airer", CategoryAirer, true},
+	{"fridge", CategoryFridge, true},
+	{"washer", CategoryWasher, true},
+
 	// Media first: several contain a vendor word that later rules also match.
 	{"appletv", CategoryTV, false},
 	{"chromecast", CategoryTV, false},

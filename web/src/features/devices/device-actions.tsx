@@ -46,7 +46,12 @@ export function useDeviceActions() {
     // ever seen joins one — and treating it as empty would forget the device
     // the moment it was put in a group.
     const empty =
-      !device.name && !device.category && !device.notes && !device.model && !device.group
+      !device.name &&
+      !device.category &&
+      !device.icon &&
+      !device.notes &&
+      !device.model &&
+      !device.group
     const next: DevicesConfig = { ...current, devices: empty ? rest : [...rest, device] }
 
     try {

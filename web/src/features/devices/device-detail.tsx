@@ -22,12 +22,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { CategoryPicker } from '@/features/devices/category-picker'
+import { CategoryPicker, type IconChoice } from '@/features/devices/category-picker'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import { groupOptions } from '@/features/devices/group-tree'
 import { categoryLabel } from '@/features/devices/icons'
 import type { DeviceRow } from '@/lib/api-types'
-import type { Device, DeviceCategory, DevicesGroup } from '@/lib/config-types'
+import type { Device, DevicesGroup } from '@/lib/config-types'
 
 /**
  * The Select's value for "in no group". Base UI treats an empty string as a
@@ -68,15 +68,13 @@ export function DeviceDetail({
   busy?: boolean
 }) {
   const [name, setName] = useState(device.name_origin === 'operator' ? device.name : '')
-  const [category, setCategory] = useState<DeviceCategory>(
-    device.category_origin === 'operator' ? device.category : '',
-  )
+  const [look, setLook] = useState<IconChoice>(() => storedLook(device))
   const [notes, setNotes] = useState(device.notes ?? '')
   const [group, setGroup] = useState(device.group ?? '')
 
   function reset() {
     setName(device.name_origin === 'operator' ? device.name : '')
-    setCategory(device.category_origin === 'operator' ? device.category : '')
+    setLook(storedLook(device))
     setNotes(device.notes ?? '')
     setGroup(device.group ?? '')
   }
@@ -93,6 +91,7 @@ export function DeviceDetail({
         <DialogHeader>
           <div className="flex items-center gap-3">
             <DeviceIcon
+              icon={device.icon}
               category={device.category}
               vendor={device.vendor}
               vendorKey={device.vendor_key}
@@ -126,12 +125,8 @@ export function DeviceDetail({
           </div>
 
           <div className="grid gap-2">
-            <Label>Category</Label>
-            <CategoryPicker
-              value={category}
-              detected={device.detected_category}
-              onChange={setCategory}
-            />
+            <Label>Icon</Label>
+            <CategoryPicker value={look} detected={device.detected_category} onChange={setLook} />
           </div>
 
           {/* Part of the form, saved with the rest, rather than applied the
@@ -207,7 +202,8 @@ export function DeviceDetail({
               onSave({
                 mac: device.mac,
                 name: name.trim() || undefined,
-                category: category || undefined,
+                category: look.category || undefined,
+                icon: look.icon || undefined,
                 notes: notes.trim() || undefined,
                 group: group || undefined,
                 // Preserved rather than edited: there is no tier-2 image set to
@@ -224,6 +220,14 @@ export function DeviceDetail({
       </DialogContent>
     </Dialog>
   )
+}
+
+/** What the operator has said about the look, with '' for anything left to detection. */
+function storedLook(device: DeviceRow): IconChoice {
+  return {
+    category: device.category_origin === 'operator' ? device.category : '',
+    icon: device.icon ?? '',
+  }
 }
 
 function PresenceBadge({ device }: { device: DeviceRow }) {

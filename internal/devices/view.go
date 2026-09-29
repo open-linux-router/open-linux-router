@@ -40,6 +40,11 @@ type deviceView struct {
 	VendorKey VendorKey `json:"vendor_key,omitempty"`
 
 	Model string `json:"model,omitempty"`
+
+	// Icon is the operator's chosen picture, absent when the picture follows
+	// category and vendor. See Device.Icon.
+	Icon Icon `json:"icon,omitempty"`
+
 	Notes string `json:"notes,omitempty"`
 
 	// Group is the device's group, absent for none.
@@ -97,6 +102,7 @@ func viewDevice(r Resolved) deviceView {
 		Vendor:           r.Detected.Vendor,
 		VendorKey:        r.Detected.VendorKey,
 		Model:            r.Model,
+		Icon:             r.Icon,
 		Notes:            r.Notes,
 		Group:            r.Group,
 		Stored:           r.Stored,
@@ -276,6 +282,7 @@ func describe(d Device, prefix string) string {
 	line("name", d.Name)
 	line("category", string(d.Category))
 	line("model", d.Model)
+	line("icon", string(d.Icon))
 	line("notes", d.Notes)
 	line("group", d.Group)
 	return b.String()

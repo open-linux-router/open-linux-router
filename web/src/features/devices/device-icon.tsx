@@ -1,6 +1,6 @@
 import { createElement } from 'react'
 
-import { deviceGlyph, deviceIcon, vendorInitials } from '@/features/devices/icons'
+import { chosenIcon, deviceGlyph, deviceIcon, vendorInitials } from '@/features/devices/icons'
 import type { VendorKey } from '@/lib/api-types'
 import type { DeviceCategory } from '@/lib/config-types'
 import { cn } from '@/lib/utils'
@@ -8,7 +8,13 @@ import { cn } from '@/lib/utils'
 /**
  * A device's picture, its vendor's initials, or its glyph.
  *
- * Three presentations, because the icon set is filled in gradually and the gap
+ * An operator's chosen `icon` comes before all of it: a picture somebody picked
+ * by hand is the answer, whatever category and vendor would have said. It is
+ * either one of the photographs or an operating system's mark, and the mark
+ * sits in the same quiet tile the glyphs use — a logo is flat artwork, and
+ * floating it bare beside the photographs made it look like a sticker.
+ *
+ * Otherwise, three presentations, because the icon set is filled in gradually and the gap
  * has to look deliberate. What it never shows is the *unknown photograph* on a
  * device that is merely undrawn — an identical grey box on a doorbell, a
  * speaker and a smart plug makes the list read as broken.
@@ -45,6 +51,7 @@ import { cn } from '@/lib/utils'
  * glance; what changed is whether it is here.
  */
 export function DeviceIcon({
+  icon,
   category,
   vendor,
   vendorKey,
@@ -52,6 +59,8 @@ export function DeviceIcon({
   size = 'md',
   className,
 }: {
+  /** The operator's chosen picture, `apple/laptop` or `os/debian`. */
+  icon?: string
   category: DeviceCategory
   /**
    * Who built it, as a person reads it — "TP-Link", "WNC". Used for the
@@ -76,7 +85,29 @@ export function DeviceIcon({
   // to know whether the anonymous grey box is still the right last resort.
   const initials = category === 'unknown' || category === '' ? vendorInitials(vendor) : ''
 
-  const photo = deviceIcon(category, vendorKey, initials !== '')
+  const chosen = chosenIcon(icon)
+
+  // The quiet tile, shared by the mark, lettering and glyph cases so they are
+  // the same object with different contents rather than several things that
+  // have to be kept looking alike.
+  const tile = cn(
+    box,
+    'flex shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-opacity',
+    dimmed && 'opacity-50',
+    className,
+  )
+
+  if (chosen?.kind === 'os') {
+    const mark = cn('size-[62%] object-contain', dimmed && 'saturate-50')
+    return (
+      <div title={chosen.label} aria-label={chosen.label} className={tile}>
+        <img src={chosen.src} alt="" className={cn(mark, chosen.dark && 'dark:hidden')} />
+        {chosen.dark && <img src={chosen.dark} alt="" className={cn(mark, 'hidden dark:block')} />}
+      </div>
+    )
+  }
+
+  const photo = chosen?.src ?? deviceIcon(category, vendorKey, initials !== '')
   if (photo) {
     return (
       <img
@@ -98,16 +129,6 @@ export function DeviceIcon({
       />
     )
   }
-
-  // The quiet tile, shared by the two lettering-or-glyph cases so they are the
-  // same object with different contents rather than two things that have to be
-  // kept looking alike.
-  const tile = cn(
-    box,
-    'flex shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-opacity',
-    dimmed && 'opacity-50',
-    className,
-  )
 
   if (initials) {
     return (

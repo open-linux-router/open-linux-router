@@ -127,6 +127,34 @@ rectangle there, and only a ThinkPad's red dot still reads. There is nowhere to
 put a logo on a front view either, and we would not ship one. Telling two
 laptops apart is the row's job — its title and vendor — not the icon's.
 
+## Operating-system marks
+
+A device can wear an OS's logo instead of a picture — `os/debian`, chosen in
+the picker and stored as the device's `icon` (see `internal/devices/icon.go`).
+This is the one place logos are allowed, and deliberately: a picture of "a
+computer running Debian" is a generic box, and the mark is the only thing that
+says Debian. The rule against logos is about *device pictures*, where a brand
+mark would be decoration; here the mark *is* the information.
+
+They live in `../os-marks/`, one SVG each, in full colour from
+[thesvg.org](https://thesvg.org) (MIT; `public/icons/<slug>/default.svg` in
+GLINCKER/thesvg). Not generated, and never redrawn. They sit in the same
+quiet tile as the glyphs, because a flat logo floating bare beside the
+photographs reads as a sticker.
+
+Two substitutions, both because the real mark fails at 32 px:
+
+- **macOS and iOS share Apple's mark**; their own marks are wordmarks. Apple's
+  is single-colour, so it ships twice — `apple-light.svg` (black) and
+  `apple-dark.svg` (white) — and the theme picks.
+- **HarmonyOS wears Huawei's flower**; its own mark is the black wordmark
+  "HMOS".
+
+Adding one is an SVG in `../os-marks/`, a line in `OS_MARKS` in
+`features/devices/icons.ts`, and the same key in `operatingSystems` in
+`internal/devices/icon.go`, which is what the stored value is validated
+against.
+
 ## Adding one
 
 1. **Generate a master** at 1024×1024 with this preamble, changing only the
@@ -143,8 +171,16 @@ laptops apart is the row's job — its title and vendor — not the icon's.
    > shapes, no waves. No logos, no text, no UI, no brand marks. Subject:
    > **\<subject\>**
 
-   The subject names the device and its materials. A **tier 1** subject ends
-   with *"Generic brandless industrial design in neutral materials."*; a **tier
+   The subject names the device and its materials. **Describe as little as
+   will identify it**, and say so: end the description with *"Very minimal: a
+   few large simple forms, no fine textures, no small parts."*, naming the
+   details this device tempts the generator into — *no vents, no screws, no
+   perforations, no cables, no mist*. Left to itself the generator fills a
+   server with twelve drive bays and a purifier with a mesh of holes; the set's
+   look is the NAS (two plain bays) and the speaker (one soft cylinder), and
+   anything busier stands out at 32 px as a different set. A **tier 1**
+   subject then ends with *"Generic brandless industrial design in neutral
+   materials."*; a **tier
    1.5** subject describes the vendor's product instead — *"an Apple iPad Pro in
    portrait orientation, silver aluminium edge, uniform thin black bezels…"*.
 

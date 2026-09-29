@@ -41,3 +41,24 @@ export function formatRate(bytesPerSecond: number): string {
   }
   return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[i]}`
 }
+
+/**
+ * formatRate for a row with no room: two significant figures and a one-letter
+ * unit, "8.8k" and "415M" rather than "8.8 kbps" and "415 Mbps". The row
+ * already says these are rates by its arrows, and at a glance the digits that
+ * matter are the first two and the letter — the rest was width taken from the
+ * device's name. Anything under a kilobit is "<1k": at that size the number is
+ * noise, and "505" without a unit would read as more than "8.8k".
+ */
+export function formatRateCompact(bytesPerSecond: number): string {
+  const bits = bytesPerSecond * 8
+  if (bits < 1000) return '<1k'
+  const units = ['k', 'M', 'G', 'T']
+  let value = bits / 1000
+  let i = 0
+  while (value >= 999.5 && i < units.length - 1) {
+    value /= 1000
+    i++
+  }
+  return `${value < 9.95 ? value.toFixed(1) : Math.round(value)}${units[i]}`
+}
