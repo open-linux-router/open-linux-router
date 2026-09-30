@@ -143,6 +143,13 @@ type Observed struct {
 	// handed us (design.md §3.4). Reported, not written.
 	AllSendRedirects *bool
 
+	// RAHosts are the interfaces holding an IPv6 default route learned from a
+	// router advertisement, whose accept_ra is 1 rather than 2 — the ones that
+	// lose it the moment this box forwards IPv6. Sorted. Reported when IPv6
+	// forwarding is about to go on, never written: accept_ra on an interface is
+	// whoever owns that interface's to set.
+	RAHosts []string
+
 	// Active is the set of source addresses currently sending traffic through
 	// us, newest observation first.
 	//
@@ -386,6 +393,24 @@ func classify(c Config, plan Plan, obs Observed, desired Desired, admin netip.Ad
 				"Set it to 0 yourself — it also governs interfaces olr was never given")
 	}
 
+	// The same shape — a fact about the running kernel, and a fix that is some
+	// other owner's write — but disruptive rather than advisory, because the
+	// loss is immediate: turning all.forwarding on makes the kernel purge every
+	// default route it learned from an advertisement on an interface whose
+	// accept_ra is not 2, and stop listening for new ones. This box's own IPv6
+	// goes the moment it applies. Only while forwarding is about to go on; once
+	// it is on, the loss has already happened and repeating it on every plan
+	// would be noise.
+	if len(obs.RAHosts) > 0 && ipv6ForwardingTurnsOn(desired, obs) {
+		impact = ImpactDisruptive
+		reasons = append(reasons, fmt.Sprintf(
+			"forwarding IPv6 makes this router drop the IPv6 default route it learned on %s "+
+				"and stop accepting router advertisements there, so this router loses its own "+
+				"IPv6 connection. Set net.ipv6.conf.<interface>.accept_ra to 2 on %s first if "+
+				"it should keep it",
+			strings.Join(obs.RAHosts, ", "), pluralPronoun(len(obs.RAHosts))))
+	}
+
 	return impact, reasons
 }
 
@@ -444,6 +469,24 @@ func adminAffected(c Config, desired Desired, admin netip.Addr) (exit, iface str
 		}
 	}
 	return "", "", false
+}
+
+// ipv6ForwardingTurnsOn reports whether this plan moves IPv6 forwarding from off
+// to on. An unreadable current value counts as off, which errs toward warning.
+func ipv6ForwardingTurnsOn(d Desired, obs Observed) bool {
+	for _, s := range d.Sysctls {
+		if s.Key == IPv6ForwardingSysctl && s.Value == "1" {
+			return obs.Sysctls[IPv6ForwardingSysctl] != "1"
+		}
+	}
+	return false
+}
+
+func pluralPronoun(n int) string {
+	if n == 1 {
+		return "it"
+	}
+	return "each"
 }
 
 func hasSendRedirects(d Desired) bool {

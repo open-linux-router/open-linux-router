@@ -339,6 +339,16 @@ type SysctlSpec struct {
 // routing policy still forwards nothing.
 const ForwardingSysctl = "net.ipv4.ip_forward"
 
+// IPv6ForwardingSysctl is the machine-wide IPv6 forwarding switch, written only
+// when Config.IPv6Forwarding says so.
+//
+// `all` rather than per-interface for the reason ForwardingSysctl gives, plus
+// one of IPv6's own: writing `all` also sets `default`, so an interface created
+// later — a tunnel, a WireGuard device — comes up in router mode too, instead of
+// answering neighbour solicitations as a host and being dropped from its
+// clients' router lists.
+const IPv6ForwardingSysctl = "net.ipv6.conf.all.forwarding"
+
 // Line is this rule's canonical form, and also the bytes stored in its netlink
 // userdata so that reading the kernel back reproduces it exactly.
 //
@@ -654,12 +664,12 @@ func renderSources(d *Desired, c Config, links LinkView) {
 // value underneath us. Narrower, and less likely to still be true in an hour.
 // §3.8 takes the plain one while the module is young.
 //
-// IPv6 is deliberately not here. `net.ipv6.conf.all.forwarding` switches every
-// interface out of host mode, and an interface in router mode stops accepting
-// the RAs this box may be getting its own address and default route from. That
-// needs `accept_ra=2` on the uplink to be safe, which needs an uplink object to
-// hang it on — `dial` (design.md §4), which does not exist yet. Exits block
-// IPv6 by default (IPv6OrDefault), so the gap is visible rather than silent.
+// IPv6 is written only when the operator says so (Config.IPv6Forwarding).
+// `net.ipv6.conf.all.forwarding` switches every interface out of host mode, and
+// an interface in router mode stops accepting the RAs this box may be getting
+// its own address and default route from — so unlike IPv4 it is not free, and
+// it is not inferred. The plan names the interfaces it would cost
+// (Observed.RAHosts); setting their accept_ra to 2 is not this module's write.
 //
 // Then §5.2, in both directions. When the exit's next hop shares a segment with
 // the clients — the normal case, and the one a WAN gateway never produces — two
@@ -683,6 +693,19 @@ func renderSysctls(d *Desired, c Config, links LinkView) {
 		Why: "without it the kernel drops every packet addressed to somewhere " +
 			"else, so nothing behind this router reaches anything",
 	})
+
+	if v := c.IPv6Forwarding; v != nil {
+		spec := SysctlSpec{
+			Key:   IPv6ForwardingSysctl,
+			Value: "0",
+			Why:   "IPv6 forwarding was turned off",
+		}
+		if *v {
+			spec.Value = "1"
+			spec.Why = "lets IPv6 pass through this router between its networks and the internet"
+		}
+		d.Sysctls = append(d.Sysctls, spec)
+	}
 
 	devs := map[string]bool{}
 	for _, e := range c.Exits {

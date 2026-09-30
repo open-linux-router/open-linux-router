@@ -135,6 +135,23 @@ type Config struct {
 	// somebody asks, and this is it.
 	Stats *bool `json:"stats,omitempty"`
 
+	// IPv6Forwarding is whether this box forwards IPv6 (§3.8). Nil means olr
+	// leaves net.ipv6.conf.all.forwarding exactly as the box has it.
+	//
+	// Its own switch rather than following ip_forward, because turning it on
+	// costs something IPv4 forwarding does not: an interface in router mode
+	// stops accepting router advertisements, so a box getting its own IPv6 from
+	// upstream loses it. That is the operator's decision, made here — not
+	// something this module infers from a network having a v6 prefix. The plan
+	// names the interfaces it would cost, and fixing them (accept_ra=2) is left
+	// to whoever owns them.
+	//
+	// A pointer so that false means "write 0" rather than "leave it": an
+	// operator who turns this off expects the box to stop forwarding, and a
+	// switch that only ever moved the kernel one way would show off while the
+	// kernel stayed on.
+	IPv6Forwarding *IPv6Forwarding `json:"ipv6_forwarding,omitempty"`
+
 	// Interfaces assigns an exit per network — §2.5's first tier of the ladder,
 	// and the only one that ships here.
 	//
@@ -153,6 +170,10 @@ type Config struct {
 // `boolean` with nothing else to say, and the one thing worth saying about this
 // field is that leaving it out means *on*.
 type EgressSNAT bool
+
+// IPv6Forwarding is Config.IPv6Forwarding's type, named for the same reason as
+// EgressSNAT: what leaving it out means is the thing worth describing.
+type IPv6Forwarding bool
 
 // Assignment is one rung of the ladder: this source uses that exit.
 //

@@ -117,9 +117,11 @@ type StaticKernel struct {
 	// redirect settings. Apply records what it was asked to write.
 	Sysctls map[string]string
 
-	// Foreign, AllSendRedirects and Active fill out the rest of Observed.
+	// Foreign, AllSendRedirects, RAHosts and Active fill out the rest of
+	// Observed.
 	Foreign          []ForeignRule
 	AllSendRedirects *bool
+	RAHosts          []string
 	Active           []string
 
 	// Flows is what Traffic returns.
@@ -150,6 +152,7 @@ func (k *StaticKernel) Observe(context.Context) (Observed, error) {
 		Sysctls:          map[string]string{},
 		Foreign:          append([]ForeignRule(nil), k.Foreign...),
 		AllSendRedirects: k.AllSendRedirects,
+		RAHosts:          append([]string(nil), k.RAHosts...),
 	}
 	for key, value := range k.Sysctls {
 		obs.Sysctls[key] = value

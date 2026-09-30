@@ -6,6 +6,7 @@ Usage:
 Available Commands:
   default          Set the exit everything uses unless something more specific says otherwise
   forward          Change an existing port forward
+  ipv6-forwarding  Let IPv6 pass through this router
   traffic-counting Count how much each device uses
   via              Send one network's traffic through an exit
 

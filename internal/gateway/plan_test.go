@@ -290,6 +290,68 @@ func TestAllSendRedirectsIsReportedNotWritten(t *testing.T) {
 	}
 }
 
+func withIPv6Forwarding(on bool) Config {
+	c := testConfig()
+	v := IPv6Forwarding(on)
+	c.IPv6Forwarding = &v
+	return c
+}
+
+// Turning v6 forwarding on purges every RA-learned default route on an
+// interface whose accept_ra is not 2. That is this box losing its own IPv6 the
+// moment the plan applies, so it is disruptive and names the interface — and
+// the fix is reported, not written, because accept_ra there is not ours.
+func TestTurningOnIPv6ForwardingNamesTheInterfacesItCosts(t *testing.T) {
+	k := programmed(t, testConfig())
+	k.RAHosts = []string{"enp1s0"}
+
+	plan := planFor(t, withIPv6Forwarding(true), k, netip.Addr{})
+	if plan.Impact != ImpactDisruptive {
+		t.Errorf("impact = %s, want disruptive", plan.Impact)
+	}
+	if !reasonsContain(plan, "enp1s0") || !reasonsContain(plan, "accept_ra") {
+		t.Errorf("the plan should name enp1s0 and the fix, got %v", plan.Reasons)
+	}
+	for _, ch := range plan.Changes {
+		if strings.Contains(ch.Line, "accept_ra") {
+			t.Errorf("accept_ra is the interface owner's to write, not ours: %q", ch.Line)
+		}
+	}
+}
+
+// Nothing learned from upstream, nothing to lose: a plain reload.
+func TestTurningOnIPv6ForwardingWithNoRAHostsIsNotDisruptive(t *testing.T) {
+	plan := planFor(t, withIPv6Forwarding(true), programmed(t, testConfig()), netip.Addr{})
+	if plan.Impact == ImpactDisruptive {
+		t.Errorf("nothing to lose, but impact = %s: %v", plan.Impact, plan.Reasons)
+	}
+	if !slicesContain(changeLines(plan), string(ChangeAdd)+" sysctl "+IPv6ForwardingSysctl+" = 1") {
+		t.Errorf("want the sysctl written, got %v", changeLines(plan))
+	}
+}
+
+// Already forwarding means the routes are already gone; saying so on every
+// later plan would be the warning nobody reads.
+func TestIPv6ForwardingAlreadyOnDoesNotWarnAgain(t *testing.T) {
+	c := withIPv6Forwarding(true)
+	k := programmed(t, c)
+	k.RAHosts = []string{"enp1s0"}
+
+	plan := planFor(t, c, k, netip.Addr{})
+	if reasonsContain(plan, "enp1s0") {
+		t.Errorf("already on, nothing new to report: %v", plan.Reasons)
+	}
+}
+
+func slicesContain(list []string, want string) bool {
+	for _, s := range list {
+		if s == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestImpactRoundTripsThroughJSON(t *testing.T) {
 	for _, want := range []Impact{ImpactNone, ImpactReload, ImpactRestart, ImpactDisruptive} {
 		text, err := want.MarshalText()

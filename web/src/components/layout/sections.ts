@@ -123,6 +123,11 @@ export const SECTIONS: Section[] = [
         blurb: 'How much each device has sent and received since this router started.',
       },
       {
+        slug: 'ipv6',
+        label: 'IPv6',
+        blurb: 'Whether IPv6 passes through this router. Off, on, or left as the router already has it.',
+      },
+      {
         // Under Gateway rather than a section of its own: the gateway is the
         // boundary with the internet, and this is the default stance at it.
         slug: 'firewall',

@@ -161,6 +161,15 @@ export function GatewayPage() {
             value: exits.length ? exits.map((e) => e.name).join(', ') : 'None yet',
           },
           { slug: 'usage', value: (config.stats ?? true) ? 'Counting' : 'Off' },
+          {
+            slug: 'ipv6',
+            value:
+              config.ipv6_forwarding === undefined
+                ? 'Not managed'
+                : config.ipv6_forwarding
+                  ? 'Forwarding'
+                  : 'Off',
+          },
           { slug: 'firewall', value: firewall.data ? (firewall.data.enabled ? 'On' : 'Off') : undefined },
           // Only when there is something to show. design.md §3.4 wants
           // somebody else's rules legible, not a permanent empty page.

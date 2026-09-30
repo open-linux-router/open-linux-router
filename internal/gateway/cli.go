@@ -198,7 +198,7 @@ func showConfigCommand() *cobra.Command {
 
 func setCommand() *cobra.Command {
 	c := verb("set", "Change an exit assignment or a port forward", func(*cobra.Command) {})
-	c.AddCommand(setDefaultCommand(), setViaCommand(), setStatsCommand())
+	c.AddCommand(setDefaultCommand(), setViaCommand(), setStatsCommand(), setIPv6ForwardingCommand())
 	return c
 }
 
@@ -228,6 +228,37 @@ func setStatsCommand() *cobra.Command {
 				return fmt.Errorf("want on or off, got %q", args[0])
 			}
 			return patchConfig(c, map[string]any{"stats": on})
+		},
+	}
+}
+
+// setIPv6ForwardingCommand is Config.IPv6Forwarding's switch. A sibling of
+// traffic-counting rather than a flag on `enable`, because it is a decision of
+// its own: turning the gateway on does not turn this on, and nothing else here
+// turns it on either.
+func setIPv6ForwardingCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "ipv6-forwarding on|off",
+		Short: "Let IPv6 pass through this router",
+		Long: "Turn IPv6 forwarding on or off.\n\n" +
+			"On costs something IPv4 forwarding does not: the kernel drops the IPv6\n" +
+			"default route this router learned from upstream on every interface whose\n" +
+			"accept_ra is not 2, and stops listening for new ones. The plan names those\n" +
+			"interfaces before anything is written. Off writes 0 — it does not merely\n" +
+			"stop olr managing the setting.",
+		Args:      cobra.ExactArgs(1),
+		ValidArgs: []string{"on", "off"},
+		RunE: func(c *cobra.Command, args []string) error {
+			var on bool
+			switch args[0] {
+			case "on":
+				on = true
+			case "off":
+				on = false
+			default:
+				return fmt.Errorf("want on or off, got %q", args[0])
+			}
+			return patchConfig(c, map[string]any{"ipv6_forwarding": on})
 		},
 	}
 }

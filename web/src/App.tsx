@@ -24,6 +24,7 @@ import { NetworksPage } from '@/routes/networks'
 import { OverviewPage } from '@/routes/overview'
 import { GatewayPage } from '@/routes/gateway/index'
 import { GatewayExitsPage } from '@/routes/gateway/exits'
+import { GatewayIPv6Page } from '@/routes/gateway/ipv6'
 import { FirewallPage } from '@/routes/gateway/firewall'
 import { GatewayUnmanagedPage } from '@/routes/gateway/unmanaged'
 import { GatewayUsagePage } from '@/routes/gateway/usage'
@@ -39,6 +40,7 @@ export function App() {
             <Route index element={<GatewayPage />} />
             <Route path="exits" element={<GatewayExitsPage />} />
             <Route path="usage" element={<GatewayUsagePage />} />
+            <Route path="ipv6" element={<GatewayIPv6Page />} />
             <Route path="firewall" element={<FirewallPage />} />
             <Route path="unmanaged" element={<GatewayUnmanagedPage />} />
           </Route>

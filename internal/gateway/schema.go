@@ -123,3 +123,20 @@ func (EgressSNAT) JSONSchema() *jsonschema.Schema {
 			"client's own address.",
 	}
 }
+
+// JSONSchema describes the IPv6 forwarding switch.
+//
+// Declared for the same reason as EgressSNAT's, with a different default:
+// absent means olr does not touch it, so a UI that rendered a missing key as
+// "off" would be claiming a kernel setting nobody has looked at.
+func (IPv6Forwarding) JSONSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type:  "boolean",
+		Title: "Forward IPv6",
+		Description: "Let IPv6 pass through this router. Turning it on stops this router " +
+			"accepting router advertisements on any interface whose accept_ra is 1, so an " +
+			"interface getting its own IPv6 from upstream loses it unless accept_ra is 2 " +
+			"there. Absent means olr leaves the setting as it finds it; false turns " +
+			"forwarding off.",
+	}
+}

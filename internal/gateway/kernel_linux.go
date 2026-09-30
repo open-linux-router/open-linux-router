@@ -90,6 +90,8 @@ func (k LinuxKernel) Observe(_ context.Context) (Observed, error) {
 		obs.AllSendRedirects = &on
 	}
 
+	obs.RAHosts = k.observeRAHosts()
+
 	obs.Active = k.observeActive()
 
 	return obs, nil
@@ -879,8 +881,10 @@ func (k LinuxKernel) readSysctl(key string) (string, bool) {
 // because something else was installed, and this is the read that notices.
 func (k LinuxKernel) readSysctls() map[string]string {
 	out := map[string]string{}
-	if v, ok := k.readSysctl(ForwardingSysctl); ok {
-		out[ForwardingSysctl] = v
+	for _, key := range []string{ForwardingSysctl, IPv6ForwardingSysctl} {
+		if v, ok := k.readSysctl(key); ok {
+			out[key] = v
+		}
 	}
 	links, err := netlink.LinkList()
 	if err != nil {
@@ -898,6 +902,42 @@ func (k LinuxKernel) readSysctls() map[string]string {
 			}
 		}
 	}
+	return out
+}
+
+// observeRAHosts finds the interfaces that would lose their IPv6 default route
+// the moment all.forwarding goes to 1 (Observed.RAHosts).
+//
+// Keyed on the route rather than on the address, because the route is what
+// the kernel purges: rt6_purge_dflt_routers drops every default route whose
+// protocol is `ra`, except on an interface whose accept_ra is 2. A SLAAC
+// address survives the switch; the path out does not.
+func (k LinuxKernel) observeRAHosts() []string {
+	routes, err := netlink.RouteListFiltered(netlink.FAMILY_V6,
+		&netlink.Route{Table: unix.RT_TABLE_MAIN}, netlink.RT_FILTER_TABLE)
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, r := range routes {
+		if r.Protocol != unix.RTPROT_RA || !isDefault(r) {
+			continue
+		}
+		link, err := netlink.LinkByIndex(r.LinkIndex)
+		if err != nil {
+			continue
+		}
+		name := link.Attrs().Name
+		if v, ok := k.readSysctl("net.ipv6.conf." + name + ".accept_ra"); ok && v == "2" {
+			continue
+		}
+		seen[name] = true
+	}
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	sort.Strings(out)
 	return out
 }
 

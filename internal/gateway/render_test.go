@@ -496,15 +496,36 @@ func TestADisabledModuleWritesNoSysctls(t *testing.T) {
 	}
 }
 
-// Deliberately absent until there is an uplink object to hang `accept_ra=2` on:
-// net.ipv6.conf.all.forwarding switches every interface out of host mode, and
-// an interface in router mode stops accepting the RAs this box may be getting
-// its own address and default route from.
-func TestIPv6ForwardingIsNotWritten(t *testing.T) {
+// Unset means olr does not touch it. IPv6 forwarding is not free the way IPv4's
+// is — it costs the box any IPv6 it learned from upstream — so it is never
+// inferred, not even on an otherwise complete gateway config.
+func TestIPv6ForwardingIsNotWrittenUnlessAskedFor(t *testing.T) {
 	got := lines(t, testConfig(), nil)
 	for _, l := range got {
-		if strings.Contains(l, "sysctl") && strings.Contains(l, "forwarding") {
-			t.Errorf("v6 forwarding needs accept_ra=2 first, so it is not ours to write: %q", l)
+		if strings.Contains(l, IPv6ForwardingSysctl) {
+			t.Errorf("nobody asked for v6 forwarding, so it is not ours to write: %q", l)
 		}
+	}
+}
+
+func TestIPv6ForwardingIsWrittenWhenTurnedOn(t *testing.T) {
+	c := testConfig()
+	on := IPv6Forwarding(true)
+	c.IPv6Forwarding = &on
+	got := lines(t, c, nil)
+	if !contains(got, "sysctl "+IPv6ForwardingSysctl+" = 1") {
+		t.Errorf("turned on, so it has to be written: %s", dump(got))
+	}
+}
+
+// Off is a value, not an absence: a switch the operator turned off has to take
+// the kernel with it, or the page would say "off" over a box still forwarding.
+func TestIPv6ForwardingTurnedOffWritesZero(t *testing.T) {
+	c := testConfig()
+	off := IPv6Forwarding(false)
+	c.IPv6Forwarding = &off
+	got := lines(t, c, nil)
+	if !contains(got, "sysctl "+IPv6ForwardingSysctl+" = 0") {
+		t.Errorf("turned off, so it has to be written as 0: %s", dump(got))
 	}
 }

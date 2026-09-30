@@ -470,18 +470,37 @@ drift and `olr gateway` offers to put it back. Writing it once at apply time and
 trusting it afterwards would make this the one setting in the module that can be
 wrong without anybody being told.
 
-#### IPv6 is deliberately absent
+#### IPv6 is its own switch
 
-`net.ipv6.conf.all.forwarding` switches every interface out of host mode, and an
-interface in router mode **stops accepting the RAs** this box may be getting its
-own address and default route from. Turning it on would cost the box its own
-IPv6 connectivity on exactly the deployment dns:§1 leads with. Doing it safely
-needs `accept_ra=2` on the uplink, which needs an uplink object to hang it on.
-That object now exists — `dial.Uplink` (`docs/dial.md` §1) — so this is no
-longer blocked on anything but the work, and §9 carries it.
+`ipv6_forwarding` in the config, `olr gateway set ipv6-forwarding on|off`, and
+Gateway → IPv6 in the WebUI. Unset means olr does not touch
+`net.ipv6.conf.all.forwarding`; `true` writes 1; `false` writes 0 — a switch the
+operator turned off takes the kernel with it, rather than only letting go of it.
+Like `ip_forward` it is written only while the module is enabled, and read back
+so a third party resetting it shows up as drift.
 
-Exits block IPv6 by default (§5.4), so the gap fails visibly rather than
-silently, and §9 carries the work.
+It does not follow `ip_forward`, and nothing infers it — not a network gaining
+an IPv6 prefix, not an uplink gaining a tunnel. The reason is what turning it
+on costs, which IPv4 forwarding does not:
+
+- The kernel **immediately purges every default route it learned from a router
+  advertisement** on an interface whose `accept_ra` is not 2, and stops
+  accepting new ones there. A box getting its own IPv6 from upstream loses it
+  the moment this applies.
+- Writing `all` also sets `default`, so an interface created later — a tunnel,
+  a WireGuard device — comes up in router mode too. That is wanted: an
+  interface left in host mode answers neighbour solicitations without the
+  router flag, and clients drop it from their router lists.
+
+So the plan **names the interfaces it would cost** — v6 default routes with
+protocol `ra` on an interface whose `accept_ra` is 1 — and comes back
+disruptive when there are any. Setting `accept_ra=2` there is not this module's
+write: the interface belongs to whoever configured it (`dial`, or the
+distribution), and the warning says what to set rather than setting it. Once
+forwarding is on, the loss has already happened and the warning stops.
+
+Exits still block IPv6 by default (§5.4), so an exit that carries only v4 fails
+visibly rather than leaking once v6 does pass through.
 
 ### 3.9 Egress NAT, and the other thing a LAN needs
 
@@ -990,8 +1009,8 @@ any work.
 | | foreign `ip rule` detection and refusal | |
 | | **egress NAT on `dial`'s uplink**, with an off switch | §3.9 — the other half of what a LAN needs, and what stops the next hop being typed twice |
 | | **port forwards, and hairpin NAT** | `docs/port-forwarding.md`, moved here from the deleted `firewall` module |
+| | **IPv6 forwarding**, its own switch | §3.8 — explicit, never inferred; the plan names the interfaces whose RA-learned route it drops |
 | **v2** | `local_socket` (TPROXY) | wants dns:§2.1's return-path answer settled first |
-| | IPv6 forwarding | §3.8 — needs `accept_ra=2` on the uplink; `dial.Uplink` now exists, so this waits only on the work |
 | | per-interface `conf.<dev>.forwarding` in place of the global key | §3.8 — the narrower write, once `link`'s networks say which interfaces traffic enters and leaves by |
 | | group and device tiers of the ladder | |
 | | conntrack-derived per-flow detail | |

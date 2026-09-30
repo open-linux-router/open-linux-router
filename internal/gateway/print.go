@@ -28,6 +28,7 @@ func writeConfigText(w io.Writer, c Config) error {
 	}
 	fmt.Fprintf(w, "Routing policy is %s\n", state)
 	fmt.Fprintf(w, "\nInternet via:  %s\n", describeDefault(c.Default))
+	fmt.Fprintf(w, "IPv6 forwarding:  %s\n", describeIPv6Forwarding(c.IPv6Forwarding))
 
 	fmt.Fprintln(w)
 	if err := writeExitsText(w, c); err != nil {
@@ -35,6 +36,19 @@ func writeConfigText(w io.Writer, c Config) error {
 	}
 	fmt.Fprintln(w)
 	return writeAssignmentsText(w, c)
+}
+
+// describeIPv6Forwarding spells out the unset case, because "off" would be a
+// claim about a kernel setting olr has not looked at.
+func describeIPv6Forwarding(v *IPv6Forwarding) string {
+	switch {
+	case v == nil:
+		return "not managed — left as this box has it"
+	case bool(*v):
+		return "on"
+	default:
+		return "off"
+	}
 }
 
 func writeExitsText(w io.Writer, c Config) error {
