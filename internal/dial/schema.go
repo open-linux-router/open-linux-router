@@ -105,11 +105,24 @@ func (UplinkIPv4) JSONSchema() *jsonschema.Schema {
 // general CIDR example would suggest the wrong one.
 func (UplinkIPv6) JSONSchema() *jsonschema.Schema {
 	props := jsonschema.NewProperties()
+	vias := []any{}
+	for _, v := range IPv6Vias() {
+		vias = append(vias, string(v))
+	}
 	props.Set("via", &jsonschema.Schema{
-		Type:        "string",
-		Title:       "How IPv6 arrives",
-		Description: "6in4: IPv6 carried inside IPv4 to a tunnel broker.",
-		Enum:        []any{string(Via6in4)},
+		Type:  "string",
+		Title: "How IPv6 arrives",
+		Description: "dhcpv6-pd: ask the ISP for a prefix to number the networks from. " +
+			"6in4: IPv6 carried inside IPv4 to a tunnel broker, for an ISP with none.",
+		Enum: vias,
+	})
+	props.Set("prefix_length", &jsonschema.Schema{
+		Type:  "integer",
+		Title: "Prefix size to ask for",
+		Description: "dhcpv6-pd only. A hint the ISP may ignore — 56 or 60 are common. " +
+			"Empty takes whatever it gives.",
+		Minimum: json.Number("48"),
+		Maximum: json.Number("64"),
 	})
 	props.Set("server", &jsonschema.Schema{
 		Type:        "string",
@@ -137,7 +150,7 @@ func (UplinkIPv6) JSONSchema() *jsonschema.Schema {
 		Description: "How this router reaches the IPv6 internet, when olr connects it. Leave the " +
 			"block out to leave IPv6 on the uplink as the ISP or the distribution has it.",
 		Properties: props,
-		Required:   []string{"via", "server", "address"},
+		Required:   []string{"via"},
 	}
 }
 

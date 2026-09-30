@@ -198,7 +198,12 @@ func run(args []string) error {
 	// addresses and state, the document for adoption. Reading both per request
 	// is what keeps §4.5 true — there is no cached copy of either to go stale
 	// while olrd is running.
-	facts := link.Facts{Source: source, Store: store}
+	//
+	// The delegated prefix is created this early because link's facts read
+	// it: networks numbered out of it resolve against it (§4.1 — dial reads
+	// link, so link subscribes to dial's prefix rather than importing it).
+	delegation := &dial.Delegation{Log: logger}
+	facts := link.Facts{Source: source, Store: store, Delegated: delegation.Prefix}
 
 	// Before anything reads the document as config, convert it if it was written
 	// by a version that keyed pools by interface, or that spelled the network
@@ -250,7 +255,7 @@ func run(args []string) error {
 	// Hoisted into a variable rather than built inline like the modules above
 	// it, because startup restores this one's kernel state as well as serving
 	// it. See the restore block below.
-	linkApplier := link.Applier{Store: store, Source: source}
+	linkApplier := link.Applier{Store: store, Source: source, Delegated: delegation.Prefix}
 
 	// The distribution's own network configuration, for the interfaces olr
 	// has taken (internal/host). Rooted like the store, so a development run
@@ -306,8 +311,12 @@ func run(args []string) error {
 		Applier: dialApplier,
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
-		Watch:   func(cfg dial.Config) { publisher.Watch(context.Background(), cfg) },
-		States:  publisher.States,
+		Watch: func(cfg dial.Config) {
+			publisher.Watch(context.Background(), cfg)
+			delegation.Watch(context.Background(), cfg)
+		},
+		States:     publisher.States,
+		Delegation: delegation.State,
 		Host: func() dial.HostStatus {
 			return dial.HostStatus{
 				Resolvers: hostApplier.Resolvers(),
@@ -382,6 +391,14 @@ func run(args []string) error {
 		return applyDependents(ctx, logger,
 			dhcpDependent(applier), gatewayDependent(gatewayApplier), natDependent(natApplier))
 	}
+	// The delegated prefix's subscriber. After followNetworks, because a
+	// network that moved to a new prefix is what everything built from the
+	// networks has to follow.
+	follower := newDelegationFollower(opts.root)
+	follower.delegation, follower.link, follower.writer = delegation, linkApplier, dial.NewWriter()
+	follower.srv, follower.logger, follower.dependents = srv, logger, follow(&followNetworks)
+	delegation.Changed = follower.changed
+
 	followUplink = func(ctx context.Context) []core.Step {
 		// Only the NAT table. The rest of what `dial` feeds is read live: the
 		// routing half reads the main table's default route rather than
@@ -594,7 +611,7 @@ func run(args []string) error {
 	go followFirewall(ctx, firewallApplier, srv, logger)
 	reapplyFirewall(ctx, firewallApplier, srv, logger, "startup")
 	startLink(ctx, linkApplier, logger)
-	startDial(ctx, dialApplier, publisher, logger)
+	startDial(ctx, dialApplier, publisher, delegation, logger)
 	startHost(ctx, srv, takeHost, logger)
 	startGateway(ctx, gatewayApplier, prober, logger)
 	startForwards(ctx, natApplier, logger)
@@ -1118,7 +1135,7 @@ func startRemote(ctx context.Context, tunnel remote.TunnelApplier, proxy remote.
 // every record publishes — the address cache is in memory and a restart empties
 // it (docs/ddns.md §6), which is also how a record somebody changed by hand at
 // the provider gets repaired.
-func startDial(ctx context.Context, a dial.Applier, publisher *dial.Publisher, logger *slog.Logger) {
+func startDial(ctx context.Context, a dial.Applier, publisher *dial.Publisher, delegation *dial.Delegation, logger *slog.Logger) {
 	cfg, err := a.Load()
 	if err != nil {
 		logger.Error("dial configuration could not be read; "+
@@ -1134,6 +1151,14 @@ func startDial(ctx context.Context, a dial.Applier, publisher *dial.Publisher, l
 	}
 
 	restoreUplink(ctx, a, cfg, logger)
+
+	// Asking for the prefix again after a restart is not losing it: the ISP
+	// keys the lease on the uplink's MAC and the fixed IAID, so it answers with
+	// the one it gave, and the networks keep their addresses meanwhile.
+	if cfg.Uplink.HasPD() {
+		delegation.Watch(ctx, cfg)
+		logger.Info("asking the ISP for a delegated prefix", "interface", cfg.Uplink.Interface)
+	}
 
 	if len(cfg.Records) > 0 {
 		publisher.Watch(ctx, cfg)

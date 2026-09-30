@@ -463,7 +463,7 @@ func (h HTTP) postPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	core.WriteJSON(w, http.StatusOK,
-		withLockoutWarning(buildPlan(current, desired, observed, opts), r, observed))
+		withLockoutWarning(buildPlan(current, desired, observed, opts, h.Applier.delegated()), r, observed))
 }
 
 // --- the list ---------------------------------------------------------------
@@ -503,7 +503,7 @@ func (h HTTP) getInterfaces(w http.ResponseWriter, r *http.Request) {
 		resp.Interfaces = append(resp.Interfaces, viewInterface(info, byName, cfg))
 	}
 	for _, n := range cfg.Networks {
-		resp.Networks = append(resp.Networks, viewNetwork(n, byName))
+		resp.Networks = append(resp.Networks, viewNetwork(n, byName, h.Applier.delegated()))
 	}
 
 	core.WriteJSON(w, http.StatusOK, resp)

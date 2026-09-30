@@ -210,6 +210,7 @@ function subtitleOf(n: NetworkRow): string {
   const parts = [n.subnet ? `${n.subnet}, this router at ${n.router}` : 'No IPv4']
   if (n.suggested_start) parts.push(`range ${n.suggested_start}–${n.suggested_end}`)
   if (n.subnet6) parts.push(`${n.subnet6}, this router at ${n.router6}`)
+  else if (n.delegated !== undefined) parts.push(`IPv6 /64 number ${n.delegated} — no prefix delegated yet`)
   return parts.join(' · ')
 }
 

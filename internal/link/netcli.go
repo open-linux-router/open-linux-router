@@ -67,12 +67,23 @@ type netFlags struct {
 	member   string
 	noSubnet bool
 
-	subnet6 string
-	router6 string
-	noIPv6  bool
+	subnet6   string
+	router6   string
+	noIPv6    bool
+	delegated int
+
+	// cmd is the command the flags are bound to, for Changed: a delegated
+	// number of 0 is the first /64, not "unset".
+	cmd *cobra.Command
+}
+
+// c6changed reports whether --ipv6-delegated was given.
+func c6changed(f *netFlags) bool {
+	return f.cmd != nil && f.cmd.Flags().Changed("ipv6-delegated")
 }
 
 func (f *netFlags) bind(c *cobra.Command) {
+	f.cmd = c
 	c.Flags().StringVar(&f.subnet, "subnet", "",
 		"the network in CIDR form, e.g. 172.16.1.0/24 (default: the next free private /24)")
 	c.Flags().StringVar(&f.router, "router", "",
@@ -86,8 +97,11 @@ func (f *netFlags) bind(c *cobra.Command) {
 			"(default: none — IPv6 comes from whatever prefix the interface already has)")
 	c.Flags().StringVar(&f.router6, "ipv6-router", "",
 		"this router's IPv6 address on the network (default: ::1 in the IPv6 subnet)")
+	c.Flags().IntVar(&f.delegated, "ipv6-delegated", 0,
+		"number the network with this /64 of the prefix the ISP delegated to the uplink "+
+			"(0 is the first); it follows the prefix when the ISP renumbers")
 	c.Flags().BoolVar(&f.noIPv6, "no-ipv6-subnet", false,
-		"drop the static IPv6 subnet, taking this router's IPv6 address off the interface")
+		"drop the network's IPv6, static or delegated, taking this router's IPv6 address off the interface")
 }
 
 func netAddCommand() *cobra.Command {
@@ -242,11 +256,21 @@ func applyNetFlags(n *Network, f *netFlags, cfg *Config, resp listResponse, crea
 // defaults to derive: a network gets a static v6 subnet only when somebody
 // names one, since most get theirs from a prefix olr never writes.
 func applyNet6Flags(n *Network, f *netFlags) error {
+	delegated := c6changed(f)
 	if f.noIPv6 {
-		if f.subnet6 != "" || f.router6 != "" {
-			return fmt.Errorf("--no-ipv6-subnet cannot be combined with --ipv6-subnet or --ipv6-router")
+		if f.subnet6 != "" || f.router6 != "" || delegated {
+			return fmt.Errorf("--no-ipv6-subnet cannot be combined with the other --ipv6 flags")
 		}
 		n.IPv6 = nil
+		return nil
+	}
+	if delegated {
+		if f.subnet6 != "" || f.router6 != "" {
+			return fmt.Errorf("--ipv6-delegated numbers the network out of the delegated prefix; " +
+				"it cannot be combined with --ipv6-subnet or --ipv6-router")
+		}
+		id := f.delegated
+		n.IPv6 = &NetworkIPv6{Delegated: &id}
 		return nil
 	}
 	if f.subnet6 == "" && f.router6 == "" {

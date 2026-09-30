@@ -152,7 +152,10 @@ func (p AddrPlan) Empty() bool {
 // if missing, and nothing else v6 is removed. A SLAAC or delegated address on a
 // member is left exactly where it is — see Desired.Addrs6 — and an old router
 // address olr put there leaves through PlanRetire.
-func PlanAddrs(c Config, observed []Interface) []AddrPlan {
+//
+// delegated is the uplink's delegated prefix, invalid when there is none; the
+// networks numbered out of it resolve against it (NetworkIPv6.Resolve).
+func PlanAddrs(c Config, observed []Interface, delegated netip.Prefix) []AddrPlan {
 	byName := make(map[string]Interface, len(observed))
 	for _, iface := range observed {
 		byName[iface.Name] = iface
@@ -190,8 +193,7 @@ func PlanAddrs(c Config, observed []Interface) []AddrPlan {
 
 			// IPv6: add only. What olr stops wanting comes off through
 			// PlanRetire, and nothing else v6 on the member is ours to judge.
-			if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
-				w := n.IPv6.RouterPrefix()
+			if w, ok := ipv6Router(n, delegated); ok {
 				if !slices.Contains(iface.Prefixes, w) {
 					plan.Add = append(plan.Add, w)
 				}
@@ -225,14 +227,18 @@ func PlanAddrs(c Config, observed []Interface) []AddrPlan {
 // was renumbered or lost its ipv6 block. Still-members included, because the v6
 // claim does not remove what it does not call for (Desired.Addrs6), so this is
 // the only way an old one goes.
-func RetiredFor(before, after Config) []Desired {
+//
+// before resolves against wasDelegated and after against delegated, so a
+// renumbering by the ISP — the same config on both sides, two different
+// prefixes — retires the old addresses through the same path an edit does.
+func RetiredFor(before, after Config, wasDelegated, delegated netip.Prefix) []Desired {
 	member := map[string]bool{}
 	wanted6 := map[string][]netip.Prefix{}
 	for _, n := range after.Networks {
 		for _, m := range n.Members {
 			member[m] = true
-			if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
-				wanted6[m] = append(wanted6[m], n.IPv6.RouterPrefix())
+			if w, ok := ipv6Router(n, delegated); ok {
+				wanted6[m] = append(wanted6[m], w)
 			}
 		}
 	}
@@ -248,10 +254,8 @@ func RetiredFor(before, after Config) []Desired {
 			if n.IPv4 != nil && n.IPv4.Subnet.IsValid() && !member[m] {
 				add(m, n.IPv4.RouterPrefix())
 			}
-			if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
-				if p := n.IPv6.RouterPrefix(); !slices.Contains(wanted6[m], p) {
-					add(m, p)
-				}
+			if p, ok := ipv6Router(n, wasDelegated); ok && !slices.Contains(wanted6[m], p) {
+				add(m, p)
 			}
 		}
 	}
@@ -266,13 +270,13 @@ func RetiredFor(before, after Config) []Desired {
 
 // PlanRetire is RetiredFor against the kernel: only the addresses that are
 // actually still there, so a plan does not promise to remove what is gone.
-func PlanRetire(before, after Config, observed []Interface) []AddrPlan {
+func PlanRetire(before, after Config, observed []Interface, wasDelegated, delegated netip.Prefix) []AddrPlan {
 	byName := make(map[string]Interface, len(observed))
 	for _, iface := range observed {
 		byName[iface.Name] = iface
 	}
 	var plans []AddrPlan
-	for _, d := range RetiredFor(before, after) {
+	for _, d := range RetiredFor(before, after, wasDelegated, delegated) {
 		have := byName[d.Interface].Prefixes
 		plan := AddrPlan{Interface: d.Interface}
 		for _, p := range d.Retire {
@@ -288,7 +292,7 @@ func PlanRetire(before, after Config, observed []Interface) []AddrPlan {
 }
 
 // DesiredFor builds the writer's input from the stored networks.
-func DesiredFor(c Config) []Desired {
+func DesiredFor(c Config, delegated netip.Prefix) []Desired {
 	var out []Desired
 	for _, n := range c.Networks {
 		for _, m := range n.Members {
@@ -296,14 +300,23 @@ func DesiredFor(c Config) []Desired {
 			if n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
 				d.Addrs = append(d.Addrs, n.IPv4.RouterPrefix())
 			}
-			if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
-				d.Addrs6 = append(d.Addrs6, n.IPv6.RouterPrefix())
+			if w, ok := ipv6Router(n, delegated); ok {
+				d.Addrs6 = append(d.Addrs6, w)
 			}
 			out = append(out, d)
 		}
 	}
 	slices.SortFunc(out, func(a, b Desired) int { return strings.Compare(a.Interface, b.Interface) })
 	return out
+}
+
+// ipv6Router is the network's v6 router address, when it has one to write.
+func ipv6Router(n Network, delegated netip.Prefix) (netip.Prefix, bool) {
+	if n.IPv6 == nil {
+		return netip.Prefix{}, false
+	}
+	_, router, ok := n.IPv6.Resolve(delegated)
+	return router, ok
 }
 
 // ipv4Prefixes filters a list to the IPv4 entries.

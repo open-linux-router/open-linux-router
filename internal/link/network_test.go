@@ -261,7 +261,7 @@ func TestPlanAddrsReplacesAForeignAddressOnAMember(t *testing.T) {
 		Networks: []Network{network("lan", "172.16.1.0/24", "lan0")},
 	}
 
-	plans := PlanAddrs(cfg, testInterfaces(t))
+	plans := PlanAddrs(cfg, testInterfaces(t), netip.Prefix{})
 	if len(plans) != 1 {
 		t.Fatalf("got %d plans, want 1: %+v", len(plans), plans)
 	}
@@ -290,7 +290,7 @@ func TestPlanAddrsLeavesIPv6Alone(t *testing.T) {
 		Adopted:  []string{"lan0"},
 		Networks: []Network{network("lan", "172.16.1.0/24", "lan0")},
 	}
-	for _, p := range PlanAddrs(cfg, observed) {
+	for _, p := range PlanAddrs(cfg, observed, netip.Prefix{}) {
 		for _, r := range p.Remove {
 			if r.Addr().Is6() {
 				t.Errorf("planned to remove the IPv6 address %s", r)
@@ -312,7 +312,7 @@ func TestPlanAddrsIsEmptyWhenTheKernelAlreadyAgrees(t *testing.T) {
 		Adopted:  []string{"lan1"},
 		Networks: []Network{network("lan", "172.16.1.0/24", "lan1")},
 	}
-	if plans := PlanAddrs(cfg, observed); len(plans) != 0 {
+	if plans := PlanAddrs(cfg, observed, netip.Prefix{}); len(plans) != 0 {
 		t.Errorf("planned %+v against a kernel that already matches", plans)
 	}
 }
@@ -324,7 +324,7 @@ func TestPlanAddrsSkipsAnAbsentMember(t *testing.T) {
 		Adopted:  []string{"nosuch0"},
 		Networks: []Network{network("lan", "172.16.1.0/24", "nosuch0")},
 	}
-	if plans := PlanAddrs(cfg, testInterfaces(t)); len(plans) != 0 {
+	if plans := PlanAddrs(cfg, testInterfaces(t), netip.Prefix{}); len(plans) != 0 {
 		t.Errorf("planned %+v for an interface this machine does not have", plans)
 	}
 }

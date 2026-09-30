@@ -353,6 +353,9 @@ func hostDesired(store *core.Store) (host.Desired, error) {
 		d.IPv4 = append(d.IPv4, u.Interface)
 		d.Resolvers = slices.Clone(u.DNS)
 	}
+	if u := dcfg.Uplink; u.HasPD() {
+		d.IPv6 = append(d.IPv6, u.Interface)
+	}
 	return d, nil
 }
 

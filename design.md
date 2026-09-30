@@ -502,7 +502,7 @@ Bounded list. Not expected to grow much. The object they all key off is the
 | | Module | Owns | v1 |
 |---|---|---|---|
 | **Foundation** | `link` | NICs, bridges, VLANs, bonds, addresses (netlink); **networks** (§4.4) | ✅ |
-| | `dial` | WAN: DHCP client, PPPoE, static, LTE; IPv6 PD. **Part built:** the static uplink — interface, address, default route in the main table — and dynamic DNS; no DHCP client, PPPoE or LTE, no IPv6 (docs/dial.md) | ✅ |
+| | `dial` | WAN: DHCP client, PPPoE, static, LTE; IPv6 PD. **Part built:** the static uplink — interface, address, default route in the main table — IPv6 by prefix delegation or a 6in4 tunnel, and dynamic DNS; no DHCP client, PPPoE or LTE (docs/dial.md) | ✅ |
 | | `devices` | **device identity** (§4.4); joins presence from leases + ARP | ✅ |
 | **Services** | `dhcp` | dnsmasq — DHCPv4, DHCPv6 **and RA** (§4.2) | ✅ |
 | | `dns` | unbound — **DNS only** | ✅ |

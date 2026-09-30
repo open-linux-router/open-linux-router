@@ -38,6 +38,7 @@ package link
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"net/netip"
@@ -122,11 +123,11 @@ type Network struct {
 	IPv4 *NetworkIPv4 `json:"ipv4,omitempty"`
 
 	// IPv6 is nil for a network whose IPv6, if any, comes from somewhere else
-	// — a prefix delegated to the member by the distribution, which dnsmasq's
-	// `constructor:` follows on its own. Set, it is a static /64 that olr writes
-	// to every member, the same way IPv4 is: the shape a tunnelled prefix (a
-	// routed /48 from a tunnel broker) or a ULA needs, because nothing else on
-	// the box is going to put that address there.
+	// — an address the distribution put on the member, which dnsmasq's
+	// `constructor:` follows on its own. Set, it is a /64 that olr writes to
+	// every member, the same way IPv4 is: either static (a tunnel broker's
+	// routed prefix, a ULA), or numbered out of the prefix the ISP delegated to
+	// the uplink, which olr follows when the ISP renumbers.
 	//
 	// The claim it makes is narrower than IPv4's. olr owns *its own* v6 address
 	// on a member — adds it, and takes it off when the network stops asking for
@@ -153,16 +154,59 @@ type NetworkIPv4 struct {
 	Router *netip.Addr `json:"router,omitempty"`
 }
 
-// NetworkIPv6 is a network's IPv6 addressing.
+// NetworkIPv6 is a network's IPv6 addressing: a static Subnet, or the
+// Delegated'th /64 of the uplink's delegated prefix. Exactly one of the two.
 type NetworkIPv6 struct {
 	// Subnet is the network's /64: 2001:db8:1:1::/64. Exactly /64, because
 	// that is what SLAAC works on and a network whose clients cannot address
 	// themselves is not one `dhcp` can serve.
-	Subnet netip.Prefix `json:"subnet"`
+	Subnet netip.Prefix `json:"subnet,omitzero"`
+
+	// Delegated numbers the network's /64 out of the prefix the ISP delegated
+	// to the uplink (dial's prefix delegation): 0 is the first /64, 1 the
+	// second. A /60 has sixteen, a /56 two hundred and fifty-six.
+	//
+	// A number rather than a prefix because the prefix is the ISP's and
+	// changes; the number is the operator's and does not. When the ISP
+	// renumbers, every delegated network moves with it and keeps its place.
+	Delegated *int `json:"delegated,omitempty"`
 
 	// Router is this box's own address on the network. Nil derives `::1`,
-	// the same convention IPv4's `.1` follows.
+	// the same convention IPv4's `.1` follows. Static subnets only: a pinned
+	// address inside a prefix the ISP can change would be wrong the first time
+	// it did.
 	Router *netip.Addr `json:"router,omitempty"`
+}
+
+// Resolve is the network's /64 and this router's address in it, against the
+// uplink's delegated prefix. False when there is nothing to write: a delegated
+// network with no prefix delegated yet, or a number past its end.
+func (n NetworkIPv6) Resolve(delegated netip.Prefix) (subnet, router netip.Prefix, ok bool) {
+	if n.Delegated == nil {
+		if !n.Subnet.IsValid() {
+			return netip.Prefix{}, netip.Prefix{}, false
+		}
+		return n.Subnet, n.RouterPrefix(), true
+	}
+	subnet, ok = NthSubnet64(delegated, *n.Delegated)
+	if !ok {
+		return netip.Prefix{}, netip.Prefix{}, false
+	}
+	return subnet, netip.PrefixFrom(FirstHost6(subnet), 64), true
+}
+
+// NthSubnet64 is the n'th /64 of a prefix /64 or shorter.
+func NthSubnet64(p netip.Prefix, n int) (netip.Prefix, bool) {
+	if !p.IsValid() || !p.Addr().Is6() || p.Bits() > 64 || n < 0 {
+		return netip.Prefix{}, false
+	}
+	if room := 64 - p.Bits(); room < 63 && uint64(n) >= uint64(1)<<room {
+		return netip.Prefix{}, false
+	}
+	a := p.Masked().Addr().As16()
+	hi := binary.BigEndian.Uint64(a[:8]) | uint64(n)
+	binary.BigEndian.PutUint64(a[:8], hi)
+	return netip.PrefixFrom(netip.AddrFrom16(a), 64), true
 }
 
 // RouterAddr resolves the stored or derived router address.
@@ -332,9 +376,11 @@ func (c *Config) normalizeNetworks() {
 			n.IPv4 = &v4
 		}
 
-		if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
+		if n.IPv6 != nil {
 			v6 := *n.IPv6
-			v6.Subnet = v6.Subnet.Masked()
+			if v6.Subnet.IsValid() {
+				v6.Subnet = v6.Subnet.Masked()
+			}
 			if v6.Router != nil && *v6.Router == FirstHost6(v6.Subnet) {
 				v6.Router = nil
 			}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -50,13 +51,21 @@ func renderDhcpcd(conf string, d Desired) string {
 		b.WriteString(blockEnd + "\n\n")
 	}
 	b.WriteString(body)
-	if ifaces := sortedUnique(d.IPv4); len(ifaces) > 0 {
+	if ifaces := sortedUnique(append(slices.Clone(d.IPv4), d.IPv6...)); len(ifaces) > 0 {
 		if body != "" && !strings.HasSuffix(body, "\n") {
 			b.WriteString("\n")
 		}
-		b.WriteString("\n" + blockBegin + ": IPv4 on these interfaces is olr's; dhcpcd keeps IPv6\n")
+		b.WriteString("\n" + blockBegin + ": " + blockHeading(d) + "\n")
 		for _, iface := range ifaces {
-			fmt.Fprintf(&b, "interface %s\n\tipv6only\n", iface)
+			v4, v6 := slices.Contains(d.IPv4, iface), slices.Contains(d.IPv6, iface)
+			switch {
+			case v4 && v6:
+				fmt.Fprintf(&b, "interface %s\n\tnoipv4\n\tnoipv6\n", iface)
+			case v6:
+				fmt.Fprintf(&b, "interface %s\n\tipv4only\n", iface)
+			default:
+				fmt.Fprintf(&b, "interface %s\n\tipv6only\n", iface)
+			}
 		}
 		b.WriteString(blockEnd + "\n")
 	}
@@ -138,10 +147,21 @@ func (a Applier) applyDhcpcd(d Desired) []core.Step {
 	return steps
 }
 
+// blockHeading is the marker line's text, saying what each block means.
+func blockHeading(d Desired) string {
+	if len(d.IPv6) == 0 {
+		return "IPv4 on these interfaces is olr's; dhcpcd keeps IPv6"
+	}
+	return "olr runs what each block turns off here: ipv6only is olr's IPv4, ipv4only olr's IPv6"
+}
+
 func describeDhcpcd(d Desired) string {
 	var parts []string
 	if ifaces := sortedUnique(d.IPv4); len(ifaces) > 0 {
 		parts = append(parts, "IPv4 on "+strings.Join(ifaces, ", ")+" is olr's")
+	}
+	if ifaces := sortedUnique(d.IPv6); len(ifaces) > 0 {
+		parts = append(parts, "IPv6 on "+strings.Join(ifaces, ", ")+" is olr's")
 	}
 	if len(d.Resolvers) > 0 {
 		parts = append(parts, "/etc/resolv.conf is olr's")

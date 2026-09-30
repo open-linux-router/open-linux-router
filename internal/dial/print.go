@@ -63,6 +63,28 @@ func uplinkSummary(u *Uplink) string {
 // gateway and the route actually in the main table are two separate lines, and
 // a route that leaves by a different interface says so rather than being
 // counted as agreement.
+func pdSize(n int) string {
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf(", asking for a /%d", n)
+}
+
+// delegationLine is the prefix and its lease, or where the loop is instead.
+func delegationLine(st *DelegationState) string {
+	switch {
+	case st == nil:
+		return "not being asked for — olrd is not running it"
+	case st.Prefix.IsValid():
+		return fmt.Sprintf("%s, renews %s, expires %s", st.Prefix,
+			st.Renews.Local().Format("Jan 2 15:04"), st.Expires.Local().Format("Jan 2 15:04"))
+	case st.Error != "":
+		return fmt.Sprintf("none — %s: %s", st.Phase, st.Error)
+	default:
+		return "none yet — " + st.Phase
+	}
+}
+
 // tunnelStateLine says whether the tunnel device is there and up, and where
 // it actually leaves from.
 func tunnelStateLine(tv *tunnelView) string {
@@ -108,6 +130,14 @@ func writeUplinkText(w io.Writer, v *uplinkView) error {
 	if v.ResolvingThrough != nil || len(v.DNS) > 0 {
 		fmt.Fprintf(t, "resolving through\t%s\n",
 			orDash(strings.Join(v.ResolvingThrough, ", ")))
+	}
+	if v.Delegation != nil || v.PrefixLength > 0 {
+		fmt.Fprintln(t, "\t")
+		fmt.Fprintf(t, "ipv6\tprefix delegation from the ISP%s\n", pdSize(v.PrefixLength))
+		fmt.Fprintf(t, "delegated prefix\t%s\n", delegationLine(v.Delegation))
+		if v.AcceptRA != "" && v.AcceptRA != "2" {
+			fmt.Fprintf(t, "router advertisements\taccept_ra is %s on %s, not 2\n", v.AcceptRA, v.Interface)
+		}
 	}
 	if tv := v.Tunnel; tv != nil {
 		fmt.Fprintln(t, "\t")

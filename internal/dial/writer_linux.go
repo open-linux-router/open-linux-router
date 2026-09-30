@@ -4,10 +4,13 @@ package dial
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"slices"
+	"strings"
 
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
@@ -117,6 +120,18 @@ func (linuxWriter) Apply(ctx context.Context, d Desired) ([]Step, error) {
 		run(fmt.Sprintf("route traffic out via %s on %s", d.Gateway, d.Interface), func() error {
 			return netlink.RouteReplace(defaultRoute(link, d.Gateway))
 		})
+	}
+
+	// accept_ra before anything IPv6 depends on it. Written on every apply the
+	// uplink asks for it, not only when it reads wrong: dhcpcd sets it to 0 on
+	// the interfaces it manages, and one reload is enough to undo it.
+	if d.AcceptRA {
+		key := "/proc/sys/net/ipv6/conf/" + d.Interface + "/accept_ra"
+		if v, err := os.ReadFile(key); err != nil || strings.TrimSpace(string(v)) != "2" {
+			run(fmt.Sprintf("keep taking router advertisements on %s (accept_ra 2)", d.Interface), func() error {
+				return os.WriteFile(key, []byte("2\n"), 0o644)
+			})
+		}
 	}
 
 	// The tunnel after the IPv4 half, because it rides on it: a tunnel whose
@@ -361,6 +376,31 @@ func observeTunnel(obs *Observed) {
 	}
 }
 
+// Unreachable implements Writer.
+func (linuxWriter) Unreachable(_ context.Context, old, next netip.Prefix) error {
+	route := func(p netip.Prefix) *netlink.Route {
+		return &netlink.Route{
+			Table:    unix.RT_TABLE_MAIN,
+			Family:   netlink.FAMILY_V6,
+			Protocol: unix.RTPROT_STATIC,
+			Type:     unix.RTN_UNREACHABLE,
+			Dst:      &net.IPNet{IP: net.IP(p.Addr().AsSlice()), Mask: net.CIDRMask(p.Bits(), 128)},
+		}
+	}
+	if old.IsValid() && old != next {
+		// Gone already is fine: a reboot took it.
+		if err := netlink.RouteDel(route(old)); err != nil && !errors.Is(err, unix.ESRCH) {
+			return fmt.Errorf("removing the unreachable route for %s: %w", old, err)
+		}
+	}
+	if next.IsValid() {
+		if err := netlink.RouteReplace(route(next)); err != nil {
+			return fmt.Errorf("adding the unreachable route for %s: %w", next, err)
+		}
+	}
+	return nil
+}
+
 // readV6 lists a device's IPv6 addresses, link-local excluded.
 func readV6(link netlink.Link) ([]netip.Prefix, error) {
 	addrs, err := netlink.AddrList(link, netlink.FAMILY_V6)
@@ -409,6 +449,9 @@ func (linuxWriter) Observe(ctx context.Context, iface string) (Observed, error) 
 	}
 
 	observeTunnel(&obs)
+	if v, err := os.ReadFile("/proc/sys/net/ipv6/conf/" + iface + "/accept_ra"); err == nil {
+		obs.AcceptRA = strings.TrimSpace(string(v))
+	}
 
 	gw, dev, err := defaultVia()
 	if err != nil {

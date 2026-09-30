@@ -153,9 +153,8 @@ type Uplink struct {
 	// whatever the interface gets from the ISP's router advertisements, or a
 	// DHCPv6 client the distribution runs, stays exactly as it is.
 	//
-	// One form today, a 6in4 tunnel to a tunnel broker — the way to IPv6 where
-	// the ISP offers none. Prefix delegation is the other form this field is
-	// shaped for, and it is not built.
+	// Two forms: prefix delegation from the ISP (ViaPD), and a 6in4 tunnel to
+	// a tunnel broker (Via6in4) for the ISP that offers no IPv6.
 	IPv6 *UplinkIPv6 `json:"ipv6,omitempty"`
 
 	// DNS are the resolvers this router itself looks names up through, in
@@ -197,7 +196,18 @@ type UplinkIPv4 struct {
 	Gateway netip.Addr `json:"gateway"`
 }
 
-// UplinkIPv6 is the uplink's IPv6: today, a 6in4 tunnel.
+// UplinkIPv6 is the uplink's IPv6: prefix delegation, or a 6in4 tunnel.
+//
+// # Prefix delegation
+//
+// olrd runs a DHCPv6 client on the uplink and asks the ISP for a prefix
+// (internal/dial/dhcpv6), keeps it renewed, and publishes it. The uplink's own
+// address and default route come from the ISP's router advertisements, which
+// the kernel takes — olr sets accept_ra to 2 on the uplink so it still does once
+// this box forwards IPv6. Networks take /64s of the delegated prefix by number
+// (link.Network.IPv6), and follow it when the ISP renumbers.
+//
+// # The tunnel
 //
 // The tunnel is a device olr creates, named TunnelInterface, and owns
 // outright — unlike the uplink interface, which exists before olr and outlives
@@ -210,17 +220,21 @@ type UplinkIPv4 struct {
 // network says which /64 it takes (link.Network.IPv6); this object only carries
 // the traffic.
 type UplinkIPv6 struct {
-	// Via is how IPv6 arrives. Only Via6in4 exists.
+	// Via is how IPv6 arrives.
 	Via IPv6Via `json:"via"`
 
+	// PrefixLength is the size of prefix to ask the ISP for — 56, 60, 64 — as
+	// a hint it may ignore. Zero asks for whatever it gives. ViaPD only.
+	PrefixLength int `json:"prefix_length,omitempty"`
+
 	// Server is the broker's IPv4 endpoint — "Server IPv4 Address" on a
-	// tunnel broker's details page.
-	Server netip.Addr `json:"server"`
+	// tunnel broker's details page. Via6in4 only, as are Address and MTU.
+	Server netip.Addr `json:"server,omitzero"`
 
 	// Address is this box's own address inside the tunnel, with its mask —
 	// "Client IPv6 Address", 2001:db8:1f0a:123::2/64. Not masked, for the
 	// reason UplinkIPv4.Address is not.
-	Address netip.Prefix `json:"address"`
+	Address netip.Prefix `json:"address,omitzero"`
 
 	// MTU of the tunnel device. Zero means DefaultTunnelMTU: 20 bytes of IPv4
 	// header under a 1500-byte link.
@@ -230,8 +244,16 @@ type UplinkIPv6 struct {
 // IPv6Via is how the uplink's IPv6 arrives.
 type IPv6Via string
 
-// Via6in4 is IPv6 carried inside IPv4 to a tunnel broker (protocol 41).
-const Via6in4 IPv6Via = "6in4"
+const (
+	// ViaPD is DHCPv6 prefix delegation from the ISP.
+	ViaPD IPv6Via = "dhcpv6-pd"
+
+	// Via6in4 is IPv6 carried inside IPv4 to a tunnel broker (protocol 41).
+	Via6in4 IPv6Via = "6in4"
+)
+
+// IPv6Vias lists the forms, for the schema and the CLI.
+func IPv6Vias() []IPv6Via { return []IPv6Via{ViaPD, Via6in4} }
 
 // TunnelInterface is the name of the 6in4 device olr creates. Fixed, because
 // there is one uplink and so at most one tunnel, and a fixed name is what lets
@@ -247,6 +269,11 @@ func (v UplinkIPv6) MTUOrDefault() int {
 		return DefaultTunnelMTU
 	}
 	return v.MTU
+}
+
+// HasPD reports whether the uplink asks the ISP for a delegated prefix.
+func (u *Uplink) HasPD() bool {
+	return u != nil && u.IPv6 != nil && u.IPv6.Via == ViaPD
 }
 
 // HasTunnel reports whether the uplink asks for a 6in4 tunnel.

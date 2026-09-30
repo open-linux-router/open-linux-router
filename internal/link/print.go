@@ -41,7 +41,10 @@ func writeConfigText(w io.Writer, c Config) error {
 			if n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
 				subnet = fmt.Sprintf("%s, this router at %s", n.IPv4.Subnet, n.IPv4.RouterAddr())
 			}
-			if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
+			switch {
+			case n.IPv6 != nil && n.IPv6.Delegated != nil:
+				subnet += fmt.Sprintf("; ipv6 /64 number %d of the delegated prefix", *n.IPv6.Delegated)
+			case n.IPv6 != nil && n.IPv6.Subnet.IsValid():
 				subnet += fmt.Sprintf("; %s, this router at %s", n.IPv6.Subnet, n.IPv6.RouterAddr())
 			}
 			fmt.Fprintf(t, "  %s\ton %s\t%s\n", n.Name,

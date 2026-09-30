@@ -29,6 +29,8 @@ func (w fakeWriter) Observe(context.Context, string) (Observed, error) {
 	return w.observed, nil
 }
 
+func (w fakeWriter) Unreachable(context.Context, netip.Prefix, netip.Prefix) error { return nil }
+
 func put(t *testing.T, h http.Handler, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	w := httptest.NewRecorder()

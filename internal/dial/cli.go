@@ -453,6 +453,10 @@ func setUplinkCommand() *cobra.Command {
 		tunnelAddress string
 		tunnelMTU     int
 		noTunnel      bool
+
+		pd           bool
+		noPD         bool
+		prefixLength int
 	)
 
 	c := &cobra.Command{
@@ -483,7 +487,12 @@ func setUplinkCommand() *cobra.Command {
 			"That connects this router over IPv6 and nothing else. The networks behind\n" +
 			"it are numbered from the broker's routed prefix one by one\n" +
 			"(`olr net set <name> --ipv6-subnet`), and forwarding IPv6 to them is\n" +
-			"`olr gateway set ipv6-forwarding on`.",
+			"`olr gateway set ipv6-forwarding on`.\n\n" +
+			"IPv6 from an ISP that delegates prefixes:\n\n" +
+			"  olr dial set uplink --prefix-delegation --prefix-length 60\n\n" +
+			"olrd asks the ISP for a prefix and keeps it renewed; networks take /64s of\n" +
+			"it by number (`olr net set <name> --ipv6-delegated 0`) and follow it when\n" +
+			"the ISP renumbers.",
 		RunE: func(c *cobra.Command, _ []string) error {
 			if c.Flags().NFlag() == 0 {
 				return fmt.Errorf("nothing to set; see `olr dial set uplink --help`")
@@ -536,11 +545,29 @@ func setUplinkCommand() *cobra.Command {
 			}
 
 			switch {
+			case noPD:
+				if u.HasPD() {
+					u.IPv6 = nil
+				}
+			case pd, c.Flags().Changed("prefix-length"):
+				if !u.HasPD() {
+					u.IPv6 = &UplinkIPv6{Via: ViaPD}
+				}
+				if c.Flags().Changed("prefix-length") {
+					u.IPv6.PrefixLength = prefixLength
+				}
+			}
+
+			switch {
 			case noTunnel:
-				u.IPv6 = nil
+				if u.HasTunnel() {
+					u.IPv6 = nil
+				}
 			case c.Flags().Changed("tunnel"), c.Flags().Changed("tunnel-address"),
 				c.Flags().Changed("tunnel-mtu"):
-				if u.IPv6 == nil {
+				if !u.HasTunnel() {
+					// Replacing prefix delegation, when that was set: the uplink
+					// brings IPv6 in one way at a time.
 					u.IPv6 = &UplinkIPv6{Via: Via6in4}
 				}
 				if c.Flags().Changed("tunnel") {
@@ -604,6 +631,18 @@ func setUplinkCommand() *cobra.Command {
 		fmt.Sprintf("the tunnel's MTU (default %d)", DefaultTunnelMTU))
 	c.Flags().BoolVar(&noTunnel, "no-tunnel", false, "take the IPv6 tunnel down and remove it")
 
+	c.Flags().BoolVar(&pd, "prefix-delegation", false,
+		"ask the ISP for an IPv6 prefix to number the networks from (DHCPv6-PD)")
+	c.Flags().BoolVar(&noPD, "no-prefix-delegation", false, "stop asking, and give the prefix back")
+	c.Flags().IntVar(&prefixLength, "prefix-length", 0,
+		"the prefix size to ask the ISP for, such as 56 or 60 (default: whatever it gives)")
+
+	c.MarkFlagsMutuallyExclusive("prefix-delegation", "no-prefix-delegation")
+	c.MarkFlagsMutuallyExclusive("prefix-length", "no-prefix-delegation")
+	for _, t := range []string{"tunnel", "tunnel-address", "tunnel-mtu"} {
+		c.MarkFlagsMutuallyExclusive("prefix-delegation", t)
+		c.MarkFlagsMutuallyExclusive("prefix-length", t)
+	}
 	c.MarkFlagsMutuallyExclusive("tunnel", "no-tunnel")
 	c.MarkFlagsMutuallyExclusive("tunnel-address", "no-tunnel")
 	c.MarkFlagsMutuallyExclusive("tunnel-mtu", "no-tunnel")

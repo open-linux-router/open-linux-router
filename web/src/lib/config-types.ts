@@ -417,7 +417,9 @@ export interface NetworkIPv4 {
   router?: IPAddress8
 }
 export interface NetworkIPv6 {
-  subnet: string
+  subnet?: string
+  /** The Nth /64 of the uplink's delegated prefix, instead of a static subnet. */
+  delegated?: number
   router?: string
 }
 export interface RemoteConfig {

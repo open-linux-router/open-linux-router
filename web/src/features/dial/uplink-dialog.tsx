@@ -63,6 +63,12 @@ export function UplinkDialog({
   const [address, setAddress] = useState(initial?.address ?? '')
   const [gateway, setGateway] = useState(initial?.gateway ?? '')
   const [dns, setDns] = useState((initial?.dns ?? []).join(', '))
+  const [v6, setV6] = useState<'none' | 'dhcpv6-pd' | '6in4'>(
+    initial?.tunnel ? '6in4' : initial?.delegation || initial?.prefix_length ? 'dhcpv6-pd' : 'none',
+  )
+  const [prefixLength, setPrefixLength] = useState(
+    initial?.prefix_length ? String(initial.prefix_length) : '',
+  )
   const [tunnelServer, setTunnelServer] = useState(initial?.tunnel?.server ?? '')
   const [tunnelAddress, setTunnelAddress] = useState(initial?.tunnel?.address ?? '')
 
@@ -82,7 +88,29 @@ export function UplinkDialog({
     if (prefix && (address.trim() === '' || address === initial?.address)) setAddress(prefix)
   }
 
-  const tunnelValid = (tunnelServer.trim() === '') === (tunnelAddress.trim() === '')
+  const tunnelValid = v6 !== '6in4' || (tunnelServer.trim() !== '' && tunnelAddress.trim() !== '')
+  function ipv6Of(): Uplink['ipv6'] {
+    switch (v6) {
+      case 'dhcpv6-pd': {
+        const n = Number(prefixLength.trim())
+        return {
+          via: 'dhcpv6-pd',
+          prefix_length: prefixLength.trim() && Number.isInteger(n) ? n : undefined,
+        }
+      }
+      case '6in4':
+        return {
+          via: '6in4',
+          server: tunnelServer.trim(),
+          address: tunnelAddress.trim(),
+          // The MTU has no field; an edit keeps whatever was set.
+          mtu: initial?.tunnel?.mtu === 1480 ? undefined : initial?.tunnel?.mtu,
+        }
+      default:
+        return undefined
+    }
+  }
+
   const valid =
     iface !== '' && (address.trim() === '') === (gateway.trim() === '') && tunnelValid
 
@@ -192,40 +220,75 @@ export function UplinkDialog({
           </div>
 
           <div className="space-y-3 border-t pt-4">
-            <div className="space-y-1">
-              <div className="text-sm font-medium">IPv6 through a tunnel broker</div>
+            <div className="space-y-2">
+              <Label htmlFor="uplink-ipv6">IPv6</Label>
+              <Select value={v6} onValueChange={(v) => setV6((v as typeof v6) ?? 'none')}>
+                <SelectTrigger id="uplink-ipv6" className="w-full">
+                  <SelectValue>{(v: string) => V6_LABEL[v as typeof v6] ?? V6_LABEL.none}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(V6_LABEL) as (typeof v6)[]).map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {V6_LABEL[k]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-xs text-muted-foreground">
-                Optional, for when your ISP offers no IPv6. Both values are on the broker&rsquo;s
-                tunnel details page. This connects this router; each network takes a /64 of the
-                broker&rsquo;s routed prefix on its own, and forwarding IPv6 to them is under
-                Gateway → IPv6.
+                This connects this router. Each network takes a /64 of the prefix on its own page,
+                and forwarding IPv6 to them is under Gateway → IPv6.
               </p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+
+            {v6 === 'dhcpv6-pd' && (
               <div className="space-y-2">
-                <Label htmlFor="uplink-tunnel-server">Tunnel server</Label>
+                <Label htmlFor="uplink-prefix-length">Prefix size to ask for</Label>
                 <Input
-                  id="uplink-tunnel-server"
-                  value={tunnelServer}
-                  placeholder="Server IPv4 Address"
-                  onChange={(e) => setTunnelServer(e.target.value)}
+                  id="uplink-prefix-length"
+                  inputMode="numeric"
+                  value={prefixLength}
+                  placeholder="Whatever the ISP gives — often 56 or 60"
+                  onChange={(e) => setPrefixLength(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  A hint the ISP may ignore. olr keeps the prefix renewed and moves the networks
+                  numbered from it when the ISP changes it.
+                </p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="uplink-tunnel-address">This router&rsquo;s tunnel address</Label>
-                <Input
-                  id="uplink-tunnel-address"
-                  value={tunnelAddress}
-                  placeholder="Client IPv6 Address, e.g. 2001:db8::2/64"
-                  onChange={(e) => setTunnelAddress(e.target.value)}
-                />
-              </div>
-            </div>
-            {!tunnelValid && (
-              <p className="text-xs text-warning">
-                A tunnel needs both the server and this router&rsquo;s address. Leave both blank
-                for no tunnel.
-              </p>
+            )}
+
+            {v6 === '6in4' && (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  For when your ISP offers no IPv6. Both values are on the broker&rsquo;s tunnel
+                  details page.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="uplink-tunnel-server">Tunnel server</Label>
+                    <Input
+                      id="uplink-tunnel-server"
+                      value={tunnelServer}
+                      placeholder="Server IPv4 Address"
+                      onChange={(e) => setTunnelServer(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="uplink-tunnel-address">This router&rsquo;s tunnel address</Label>
+                    <Input
+                      id="uplink-tunnel-address"
+                      value={tunnelAddress}
+                      placeholder="Client IPv6 Address, e.g. 2001:db8::2/64"
+                      onChange={(e) => setTunnelAddress(e.target.value)}
+                    />
+                  </div>
+                </div>
+                {!tunnelValid && (
+                  <p className="text-xs text-warning">
+                    A tunnel needs both the server and this router&rsquo;s address.
+                  </p>
+                )}
+              </>
             )}
           </div>
 
@@ -259,15 +322,7 @@ export function UplinkDialog({
                     ? { address: address.trim(), gateway: gateway.trim() }
                     : undefined,
                   dns: splitAddresses(dns),
-                  // The MTU has no field; an edit keeps whatever was set.
-                  ipv6: tunnelServer.trim()
-                    ? {
-                        via: '6in4',
-                        server: tunnelServer.trim(),
-                        address: tunnelAddress.trim(),
-                        mtu: initial?.tunnel?.mtu === 1480 ? undefined : initial?.tunnel?.mtu,
-                      }
-                    : undefined,
+                  ipv6: ipv6Of(),
                 },
                 replacing?.name,
               )
@@ -280,6 +335,12 @@ export function UplinkDialog({
     </Dialog>
   )
 }
+
+const V6_LABEL = {
+  none: 'Leave IPv6 as the ISP or the distribution has it',
+  'dhcpv6-pd': 'Ask the ISP for a prefix (DHCPv6 prefix delegation)',
+  '6in4': 'Through a tunnel broker (6in4)',
+} as const
 
 /** A network's router address with the subnet's mask — 192.168.1.2/24 — or
  * undefined for a network that serves no IPv4. */

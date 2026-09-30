@@ -29,7 +29,7 @@ func lanOn(member string) Config {
 func TestRemovingANetworkRetiresItsRouterAddress(t *testing.T) {
 	before, after := lanOn("lan0"), Config{Adopted: []string{"lan0", "lan1"}}
 
-	got := RetiredFor(before, after)
+	got := RetiredFor(before, after, netip.Prefix{}, netip.Prefix{})
 	want := []Desired{{Interface: "lan0", AddOnly: true,
 		Retire: []netip.Prefix{netip.MustParsePrefix("192.168.1.1/24")}}}
 	if len(got) != 1 || got[0].Interface != want[0].Interface || !got[0].AddOnly ||
@@ -40,7 +40,7 @@ func TestRemovingANetworkRetiresItsRouterAddress(t *testing.T) {
 	// An interface still in some network is that network's apply's business.
 	moved := lanOn("lan0")
 	moved.Networks[0].Name = "home"
-	if got := RetiredFor(before, moved); len(got) != 0 {
+	if got := RetiredFor(before, moved, netip.Prefix{}, netip.Prefix{}); len(got) != 0 {
 		t.Errorf("a member that moved networks was retired: %+v", got)
 	}
 }
@@ -51,18 +51,18 @@ func TestThePlanShowsARemovedNetworksAddressComingOff(t *testing.T) {
 	observed := []Interface{{Name: "lan0", Up: true, Prefixes: prefixes(t, "192.168.1.1/24")}}
 	before, after := lanOn("lan0"), Config{Adopted: []string{"lan0", "lan1"}}
 
-	plan := buildPlan(before, after, observed, Options{})
+	plan := buildPlan(before, after, observed, Options{}, netip.Prefix{})
 	change, ok := linkChangeAt(plan, "interfaces[lan0]")
 	if !ok || change.Diff != "- ip addr del 192.168.1.1/24 dev lan0\n" || change.Impact != impactDisruptive {
 		t.Errorf("interface change = %+v (found %v)", change, ok)
 	}
 
 	gone := []Interface{{Name: "lan0", Up: true}}
-	if _, ok := linkChangeAt(buildPlan(before, after, gone, Options{}), "interfaces[lan0]"); ok {
+	if _, ok := linkChangeAt(buildPlan(before, after, gone, Options{}, netip.Prefix{}), "interfaces[lan0]"); ok {
 		t.Error("the plan promised to remove an address that is not there")
 	}
 
-	kept := buildPlan(before, after, observed, Options{KeepAddresses: true})
+	kept := buildPlan(before, after, observed, Options{KeepAddresses: true}, netip.Prefix{})
 	if _, ok := linkChangeAt(kept, "interfaces[lan0]"); ok {
 		t.Errorf("keep_addresses still planned a removal: %+v", kept.Changes)
 	}

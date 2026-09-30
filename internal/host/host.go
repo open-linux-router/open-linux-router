@@ -20,9 +20,11 @@
 //
 //   - **IPv4 on the interfaces whose IPv4 olr writes**: the uplink with a static
 //     address, and every network member with a subnet. The distribution's DHCP
-//     client stops doing IPv4 there. IPv6 is left exactly where it is — olr
-//     does not configure IPv6, and whatever the distribution does there (SLAAC,
-//     DHCPv6) is the only IPv6 the box has.
+//     client stops doing IPv4 there. IPv6 is left where it is unless the next
+//     item takes it.
+//   - **IPv6 on the uplink, when it asks the ISP for a delegated prefix.** olrd
+//     runs the DHCPv6 client there and the kernel takes the router
+//     advertisements, so the distribution's client stops doing IPv6 on it.
 //   - **The box's own resolvers**, when the uplink is static and names them. A
 //     static uplink replaces the DHCP client that would otherwise have supplied
 //     them, so it has to supply them too.
@@ -59,6 +61,12 @@ import (
 type Desired struct {
 	// IPv4 are the interfaces whose IPv4 addressing olr writes.
 	IPv4 []string
+
+	// IPv6 are the interfaces whose IPv6 olr runs: the uplink, when it asks
+	// the ISP for a delegated prefix. olrd's own DHCPv6 client needs the
+	// client port, and the kernel — not a userspace client that turns
+	// accept_ra off — has to take the router advertisements.
+	IPv6 []string
 
 	// Resolvers are the name servers this box itself uses. Empty means olr
 	// does not own the box's resolvers, and leaves them to the distribution.
@@ -155,7 +163,7 @@ func (a Applier) Apply(ctx context.Context, d Desired) ([]core.Step, error) {
 // resolvers d names.
 func (a Applier) Findings(d Desired) []Finding {
 	var out []Finding
-	for _, iface := range d.IPv4 {
+	for _, iface := range sortedUnique(append(slices.Clone(d.IPv4), d.IPv6...)) {
 		out = append(out, a.otherManagers(iface)...)
 	}
 	if len(d.Resolvers) > 0 {

@@ -1,8 +1,8 @@
 # `dial` module design — the box's own way out
 
 Status: **part built.** `internal/dial` is the module. The static uplink,
-IPv6 over a 6in4 tunnel (§2.1) and dynamic DNS are built; the DHCP-client,
-PPPoE and LTE forms, prefix delegation, and multi-WAN are owed. Bare section references are to this
+IPv6 by prefix delegation (§2.2) or over a 6in4 tunnel (§2.1), and dynamic DNS
+are built; the DHCP-client, PPPoE and LTE forms and multi-WAN are owed. Bare section references are to this
 document; references to `design.md` name it, and `gateway:` means
 `docs/gateway.md`.
 
@@ -151,6 +151,60 @@ front has to pass IP protocol 41 to this box, usually by making it the DMZ
 host, because 6in4 is not TCP or UDP and no port forward carries it. Validation
 warns. The firewall lets protocol 41 in from the broker's address only
 (`docs/firewall.md` §2.2).
+
+### 2.2 IPv6 by prefix delegation
+
+`via: dhcpv6-pd`, with one optional field: the prefix size to ask for
+(`prefix_length`, a hint the ISP may ignore). It is the IPv6 an ISP that has
+IPv6 actually gives a router: a prefix — a /56 or a /60, commonly — to number
+its networks from.
+
+**olrd runs the client itself** (`internal/dial/dhcpv6`, stdlib, one IA_PD and
+nothing else: no addresses, no Reconfigure). Solicit → Advertise → Request →
+Reply, or Solicit → Reply where the ISP does Rapid Commit; renew at T1, rebind
+at T2, start over when the lease expires. The identity the ISP keys the lease on
+is a DUID-LL from the uplink's MAC and a fixed IAID, both functions of the
+interface, so there is nothing to persist and a restart asks for — and on every
+ISP we know of, gets — the same prefix. Not dhcpcd: that is the distribution's
+client, it would also be the thing writing addresses onto the LAN interfaces
+`link` owns, and its prefix is not something olr could read without a hook
+script. Its loop lives in olrd by design.md §3.5's test, like the DDNS
+publisher's.
+
+**What dial writes for it:**
+
+- `accept_ra = 2` on the uplink. The uplink's own address and IPv6 default route
+  come from the ISP's router advertisements, which the kernel takes — and stops
+  taking the moment this box forwards IPv6 (gateway:§3.8), unless accept_ra is
+  2. The interface is dial's, so this is dial's write. Rewritten on every apply,
+  because dhcpcd sets it to 0 on interfaces it manages.
+- `unreachable <prefix>` in the main table, swapped when the prefix moves. The
+  /64s no network has taken would otherwise follow the IPv6 default route back
+  to the ISP, which routes the whole prefix here — a loop until the hop limit
+  (RFC 7084 WPD-5).
+- The uplink's IPv6 is taken from the distribution, the way its IPv4 is when
+  static (§4): for dhcpcd, `ipv4only` on the uplink, or `noipv4` + `noipv6` when
+  olr owns both. olrd needs the DHCPv6 client port, and dhcpcd both holds it and
+  turns the kernel's accept_ra off to run RAs itself.
+
+**Who uses the prefix is not dial's to say.** It is published, and a network
+says which /64 of it it takes — `link.Network.IPv6.delegated`, a number, `0` for
+the first — and gets `::1` in it. design.md §4.1's arrows run link → dial, so
+link subscribes rather than imports: when the prefix appears, is renumbered by
+the ISP, expires or is given back, olrd retires the delegated networks' old
+router addresses, adds the new ones, swaps the unreachable route and re-applies
+what is built from the networks (dns derives its allow list from the addresses).
+The last prefix applied is kept in
+`/var/lib/open-linux-router/dial/delegated-prefix`, because a prefix that
+changed while olrd was down left addresses nothing else knows to take off.
+dhcp's RA follows the new address on its own (`constructor:`).
+
+**Given back only when asked.** Removing the ipv6 block, or the uplink, sends a
+Release and withdraws the networks' addresses. olrd stopping does neither: the
+lease outlives the process and the next start renews it.
+
+**Behind another router** the prefix has to be delegated onward by that router;
+some do, many do not. Validation warns when the uplink's address is private.
 
 ---
 
@@ -429,9 +483,10 @@ turn the box's own address into something netlink accepts and nothing can reach.
 ## 8. Still open
 
 1. **The DHCP-client, PPPoE and LTE forms.** §2 has what they cost.
-2. **Prefix delegation.** design.md §4.3 wants the delegated prefix to reach
-   `dhcp`; nothing here reads or stores one. The 6in4 tunnel (§2.1) is the
-   IPv6 form that is built.
+2. ~~Prefix delegation.~~ **Built** (§2.2). What is not: asking for addresses
+   (IA_NA) alongside the prefix, for the ISP that gives the uplink no SLAAC
+   address; and handing the ISP's DNS servers (read, and shown in status) to
+   anything.
 7. **Telling a tunnel broker this box's new IPv4.** Brokers take a
    DynDNS-style update keyed by tunnel ID. The DDNS machinery here already
    notices the address changing, but a `Record` is a public DNS name and a

@@ -2,7 +2,10 @@
 
 package dial
 
-import "context"
+import (
+	"context"
+	"net/netip"
+)
 
 // NewWriter returns a writer that refuses, so the module builds and its
 // decision layer stays testable on a developer's laptop.
@@ -22,4 +25,8 @@ func (unsupportedWriter) Apply(context.Context, Desired) ([]Step, error) {
 
 func (unsupportedWriter) Observe(context.Context, string) (Observed, error) {
 	return Observed{}, nil
+}
+
+func (unsupportedWriter) Unreachable(context.Context, netip.Prefix, netip.Prefix) error {
+	return ErrNoKernel
 }

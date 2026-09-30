@@ -18,7 +18,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useUplinkEditor } from '@/features/dial/queries'
 import { UplinkDialog } from '@/features/dial/uplink-dialog'
 import { useRemoveAddress } from '@/features/link/queries'
-import type { NetworkRow, InterfaceRow, TunnelStatus, UplinkStatus } from '@/lib/api-types'
+import type {
+  DelegationStatus,
+  NetworkRow,
+  InterfaceRow,
+  TunnelStatus,
+  UplinkStatus,
+} from '@/lib/api-types'
 import { cn } from '@/lib/utils'
 
 /**
@@ -169,6 +175,7 @@ function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
       <ResolverLine uplink={uplink} />
 
       {uplink.tunnel && <TunnelLine tunnel={uplink.tunnel} />}
+      {uplink.delegation && <DelegationLine uplink={uplink} delegation={uplink.delegation} />}
 
       {uplink.problems?.map((p) => (
         <p key={p.path + p.message} className="text-sm text-warning">
@@ -207,6 +214,44 @@ function TunnelLine({ tunnel }: { tunnel: TunnelStatus }) {
         IPv6 · {tunnel.address} via tunnel to {tunnel.server}
       </div>
       <p className={using ? 'text-muted-foreground' : 'text-warning'}>{state}</p>
+    </div>
+  )
+}
+
+/**
+ * The delegated prefix: what the ISP gave and until when, or where the loop
+ * is instead — and accept_ra, since a prefix with no route out is no IPv6.
+ */
+function DelegationLine({
+  uplink,
+  delegation,
+}: {
+  uplink: UplinkStatus
+  delegation: DelegationStatus
+}) {
+  const until = (t?: string) => (t ? new Date(t).toLocaleString() : '')
+  return (
+    <div className="space-y-1 text-sm">
+      <div className="font-mono">
+        IPv6 · {delegation.prefix ? `${delegation.prefix} delegated by the ISP` : 'no prefix yet'}
+      </div>
+      {delegation.prefix ? (
+        <p className="text-muted-foreground">
+          Renews {until(delegation.renews)}, expires {until(delegation.expires)}.
+        </p>
+      ) : (
+        <p className="text-warning">
+          {delegation.error
+            ? `Still asking — the last attempt failed: ${delegation.error}`
+            : 'Asking the ISP for a prefix.'}
+        </p>
+      )}
+      {uplink.accept_ra && uplink.accept_ra !== '2' && (
+        <p className="text-warning">
+          {uplink.interface} is not taking router advertisements the way prefix delegation
+          needs (accept_ra is {uplink.accept_ra}). Applying the uplink again sets it.
+        </p>
+      )}
     </div>
   )
 }

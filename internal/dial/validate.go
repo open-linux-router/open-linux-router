@@ -135,9 +135,18 @@ func validateUplinkIPv6(r *Result, u *Uplink) {
 	v6 := *u.IPv6
 	path := UplinkPath + ".ipv6"
 
-	if v6.Via != Via6in4 {
-		r.errorf(path+".via", "%q is not a way olr can bring IPv6 in; the one it knows is %q",
-			v6.Via, Via6in4)
+	switch v6.Via {
+	case ViaPD:
+		validatePD(r, u, path)
+		return
+	case Via6in4:
+		if v6.PrefixLength != 0 {
+			r.errorf(path+".prefix_length", "a prefix length is what prefix delegation asks the ISP "+
+				"for; a tunnel's prefix is whatever the broker routed to it")
+		}
+	default:
+		r.errorf(path+".via", "%q is not a way olr can bring IPv6 in; it knows %q and %q",
+			v6.Via, ViaPD, Via6in4)
 		return
 	}
 
@@ -188,6 +197,26 @@ func validateUplinkIPv6(r *Result, u *Uplink) {
 		r.warnf(path, "the uplink has no static IPv4, so the tunnel leaves from whichever "+
 			"address the route to %s picks. The broker has to be told that address; if it "+
 			"changes, the tunnel stops until it is told again", v6.Server)
+	}
+}
+
+// validatePD checks prefix delegation, which has one field of its own.
+func validatePD(r *Result, u *Uplink, path string) {
+	v6 := *u.IPv6
+	if v6.Server.IsValid() || v6.Address.IsValid() || v6.MTU != 0 {
+		r.errorf(path, "server, address and mtu describe a tunnel; prefix delegation takes "+
+			"none of them")
+	}
+	if n := v6.PrefixLength; n != 0 && (n < 48 || n > 64) {
+		// Below /48 no ISP delegates to a home; above /64 there is not one
+		// network's worth of addresses in it.
+		r.errorf(path+".prefix_length", "%d is outside 48–64; leave it empty to take what "+
+			"the ISP gives", n)
+	}
+	if u.HasIPv4() && u.IPv4.Address.Addr().IsPrivate() {
+		r.warnf(path, "this box's uplink address %s is private, so another router is in front "+
+			"of it. That router has to delegate a prefix onward to this one — some do, many "+
+			"only ever keep what the ISP gives them", u.IPv4.Address.Addr())
 	}
 }
 

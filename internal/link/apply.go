@@ -46,6 +46,19 @@ type Applier struct {
 	// because what it owns is computed from link's config and dial's together,
 	// and that join is olrd's to make; nil outside olrd.
 	Host func(context.Context) ([]core.Step, error)
+
+	// Delegated reads the prefix the ISP delegated to the uplink, invalid when
+	// there is none. It is dial's fact, published rather than imported (§4.1:
+	// dial already reads link, so link subscribes). Nil means none.
+	Delegated func() netip.Prefix
+}
+
+// delegated resolves the zero value.
+func (a Applier) delegated() netip.Prefix {
+	if a.Delegated == nil {
+		return netip.Prefix{}
+	}
+	return a.Delegated()
 }
 
 // writer resolves the zero value.
@@ -147,7 +160,7 @@ func (a Applier) PlanWith(desired Config, opts Options) (planView, error) {
 	if err != nil {
 		return planView{}, err
 	}
-	return buildPlan(stored, desired, a.observeQuietly(), opts), nil
+	return buildPlan(stored, desired, a.observeQuietly(), opts, a.delegated()), nil
 }
 
 // Drift reports what the kernel would need in order to match what is stored.
@@ -159,7 +172,7 @@ func (a Applier) Drift() (planView, error) {
 	if err != nil {
 		return planView{}, err
 	}
-	return buildPlan(stored, stored, a.observeQuietly(), Options{}), nil
+	return buildPlan(stored, stored, a.observeQuietly(), Options{}, a.delegated()), nil
 }
 
 // ApplyResult is what an apply actually did.
@@ -210,9 +223,10 @@ func (a Applier) ApplyWith(ctx context.Context, desired Config, opts Options) (A
 	// The exception is a network that has just gone, whose address has to come
 	// off with it — the one reason an apply that leaves no networks still has
 	// kernel work to do.
-	want := DesiredFor(stored)
+	delegated := a.delegated()
+	want := DesiredFor(stored, delegated)
 	if !opts.KeepAddresses {
-		want = append(want, RetiredFor(previous, stored)...)
+		want = append(want, RetiredFor(previous, stored, delegated, delegated)...)
 	}
 	result := ApplyResult{Plan: plan}
 	if len(want) > 0 {
@@ -282,7 +296,9 @@ func (a Applier) Restore(ctx context.Context) ([]Step, error) {
 		return nil, err
 	}
 
-	want := DesiredFor(cfg)
+	// A delegated network has nothing to restore until the uplink has its
+	// prefix back; FollowDelegation writes it then.
+	want := DesiredFor(cfg, a.delegated())
 	if len(want) == 0 {
 		// Same promise Apply keeps: a box with no networks is one olr has not
 		// been asked to address, and startup touches nothing on it (§7).
@@ -368,4 +384,36 @@ func (a Applier) RemoveAddress(ctx context.Context, iface string, p netip.Prefix
 	}
 
 	return a.writer().Apply(ctx, []Desired{{Interface: iface, AddOnly: true, Retire: []netip.Prefix{p}}})
+}
+
+// FollowDelegation moves the delegated networks from one prefix to the next:
+// their router addresses in was come off, the ones in now go on.
+//
+// Not an apply, and it does not save: nothing the operator said changed. It is
+// §4.1's arrow walked when the fact at its tail moved — the ISP renumbered, or
+// the prefix arrived after a restart, or it expired — and the networks follow
+// because each one's own setting says "the Nth /64 of whatever the uplink was
+// given". Static networks resolve the same on both sides and are untouched.
+func (a Applier) FollowDelegation(ctx context.Context, was, now netip.Prefix) ([]Step, error) {
+	cfg, err := a.Load()
+	if err != nil {
+		return nil, err
+	}
+	var want []Desired
+	for _, d := range DesiredFor(cfg, now) {
+		if len(d.Addrs6) > 0 {
+			// Only the v6 half, and additively: this is not the moment to
+			// enforce the v4 ownership claim on a box nobody just edited.
+			want = append(want, Desired{Interface: d.Interface, Addrs6: d.Addrs6, AddOnly: true})
+		}
+	}
+	want = append(want, RetiredFor(cfg, cfg, was, now)...)
+	if len(want) == 0 {
+		return nil, nil
+	}
+	steps, err := a.writer().Apply(ctx, want)
+	if err != nil {
+		return steps, fmt.Errorf("moving networks to the delegated prefix %s: %w", now, err)
+	}
+	return steps, nil
 }

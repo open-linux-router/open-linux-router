@@ -61,6 +61,12 @@ type Desired struct {
 	// Tunnel is the 6in4 device the uplink asks for, nil for none.
 	Tunnel *Tunnel
 
+	// AcceptRA sets the uplink's accept_ra to 2, so it keeps taking the ISP's
+	// router advertisements — its own address and IPv6 default route — once
+	// this box forwards IPv6. Prefix delegation's half of the uplink: the
+	// interface is dial's, so this is dial's write, not gateway's.
+	AcceptRA bool
+
 	// RemoveTunnel deletes TunnelInterface. Set when the stored uplink had a
 	// tunnel and the desired one does not — olr created the device, so there
 	// is nothing on it to leave behind (UplinkIPv6).
@@ -81,7 +87,7 @@ type Tunnel struct {
 
 // Empty reports whether there is nothing for a writer to do.
 func (d Desired) Empty() bool {
-	if d.Tunnel != nil || d.RemoveTunnel {
+	if d.Tunnel != nil || d.RemoveTunnel || d.AcceptRA {
 		return false
 	}
 	return d.Interface == "" ||
@@ -145,6 +151,15 @@ type Writer interface {
 	// runs `ip route del default` by hand has to show up on the same surface a
 	// hand-edited config file does.
 	Observe(ctx context.Context, iface string) (Observed, error)
+
+	// Unreachable swaps the unreachable route for a delegated prefix: remove
+	// the one for old, add one for next, either invalid for none.
+	//
+	// The route every router given a prefix needs (RFC 7084 WPD-5): the /64s
+	// no network has taken would otherwise match the IPv6 default route, go
+	// back to the ISP, come back — the ISP routes the whole prefix here — and
+	// loop until the hop limit runs out. Unreachable answers them at once.
+	Unreachable(ctx context.Context, old, next netip.Prefix) error
 }
 
 // Observed is what the kernel currently has, for one interface.
@@ -196,6 +211,10 @@ type Observed struct {
 	// point-to-point device such as the tunnel.
 	V6DefaultDev string
 	V6DefaultVia netip.Addr
+
+	// AcceptRA is the uplink's net.ipv6.conf.<iface>.accept_ra, empty when
+	// it could not be read.
+	AcceptRA string
 }
 
 // TunnelObserved is what the kernel has for TunnelInterface.
@@ -233,6 +252,7 @@ func DesiredFor(c Config) Desired {
 		d.Address = c.Uplink.IPv4.Address
 		d.Gateway = c.Uplink.IPv4.Gateway
 	}
+	d.AcceptRA = c.Uplink.HasPD()
 	if c.Uplink.HasTunnel() {
 		v6 := c.Uplink.IPv6
 		t := &Tunnel{Remote: v6.Server, Address: v6.Address, MTU: v6.MTUOrDefault()}
@@ -277,6 +297,9 @@ type UplinkPlan struct {
 	// there is none.
 	Tunnel *TunnelPlan
 
+	// AcceptRA is that the uplink's accept_ra has to become 2.
+	AcceptRA bool
+
 	// Foreign are the other IPv4 addresses on the interface. Reported and never
 	// removed — see the writer's contract below — so that a DHCP client also
 	// acting on this NIC is *visible* rather than either invisible or deleted.
@@ -309,7 +332,7 @@ type TunnelPlan struct {
 
 // Empty reports whether the kernel already agrees.
 func (p UplinkPlan) Empty() bool {
-	return !p.Add.IsValid() && !p.Gateway.IsValid() && !p.BringUp && p.Tunnel == nil
+	return !p.Add.IsValid() && !p.Gateway.IsValid() && !p.BringUp && p.Tunnel == nil && !p.AcceptRA
 }
 
 // PlanTunnel diffs the observed tunnel against the one wanted.
@@ -384,6 +407,7 @@ func PlanUplink(d Desired, obs Observed) UplinkPlan {
 	if d.Tunnel != nil {
 		plan.Tunnel = PlanTunnel(*d.Tunnel, obs)
 	}
+	plan.AcceptRA = d.AcceptRA && obs.AcceptRA != "2"
 	return plan
 }
 
@@ -399,6 +423,9 @@ func DescribeUplinkPlan(p UplinkPlan) []string {
 	if p.Gateway.IsValid() {
 		lines = append(lines, fmt.Sprintf("+ ip route replace default via %s dev %s",
 			p.Gateway, p.Interface))
+	}
+	if p.AcceptRA {
+		lines = append(lines, fmt.Sprintf("+ sysctl net.ipv6.conf.%s.accept_ra = 2", p.Interface))
 	}
 	return lines
 }
@@ -446,6 +473,9 @@ type RecordingWriter struct {
 
 	// Err makes every step fail, for the partial-apply paths.
 	Err error
+
+	// Unreachables is every Unreachable call, old then next.
+	Unreachables [][2]netip.Prefix
 }
 
 // Apply implements Writer.
@@ -478,6 +508,9 @@ func (w *RecordingWriter) Apply(_ context.Context, d Desired) ([]Step, error) {
 	if d.RemoveTunnel {
 		record("remove %s", TunnelInterface)
 	}
+	if d.AcceptRA {
+		record("keep taking router advertisements on %s", d.Interface)
+	}
 
 	w.Steps = steps
 	if w.Err != nil {
@@ -494,4 +527,10 @@ func (w *RecordingWriter) Observe(_ context.Context, iface string) (Observed, er
 	}
 	obs.Present = true
 	return obs, nil
+}
+
+// Unreachable implements Writer, recording the swap.
+func (w *RecordingWriter) Unreachable(_ context.Context, old, next netip.Prefix) error {
+	w.Unreachables = append(w.Unreachables, [2]netip.Prefix{old, next})
+	return w.Err
 }

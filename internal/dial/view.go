@@ -122,6 +122,14 @@ type uplinkView struct {
 	// Absent when the uplink has no ipv6 block.
 	Tunnel *tunnelView `json:"tunnel,omitempty"`
 
+	// PrefixLength is the size asked for, when the uplink asks for prefix
+	// delegation, and Delegation is how that is going — the phase, the prefix
+	// and its lease, or why there is none. AcceptRA is the uplink's accept_ra
+	// as the kernel has it, which has to read 2.
+	PrefixLength int              `json:"prefix_length,omitempty"`
+	Delegation   *DelegationState `json:"delegation,omitempty"`
+	AcceptRA     string           `json:"accept_ra,omitempty"`
+
 	// ResolvingThrough are the name servers this box itself looks names up
 	// through, read from /etc/resolv.conf whoever wrote it — beside DNS, which
 	// is what olr was told, for the same reason the route is beside the
@@ -248,6 +256,10 @@ func viewUplink(u *Uplink, obs Observed, problems []core.Problem) *uplinkView {
 		v.RouteVia = obs.Gateway.String()
 	}
 	v.GatewayState, v.GatewaySeenOn = obs.GatewayState, obs.GatewaySeenOn
+	if u.HasPD() {
+		v.PrefixLength = u.IPv6.PrefixLength
+		v.AcceptRA = obs.AcceptRA
+	}
 	if u.HasTunnel() {
 		t := &tunnelView{
 			Interface: TunnelInterface,
@@ -665,6 +677,13 @@ func describeUplink(sign string, u *Uplink) string {
 	if u.HasTunnel() {
 		fmt.Fprintf(&b, "%s  ipv6 %s over a 6in4 tunnel to %s, mtu %d\n", sign,
 			u.IPv6.Address, u.IPv6.Server, u.IPv6.MTUOrDefault())
+	}
+	if u.HasPD() {
+		size := "whatever size the ISP gives"
+		if u.IPv6.PrefixLength > 0 {
+			size = fmt.Sprintf("a /%d", u.IPv6.PrefixLength)
+		}
+		fmt.Fprintf(&b, "%s  ipv6 by prefix delegation from the ISP, asking for %s\n", sign, size)
 	}
 	if len(u.DNS) > 0 {
 		addrs := make([]string, 0, len(u.DNS))

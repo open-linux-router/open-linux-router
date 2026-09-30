@@ -346,6 +346,8 @@ export interface NetworkRow {
   subnet6?: string
   router6?: string
   router6_explicit?: boolean
+  /** The /64 number taken out of the delegated prefix; with no subnet6, not delegated yet. */
+  delegated?: number
 
   /**
    * The range dhcp derives when nobody types one. A hint for prefilling, never
@@ -402,7 +404,7 @@ export interface LinkStep {
 export interface Uplink {
   interface: string
   ipv4?: UplinkIPv4
-  /** IPv6 over a 6in4 tunnel to a broker; absent leaves IPv6 on the uplink alone. */
+  /** Prefix delegation or a 6in4 tunnel; absent leaves IPv6 on the uplink alone. */
   ipv6?: UplinkIPv6
   /**
    * The resolvers this router itself looks names up through, written for the
@@ -424,13 +426,28 @@ export interface UplinkIPv4 {
 }
 
 export interface UplinkIPv6 {
-  via: '6in4'
-  /** The broker's IPv4 endpoint — "Server IPv4 Address" on its details page. */
-  server: string
-  /** This box's address inside the tunnel, with its mask — usually ending ::2. */
-  address: string
-  /** Absent means 1480. */
+  via: 'dhcpv6-pd' | '6in4'
+  /** dhcpv6-pd: the prefix size to ask for; absent takes what the ISP gives. */
+  prefix_length?: number
+  /** 6in4: the broker's IPv4 endpoint — "Server IPv4 Address" on its details page. */
+  server?: string
+  /** 6in4: this box's address inside the tunnel, with its mask — usually ending ::2. */
+  address?: string
+  /** 6in4: absent means 1480. */
   mtu?: number
+}
+
+/** The prefix-delegation loop — internal/dial DelegationState. */
+export interface DelegationStatus {
+  interface: string
+  phase: 'soliciting' | 'bound' | 'renewing' | 'rebinding' | 'waiting'
+  prefix?: string
+  obtained?: string
+  renews?: string
+  expires?: string
+  dns?: string[]
+  /** Why the last attempt failed, in the ISP's or the kernel's words. */
+  error?: string
 }
 
 /** The uplink's tunnel as the status publishes it — internal/dial tunnelView. */
@@ -498,6 +515,12 @@ export interface UplinkStatus {
   resolving_through?: string[]
 
   tunnel?: TunnelStatus
+
+  /** Set when the uplink asks for prefix delegation. */
+  prefix_length?: number
+  delegation?: DelegationStatus
+  /** The uplink's accept_ra as the kernel has it; prefix delegation needs 2. */
+  accept_ra?: string
 
   problems?: Problem[]
 }

@@ -199,9 +199,23 @@ func validateNetworkIPv6(r *Result, path string, n Network) {
 		return
 	}
 	v6 := *n.IPv6
+	if v6.Delegated != nil {
+		switch {
+		case v6.Subnet.IsValid():
+			r.errorf(path+".ipv6", "a network's IPv6 is either a static subnet or a number out "+
+				"of the delegated prefix, not both")
+		case *v6.Delegated < 0:
+			r.errorf(path+".ipv6.delegated", "%d is not a /64's number; the first is 0", *v6.Delegated)
+		case v6.Router != nil:
+			r.errorf(path+".ipv6.router", "a delegated network's router is ::1 in its /64; an "+
+				"address pinned inside a prefix the ISP can change would be wrong the first time it did")
+		}
+		return
+	}
 	switch {
 	case !v6.Subnet.IsValid():
-		r.errorf(path+".ipv6.subnet", "required, as the ipv6 block is its subnet")
+		r.errorf(path+".ipv6.subnet", "give a static /64, or the number of a /64 out of the "+
+			"delegated prefix")
 		return
 	case !v6.Subnet.Addr().Is6() || v6.Subnet.Addr().Is4In6():
 		r.errorf(path+".ipv6.subnet", "%s is IPv4; the ipv6 block takes an IPv6 subnet", v6.Subnet)
@@ -230,8 +244,21 @@ func validateNetworkIPv6(r *Result, path string, n Network) {
 	}
 }
 
-// validateSubnet6Overlap is validateSubnetOverlap for the IPv6 blocks.
+// validateSubnet6Overlap is validateSubnetOverlap for the IPv6 blocks: static
+// subnets that overlap, and two networks taking the same delegated number.
 func validateSubnet6Overlap(r *Result, networks []Network) {
+	taken := map[int]string{}
+	for j, n := range networks {
+		if n.IPv6 == nil || n.IPv6.Delegated == nil {
+			continue
+		}
+		if other, dup := taken[*n.IPv6.Delegated]; dup {
+			r.errorf(fmt.Sprintf("networks[%d].ipv6.delegated", j),
+				"/64 number %d of the delegated prefix is already %q's", *n.IPv6.Delegated, other)
+			continue
+		}
+		taken[*n.IPv6.Delegated] = n.Name
+	}
 	for i := range networks {
 		a := networks[i]
 		if a.IPv6 == nil || !a.IPv6.Subnet.IsValid() {

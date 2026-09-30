@@ -44,6 +44,10 @@ type HTTP struct {
 	Watch  func(Config)
 	States func() map[string]RecordState
 
+	// Delegation reads the prefix-delegation loop's state, and false when it
+	// is not running. Nil outside olrd, like States.
+	Delegation func() (DelegationState, bool)
+
 	// Host reads the host's side of the uplink: the resolvers this box really
 	// looks names up through, whoever wrote them, and what olr could not take
 	// from the distribution (internal/host). Nil outside olrd.
@@ -69,6 +73,11 @@ type HostStatus struct {
 
 // withHost adds the host's side to an uplink row.
 func (h HTTP) withHost(v *uplinkView) *uplinkView {
+	if v != nil && h.Delegation != nil {
+		if st, ok := h.Delegation(); ok {
+			v.Delegation = &st
+		}
+	}
 	if v == nil || h.Host == nil {
 		return v
 	}

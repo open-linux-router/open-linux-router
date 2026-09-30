@@ -2,6 +2,7 @@ package link
 
 import (
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 	"time"
@@ -110,6 +111,12 @@ type networkView struct {
 	Router6         string `json:"router6,omitempty"`
 	Router6Explicit bool   `json:"router6_explicit,omitempty"`
 
+	// Delegated is the number of the /64 the network takes out of the
+	// uplink's delegated prefix, absent for a static one. With it set and
+	// Subnet6 empty, the prefix has not been delegated yet — or is too small
+	// to have this many /64s.
+	Delegated *int `json:"delegated,omitempty"`
+
 	// SuggestedStart and SuggestedEnd are the range `dhcp` derives when nobody
 	// types one. A hint, never a second opinion: `dhcp` validates whatever range
 	// it is given against its own rules regardless of where the numbers came
@@ -122,7 +129,7 @@ type networkView struct {
 	Present bool `json:"present"`
 }
 
-func viewNetwork(n Network, observed map[string]Interface) networkView {
+func viewNetwork(n Network, observed map[string]Interface, delegated netip.Prefix) networkView {
 	v := networkView{
 		Name:    n.Name,
 		Members: slices.Clone(n.Members),
@@ -145,10 +152,13 @@ func viewNetwork(n Network, observed map[string]Interface) networkView {
 			v.SuggestedStart, v.SuggestedEnd = start.String(), end.String()
 		}
 	}
-	if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
-		v.Subnet6 = n.IPv6.Subnet.String()
-		v.Router6 = n.IPv6.RouterAddr().String()
-		v.Router6Explicit = n.IPv6.Router != nil
+	if n.IPv6 != nil {
+		v.Delegated = n.IPv6.Delegated
+		if subnet, router, ok := n.IPv6.Resolve(delegated); ok {
+			v.Subnet6 = subnet.String()
+			v.Router6 = router.Addr().String()
+			v.Router6Explicit = n.IPv6.Router != nil
+		}
 	}
 	return v
 }
@@ -224,7 +234,7 @@ var impactRank = map[string]int{impactNone: 0, impactRestart: 1, impactDisruptiv
 // on the box for the result to be true. They are not the same list — re-applying
 // an unchanged config still has work to do if somebody ran `ip addr del` by
 // hand, and that is drift (§5.4) rather than a no-op.
-func buildPlan(stored, desired Config, observed []Interface, opts Options) planView {
+func buildPlan(stored, desired Config, observed []Interface, opts Options, delegated netip.Prefix) planView {
 	stored.Normalize()
 	desired.Normalize()
 
@@ -291,7 +301,7 @@ func buildPlan(stored, desired Config, observed []Interface, opts Options) planV
 	}
 
 	// --- the kernel: what has to happen for any of the above to be true ---
-	for _, ap := range PlanAddrs(desired, observed) {
+	for _, ap := range PlanAddrs(desired, observed, delegated) {
 		lines := DescribeAddrPlan(ap)
 		if len(lines) == 0 {
 			continue
@@ -310,7 +320,7 @@ func buildPlan(stored, desired Config, observed []Interface, opts Options) planV
 	// more — the half of a removal PlanAddrs cannot see, because it walks the
 	// networks that still exist.
 	if !opts.KeepAddresses {
-		for _, ap := range PlanRetire(stored, desired, observed) {
+		for _, ap := range PlanRetire(stored, desired, observed, delegated, delegated) {
 			plan.Changes = append(plan.Changes, changeView{
 				Path:   "interfaces[" + ap.Interface + "]",
 				Kind:   kindUpdate,
@@ -351,7 +361,14 @@ func sameIPv6(a, b *NetworkIPv6) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
-	return a.Subnet == b.Subnet && a.RouterAddr() == b.RouterAddr()
+	return a.Subnet == b.Subnet && a.RouterAddr() == b.RouterAddr() && sameInt(a.Delegated, b.Delegated)
+}
+
+func sameInt(a, b *int) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // networkImpact classifies a change to an existing network in client terms.
@@ -397,7 +414,8 @@ func ipv6Impact(before, after *NetworkIPv6) string {
 		return impactNone
 	case before == nil:
 		return impactRestart
-	case after == nil, before.Subnet != after.Subnet, before.RouterAddr() != after.RouterAddr():
+	case after == nil, before.Subnet != after.Subnet, before.RouterAddr() != after.RouterAddr(),
+		!sameInt(before.Delegated, after.Delegated):
 		return impactDisruptive
 	}
 	return impactNone
@@ -415,7 +433,10 @@ func describeNetwork(sign string, n Network) string {
 	} else {
 		fmt.Fprintf(&b, "%s  no ipv4\n", sign)
 	}
-	if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
+	switch {
+	case n.IPv6 != nil && n.IPv6.Delegated != nil:
+		fmt.Fprintf(&b, "%s  ipv6 /64 number %d of the delegated prefix\n", sign, *n.IPv6.Delegated)
+	case n.IPv6 != nil && n.IPv6.Subnet.IsValid():
 		fmt.Fprintf(&b, "%s  ipv6 %s, this router at %s\n", sign, n.IPv6.Subnet, n.IPv6.RouterAddr())
 	}
 	return b.String()

@@ -1,7 +1,7 @@
-import { SubPage } from "@/components/layout/sub-page";
-import { SwitchField } from "@/components/ui/editable-field";
-import { ApplyOutcome, useGatewayEditor } from "@/features/gateway/editor";
-import { gatewayChange } from "@/features/gateway/queries";
+import { SubPage } from '@/components/layout/sub-page'
+import { SwitchField } from '@/components/ui/editable-field'
+import { ApplyOutcome, useGatewayEditor } from '@/features/gateway/editor'
+import { gatewayChange } from '@/features/gateway/queries'
 
 /**
  * Whether IPv6 passes through this router — one switch, and only this one.
@@ -13,10 +13,10 @@ import { gatewayChange } from "@/features/gateway/queries";
  * take this router's own IPv6 away.
  */
 export function GatewayIPv6Page() {
-  const { config, busy, change, applier, gate } = useGatewayEditor();
+  const { config, busy, change, applier, gate } = useGatewayEditor()
 
-  if (!config) return gate;
-  const setting = config.ipv6_forwarding;
+  if (!config) return gate
+  const setting = config.ipv6_forwarding
 
   return (
     <SubPage section="/gateway" slug="ipv6">
@@ -27,14 +27,12 @@ export function GatewayIPv6Page() {
         label="Forward IPv6"
         hint={
           setting === undefined
-            ? "Not managed yet — this router’s own setting is left as it is. Switching this on or off hands it to olr."
-            : "Lets IPv6 pass between this router’s networks and the internet. Turning it on stops this router learning its own IPv6 route from upstream on any interface whose accept_ra is not 2; you will be asked first if that applies."
+            ? 'Not managed yet — this router’s own setting is left as it is. Switching this on or off hands it to olr.'
+            : 'Lets IPv6 pass between this router’s networks and the internet. Turning it on stops this router learning its own IPv6 route from upstream on any interface whose accept_ra is not 2; you will be asked first if that applies.'
         }
         checked={setting === true}
         busy={busy}
-        onChange={(on) =>
-          change(gatewayChange.settings({ ipv6_forwarding: on }))
-        }
+        onChange={(on) => change(gatewayChange.settings({ ipv6_forwarding: on }))}
       />
 
       {!config.enabled && (
@@ -43,5 +41,5 @@ export function GatewayIPv6Page() {
         </p>
       )}
     </SubPage>
-  );
+  )
 }

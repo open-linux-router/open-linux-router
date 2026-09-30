@@ -36,6 +36,23 @@ options edns0
 
 var uplinkDNS = []netip.Addr{netip.MustParseAddr("192.168.1.1")}
 
+// Prefix delegation takes the uplink's IPv6: on an uplink whose IPv4 is olr's
+// too dhcpcd is told to leave both alone; on one whose IPv4 is still the
+// distribution's, it keeps IPv4 and stops IPv6.
+func TestDhcpcdGivesUpIPv6OnAPrefixDelegatingUplink(t *testing.T) {
+	both := renderDhcpcd(stockDhcpcd, Desired{IPv4: []string{"ens18"}, IPv6: []string{"ens18"}})
+	if !strings.Contains(both, "interface ens18\n\tnoipv4\n\tnoipv6\n") {
+		t.Errorf("both families taken:\n%s", both)
+	}
+	v6 := renderDhcpcd(stockDhcpcd, Desired{IPv4: []string{"ens19"}, IPv6: []string{"ens18"}})
+	if !strings.Contains(v6, "interface ens18\n\tipv4only\n") || !strings.Contains(v6, "interface ens19\n\tipv6only\n") {
+		t.Errorf("one family each:\n%s", v6)
+	}
+	if back := renderDhcpcd(v6, Desired{}); back != stockDhcpcd {
+		t.Errorf("giving back did not restore the file:\n%q", back)
+	}
+}
+
 func TestDhcpcdBlocksRoundTrip(t *testing.T) {
 	d := Desired{IPv4: []string{"ens18", "ens19", "ens18"}, Resolvers: uplinkDNS}
 	got := renderDhcpcd(stockDhcpcd, d)

@@ -63,6 +63,10 @@ type Facts struct {
 
 	// Store is the configuration document holding the adopted set.
 	Store *core.Store
+
+	// Delegated reads the uplink's delegated prefix, for the networks
+	// numbered out of it. Nil means none.
+	Delegated func() netip.Prefix
 }
 
 // source resolves the nil default in one place.
@@ -252,8 +256,9 @@ type NetworkInfo struct {
 	Subnet netip.Prefix
 	Router netip.Addr
 
-	// Subnet6 and Router6 are the network's static IPv6 intent. Invalid when
-	// the network has no ipv6 block — which is not "no IPv6": a delegated
+	// Subnet6 and Router6 are the network's IPv6 intent, resolved against the
+	// delegated prefix for a delegated network. Invalid when the network has no
+	// ipv6 block, or its prefix has not been delegated yet — which is not "no IPv6": a delegated
 	// prefix on the member is still there, and still served by `dhcp`'s RA.
 	Subnet6 netip.Prefix
 	Router6 netip.Addr
@@ -295,9 +300,14 @@ func (f Facts) Networks() ([]NetworkInfo, error) {
 			info.Subnet = n.IPv4.Subnet
 			info.Router = n.IPv4.RouterAddr()
 		}
-		if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
-			info.Subnet6 = n.IPv6.Subnet
-			info.Router6 = n.IPv6.RouterAddr()
+		if n.IPv6 != nil {
+			var delegated netip.Prefix
+			if f.Delegated != nil {
+				delegated = f.Delegated()
+			}
+			if subnet, router, ok := n.IPv6.Resolve(delegated); ok {
+				info.Subnet6, info.Router6 = subnet, router.Addr()
+			}
 		}
 		out = append(out, info)
 	}

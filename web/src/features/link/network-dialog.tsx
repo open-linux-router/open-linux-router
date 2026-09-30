@@ -23,6 +23,14 @@ import { useFirewallStatus } from '@/features/firewall/queries'
 import type { InterfaceRow } from '@/lib/api-types'
 import type { Network } from '@/lib/config-types'
 
+type V6Mode = 'none' | 'static' | 'delegated'
+
+const V6_MODE_LABEL: Record<V6Mode, string> = {
+  none: 'None of olr’s — whatever prefix the interface already has',
+  delegated: 'A /64 of the prefix the ISP delegates',
+  static: 'A static /64',
+}
+
 const EMPTY: Network = { name: '', members: [], ipv4: { subnet: '' } }
 
 /**
@@ -75,7 +83,9 @@ export function NetworkDialog({
   // subnet with it off makes every device here reachable from the internet,
   // and this is the moment somebody is choosing to have one.
   const firewall = useFirewallStatus()
-  const exposed = !!draft.ipv6?.subnet?.trim() && firewall.data?.enabled === false
+  const exposed =
+    (!!draft.ipv6?.subnet?.trim() || draft.ipv6?.delegated !== undefined) &&
+    firewall.data?.enabled === false
   const valid = draft.name.trim() !== '' && member !== ''
 
   function set(patch: Partial<Network>) {
@@ -85,7 +95,15 @@ export function NetworkDialog({
     setDraft((d) => ({ ...d, ipv4: { subnet: '', ...d.ipv4, ...patch } }))
   }
   function setIPv6(patch: Partial<NonNullable<Network['ipv6']>>) {
-    setDraft((d) => ({ ...d, ipv6: { subnet: '', ...d.ipv6, ...patch } }))
+    setDraft((d) => ({ ...d, ipv6: { subnet: '', ...d.ipv6, ...patch, delegated: undefined } }))
+  }
+  const [v6Mode, setV6ModeState] = useState<V6Mode>(
+    initial?.ipv6?.delegated !== undefined ? 'delegated' : initial?.ipv6?.subnet ? 'static' : 'none',
+  )
+  function setV6Mode(mode: V6Mode) {
+    setV6ModeState(mode)
+    const ipv6 = mode === 'delegated' ? { delegated: 0 } : mode === 'static' ? { subnet: '' } : undefined
+    setDraft((d) => ({ ...d, ipv6 }))
   }
 
   return (
@@ -178,33 +196,74 @@ export function NetworkDialog({
             </p>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="net-v6">IPv6</Label>
+            <Select value={v6Mode} onValueChange={(v) => setV6Mode((v as V6Mode) ?? 'none')}>
+              <SelectTrigger id="net-v6" className="w-full">
+                <SelectValue>
+                  {(v: string) => V6_MODE_LABEL[v as V6Mode] ?? V6_MODE_LABEL.none}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(V6_MODE_LABEL) as V6Mode[]).map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {V6_MODE_LABEL[k]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {v6Mode === 'delegated' && (
             <div className="space-y-2">
-              <Label htmlFor="net-subnet6">IPv6 subnet</Label>
+              <Label htmlFor="net-delegated">Which /64</Label>
               <Input
-                id="net-subnet6"
-                value={draft.ipv6?.subnet ?? ''}
-                placeholder="2001:db8:1:1::/64"
-                onChange={(e) => setIPv6({ subnet: e.target.value })}
+                id="net-delegated"
+                inputMode="numeric"
+                value={draft.ipv6?.delegated ?? ''}
+                placeholder="0"
+                onChange={(e) => {
+                  const n = Number(e.target.value.trim())
+                  const delegated = e.target.value.trim() && Number.isInteger(n) ? n : undefined
+                  setDraft((d) => ({ ...d, ipv6: { delegated } }))
+                }}
               />
               <p className="text-xs text-muted-foreground">
-                Optional. A /64 this router numbers the network from — one out of a tunnel
-                broker&rsquo;s routed prefix, say. Leave it empty if the interface gets its IPv6
-                prefix some other way.
+                The number of the /64 this network takes out of the prefix the ISP delegates to
+                the uplink — 0 is the first. When the ISP changes the prefix, the network moves
+                with it and keeps its number.
               </p>
             </div>
+          )}
 
-            <div className="space-y-2">
-              <Label htmlFor="net-router6">This router&rsquo;s IPv6 address</Label>
-              <Input
-                id="net-router6"
-                value={draft.ipv6?.router ?? ''}
-                placeholder={derivedRouter6 || '::1 in the subnet'}
-                disabled={!draft.ipv6?.subnet?.trim()}
-                onChange={(e) => setIPv6({ router: e.target.value || undefined })}
-              />
+          {v6Mode === 'static' && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="net-subnet6">IPv6 subnet</Label>
+                <Input
+                  id="net-subnet6"
+                  value={draft.ipv6?.subnet ?? ''}
+                  placeholder="2001:db8:1:1::/64"
+                  onChange={(e) => setIPv6({ subnet: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  A /64 this router numbers the network from — one out of a tunnel broker&rsquo;s
+                  routed prefix, say.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="net-router6">This router&rsquo;s IPv6 address</Label>
+                <Input
+                  id="net-router6"
+                  value={draft.ipv6?.router ?? ''}
+                  placeholder={derivedRouter6 || '::1 in the subnet'}
+                  disabled={!draft.ipv6?.subnet?.trim()}
+                  onChange={(e) => setIPv6({ router: e.target.value || undefined })}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {exposed && (
             <p className="text-xs text-warning">
@@ -231,7 +290,12 @@ export function NetworkDialog({
               disabled={!valid}
               onClick={() => {
                 const ipv4 = draft.ipv4?.subnet?.trim() ? draft.ipv4 : undefined
-                const ipv6 = draft.ipv6?.subnet?.trim() ? draft.ipv6 : undefined
+                const ipv6 =
+                  draft.ipv6?.delegated !== undefined
+                    ? { delegated: draft.ipv6.delegated }
+                    : draft.ipv6?.subnet?.trim()
+                      ? draft.ipv6
+                      : undefined
                 onSubmit({ ...draft, name: draft.name.trim(), ipv4, ipv6 })
               }}
             >
