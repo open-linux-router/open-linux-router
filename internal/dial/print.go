@@ -63,6 +63,21 @@ func uplinkSummary(u *Uplink) string {
 // gateway and the route actually in the main table are two separate lines, and
 // a route that leaves by a different interface says so rather than being
 // counted as agreement.
+// tunnelStateLine says whether the tunnel device is there and up, and where
+// it actually leaves from.
+func tunnelStateLine(tv *tunnelView) string {
+	switch {
+	case !tv.Present:
+		return tv.Interface + " is missing"
+	case !tv.Up:
+		return tv.Interface + " is down"
+	case tv.Local != "":
+		return tv.Interface + " is up, from " + tv.Local
+	default:
+		return tv.Interface + " is up, from whichever address the route picks"
+	}
+}
+
 func writeUplinkText(w io.Writer, v *uplinkView) error {
 	if v == nil {
 		fmt.Fprintln(w, "olr does not own this box's way out.")
@@ -93,6 +108,16 @@ func writeUplinkText(w io.Writer, v *uplinkView) error {
 	if v.ResolvingThrough != nil || len(v.DNS) > 0 {
 		fmt.Fprintf(t, "resolving through\t%s\n",
 			orDash(strings.Join(v.ResolvingThrough, ", ")))
+	}
+	if tv := v.Tunnel; tv != nil {
+		fmt.Fprintln(t, "\t")
+		fmt.Fprintf(t, "ipv6 tunnel\t%s to %s, mtu %d\n", tv.Address, tv.Server, tv.MTU)
+		fmt.Fprintf(t, "tunnel state\t%s\n", tunnelStateLine(tv))
+		route := "none"
+		if tv.RouteDev != "" {
+			route = "out of " + tv.RouteDev
+		}
+		fmt.Fprintf(t, "ipv6 default route\t%s\n", route)
 	}
 	if err := t.Flush(); err != nil {
 		return err

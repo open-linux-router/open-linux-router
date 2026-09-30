@@ -63,6 +63,8 @@ export function UplinkDialog({
   const [address, setAddress] = useState(initial?.address ?? '')
   const [gateway, setGateway] = useState(initial?.gateway ?? '')
   const [dns, setDns] = useState((initial?.dns ?? []).join(', '))
+  const [tunnelServer, setTunnelServer] = useState(initial?.tunnel?.server ?? '')
+  const [tunnelAddress, setTunnelAddress] = useState(initial?.tunnel?.address ?? '')
 
   // Only adopted interfaces (design.md §3.4).
   const available = interfaces.filter((i) => i.adopted && !i.loopback)
@@ -80,7 +82,9 @@ export function UplinkDialog({
     if (prefix && (address.trim() === '' || address === initial?.address)) setAddress(prefix)
   }
 
-  const valid = iface !== '' && (address.trim() === '') === (gateway.trim() === '')
+  const tunnelValid = (tunnelServer.trim() === '') === (tunnelAddress.trim() === '')
+  const valid =
+    iface !== '' && (address.trim() === '') === (gateway.trim() === '') && tunnelValid
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -187,7 +191,45 @@ export function UplinkDialog({
             )}
           </div>
 
-          {!valid && iface !== '' && (
+          <div className="space-y-3 border-t pt-4">
+            <div className="space-y-1">
+              <div className="text-sm font-medium">IPv6 through a tunnel broker</div>
+              <p className="text-xs text-muted-foreground">
+                Optional, for when your ISP offers no IPv6. Both values are on the broker&rsquo;s
+                tunnel details page. This connects this router; each network takes a /64 of the
+                broker&rsquo;s routed prefix on its own, and forwarding IPv6 to them is under
+                Gateway → IPv6.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="uplink-tunnel-server">Tunnel server</Label>
+                <Input
+                  id="uplink-tunnel-server"
+                  value={tunnelServer}
+                  placeholder="Server IPv4 Address"
+                  onChange={(e) => setTunnelServer(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="uplink-tunnel-address">This router&rsquo;s tunnel address</Label>
+                <Input
+                  id="uplink-tunnel-address"
+                  value={tunnelAddress}
+                  placeholder="Client IPv6 Address, e.g. 2001:db8::2/64"
+                  onChange={(e) => setTunnelAddress(e.target.value)}
+                />
+              </div>
+            </div>
+            {!tunnelValid && (
+              <p className="text-xs text-warning">
+                A tunnel needs both the server and this router&rsquo;s address. Leave both blank
+                for no tunnel.
+              </p>
+            )}
+          </div>
+
+          {!valid && iface !== '' && tunnelValid && (
             <p className="text-xs text-warning">
               An address needs a gateway and a gateway needs an address. Leave both blank for an
               interface olr should own and not configure.
@@ -217,6 +259,15 @@ export function UplinkDialog({
                     ? { address: address.trim(), gateway: gateway.trim() }
                     : undefined,
                   dns: splitAddresses(dns),
+                  // The MTU has no field; an edit keeps whatever was set.
+                  ipv6: tunnelServer.trim()
+                    ? {
+                        via: '6in4',
+                        server: tunnelServer.trim(),
+                        address: tunnelAddress.trim(),
+                        mtu: initial?.tunnel?.mtu === 1480 ? undefined : initial?.tunnel?.mtu,
+                      }
+                    : undefined,
                 },
                 replacing?.name,
               )

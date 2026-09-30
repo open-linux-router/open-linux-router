@@ -118,6 +118,10 @@ type uplinkView struct {
 	GatewayState  string `json:"gateway_state,omitempty"`
 	GatewaySeenOn string `json:"gateway_seen_on,omitempty"`
 
+	// Tunnel is the uplink's 6in4 tunnel, intent beside what the kernel has.
+	// Absent when the uplink has no ipv6 block.
+	Tunnel *tunnelView `json:"tunnel,omitempty"`
+
 	// ResolvingThrough are the name servers this box itself looks names up
 	// through, read from /etc/resolv.conf whoever wrote it — beside DNS, which
 	// is what olr was told, for the same reason the route is beside the
@@ -127,6 +131,26 @@ type uplinkView struct {
 	// Problems are the uplink's findings from the validator, so a section that
 	// is misconfigured says so beside itself.
 	Problems []core.Problem `json:"problems,omitempty"`
+}
+
+// tunnelView is the tunnel's two halves, flat, for the reason uplinkView is.
+type tunnelView struct {
+	// Server, Address and MTU are stored intent; Interface is the device name
+	// olr gives it.
+	Interface string `json:"interface"`
+	Server    string `json:"server"`
+	Address   string `json:"address"`
+	MTU       int    `json:"mtu"`
+
+	// Present and Up are the device as the kernel has it, and Local the IPv4
+	// address it actually leaves from — empty for "whatever the route picks".
+	Present bool   `json:"present"`
+	Up      bool   `json:"up"`
+	Local   string `json:"local,omitempty"`
+
+	// RouteDev is the interface the IPv6 default route leaves by, whichever
+	// it is. Anything but the tunnel means IPv6 is not going through it.
+	RouteDev string `json:"route_dev,omitempty"`
 }
 
 // routeView is the way out as the kernel has it, on any box.
@@ -224,6 +248,21 @@ func viewUplink(u *Uplink, obs Observed, problems []core.Problem) *uplinkView {
 		v.RouteVia = obs.Gateway.String()
 	}
 	v.GatewayState, v.GatewaySeenOn = obs.GatewayState, obs.GatewaySeenOn
+	if u.HasTunnel() {
+		t := &tunnelView{
+			Interface: TunnelInterface,
+			Server:    u.IPv6.Server.String(),
+			Address:   u.IPv6.Address.String(),
+			MTU:       u.IPv6.MTUOrDefault(),
+			Present:   obs.Tunnel.Present && obs.Tunnel.Sit,
+			Up:        obs.Tunnel.Up,
+			RouteDev:  obs.V6DefaultDev,
+		}
+		if obs.Tunnel.Local.IsValid() {
+			t.Local = obs.Tunnel.Local.String()
+		}
+		v.Tunnel = t
+	}
 	return v
 }
 
@@ -399,7 +438,7 @@ func planUplink(plan *planView, stored, desired Config, links LinkView, obs Obse
 				"default route it has right now, so nothing goes offline — but olr will not "+
 				"put them back after a reboot, and nothing else on this box knows them. "+
 				"Give the interface to your distribution's network configuration, or set "+
-				"the uplink again", stored.Uplink.Interface),
+				"the uplink again", stored.Uplink.Interface) + tunnelGoesNote(stored.Uplink),
 		})
 	case stored.Uplink == nil:
 		plan.Changes = append(plan.Changes, changeView{
@@ -448,6 +487,48 @@ func planUplink(plan *planView, stored, desired Config, links LinkView, obs Obse
 		})
 	}
 
+	// The tunnel, as its own change: it is a device of its own, and a reader
+	// looking for "what happens to IPv6" should find it under that name rather
+	// than folded into the uplink interface's lines.
+	if t := kernel.Tunnel; t != nil {
+		if t.Conflict {
+			plan.Warnings = append(plan.Warnings, core.Problem{
+				Path: UplinkPath + ".ipv6",
+				Message: fmt.Sprintf("%s already exists and is not a 6in4 tunnel, so olr will not "+
+					"touch it and the tunnel will not come up. Rename or remove that device",
+					TunnelInterface),
+			})
+		} else if lines := DescribeTunnelPlan(t); len(lines) > 0 {
+			plan.Changes = append(plan.Changes, changeView{
+				Path: "interfaces[" + TunnelInterface + "]",
+				Kind: kindUpdate,
+				// Taking the IPv6 default route from another interface can drop
+				// IPv6 that was working; recreating the device drops it for a
+				// moment. Bringing up a tunnel where there was no IPv6 route
+				// takes nothing from anybody.
+				Impact: pick(t.ReplacesRoute != "" || (t.Create && obs.Tunnel.Present),
+					impactDisruptive, impactRestart),
+				Diff: strings.Join(lines, "\n") + "\n",
+			})
+			if t.ReplacesRoute != "" {
+				plan.Warnings = append(plan.Warnings, core.Problem{
+					Path: UplinkPath + ".ipv6",
+					Message: fmt.Sprintf("this box's IPv6 default route leaves by %s now; the "+
+						"tunnel takes it over, so IPv6 that works through %s today will go "+
+						"through the broker instead", t.ReplacesRoute, t.ReplacesRoute),
+				})
+			}
+		}
+	}
+	if RemovingTunnel(stored, desired) && obs.Tunnel.Present && obs.Tunnel.Sit {
+		plan.Changes = append(plan.Changes, changeView{
+			Path:   "interfaces[" + TunnelInterface + "]",
+			Kind:   kindDelete,
+			Impact: impactDisruptive,
+			Diff:   fmt.Sprintf("- ip link del %s\n", TunnelInterface),
+		})
+	}
+
 	// The address the previous uplink had and this one does not. Its own
 	// change, on the interface it is on, because that may not be the one the
 	// uplink is moving to — and disruptive, because a session arriving at that
@@ -488,6 +569,16 @@ func planUplink(plan *planView, stored, desired Config, links LinkView, obs Obse
 				kernel.Interface, strings.Join(foreign, ", ")),
 		})
 	}
+}
+
+// tunnelGoesNote is the exception to "nothing is torn down": the tunnel is a
+// device olr created, so it goes with the uplink (UplinkIPv6).
+func tunnelGoesNote(u *Uplink) string {
+	if !u.HasTunnel() {
+		return ""
+	}
+	return fmt.Sprintf(". The IPv6 tunnel is the exception: olr created %s, so it is removed, "+
+		"and this box loses the IPv6 it carried", TunnelInterface)
 }
 
 // retiredStillThere reports whether the previous uplink's address is still on
@@ -570,6 +661,10 @@ func describeUplink(sign string, u *Uplink) string {
 		fmt.Fprintf(&b, "%s  ipv4 %s via %s\n", sign, u.IPv4.Address, u.IPv4.Gateway)
 	} else {
 		fmt.Fprintf(&b, "%s  no static ipv4\n", sign)
+	}
+	if u.HasTunnel() {
+		fmt.Fprintf(&b, "%s  ipv6 %s over a 6in4 tunnel to %s, mtu %d\n", sign,
+			u.IPv6.Address, u.IPv6.Server, u.IPv6.MTUOrDefault())
 	}
 	if len(u.DNS) > 0 {
 		addrs := make([]string, 0, len(u.DNS))

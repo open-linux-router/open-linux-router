@@ -57,10 +57,33 @@ type Desired struct {
 	// for when there is one.
 	Retire     netip.Prefix
 	RetireFrom string
+
+	// Tunnel is the 6in4 device the uplink asks for, nil for none.
+	Tunnel *Tunnel
+
+	// RemoveTunnel deletes TunnelInterface. Set when the stored uplink had a
+	// tunnel and the desired one does not — olr created the device, so there
+	// is nothing on it to leave behind (UplinkIPv6).
+	RemoveTunnel bool
+}
+
+// Tunnel is the kernel state a 6in4 tunnel is: a sit device from Local to
+// Remote, an address on it, and the IPv6 default route through it.
+type Tunnel struct {
+	// Local is the IPv4 source of the tunnel, invalid for "whatever the route
+	// to Remote picks" — which is what an uplink with no static address gets.
+	Local  netip.Addr
+	Remote netip.Addr
+
+	Address netip.Prefix
+	MTU     int
 }
 
 // Empty reports whether there is nothing for a writer to do.
 func (d Desired) Empty() bool {
+	if d.Tunnel != nil || d.RemoveTunnel {
+		return false
+	}
 	return d.Interface == "" ||
 		(!d.Address.IsValid() && !d.Gateway.IsValid() && !d.Up && !d.Retire.IsValid())
 }
@@ -163,6 +186,35 @@ type Observed struct {
 	// there is one. It is usually the answer to "which of my NICs faces the
 	// modem", and cheaper to state than to leave the operator to guess.
 	GatewaySeenOn string
+
+	// Tunnel is TunnelInterface as the kernel has it, read whether or not the
+	// uplink asks for one — a leftover is exactly what that read is for.
+	Tunnel TunnelObserved
+
+	// V6DefaultDev is the interface the main table's IPv6 default route leaves
+	// by, empty when there is none. V6DefaultVia is its next hop, invalid on a
+	// point-to-point device such as the tunnel.
+	V6DefaultDev string
+	V6DefaultVia netip.Addr
+}
+
+// TunnelObserved is what the kernel has for TunnelInterface.
+type TunnelObserved struct {
+	// Present reports that the device exists at all. Everything below is zero
+	// when it does not.
+	Present bool
+
+	// Sit reports that it is a sit (6in4) device. A device by that name of any
+	// other kind is not olr's, and the writer refuses to touch it.
+	Sit bool
+
+	Up     bool
+	Local  netip.Addr
+	Remote netip.Addr
+	MTU    int
+
+	// Addrs are its IPv6 addresses, link-local excluded.
+	Addrs []netip.Prefix
 }
 
 // The states Observed.GatewayState can take.
@@ -181,7 +233,21 @@ func DesiredFor(c Config) Desired {
 		d.Address = c.Uplink.IPv4.Address
 		d.Gateway = c.Uplink.IPv4.Gateway
 	}
+	if c.Uplink.HasTunnel() {
+		v6 := c.Uplink.IPv6
+		t := &Tunnel{Remote: v6.Server, Address: v6.Address, MTU: v6.MTUOrDefault()}
+		if c.Uplink.HasIPv4() {
+			t.Local = c.Uplink.IPv4.Address.Addr()
+		}
+		d.Tunnel = t
+	}
 	return d
+}
+
+// RemovingTunnel reports whether a change takes the tunnel away: the stored
+// uplink had one and the desired config has none, uplink removed included.
+func RemovingTunnel(stored, desired Config) bool {
+	return stored.Uplink.HasTunnel() && !desired.Uplink.HasTunnel()
 }
 
 // UplinkPlan is the difference between what the kernel has and what the uplink
@@ -207,15 +273,67 @@ type UplinkPlan struct {
 	// BringUp reports that the interface is down and the uplink needs it up.
 	BringUp bool
 
+	// Tunnel is what the 6in4 device needs, nil when it already agrees or
+	// there is none.
+	Tunnel *TunnelPlan
+
 	// Foreign are the other IPv4 addresses on the interface. Reported and never
 	// removed — see the writer's contract below — so that a DHCP client also
 	// acting on this NIC is *visible* rather than either invisible or deleted.
 	Foreign []netip.Prefix
 }
 
+// TunnelPlan is the difference for the tunnel.
+type TunnelPlan struct {
+	// Create means the device is missing, or exists with a different local,
+	// remote or MTU; the writer replaces it outright rather than editing it.
+	Create bool
+
+	// Want is the tunnel as the uplink asks for it.
+	Want Tunnel
+
+	// Add is the address to put on it, BringUp that it is down, and Route that
+	// the IPv6 default route does not go through it.
+	Add     bool
+	BringUp bool
+	Route   bool
+
+	// ReplacesRoute is the device the IPv6 default route leaves by now, when
+	// writing Route would displace it. Empty when there is none to displace.
+	ReplacesRoute string
+
+	// Conflict names a device called TunnelInterface that is not a sit
+	// tunnel. Nothing is planned over it; the writer refuses.
+	Conflict bool
+}
+
 // Empty reports whether the kernel already agrees.
 func (p UplinkPlan) Empty() bool {
-	return !p.Add.IsValid() && !p.Gateway.IsValid() && !p.BringUp
+	return !p.Add.IsValid() && !p.Gateway.IsValid() && !p.BringUp && p.Tunnel == nil
+}
+
+// PlanTunnel diffs the observed tunnel against the one wanted.
+func PlanTunnel(want Tunnel, obs Observed) *TunnelPlan {
+	t := obs.Tunnel
+	p := &TunnelPlan{Want: want}
+	switch {
+	case t.Present && !t.Sit:
+		p.Conflict = true
+		return p
+	case !t.Present || t.Local != want.Local || t.Remote != want.Remote || t.MTU != want.MTU:
+		p.Create, p.Add, p.BringUp, p.Route = true, true, true, true
+	default:
+		p.Add = !slices.Contains(t.Addrs, want.Address)
+		p.BringUp = !t.Up
+		p.Route = obs.V6DefaultDev != TunnelInterface
+	}
+	if p.Route && obs.V6DefaultDev != "" && obs.V6DefaultDev != TunnelInterface {
+		p.ReplacesRoute = obs.V6DefaultDev
+	}
+	if !p.Create && !p.Add && !p.BringUp && !p.Route {
+		return nil
+	}
+	return p
 }
 
 // PlanUplink diffs the observed kernel against what the uplink asks for.
@@ -263,6 +381,9 @@ func PlanUplink(d Desired, obs Observed) UplinkPlan {
 			plan.ReplacesGateway = obs.Gateway
 		}
 	}
+	if d.Tunnel != nil {
+		plan.Tunnel = PlanTunnel(*d.Tunnel, obs)
+	}
 	return plan
 }
 
@@ -278,6 +399,33 @@ func DescribeUplinkPlan(p UplinkPlan) []string {
 	if p.Gateway.IsValid() {
 		lines = append(lines, fmt.Sprintf("+ ip route replace default via %s dev %s",
 			p.Gateway, p.Interface))
+	}
+	return lines
+}
+
+// DescribeTunnelPlan renders the tunnel's half the same way.
+func DescribeTunnelPlan(p *TunnelPlan) []string {
+	if p == nil || p.Conflict {
+		return nil
+	}
+	var lines []string
+	if p.Create {
+		local := "any"
+		if p.Want.Local.IsValid() {
+			local = p.Want.Local.String()
+		}
+		lines = append(lines, fmt.Sprintf("+ ip tunnel add %s mode sit remote %s local %s ttl 255",
+			TunnelInterface, p.Want.Remote, local))
+		lines = append(lines, fmt.Sprintf("+ ip link set %s mtu %d", TunnelInterface, p.Want.MTU))
+	}
+	if p.Add {
+		lines = append(lines, fmt.Sprintf("+ ip addr add %s dev %s", p.Want.Address, TunnelInterface))
+	}
+	if p.BringUp {
+		lines = append(lines, fmt.Sprintf("+ ip link set %s up", TunnelInterface))
+	}
+	if p.Route {
+		lines = append(lines, fmt.Sprintf("+ ip -6 route replace default dev %s", TunnelInterface))
 	}
 	return lines
 }
@@ -323,6 +471,12 @@ func (w *RecordingWriter) Apply(_ context.Context, d Desired) ([]Step, error) {
 	}
 	if d.Retire.IsValid() {
 		record("remove %s from %s", d.Retire, d.RetireFrom)
+	}
+	if d.Tunnel != nil {
+		record("bring up the IPv6 tunnel to %s", d.Tunnel.Remote)
+	}
+	if d.RemoveTunnel {
+		record("remove %s", TunnelInterface)
 	}
 
 	w.Steps = steps

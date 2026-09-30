@@ -214,3 +214,17 @@ func mustObserve(t *testing.T, k *StaticKernel) Observed {
 	}
 	return obs
 }
+
+// The tunnel's opening has no port and names its one source; two tunnels to
+// different brokers are two openings, not one deduplicated by port zero.
+func TestASixInFourOpeningNamesItsSource(t *testing.T) {
+	he := Opening{For: "IPv6 tunnel", Protocol: SixInFour, From: netip.MustParseAddr("216.66.80.26")}
+	if got := he.Line(); got != "nft allow 6in4 from 216.66.80.26 for IPv6 tunnel" {
+		t.Errorf("line = %q", got)
+	}
+	other := he
+	other.From = netip.MustParseAddr("216.66.80.30")
+	if got := normalizeOpenings([]Opening{he, other, he}); len(got) != 2 {
+		t.Errorf("want the two sources kept and the duplicate dropped, got %+v", got)
+	}
+}

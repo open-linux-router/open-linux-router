@@ -118,12 +118,77 @@ func validateUplink(r *Result, u *Uplink, links LinkView) {
 			"an uplink needs the interface facing your modem or your ISP")
 	}
 	validateUplinkIPv4(r, u)
+	validateUplinkIPv6(r, u)
 	validateUplinkDNS(r, u)
 
 	if links == nil || u.Interface == "" {
 		return
 	}
 	checkUplinkInterface(r, u, links)
+}
+
+// validateUplinkIPv6 checks the tunnel.
+func validateUplinkIPv6(r *Result, u *Uplink) {
+	if u.IPv6 == nil {
+		return
+	}
+	v6 := *u.IPv6
+	path := UplinkPath + ".ipv6"
+
+	if v6.Via != Via6in4 {
+		r.errorf(path+".via", "%q is not a way olr can bring IPv6 in; the one it knows is %q",
+			v6.Via, Via6in4)
+		return
+	}
+
+	switch s := v6.Server; {
+	case !s.IsValid():
+		r.errorf(path+".server", "give the tunnel broker's IPv4 endpoint — "+
+			"\"Server IPv4 Address\" on its tunnel details page")
+	case !s.Is4():
+		r.errorf(path+".server", "%s is IPv6; the tunnel runs over IPv4, so the server is "+
+			"an IPv4 address", s)
+	case s.IsPrivate(), s.IsLoopback(), s.IsUnspecified(), s.IsMulticast(), s.IsLinkLocalUnicast():
+		r.errorf(path+".server", "%s is not a public address a tunnel broker could be at", s)
+	}
+
+	switch a := v6.Address; {
+	case !a.IsValid():
+		r.errorf(path+".address", "give this box's address inside the tunnel, with its mask — "+
+			"\"Client IPv6 Address\", such as 2001:db8:1f0a:123::2/64")
+	case !a.Addr().Is6() || a.Addr().Is4In6():
+		r.errorf(path+".address", "%s is IPv4; the tunnel's own address is IPv6", a)
+	case a.Addr() == a.Masked().Addr():
+		r.errorf(path+".address", "%s is the tunnel's network, not this box's address in it — "+
+			"usually the one ending ::2", a)
+	case a.Addr().IsLinkLocalUnicast(), a.Addr().IsMulticast(), a.Addr().IsLoopback():
+		r.errorf(path+".address", "%s cannot be a tunnel's address", a)
+	}
+
+	if m := v6.MTU; m != 0 && (m < 1280 || m > 1480) {
+		// 1280 is IPv6's floor (RFC 8200 §5); 1480 is the most a 6in4 packet
+		// fits in under a 1500-byte link.
+		r.errorf(path+".mtu", "%d is outside 1280–1480; leave it empty for %d", m, DefaultTunnelMTU)
+	}
+
+	if u.HasIPv4() && u.IPv4.Address.Addr().IsPrivate() {
+		// The overview's "upstream" case: another router sits in front. 6in4 is
+		// IP protocol 41, not TCP or UDP, so an ordinary port forward cannot
+		// pass it and plenty of home routers drop it outright.
+		r.warnf(path, "this box's uplink address %s is private, so another router is in front "+
+			"of it. That router has to pass IP protocol 41 to this box — usually by making it "+
+			"the DMZ host — and the broker has to be told that router's public address",
+			u.IPv4.Address.Addr())
+	}
+
+	if !u.HasIPv4() {
+		// Works — the kernel picks the source address from the route to the
+		// server — and it is worth saying, because it is also how a tunnel
+		// ends up leaving by an interface nobody expected.
+		r.warnf(path, "the uplink has no static IPv4, so the tunnel leaves from whichever "+
+			"address the route to %s picks. The broker has to be told that address; if it "+
+			"changes, the tunnel stops until it is told again", v6.Server)
+	}
 }
 
 // validateUplinkIPv4 checks the static addressing.
@@ -146,7 +211,7 @@ func validateUplinkIPv4(r *Result, u *Uplink) {
 		// accepting the field before that exists would be a promise every
 		// generated surface makes and the writer cannot keep.
 		r.errorf(UplinkPath+".ipv4.address",
-			"%s is IPv6; olr does not configure an IPv6 uplink yet", addr)
+			"%s is IPv6; the uplink's IPv6 is its ipv6 block", addr)
 	case addr.Addr().IsUnspecified(), addr.Addr().IsLoopback(), addr.Addr().IsMulticast():
 		r.errorf(UplinkPath+".ipv4.address", "%s cannot be an interface's address", addr)
 	case addr.Bits() < 31 && addr.Addr() == addr.Masked().Addr():

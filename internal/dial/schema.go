@@ -1,6 +1,9 @@
 package dial
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"github.com/invopop/jsonschema"
 )
 
@@ -94,6 +97,47 @@ func (UplinkIPv4) JSONSchema() *jsonschema.Schema {
 			"and PPPoE forms will take when they land.",
 		Properties: props,
 		Required:   []string{"address", "gateway"},
+	}
+}
+
+// JSONSchema describes the uplink's IPv6 block, for the same reason as
+// UplinkIPv4's: its address is an address with a mask, not a network, and the
+// general CIDR example would suggest the wrong one.
+func (UplinkIPv6) JSONSchema() *jsonschema.Schema {
+	props := jsonschema.NewProperties()
+	props.Set("via", &jsonschema.Schema{
+		Type:        "string",
+		Title:       "How IPv6 arrives",
+		Description: "6in4: IPv6 carried inside IPv4 to a tunnel broker.",
+		Enum:        []any{string(Via6in4)},
+	})
+	props.Set("server", &jsonschema.Schema{
+		Type:        "string",
+		Title:       "Tunnel server",
+		Description: "The broker's IPv4 endpoint — \"Server IPv4 Address\" on its tunnel details page.",
+		Examples:    []any{"216.66.80.26"},
+	})
+	props.Set("address", &jsonschema.Schema{
+		Type:  "string",
+		Title: "This router's tunnel address",
+		Description: "This box's IPv6 address inside the tunnel, with its mask — \"Client IPv6 " +
+			"Address\" on the details page, usually ending ::2.",
+		Examples: []any{"2001:db8:1f0a:123::2/64"},
+	})
+	props.Set("mtu", &jsonschema.Schema{
+		Type:        "integer",
+		Title:       "MTU",
+		Description: fmt.Sprintf("The tunnel's MTU, 1280–1480. Empty means %d.", DefaultTunnelMTU),
+		Minimum:     json.Number("1280"),
+		Maximum:     json.Number("1480"),
+	})
+	return &jsonschema.Schema{
+		Type:  "object",
+		Title: "IPv6",
+		Description: "How this router reaches the IPv6 internet, when olr connects it. Leave the " +
+			"block out to leave IPv6 on the uplink as the ISP or the distribution has it.",
+		Properties: props,
+		Required:   []string{"via", "server", "address"},
 	}
 }
 

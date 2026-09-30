@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/dial"
 	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
@@ -99,6 +100,19 @@ func (b firewallBoundary) Openings() ([]firewall.Opening, error) {
 			firewall.Opening{For: "ingress", Protocol: firewall.UDP, Port: 443},
 		)
 	}
+
+	// The IPv6 tunnel arrives as protocol 41 from the broker. Conntrack lets
+	// replies in for a while after this box last sent, which is why a tunnel
+	// appears to work behind the firewall — until it has been quiet for ten
+	// minutes and the first inbound IPv6 connection is dropped.
+	dc, err := dial.FromDocument(doc)
+	if err != nil {
+		return nil, err
+	}
+	if dc.Uplink.HasTunnel() {
+		out = append(out, firewall.Opening{For: "IPv6 tunnel",
+			Protocol: firewall.SixInFour, From: dc.Uplink.IPv6.Server})
+	}
 	return out, nil
 }
 
@@ -122,6 +136,7 @@ func (b firewallBoundary) InterfaceOf(addr netip.Addr) (string, bool) {
 // built from: the networks (inside), and the two that serve ports to the
 // outside. Port forwards are absent on purpose — see Openings.
 var firewallFollows = map[string]bool{
+	dial.ModuleName:    true,
 	link.ModuleName:    true,
 	remote.ModuleName:  true,
 	ingress.ModuleName: true,

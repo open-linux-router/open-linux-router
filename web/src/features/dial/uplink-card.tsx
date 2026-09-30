@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useUplinkEditor } from '@/features/dial/queries'
 import { UplinkDialog } from '@/features/dial/uplink-dialog'
 import { useRemoveAddress } from '@/features/link/queries'
-import type { NetworkRow, InterfaceRow, UplinkStatus } from '@/lib/api-types'
+import type { NetworkRow, InterfaceRow, TunnelStatus, UplinkStatus } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
 
 /**
@@ -168,6 +168,8 @@ function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
 
       <ResolverLine uplink={uplink} />
 
+      {uplink.tunnel && <TunnelLine tunnel={uplink.tunnel} />}
+
       {uplink.problems?.map((p) => (
         <p key={p.path + p.message} className="text-sm text-warning">
           {p.message}
@@ -186,6 +188,29 @@ function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
  * name because the file it resolves through was empty. Nothing on the page
  * said so.
  */
+/**
+ * The tunnel in one line: what was set, and whether IPv6 is actually going
+ * through it — the same intent-beside-fact pairing as the route above.
+ */
+function TunnelLine({ tunnel }: { tunnel: TunnelStatus }) {
+  const using = tunnel.present && tunnel.up && tunnel.route_dev === tunnel.interface
+  let state: string
+  if (!tunnel.present) state = `${tunnel.interface} is missing.`
+  else if (!tunnel.up) state = `${tunnel.interface} is down.`
+  else if (!tunnel.route_dev) state = 'There is no IPv6 default route.'
+  else if (!using) state = `IPv6 leaves by ${tunnel.route_dev}, not through the tunnel.`
+  else state = 'IPv6 goes out through it.'
+
+  return (
+    <div className="space-y-1 text-sm">
+      <div className="font-mono">
+        IPv6 · {tunnel.address} via tunnel to {tunnel.server}
+      </div>
+      <p className={using ? 'text-muted-foreground' : 'text-warning'}>{state}</p>
+    </div>
+  )
+}
+
 function ResolverLine({ uplink }: { uplink: UplinkStatus }) {
   const set = uplink.dns ?? []
   const through = uplink.resolving_through ?? []

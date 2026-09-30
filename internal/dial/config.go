@@ -148,6 +148,16 @@ type Uplink struct {
 	// nothing else, and the plan says so.
 	IPv4 *UplinkIPv4 `json:"ipv4,omitempty"`
 
+	// IPv6 is how this box reaches the IPv6 internet, when olr is the one
+	// connecting it. Nil means olr does nothing about IPv6 on the uplink:
+	// whatever the interface gets from the ISP's router advertisements, or a
+	// DHCPv6 client the distribution runs, stays exactly as it is.
+	//
+	// One form today, a 6in4 tunnel to a tunnel broker — the way to IPv6 where
+	// the ISP offers none. Prefix delegation is the other form this field is
+	// shaped for, and it is not built.
+	IPv6 *UplinkIPv6 `json:"ipv6,omitempty"`
+
 	// DNS are the resolvers this router itself looks names up through, in
 	// preference order — usually the modem, or the ISP's.
 	//
@@ -187,6 +197,63 @@ type UplinkIPv4 struct {
 	Gateway netip.Addr `json:"gateway"`
 }
 
+// UplinkIPv6 is the uplink's IPv6: today, a 6in4 tunnel.
+//
+// The tunnel is a device olr creates, named TunnelInterface, and owns
+// outright — unlike the uplink interface, which exists before olr and outlives
+// it. So removing this block deletes the device and its route, where removing
+// the uplink's IPv4 leaves the address behind (RemoveUplink). There is nothing
+// on it anybody else put there.
+//
+// What the broker routes to this box beyond the tunnel's own /64 — a routed
+// /64 or /48 — is not stored here. It is the networks' to number from, and each
+// network says which /64 it takes (link.Network.IPv6); this object only carries
+// the traffic.
+type UplinkIPv6 struct {
+	// Via is how IPv6 arrives. Only Via6in4 exists.
+	Via IPv6Via `json:"via"`
+
+	// Server is the broker's IPv4 endpoint — "Server IPv4 Address" on a
+	// tunnel broker's details page.
+	Server netip.Addr `json:"server"`
+
+	// Address is this box's own address inside the tunnel, with its mask —
+	// "Client IPv6 Address", 2001:db8:1f0a:123::2/64. Not masked, for the
+	// reason UplinkIPv4.Address is not.
+	Address netip.Prefix `json:"address"`
+
+	// MTU of the tunnel device. Zero means DefaultTunnelMTU: 20 bytes of IPv4
+	// header under a 1500-byte link.
+	MTU int `json:"mtu,omitempty"`
+}
+
+// IPv6Via is how the uplink's IPv6 arrives.
+type IPv6Via string
+
+// Via6in4 is IPv6 carried inside IPv4 to a tunnel broker (protocol 41).
+const Via6in4 IPv6Via = "6in4"
+
+// TunnelInterface is the name of the 6in4 device olr creates. Fixed, because
+// there is one uplink and so at most one tunnel, and a fixed name is what lets
+// every read find it without a stored handle.
+const TunnelInterface = "olr-6in4"
+
+// DefaultTunnelMTU is a 6in4 tunnel's MTU under a 1500-byte link.
+const DefaultTunnelMTU = 1480
+
+// MTUOrDefault resolves the zero value.
+func (v UplinkIPv6) MTUOrDefault() int {
+	if v.MTU == 0 {
+		return DefaultTunnelMTU
+	}
+	return v.MTU
+}
+
+// HasTunnel reports whether the uplink asks for a 6in4 tunnel.
+func (u *Uplink) HasTunnel() bool {
+	return u != nil && u.IPv6 != nil && u.IPv6.Via == Via6in4
+}
+
 // HasIPv4 reports whether the uplink carries a usable static IPv4
 // configuration. Both halves or neither: an address with no gateway leaves the
 // box on the link and off the internet, and a gateway with no address is a next
@@ -207,6 +274,10 @@ func (u *Uplink) Clone() *Uplink {
 		ipv4 := *u.IPv4
 		out.IPv4 = &ipv4
 	}
+	if u.IPv6 != nil {
+		ipv6 := *u.IPv6
+		out.IPv6 = &ipv6
+	}
 	return &out
 }
 
@@ -219,6 +290,10 @@ func (u *Uplink) Equal(other *Uplink) bool {
 	case u.Interface != other.Interface:
 		return false
 	case !slices.Equal(u.DNS, other.DNS):
+		return false
+	case (u.IPv6 == nil) != (other.IPv6 == nil):
+		return false
+	case u.IPv6 != nil && *u.IPv6 != *other.IPv6:
 		return false
 	case (u.IPv4 == nil) != (other.IPv4 == nil):
 		return false

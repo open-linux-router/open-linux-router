@@ -241,6 +241,19 @@ func ruleExprs(conn *nftables.Conn, table *nftables.Table, d Desired, r Rule) ([
 		}, nil
 
 	case RuleOpening:
+		if r.Opening.Protocol == SixInFour {
+			// ip protocol 41 and ip saddr <broker>. The family guard first, as
+			// everywhere in this inet table: a v4 source address read out of a
+			// v6 header is whatever bytes sit at that offset.
+			from := r.Opening.From.As4()
+			return []expr.Any{
+				nfproto(), nfprotoCmp(unix.NFPROTO_IPV4),
+				l4proto(), l4protoCmp(unix.IPPROTO_IPV6),
+				&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseNetworkHeader, Offset: 12, Len: 4},
+				&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: from[:]},
+				accept,
+			}, nil
+		}
 		proto := byte(unix.IPPROTO_TCP)
 		if r.Opening.Protocol == UDP {
 			proto = unix.IPPROTO_UDP

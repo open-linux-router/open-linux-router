@@ -133,11 +133,11 @@ export function FirewallPage() {
           />
           {st.openings.map((o) => (
             <ListRow
-              key={`${o.protocol}/${o.port}`}
+              key={`${o.protocol}/${o.port ?? o.from}`}
               title={o.for}
               trailing={
                 <span className="font-mono text-sm text-muted-foreground">
-                  {o.protocol} {o.port}
+                  {o.protocol} {o.from ? `from ${o.from}` : o.port}
                 </span>
               }
             />

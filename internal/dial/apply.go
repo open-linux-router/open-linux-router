@@ -187,6 +187,7 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 	// asked.
 	want := DesiredFor(stored)
 	want.RetireFrom, want.Retire = Retiring(previous, stored)
+	want.RemoveTunnel = RemovingTunnel(previous, stored)
 	result := ApplyResult{Plan: plan}
 	if !want.Empty() {
 		steps, err := a.writer().Apply(ctx, want)

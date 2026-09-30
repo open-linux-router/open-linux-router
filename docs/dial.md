@@ -1,8 +1,8 @@
 # `dial` module design — the box's own way out
 
-Status: **part built.** `internal/dial` is the module. The static uplink and
-dynamic DNS are built; the DHCP-client, PPPoE and LTE forms, IPv6 and prefix
-delegation, and multi-WAN are owed. Bare section references are to this
+Status: **part built.** `internal/dial` is the module. The static uplink,
+IPv6 over a 6in4 tunnel (§2.1) and dynamic DNS are built; the DHCP-client,
+PPPoE and LTE forms, prefix delegation, and multi-WAN are owed. Bare section references are to this
 document; references to `design.md` name it, and `gateway:` means
 `docs/gateway.md`.
 
@@ -109,9 +109,48 @@ forms will arrive through — an uplink with no IPv4 block already means "olr ow
 this interface and writes no address", which is exactly what a DHCP-client
 uplink stores.
 
-`Uplink.IPv6` is absent for the reason `link.Network` has no IPv6 field: there is
-no v6 write path behind it. A field that three generated surfaces offer and the
-writer cannot honour is worse than its absence.
+### 2.1 IPv6 through a tunnel broker
+
+`Uplink.IPv6` has one form, `via: 6in4`: IPv6 carried inside IPv4 to a tunnel
+broker, for the ISP that offers no IPv6. Three values, all from the broker's
+tunnel details page — the server's IPv4 endpoint, this box's address inside
+the tunnel (usually `…::2/64`), and an optional MTU (1480 by default).
+
+It came before prefix delegation on purpose. Everything about a broker tunnel
+is typed, where PD is discovered: no DHCPv6 client to supervise, no prefix that
+can change under the networks numbered from it, no status that says "dialling".
+It is the static form's shape, one level up.
+
+**The device is olr's outright.** `olr-6in4` is a `sit` device olr creates, so
+unlike the uplink interface there is nothing on it anybody else put there:
+removing the ipv6 block — or the whole uplink — deletes it, address and route
+with it. That is the one exception to §3.3's "removing an uplink tears nothing
+down", and the plan says so. A device already called `olr-6in4` that is not a
+sit tunnel is somebody else's; the writer refuses to touch it and the plan warns.
+
+**What it writes**, in the §3 order: the device (local = the uplink's static
+address when there is one, otherwise "any"; TTL 255; PMTU discovery on), its
+address, up, then `ip -6 route replace default dev olr-6in4`. A device whose
+endpoints or MTU differ is replaced, not edited. Taking the IPv6 default route
+from another interface — an ISP's router advertisement, say — is disruptive and
+warned about by name.
+
+**What it does not do:**
+
+- **Number the networks.** A broker routes a /64 or a /48 to this box beyond
+  the tunnel's own /64. That is not stored here: each network takes a /64 of
+  it itself (`link.Network.IPv6`, `olr net set <name> --ipv6-subnet`).
+- **Forward IPv6** to those networks. That is `gateway`'s own switch
+  (gateway:§3.8), turned on there. Nothing here turns it on — design.md §4.3.
+- **Tell the broker when this box's IPv4 changes.** A tunnel is pinned to the
+  public address the broker was given; on an ISP that changes it, the tunnel
+  goes quiet until the broker is told the new one. §8 carries it.
+
+**Behind another router** — the uplink's own address private — the router in
+front has to pass IP protocol 41 to this box, usually by making it the DMZ
+host, because 6in4 is not TCP or UDP and no port forward carries it. Validation
+warns. The firewall lets protocol 41 in from the broker's address only
+(`docs/firewall.md` §2.2).
 
 ---
 
@@ -390,8 +429,14 @@ turn the box's own address into something netlink accepts and nothing can reach.
 ## 8. Still open
 
 1. **The DHCP-client, PPPoE and LTE forms.** §2 has what they cost.
-2. **IPv6, and prefix delegation.** design.md §4.3 wants the delegated prefix to
-   reach `dhcp`; nothing here reads or stores one.
+2. **Prefix delegation.** design.md §4.3 wants the delegated prefix to reach
+   `dhcp`; nothing here reads or stores one. The 6in4 tunnel (§2.1) is the
+   IPv6 form that is built.
+7. **Telling a tunnel broker this box's new IPv4.** Brokers take a
+   DynDNS-style update keyed by tunnel ID. The DDNS machinery here already
+   notices the address changing, but a `Record` is a public DNS name and a
+   tunnel is not one, so it is not wedged into that object. Until it is built,
+   a box whose public IPv4 changes has to update the broker by hand.
 3. **Multi-WAN**, and with it failover — which needs a health signal, and
    `gateway` already has one for exits (gateway:§5.5). Whether they are one
    mechanism is the interesting question and is not answered.

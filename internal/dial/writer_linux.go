@@ -50,11 +50,22 @@ type linuxWriter struct{}
 // half-applied change is better served by the complete list than by a report
 // that stops at line one.
 func (linuxWriter) Apply(ctx context.Context, d Desired) ([]Step, error) {
-	if d.Interface == "" {
-		return nil, nil
-	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if d.Interface == "" {
+		// The uplink went, and with it any tunnel it carried: the one thing an
+		// uplink leaves that olr removes, because olr created it (UplinkIPv6).
+		if d.RemoveTunnel {
+			var steps []Step
+			failed := 0
+			removeTunnel(&steps, &failed)
+			if failed > 0 {
+				return steps, fmt.Errorf("removing %s failed", TunnelInterface)
+			}
+			return steps, nil
+		}
+		return nil, nil
 	}
 
 	link, err := netlink.LinkByName(d.Interface)
@@ -108,6 +119,15 @@ func (linuxWriter) Apply(ctx context.Context, d Desired) ([]Step, error) {
 		})
 	}
 
+	// The tunnel after the IPv4 half, because it rides on it: a tunnel whose
+	// local address has not landed yet is a device that sends nothing.
+	switch {
+	case d.Tunnel != nil:
+		applyTunnel(*d.Tunnel, &steps, &failed)
+	case d.RemoveTunnel:
+		removeTunnel(&steps, &failed)
+	}
+
 	// The previous uplink's address, last and only on a clean run. Everything
 	// above is what replaces it; if any of that was refused, the old address may
 	// be the only way this box still reaches anything, and taking it away then
@@ -152,6 +172,216 @@ func retire(d Desired, steps *[]Step, failed *int) {
 	*steps = append(*steps, step)
 }
 
+// applyTunnel brings TunnelInterface to t: the device, its MTU, its address,
+// up, and the IPv6 default route through it — the same address, up, route
+// order Apply follows for the uplink itself, for the same reasons.
+//
+// A device with different endpoints or MTU is replaced rather than edited.
+// netlink's LinkModify does not cover every sit attribute across kernels, and
+// the device is olr's alone, so delete-and-add is the one path that always
+// lands in the state asked for. The cost is a moment without IPv6, on a change
+// the operator just asked for.
+func applyTunnel(t Tunnel, steps *[]Step, failed *int) {
+	run := func(description string, fn func() error) bool {
+		step := Step{Description: description}
+		err := fn()
+		if err != nil {
+			step.Error = err.Error()
+			*failed++
+		} else {
+			step.Done = true
+		}
+		*steps = append(*steps, step)
+		return err == nil
+	}
+
+	existing, err := netlink.LinkByName(TunnelInterface)
+	if err == nil {
+		sit, ok := existing.(*netlink.Sittun)
+		if !ok {
+			// Not ours. A device by this name that is not a sit tunnel was put
+			// there by somebody else, and deleting it to make room would be
+			// removing what olr did not create.
+			*steps = append(*steps, Step{
+				Description: fmt.Sprintf("create %s", TunnelInterface),
+				Error: fmt.Sprintf("%s already exists and is a %s device, not a 6in4 tunnel; "+
+					"olr will not replace it", TunnelInterface, existing.Type()),
+			})
+			*failed++
+			return
+		}
+		if !sitMatches(sit, t) {
+			if !run(fmt.Sprintf("remove %s to recreate it", TunnelInterface), func() error {
+				return netlink.LinkDel(existing)
+			}) {
+				return
+			}
+			existing = nil
+		}
+	} else {
+		existing = nil
+	}
+
+	if existing == nil {
+		local := "any"
+		if t.Local.IsValid() {
+			local = t.Local.String()
+		}
+		if !run(fmt.Sprintf("create %s to %s from %s", TunnelInterface, t.Remote, local), func() error {
+			return netlink.LinkAdd(newSit(t))
+		}) {
+			return
+		}
+		existing, err = netlink.LinkByName(TunnelInterface)
+		if err != nil {
+			*steps = append(*steps, Step{
+				Description: fmt.Sprintf("find %s", TunnelInterface),
+				Error:       err.Error(),
+			})
+			*failed++
+			return
+		}
+	}
+
+	if have, err := readV6(existing); err == nil && !slices.Contains(have, t.Address) {
+		run(fmt.Sprintf("add %s to %s", t.Address, TunnelInterface), func() error {
+			return netlink.AddrAdd(existing, &netlink.Addr{IPNet: &net.IPNet{
+				IP:   net.IP(t.Address.Addr().AsSlice()),
+				Mask: net.CIDRMask(t.Address.Bits(), 128),
+			}})
+		})
+	}
+	if existing.Attrs().Flags&net.FlagUp == 0 {
+		run(fmt.Sprintf("bring %s up", TunnelInterface), func() error {
+			return netlink.LinkSetUp(existing)
+		})
+	}
+	run(fmt.Sprintf("route IPv6 out through %s", TunnelInterface), func() error {
+		return netlink.RouteReplace(&netlink.Route{
+			LinkIndex: existing.Attrs().Index,
+			Table:     unix.RT_TABLE_MAIN,
+			Family:    netlink.FAMILY_V6,
+			Protocol:  unix.RTPROT_STATIC,
+			Type:      unix.RTN_UNICAST,
+			Dst:       &net.IPNet{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)},
+		})
+	})
+}
+
+// newSit is the netlink form of
+// `ip tunnel add olr-6in4 mode sit remote <r> local <l> ttl 255`.
+//
+// TTL 255 rather than inheriting the inner packet's hop limit, which is what
+// every broker's instructions say and what keeps a traceroute through the
+// tunnel from dying at the first IPv4 hop. PMTU discovery is on, which a fixed
+// TTL requires.
+func newSit(t Tunnel) *netlink.Sittun {
+	attrs := netlink.NewLinkAttrs()
+	attrs.Name = TunnelInterface
+	attrs.MTU = t.MTU
+	sit := &netlink.Sittun{
+		LinkAttrs: attrs,
+		Remote:    net.IP(t.Remote.AsSlice()),
+		Ttl:       255,
+		PMtuDisc:  1,
+	}
+	if t.Local.IsValid() {
+		sit.Local = net.IP(t.Local.AsSlice())
+	}
+	return sit
+}
+
+// sitMatches reports whether an existing sit device is the tunnel t asks for.
+func sitMatches(sit *netlink.Sittun, t Tunnel) bool {
+	return ipv4Of(sit.Local) == t.Local && ipv4Of(sit.Remote) == t.Remote && sit.MTU == t.MTU
+}
+
+// ipv4Of converts a tunnel endpoint, with 0.0.0.0 — "any" — as invalid.
+func ipv4Of(ip net.IP) netip.Addr {
+	addr, ok := netip.AddrFromSlice(ip.To4())
+	if !ok || addr.IsUnspecified() {
+		return netip.Addr{}
+	}
+	return addr
+}
+
+// removeTunnel deletes TunnelInterface if it is there and is a sit device.
+// Its address and route go with it.
+func removeTunnel(steps *[]Step, failed *int) {
+	link, err := netlink.LinkByName(TunnelInterface)
+	if err != nil {
+		return
+	}
+	if _, ok := link.(*netlink.Sittun); !ok {
+		return
+	}
+	step := Step{Description: fmt.Sprintf("remove %s", TunnelInterface)}
+	if err := netlink.LinkDel(link); err != nil {
+		step.Error = err.Error()
+		*failed++
+	} else {
+		step.Done = true
+	}
+	*steps = append(*steps, step)
+}
+
+// observeTunnel reads TunnelInterface and the IPv6 default route.
+func observeTunnel(obs *Observed) {
+	if link, err := netlink.LinkByName(TunnelInterface); err == nil {
+		obs.Tunnel.Present = true
+		obs.Tunnel.Up = link.Attrs().Flags&net.FlagUp != 0
+		obs.Tunnel.MTU = link.Attrs().MTU
+		if sit, ok := link.(*netlink.Sittun); ok {
+			obs.Tunnel.Sit = true
+			obs.Tunnel.Local, obs.Tunnel.Remote = ipv4Of(sit.Local), ipv4Of(sit.Remote)
+		}
+		if addrs, err := readV6(link); err == nil {
+			obs.Tunnel.Addrs = addrs
+		}
+	}
+
+	routes, err := netlink.RouteListFiltered(netlink.FAMILY_V6,
+		&netlink.Route{Table: unix.RT_TABLE_MAIN}, netlink.RT_FILTER_TABLE)
+	if err != nil {
+		return
+	}
+	for _, r := range routes {
+		if r.Dst != nil {
+			if ones, _ := r.Dst.Mask.Size(); ones != 0 {
+				continue
+			}
+		}
+		if link, err := netlink.LinkByIndex(r.LinkIndex); err == nil {
+			obs.V6DefaultDev = link.Attrs().Name
+		}
+		if gw, ok := netip.AddrFromSlice(r.Gw); ok {
+			obs.V6DefaultVia = gw
+		}
+		return
+	}
+}
+
+// readV6 lists a device's IPv6 addresses, link-local excluded.
+func readV6(link netlink.Link) ([]netip.Prefix, error) {
+	addrs, err := netlink.AddrList(link, netlink.FAMILY_V6)
+	if err != nil {
+		return nil, err
+	}
+	var out []netip.Prefix
+	for _, a := range addrs {
+		if a.IPNet == nil {
+			continue
+		}
+		addr, ok := netip.AddrFromSlice(a.IPNet.IP)
+		if !ok || addr.Is4In6() || addr.IsLinkLocalUnicast() {
+			continue
+		}
+		ones, _ := a.IPNet.Mask.Size()
+		out = append(out, netip.PrefixFrom(addr, ones))
+	}
+	return out, nil
+}
+
 // Observe reads back the interface and the main table's default route.
 func (linuxWriter) Observe(ctx context.Context, iface string) (Observed, error) {
 	if err := ctx.Err(); err != nil {
@@ -177,6 +407,8 @@ func (linuxWriter) Observe(ctx context.Context, iface string) (Observed, error) 
 			return obs, err
 		}
 	}
+
+	observeTunnel(&obs)
 
 	gw, dev, err := defaultVia()
 	if err != nil {

@@ -448,6 +448,11 @@ func setUplinkCommand() *cobra.Command {
 		dns       []string
 		noDNS     bool
 		noAddress bool
+
+		tunnel        string
+		tunnelAddress string
+		tunnelMTU     int
+		noTunnel      bool
 	)
 
 	c := &cobra.Command{
@@ -470,7 +475,15 @@ func setUplinkCommand() *cobra.Command {
 			"networks through it, or their traffic leaves untranslated and nothing\n" +
 			"comes back.\n\n" +
 			"Changing the address or the gateway can drop the session you are typing\n" +
-			"into; --dry-run shows what would move before you commit to it.",
+			"into; --dry-run shows what would move before you commit to it.\n\n" +
+			"IPv6 through a tunnel broker, where the ISP offers none — the values are\n" +
+			"on the broker's tunnel details page:\n\n" +
+			"  olr dial set uplink --tunnel 216.66.80.26 \\\n" +
+			"      --tunnel-address 2001:db8:1f0a:123::2/64\n\n" +
+			"That connects this router over IPv6 and nothing else. The networks behind\n" +
+			"it are numbered from the broker's routed prefix one by one\n" +
+			"(`olr net set <name> --ipv6-subnet`), and forwarding IPv6 to them is\n" +
+			"`olr gateway set ipv6-forwarding on`.",
 		RunE: func(c *cobra.Command, _ []string) error {
 			if c.Flags().NFlag() == 0 {
 				return fmt.Errorf("nothing to set; see `olr dial set uplink --help`")
@@ -523,6 +536,34 @@ func setUplinkCommand() *cobra.Command {
 			}
 
 			switch {
+			case noTunnel:
+				u.IPv6 = nil
+			case c.Flags().Changed("tunnel"), c.Flags().Changed("tunnel-address"),
+				c.Flags().Changed("tunnel-mtu"):
+				if u.IPv6 == nil {
+					u.IPv6 = &UplinkIPv6{Via: Via6in4}
+				}
+				if c.Flags().Changed("tunnel") {
+					server, err := netip.ParseAddr(strings.TrimSpace(tunnel))
+					if err != nil {
+						return fmt.Errorf("--tunnel: %w; give the broker's IPv4 endpoint", err)
+					}
+					u.IPv6.Server = server
+				}
+				if c.Flags().Changed("tunnel-address") {
+					prefix, err := netip.ParsePrefix(strings.TrimSpace(tunnelAddress))
+					if err != nil {
+						return fmt.Errorf("--tunnel-address: %w; give it with its mask, "+
+							"such as 2001:db8:1f0a:123::2/64", err)
+					}
+					u.IPv6.Address = prefix
+				}
+				if c.Flags().Changed("tunnel-mtu") {
+					u.IPv6.MTU = tunnelMTU
+				}
+			}
+
+			switch {
 			case noDNS:
 				u.DNS = nil
 			case c.Flags().Changed("dns"):
@@ -555,6 +596,17 @@ func setUplinkCommand() *cobra.Command {
 		"resolver this router looks names up through, usually your modem (repeatable)")
 	c.Flags().BoolVar(&noDNS, "no-dns", false, "forget the resolvers and give them back to the distribution")
 
+	c.Flags().StringVar(&tunnel, "tunnel", "",
+		"bring IPv6 in over a 6in4 tunnel to this broker endpoint (its IPv4 address)")
+	c.Flags().StringVar(&tunnelAddress, "tunnel-address", "",
+		"this box's IPv6 address inside the tunnel, with its mask, such as 2001:db8:1f0a:123::2/64")
+	c.Flags().IntVar(&tunnelMTU, "tunnel-mtu", 0,
+		fmt.Sprintf("the tunnel's MTU (default %d)", DefaultTunnelMTU))
+	c.Flags().BoolVar(&noTunnel, "no-tunnel", false, "take the IPv6 tunnel down and remove it")
+
+	c.MarkFlagsMutuallyExclusive("tunnel", "no-tunnel")
+	c.MarkFlagsMutuallyExclusive("tunnel-address", "no-tunnel")
+	c.MarkFlagsMutuallyExclusive("tunnel-mtu", "no-tunnel")
 	c.MarkFlagsMutuallyExclusive("address", "no-address")
 	c.MarkFlagsMutuallyExclusive("gateway", "no-address")
 	c.MarkFlagsMutuallyExclusive("dns", "no-dns")

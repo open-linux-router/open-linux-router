@@ -32,6 +32,11 @@ type Protocol string
 const (
 	TCP Protocol = "tcp"
 	UDP Protocol = "udp"
+
+	// SixInFour is IPv6 carried in IPv4, IP protocol 41. Not a transport and
+	// it has no port, so an opening for it names who it comes from instead —
+	// a tunnel broker, and nobody else.
+	SixInFour Protocol = "6in4"
 )
 
 // Opening is one port this router serves to the outside, and who asked for it.
@@ -45,14 +50,33 @@ type Opening struct {
 	For string `json:"for"`
 
 	Protocol Protocol `json:"protocol"`
-	Port     uint16   `json:"port"`
+
+	// Port is the destination port, zero for SixInFour.
+	Port uint16 `json:"port,omitempty"`
+
+	// From limits the opening to one source address. Set for SixInFour, where
+	// letting protocol 41 in from anywhere would let anybody inject IPv6 into
+	// the tunnel.
+	From netip.Addr `json:"from,omitzero"`
 }
 
 // Line is the opening's canonical form. It is also the text of the rule that
 // implements it, so it names the owner — `nft list table inet olr_filter`
 // should say why a port is open, not just that it is.
 func (o Opening) Line() string {
+	if o.Protocol == SixInFour {
+		return fmt.Sprintf("nft allow %s from %s for %s", o.Protocol, o.From, o.For)
+	}
 	return fmt.Sprintf("nft allow %s port %d for %s", o.Protocol, o.Port, o.For)
+}
+
+// Describe is the opening as a status line reads it: "udp 51820", or
+// "6in4 from 216.66.80.26".
+func (o Opening) Describe() string {
+	if o.Protocol == SixInFour {
+		return fmt.Sprintf("%s from %s", o.Protocol, o.From)
+	}
+	return fmt.Sprintf("%s %d", o.Protocol, o.Port)
 }
 
 // StaticBoundary is a Boundary backed by values. What the tests use.
@@ -99,9 +123,12 @@ func normalizeOpenings(in []Opening) []Opening {
 		if a.Port != b.Port {
 			return int(a.Port) - int(b.Port)
 		}
+		if c := a.From.Compare(b.From); c != 0 {
+			return c
+		}
 		return strings.Compare(a.For, b.For)
 	})
 	return slices.CompactFunc(out, func(a, b Opening) bool {
-		return a.Protocol == b.Protocol && a.Port == b.Port
+		return a.Protocol == b.Protocol && a.Port == b.Port && a.From == b.From
 	})
 }

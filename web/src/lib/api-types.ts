@@ -402,6 +402,8 @@ export interface LinkStep {
 export interface Uplink {
   interface: string
   ipv4?: UplinkIPv4
+  /** IPv6 over a 6in4 tunnel to a broker; absent leaves IPv6 on the uplink alone. */
+  ipv6?: UplinkIPv6
   /**
    * The resolvers this router itself looks names up through, written for the
    * box whenever the uplink is static. Only recorded when it is not.
@@ -419,6 +421,30 @@ export interface UplinkIPv4 {
   address: string
   /** The modem's address on that link, and the next hop of the default route. */
   gateway: string
+}
+
+export interface UplinkIPv6 {
+  via: '6in4'
+  /** The broker's IPv4 endpoint — "Server IPv4 Address" on its details page. */
+  server: string
+  /** This box's address inside the tunnel, with its mask — usually ending ::2. */
+  address: string
+  /** Absent means 1480. */
+  mtu?: number
+}
+
+/** The uplink's tunnel as the status publishes it — internal/dial tunnelView. */
+export interface TunnelStatus {
+  interface: string
+  server: string
+  address: string
+  mtu: number
+  present: boolean
+  up: boolean
+  /** The IPv4 address the device actually leaves from; absent for "whatever the route picks". */
+  local?: string
+  /** Where the IPv6 default route leaves by. Anything but the tunnel means IPv6 is not using it. */
+  route_dev?: string
 }
 
 /**
@@ -470,6 +496,8 @@ export interface UplinkStatus {
    * — beside `dns`, which is what olr was told.
    */
   resolving_through?: string[]
+
+  tunnel?: TunnelStatus
 
   problems?: Problem[]
 }
@@ -1475,8 +1503,11 @@ export interface FirewallPlan {
 /** A port this router serves to the outside, and the object that asked for it. */
 export interface FirewallOpening {
   for: string
-  protocol: 'tcp' | 'udp'
-  port: number
+  protocol: 'tcp' | 'udp' | '6in4'
+  /** Absent for 6in4, which has no port. */
+  port?: number
+  /** The one source a 6in4 opening lets in: the tunnel broker. */
+  from?: string
 }
 
 /** GET /api/firewall/status — internal/firewall Status. */

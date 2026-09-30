@@ -34,7 +34,7 @@ func writeStatusText(w io.Writer, st Status) {
 	fmt.Fprintln(w, "\nopen to the outside:")
 	fmt.Fprintln(w, "  port forwards (each forward is its own permission)")
 	for _, o := range st.Openings {
-		fmt.Fprintf(w, "  %s %d  %s\n", o.Protocol, o.Port, o.For)
+		fmt.Fprintf(w, "  %s  %s\n", o.Describe(), o.For)
 	}
 
 	if st.Enabled && st.Known {

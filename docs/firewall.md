@@ -56,11 +56,21 @@ What stays reachable from outside comes from the objects that need it:
 | tcp (+udp) Shadowsocks port | `remote.shadowsocks`, when enabled |
 | tcp SOCKS5 port | `remote.socks5`, only with `listen: internet` |
 | tcp 80, tcp 443, udp 443 | `ingress`, when enabled (443/udp is HTTP/3) |
+| IP protocol 41, **from the broker only** | `dial`'s IPv6 tunnel (`uplink.ipv6`), when set |
 | a port forward's traffic | conntrack's DNAT status — the forward *is* the permission |
 
 Removing the object closes its port on the next apply. There is no rule anybody
-can forget to take out. olrd re-applies the firewall whenever `link`, `remote` or
-`ingress` announces a change (`internal/daemon/firewall.go`).
+can forget to take out. olrd re-applies the firewall whenever `dial`, `link`,
+`remote` or `ingress` announces a change (`internal/daemon/firewall.go`).
+
+The tunnel's opening is the one that is not a port. 6in4 is its own IP
+protocol, and it is limited to the broker's address because protocol 41 from
+anywhere would let anybody inject IPv6 into the tunnel. It is needed even though
+conntrack lets replies in: the tracking entry for protocol 41 lapses after ten
+minutes of silence, and the first inbound IPv6 connection to a quiet tunnel
+would be dropped. The tunnel device itself is outside, like every interface that
+appears later, so IPv6 arriving through it gets the same stance as IPv4 arriving
+on the uplink.
 
 ## 3. The ruleset
 
