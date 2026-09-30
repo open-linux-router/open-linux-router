@@ -184,7 +184,7 @@ func forwardCommand(mode string) *cobra.Command {
 			"tell your own machines apart; --no-hairpin turns it off.\n\n" +
 			"IPv6 is not forwarded. There is no NAT in IPv6 — a device inside already has\n" +
 			"a reachable address — so it is a firewall permission rather than a\n" +
-			"translation, and olr has no firewall policy to permit it within yet.",
+			"translation, and olr cannot open an IPv6 port to one device yet.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			name := args[0]

@@ -36,6 +36,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dial"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
+	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
 	"github.com/open-linux-router/open-linux-router/internal/geoip"
@@ -181,13 +182,16 @@ func run(args []string) error {
 	// themselves gets back in to all of it (docs/remote-access.md §1). It reads `link`'s networks for what to push
 	// into a client's tunnel, so it comes after `link` and depends on nothing
 	// else.
-	// `ingress` is last and is the only one that is not networking at all
+	// `ingress` is the only one that is not networking at all
 	// (docs/ingress.md §2). It reads `dns` for the suffix it publishes under and
 	// `devices` for what to point at, so it cannot come up before either.
+	// `firewall` is last because it is built from three of the others: the
+	// networks say what is inside, and `remote` and `ingress` say which ports
+	// are served to the outside (internal/daemon/firewall.go).
 	store := core.NewStore(core.RootedConfigPath(opts.root),
 		link.ModuleName, dial.ModuleName, dhcp.ModuleName, dns.ModuleName,
 		devices.ModuleName, gateway.ModuleName,
-		remote.ModuleName, ingress.ModuleName)
+		remote.ModuleName, ingress.ModuleName, firewall.ModuleName)
 	checkStore(store, logger)
 
 	// The consumers' windows onto link, all backed by one Facts: the kernel for
@@ -479,6 +483,20 @@ func run(args []string) error {
 		},
 	}.Routes(), ingress.Config{})
 
+	// `firewall` is mounted last, matching the store's order. It re-applies
+	// itself whenever a module it is built from announces a change
+	// (followFirewall), rather than through a Dependents hook on each.
+	firewallApplier := firewall.Applier{
+		Store:    store,
+		Kernel:   firewall.NewKernel(),
+		Boundary: firewallBoundary{facts: facts, store: store},
+	}
+	srv.Mount(firewall.ModuleName, firewall.HTTP{
+		Applier: firewallApplier,
+		Lock:    srv.ApplyLock(),
+		Events:  srv.Events(),
+	}.Routes(), firewall.Config{})
+
 	// --- routes -----------------------------------------------------------
 	//
 	// The API and the SPA are composed here rather than inside core, which has
@@ -566,6 +584,15 @@ func run(args []string) error {
 	// None of them ever fails the start. A box whose routing cannot be
 	// programmed is exactly the box whose API has to come up, because the API is
 	// how it gets fixed.
+	//
+	// `firewall` goes before all of them, and after nothing: it is built from
+	// stored intent alone — network members, and the ports `remote` and
+	// `ingress` serve — so it needs no restored address to be correct, and
+	// every moment the box is up before it is a moment the default stance is
+	// not in force. Its follower starts first so that nothing the restores
+	// below announce is missed.
+	go followFirewall(ctx, firewallApplier, srv, logger)
+	reapplyFirewall(ctx, firewallApplier, srv, logger, "startup")
 	startLink(ctx, linkApplier, logger)
 	startDial(ctx, dialApplier, publisher, logger)
 	startHost(ctx, srv, takeHost, logger)

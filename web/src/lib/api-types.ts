@@ -27,6 +27,7 @@
 import type { Problem } from '@/lib/api'
 import type {
   DeviceCategory,
+  FirewallConfig,
   IngressConfig,
   UpstreamScheme,
   DevicesConfig,
@@ -1454,4 +1455,42 @@ export interface RemoteClients {
   counted: boolean
   error?: string
   as_of: string
+}
+
+// --- firewall ---------------------------------------------------------------
+
+/** internal/firewall Plan. Its own shape: lines of a ruleset, not files or units. */
+export interface FirewallPlan {
+  changes: { kind: 'add' | 'remove'; line: string }[] | null
+  impact: 'none' | 'reload' | 'disruptive'
+  empty: boolean
+  warnings?: Problem[]
+}
+
+/** A port this router serves to the outside, and the object that asked for it. */
+export interface FirewallOpening {
+  for: string
+  protocol: 'tcp' | 'udp'
+  port: number
+}
+
+/** GET /api/firewall/status — internal/firewall Status. */
+export interface FirewallStatus {
+  enabled: boolean
+  known: boolean
+  drifted: boolean
+  plan: FirewallPlan
+  inside: string[]
+  openings: FirewallOpening[]
+  blocked_input: number
+  blocked_forward: number
+  /** Why no plan could be built — today only "there are no networks". */
+  problem?: string
+}
+
+export interface FirewallApplyResult {
+  plan: FirewallPlan
+  config: FirewallConfig
+  steps?: Step[]
+  error?: { message: string; problems?: Problem[] }
 }

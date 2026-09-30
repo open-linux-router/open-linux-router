@@ -10,6 +10,7 @@ Modules:
   dhcp        DHCP server (dnsmasq)
   dial        Internet uplink, and a public name that follows it
   dns         DNS resolver and policy (olr-dnsd + unbound)
+  firewall    Block connections from outside that nothing here asked for
   gateway     The boundary with the internet: exits, NAT and port forwards
   ingress     Publish internal services at https:// names
   link        Network interfaces olr has been given

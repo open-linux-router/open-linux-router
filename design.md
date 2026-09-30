@@ -508,7 +508,7 @@ Bounded list. Not expected to grow much. The object they all key off is the
 | | `dns` | unbound — **DNS only** | ✅ |
 | | `qos` | tc — CAKE / fq_codel, per-device shaping | |
 | | `gateway` | **the boundary between the networks this box serves and everything else, in both directions**: static + policy routes and exits (`olr_route`), egress NAT and port forwarding (`olr_nat`), byte accounting (`olr_stat`); later bird (BGP/OSPF). Absorbed the deleted `firewall` module (docs/gateway.md §0, docs/port-forwarding.md) | ✅ |
-| | ~~`firewall`~~ | **Deleted.** It owned `olr_nat` and port forwarding and no filtering at all, so it was a NAT module wearing a firewall's name. olr is not building filtering for now — nftables is there for anyone who wants rules — so the object moved to `gateway` and the name is free for whenever a real firewall arrives (docs/port-forwarding.md §0) | |
+| | `firewall` | **a default stance, not a rule list**: one switch; blocks connections from outside the networks unless a port forward, remote access or ingress asked for them (`olr_filter`, IPv4 and IPv6). The old module of this name was NAT only and moved to `gateway` (docs/firewall.md, docs/port-forwarding.md §0) | ✅ |
 | | `remote` | getting back in from outside: **WireGuard and Shadowsocks** built as parallel objects; SOCKS5 planned beside them, never under them (docs/remote-access.md) | ✅ |
 | | `wifi` | hostapd — only if the box has radios | |
 | **Operational** | `system` | hostname, time, admin users, updates, backup, logs | ✅ |

@@ -287,15 +287,15 @@ func validateTo(r *Result, path string, f Forward, links LinkView) {
 
 	// docs/port-forwarding.md §7. IPv6 has no NAT: a device inside already has a
 	// globally routable address, so "forwarding" a v6 port is a filtering
-	// decision rather than a translation — and this module has no filtering
-	// policy for it to be a decision within. Refused with the reason rather
+	// decision rather than a translation, and belongs to internal/firewall,
+	// which has no per-device opening yet. Refused with the reason rather
 	// than accepted into a rule that would do nothing.
 	if addr.Is6() {
 		r.errorf(path+".to",
 			"%s is an IPv6 address, and olr does not forward IPv6. There is no NAT in IPv6 — a "+
 				"device inside already has a reachable address — so this would be a firewall "+
-				"permission rather than a translation, and olr has no firewall policy to permit "+
-				"it within yet",
+				"permission rather than a translation, and olr cannot open an IPv6 port to one "+
+				"device yet",
 			addr)
 		return
 	}

@@ -130,6 +130,11 @@ it. Adding structure to that would be modelling for its own sake.
 
 ### 2.1 Everything else stays shut, and we do not say otherwise
 
+> **Superseded in part (docs/firewall.md).** olr now has a firewall — one switch,
+> off by default. With it on, the forward chain lets through exactly what a
+> forward translated, so a forward is still the whole permission and there is
+> nothing to open separately. With it off, what follows is still true.
+
 olr has no filtering policy. It does not maintain a default-deny stance on the
 forward hook, and this feature does not create one. What keeps the rest of the
 network unreachable from outside is that the addresses inside are private and

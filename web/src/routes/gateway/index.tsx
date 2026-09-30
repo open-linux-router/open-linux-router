@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { ApplyOutcome, useGatewayEditor } from '@/features/gateway/editor'
 import { DIRECT, NetworkList } from '@/features/gateway/network-list'
+import { useFirewallStatus } from '@/features/firewall/queries'
 import { gatewayChange, useGatewayStatus, useReapplyGateway } from '@/features/gateway/queries'
 
 /**
@@ -36,6 +37,7 @@ export function GatewayPage() {
   const { config, busy, change, applier, gate } = useGatewayEditor()
   const status = useGatewayStatus()
   const reapply = useReapplyGateway()
+  const firewall = useFirewallStatus()
 
   if (!config) return gate
   const exits = config.exits ?? []
@@ -159,6 +161,7 @@ export function GatewayPage() {
             value: exits.length ? exits.map((e) => e.name).join(', ') : 'None yet',
           },
           { slug: 'usage', value: (config.stats ?? true) ? 'Counting' : 'Off' },
+          { slug: 'firewall', value: firewall.data ? (firewall.data.enabled ? 'On' : 'Off') : undefined },
           // Only when there is something to show. design.md §3.4 wants
           // somebody else's rules legible, not a permanent empty page.
           ...(foreign.length

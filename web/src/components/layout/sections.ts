@@ -34,11 +34,12 @@ import type { LucideIcon } from 'lucide-react'
  * a row also read as one system, where "Addresses / DNS / Internet" read as
  * three different registers.
  *
- * There is no Firewall section, and its absence is deliberate rather than
- * pending. The section used to hold port forwarding and no filtering at all; a
- * label promising a firewall over a page that has none was the thing worth
- * losing. Port forwards are under Advanced now, with the page about somebody
- * else's filtering that explains a forward which does not reach.
+ * There is no Firewall section. The section that used to carry the name held
+ * port forwarding and no filtering at all, and was removed; the real firewall,
+ * when it arrived, is one switch and a list, so it is a page under Gateway —
+ * the boundary it guards — rather than a tab. Port forwards are under Advanced,
+ * with the page about somebody else's filtering that explains a forward which
+ * does not reach.
  *
  * Advanced is the one section that is not a module, and that is the point of
  * it. The five above are what every router has, and the order an operator sets
@@ -120,6 +121,14 @@ export const SECTIONS: Section[] = [
         slug: 'usage',
         label: 'Usage',
         blurb: 'How much each device has sent and received since this router started.',
+      },
+      {
+        // Under Gateway rather than a section of its own: the gateway is the
+        // boundary with the internet, and this is the default stance at it.
+        slug: 'firewall',
+        label: 'Firewall',
+        blurb:
+          'Block connections from outside that nothing here asked for. What stays reachable is derived from what you have set up — port forwards, remote access, published services — so there are no rules to write or to forget to remove.',
       },
       {
         slug: 'unmanaged',
@@ -210,7 +219,7 @@ export const SECTIONS: Section[] = [
         slug: 'forwards',
         label: 'Port forwards',
         blurb:
-          'Let something on the internet reach one device here. This is a translation, not a firewall permission — olr has no filtering policy for it to be an exception to.',
+          'Let something on the internet reach one device here. With the firewall on, a forward is also its own permission — there is nothing to open separately.',
       },
       {
         // Not a row on the landing page: it is reached from the forwards page,

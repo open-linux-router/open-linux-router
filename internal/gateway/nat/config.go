@@ -27,10 +27,10 @@
 // owns the stored document and hands this package a Config (see Applier), and
 // this package owns the table and everything about how it is rendered.
 //
-// The consequence worth knowing before reading any of this: **olr does not
-// maintain a default-deny stance on forwarded traffic**, so creating a forward
-// does not open a hole in a firewall of ours — there is not one. It installs a
-// NAT translation. If something else on the box filters the forward hook, that
+// The consequence worth knowing before reading any of this: creating a forward
+// installs a NAT translation and nothing else. internal/firewall, when it is
+// switched on, lets through whatever a forward translated (conntrack's DNAT
+// status), so the forward is still the whole permission. If something else on the box filters the forward hook, that
 // filter still applies, and `docs/port-forwarding.md` §5.2 is why we report
 // that rather than trying to overrule it.
 package nat

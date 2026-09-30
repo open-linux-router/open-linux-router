@@ -17,6 +17,9 @@
 // appliance categories, were checked against a real `make types` run and match
 // it; that run could not replace the file because its group type is named
 // differently from the `DevicesGroup` the UI imports.
+//
+// `FirewallConfig` is back, for a module that now does filter: one field,
+// spelled the way internal/firewall/config.go marshals it.
 
 /**
  * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
@@ -194,6 +197,7 @@ export interface OlrDocument {
   dhcp?: DhcpConfig
   dial?: DialConfig
   dns?: DnsConfig
+  firewall?: FirewallConfig
   gateway?: GatewayConfig
   ingress?: IngressConfig
   link?: LinkConfig
@@ -360,6 +364,12 @@ export interface Probe {
 export interface Assignment {
   interface: string
   exit?: string
+}
+export interface FirewallConfig {
+  /**
+   * Block connections from outside that nothing here asked for.
+   */
+  enabled: boolean
 }
 export interface IngressConfig {
   enabled: boolean
