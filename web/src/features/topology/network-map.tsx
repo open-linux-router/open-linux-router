@@ -3,20 +3,24 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 
 import { Skeleton } from '@/components/ui/skeleton'
 import { useInterfaces } from '@/features/link/queries'
-import { layout, type Box, type Density, type Item, type Layout } from '@/features/topology/layout'
+import { layout, remoteHeight, type Box, type Density, type Item, type Layout } from '@/features/topology/layout'
 import { Links } from '@/features/topology/links'
 import { buildTree, shownExits } from '@/features/topology/model'
 import {
   DeviceNode,
   ExitNode,
   GroupNode,
+  InternetNode,
   MoreNode,
   NoteNode,
   PickNode,
+  RemoteNode,
   RouterNode,
+  UpstreamNode,
   type MapActions,
   type NetworkInfo,
 } from '@/features/topology/nodes'
+import type { Outside, Remote } from '@/features/topology/outside'
 import { magnitude, type TrafficView } from '@/features/topology/traffic'
 import type { AssignmentStatus, DeviceRow, ExitStatus, NetworkRow } from '@/lib/api-types'
 import type { DevicesGroup, Pool } from '@/lib/config-types'
@@ -61,6 +65,8 @@ export function NetworkMap({
   traffic,
   assignments,
   exits,
+  outside,
+  remote,
   pools,
   pending,
   filter = '',
@@ -74,6 +80,10 @@ export function NetworkMap({
   traffic: TrafficView
   assignments?: AssignmentStatus[]
   exits?: ExitStatus[]
+  /** The internet and what is between it and this router; absent draws neither. */
+  outside?: Outside
+  /** Who is reaching in from outside; absent when no way in is switched on. */
+  remote?: Remote
   pools?: Pool[]
   pending: boolean
   filter?: string
@@ -118,6 +128,8 @@ export function NetworkMap({
       traffic={traffic}
       networks={networks}
       exits={ways}
+      outside={outside}
+      remote={remote}
       filter={filter}
       network={network}
       density={density}
@@ -149,6 +161,8 @@ function Canvas({
   traffic,
   networks,
   exits,
+  outside,
+  remote,
   filter,
   network,
   density: wanted,
@@ -160,6 +174,8 @@ function Canvas({
   traffic: TrafficView
   networks: NetworkInfo[]
   exits: ExitStatus[]
+  outside?: Outside
+  remote?: Remote
   filter: string
   network: string
   density: Density | 'auto'
@@ -234,9 +250,23 @@ function Canvas({
       exits.map((e) => ({
         name: e.name,
         down: e.probed && !e.up,
+        blocked: e.via === 'blocked',
         weight: magnitude(traffic.flowOfExit(e.name), traffic.rated),
       })),
     [exits, traffic],
+  )
+
+  const outsideInput = useMemo(
+    () =>
+      outside && {
+        upstream: Boolean(outside.upstream),
+        upstreamDown: outside.upstream?.down ?? false,
+        noRoute: outside.internet.noRoute,
+        remote: remote && {
+          h: remoteHeight(remote.lines, Boolean(remote.locations)),
+        },
+      },
+    [outside, remote],
   )
 
   const [geo, density] = useMemo((): [Layout | null, Density] => {
@@ -252,6 +282,7 @@ function Canvas({
         counting: traffic.counting,
         rated: traffic.rated,
         exits: exitInput,
+        outside: outsideInput,
       })
     if (wanted !== 'auto') return [at(wanted), wanted]
     // Decided on the unfocused map. Opening a "+N more" does not count against detail either: it is the
@@ -263,7 +294,7 @@ function Canvas({
     const whole = at('detail', undefined)
     const d: Density = !whole.narrow && !focus && (whole.fits || expanded.size > 0) ? 'detail' : 'compact'
     return [d === 'detail' ? whole : at(d), d]
-  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated, exitInput])
+  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated, exitInput, outsideInput])
 
   useEffect(() => {
     onDensity?.(density)
@@ -329,6 +360,12 @@ function Canvas({
         return <PickNode groups={item.groups} onFocus={setFocus} />
       case 'note':
         return <NoteNode note={item.note} filtering={tree.filtering} onCreateGroup={actions.onCreateGroup} />
+      case 'internet':
+        return outside ? <InternetNode internet={outside.internet} /> : null
+      case 'upstream':
+        return outside?.upstream ? <UpstreamNode upstream={outside.upstream} /> : null
+      case 'remote':
+        return remote ? <RemoteNode remote={remote} /> : null
       case 'exit':
         return (
           <ExitNode

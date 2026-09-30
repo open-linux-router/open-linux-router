@@ -7,6 +7,7 @@ import {
   FolderInput,
   FolderPlus,
   Globe,
+  KeyRound,
   Layers,
   MoreHorizontal,
   Pencil,
@@ -34,8 +35,11 @@ import {
 import { DeviceIcon } from '@/features/devices/device-icon'
 import type { GroupDeletion } from '@/features/devices/group-actions'
 import { groupOptions, MAX_GROUP_DEPTH, parentChoices } from '@/features/devices/group-tree'
-import type { Density, GroupVariant, Hidden } from '@/features/topology/layout'
+import { Link } from 'react-router'
+
+import { REMOTE_MAX_LINES, type Density, type GroupVariant, type Hidden } from '@/features/topology/layout'
 import type { MapGroup } from '@/features/topology/model'
+import type { Outside, Remote } from '@/features/topology/outside'
 import { magnitude, type Flow, type TrafficView } from '@/features/topology/traffic'
 import type { DeviceRow, ExitStatus } from '@/lib/api-types'
 import type { DevicesGroup } from '@/lib/config-types'
@@ -182,6 +186,194 @@ export function ExitNode({ exit, flow, rated }: { exit?: ExitStatus; flow?: Flow
           {down ? 'Not responding' : busy ? <Rates flow={flow} neutral /> : exit.probed ? 'Working' : 'Not checked'}
         </div>
       </div>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* The internet, and what is between                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The top of the map. It carries the one number about the outside worth a
+ * glance — the address the world sees — when the box already knows it, and
+ * says in words when it does not, rather than leaving a blank that reads as
+ * a fault.
+ */
+export function InternetNode({ internet }: { internet: Outside['internet'] }) {
+  const { publicAddress, publicFrom, cgnat, noRoute } = internet
+  const detail = noRoute
+    ? 'No way out'
+    : publicAddress
+      ? publicAddress
+      : cgnat
+        ? "Shared address (provider's NAT)"
+        : 'Public address not known'
+  const title = noRoute
+    ? 'This router has no default route: nothing leaves it for the internet.'
+    : publicAddress
+      ? publicFrom === 'ddns'
+        ? 'The address your dynamic DNS record last read from outside.'
+        : "This router's own address on its way out."
+      : cgnat
+        ? 'Your provider puts this router behind its own NAT (100.64.0.0/10). Nothing outside can connect in unless it goes through a relay.'
+        : 'Set up a dynamic DNS record that reads the address from outside and it shows here.'
+  return (
+    <div
+      title={title}
+      className={cn(
+        'flex size-full items-center gap-3 rounded-2xl border bg-card pr-4 pl-2.5 shadow-xs',
+        noRoute && 'border-destructive/50',
+      )}
+    >
+      <span
+        className={cn(
+          'flex size-8 shrink-0 items-center justify-center rounded-full',
+          noRoute ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground/75',
+        )}
+      >
+        <Globe className="size-4" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold">Internet</div>
+        <div
+          className={cn(
+            'truncate text-xs',
+            noRoute ? 'text-destructive' : 'text-muted-foreground',
+            publicAddress && 'font-mono tabular-nums',
+          )}
+        >
+          {detail}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The router between this one and the internet: a modem, or a router of the
+ * operator's own. Named for what it is to this box — the next hop, and the
+ * interface it is reached on — because that is all this box can know about it.
+ */
+export function UpstreamNode({ upstream }: { upstream: NonNullable<Outside['upstream']> }) {
+  const { via, dev, address, down } = upstream
+  return (
+    <div
+      title={
+        (address ? `This router is ${address} on ${dev}. ` : '') +
+        'Your address on the way out is private, so something in front of this router translates it — ' +
+        "usually a modem or another router, sometimes your provider's own network."
+      }
+      className={cn(
+        'flex size-full items-center gap-3 rounded-2xl border bg-card pr-4 pl-2.5 shadow-xs',
+        down && 'border-destructive/50',
+      )}
+    >
+      <span
+        className={cn(
+          'flex size-8 shrink-0 items-center justify-center rounded-full',
+          down ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground/75',
+        )}
+      >
+        <Router className="size-4" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold">Upstream router</div>
+        <div className={cn('truncate text-xs', down ? 'text-destructive' : 'text-muted-foreground')}>
+          {down ? (
+            'Not responding'
+          ) : (
+            <>
+              {via && <span className="font-mono tabular-nums">{via}</span>}
+              {via && ' · '}
+              {dev}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Who is reaching in from outside, a line each, and a link to where it is set
+ * up.
+ *
+ * A tunnel line names a device; a proxy line names an address, because that
+ * is all a shared password lets the box know. Where each is — the network
+ * that owns the address, and its country — is what lets an operator see at a
+ * glance that the one address on their proxy is their own phone.
+ */
+export function RemoteNode({ remote }: { remote: Remote }) {
+  const shown = remote.lines.slice(0, remote.lines.length > REMOTE_MAX_LINES ? REMOTE_MAX_LINES - 1 : REMOTE_MAX_LINES)
+  const hidden = remote.lines.length - shown.length
+  return (
+    <div className="flex size-full flex-col rounded-2xl border border-dashed bg-card shadow-xs">
+      <Link
+        to="/advanced/remote"
+        className={cn('flex h-11 shrink-0 items-center gap-3 rounded-t-2xl pr-4 pl-2.5 hover:bg-accent/50', focusRing)}
+      >
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground/75">
+          <KeyRound className="size-4" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">Remote access</span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {remote.connected > 0 ? `${remote.connected} connected` : 'nobody on'}
+        </span>
+      </Link>
+      <ul className="min-h-0 flex-1 px-3">
+        {shown.map((l) => (
+          <li key={l.key}>
+            {l.first && (
+              <div className="flex h-5 items-end pl-3.5 text-[11px] font-medium text-muted-foreground">{l.via}</div>
+            )}
+            <div className="flex h-[22px] min-w-0 items-center gap-2 text-xs">
+              <span
+                aria-hidden
+                className={cn(
+                  'size-1.5 shrink-0 rounded-full',
+                  l.fault ? 'bg-destructive' : l.who ? 'bg-success' : 'bg-muted-foreground/30',
+                )}
+              />
+              {l.who ? (
+                <>
+                  <span
+                    className={cn(
+                      'min-w-0 truncate font-medium',
+                      l.address ? 'shrink-0 font-mono tabular-nums' : 'shrink',
+                    )}
+                  >
+                    {l.who}
+                  </span>
+                  {l.where && (
+                    <span className="ml-auto min-w-0 truncate pl-2 text-right text-muted-foreground" title={l.where}>
+                      {l.where}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className={cn('truncate', l.fault ? 'text-destructive' : 'text-muted-foreground/70')}>
+                  {l.note}
+                </span>
+              )}
+            </div>
+          </li>
+        ))}
+        {hidden > 0 && (
+          <li className="flex h-[22px] items-center pl-3.5 text-xs text-muted-foreground">+{hidden} more</li>
+        )}
+      </ul>
+      {remote.locations && (
+        // The databases' licence (CC BY 4.0) asks for this wherever a place is shown.
+        <a
+          href={remote.locations.source_url}
+          target="_blank"
+          rel="noreferrer"
+          className="block h-[18px] shrink-0 px-3 text-right text-[10px] leading-[18px] text-muted-foreground/60 hover:underline"
+        >
+          Places by {remote.locations.source}
+        </a>
+      )}
     </div>
   )
 }

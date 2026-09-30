@@ -114,6 +114,9 @@ type Writer interface {
 	// Observe reads back what is actually on the box: the interface's IPv4
 	// addresses and the next hop of the default route in the main table.
 	//
+	// An empty iface means whichever interface the default route leaves by,
+	// which is how the way out is read on a box where olr does not own it.
+	//
 	// Read per request and never stored (§4.5). This is what makes drift mean
 	// something here in the same way it does in internal/link — somebody who
 	// runs `ip route del default` by hand has to show up on the same surface a

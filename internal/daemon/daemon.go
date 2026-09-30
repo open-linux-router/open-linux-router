@@ -38,6 +38,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
+	"github.com/open-linux-router/open-linux-router/internal/geoip"
 	"github.com/open-linux-router/open-linux-router/internal/host"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/link"
@@ -450,6 +451,9 @@ func run(args []string) error {
 		Socks:  remoteSocks,
 		Lock:   srv.ApplyLock(),
 		Events: srv.Events(),
+		// Rooted like everything else olrd keeps, so a development run fetches
+		// into its scratch root rather than the box's /var/lib.
+		Places: geoip.New(geoip.RootedDir(opts.root)),
 	}.Routes(), remote.Config{})
 
 	// `ingress` is mounted last, matching the store's order. Its two views are

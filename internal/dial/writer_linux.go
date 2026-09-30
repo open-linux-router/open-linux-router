@@ -154,11 +154,16 @@ func retire(d Desired, steps *[]Step, failed *int) {
 
 // Observe reads back the interface and the main table's default route.
 func (linuxWriter) Observe(ctx context.Context, iface string) (Observed, error) {
-	if iface == "" {
-		return Observed{}, nil
-	}
 	if err := ctx.Err(); err != nil {
 		return Observed{}, err
+	}
+	byRoute := iface == ""
+	if byRoute {
+		dev, err := defaultDev()
+		if err != nil || dev == "" {
+			return Observed{}, err
+		}
+		iface = dev
 	}
 
 	var obs Observed
@@ -178,6 +183,10 @@ func (linuxWriter) Observe(ctx context.Context, iface string) (Observed, error) 
 		return obs, err
 	}
 	obs.Gateway, obs.GatewayDev = gw, dev
+	if byRoute && dev == "" {
+		// defaultVia skips a route with no next hop; defaultDev did not.
+		obs.GatewayDev = iface
+	}
 	if gw.IsValid() {
 		obs.GatewayState, obs.GatewaySeenOn = gatewayNeighbour(gw, dev)
 	}
@@ -287,6 +296,30 @@ func defaultVia() (netip.Addr, string, error) {
 		return gw.Unmap(), dev, nil
 	}
 	return netip.Addr{}, "", nil
+}
+
+// defaultDev names the interface the default route leaves by, gateway or not.
+//
+// Not defaultVia: a point-to-point uplink — PPPoE is the common one — has a
+// default route with no next hop at all, and that is still the way out, with
+// the box's public address sitting on it.
+func defaultDev() (string, error) {
+	routes, err := netlink.RouteListFiltered(netlink.FAMILY_V4,
+		&netlink.Route{Table: unix.RT_TABLE_MAIN}, netlink.RT_FILTER_TABLE)
+	if err != nil {
+		return "", err
+	}
+	for _, r := range routes {
+		if r.Dst != nil {
+			if ones, _ := r.Dst.Mask.Size(); ones != 0 {
+				continue
+			}
+		}
+		if link, err := netlink.LinkByIndex(r.LinkIndex); err == nil {
+			return link.Attrs().Name, nil
+		}
+	}
+	return "", nil
 }
 
 // readUplinkV4 lists an interface's IPv4 addresses as prefixes.

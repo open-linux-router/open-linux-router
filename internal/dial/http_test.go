@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -101,5 +102,41 @@ func TestAChangedUplinkTakesItsDependentsWithIt(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Errorf("dependents ran %d times; a no-op apply must not take them along", calls)
+	}
+}
+
+// The way out is reported on a box where olr does not own it — which is most
+// of them, and exactly the ones whose overview would otherwise draw the router
+// with nothing above it.
+func TestStatusReportsTheRouteWithoutAnUplink(t *testing.T) {
+	h := HTTP{
+		Applier: Applier{
+			Store: testStore(t, ""),
+			Writer: fakeWriter{observed: Observed{
+				Present:      true,
+				Up:           true,
+				Addrs:        []netip.Prefix{netip.MustParsePrefix("192.168.1.2/24")},
+				Gateway:      netip.MustParseAddr("192.168.1.1"),
+				GatewayDev:   "wan0",
+				GatewayState: GatewayAnswers,
+			}},
+		},
+	}.Handler()
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/status", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", w.Code, w.Body)
+	}
+	var got statusResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Uplink != nil {
+		t.Errorf("uplink = %+v; olr does not own this one", got.Uplink)
+	}
+	want := routeView{Dev: "wan0", Via: "192.168.1.1", Addresses: []string{"192.168.1.2/24"}, GatewayState: GatewayAnswers}
+	if got.Route == nil || !reflect.DeepEqual(*got.Route, want) {
+		t.Errorf("route = %+v, want %+v", got.Route, want)
 	}
 }

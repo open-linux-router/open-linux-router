@@ -522,8 +522,27 @@ export interface RecordStatus {
   watched: boolean
 }
 
+/**
+ * The way out as the kernel has it, on any box — internal/dial routeView.
+ *
+ * Beside `uplink` rather than inside it: `uplink` is absent when olr does not
+ * own the way out, which is most boxes, and this is what the overview draws
+ * above the router on every one of them.
+ */
+export interface RouteStatus {
+  /** The interface the default route leaves by. */
+  dev: string
+  /** Its next hop; absent on a point-to-point uplink such as PPPoE. */
+  via?: string
+  /** dev's IPv4 addresses, as prefixes. */
+  addresses?: string[]
+  gateway_state?: 'answers' | 'silent'
+}
+
 export interface DialStatus {
   uplink?: UplinkStatus
+  /** Absent only when the box has no default route at all. */
+  route?: RouteStatus
   records: RecordStatus[]
   as_of: string
 }
@@ -1375,4 +1394,55 @@ export interface ProxyApplyResult {
   error?: { message: string; problems?: Problem[] }
   /** What is stored now, redacted. Present on the refusal path especially. */
   config?: Shadowsocks
+}
+
+// --- remote: who is connected -------------------------------------------------
+
+/** Where one address is — internal/geoip Place. */
+export interface GeoPlace {
+  /** ISO 3166 code. */
+  country?: string
+  country_name?: string
+  asn?: number
+  /** Who runs the network: usually an ISP or a mobile carrier. */
+  org?: string
+  /** Not on the internet at all: a private, carrier-grade NAT or link-local address. */
+  local?: boolean
+}
+
+/** How complete the places are, and whose they are — internal/geoip Status. */
+export interface GeoStatus {
+  state: 'ready' | 'fetching' | 'unavailable'
+  error?: string
+  updated?: string
+  /** The attribution the databases' licence asks every surface showing a place to carry. */
+  source: string
+  source_url: string
+}
+
+/** One address connected to a proxy — internal/remote clientView. An address, not a device. */
+export interface ProxyClient {
+  address: string
+  connections: number
+  /** What it has sent; absent when the kernel does not count bytes. */
+  bytes?: number
+}
+
+export interface ProxyClients {
+  proxy: 'shadowsocks' | 'socks5'
+  port: number
+  clients: ProxyClient[]
+}
+
+/** GET /api/remote/clients — internal/remote clientsResponse. */
+export interface RemoteClients {
+  /** One per proxy that is switched on. */
+  proxies: ProxyClients[]
+  /** Keyed by bare address: every proxy client, and every tunnel device's last endpoint. */
+  places: Record<string, GeoPlace>
+  locations: GeoStatus
+  /** Whether the kernel counts bytes; without it scanners are listed too. */
+  counted: boolean
+  error?: string
+  as_of: string
 }

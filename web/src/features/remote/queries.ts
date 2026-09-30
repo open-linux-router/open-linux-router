@@ -6,6 +6,7 @@ import type {
   ProxyLink,
   ProxyStatus,
   RemoteApplyResult,
+  RemoteClients,
   RemotePeers,
   RemoteStatus,
   SocksStatus,
@@ -45,6 +46,16 @@ export function useRemoteStatus() {
     // Observed state, never cached by the daemon (design.md §4.5), so the only
     // way to stay current is to ask again.
     refetchInterval: OBSERVED_REFETCH_MS,
+  })
+}
+
+/** Who is connected right now, and where each address is. */
+export function useRemoteClients(enabled = true) {
+  return useQuery({
+    queryKey: [...remoteKeys.status, 'clients'] as const,
+    queryFn: () => api.get<RemoteClients>(`${base}/clients`),
+    refetchInterval: OBSERVED_REFETCH_MS,
+    enabled,
   })
 }
 

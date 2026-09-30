@@ -637,6 +637,7 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 
 	resp := statusResponse{
 		Uplink:  h.withHost(viewUplink(cfg.Uplink, h.Applier.Observe(r.Context(), cfg.uplinkInterface()), byPath[UplinkPath])),
+		Route:   viewRoute(h.Applier.ObserveRoute(r.Context())),
 		Records: make([]recordView, 0, len(cfg.Records)),
 		AsOf:    time.Now(),
 	}

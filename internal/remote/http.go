@@ -43,6 +43,13 @@ type HTTP struct {
 
 	// Events is where an applied change is announced so the UI can re-read.
 	Events *core.Events
+
+	// Conns reads the kernel's connection table for who is using the proxies.
+	// Nil means the platform's own.
+	Conns ConnTable
+
+	// Places says where an address is. Nil answers every place as unknown.
+	Places Locator
 }
 
 // gate is the pair of query parameters every mutating route carries (§6.2):
@@ -89,6 +96,13 @@ func (h HTTP) Routes() []core.Route {
 			Summary: "Show whether each way in is working: the tunnel's interface and its devices, the proxy's service, " +
 				"and whether the box still matches the stored configuration.",
 			Handler: h.getStatus,
+		},
+		{
+			Method: "GET", Path: "/clients", Tool: "show clients",
+			Summary: "Show who is connected right now, and from where: the addresses with connections open to each proxy, " +
+				"and the country and network of each of those and of every tunnel device's last address. " +
+				"An address is a place, not a device.",
+			Handler: h.getClients,
 		},
 		{
 			// No Tool, and the conformance suite's R3 is why: no mutating route

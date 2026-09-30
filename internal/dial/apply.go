@@ -73,6 +73,20 @@ func (a Applier) Observe(ctx context.Context, iface string) Observed {
 	return obs
 }
 
+// ObserveRoute reads the way out as the kernel has it, whoever set it up: the
+// interface the default route leaves by, its addresses, and its next hop.
+//
+// Separate from Observe, whose empty interface means "no uplink, nothing to
+// read". This one is asked on every box, because the overview draws the way
+// out whether or not olr owns it — and most boxes' is the distribution's.
+func (a Applier) ObserveRoute(ctx context.Context) Observed {
+	obs, err := a.writer().Observe(ctx, "")
+	if err != nil {
+		return Observed{}
+	}
+	return obs
+}
+
 // Load reads stored intent out of the configuration document.
 func (a Applier) Load() (Config, error) {
 	doc, err := a.Store.Load()

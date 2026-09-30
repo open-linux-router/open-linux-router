@@ -129,10 +129,50 @@ type uplinkView struct {
 	Problems []core.Problem `json:"problems,omitempty"`
 }
 
+// routeView is the way out as the kernel has it, on any box.
+//
+// The uplink's observed half without its intended half: olr may own none of
+// it, and what it reports is only what is there. Flat facts, no verdict — the
+// overview decides from `addresses` whether something sits between this box
+// and the internet, and that is a reading of the facts, not one of them.
+type routeView struct {
+	// Dev is the interface the default route leaves by.
+	Dev string `json:"dev"`
+
+	// Via is its next hop. Empty on a point-to-point uplink such as PPPoE,
+	// which has none.
+	Via string `json:"via,omitempty"`
+
+	// Addresses are Dev's IPv4 addresses, as prefixes.
+	Addresses []string `json:"addresses,omitempty"`
+
+	// GatewayState is whether Via answers on Dev — see uplinkView.
+	GatewayState string `json:"gateway_state,omitempty"`
+}
+
+// viewRoute is nil when the box has no default route at all.
+func viewRoute(obs Observed) *routeView {
+	if obs.GatewayDev == "" {
+		return nil
+	}
+	v := &routeView{Dev: obs.GatewayDev, GatewayState: obs.GatewayState}
+	if obs.Gateway.IsValid() {
+		v.Via = obs.Gateway.String()
+	}
+	for _, p := range obs.Addrs {
+		v.Addresses = append(v.Addresses, p.String())
+	}
+	return v
+}
+
 // statusResponse is the whole module's observed state.
 type statusResponse struct {
 	// Uplink is absent when olr does not own the way out.
 	Uplink *uplinkView `json:"uplink,omitempty"`
+
+	// Route is the way out as it is, present whether or not olr owns it, and
+	// absent only when there is no default route.
+	Route *routeView `json:"route,omitempty"`
 
 	Records []recordView `json:"records"`
 
