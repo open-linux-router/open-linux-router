@@ -342,6 +342,11 @@ export interface NetworkRow {
   /** The operator pinned the router address, rather than it being derived. */
   router_explicit?: boolean
 
+  /** The static IPv6 /64 and this router's address in it; absent without one. */
+  subnet6?: string
+  router6?: string
+  router6_explicit?: boolean
+
   /**
    * The range dhcp derives when nobody types one. A hint for prefilling, never
    * a second opinion: dhcp validates whatever range it is given regardless.

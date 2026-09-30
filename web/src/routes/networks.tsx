@@ -207,9 +207,9 @@ export function NetworksPage() {
  * often than it is asked on the DHCP one.
  */
 function subtitleOf(n: NetworkRow): string {
-  if (!n.subnet) return 'No IPv4 — router advertisement only'
-  const parts = [`${n.subnet}, this router at ${n.router}`]
+  const parts = [n.subnet ? `${n.subnet}, this router at ${n.router}` : 'No IPv4']
   if (n.suggested_start) parts.push(`range ${n.suggested_start}–${n.suggested_end}`)
+  if (n.subnet6) parts.push(`${n.subnet6}, this router at ${n.router6}`)
   return parts.join(' · ')
 }
 

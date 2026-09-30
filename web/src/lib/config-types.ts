@@ -22,7 +22,8 @@
 // spelled the way internal/firewall/config.go marshals it.
 //
 // `GatewayConfig.ipv6_forwarding` was added the same way, spelled as
-// internal/gateway/config.go marshals it.
+// internal/gateway/config.go marshals it, and so were `Network.ipv6` and
+// `NetworkIPv6`, as internal/link/config.go marshals them.
 
 /**
  * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
@@ -408,10 +409,15 @@ export interface Network {
   name: string
   members: string[]
   ipv4?: NetworkIPv4
+  ipv6?: NetworkIPv6
 }
 export interface NetworkIPv4 {
   subnet: IPPrefix2
   router?: IPAddress8
+}
+export interface NetworkIPv6 {
+  subnet: string
+  router?: string
 }
 export interface RemoteConfig {
   endpoint?: string

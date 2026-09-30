@@ -121,13 +121,20 @@ type Network struct {
 	// expressible before.
 	IPv4 *NetworkIPv4 `json:"ipv4,omitempty"`
 
-	// IPv6 is deliberately absent. dnsmasq's `constructor:` derives the v6
-	// prefix from the member's own address, so a delegated prefix that changes
-	// is followed by the daemon rather than re-rendered by us — which is
-	// everything §4.3's "v1 serves RA with SLAAC + RDNSS" needs. A ULA or a
-	// static prefix would need olr to write a v6 address to the interface, and
-	// that is a second kernel write path with its own failure modes. The field
-	// goes here when it is built; nothing about this struct has to move.
+	// IPv6 is nil for a network whose IPv6, if any, comes from somewhere else
+	// — a prefix delegated to the member by the distribution, which dnsmasq's
+	// `constructor:` follows on its own. Set, it is a static /64 that olr writes
+	// to every member, the same way IPv4 is: the shape a tunnelled prefix (a
+	// routed /48 from a tunnel broker) or a ULA needs, because nothing else on
+	// the box is going to put that address there.
+	//
+	// The claim it makes is narrower than IPv4's. olr owns *its own* v6 address
+	// on a member — adds it, and takes it off when the network stops asking for
+	// it — and leaves every other v6 address alone. A member routinely holds
+	// SLAAC and delegated addresses olr never configured, and taking those off
+	// because a network did not name them would cut the box off in exactly the
+	// setups that already work.
+	IPv6 *NetworkIPv6 `json:"ipv6,omitempty"`
 }
 
 // NetworkIPv4 is a network's IPv4 addressing.
@@ -144,6 +151,40 @@ type NetworkIPv4 struct {
 	// makes that a requirement rather than a nicety, since `olr net add iot`
 	// has to work with no flags at all.
 	Router *netip.Addr `json:"router,omitempty"`
+}
+
+// NetworkIPv6 is a network's IPv6 addressing.
+type NetworkIPv6 struct {
+	// Subnet is the network's /64: 2001:db8:1:1::/64. Exactly /64, because
+	// that is what SLAAC works on and a network whose clients cannot address
+	// themselves is not one `dhcp` can serve.
+	Subnet netip.Prefix `json:"subnet"`
+
+	// Router is this box's own address on the network. Nil derives `::1`,
+	// the same convention IPv4's `.1` follows.
+	Router *netip.Addr `json:"router,omitempty"`
+}
+
+// RouterAddr resolves the stored or derived router address.
+func (n NetworkIPv6) RouterAddr() netip.Addr {
+	if n.Router != nil && n.Router.IsValid() {
+		return *n.Router
+	}
+	return FirstHost6(n.Subnet)
+}
+
+// RouterPrefix is the router address with the network's mask.
+func (n NetworkIPv6) RouterPrefix() netip.Prefix {
+	return netip.PrefixFrom(n.RouterAddr(), n.Subnet.Bits())
+}
+
+// FirstHost6 is `::1` in a prefix. The all-zeros address is the subnet-router
+// anycast address (RFC 4291 §2.6.1), so it is not a host to hand the router.
+func FirstHost6(p netip.Prefix) netip.Addr {
+	if !p.IsValid() || !p.Addr().Is6() {
+		return netip.Addr{}
+	}
+	return p.Masked().Addr().Next()
 }
 
 // RouterAddr resolves the stored or derived router address.
@@ -289,6 +330,15 @@ func (c *Config) normalizeNetworks() {
 				}
 			}
 			n.IPv4 = &v4
+		}
+
+		if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
+			v6 := *n.IPv6
+			v6.Subnet = v6.Subnet.Masked()
+			if v6.Router != nil && *v6.Router == FirstHost6(v6.Subnet) {
+				v6.Router = nil
+			}
+			n.IPv6 = &v6
 		}
 
 		out = append(out, n)

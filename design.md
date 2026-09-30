@@ -595,8 +595,15 @@ rule in §1.
 
 ### 4.3 IPv6 is not a module
 
-It is a dimension cutting through `dial` (prefix delegation), `dhcp` (DHCPv6,
-RA), `gateway`, and `dns`. Modeling it as a module would be a mistake.
+It is a dimension cutting through `dial` (prefix delegation, tunnels), `link`
+(a network's static /64), `dhcp` (DHCPv6, RA), `gateway` (forwarding), `dns`
+and `firewall`. Modeling it as a module would be a mistake — and so would a
+page or a wizard that sets it across modules at once. **Each module owns its
+own IPv6 setting, explicitly, on its own page**: `gateway` does not turn
+forwarding on because a network gained a prefix, and a network gaining one does
+not turn anything else on. Where one module's setting costs another's, the plan
+says so as a warning; it never writes the other module's half (decided
+2026-09-30, while adding tunnelled IPv6).
 
 **v1 serves RA with SLAAC + RDNSS, and no DHCPv6 at all.** Two facts decide
 this, and both are structural rather than matters of taste:

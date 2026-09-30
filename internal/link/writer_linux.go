@@ -69,8 +69,18 @@ func (linuxWriter) Apply(ctx context.Context, desired []Desired) ([]Step, error)
 			continue
 		}
 
-		for _, want := range d.Addrs {
-			if slices.Contains(have, want) {
+		have6, err := readV6(link)
+		if err != nil {
+			steps = append(steps, Step{
+				Description: fmt.Sprintf("read IPv6 addresses on %s", d.Interface),
+				Error:       err.Error(),
+			})
+			failed++
+			continue
+		}
+
+		for _, want := range slices.Concat(d.Addrs, d.Addrs6) {
+			if slices.Contains(have, want) || slices.Contains(have6, want) {
 				continue
 			}
 			step := Step{Description: fmt.Sprintf("add %s to %s", want, d.Interface)}
@@ -102,7 +112,8 @@ func (linuxWriter) Apply(ctx context.Context, desired []Desired) ([]Step, error)
 		// Named removals, which hold whether or not the interface is still
 		// claimed: Desired.Retire has the difference from the loop above.
 		for _, old := range d.Retire {
-			if !slices.Contains(have, old) || slices.Contains(d.Addrs, old) {
+			present := slices.Contains(have, old) || slices.Contains(have6, old)
+			if !present || slices.Contains(d.Addrs, old) || slices.Contains(d.Addrs6, old) {
 				continue
 			}
 			step := Step{Description: fmt.Sprintf("remove %s from %s", old, d.Interface)}
@@ -157,12 +168,44 @@ func readV4(link netlink.Link) ([]netip.Prefix, error) {
 	return out, nil
 }
 
+// readV6 lists an interface's IPv6 addresses the same way. Read so an add is
+// skipped when the address is already there and a retire is skipped when it is
+// already gone — never to decide what else to remove (Desired.Addrs6).
+func readV6(link netlink.Link) ([]netip.Prefix, error) {
+	addrs, err := netlink.AddrList(link, netlink.FAMILY_V6)
+	if err != nil {
+		return nil, err
+	}
+	var out []netip.Prefix
+	for _, a := range addrs {
+		if a.IPNet == nil {
+			continue
+		}
+		addr, ok := netip.AddrFromSlice(a.IPNet.IP)
+		if !ok || addr.Is4In6() || addr.IsLinkLocalUnicast() {
+			continue
+		}
+		ones, _ := a.IPNet.Mask.Size()
+		out = append(out, netip.PrefixFrom(addr, ones))
+	}
+	return out, nil
+}
+
 // toNetlinkAddr converts a prefix into the shape netlink wants.
 //
 // The mask is built from the prefix length rather than copied from anywhere, so
 // a /24 cannot arrive here as a /120 through the v4-in-v6 route that toPrefix
 // exists to close.
 func toNetlinkAddr(p netip.Prefix) *netlink.Addr {
+	if p.Addr().Is6() {
+		addr := p.Addr().As16()
+		return &netlink.Addr{
+			IPNet: &net.IPNet{
+				IP:   net.IP(addr[:]),
+				Mask: net.CIDRMask(p.Bits(), 128),
+			},
+		}
+	}
 	addr := p.Addr().As4()
 	return &netlink.Addr{
 		IPNet: &net.IPNet{

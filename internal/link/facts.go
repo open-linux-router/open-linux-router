@@ -239,6 +239,12 @@ type NetworkInfo struct {
 	Subnet netip.Prefix
 	Router netip.Addr
 
+	// Subnet6 and Router6 are the network's static IPv6 intent. Invalid when
+	// the network has no ipv6 block — which is not "no IPv6": a delegated
+	// prefix on the member is still there, and still served by `dhcp`'s RA.
+	Subnet6 netip.Prefix
+	Router6 netip.Addr
+
 	// Up reports that every member exists and is administratively up. A network
 	// with no members is not up: there is nothing for it to be up on.
 	Up bool
@@ -275,6 +281,10 @@ func (f Facts) Networks() ([]NetworkInfo, error) {
 		if n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
 			info.Subnet = n.IPv4.Subnet
 			info.Router = n.IPv4.RouterAddr()
+		}
+		if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
+			info.Subnet6 = n.IPv6.Subnet
+			info.Router6 = n.IPv6.RouterAddr()
 		}
 		out = append(out, info)
 	}

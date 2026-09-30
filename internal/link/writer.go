@@ -33,12 +33,16 @@ type Desired struct {
 	// Addrs are the IPv4 addresses olr wants on it, with masks. Empty means olr
 	// wants none — which is how a member leaving a network is expressed.
 	//
-	// IPv4 only, and that is the scope decision rather than an oversight: v6
-	// prefixes come from delegation and dnsmasq derives them from the interface
-	// itself (`constructor:`), so olr has no v6 address to write. Observe reads
-	// only v4 for the same reason — a writer that saw a SLAAC address and did
-	// not want it would try to remove it.
+	// IPv4 only: this is the list the ownership claim in PlanAddrs applies to,
+	// so anything v4 on the interface that is not here comes off.
 	Addrs []netip.Prefix
+
+	// Addrs6 are the IPv6 addresses olr wants on it. Added if missing and never
+	// used to decide what to remove — the v6 claim is only over olr's own
+	// address (Network.IPv6), and taking one of those off is Retire's job. A
+	// member's SLAAC and delegated addresses are not in here and are not
+	// touched, which is the whole difference from Addrs.
+	Addrs6 []netip.Prefix
 
 	// Up asks for the interface to be brought up. Never down: taking an
 	// interface down is not something any network configuration implies, and an
@@ -71,6 +75,8 @@ type Desired struct {
 	AddOnly bool
 
 	// Retire are addresses to take off if they are there, and nothing else.
+	// Either family: it is also how a v6 router address olr stopped wanting
+	// leaves a member that is still in a network.
 	//
 	// The precise opposite of the ownership claim above, and used where that
 	// claim has ended: an interface that has left every network is no longer
@@ -142,8 +148,10 @@ func (p AddrPlan) Empty() bool {
 // — the two cannot both own one interface's addressing, and the refusal is what
 // makes this paragraph true rather than aspirational.
 //
-// IPv6 is not touched at all. A SLAAC or delegated address on a member is left
-// exactly where it is — see Desired.Addrs.
+// IPv6 is claimed far more narrowly: the network's own router address is added
+// if missing, and nothing else v6 is removed. A SLAAC or delegated address on a
+// member is left exactly where it is — see Desired.Addrs6 — and an old router
+// address olr put there leaves through PlanRetire.
 func PlanAddrs(c Config, observed []Interface) []AddrPlan {
 	byName := make(map[string]Interface, len(observed))
 	for _, iface := range observed {
@@ -180,6 +188,15 @@ func PlanAddrs(c Config, observed []Interface) []AddrPlan {
 				}
 			}
 
+			// IPv6: add only. What olr stops wanting comes off through
+			// PlanRetire, and nothing else v6 on the member is ours to judge.
+			if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
+				w := n.IPv6.RouterPrefix()
+				if !slices.Contains(iface.Prefixes, w) {
+					plan.Add = append(plan.Add, w)
+				}
+			}
+
 			if !plan.Empty() {
 				plans = append(plans, plan)
 			}
@@ -190,37 +207,52 @@ func PlanAddrs(c Config, observed []Interface) []AddrPlan {
 	return plans
 }
 
-// RetiredFor lists the router addresses a change leaves behind: for every
-// interface that was a member of a network in before and is a member of none in
-// after, the address that network had olr put on it.
+// RetiredFor lists the router addresses a change leaves behind.
 //
-// This is what `olr net rm` has always promised — "take its address off the
-// interface" — and what an apply did not do, because DesiredFor walks the
-// networks that exist and a removed one is not among them. The address stayed,
-// with nothing left in olr that knew why: on the box it happened to, a second
-// subnet answering on a NIC that no longer served one, and a card blaming the
-// distribution for it.
+// IPv4: for every interface that was a member of a network in before and is a
+// member of none in after, the address that network had olr put on it. This is
+// what `olr net rm` has always promised — "take its address off the interface"
+// — and what an apply did not do, because DesiredFor walks the networks that
+// exist and a removed one is not among them. The address stayed, with nothing
+// left in olr that knew why: on the box it happened to, a second subnet
+// answering on a NIC that no longer served one, and a card blaming the
+// distribution for it. An interface still in some network is left out, because
+// that network's own apply owns its IPv4 and removes what it does not call for
+// anyway.
 //
-// An interface still in some network is left out, because that network's own
-// apply owns its addressing and removes what it does not call for anyway.
+// IPv6: every v6 router address before put on an interface that after no
+// longer puts there — whether the interface left its network, or the network
+// was renumbered or lost its ipv6 block. Still-members included, because the v6
+// claim does not remove what it does not call for (Desired.Addrs6), so this is
+// the only way an old one goes.
 func RetiredFor(before, after Config) []Desired {
 	member := map[string]bool{}
+	wanted6 := map[string][]netip.Prefix{}
 	for _, n := range after.Networks {
 		for _, m := range n.Members {
 			member[m] = true
+			if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
+				wanted6[m] = append(wanted6[m], n.IPv6.RouterPrefix())
+			}
 		}
 	}
 
 	byIface := map[string][]netip.Prefix{}
-	for _, n := range before.Networks {
-		if n.IPv4 == nil || !n.IPv4.Subnet.IsValid() {
-			continue
+	add := func(iface string, p netip.Prefix) {
+		if !slices.Contains(byIface[iface], p) {
+			byIface[iface] = append(byIface[iface], p)
 		}
+	}
+	for _, n := range before.Networks {
 		for _, m := range n.Members {
-			if member[m] || slices.Contains(byIface[m], n.IPv4.RouterPrefix()) {
-				continue
+			if n.IPv4 != nil && n.IPv4.Subnet.IsValid() && !member[m] {
+				add(m, n.IPv4.RouterPrefix())
 			}
-			byIface[m] = append(byIface[m], n.IPv4.RouterPrefix())
+			if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
+				if p := n.IPv6.RouterPrefix(); !slices.Contains(wanted6[m], p) {
+					add(m, p)
+				}
+			}
 		}
 	}
 
@@ -241,7 +273,7 @@ func PlanRetire(before, after Config, observed []Interface) []AddrPlan {
 	}
 	var plans []AddrPlan
 	for _, d := range RetiredFor(before, after) {
-		have := ipv4Prefixes(byName[d.Interface].Prefixes)
+		have := byName[d.Interface].Prefixes
 		plan := AddrPlan{Interface: d.Interface}
 		for _, p := range d.Retire {
 			if slices.Contains(have, p) {
@@ -263,6 +295,9 @@ func DesiredFor(c Config) []Desired {
 			d := Desired{Interface: m, Up: true}
 			if n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
 				d.Addrs = append(d.Addrs, n.IPv4.RouterPrefix())
+			}
+			if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
+				d.Addrs6 = append(d.Addrs6, n.IPv6.RouterPrefix())
 			}
 			out = append(out, d)
 		}

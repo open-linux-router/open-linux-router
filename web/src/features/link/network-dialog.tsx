@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useFirewallStatus } from '@/features/firewall/queries'
 import type { InterfaceRow } from '@/lib/api-types'
 import type { Network } from '@/lib/config-types'
 
@@ -69,6 +70,12 @@ export function NetworkDialog({
   )
 
   const derivedRouter = deriveRouter(draft.ipv4?.subnet ?? '')
+  const derivedRouter6 = deriveRouter6(draft.ipv6?.subnet ?? '')
+  // Read, never written: the firewall is its own page's switch. A public v6
+  // subnet with it off makes every device here reachable from the internet,
+  // and this is the moment somebody is choosing to have one.
+  const firewall = useFirewallStatus()
+  const exposed = !!draft.ipv6?.subnet?.trim() && firewall.data?.enabled === false
   const valid = draft.name.trim() !== '' && member !== ''
 
   function set(patch: Partial<Network>) {
@@ -76,6 +83,9 @@ export function NetworkDialog({
   }
   function setIPv4(patch: Partial<NonNullable<Network['ipv4']>>) {
     setDraft((d) => ({ ...d, ipv4: { subnet: '', ...d.ipv4, ...patch } }))
+  }
+  function setIPv6(patch: Partial<NonNullable<Network['ipv6']>>) {
+    setDraft((d) => ({ ...d, ipv6: { subnet: '', ...d.ipv6, ...patch } }))
   }
 
   return (
@@ -167,6 +177,42 @@ export function NetworkDialog({
               need to come back on the new address.
             </p>
           )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="net-subnet6">IPv6 subnet</Label>
+              <Input
+                id="net-subnet6"
+                value={draft.ipv6?.subnet ?? ''}
+                placeholder="2001:db8:1:1::/64"
+                onChange={(e) => setIPv6({ subnet: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional. A /64 this router numbers the network from — one out of a tunnel
+                broker&rsquo;s routed prefix, say. Leave it empty if the interface gets its IPv6
+                prefix some other way.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="net-router6">This router&rsquo;s IPv6 address</Label>
+              <Input
+                id="net-router6"
+                value={draft.ipv6?.router ?? ''}
+                placeholder={derivedRouter6 || '::1 in the subnet'}
+                disabled={!draft.ipv6?.subnet?.trim()}
+                onChange={(e) => setIPv6({ router: e.target.value || undefined })}
+              />
+            </div>
+          </div>
+
+          {exposed && (
+            <p className="text-xs text-warning">
+              The firewall is off. With an IPv6 subnet every device on this network gets an
+              address the internet can reach directly — there is no NAT in IPv6 to hide it.
+              Turn the firewall on under Gateway → Firewall.
+            </p>
+          )}
         </div>
 
         <DialogFooter className="sm:justify-between">
@@ -185,7 +231,8 @@ export function NetworkDialog({
               disabled={!valid}
               onClick={() => {
                 const ipv4 = draft.ipv4?.subnet?.trim() ? draft.ipv4 : undefined
-                onSubmit({ ...draft, name: draft.name.trim(), ipv4 })
+                const ipv6 = draft.ipv6?.subnet?.trim() ? draft.ipv6 : undefined
+                onSubmit({ ...draft, name: draft.name.trim(), ipv4, ipv6 })
               }}
             >
               {editing ? 'Save' : 'Add'}
@@ -211,4 +258,15 @@ function deriveRouter(subnet: string): string {
   if (octets.length !== 4 || Number(bits) !== 24) return ''
   if (octets.some((o) => o === '' || Number.isNaN(Number(o)))) return ''
   return `${octets[0]}.${octets[1]}.${octets[2]}.1`
+}
+
+/**
+ * `::1` in a /64, for the placeholder. The same deliberate naivety as
+ * deriveRouter: it only has to be right for the one prefix length the server
+ * accepts, and it shows nothing rather than guessing for any other.
+ */
+function deriveRouter6(subnet: string): string {
+  const [addr, bits] = subnet.trim().split('/')
+  if (Number(bits) !== 64 || !addr?.endsWith('::')) return ''
+  return `${addr}1`
 }

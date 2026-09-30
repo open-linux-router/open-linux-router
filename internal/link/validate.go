@@ -3,6 +3,7 @@ package link
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -183,9 +184,71 @@ func validateNetworks(r *Result, c Config, observed map[string]Interface, haveOb
 		}
 
 		validateNetworkIPv4(r, path, n)
+		validateNetworkIPv6(r, path, n)
 	}
 
 	validateSubnetOverlap(r, c.Networks)
+	validateSubnet6Overlap(r, c.Networks)
+}
+
+// validateNetworkIPv6 checks the IPv6 block, which is optional in a way IPv4's
+// is not remarked on: most networks get their IPv6 from a delegated prefix
+// olr never writes, so its absence says nothing.
+func validateNetworkIPv6(r *Result, path string, n Network) {
+	if n.IPv6 == nil {
+		return
+	}
+	v6 := *n.IPv6
+	switch {
+	case !v6.Subnet.IsValid():
+		r.errorf(path+".ipv6.subnet", "required, as the ipv6 block is its subnet")
+		return
+	case !v6.Subnet.Addr().Is6() || v6.Subnet.Addr().Is4In6():
+		r.errorf(path+".ipv6.subnet", "%s is IPv4; the ipv6 block takes an IPv6 subnet", v6.Subnet)
+		return
+	case v6.Subnet.Bits() != 64:
+		// SLAAC forms an address from a 64-bit interface identifier and does
+		// nothing on any other length, so a /56 here would be a network whose
+		// clients never get an address — and a /48 from a tunnel broker is the
+		// commonest thing to paste in.
+		r.errorf(path+".ipv6.subnet", "%s is a /%d; a network's IPv6 subnet is a /64, "+
+			"because that is the only length devices can address themselves in. "+
+			"Pick one /64 out of it, like %s", v6.Subnet, v6.Subnet.Bits(),
+			netip.PrefixFrom(v6.Subnet.Masked().Addr(), 64))
+		return
+	case v6.Subnet.Addr().IsLinkLocalUnicast() || v6.Subnet.Addr().IsMulticast() ||
+		v6.Subnet.Addr().IsLoopback():
+		r.errorf(path+".ipv6.subnet", "%s is not a prefix a network can be numbered from", v6.Subnet)
+		return
+	}
+
+	router := v6.RouterAddr()
+	if !v6.Subnet.Contains(router) || router == v6.Subnet.Masked().Addr() {
+		// The masked address is the subnet-router anycast address, which every
+		// router on the link answers for; it is not one to hold as a host.
+		r.errorf(path+".ipv6.router", "%s is not an assignable address in %s", router, v6.Subnet)
+	}
+}
+
+// validateSubnet6Overlap is validateSubnetOverlap for the IPv6 blocks.
+func validateSubnet6Overlap(r *Result, networks []Network) {
+	for i := range networks {
+		a := networks[i]
+		if a.IPv6 == nil || !a.IPv6.Subnet.IsValid() {
+			continue
+		}
+		for j := i + 1; j < len(networks); j++ {
+			b := networks[j]
+			if b.IPv6 == nil || !b.IPv6.Subnet.IsValid() {
+				continue
+			}
+			if a.IPv6.Subnet.Overlaps(b.IPv6.Subnet) {
+				r.errorf(fmt.Sprintf("networks[%d].ipv6.subnet", j),
+					"%s overlaps %s on %q; two networks cannot share addresses",
+					b.IPv6.Subnet, a.IPv6.Subnet, a.Name)
+			}
+		}
+	}
 }
 
 // validateNetworkIPv4 checks a network's addressing against itself.

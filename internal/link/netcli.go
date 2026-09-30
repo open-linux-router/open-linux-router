@@ -66,6 +66,10 @@ type netFlags struct {
 	router   string
 	member   string
 	noSubnet bool
+
+	subnet6 string
+	router6 string
+	noIPv6  bool
 }
 
 func (f *netFlags) bind(c *cobra.Command) {
@@ -77,6 +81,13 @@ func (f *netFlags) bind(c *cobra.Command) {
 		"the interface the network lives on (default: the only adopted interface without one)")
 	c.Flags().BoolVar(&f.noSubnet, "no-subnet", false,
 		"serve no IPv4 here, leaving the network to router advertisement alone")
+	c.Flags().StringVar(&f.subnet6, "ipv6-subnet", "",
+		"a static IPv6 /64 this router numbers the network from, e.g. 2001:db8:1:1::/64 "+
+			"(default: none — IPv6 comes from whatever prefix the interface already has)")
+	c.Flags().StringVar(&f.router6, "ipv6-router", "",
+		"this router's IPv6 address on the network (default: ::1 in the IPv6 subnet)")
+	c.Flags().BoolVar(&f.noIPv6, "no-ipv6-subnet", false,
+		"drop the static IPv6 subnet, taking this router's IPv6 address off the interface")
 }
 
 func netAddCommand() *cobra.Command {
@@ -177,6 +188,10 @@ func applyNetFlags(n *Network, f *netFlags, cfg *Config, resp listResponse, crea
 		n.Members = []string{member}
 	}
 
+	if err := applyNet6Flags(n, f); err != nil {
+		return err
+	}
+
 	if f.noSubnet {
 		if f.subnet != "" || f.router != "" {
 			return fmt.Errorf("--no-subnet cannot be combined with --subnet or --router")
@@ -197,8 +212,7 @@ func applyNetFlags(n *Network, f *netFlags, cfg *Config, resp listResponse, crea
 			return fmt.Errorf("--subnet %q is not a subnet in CIDR form like 172.16.1.0/24: %w", f.subnet, err)
 		}
 		if !prefix.Addr().Is4() {
-			return fmt.Errorf("--subnet %s is IPv6; olr does not manage IPv6 prefixes yet, "+
-				"they are derived from the uplink's delegation", prefix)
+			return fmt.Errorf("--subnet %s is IPv6; the IPv6 subnet is --ipv6-subnet", prefix)
 		}
 		v4.Subnet = prefix.Masked()
 	case creating && !v4.Subnet.IsValid():
@@ -221,6 +235,53 @@ func applyNetFlags(n *Network, f *netFlags, cfg *Config, resp listResponse, crea
 	}
 
 	n.IPv4 = &v4
+	return nil
+}
+
+// applyNet6Flags is the IPv6 half of applyNetFlags. Separate because it has no
+// defaults to derive: a network gets a static v6 subnet only when somebody
+// names one, since most get theirs from a prefix olr never writes.
+func applyNet6Flags(n *Network, f *netFlags) error {
+	if f.noIPv6 {
+		if f.subnet6 != "" || f.router6 != "" {
+			return fmt.Errorf("--no-ipv6-subnet cannot be combined with --ipv6-subnet or --ipv6-router")
+		}
+		n.IPv6 = nil
+		return nil
+	}
+	if f.subnet6 == "" && f.router6 == "" {
+		return nil
+	}
+
+	v6 := NetworkIPv6{}
+	if n.IPv6 != nil {
+		v6 = *n.IPv6
+	}
+	if f.subnet6 != "" {
+		prefix, err := netip.ParsePrefix(f.subnet6)
+		if err != nil {
+			return fmt.Errorf("--ipv6-subnet %q is not a subnet in CIDR form like 2001:db8:1:1::/64: %w",
+				f.subnet6, err)
+		}
+		if !prefix.Addr().Is6() {
+			return fmt.Errorf("--ipv6-subnet %s is IPv4; the IPv4 subnet is --subnet", prefix)
+		}
+		v6.Subnet = prefix.Masked()
+	}
+	if f.router6 != "" {
+		if !v6.Subnet.IsValid() {
+			return fmt.Errorf("--ipv6-router needs --ipv6-subnet, as this network has no IPv6 subnet yet")
+		}
+		addr, err := netip.ParseAddr(f.router6)
+		if err != nil {
+			return fmt.Errorf("--ipv6-router %q is not an address: %w", f.router6, err)
+		}
+		if !addr.Is6() {
+			return fmt.Errorf("--ipv6-router %s is IPv4; the IPv4 router address is --router", addr)
+		}
+		v6.Router = &addr
+	}
+	n.IPv6 = &v6
 	return nil
 }
 

@@ -104,6 +104,12 @@ type networkView struct {
 	// between showing the field filled in and showing it as a placeholder.
 	RouterExplicit bool `json:"router_explicit,omitempty"`
 
+	// Subnet6 and Router6 are the network's static IPv6 intent, empty for a
+	// network with no ipv6 block. Router6Explicit is RouterExplicit's twin.
+	Subnet6         string `json:"subnet6,omitempty"`
+	Router6         string `json:"router6,omitempty"`
+	Router6Explicit bool   `json:"router6_explicit,omitempty"`
+
 	// SuggestedStart and SuggestedEnd are the range `dhcp` derives when nobody
 	// types one. A hint, never a second opinion: `dhcp` validates whatever range
 	// it is given against its own rules regardless of where the numbers came
@@ -138,6 +144,11 @@ func viewNetwork(n Network, observed map[string]Interface) networkView {
 		if start, end, ok := core.SuggestRange(n.IPv4.Subnet, router); ok {
 			v.SuggestedStart, v.SuggestedEnd = start.String(), end.String()
 		}
+	}
+	if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
+		v.Subnet6 = n.IPv6.Subnet.String()
+		v.Router6 = n.IPv6.RouterAddr().String()
+		v.Router6Explicit = n.IPv6.Router != nil
 	}
 	return v
 }
@@ -326,13 +337,21 @@ func sameNetwork(a, b Network) bool {
 	if a.Name != b.Name || !slices.Equal(a.Members, b.Members) {
 		return false
 	}
-	if (a.IPv4 == nil) != (b.IPv4 == nil) {
-		return false
+	return sameIPv4(a.IPv4, b.IPv4) && sameIPv6(a.IPv6, b.IPv6)
+}
+
+func sameIPv4(a, b *NetworkIPv4) bool {
+	if a == nil || b == nil {
+		return a == b
 	}
-	if a.IPv4 == nil {
-		return true
+	return a.Subnet == b.Subnet && a.RouterAddr() == b.RouterAddr()
+}
+
+func sameIPv6(a, b *NetworkIPv6) bool {
+	if a == nil || b == nil {
+		return a == b
 	}
-	return a.IPv4.Subnet == b.IPv4.Subnet && a.IPv4.RouterAddr() == b.IPv4.RouterAddr()
+	return a.Subnet == b.Subnet && a.RouterAddr() == b.RouterAddr()
 }
 
 // networkImpact classifies a change to an existing network in client terms.
@@ -341,17 +360,44 @@ func sameNetwork(a, b Network) bool {
 // is holding". Renumbering the subnet does; adding an IPv4 block to a network
 // that had none does not, because there was nothing there to lose.
 func networkImpact(before, after Network) string {
+	if !slices.Equal(before.Members, after.Members) {
+		return impactDisruptive
+	}
+	v4, v6 := ipv4Impact(before.IPv4, after.IPv4), ipv6Impact(before.IPv6, after.IPv6)
+	if impactRank[v6] > impactRank[v4] {
+		return v6
+	}
+	return v4
+}
+
+func ipv4Impact(before, after *NetworkIPv4) string {
 	switch {
-	case !slices.Equal(before.Members, after.Members):
-		return impactDisruptive
-	case before.IPv4 == nil:
+	case before == nil && after == nil:
+		return impactNone
+	case before == nil:
 		return impactRestart
-	case after.IPv4 == nil, before.IPv4.Subnet != after.IPv4.Subnet:
+	case after == nil, before.Subnet != after.Subnet:
 		return impactDisruptive
-	case before.IPv4.RouterAddr() != after.IPv4.RouterAddr():
+	case before.RouterAddr() != after.RouterAddr():
 		// The subnet is unchanged, so clients keep valid addresses — but their
 		// default gateway just moved and they will not learn that until they
 		// renew, which is a network that looks fine and does not work.
+		return impactDisruptive
+	}
+	return impactNone
+}
+
+// ipv6Impact is the same question for the v6 block. Losing or renumbering the
+// prefix strands every address clients formed from it until its advertised
+// lifetime runs out, which is the same "looks fine and does not work" as a
+// moved IPv4 gateway. Gaining one takes nothing away.
+func ipv6Impact(before, after *NetworkIPv6) string {
+	switch {
+	case before == nil && after == nil:
+		return impactNone
+	case before == nil:
+		return impactRestart
+	case after == nil, before.Subnet != after.Subnet, before.RouterAddr() != after.RouterAddr():
 		return impactDisruptive
 	}
 	return impactNone
@@ -368,6 +414,9 @@ func describeNetwork(sign string, n Network) string {
 		fmt.Fprintf(&b, "%s  ipv4 %s, this router at %s\n", sign, n.IPv4.Subnet, n.IPv4.RouterAddr())
 	} else {
 		fmt.Fprintf(&b, "%s  no ipv4\n", sign)
+	}
+	if n.IPv6 != nil && n.IPv6.Subnet.IsValid() {
+		fmt.Fprintf(&b, "%s  ipv6 %s, this router at %s\n", sign, n.IPv6.Subnet, n.IPv6.RouterAddr())
 	}
 	return b.String()
 }

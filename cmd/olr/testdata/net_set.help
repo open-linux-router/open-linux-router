@@ -8,11 +8,14 @@ Usage:
   olr net set <name> [flags]
 
 Flags:
-  -h, --help            help for set
-      --member string   the interface the network lives on (default: the only adopted interface without one)
-      --no-subnet       serve no IPv4 here, leaving the network to router advertisement alone
-      --router string   this router's address on the network (default: the first address in the subnet)
-      --subnet string   the network in CIDR form, e.g. 172.16.1.0/24 (default: the next free private /24)
+  -h, --help                 help for set
+      --ipv6-router string   this router's IPv6 address on the network (default: ::1 in the IPv6 subnet)
+      --ipv6-subnet string   a static IPv6 /64 this router numbers the network from, e.g. 2001:db8:1:1::/64 (default: none — IPv6 comes from whatever prefix the interface already has)
+      --member string        the interface the network lives on (default: the only adopted interface without one)
+      --no-ipv6-subnet       drop the static IPv6 subnet, taking this router's IPv6 address off the interface
+      --no-subnet            serve no IPv4 here, leaving the network to router advertisement alone
+      --router string        this router's address on the network (default: the first address in the subnet)
+      --subnet string        the network in CIDR form, e.g. 172.16.1.0/24 (default: the next free private /24)
 
 Global Flags:
       --dry-run         show what would change and exit without applying it
