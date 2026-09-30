@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from 'react-router'
 
-import { BRAND_ICON, SECTIONS, sectionOf } from '@/components/layout/sections'
+import { Logo } from '@/components/layout/logo'
+import { SECTIONS, sectionOf } from '@/components/layout/sections'
 import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { TokenButton } from '@/components/layout/token-button'
 import { cn } from '@/lib/utils'
@@ -10,7 +11,7 @@ export function AppShell() {
     <div className="flex min-h-svh flex-col bg-background text-foreground">
       <header className="sticky top-0 z-20 border-b bg-background/75 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-[90rem] items-center gap-2.5 px-4">
-          <BRAND_ICON className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+          <Logo className="size-5 shrink-0" aria-hidden />
           <span className="font-semibold tracking-tight">Router</span>
 
           <DesktopNav />

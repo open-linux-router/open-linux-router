@@ -261,9 +261,6 @@ export const SECTIONS: Section[] = [
   },
 ]
 
-/** The icon for the app itself, used in the bar beside the name. */
-export const BRAND_ICON = Router
-
 /** The section a path belongs to, section landing pages and sub-pages alike. */
 export function sectionOf(pathname: string): Section | undefined {
   return SECTIONS.find(({ to, end }) => (end ? pathname === to : pathname.startsWith(to)))
