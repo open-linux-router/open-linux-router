@@ -2,7 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- The SVG is the tab icon everywhere that takes one, sharp at any
+         density. The PNGs are rendered from it by scripts/app-icons.mjs, for
+         installs and for iOS, which will not use an SVG. -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="1024x1024" href="/apple-touch-icon-1024.png" />
+    <!-- .json rather than .webmanifest: olrd serves public/ through Go's
+         mime table, which knows the one and not the other. -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>open-linux-router</title>
   </head>
