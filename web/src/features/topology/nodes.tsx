@@ -37,9 +37,9 @@ import type { GroupDeletion } from '@/features/devices/group-actions'
 import { groupOptions, MAX_GROUP_DEPTH, parentChoices } from '@/features/devices/group-tree'
 import { Link } from 'react-router'
 
-import { REMOTE_MAX_LINES, type Density, type GroupVariant, type Hidden } from '@/features/topology/layout'
+import type { Density, GroupVariant, Hidden } from '@/features/topology/layout'
 import type { MapGroup } from '@/features/topology/model'
-import type { Outside, Remote } from '@/features/topology/outside'
+import type { Outside, RemoteClient } from '@/features/topology/outside'
 import { magnitude, type Flow, type TrafficView } from '@/features/topology/traffic'
 import type { DeviceRow, ExitStatus } from '@/lib/api-types'
 import type { DevicesGroup } from '@/lib/config-types'
@@ -195,186 +195,163 @@ export function ExitNode({ exit, flow, rated }: { exit?: ExitStatus; flow?: Flow
 /* -------------------------------------------------------------------------- */
 
 /**
- * The top of the map. It carries the one number about the outside worth a
- * glance — the address the world sees — when the box already knows it, and
- * says in words when it does not, rather than leaving a blank that reads as
- * a fault.
+ * The top of the map: the internet, as this router reaches it.
+ *
+ * When something sits between — a modem, or a router of the operator's own —
+ * this node *is* that thing, because the public address is its address and
+ * not this box's; the two used to be stacked as separate nodes, which drew one
+ * box as two. It is the device the operator named when the device list holds
+ * its address, and "Upstream router" when it does not.
+ *
+ * It carries the one number about the outside worth a glance — the address the
+ * world sees — when the box already knows it, and says in words when it does
+ * not, rather than leaving a blank that reads as a fault.
  */
-export function InternetNode({ internet }: { internet: Outside['internet'] }) {
+export function InternetNode({
+  internet,
+  upstream,
+  onSelect,
+}: {
+  internet: Outside['internet']
+  upstream?: Outside['upstream']
+  onSelect?: (device: DeviceRow) => void
+}) {
   const { publicAddress, publicFrom, cgnat, noRoute } = internet
+  const device = upstream?.device
+  const down = noRoute || Boolean(upstream?.down)
+  const name = upstream ? device?.name || device?.mac || 'Upstream router' : 'Internet'
+
+  // The second line: the address the world sees, else how this box reaches
+  // the router in front, else what is known instead.
+  const local = upstream && (upstream.via ? `${upstream.via} · ${upstream.dev}` : upstream.dev)
   const detail = noRoute
     ? 'No way out'
-    : publicAddress
-      ? publicAddress
-      : cgnat
-        ? "Shared address (provider's NAT)"
-        : 'Public address not known'
-  const title = noRoute
-    ? 'This router has no default route: nothing leaves it for the internet.'
-    : publicAddress
-      ? publicFrom === 'ddns'
-        ? 'The address your dynamic DNS record last read from outside.'
-        : "This router's own address on its way out."
-      : cgnat
-        ? 'Your provider puts this router behind its own NAT (100.64.0.0/10). Nothing outside can connect in unless it goes through a relay.'
-        : 'Set up a dynamic DNS record that reads the address from outside and it shows here.'
+    : upstream?.down
+      ? 'Not responding'
+      : (publicAddress ?? local ?? (cgnat ? "Shared address (provider's NAT)" : 'Public address not known'))
+  const mono = !down && Boolean(publicAddress || upstream?.via)
+
+  const title = [
+    noRoute
+      ? 'This router has no default route: nothing leaves it for the internet.'
+      : publicAddress
+        ? publicFrom === 'ddns'
+          ? `${publicAddress} is the address your dynamic DNS record last read from outside.`
+          : `${publicAddress} is this router's own address on its way out.`
+        : cgnat
+          ? 'Your provider puts this router behind its own NAT (100.64.0.0/10). Nothing outside can connect in unless it goes through a relay.'
+          : 'Set up a dynamic DNS record that reads the address from outside and it shows here.',
+    upstream &&
+      `This router reaches the internet through ${upstream.via ?? upstream.dev}` +
+        (upstream.address ? `, as ${upstream.address} on ${upstream.dev}` : '') +
+        '. Its address on the way out is private, so the router in front translates it.',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const open = device && onSelect ? () => onSelect(device) : undefined
   return (
-    <div
+    <Shell
+      onClick={open}
       title={title}
       className={cn(
-        'flex size-full items-center gap-3 rounded-2xl border bg-card pr-4 pl-2.5 shadow-xs',
-        noRoute && 'border-destructive/50',
+        'flex size-full min-w-0 items-center gap-3 rounded-2xl border bg-card pr-4 pl-2.5 text-left shadow-xs',
+        open && 'transition-[border-color,box-shadow] hover:border-foreground/20 hover:shadow-sm',
+        down && 'border-destructive/50',
+        focusRing,
       )}
     >
-      <span
-        className={cn(
-          'flex size-8 shrink-0 items-center justify-center rounded-full',
-          noRoute ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground/75',
-        )}
-      >
-        <Globe className="size-4" aria-hidden />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold">Internet</div>
-        <div
+      {device ? (
+        <DeviceIcon
+          icon={device.icon}
+          category={device.category}
+          vendor={device.vendor}
+          vendorKey={device.vendor_key}
+          online={device.online}
+          size="sm"
+        />
+      ) : (
+        <span
+          className={cn(
+            'flex size-8 shrink-0 items-center justify-center rounded-full',
+            down ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground/75',
+          )}
+        >
+          {upstream ? <Router className="size-4" aria-hidden /> : <Globe className="size-4" aria-hidden />}
+        </span>
+      )}
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-sm font-semibold">{name}</span>
+        <span
           className={cn(
             'truncate text-xs',
-            noRoute ? 'text-destructive' : 'text-muted-foreground',
-            publicAddress && 'font-mono tabular-nums',
+            down ? 'text-destructive' : 'text-muted-foreground',
+            mono && 'font-mono tabular-nums',
           )}
         >
           {detail}
-        </div>
-      </div>
-    </div>
+        </span>
+      </span>
+    </Shell>
   )
 }
 
 /**
- * The router between this one and the internet: a modem, or a router of the
- * operator's own. Named for what it is to this box — the next hop, and the
- * interface it is reached on — because that is all this box can know about it.
+ * Someone connected from outside, drawn like any other node: who, and the way
+ * they came in. A tunnel names a device; a proxy names an address, because
+ * that is all a shared password lets the box know — and where that address
+ * is, which is what lets an operator see at a glance that the one address on
+ * their proxy is their own phone.
+ *
+ * The place's source is credited on hover: the geolocation databases' licence
+ * (CC BY 4.0) asks for it wherever a place is shown, and a line of small print
+ * under every node was more than the map had room for.
  */
-export function UpstreamNode({ upstream }: { upstream: NonNullable<Outside['upstream']> }) {
-  const { via, dev, address, down } = upstream
+export function RemoteNode({
+  client,
+  more,
+  source,
+}: {
+  client?: RemoteClient
+  /** Stands for this many who did not fit. */
+  more?: number
+  /** Where places come from, when this one shows one. */
+  source?: string
+}) {
+  const Icon = client?.via === 'WireGuard' ? KeyRound : Globe
+  const title = client
+    ? [`${client.who}, connected through ${client.via}.`, client.where && `${client.where}${source ? ` (places by ${source})` : ''}.`]
+        .filter(Boolean)
+        .join(' ')
+    : undefined
   return (
-    <div
-      title={
-        (address ? `This router is ${address} on ${dev}. ` : '') +
-        'Your address on the way out is private, so something in front of this router translates it — ' +
-        "usually a modem or another router, sometimes your provider's own network."
-      }
+    <Link
+      to="/advanced/remote"
+      title={title}
       className={cn(
-        'flex size-full items-center gap-3 rounded-2xl border bg-card pr-4 pl-2.5 shadow-xs',
-        down && 'border-destructive/50',
+        'flex size-full min-w-0 items-center gap-3 rounded-2xl border border-dashed bg-card pr-4 pl-2.5 shadow-xs transition-colors hover:bg-accent/50',
+        focusRing,
       )}
     >
-      <span
-        className={cn(
-          'flex size-8 shrink-0 items-center justify-center rounded-full',
-          down ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground/75',
-        )}
-      >
-        <Router className="size-4" aria-hidden />
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground/75">
+        {client ? <Icon className="size-4" aria-hidden /> : <Plus className="size-4" aria-hidden />}
       </span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold">Upstream router</div>
-        <div className={cn('truncate text-xs', down ? 'text-destructive' : 'text-muted-foreground')}>
-          {down ? (
-            'Not responding'
-          ) : (
-            <>
-              {via && <span className="font-mono tabular-nums">{via}</span>}
-              {via && ' · '}
-              {dev}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/**
- * Who is reaching in from outside, a line each, and a link to where it is set
- * up.
- *
- * A tunnel line names a device; a proxy line names an address, because that
- * is all a shared password lets the box know. Where each is — the network
- * that owns the address, and its country — is what lets an operator see at a
- * glance that the one address on their proxy is their own phone.
- */
-export function RemoteNode({ remote }: { remote: Remote }) {
-  const shown = remote.lines.slice(0, remote.lines.length > REMOTE_MAX_LINES ? REMOTE_MAX_LINES - 1 : REMOTE_MAX_LINES)
-  const hidden = remote.lines.length - shown.length
-  return (
-    <div className="flex size-full flex-col rounded-2xl border border-dashed bg-card shadow-xs">
-      <Link
-        to="/advanced/remote"
-        className={cn('flex h-11 shrink-0 items-center gap-3 rounded-t-2xl pr-4 pl-2.5 hover:bg-accent/50', focusRing)}
-      >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground/75">
-          <KeyRound className="size-4" aria-hidden />
+      {client ? (
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className={cn('truncate text-sm font-semibold', client.address && 'font-mono tabular-nums')}>
+            {client.who}
+          </span>
+          <span className="truncate text-xs text-muted-foreground">
+            via {client.via}
+            {client.where && ` · ${client.where}`}
+          </span>
         </span>
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">Remote access</span>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {remote.connected > 0 ? `${remote.connected} connected` : 'nobody on'}
+      ) : (
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+          {more} more connected
         </span>
-      </Link>
-      <ul className="min-h-0 flex-1 px-3">
-        {shown.map((l) => (
-          <li key={l.key}>
-            {l.first && (
-              <div className="flex h-5 items-end pl-3.5 text-[11px] font-medium text-muted-foreground">{l.via}</div>
-            )}
-            <div className="flex h-[22px] min-w-0 items-center gap-2 text-xs">
-              <span
-                aria-hidden
-                className={cn(
-                  'size-1.5 shrink-0 rounded-full',
-                  l.fault ? 'bg-destructive' : l.who ? 'bg-success' : 'bg-muted-foreground/30',
-                )}
-              />
-              {l.who ? (
-                <>
-                  <span
-                    className={cn(
-                      'min-w-0 truncate font-medium',
-                      l.address ? 'shrink-0 font-mono tabular-nums' : 'shrink',
-                    )}
-                  >
-                    {l.who}
-                  </span>
-                  {l.where && (
-                    <span className="ml-auto min-w-0 truncate pl-2 text-right text-muted-foreground" title={l.where}>
-                      {l.where}
-                    </span>
-                  )}
-                </>
-              ) : (
-                <span className={cn('truncate', l.fault ? 'text-destructive' : 'text-muted-foreground/70')}>
-                  {l.note}
-                </span>
-              )}
-            </div>
-          </li>
-        ))}
-        {hidden > 0 && (
-          <li className="flex h-[22px] items-center pl-3.5 text-xs text-muted-foreground">+{hidden} more</li>
-        )}
-      </ul>
-      {remote.locations && (
-        // The databases' licence (CC BY 4.0) asks for this wherever a place is shown.
-        <a
-          href={remote.locations.source_url}
-          target="_blank"
-          rel="noreferrer"
-          className="block h-[18px] shrink-0 px-3 text-right text-[10px] leading-[18px] text-muted-foreground/60 hover:underline"
-        >
-          Places by {remote.locations.source}
-        </a>
       )}
-    </div>
+    </Link>
   )
 }
 
@@ -841,11 +818,15 @@ function Address({ device }: { device: DeviceRow }) {
  * claim an idleness nobody measured.
  */
 function DeviceTraffic({ flow, rated }: { flow?: Flow; rated: boolean }) {
-  if (!flow) return <span className="text-muted-foreground/60">—</span>
+  // Never counted and counted-but-quiet are one answer to someone looking at
+  // the map — nothing is moving — so they are one word. The first used to be
+  // a dash, which read as "unknown" beside a row that said "idle".
+  if (!flow || (rated && (flow.downRate ?? 0) + (flow.upRate ?? 0) < 1)) {
+    return <span className="text-muted-foreground/60">idle</span>
+  }
   if (!rated) return <>{formatBytes(flow.down + flow.up)}</>
   const down = flow.downRate ?? 0
   const up = flow.upRate ?? 0
-  if (down + up < 1) return <span className="text-muted-foreground/60">idle</span>
   // Compact, with the exact figures on hover: the row's width belongs to the
   // device's name, and a rate only has to say "busy" or "quiet" at a glance.
   return (

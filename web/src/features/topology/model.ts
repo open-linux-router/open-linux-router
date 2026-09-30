@@ -63,7 +63,13 @@ export interface MapTree {
  * The operator's groups as a tree, with the filters applied and everything in
  * drawing order.
  *
- * **Busiest first, at every level.** The map folds whatever does not fit into
+ * **Groups keep their places.** A group is a place on the map the operator
+ * learns — Home on the left, IoT on the right — and ordering groups by traffic
+ * moved them every time the counters were read, which is the map rearranging
+ * the house. They are in name order, the same as every group menu, at every
+ * level.
+ *
+ * **Devices are busiest first.** The map folds whatever does not fit into
  * "+N more", and the fold has to hide the least interesting things, which on a
  * page about what the network is doing are the quiet ones. By rate when there
  * is one, else by bytes moved, then by name so equal weights do not shuffle.
@@ -129,8 +135,8 @@ export function buildTree({
     )
   }
   const rankGroups = (list: MapGroup[]) => {
-    const w = new Map(list.map((g) => [g.key, sortKey(g.key, g.weight)]))
-    return list.sort((a, b) => w.get(b.key)! - w.get(a.key)! || a.title.localeCompare(b.title))
+    for (const g of list) weights.set(g.key, g.weight)
+    return list.sort((a, b) => a.title.localeCompare(b.title))
   }
 
   const parents = effectiveParents(groups)

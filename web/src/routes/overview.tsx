@@ -76,7 +76,7 @@ export function OverviewPage() {
   const socks = useSocksStatus()
   const anyWayIn = Boolean(tunnel.data?.enabled || shadowsocks.data?.enabled || socks.data?.enabled)
   const clients = useRemoteClients(anyWayIn)
-  const outside = useMemo(() => buildOutside(dial.data), [dial.data])
+  const outside = useMemo(() => buildOutside(dial.data, devices.data?.devices), [dial.data, devices.data])
   const remote = useMemo(
     () =>
       buildRemote({ tunnel: tunnel.data, shadowsocks: shadowsocks.data, socks: socks.data, clients: clients.data }),

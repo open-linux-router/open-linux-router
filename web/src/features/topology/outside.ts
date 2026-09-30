@@ -1,4 +1,5 @@
 import type {
+  DeviceRow,
   DialStatus,
   GeoPlace,
   GeoStatus,
@@ -40,7 +41,12 @@ export interface Outside {
     /** There is no default route at all. */
     noRoute: boolean
   }
-  /** The router in between, when this box's way out is a private address. */
+  /**
+   * The router in between, when this box's way out is a private address. It
+   * is drawn as one node with the internet: the public address is that
+   * router's, not this one's, so two nodes stacked one on the other were two
+   * halves of one box.
+   */
   upstream?: {
     /** The next hop. Absent on a point-to-point link, which has none. */
     via?: string
@@ -49,10 +55,16 @@ export interface Outside {
     address?: string
     /** The next hop was asked and has not answered. */
     down: boolean
+    /**
+     * The device that holds the next hop's address, when the device list has
+     * one — the modem the operator already named. Then the node is that
+     * device, not an anonymous "upstream router".
+     */
+    device?: DeviceRow
   }
 }
 
-export function buildOutside(dial?: DialStatus): Outside | undefined {
+export function buildOutside(dial?: DialStatus, devices?: DeviceRow[]): Outside | undefined {
   if (!dial) return undefined
   const route = dial.route
   const out: Outside = { internet: { cgnat: false, noRoute: !route } }
@@ -66,7 +78,14 @@ export function buildOutside(dial?: DialStatus): Outside | undefined {
   } else if (kind === 'cgnat') {
     out.internet.cgnat = true
   } else {
-    out.upstream = { via: route.via, dev: route.dev, address, down: route.gateway_state === 'silent' }
+    const via = route.via
+    out.upstream = {
+      via,
+      dev: route.dev,
+      address,
+      down: route.gateway_state === 'silent',
+      device: via ? devices?.find((d) => d.fixed_ip === via || d.ips?.includes(via)) : undefined,
+    }
   }
 
   if (!out.internet.publicAddress) {
@@ -97,35 +116,32 @@ export function classify(address: string): AddressKind {
 }
 
 /**
- * The people reaching in, one line apiece.
+ * The people reaching in, one node apiece — only the ones connected now.
  *
  * A tunnel device is a device: it has its own key, so it has a name. A proxy
  * client is an address: everybody shares one password, and the most the box
- * can say is who has connections open and where that address is.
+ * can say is who has connections open and where that address is. Either way
+ * it is someone arriving at the router, drawn like every other node on the
+ * map, and the way it came in is its second line.
+ *
+ * Nobody connected draws nothing. The map is about who is here; that a way
+ * in is switched on, and whether it is running, is the Remote access page's.
  */
-export interface RemoteLine {
+export interface RemoteClient {
   key: string
   /** The way in: "WireGuard", "Shadowsocks", "SOCKS5". */
   via: string
-  /** The first line of its way in, which the node heads with the way in's name. */
-  first?: boolean
   /** A device's name, or an address. */
-  who?: string
+  who: string
   /** `who` is an address rather than a name. */
   address?: boolean
   /** Where it is, already worded. */
   where?: string
-  /** A way in that is switched on and not running. */
-  fault?: boolean
-  /** "nobody connected", "not running" — a line with nobody on it. */
-  note?: string
 }
 
 export interface Remote {
-  lines: RemoteLine[]
-  /** How many are connected, over every way in. */
-  connected: number
-  /** Present when any line carries a place: the attribution goes with it. */
+  clients: RemoteClient[]
+  /** Present when any client carries a place: the attribution goes with it. */
   locations?: GeoStatus
 }
 
@@ -141,7 +157,7 @@ export function buildRemote({
   clients?: RemoteClients
 }): Remote | undefined {
   const places = clients?.places ?? {}
-  const lines: RemoteLine[] = []
+  const out: RemoteClient[] = []
   let placed = false
   const where = (addr?: string) => {
     const p = addr ? places[addr] : undefined
@@ -150,17 +166,9 @@ export function buildRemote({
   }
 
   if (tunnel?.enabled) {
-    const online = tunnel.peers.filter((p) => p.online)
-    for (const p of online) {
+    for (const p of tunnel.peers.filter((p) => p.online)) {
       const addr = p.endpoint ? hostOf(p.endpoint) : undefined
-      lines.push({ key: `wg:${p.name}`, via: 'WireGuard', who: p.name, where: where(addr) ?? addr })
-    }
-    if (online.length === 0) {
-      lines.push({
-        key: 'wg',
-        via: 'WireGuard',
-        note: tunnel.peers.length === 0 ? 'no devices yet' : 'nobody connected',
-      })
+      out.push({ key: `wg:${p.name}`, via: 'WireGuard', who: p.name, where: where(addr) ?? addr })
     }
   }
 
@@ -169,26 +177,14 @@ export function buildRemote({
     ['SOCKS5', 'socks5', socks],
   ]
   for (const [label, name, status] of proxies) {
-    if (!status?.enabled) continue
-    const running = status.service?.active ?? false
-    const seen = clients?.proxies.find((p) => p.proxy === name)?.clients ?? []
-    if (!running && status.service) {
-      lines.push({ key: name, via: label, note: 'not running', fault: true })
-      continue
+    if (!status?.enabled || (status.service && !status.service.active)) continue
+    for (const c of clients?.proxies.find((p) => p.proxy === name)?.clients ?? []) {
+      out.push({ key: `${name}:${c.address}`, via: label, who: c.address, address: true, where: where(c.address) })
     }
-    for (const c of seen) {
-      lines.push({ key: `${name}:${c.address}`, via: label, who: c.address, address: true, where: where(c.address) })
-    }
-    if (seen.length === 0) lines.push({ key: name, via: label, note: 'nobody connected' })
   }
 
-  if (lines.length === 0) return undefined
-  lines.forEach((l, i) => (l.first = i === 0 || lines[i - 1].via !== l.via))
-  return {
-    lines,
-    connected: lines.filter((l) => l.who).length,
-    locations: placed ? clients?.locations : undefined,
-  }
+  if (out.length === 0) return undefined
+  return { clients: out, locations: placed ? clients?.locations : undefined }
 }
 
 /** "China Telecom · CN". The network owner leads: it is what someone recognises as theirs. */

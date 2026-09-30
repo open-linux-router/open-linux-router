@@ -47,12 +47,15 @@ export function formatRate(bytesPerSecond: number): string {
  * unit, "8.8k" and "415M" rather than "8.8 kbps" and "415 Mbps". The row
  * already says these are rates by its arrows, and at a glance the digits that
  * matter are the first two and the letter — the rest was width taken from the
- * device's name. Anything under a kilobit is "<1k": at that size the number is
- * noise, and "505" without a unit would read as more than "8.8k".
+ * device's name. Anything under a kilobit rounds up to "1k": at that size the
+ * number is noise, "505" without a unit would read as more than "8.8k", and
+ * "<1k" was the one figure on the map written differently from the rest.
+ * Nothing at all is "0".
  */
 export function formatRateCompact(bytesPerSecond: number): string {
   const bits = bytesPerSecond * 8
-  if (bits < 1000) return '<1k'
+  if (bits < 0.5) return '0'
+  if (bits < 1000) return '1k'
   const units = ['k', 'M', 'G', 'T']
   let value = bits / 1000
   let i = 0

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 
 import { Skeleton } from '@/components/ui/skeleton'
 import { useInterfaces } from '@/features/link/queries'
-import { layout, remoteHeight, type Box, type Density, type Item, type Layout } from '@/features/topology/layout'
+import { layout, type Box, type Density, type Item, type Layout } from '@/features/topology/layout'
 import { Links } from '@/features/topology/links'
 import { buildTree, shownExits } from '@/features/topology/model'
 import {
@@ -16,7 +16,6 @@ import {
   PickNode,
   RemoteNode,
   RouterNode,
-  UpstreamNode,
   type MapActions,
   type NetworkInfo,
 } from '@/features/topology/nodes'
@@ -182,11 +181,17 @@ function Canvas({
   onDensity?: (density: Density) => void
   actions: MapActions
 }) {
+  // The router in front, when it is a device the operator knows, is drawn at
+  // the top as the internet node and not again in its group: one device, one
+  // node.
+  const upstreamMac = outside?.upstream?.device?.mac
+  const listed = useMemo(() => (upstreamMac ? all.filter((d) => d.mac !== upstreamMac) : all), [all, upstreamMac])
+
   // Hold the order still while the pointer is over the map: see buildTree.
   const [frozen, setFrozen] = useState<Map<string, number> | null>(null)
   const tree = useMemo(
-    () => buildTree({ devices: all, groups, traffic, filter, network, frozen }),
-    [all, groups, traffic, filter, network, frozen],
+    () => buildTree({ devices: listed, groups, traffic, filter, network, frozen }),
+    [listed, groups, traffic, filter, network, frozen],
   )
 
   // Bars are scaled against the busiest device on the whole map, not the busiest
@@ -259,12 +264,9 @@ function Canvas({
   const outsideInput = useMemo(
     () =>
       outside && {
-        upstream: Boolean(outside.upstream),
         upstreamDown: outside.upstream?.down ?? false,
         noRoute: outside.internet.noRoute,
-        remote: remote && {
-          h: remoteHeight(remote.lines, Boolean(remote.locations)),
-        },
+        remote: remote?.clients.map((c) => c.key),
       },
     [outside, remote],
   )
@@ -361,11 +363,19 @@ function Canvas({
       case 'note':
         return <NoteNode note={item.note} filtering={tree.filtering} onCreateGroup={actions.onCreateGroup} />
       case 'internet':
-        return outside ? <InternetNode internet={outside.internet} /> : null
-      case 'upstream':
-        return outside?.upstream ? <UpstreamNode upstream={outside.upstream} /> : null
-      case 'remote':
-        return remote ? <RemoteNode remote={remote} /> : null
+        return outside ? (
+          <InternetNode internet={outside.internet} upstream={outside.upstream} onSelect={actions.onSelect} />
+        ) : null
+      case 'remote': {
+        const client = remote?.clients.find((c) => c.key === item.client)
+        return (
+          <RemoteNode
+            client={client}
+            more={item.more}
+            source={client?.where ? remote?.locations?.source : undefined}
+          />
+        )
+      }
       case 'exit':
         return (
           <ExitNode
