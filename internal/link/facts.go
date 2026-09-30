@@ -49,6 +49,11 @@ type Info struct {
 	// "not up" because they need different answers from the operator, and
 	// because flattening them would make `olr adopt eth9` look like it worked.
 	Present bool
+
+	// Network names the network this interface carries, empty when none. It
+	// is how a consumer tells an interface this router *serves* from one it
+	// was merely handed — the uplink is adopted too.
+	Network string
 }
 
 // Facts joins the kernel's interfaces with the adopted set.
@@ -111,17 +116,25 @@ func Join(cfg Config, observed []Interface) []Info {
 	seen := make(map[string]bool, len(observed))
 	for _, iface := range observed {
 		seen[iface.Name] = true
-		out = append(out, Info{
+		info := Info{
 			Name:     iface.Name,
 			Adopted:  cfg.IsAdopted(iface.Name),
 			Up:       iface.Up,
 			Prefixes: iface.Prefixes,
 			Present:  true,
-		})
+		}
+		if n, ok := cfg.NetworkFor(iface.Name); ok {
+			info.Network = n.Name
+		}
+		out = append(out, info)
 	}
 	for _, name := range cfg.Adopted {
 		if !seen[name] {
-			out = append(out, Info{Name: name, Adopted: true})
+			info := Info{Name: name, Adopted: true}
+			if n, ok := cfg.NetworkFor(name); ok {
+				info.Network = n.Name
+			}
+			out = append(out, info)
 		}
 	}
 

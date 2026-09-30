@@ -82,11 +82,19 @@ func rangeText(p Pool) string {
 // R6's pairs. The tables above drop NTP servers and extra options to fit a
 // terminal; these are where an operator finds out those are set at all.
 
+// ipv6Text is the mode, and the advertised MTU when there is one.
+func ipv6Text(p Pool) string {
+	if p.IPv6 != nil && p.IPv6.MTU > 0 {
+		return fmt.Sprintf("%s, mtu %d", p.RA(), p.IPv6.MTU)
+	}
+	return string(p.RA())
+}
+
 func writePoolText(w io.Writer, p Pool) error {
 	rows := [][2]string{
 		{"network", p.Network},
 		{"ipv4", rangeText(p)},
-		{"ipv6", string(p.RA())},
+		{"ipv6", ipv6Text(p)},
 		{"lease", fmt.Sprintf("%s", p.LeaseTimeOrDefault())},
 		{"gateway", orRouter(p.Gateway == nil, addrOrEmpty(p.Gateway))},
 		{"dns", orRouter(len(p.DNS) == 0, joinAddrs(p.DNS))},

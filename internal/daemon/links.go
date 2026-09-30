@@ -90,6 +90,7 @@ func (l dnsLinkView) Interface(name string) (dns.LinkInfo, error) {
 		Adopted:  info.Adopted,
 		Up:       info.Up,
 		Prefixes: info.Prefixes,
+		Network:  info.Network,
 	}, nil
 }
 
@@ -105,6 +106,7 @@ func (l dnsLinkView) Interfaces() ([]dns.LinkInfo, error) {
 			Adopted:  info.Adopted,
 			Up:       info.Up,
 			Prefixes: info.Prefixes,
+			Network:  info.Network,
 		})
 	}
 	return out, nil

@@ -213,6 +213,33 @@ func TestDerivedAllowFromExcludesTheUplink(t *testing.T) {
 	}
 }
 
+// A network numbered from a public IPv6 prefix — a tunnel broker's, an ISP's
+// delegation — is still a LAN, and its clients ask over IPv6 from that prefix.
+// The private filter refused them. On a network member every routable prefix
+// is in; on an interface that is merely adopted, the uplink, it still is not.
+func TestAPublicIPv6PrefixOnANetworkIsAllowed(t *testing.T) {
+	links := StaticLinks{
+		"lan0": {Name: "lan0", Adopted: true, Up: true, Network: "lan", Prefixes: []netip.Prefix{
+			netip.MustParsePrefix("192.168.10.1/24"),
+			netip.MustParsePrefix("2001:db8:1:1::1/64"),
+		}},
+		"wan0": {Name: "wan0", Adopted: true, Up: true, Prefixes: []netip.Prefix{
+			netip.MustParsePrefix("203.0.113.7/24"),
+			netip.MustParsePrefix("2001:db8:ffff::5/64"),
+		}},
+	}
+	got := LANPrefixes(links)
+	want := map[string]bool{"192.168.10.0/24": true, "2001:db8:1:1::/64": true}
+	if len(got) != len(want) {
+		t.Fatalf("derived %v, want %v", got, want)
+	}
+	for _, p := range got {
+		if !want[p.String()] {
+			t.Errorf("unexpected %s in %v", p, got)
+		}
+	}
+}
+
 // Derivation reads the box, not the stored config, so a renumbered network is
 // followed rather than leaving the relay answering nobody.
 func TestDerivedAllowFromFollowsTheNetwork(t *testing.T) {

@@ -23,7 +23,7 @@
 //
 // `GatewayConfig.ipv6_forwarding` was added the same way, spelled as
 // internal/gateway/config.go marshals it, and so were `Network.ipv6` and
-// `NetworkIPv6`, as internal/link/config.go marshals them.
+// `NetworkIPv6`, as internal/link/config.go marshals them, and `PoolIPv6.mtu`.
 
 /**
  * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
@@ -260,6 +260,7 @@ export interface PoolIPv4 {
 }
 export interface PoolIPv6 {
   mode?: RouterAdvertisementMode
+  mtu?: number
 }
 export interface Option {
   option: string

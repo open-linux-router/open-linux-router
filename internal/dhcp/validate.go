@@ -315,6 +315,16 @@ func validatePoolIPv6(r *Result, path string, p Pool, n NetworkInfo) {
 				"they get no DHCPv6 address at all. They still work via the advertised prefix, "+
 				"but anything depending on a DHCPv6 lease will not see them")
 	}
+	if m := p.IPv6.MTU; m != 0 {
+		switch {
+		case p.IPv6.Mode.OrDefault() == RAOff:
+			r.errorf(path+".ipv6.mtu", "an MTU is advertised in router advertisements, and this "+
+				"network sends none; set ipv6.mode, or drop the MTU")
+		case m < 1280 || m > 65535:
+			// 1280 is IPv6's floor (RFC 8200 §5); dnsmasq refuses less.
+			r.errorf(path+".ipv6.mtu", "%d is outside 1280–65535", m)
+		}
+	}
 	if len(n.Members) == 0 {
 		r.warnf(path+".ipv6", "%q has no interface, so nothing can be advertised on it", n.Name)
 	}

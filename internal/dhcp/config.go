@@ -155,6 +155,17 @@ type PoolIPv6 struct {
 	// re-rendered by us. A literal IPv6 range would have to be retyped every
 	// time the uplink's delegation moved.
 	Mode RAMode `json:"mode,omitempty"`
+
+	// MTU is advertised in the router advertisement, so clients size their
+	// packets to it rather than to their own link. Zero advertises none, and
+	// clients use the interface's own MTU.
+	//
+	// Typed, not read off the uplink. It matters when IPv6 leaves by a tunnel
+	// narrower than the LAN — 1480 for a 6in4 tunnel under 1500 — and that is
+	// `dial`'s fact; this module does not go and find it (design.md §4.3). The
+	// tunnel still works without it, through Packet Too Big, until something
+	// on the path drops ICMPv6 and large transfers stall.
+	MTU int `json:"mtu,omitempty"`
 }
 
 // LeaseTimeOrDefault resolves the zero value.

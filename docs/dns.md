@@ -493,6 +493,12 @@ Three parts of that are load-bearing:
   the uplink's own subnet in the allow list and stand up an open resolver by
   default. §5 calls that an amplifier, and arriving at it helpfully is the worst
   way to arrive at it.
+  **Except on a network member**, where every routable prefix is in. An
+  interface that carries a `link` network is a LAN by declaration, which is the
+  fact the private filter was only ever guessing at — and the guess was wrong
+  for IPv6: a network numbered from a delegated or a tunnel broker's prefix is
+  public, and its clients' queries over IPv6 were refused. The uplink is never a
+  network member (dial refuses it), so the amplifier stays shut.
 - **A pinned address is honoured, and is not allowed to be fatal.** An operator
   who names addresses owns them, but "owns it" cannot mean "the house loses DNS
   until they notice". The relay tries intent first and falls back to the

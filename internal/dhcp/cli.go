@@ -284,6 +284,8 @@ type poolFlags struct {
 	ntp      []string
 	domain   string
 	ipv6     string
+	ipv6MTU  int
+	noMTU    bool
 	options  []string
 	noGate   bool
 	clearDNS bool
@@ -307,11 +309,15 @@ func (f *poolFlags) register(c *cobra.Command) {
 	c.Flags().StringArrayVar(&f.ntp, "ntp", nil, "NTP server to advertise, repeatable")
 	c.Flags().StringVar(&f.domain, "domain", "", "search domain to advertise")
 	c.Flags().StringVar(&f.ipv6, "ipv6", "", fmt.Sprintf("IPv6 mode: %s", joinRAModes()))
+	c.Flags().IntVar(&f.ipv6MTU, "ipv6-mtu", 0,
+		"MTU to advertise with IPv6, e.g. 1480 when IPv6 leaves by a 6in4 tunnel")
+	c.Flags().BoolVar(&f.noMTU, "no-ipv6-mtu", false, "advertise no MTU; clients use their own link's")
 	c.Flags().StringArrayVar(&f.options, "option", nil, "extra DHCP option as CODE=VALUE, repeatable")
 
 	c.MarkFlagsMutuallyExclusive("gateway", "no-gateway")
 	c.MarkFlagsMutuallyExclusive("dns", "no-dns")
 	c.MarkFlagsMutuallyExclusive("range", "no-range")
+	c.MarkFlagsMutuallyExclusive("ipv6-mtu", "no-ipv6-mtu")
 	cli.EnumFlag(c, "ipv6", raModeNames()...)
 }
 
@@ -377,8 +383,24 @@ func (f *poolFlags) apply(c *cobra.Command, p *Pool) error {
 		if mode.OrDefault() == RAOff {
 			p.IPv6 = nil
 		} else {
-			p.IPv6 = &PoolIPv6{Mode: mode}
+			// The MTU survives a mode change; only --no-ipv6-mtu drops it.
+			v6 := PoolIPv6{Mode: mode}
+			if p.IPv6 != nil {
+				v6.MTU = p.IPv6.MTU
+			}
+			p.IPv6 = &v6
 		}
+	}
+	switch {
+	case f.noMTU:
+		if p.IPv6 != nil {
+			p.IPv6.MTU = 0
+		}
+	case c.Flags().Changed("ipv6-mtu"):
+		if p.IPv6 == nil {
+			return fmt.Errorf("--ipv6-mtu needs IPv6 on this network; set --ipv6 %s too", RASLAAC)
+		}
+		p.IPv6.MTU = f.ipv6MTU
 	}
 	if c.Flags().Changed("option") {
 		opts, err := parseOptions(f.options)

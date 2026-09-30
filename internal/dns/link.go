@@ -45,6 +45,12 @@ type LinkInfo struct {
 
 	// Prefixes are the addresses configured on the interface, with masks.
 	Prefixes []netip.Prefix `json:"prefixes"`
+
+	// Network names the `link` network this interface carries, empty when it
+	// carries none. An interface with one is a network this router serves by
+	// declaration, so every routable prefix on it is a LAN — public IPv6
+	// included (LANPrefixes).
+	Network string `json:"network,omitempty"`
 }
 
 // ErrNoSuchInterface is returned by LinkView.Interface for an unknown name.
@@ -113,10 +119,18 @@ func InterfaceWithAddress(links LinkView, addr netip.Addr) (LinkInfo, bool) {
 // transactions and there is no notification path between link and dns — this is
 // what makes one unnecessary rather than missing.
 //
-// Private prefixes only, and that is the load-bearing filter now that the
-// listen address no longer narrows anything: the WAN is adopted too (gateway
-// and firewall need it), so taking every prefix on every adopted interface
-// would put the uplink's own subnet in the allow list.
+// Private prefixes only on an interface that is merely adopted, and that is the
+// load-bearing filter now that the listen address no longer narrows anything:
+// the WAN is adopted too (gateway and firewall need it), so taking every prefix
+// on every adopted interface would put the uplink's own subnet in the allow
+// list.
+//
+// Every routable prefix on an interface that carries a network. The private
+// filter was a stand-in for "a network this router serves", from before link
+// could say so, and it is wrong for IPv6: a LAN numbered from a delegated or a
+// tunnel broker's prefix is public, so its clients' queries over IPv6 were
+// refused. A network member is a LAN by declaration, which is the fact the
+// filter was guessing at.
 func LANPrefixes(links LinkView) []netip.Prefix {
 	infos, err := links.Interfaces()
 	if err != nil {
@@ -135,7 +149,7 @@ func LANPrefixes(links LinkView) []netip.Prefix {
 			continue
 		}
 		for _, prefix := range info.Prefixes {
-			if !servedAddress(prefix.Addr()) {
+			if !servedAddress(prefix.Addr()) && !(info.Network != "" && routable(prefix.Addr())) {
 				continue
 			}
 			masked := prefix.Masked()
@@ -188,6 +202,13 @@ func servedAddress(addr netip.Addr) bool {
 		return false
 	}
 	return addr.IsPrivate()
+}
+
+// routable is servedAddress without the private test: an address a client on
+// a served network could be sending from.
+func routable(addr netip.Addr) bool {
+	return addr.IsValid() && !addr.IsUnspecified() && !addr.IsLoopback() &&
+		!addr.IsLinkLocalUnicast() && !addr.IsMulticast()
 }
 
 // StaticLinks is a LinkView backed by a map, for tests.

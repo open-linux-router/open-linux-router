@@ -217,7 +217,9 @@ export function PoolDialog({
               onValueChange={(v) =>
                 field(
                   'ipv6',
-                  !v || v === 'off' ? undefined : { mode: v as RouterAdvertisementMode },
+                  !v || v === 'off'
+                    ? undefined
+                    : { ...draft.ipv6, mode: v as RouterAdvertisementMode },
                 )
               }
             >
@@ -238,9 +240,32 @@ export function PoolDialog({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              There is no range to set: the prefix comes from your internet connection, and
-              this router follows it when it changes.
+              There is no range to set: the prefix comes from the network&rsquo;s own IPv6
+              address — your internet connection&rsquo;s, or the network&rsquo;s static IPv6
+              subnet — and this router follows it when it changes.
             </p>
+            {draft.ipv6 && (
+              <div className="grid gap-2">
+                <Label htmlFor="pool-ra-mtu">MTU to advertise</Label>
+                <Input
+                  id="pool-ra-mtu"
+                  inputMode="numeric"
+                  value={draft.ipv6.mtu ?? ''}
+                  placeholder="None — devices use their own"
+                  onChange={(e) => {
+                    const n = Number(e.target.value.trim())
+                    field('ipv6', {
+                      ...draft.ipv6,
+                      mtu: e.target.value.trim() && Number.isInteger(n) ? n : undefined,
+                    })
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Set 1480 when IPv6 leaves this router through a 6in4 tunnel, so devices send
+                  packets that fit it.
+                </p>
+              </div>
+            )}
           </fieldset>
 
           <div className="grid gap-2">

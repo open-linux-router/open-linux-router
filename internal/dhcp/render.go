@@ -349,6 +349,13 @@ dhcp-lease-max=%d
 			for _, member := range info.Members {
 				fmt.Fprintf(&b, "dhcp-range=set:%s,%s\n", p.Network, raRange(ra, member, p))
 			}
+			if p.IPv6.MTU > 0 {
+				// The trailing 0 is the RA interval, and zero means dnsmasq's
+				// default; the syntax has no way to set the MTU alone.
+				for _, member := range info.Members {
+					fmt.Fprintf(&b, "ra-param=%s,mtu:%d,0\n", member, p.IPv6.MTU)
+				}
+			}
 		}
 	}
 

@@ -92,6 +92,50 @@ func TestRenderStatefulIPv6(t *testing.T) {
 	renderGolden(t, "stateful-v6", c, testNetworks())
 }
 
+// A 6in4 tunnel is 1480 under a 1500-byte LAN; advertising it keeps clients
+// from depending on Packet Too Big making it back. One ra-param per member,
+// with a zero interval because dnsmasq has no way to set the MTU alone.
+func TestRenderAdvertisesTheIPv6MTU(t *testing.T) {
+	c := validConfig(t)
+	c.Pools[0].IPv6 = &PoolIPv6{Mode: RASLAAC, MTU: 1480}
+	out, err := renderAll(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, ",mtu:1480,0\n") || !strings.Contains(out, "ra-param=") {
+		t.Errorf("no ra-param with the MTU:\n%s", out)
+	}
+
+	c.Pools[0].IPv6.MTU = 0
+	if out, _ := renderAll(c); strings.Contains(out, "ra-param=") {
+		t.Errorf("an unset MTU rendered an ra-param:\n%s", out)
+	}
+}
+
+func renderAll(c Config) (string, error) {
+	rendered, err := NewDnsmasq(DefaultPaths()).Render(c, testNetworks())
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	for _, f := range rendered.Files {
+		b.Write(f.Data)
+	}
+	return b.String(), nil
+}
+
+func TestAnIPv6MTUNeedsIPv6AndAtLeast1280(t *testing.T) {
+	c := validConfig(t)
+	c.Pools[0].IPv6 = &PoolIPv6{Mode: RASLAAC, MTU: 1200}
+	if res := Validate(c, testNetworks()); res.OK() {
+		t.Error("an MTU under IPv6's 1280 floor validated")
+	}
+	c.Pools[0].IPv6 = &PoolIPv6{Mode: RAOff, MTU: 1480}
+	if res := Validate(c, testNetworks()); res.OK() {
+		t.Error("an MTU on a network advertising nothing validated")
+	}
+}
+
 func TestRenderTwoPools(t *testing.T) {
 	c := validConfig(t)
 	c.Pools = append(c.Pools, Pool{
