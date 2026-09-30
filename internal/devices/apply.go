@@ -37,6 +37,10 @@ type Applier struct {
 	// device is placed only when a source saw which interface it was on, which
 	// is a smaller answer rather than a wrong one.
 	Networks NetworkView
+
+	// Seen is when each device was last heard from. Nil leaves every
+	// device's time out rather than claiming it was never heard.
+	Seen *Seen
 }
 
 // Load reads stored intent out of the configuration document.
@@ -116,5 +120,10 @@ func (a Applier) List(ctx context.Context) ([]Resolved, []Problem, error) {
 	}
 
 	list, joinProblems := Build(cfg, sightings, fixed, networks)
+	for i := range list {
+		if at, ok := a.Seen.LastSeen(list[i].MAC); ok {
+			list[i].LastSeen = &at
+		}
+	}
 	return list, append(problems, joinProblems...), nil
 }

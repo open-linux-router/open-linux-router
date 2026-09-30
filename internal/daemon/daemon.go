@@ -325,6 +325,10 @@ func run(args []string) error {
 		Events:  srv.Events(),
 	}.Routes(), dns.Config{})
 
+	// When each device was last heard from: the one piece of presence the
+	// devices module keeps, sampled below for as long as olrd runs.
+	seen := devices.NewSeen(devices.SeenPath(opts.root), devices.Neighbours{}, logger)
+
 	// Hoisted out of the Mount call because `ingress` reads devices through it
 	// too. One Applier, so both surfaces answer from the same join rather than
 	// from two that could drift.
@@ -339,6 +343,7 @@ func run(args []string) error {
 		},
 		Fixed:    dhcpFixedAddresses{applier: applier},
 		Networks: dhcpNetworks{applier: applier},
+		Seen:     seen,
 	}
 
 	srv.Mount(devices.ModuleName, devices.HTTP{
@@ -579,6 +584,8 @@ func run(args []string) error {
 		dhcpBackend(applier),
 	}, superviseEvery, logger)
 
+	go seen.Run(ctx, seenEvery, seenWrite)
+
 	var listeners []net.Listener
 
 	unix, err := core.ListenUnix(opts.socket)
@@ -630,8 +637,20 @@ func run(args []string) error {
 	for _, l := range listeners {
 		l.Close()
 	}
+	// After the server, so a request still being answered cannot race it.
+	if ferr := seen.Flush(time.Now()); ferr != nil {
+		logger.Warn("could not save last-seen times", "error", ferr)
+	}
 	return err
 }
+
+// How often the neighbour table is sampled, and how often what it heard is
+// written down. A REACHABLE entry lasts about half a minute, so sampling
+// more slowly than that would miss devices that were only briefly heard.
+const (
+	seenEvery = 10 * time.Second
+	seenWrite = 5 * time.Minute
+)
 
 type tcpServer struct {
 	server   *http.Server

@@ -88,6 +88,13 @@ type deviceView struct {
 	// worse than saying we do not know.
 	Network       string `json:"network,omitempty"`
 	NetworkOrigin Origin `json:"network_origin,omitempty"`
+
+	// LastSeen is when the router last heard from the device: the neighbour
+	// table confirming it answers, which any traffic through the router keeps
+	// doing. Absent when it has not been heard since the record began. Unlike
+	// Online it moves only on evidence, so a device that left an hour ago
+	// reads as an hour ago even while a stale entry still lists it.
+	LastSeen *time.Time `json:"last_seen,omitempty"`
 }
 
 func viewDevice(r Resolved) deviceView {
@@ -111,6 +118,7 @@ func viewDevice(r Resolved) deviceView {
 		FixedIP:          r.FixedIP,
 		Network:          r.Network,
 		NetworkOrigin:    r.NetworkOrigin,
+		LastSeen:         r.LastSeen,
 	}
 	if r.Presence != nil {
 		v.IPs = r.Presence.IPs

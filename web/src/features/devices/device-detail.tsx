@@ -28,6 +28,7 @@ import { groupOptions } from '@/features/devices/group-tree'
 import { categoryLabel } from '@/features/devices/icons'
 import type { DeviceRow } from '@/lib/api-types'
 import type { Device, DevicesGroup } from '@/lib/config-types'
+import { formatAgo } from '@/lib/utils'
 
 /**
  * The Select's value for "in no group". Base UI treats an empty string as a
@@ -304,6 +305,9 @@ function Observed({ device }: { device: DeviceRow }) {
   if (device.vendor) rows.push(['Vendor', device.vendor])
   if (device.sources?.length) {
     rows.push(['Seen by', device.sources.map(sourceLabel).join(', ')])
+  }
+  if (device.last_seen) {
+    rows.push(['Last heard', `${formatAgo(device.last_seen)} · ${new Date(device.last_seen).toLocaleString()}`])
   }
   if (device.expires) {
     rows.push(['Lease expires', new Date(device.expires).toLocaleString()])

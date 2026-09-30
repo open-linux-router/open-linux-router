@@ -43,7 +43,7 @@ import type { Outside, RemoteClient } from '@/features/topology/outside'
 import { magnitude, type Flow, type TrafficView } from '@/features/topology/traffic'
 import type { DeviceRow, ExitStatus } from '@/lib/api-types'
 import type { DevicesGroup } from '@/lib/config-types'
-import { cn, formatBytes, formatRate, formatRateCompact } from '@/lib/utils'
+import { cn, formatAgo, formatBytes, formatRate, formatRateCompact } from '@/lib/utils'
 
 /**
  * What the map can ask its page to do. All optional: without them the map is
@@ -656,14 +656,10 @@ export function DeviceNode({
             {density === 'detail' && <Address device={device} />}
           </span>
           <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-            {/* Away is said in words beside the dimmed name, so presence is
-                never colour alone — and a green dot on every row that is fine
-                was the one mark on the list that said nothing. */}
-            {!device.online ? (
-              <span className="text-muted-foreground/70">{device.seen ? 'away' : 'never seen'}</span>
-            ) : traffic.counting ? (
-              <DeviceTraffic flow={flow} rated={traffic.rated} />
-            ) : null}
+            {/* Away is said beside the dimmed name, so presence is never
+                colour alone — and a green dot on every row that is fine was
+                the one mark on the list that said nothing. */}
+            <DeviceTraffic device={device} flow={flow} rated={traffic.rated} counting={traffic.counting} />
           </span>
         </Shell>
         {onMoveDevice && (
@@ -732,7 +728,7 @@ export function DeviceNode({
                 />
               </span>
               <span className="shrink-0 text-[10.5px] leading-3 text-muted-foreground tabular-nums">
-                <DeviceTraffic flow={flow} rated={traffic.rated} />
+                <DeviceTraffic device={device} flow={flow} rated={traffic.rated} counting />
               </span>
             </span>
           )}
@@ -813,17 +809,29 @@ function Address({ device }: { device: DeviceRow }) {
 }
 
 /**
- * A node's figure: both rates when there are rates, and until then the running
- * total — one number, because "↓ 0 bps ↑ 0 bps" before the second sample would
- * claim an idleness nobody measured.
+ * A node's figure: both rates when something is moving, and until the second
+ * sample the running total — one number, because "↓ 0 bps ↑ 0 bps" before it
+ * would claim an idleness nobody measured.
+ *
+ * When nothing is moving, or the device is away, it is when the router last
+ * heard from it: "4m ago", "2h ago". That is one answer for what used to be
+ * three words — idle, away, and a dash for a device never counted — and it
+ * is the one that says something, since a quiet device that is here and one
+ * that left at breakfast are both "not moving".
  */
-function DeviceTraffic({ flow, rated }: { flow?: Flow; rated: boolean }) {
-  // Never counted and counted-but-quiet are one answer to someone looking at
-  // the map — nothing is moving — so they are one word. The first used to be
-  // a dash, which read as "unknown" beside a row that said "idle".
-  if (!flow || (rated && (flow.downRate ?? 0) + (flow.upRate ?? 0) < 1)) {
-    return <span className="text-muted-foreground/60">idle</span>
-  }
+function DeviceTraffic({
+  device,
+  flow,
+  rated,
+  counting,
+}: {
+  device: DeviceRow
+  flow?: Flow
+  rated: boolean
+  counting: boolean
+}) {
+  const moving = device.online && counting && flow && (!rated || (flow.downRate ?? 0) + (flow.upRate ?? 0) >= 1)
+  if (!moving) return <Quiet device={device} />
   if (!rated) return <>{formatBytes(flow.down + flow.up)}</>
   const down = flow.downRate ?? 0
   const up = flow.upRate ?? 0
@@ -833,6 +841,19 @@ function DeviceTraffic({ flow, rated }: { flow?: Flow; rated: boolean }) {
     <span title={`↓ ${formatRate(down)}  ↑ ${formatRate(up)}`}>
       <span className="text-foreground/75">↓{formatRateCompact(down)}</span>
       <span className="ml-1">↑{formatRateCompact(up)}</span>
+    </span>
+  )
+}
+
+/** When a device was last heard, or the word for why there is no time. */
+function Quiet({ device }: { device: DeviceRow }) {
+  const at = device.last_seen
+  return (
+    <span
+      className="text-muted-foreground/60"
+      title={at ? `Last heard ${new Date(at).toLocaleString()}` : undefined}
+    >
+      {at ? formatAgo(at) : device.online ? 'idle' : device.seen ? 'away' : 'never seen'}
     </span>
   )
 }

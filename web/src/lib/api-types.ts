@@ -686,6 +686,15 @@ export interface DeviceRow {
    */
   network?: string
   network_origin?: Origin
+
+  /**
+   * When the router last heard from it: the neighbour table confirming it
+   * answers, which any traffic through the router keeps doing. Absent when it
+   * has not been heard since olrd started keeping the record. Moves only on
+   * evidence, so it can say "an hour ago" while `online` still says yes off a
+   * stale entry.
+   */
+  last_seen?: string
 }
 
 export interface DeviceList {

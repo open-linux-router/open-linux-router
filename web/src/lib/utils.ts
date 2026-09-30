@@ -43,6 +43,20 @@ export function formatRate(bytesPerSecond: number): string {
 }
 
 /**
+ * How long ago, in the fewest characters that still read: "now", "4m ago",
+ * "2h ago", "3d ago". For a row with no room — a precise time belongs in a
+ * tooltip beside it.
+ */
+export function formatAgo(iso: string, now = Date.now()): string {
+  const minutes = Math.floor((now - Date.parse(iso)) / 60_000)
+  if (!(minutes >= 1)) return 'now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 48) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
+
+/**
  * formatRate for a row with no room: two significant figures and a one-letter
  * unit, "8.8k" and "415M" rather than "8.8 kbps" and "415 Mbps". The row
  * already says these are rates by its arrows, and at a glance the digits that

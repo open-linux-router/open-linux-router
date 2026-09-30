@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+	"time"
 )
 
 // The device list is the join design.md §4.4 describes: identity, which is
@@ -172,6 +173,11 @@ type Resolved struct {
 	// than filing it under a plausible network.
 	Network       string
 	NetworkOrigin Origin
+
+	// LastSeen is when the device was last heard from — see seen.go. Nil when
+	// it has not been heard since the record began, which is not the same as
+	// never seen: Presence can list it from a lease all the same.
+	LastSeen *time.Time
 }
 
 // Online reports whether any source considers the device current.

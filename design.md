@@ -641,6 +641,13 @@ halves**, and keeping them distinct is the whole trick:
 | **Identity** — intent | user-given name, fixed address, blocked | ours, stored, revisioned |
 | **Presence** — observed | online, current address, last seen | read-through, never stored as truth |
 
+The one exception is *last seen*. No source remembers a device once it has
+gone, so `devices` keeps it: a MAC → time record sampled from the neighbour
+table (REACHABLE entries only) every few seconds, in
+`/var/lib/open-linux-router/devices/seen.json`, apart from olr.json because it
+is history, not intent. It can be deleted at any time and costs only that
+history. See internal/devices/seen.go.
+
 Devices are a *foundation* object, not an operational one: `dhcp` references
 them for fixed addresses, `gateway` for per-device routing and forwards, `qos`
 for shaping, `dns` for names. `gateway` must not have to depend on `dhcp` to
