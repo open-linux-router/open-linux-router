@@ -16,6 +16,8 @@ import {
 import { Switch } from '@/components/ui/switch'
 import type { ProxyStatus } from '@/lib/api-types'
 
+import { WayMark } from './way-mark'
+
 import { ProxyLinkDialog } from './proxy-link'
 import { shadowsocksChange, useShadowsocksLink } from './queries'
 import type { useRemoteApply } from './use-apply'
@@ -72,7 +74,7 @@ export function ProxyCard({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Globe className="size-4 text-muted-foreground" />
+            <WayMark way="shadowsocks" fallback={Globe} className="size-4" />
             Shadowsocks
             <ProxyBadge status={status} />
           </CardTitle>

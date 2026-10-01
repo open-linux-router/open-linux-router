@@ -44,7 +44,11 @@ different to share a picture: an eight-bay NAS is not the two-bay box, and a
 Mac mini is not the iMac that `apple/desktop` draws. A variant is keyed under
 what it is a shape *of* — `nas/4bay`, `apple/desktop/mini` — and the list is
 closed, in `variants` in `internal/devices/icon.go` and hand-mirrored as
-`VariantKey` in `features/devices/icons.ts`. Detection never picks one; only an
+`VariantKey` in `features/devices/icons.ts`. The brandless pair matter most at
+home, because they are what a home runs: `server/tower` is the PC under a desk
+that is really a server, and `desktop/mini` is the small box on a shelf that is
+really a computer — neither is the rack unit or the monitor-and-tower the plain
+category draws. Detection never picks one; only an
 operator does, from the picker, where brandless variants sit beside their
 category's tile and vendor ones among the brands. Drawn like the tier they
 belong to — a brandless variant is tier 1, Apple's is tier 1.5 — and changed
@@ -166,6 +170,33 @@ Adding one is an SVG in `../os-marks/`, a line in `OS_MARKS` in
 `features/devices/icons.ts`, and the same key in `operatingSystems` in
 `internal/devices/icon.go`, which is what the stored value is validated
 against.
+
+## Protocol marks
+
+The other place a logo is allowed, and the narrower one: WireGuard's knot and
+Shadowsocks' paper plane, worn by the nodes on the map that say how somebody
+reached this router. Same argument as the OS marks — "a picture of WireGuard"
+is a grey box — and the same treatment: flat colour artwork in the quiet tile,
+never floating bare.
+
+They live in `../way-marks/`, one SVG each. WireGuard's is from
+[thesvg.org](https://thesvg.org) (MIT) like the OS marks; Shadowsocks' is the
+project's own paper plane, transcribed from the vector in its Android client.
+Both carry the red the two brands share, which is why they sit together on one
+map without either looking borrowed.
+
+**Not part of the device vocabulary, and that is the difference from the OS
+marks.** An OS mark is *identity* — it says this machine runs Debian — so it is
+stored on the device and validated by `Icon`. Which way a connection arrived is
+read from the status of whatever is running, is stored nowhere, and is therefore
+just a lookup the UI does while rendering: `WAY_MARKS` in
+`features/remote/way-marks.ts`, reached through `WayMark`. Adding one is an SVG
+and a line in that map. Nothing in Go changes, and no config can name it.
+
+The fallback is the caller's own line glyph rather than a stand-in picture, for
+the reason every other gap in this set falls back to a glyph: SOCKS5 has no mark,
+shares no artwork with Shadowsocks, and is better served by a plain icon than by
+someone else's logo.
 
 ## Adding one
 

@@ -24,6 +24,16 @@
 // `GatewayConfig.ipv6_forwarding` was added the same way, spelled as
 // internal/gateway/config.go marshals it, and so were `Network.ipv6` and
 // `NetworkIPv6`, as internal/link/config.go marshals them, and `PoolIPv6.mtu`.
+//
+// The `modem` category is the same story again, and it was checked against a
+// real run rather than assumed: a 2026-10-01 `make types` against a live olrd
+// put 'modem' between 'sbc' and 'router', which is where it is below. That run
+// could not replace the file, and the reason is worth writing down — it is the
+// same reason as before, and it is now the whole file rather than one type.
+// Regenerating renames `DevicesGroup` to `Group` and drops `DevicesGroup.parent`
+// with it, which breaks `npm run build` for every module that imports it. So the
+// file still cannot be regenerated wholesale until the UI is moved onto the
+// generated names; until then this header is the record of what is hand-kept.
 
 /**
  * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
@@ -58,6 +68,7 @@ export type DeviceCategory =
   | 'nas'
   | 'server'
   | 'sbc'
+  | 'modem'
   | 'router'
   | 'accesspoint'
   | 'switch'

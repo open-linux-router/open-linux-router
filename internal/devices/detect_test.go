@@ -34,6 +34,14 @@ func TestDetectFromHostname(t *testing.T) {
 		{"hyd-airer-znlyj_mibt4a2c", CategoryAirer},
 		{"viomi-fridge-v3", CategoryFridge},
 		{"viomi-washer-v5", CategoryWasher},
+		// The provider's box, announcing its own part number, which is how
+		// most ONTs arrive on a LAN.
+		{"HG8145V5", CategoryModem},
+		{"hg8245h", CategoryModem},
+		{"ZXHN-F670L", CategoryModem},
+		{"FiberHome-AN5506", CategoryModem},
+		{"home-gpon", CategoryModem},
+		{"modem", CategoryModem},
 	}
 	for _, tc := range tests {
 		got := Detect("aa:bb:cc:dd:ee:ff", tc.hostname)
@@ -59,6 +67,12 @@ func TestDetectDoesNotMatchInsideAWord(t *testing.T) {
 		{"jonas", CategoryNAS},
 		{"thomas", CategoryNAS},
 		{"nasa-workstation", CategoryNAS},
+		// "ont" and "modem" are the opening of unrelated words, which is why
+		// both rules are exact. A hostname that merely begins with one is not
+		// evidence of anything, and the provider's box is exactly the device
+		// whose name people *do* change.
+		{"ontario-laptop", CategoryModem},
+		{"modemrouter", CategoryModem},
 	}
 	for _, tc := range tests {
 		got := Detect("aa:bb:cc:dd:ee:ff", tc.hostname)

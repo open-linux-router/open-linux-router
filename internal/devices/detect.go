@@ -181,6 +181,27 @@ var hostnameRules = []hostnameRule{
 	{"roomba", CategoryVacuum, false},
 
 	// Network infrastructure.
+	//
+	// The provider's box first, because it is upstream of everything else and
+	// because an ONT is the one device on a home LAN that announces its own
+	// part number as its hostname: "HG8145V5" is a Huawei fibre modem,
+	// "ZXHN-F670L" a ZTE one. That is the most reliable fingerprint in this
+	// table — nobody renames the box the installer left behind.
+	//
+	// "ont" and "modem" are exact for the reason the struct documents: both
+	// are the opening of unrelated words, and an operator who has to correct a
+	// confidently wrong picture is worse off than one who was simply asked.
+	{"hg8145", CategoryModem, false},
+	{"hg8245", CategoryModem, false},
+	{"hg8546", CategoryModem, false},
+	{"hg8045", CategoryModem, false},
+	{"hg6543", CategoryModem, false},
+	{"zxhn", CategoryModem, false},
+	{"fiberhome", CategoryModem, false},
+	{"gpon", CategoryModem, false},
+	{"ont", CategoryModem, true},
+	{"modem", CategoryModem, true},
+
 	{"unifi", CategoryAccessPoint, false},
 	{"accesspoint", CategoryAccessPoint, false},
 	{"openwrt", CategoryRouter, false},

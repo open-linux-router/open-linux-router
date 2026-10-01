@@ -42,6 +42,7 @@ import {
 } from '@/features/remote/queries'
 import { SettingsDialog } from '@/features/remote/settings-dialog'
 import { useRemoteApply } from '@/features/remote/use-apply'
+import { WayMark } from '@/features/remote/way-mark'
 import type { RemotePeer, RemoteStatus } from '@/lib/api-types'
 
 export function RemotePage() {
@@ -268,7 +269,7 @@ function ReachCard({ status, onEdit }: { status?: RemoteStatus; onEdit: () => vo
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <KeyRound className="size-4 text-muted-foreground" />
+          <WayMark way="wireguard" fallback={KeyRound} className="size-4" />
           WireGuard
           {status && !status.endpoint && <Badge variant="destructive">Not set</Badge>}
         </CardTitle>

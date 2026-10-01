@@ -53,6 +53,12 @@ var operatingSystems = []string{
 var variants = map[string][]string{
 	"nas":           {"4bay", "5bay", "6bay", "8bay"},
 	"apple/desktop": {"mini", "studio"},
+	// A tower server is not the rack unit `server` draws, and a mini PC is
+	// not the monitor-and-tower `desktop` draws. Each is the same *kind* of
+	// thing in a shape nothing else in the set shares, which is what a
+	// variant is for — and both are what a home actually runs a server on.
+	"server":  {"tower"},
+	"desktop": {"mini"},
 }
 
 // OperatingSystems returns the OS vocabulary in display order.

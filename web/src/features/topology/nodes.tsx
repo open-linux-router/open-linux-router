@@ -37,6 +37,7 @@ import type { GroupDeletion } from '@/features/devices/group-actions'
 import { groupOptions, MAX_GROUP_DEPTH, parentChoices } from '@/features/devices/group-tree'
 import { Link } from 'react-router'
 
+import { WayMark } from '@/features/remote/way-mark'
 import type { Density, GroupVariant, Hidden } from '@/features/topology/layout'
 import type { MapGroup } from '@/features/topology/model'
 import type { Outside, RemoteClient } from '@/features/topology/outside'
@@ -334,7 +335,15 @@ export function RemoteNode({
       )}
     >
       <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground/75">
-        {client ? <Icon className="size-4" aria-hidden /> : <Plus className="size-4" aria-hidden />}
+        {client ? (
+          // The protocol's own mark, where there is one. Which way in is the
+          // whole of what this node's second line says, so it is worth the
+          // one place in the map where a logo is allowed to appear — the same
+          // exception the device list makes for an operating system's.
+          <WayMark way={client.way} fallback={Icon} className="size-4" />
+        ) : (
+          <Plus className="size-4" aria-hidden />
+        )}
       </span>
       {client ? (
         <span className="flex min-w-0 flex-1 flex-col">

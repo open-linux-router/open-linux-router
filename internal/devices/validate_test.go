@@ -144,7 +144,8 @@ func problemStrings(ps []Problem) string {
 
 func TestValidateIcons(t *testing.T) {
 	for _, icon := range []Icon{"", "apple/laptop", "apple/phone", "os/debian", "os/proxmox", "huawei/laptop",
-		"nas/4bay", "nas/8bay", "apple/desktop/mini", "apple/desktop/studio"} {
+		"nas/4bay", "nas/8bay", "apple/desktop/mini", "apple/desktop/studio",
+		"server/tower", "desktop/mini", "intel/desktop"} {
 		cfg := Config{Devices: []Device{{MAC: "aa:bb:cc:dd:ee:ff", Icon: icon}}}
 		if res := Validate(cfg); !res.OK() {
 			t.Errorf("Validate rejected icon %q: %s", icon, problemStrings(res.Errors))
@@ -162,7 +163,9 @@ func TestValidateIcons(t *testing.T) {
 		"apple/desktop/x",      // not a variant of the iMac's category
 		"nas/3bay",             // not a variant anyone drew
 		"router/4bay",          // routers have no variants
-		"dell/desktop/mini",    // the variant is Apple's, not every vendor's
+		"modem/4bay",           // nor modems
+		"dell/desktop/mini",    // the brandless mini is every vendor's; Dell's is nobody's
+		"server/tower/2u",      // two slashes at most, and a tower has no bays
 		"apple/desktop/mini/x", // two slashes at most
 	} {
 		cfg := Config{Devices: []Device{{MAC: "aa:bb:cc:dd:ee:ff", Icon: icon}}}

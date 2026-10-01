@@ -62,6 +62,14 @@ const (
 	CategorySBC     Category = "sbc"
 
 	// Network infrastructure.
+	//
+	// The modem is the provider's box, upstream of everything an operator
+	// owns: a fibre ONT — the 光猫 on the wall — or a cable or DSL modem. It
+	// earns a category rather than a variant of router because it is a
+	// different *thing*, not a different shape of the same thing: it is
+	// usually not ours, it usually cannot be configured from here, and naming
+	// it is how someone says "the internet comes in through that one".
+	CategoryModem       Category = "modem"
 	CategoryRouter      Category = "router"
 	CategoryAccessPoint Category = "accesspoint"
 	CategorySwitch      Category = "switch"
@@ -91,7 +99,7 @@ var categories = []Category{
 
 	CategoryPrinter, CategoryNAS, CategoryServer, CategorySBC,
 
-	CategoryRouter, CategoryAccessPoint, CategorySwitch, CategoryHub,
+	CategoryModem, CategoryRouter, CategoryAccessPoint, CategorySwitch, CategoryHub,
 }
 
 // Categories returns the vocabulary in display order.

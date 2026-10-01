@@ -5,6 +5,7 @@ import {
   Bot,
   CircuitBoard,
   Droplets,
+  EthernetPort,
   Fan,
   Gamepad2,
   GlassWater,
@@ -44,6 +45,7 @@ import airPurifier from '@/assets/device-icons/airpurifier.webp'
 import camera from '@/assets/device-icons/camera.webp'
 import gameConsole from '@/assets/device-icons/console.webp'
 import desktop from '@/assets/device-icons/desktop.webp'
+import desktopMini from '@/assets/device-icons/desktop-mini.webp'
 import doorbell from '@/assets/device-icons/doorbell.webp'
 import ereader from '@/assets/device-icons/ereader.webp'
 import fridge from '@/assets/device-icons/fridge.webp'
@@ -51,6 +53,7 @@ import hub from '@/assets/device-icons/hub.webp'
 import humidifier from '@/assets/device-icons/humidifier.webp'
 import laptop from '@/assets/device-icons/laptop.webp'
 import light from '@/assets/device-icons/light.webp'
+import modem from '@/assets/device-icons/modem.webp'
 import nas from '@/assets/device-icons/nas.webp'
 import nas4Bay from '@/assets/device-icons/nas-4bay.webp'
 import nas5Bay from '@/assets/device-icons/nas-5bay.webp'
@@ -63,6 +66,7 @@ import router from '@/assets/device-icons/router.webp'
 import sbc from '@/assets/device-icons/sbc.webp'
 import sensor from '@/assets/device-icons/sensor.webp'
 import server from '@/assets/device-icons/server.webp'
+import serverTower from '@/assets/device-icons/server-tower.webp'
 import speaker from '@/assets/device-icons/speaker.webp'
 import networkSwitch from '@/assets/device-icons/switch.webp'
 import tablet from '@/assets/device-icons/tablet.webp'
@@ -93,6 +97,7 @@ import huaweiLaptop from '@/assets/device-icons/huawei-laptop.webp'
 import huaweiPhone from '@/assets/device-icons/huawei-phone.webp'
 import huaweiTablet from '@/assets/device-icons/huawei-tablet.webp'
 import huaweiWatch from '@/assets/device-icons/huawei-watch.webp'
+import intelDesktop from '@/assets/device-icons/intel-desktop.webp'
 import lenovoLaptop from '@/assets/device-icons/lenovo-laptop.webp'
 import lgTv from '@/assets/device-icons/lg-tv.webp'
 import microsoftConsole from '@/assets/device-icons/microsoft-console.webp'
@@ -186,6 +191,8 @@ type VariantKey =
   | 'nas/8bay'
   | 'apple/desktop/mini'
   | 'apple/desktop/studio'
+  | 'server/tower'
+  | 'desktop/mini'
 
 const IMAGES: Partial<Record<IconKey, string>> = {
   accesspoint: accessPoint,
@@ -202,6 +209,7 @@ const IMAGES: Partial<Record<IconKey, string>> = {
   humidifier,
   laptop,
   light,
+  modem,
   nas,
   phone,
   plug,
@@ -225,6 +233,8 @@ const IMAGES: Partial<Record<IconKey, string>> = {
   'nas/5bay': nas5Bay,
   'nas/6bay': nas6Bay,
   'nas/8bay': nas8Bay,
+  'server/tower': serverTower,
+  'desktop/mini': desktopMini,
 
   // In the order the picker shows them: the makers most homes have several
   // things from first, then one-product vendors, then the cupboard.
@@ -263,6 +273,10 @@ const IMAGES: Partial<Record<IconKey, string>> = {
 
   'microsoft/laptop': microsoftLaptop,
   'microsoft/console': microsoftConsole,
+
+  // Beside the other box-makers, not with the phone vendors: the NUC is the
+  // one thing Intel sells that anyone has in a house, and it is a desk.
+  'intel/desktop': intelDesktop,
 
   'lenovo/laptop': lenovoLaptop,
   'lg/tv': lgTv,
@@ -323,6 +337,7 @@ export const LABELS: Record<DeviceCategory, string> = {
   server: 'Server',
   sbc: 'Single-board computer',
 
+  modem: 'Modem',
   router: 'Router',
   accesspoint: 'Access point',
   switch: 'Network switch',
@@ -382,6 +397,7 @@ export const GLYPHS: Record<DeviceCategory, LucideIcon> = {
   server: Server,
   sbc: CircuitBoard,
 
+  modem: EthernetPort,
   router: RouterGlyph,
   accesspoint: Wifi,
   switch: Network,
@@ -518,7 +534,7 @@ export const CATEGORY_GROUPS: { label: string; categories: DeviceCategory[] }[] 
     categories: ['airpurifier', 'waterpurifier', 'humidifier', 'aircon', 'airer', 'fridge', 'washer'],
   },
   { label: 'Computing', categories: ['printer', 'nas', 'server', 'sbc'] },
-  { label: 'Network', categories: ['router', 'accesspoint', 'switch', 'hub'] },
+  { label: 'Network', categories: ['modem', 'router', 'accesspoint', 'switch', 'hub'] },
   { label: 'Other', categories: ['unknown'] },
 ]
 
@@ -631,6 +647,7 @@ const BRAND_LABELS: Partial<Record<IconKey, string>> = {
 
   'microsoft/laptop': 'Surface',
   'microsoft/console': 'Xbox',
+  'intel/desktop': 'Intel NUC',
 
   'lenovo/laptop': 'ThinkPad',
   'lg/tv': 'LG TV',
@@ -674,6 +691,8 @@ const VARIANT_LABELS: Partial<Record<VariantKey, string>> = {
   'nas/5bay': '5-bay NAS',
   'nas/6bay': '6-bay NAS',
   'nas/8bay': '8-bay NAS',
+  'server/tower': 'Tower server',
+  'desktop/mini': 'Mini PC',
 }
 
 /**

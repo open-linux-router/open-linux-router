@@ -1,3 +1,4 @@
+import type { WayKey } from '@/features/remote/way-marks'
 import type {
   DeviceRow,
   DialStatus,
@@ -131,6 +132,13 @@ export interface RemoteClient {
   key: string
   /** The way in: "WireGuard", "Shadowsocks", "SOCKS5". */
   via: string
+  /**
+   * The same way in, as a key rather than a word — what picks the mark the
+   * node wears. Kept beside the label rather than derived from it, because a
+   * label is prose and gets edited: "SOCKS5" was "SOCKS" once, and the mark
+   * lookup would have gone quietly blank with it.
+   */
+  way: WayKey
   /** A device's name, or an address. */
   who: string
   /** `who` is an address rather than a name. */
@@ -168,18 +176,31 @@ export function buildRemote({
   if (tunnel?.enabled) {
     for (const p of tunnel.peers.filter((p) => p.online)) {
       const addr = p.endpoint ? hostOf(p.endpoint) : undefined
-      out.push({ key: `wg:${p.name}`, via: 'WireGuard', who: p.name, where: where(addr) ?? addr })
+      out.push({
+        key: `wg:${p.name}`,
+        via: 'WireGuard',
+        way: 'wireguard',
+        who: p.name,
+        where: where(addr) ?? addr,
+      })
     }
   }
 
-  const proxies: [string, 'shadowsocks' | 'socks5', ProxyStatus | SocksStatus | undefined][] = [
+  const proxies: [string, WayKey, ProxyStatus | SocksStatus | undefined][] = [
     ['Shadowsocks', 'shadowsocks', shadowsocks],
     ['SOCKS5', 'socks5', socks],
   ]
   for (const [label, name, status] of proxies) {
     if (!status?.enabled || (status.service && !status.service.active)) continue
     for (const c of clients?.proxies.find((p) => p.proxy === name)?.clients ?? []) {
-      out.push({ key: `${name}:${c.address}`, via: label, who: c.address, address: true, where: where(c.address) })
+      out.push({
+        key: `${name}:${c.address}`,
+        via: label,
+        way: name,
+        who: c.address,
+        address: true,
+        where: where(c.address),
+      })
     }
   }
 
