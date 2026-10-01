@@ -418,3 +418,23 @@ func (unsupportedStub) Observe(context.Context) (Observed, error) {
 func (unsupportedStub) Apply(context.Context, Desired) ([]Step, error) {
 	return nil, ErrUnsupported
 }
+
+func TestLatencyEndpointReadsWithoutProbing(t *testing.T) {
+	monitor := NewLatencyMonitor()
+	monitor.probe = func(context.Context, string) (float64, error) { t.Error("GET must not probe"); return 0, nil }
+	for _, m := range []*LatencyMonitor{nil, monitor} {
+		h := HTTP{Latency: m}.Handler()
+		w := do(t, h, http.MethodGet, "/latency", nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status %d", w.Code)
+		}
+		s := decode[LatencySnapshot](t, w)
+		want := "measuring"
+		if m == nil {
+			want = "unavailable"
+		}
+		if s.State != want || s.Milliseconds != nil || s.Sites == nil {
+			t.Fatalf("unexpected snapshot: %+v", s)
+		}
+	}
+}

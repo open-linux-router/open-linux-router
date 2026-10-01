@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { GatewayApplyResult, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
+import type { GatewayApplyResult, GatewayLatency, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
 import type { GatewayConfig } from '@/lib/config-types'
 
 // The same polling story as the other modules: EventSource cannot send an
@@ -147,5 +147,13 @@ export function useReapplyGateway() {
   return useMutation({
     mutationFn: () => api.post<GatewayApplyResult>('/api/gateway/apply', undefined),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['gateway'] }),
+  })
+}
+
+export function useGatewayLatency() {
+  return useQuery({
+    queryKey: ['gateway', 'latency'],
+    queryFn: () => api.get<GatewayLatency>('/api/gateway/latency'),
+    refetchInterval: OBSERVED_REFETCH_MS,
   })
 }

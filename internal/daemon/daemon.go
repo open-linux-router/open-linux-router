@@ -371,6 +371,7 @@ func run(args []string) error {
 	// prober can change what the kernel should hold without the operator
 	// touching anything.
 	prober := gateway.NewProber()
+	latency := gateway.NewLatencyMonitor()
 	prober.Log = logger
 	gatewayApplier := gateway.Applier{
 		Kernel: gateway.NewKernel(),
@@ -420,6 +421,7 @@ func run(args []string) error {
 	// routes` and the MCP tool list see one module rather than the two packages
 	// that implement it.
 	srv.Mount(gateway.ModuleName, gateway.HTTP{
+		Latency: latency,
 		Applier: gatewayApplier,
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
@@ -629,6 +631,7 @@ func run(args []string) error {
 	}, superviseEvery, logger)
 
 	go seen.Run(ctx, seenEvery, seenWrite)
+	go latency.Run(ctx)
 
 	var listeners []net.Listener
 

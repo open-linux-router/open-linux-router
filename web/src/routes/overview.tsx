@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowDown, ArrowUp, Check, ChevronRight, Info } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Info, ShieldCheck } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 
@@ -11,7 +11,7 @@ import { useDhcpConfig, useDhcpStatus } from '@/features/dhcp/queries'
 import { useDialStatus } from '@/features/dial/queries'
 import { useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
-import { useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
+import { useGatewayLatency, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import {
   useRemoteClients,
   useRemoteStatus,
@@ -19,11 +19,10 @@ import {
   useSocksStatus,
 } from '@/features/remote/queries'
 import { FirstRun } from '@/features/setup/first-run'
-import { shownExits } from '@/features/topology/model'
 import { NetworkMap } from '@/features/topology/network-map'
 import { buildOutside, buildRemote } from '@/features/topology/outside'
 import { useTrafficView, type TrafficView } from '@/features/topology/traffic'
-import type { DeviceRow, DhcpStatus, DnsStatus, ExitStatus, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
+import type { DeviceRow, DhcpStatus, DnsStatus, GatewayLatency, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
 import { cn, formatBytes, formatRate } from '@/lib/utils'
 
 /**
@@ -36,9 +35,7 @@ import { cn, formatBytes, formatRate } from '@/lib/utils'
  *
  * The order is what an operator asks in order: is anything wrong, how much is
  * this network doing, and what is on it. The answer to the first is the
- * page's headline — one sentence, and when something is wrong it is that
- * thing, never a reassurance above a list of faults (design.md §5.6); the
- * faults follow in full. Then the counters; then the map, which is both the
+ * first card; faults follow the cards in full. Then the map, which is both the
  * only place three modules' answers are joined into one picture and the only
  * place devices are listed.
  *
@@ -67,6 +64,7 @@ export function OverviewPage() {
   const dns = useDnsStatus()
   const gateway = useGatewayStatus()
   const traffic = useGatewayTraffic()
+  const latency = useGatewayLatency()
   const identity = useDevicesConfig()
   const flows = useTrafficView(traffic.data, traffic.isError)
   const history = useRateHistory(flows)
@@ -100,22 +98,15 @@ export function OverviewPage() {
           renders nothing once the router is doing something. */}
       <FirstRun />
 
-      {!idle && (
-        <Headline
-          faults={faults}
-          known={known}
-          devices={devices.data?.devices}
-          exits={gateway.data?.exits}
-          flows={flows}
-        />
-      )}
+      <h1 className="sr-only">Network overview</h1>
+      <Stats devices={devices.data?.devices} traffic={traffic.data} flows={flows} history={history}
+        faults={faults} known={known} idle={idle} failed={dhcp.isError || dns.isError || gateway.isError}
+        latency={latency.data} latencyReadAt={latency.dataUpdatedAt} latencyFailed={latency.isError} trafficFailed={traffic.isError} />
 
       {faults.map((fault) => (
         <Alert key={fault.key} variant={fault.tone === 'bad' ? 'destructive' : 'default'}>
           <AlertTriangle />
-          {/* A single fault is already the headline; saying it twice in a
-              row is the page stammering. */}
-          {faults.length > 1 && <AlertTitle>{fault.title}</AlertTitle>}
+          <AlertTitle>{fault.title}</AlertTitle>
           <AlertDescription className="space-y-2">
             <p>{fault.detail}</p>
             {fault.to && (
@@ -130,15 +121,6 @@ export function OverviewPage() {
           </AlertDescription>
         </Alert>
       ))}
-
-      <Stats
-        devices={devices.data?.devices}
-        dns={dns.data}
-        gateway={gateway.data}
-        traffic={traffic.data}
-        flows={flows}
-        history={history}
-      />
 
       <section aria-label="Your network" className="space-y-4 pt-6">
         <NetworkMap
@@ -169,86 +151,6 @@ export function OverviewPage() {
   )
 }
 
-/**
- * The page's one sentence: all is well, or the thing that is not.
- *
- * One fault is named; several are counted, and the alerts beneath say what
- * each one is. The live rates sit beside it once there are two readings to
- * make a rate from — before that there is nothing honest to show there.
- */
-function Headline({
-  faults,
-  known,
-  devices,
-  exits,
-  flows,
-}: {
-  faults: Fault[]
-  known: boolean
-  devices?: DeviceRow[]
-  exits?: ExitStatus[]
-  flows: TrafficView
-}) {
-  const bad = faults.some((f) => f.tone === 'bad')
-  const title = !known
-    ? undefined
-    : faults.length === 0
-      ? 'Everything’s running smoothly'
-      : faults.length === 1
-        ? faults[0].title
-        : `${faults.length} things need you`
-
-  const here = devices?.filter((d) => d.online).length
-  const ways = shownExits(exits).filter((e) => e.probed)
-  const facts = [
-    devices && `${here} of ${devices.length} ${devices.length === 1 ? 'device' : 'devices'} here`,
-    ways.length > 0 &&
-      `${ways.filter((e) => e.up).length} of ${ways.length} ${ways.length === 1 ? 'way' : 'ways'} out working`,
-  ].filter(Boolean)
-
-  return (
-    <div className="flex flex-wrap items-center gap-x-8 gap-y-5">
-      <div className="flex min-w-0 flex-1 basis-80 items-center gap-4">
-        {title === undefined ? (
-          <Skeleton className="size-12 shrink-0 rounded-full" />
-        ) : (
-          <span
-            className={cn(
-              'flex size-12 shrink-0 items-center justify-center rounded-full',
-              faults.length === 0
-                ? 'bg-success text-white shadow-[0_6px_20px_-4px] shadow-success/60'
-                : bad
-                  ? 'bg-destructive text-white shadow-[0_6px_20px_-4px] shadow-destructive/50'
-                  : 'bg-muted text-foreground',
-            )}
-          >
-            {faults.length === 0 ? (
-              <Check className="size-6" strokeWidth={2.75} aria-hidden />
-            ) : (
-              <AlertTriangle className="size-5.5" aria-hidden />
-            )}
-          </span>
-        )}
-        <div className="min-w-0">
-          {title === undefined ? (
-            <Skeleton className="h-7 w-72 max-w-full" />
-          ) : (
-            <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-[28px]">{title}</h1>
-          )}
-          {facts.length > 0 && <p className="mt-0.5 text-sm text-muted-foreground sm:text-[15px]">{facts.join(' · ')}</p>}
-        </div>
-      </div>
-
-      {flows.rated && (
-        <div className="flex gap-7">
-          <BigRate label="Download" icon={ArrowDown} rate={flows.total.downRate ?? 0} />
-          <BigRate label="Upload" icon={ArrowUp} rate={flows.total.upRate ?? 0} />
-        </div>
-      )}
-    </div>
-  )
-}
-
 function BigRate({ label, icon: Icon, rate }: { label: string; icon: typeof ArrowDown; rate: number }) {
   const [value, unit] = formatRate(rate).split(' ')
   return (
@@ -258,7 +160,7 @@ function BigRate({ label, icon: Icon, rate }: { label: string; icon: typeof Arro
         {label}
       </div>
       <div className="tabular-nums">
-        <span className="text-[28px] leading-9 font-semibold tracking-tight">{value}</span>
+        <span className="text-2xl leading-9 font-semibold tracking-tight">{value}</span>
         <span className="ml-1 text-sm text-muted-foreground">{unit}</span>
       </div>
     </div>
@@ -446,75 +348,66 @@ function useRateHistory(flows: TrafficView): number[] {
  * tab has watched it (useRateHistory); there is no "+12% from last week",
  * because there is no last week to compare with.
  */
-function Stats({
-  devices,
-  dns,
-  gateway,
-  traffic,
-  flows,
-  history,
-}: {
+function Stats({ devices, traffic, flows, history, faults, known, idle, failed, latency, latencyReadAt, latencyFailed, trafficFailed }: {
   devices?: DeviceRow[]
-  dns?: DnsStatus
-  gateway?: GatewayStatus
   traffic?: GatewayTraffic
   flows: TrafficView
   history: number[]
+  faults: Fault[]
+  known: boolean
+  idle: boolean
+  failed: boolean
+  latency?: GatewayLatency
+  latencyReadAt: number
+  latencyFailed: boolean
+  trafficFailed: boolean
 }) {
   const here = devices?.filter((d) => d.online).length
   const moved = traffic?.usage.reduce((sum, u) => sum + u.up_bytes + u.down_bytes, 0)
-  const ways = shownExits(gateway?.exits)
-  const rate = flows.rated ? formatRate((flows.total.downRate ?? 0) + (flows.total.upRate ?? 0)).split(' ') : undefined
-  const share = dns?.stats && dns.stats.queries > 0 ? dns.stats.blocked / dns.stats.queries : undefined
-
+  const healthy = known && !failed && !idle && faults.length === 0
+  const title = failed ? 'Status unavailable' : !known ? 'Checking…' : faults.length ? 'Needs attention' : idle ? 'Not set up' : 'All systems OK'
+  const stale = latency?.checked_at ? latencyReadAt - Date.parse(latency.checked_at) > 90 * 1000 : false
+  const measured = !latencyFailed && !stale && latency?.state === 'ok' && latency.milliseconds != null
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-      <Stat
-        label="Traffic"
-        title="Traffic through the router. Devices talking to each other on the same network are not counted."
-        value={
-          rate ? rate[0] : traffic === undefined ? undefined : traffic.counting && moved !== undefined ? formatBytes(moved) : '—'
-        }
-        unit={rate?.[1]}
-        hint={
-          traffic && !traffic.counting
-            ? 'not being counted'
-            : rate && moved !== undefined
-              ? `${formatBytes(moved)} since counting started`
-              : 'since counting started'
-        }
-      >
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+      <Stat label="Status" loading={false}>
+        <div className="my-auto flex items-center gap-4 py-3">
+          <span className={cn('flex size-14 shrink-0 items-center justify-center rounded-2xl', healthy
+            ? 'bg-success/15 text-success ring-1 ring-success/25'
+            : faults.length ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground')}>
+            {healthy ? <ShieldCheck className="size-9" strokeWidth={1.8} aria-hidden /> : faults.length || failed ? <AlertTriangle className="size-8" aria-hidden /> : <Info className="size-8" aria-hidden />}
+          </span>
+          <div className="min-w-0">
+            <p className="text-lg font-semibold tracking-tight">{title}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{failed ? 'Could not read router status' : !known ? 'Reading router status' : faults.length ? `${faults.length} ${faults.length === 1 ? 'issue' : 'issues'} to review below` : idle ? 'Configure your network to get started' : 'Router services are running smoothly'}</p>
+          </div>
+        </div>
+      </Stat>
+      <Stat label="Traffic" loading={false} title="Traffic through the router; local traffic within one network is not counted.">
+        <div className="relative z-10 mt-2 mb-1 flex flex-wrap gap-x-5 gap-y-1">
+          {flows.rated ? <>
+            <BigRate label="Download" icon={ArrowDown} rate={flows.total.downRate ?? 0} />
+            <BigRate label="Upload" icon={ArrowUp} rate={flows.total.upRate ?? 0} />
+          </> : <p className="py-2 text-sm text-muted-foreground">{trafficFailed ? 'Traffic unavailable' : traffic?.counting ? 'Measuring traffic…' : traffic ? 'Not being counted' : 'Loading…'}</p>}
+        </div>
+        <p className="relative z-10 mb-6 text-xs text-muted-foreground">{!trafficFailed && traffic?.counting && moved !== undefined ? `${formatBytes(moved)} total · since counting started` : '— total'}</p>
         {history.length > 1 && <Sparkline values={history} />}
       </Stat>
-      <Stat
-        label="Devices here"
-        value={here === undefined ? undefined : String(here)}
-        unit={devices ? `of ${devices.length}` : undefined}
-      >
-        {devices && devices.length > 0 && <Presence devices={devices} />}
+      <Stat label="Latency" loading={!latency && !latencyFailed}
+        value={measured ? latency.milliseconds!.toFixed(0) : '—'} unit={measured ? 'ms' : undefined}
+        hint={latencyFailed || stale ? 'Measurement unavailable' : measured ? `Router → ${latency.target} · HTTPS` : latency?.state === 'unreachable' ? 'No test website responded' : latency?.state === 'unavailable' ? 'Measurement unavailable' : 'Testing websites…'}>
+        {latency && latency.sites.length > 0 && <details className="group relative z-10 mt-auto pt-3 text-xs">
+          <summary className="flex min-h-11 cursor-pointer items-center gap-1 text-muted-foreground underline-offset-4 hover:underline">Test websites · {latency.sites.filter(s => s.selected).length || latency.sites.length} active<ChevronRight aria-hidden className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" /></summary>
+          <ul className="space-y-2 pb-1">{latency.sites.map(site => <li key={site.name} className="flex justify-between gap-2">
+            <span>{site.name}{site.selected ? ' · selected' : ''}</span>
+            <span className="text-muted-foreground tabular-nums" title={`Last tested: ${site.checked_at}`}>{site.milliseconds == null ? 'No response' : `${site.milliseconds.toFixed(0)} ms`}</span>
+          </li>)}</ul>
+          <p className="mt-2 text-muted-foreground">Latest result per website. Fastest response is shown above; websites are compared again periodically.</p>
+        </details>}
       </Stat>
-      <Stat
-        label="DNS lookups"
-        value={dns ? (dns.stats ? dns.stats.queries.toLocaleString() : '—') : undefined}
-        hint={
-          dns?.stats
-            ? <>
-                {dns.stats.blocked.toLocaleString()} blocked
-                {/* The ring says the share on a wide tile; a narrow one has no
-                    room for it beside the figure, so there it joins the words. */}
-                {share !== undefined && <span className="sm:hidden"> · {Math.round(share * 100)}%</span>}
-              </>
-            : 'not answering'
-        }
-        aside={share !== undefined ? <Ring share={share} /> : undefined}
-      />
-      <Stat label="Ways out" value={gateway ? (ways.length === 0 ? '—' : undefined) : undefined} loading={!gateway}>
-        {gateway &&
-          (ways.length === 0 ? (
-            <div className="mt-auto text-xs text-muted-foreground">none set up</div>
-          ) : (
-            <ExitList exits={ways} />
-          ))}
+      <Stat label="Devices here" value={here === undefined ? undefined : String(here)} unit={devices ? `of ${devices.length}` : undefined}
+        hint={devices ? `${devices.length - (here ?? 0)} offline` : undefined}>
+        {devices && devices.length > 0 && <Presence devices={devices} />}
       </Stat>
     </div>
   )
@@ -530,7 +423,6 @@ function Stat({
   value,
   unit,
   hint,
-  aside,
   loading = value === undefined,
   children,
 }: {
@@ -539,17 +431,15 @@ function Stat({
   value?: string
   unit?: string
   hint?: React.ReactNode
-  aside?: React.ReactNode
   loading?: boolean
   children?: React.ReactNode
 }) {
   return (
     <div
       title={title}
-      className="relative flex min-h-32 min-w-0 flex-col overflow-hidden rounded-2xl bg-card p-4 shadow-xs ring-1 ring-foreground/[0.07]"
+      className="relative flex min-h-40 min-w-0 flex-col overflow-hidden rounded-2xl bg-card p-4 shadow-xs ring-1 ring-foreground/[0.07]"
     >
       <div className="truncate text-[13px] font-medium text-muted-foreground">{label}</div>
-      {aside && <div className="absolute top-3.5 right-3.5 hidden sm:block">{aside}</div>}
       {loading ? (
         <Skeleton className="mt-2 h-8 w-20" />
       ) : (
@@ -560,7 +450,7 @@ function Stat({
           </div>
         )
       )}
-      {hint && <div className="relative z-10 truncate text-xs text-muted-foreground">{hint}</div>}
+      {hint && <div className="relative z-10 text-xs text-muted-foreground">{hint}</div>}
       {children}
     </div>
   )
@@ -618,61 +508,6 @@ function Presence({ devices }: { devices: DeviceRow[] }) {
         />
       ))}
     </div>
-  )
-}
-
-/** The blocked share of lookups. Neutral: blocking is the resolver working, not a fault. */
-function Ring({ share }: { share: number }) {
-  const r = 20
-  const c = 2 * Math.PI * r
-  return (
-    <svg viewBox="0 0 48 48" className="size-12" role="img" aria-label={`${Math.round(share * 100)}% blocked`}>
-      <circle cx="24" cy="24" r={r} fill="none" strokeWidth="4.5" className="stroke-muted" />
-      <circle
-        cx="24"
-        cy="24"
-        r={r}
-        fill="none"
-        strokeWidth="4.5"
-        strokeLinecap="round"
-        strokeDasharray={`${Math.max(share * c, share > 0 ? 2 : 0)} ${c}`}
-        transform="rotate(-90 24 24)"
-        className="stroke-foreground/70"
-      />
-      <text x="24" y="28" textAnchor="middle" className="fill-foreground text-[11px] font-semibold tabular-nums">
-        {Math.round(share * 100)}%
-      </text>
-    </svg>
-  )
-}
-
-/** Each way out and its state, in the same three words the map uses. */
-function ExitList({ exits }: { exits: ExitStatus[] }) {
-  const shown = exits.slice(0, 3)
-  return (
-    <ul className="mt-auto space-y-1.5 pt-3">
-      {shown.map((e) => {
-        const down = e.probed && !e.up
-        return (
-          <li key={e.name} className="flex items-center gap-2 text-sm">
-            <span
-              aria-hidden
-              className={cn(
-                'size-1.5 shrink-0 rounded-full',
-                down ? 'bg-destructive' : e.probed ? 'bg-success' : 'bg-muted-foreground/30',
-              )}
-            />
-            <span className="min-w-0 flex-1 truncate font-medium">{e.name}</span>
-            <span className={cn('shrink-0 text-xs', down ? 'text-destructive' : 'text-muted-foreground')}>
-              {down ? 'not responding' : e.probed ? 'working' : 'not checked'}
-            </span>
-          </li>
-        )
-      })}
-      {exits.length > shown.length && (
-        <li className="text-xs text-muted-foreground">+{exits.length - shown.length} more</li>
-      )}
-    </ul>
   )
 }
 

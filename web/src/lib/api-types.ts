@@ -1553,3 +1553,12 @@ export interface FirewallApplyResult {
   steps?: Step[]
   error?: { message: string; problems?: Problem[] }
 }
+
+/** Router-originated HTTPS response timing, including DNS and connection setup. */
+export interface GatewayLatency {
+  state: 'measuring' | 'ok' | 'unreachable' | 'unavailable'
+  milliseconds: number | null
+  target: string
+  checked_at: string | null
+  sites: { name: string; url: string; milliseconds: number | null; checked_at: string; selected: boolean }[]
+}

@@ -24,6 +24,8 @@ import (
 // HTTP serves the module. Its fields are what the module needs from core
 // (design.md §3.1 — modules call core, not the reverse).
 type HTTP struct {
+	Latency *LatencyMonitor
+
 	Applier Applier
 
 	// Lock is core's one global apply lock (§3.6). Writes take it; reads never
@@ -69,6 +71,7 @@ func (h HTTP) Routes() []core.Route {
 	}
 
 	routes := []core.Route{
+		{Method: "GET", Path: "/latency", Tool: "show latency", Summary: "Latest router HTTPS latency measurements and selected websites.", Handler: h.getLatency},
 		// Intent, whole document. Still the way to restore a backup or make
 		// several changes at once; the routes below are additions, not
 		// replacements.
@@ -704,4 +707,12 @@ func callerAddr(r *http.Request) netip.Addr {
 		return netip.Addr{}
 	}
 	return addr.Unmap()
+}
+
+func (h HTTP) getLatency(w http.ResponseWriter, r *http.Request) {
+	if h.Latency == nil {
+		core.WriteJSON(w, http.StatusOK, LatencySnapshot{State: "unavailable", Sites: []LatencySite{}})
+		return
+	}
+	core.WriteJSON(w, http.StatusOK, h.Latency.Snapshot())
 }
