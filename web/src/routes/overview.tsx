@@ -368,6 +368,7 @@ function Stats({ devices, traffic, flows, history, faults, known, idle, failed, 
   const title = failed ? 'Status unavailable' : !known ? 'Checking…' : faults.length ? 'Needs attention' : idle ? 'Not set up' : 'All systems OK'
   const stale = latency?.checked_at ? latencyReadAt - Date.parse(latency.checked_at) > 90 * 1000 : false
   const measured = !latencyFailed && !stale && latency?.state === 'ok' && latency.milliseconds != null
+  const latencyQuality = measured ? latency.milliseconds! < 100 ? 'Good' : latency.milliseconds! < 200 ? 'Fair' : 'Slow' : undefined
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
       <Stat label="Status" loading={false}>
@@ -395,17 +396,14 @@ function Stats({ devices, traffic, flows, history, faults, known, idle, failed, 
       </Stat>
       <Stat label="Latency" loading={!latency && !latencyFailed}
         value={measured ? latency.milliseconds!.toFixed(0) : '—'} unit={measured ? 'ms' : undefined}
-        hint={latencyFailed || stale ? 'Measurement unavailable' : measured ? `Router → ${latency.target} · HTTPS` : latency?.state === 'unreachable' ? 'No test website responded' : latency?.state === 'unavailable' ? 'Measurement unavailable' : 'Testing websites…'}>
-        {latency && latency.sites.length > 0 && <details className="group relative z-10 mt-auto pt-3 text-xs">
-          <summary className="flex min-h-11 cursor-pointer items-center gap-1 text-muted-foreground underline-offset-4 hover:underline">Test websites · {latency.sites.filter(s => s.selected).length || latency.sites.length} active<ChevronRight aria-hidden className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" /></summary>
-          <ul className="space-y-2 pb-1">{latency.sites.map(site => <li key={site.name} className="flex justify-between gap-2">
-            <span>{site.name}{site.selected ? ' · selected' : ''}</span>
-            <span className="text-muted-foreground tabular-nums" title={`Last tested: ${site.checked_at}`}>{site.milliseconds == null ? 'No response' : `${site.milliseconds.toFixed(0)} ms`}</span>
-          </li>)}</ul>
-          <p className="mt-2 text-muted-foreground">Latest result per website. Fastest response is shown above; websites are compared again periodically.</p>
-        </details>}
+        hint={latencyFailed || stale ? 'Measurement unavailable' : !measured ? latency?.state === 'unreachable' ? 'No response' : latency?.state === 'unavailable' ? 'Measurement unavailable' : 'Measuring…' : undefined}>
+        {latencyQuality && <div className={cn('mt-2 flex items-center gap-2 text-xs font-medium',
+          latencyQuality === 'Good' ? 'text-success-foreground' : latencyQuality === 'Fair' ? 'text-muted-foreground' : 'text-destructive')}>
+          <span className={cn('size-1.5 rounded-full', latencyQuality === 'Good' ? 'bg-success' : latencyQuality === 'Fair' ? 'bg-muted-foreground' : 'bg-destructive')} aria-hidden />
+          {latencyQuality}
+        </div>}
       </Stat>
-      <Stat label="Devices here" value={here === undefined ? undefined : String(here)} unit={devices ? `of ${devices.length}` : undefined}
+      <Stat label="Devices" value={here === undefined ? undefined : String(here)} unit={devices ? `of ${devices.length}` : undefined}
         hint={devices ? `${devices.length - (here ?? 0)} offline` : undefined}>
         {devices && devices.length > 0 && <Presence devices={devices} />}
       </Stat>

@@ -12,7 +12,7 @@ export function AppShell() {
       <header className="sticky top-0 z-20 border-b bg-background/75 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-[90rem] items-center gap-2.5 px-4">
           <Logo className="size-5 shrink-0" aria-hidden />
-          <span className="font-semibold tracking-tight">Router</span>
+          <span className="shrink-0 font-semibold tracking-tight">Open Linux Router</span>
 
           <DesktopNav />
 
@@ -49,7 +49,7 @@ export function AppShell() {
  */
 function DesktopNav() {
   return (
-    <nav className="ml-4 hidden self-stretch sm:block" aria-label="Sections">
+    <nav className="ml-4 hidden min-w-0 self-stretch overflow-x-auto sm:block" aria-label="Sections">
       <ul className="flex h-full items-stretch gap-1">
         {SECTIONS.map(({ to, label, end }) => (
           <li key={to}>
