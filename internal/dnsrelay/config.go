@@ -44,22 +44,11 @@ type Config struct {
 	// The wildcard is the default because the alternative is a copy of
 	// something the kernel owns. internal/dns.Config.Listen carries the full
 	// reasoning; what matters on this side is the failure it removes. An
-	// address that no longer exists cannot be bound, Run returned that error,
-	// and Restart=always turned a renumbered LAN into a crash loop that took
-	// DNS down for the whole building. Nothing on this side could have known
-	// the address had moved.
+	// address that no longer exists cannot be bound; use the wildcard default
+	// when the address is expected to change. Explicit addresses stay pinned.
 	//
-	// It does not widen who gets answered. AllowFrom is checked on every
-	// datagram regardless of which socket received it, so a query arriving from
-	// outside those prefixes is dropped whether the socket holds one address or
-	// all of them.
+	// Inbound access is governed by the firewall, not a second DNS ACL.
 	Listen []netip.AddrPort `json:"listen"`
-
-	// AllowFrom are the source prefixes permitted to ask. Empty denies
-	// everybody, which is the safe direction to fail: a relay that answers
-	// nobody is a visible outage, where one that answers the internet is an
-	// amplifier nobody notices until it is used (docs/dns.md §5).
-	AllowFrom []netip.Prefix `json:"allow_from"`
 
 	// Upstream is the resolver doing the actual work — unbound, on loopback.
 	Upstream netip.AddrPort `json:"upstream"`
@@ -196,7 +185,7 @@ func MarshalPolicy(p Policy) ([]byte, error) { return json.MarshalIndent(p, "", 
 // config parser, with one extra edge: this file is written by a *newer* olrd
 // than the binary reading it might be, if a partial upgrade left them out of
 // step. Failing loudly at startup beats a relay that silently ignored the
-// access-control list it did not recognise.
+// configuration it did not recognise.
 func UnmarshalConfig(data []byte) (Config, error) {
 	dec := json.NewDecoder(strings.NewReader(string(data)))
 	dec.DisallowUnknownFields()

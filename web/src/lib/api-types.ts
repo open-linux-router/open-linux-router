@@ -840,7 +840,6 @@ export interface DnsStats {
   since: string
   queries: number
   blocked: number
-  refused: number
   failed: number
   /** Observations lost because the tee was full. */
   dropped: number

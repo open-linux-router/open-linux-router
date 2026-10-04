@@ -204,8 +204,7 @@ type bound struct {
 // sockets came up" is a state nothing downstream can describe — the unit is
 // either notified ready or it is not — and a relay answering on half the
 // addresses it was told to is the kind of half-working that takes longest to
-// diagnose. Run turns the failure into a wildcard retry, which is a decision
-// about intent and belongs there, not here.
+// diagnose. A failed explicit bind must not silently widen to the wildcard.
 func bindAll(addrs []netip.AddrPort) ([]bound, error) {
 	var out []bound
 	unwind := func() {

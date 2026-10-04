@@ -251,15 +251,7 @@ type applyResponse struct {
 }
 
 func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
-	// Nothing is filled into the stored config any more: turning DNS on without
-	// saying where it answers now means the wildcard, and who may resolve is
-	// derived at render time from a live view of the box rather than copied
-	// into intent once. Both used to be written here, and the copy is what went
-	// stale when a network changed underneath.
-	//
-	// What is still owed is the sentence (design.md §5.6) — the decisions olr
-	// made for a caller who did not say, reported in the same breath as the
-	// change. That is all DerivedNotes does; it reads, it does not fill.
+	// Report the wildcard default without storing a copy of kernel addresses.
 	derived := DerivedNotes(cfg, h.Applier.Links)
 
 	// Validated before the lock is taken. Validation is pure (§5.3.1), so

@@ -395,9 +395,8 @@ func TestApplyStoresIntentEvenWhenTheKernelRefuses(t *testing.T) {
 
 // The bug this exists to stop: an address is kernel state and the kernel
 // forgets it, so a box came back from a reboot with its configuration intact
-// and its router address gone — dnsmasq holding no address inside the range it
-// serves, and `dns` deriving allow_from from an interface no longer carrying
-// the LAN.
+// and its router address gone — dnsmasq holding no address inside the range
+// it serves.
 func TestRestorePutsTheAddressBackAfterAReboot(t *testing.T) {
 	w := &RecordingWriter{}
 	a := Applier{Store: storeWith(t, ""), Source: staticSource(testInterfaces(t)...), Writer: w}

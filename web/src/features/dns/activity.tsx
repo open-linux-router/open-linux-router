@@ -184,7 +184,7 @@ function Segmented({ value, onChange }: { value: View; onChange: (next: View) =>
 function Counters({ stats, pending }: { stats?: DnsStats; pending: boolean }) {
   if (pending && !stats) {
     return (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {[0, 1, 2, 3].map((i) => (
           <Skeleton key={i} className="h-16 rounded-lg" />
         ))}
@@ -196,15 +196,12 @@ function Counters({ stats, pending }: { stats?: DnsStats; pending: boolean }) {
   const cells = [
     { label: 'Looked up', value: stats.queries, tone: '' },
     { label: 'Blocked', value: stats.blocked, tone: stats.blocked > 0 ? 'text-destructive' : '' },
-    // Named for what it means rather than for the DNS rcode: a refusal is a
-    // device that was not allowed to ask, which is an access-control fact.
-    { label: 'Not allowed to ask', value: stats.refused, tone: '' },
     { label: 'No answer', value: stats.failed, tone: stats.failed > 0 ? 'text-warning' : '' },
   ]
 
   return (
     <div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {cells.map((c) => (
           <div key={c.label} className="rounded-lg border px-3 py-2">
             <div className={cn('text-xl font-semibold tabular-nums', c.tone)}>

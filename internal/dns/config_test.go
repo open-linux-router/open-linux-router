@@ -46,10 +46,6 @@ func TestNormalizeIsCanonical(t *testing.T) {
 		Listen: []netip.AddrPort{
 			mustAddrPort(t, "192.168.1.1:53"), mustAddrPort(t, "10.0.0.1:53"),
 		},
-		AllowFrom: []netip.Prefix{
-			mustPrefix(t, "192.168.1.0/24"), mustPrefix(t, "10.0.0.0/8"),
-			mustPrefix(t, "192.168.1.0/24"), // a duplicate
-		},
 		Policies: []Policy{
 			{Name: "kids", Block: []string{"B.example.COM", "a.example.com."}},
 			{Name: "default"},
@@ -59,9 +55,6 @@ func TestNormalizeIsCanonical(t *testing.T) {
 	b := Config{
 		Listen: []netip.AddrPort{
 			mustAddrPort(t, "10.0.0.1:53"), mustAddrPort(t, "192.168.1.1:53"),
-		},
-		AllowFrom: []netip.Prefix{
-			mustPrefix(t, "10.0.0.0/8"), mustPrefix(t, "192.168.1.0/24"),
 		},
 		Policies: []Policy{
 			{Name: "default"},
@@ -111,9 +104,8 @@ func TestUnmarshalRejectsUnknownFields(t *testing.T) {
 
 func TestConfigRoundTrips(t *testing.T) {
 	want := Config{
-		Enabled:   true,
-		Listen:    []netip.AddrPort{mustAddrPort(t, "192.168.1.1:53")},
-		AllowFrom: []netip.Prefix{mustPrefix(t, "192.168.1.0/24")},
+		Enabled: true,
+		Listen:  []netip.AddrPort{mustAddrPort(t, "192.168.1.1:53")},
 		Upstream: Upstream{
 			Mode:    ModeForward,
 			Servers: []netip.AddrPort{mustAddrPort(t, "1.1.1.1:853")},
@@ -153,13 +145,12 @@ func TestConfigRoundTrips(t *testing.T) {
 // the wire form this module actually publishes rather than trusting it.
 func TestAddressesMarshalAsStrings(t *testing.T) {
 	data, err := MarshalConfig(Config{
-		Listen:    []netip.AddrPort{mustAddrPort(t, "192.168.1.1:53")},
-		AllowFrom: []netip.Prefix{mustPrefix(t, "192.168.1.0/24")},
+		Listen: []netip.AddrPort{mustAddrPort(t, "192.168.1.1:53")},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"192.168.1.1:53"`, `"192.168.1.0/24"`} {
+	for _, want := range []string{`"192.168.1.1:53"`} {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("rendered config does not contain %s:\n%s", want, data)
 		}
@@ -180,9 +171,8 @@ func TestFromDocumentTreatsAnAbsentSectionAsUnconfigured(t *testing.T) {
 
 func TestCloneDoesNotShareBackingArrays(t *testing.T) {
 	original := Config{
-		Listen:    []netip.AddrPort{mustAddrPort(t, "192.168.1.1:53")},
-		AllowFrom: []netip.Prefix{mustPrefix(t, "192.168.1.0/24")},
-		Upstream:  Upstream{Servers: []netip.AddrPort{mustAddrPort(t, "1.1.1.1:53")}},
+		Listen:   []netip.AddrPort{mustAddrPort(t, "192.168.1.1:53")},
+		Upstream: Upstream{Servers: []netip.AddrPort{mustAddrPort(t, "1.1.1.1:53")}},
 		Policies: []Policy{{
 			Name:    "kids",
 			Clients: []netip.Prefix{mustPrefix(t, "192.168.1.50/32")},
@@ -357,5 +347,20 @@ func TestNormalizeSortsAndDeduplicatesHosts(t *testing.T) {
 	}
 	if len(c.Hosts[1].Addrs) != 2 {
 		t.Errorf("duplicate address survived: %v", c.Hosts[1].Addrs)
+	}
+}
+
+func TestStoredLegacyAllowFromIsMigratedButNewRequestsRejectIt(t *testing.T) {
+	raw := []byte(`{"enabled":true,"allow_from":["192.168.1.0/24"]}`)
+	if _, err := UnmarshalConfig(raw); err == nil {
+		t.Fatal("new requests should reject the removed field")
+	}
+	cfg, err := FromDocument(docWith(t, raw))
+	if err != nil || !cfg.Enabled {
+		t.Fatalf("legacy stored intent did not load: %+v, %v", cfg, err)
+	}
+	data, err := MarshalConfig(cfg)
+	if err != nil || strings.Contains(string(data), "allow_from") {
+		t.Fatalf("removed field survived migration: %s, %v", data, err)
 	}
 }

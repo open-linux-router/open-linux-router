@@ -268,10 +268,9 @@ func fromCore(in []core.Step) []Step {
 // nftables tables, RPDB entries, route tables, a WireGuard interface — and
 // `link` was simply never added to that list. The result was a box that came
 // back from a reboot with its configuration intact and its router address
-// gone: dnsmasq with no address inside the range it serves, a `dns` render
-// deriving allow_from from an interface that no longer carried the LAN, and a
-// gateway whose policy pointed at a network the box was no longer on. One
-// missing line, three modules visibly broken, and nothing in olr saying why.
+// gone: dnsmasq with no address inside the range it serves and a gateway
+// whose policy pointed at a network the box was no longer on. One missing
+// line, two modules visibly broken, and nothing in olr saying why.
 //
 // # Why it is not just Apply
 //

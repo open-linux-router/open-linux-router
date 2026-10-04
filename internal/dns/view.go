@@ -144,7 +144,6 @@ type statsView struct {
 
 	Queries uint64 `json:"queries"`
 	Blocked uint64 `json:"blocked"`
-	Refused uint64 `json:"refused"`
 	Failed  uint64 `json:"failed"`
 
 	// Dropped is observations lost because the tee was full; Unparsed is
@@ -167,7 +166,7 @@ type clientView struct {
 
 func viewStatsAPI(s Stats) statsView {
 	v := statsView{
-		Since: s.Since, Queries: s.Queries, Blocked: s.Blocked, Refused: s.Refused,
+		Since: s.Since, Queries: s.Queries, Blocked: s.Blocked,
 		Failed: s.Failed, Dropped: s.Dropped, Unparsed: s.Unparsed,
 		Held: s.Held, Capacity: s.Capacity,
 	}

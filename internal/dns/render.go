@@ -567,20 +567,6 @@ func formatForwardAddr(srv netip.AddrPort, u Upstream) string {
 // --- the relay -------------------------------------------------------------
 
 func (b Backend) renderRelay(c Config, links LinkView) ([]byte, error) {
-	allow := c.AllowFrom
-	if len(allow) == 0 {
-		// Derived, never defaulted open. An empty allow_from means "the
-		// networks this router was given", which is what an operator means and
-		// is the only reading that cannot accidentally ship an amplifier.
-		//
-		// Re-derived here on every render from a live LinkView, so it follows
-		// the box when the network changes. That is what carries the safety
-		// property now that Listen no longer names addresses: the relay binds
-		// the wildcard, so this list is the whole of what separates a LAN
-		// resolver from an open one.
-		allow = LANPrefixes(links)
-	}
-
 	cfg := dnsrelay.Config{
 		// Passed through as the operator wrote it, empty included: an empty
 		// list means the wildcard to the relay (dnsrelay.Config.Listen), which
@@ -588,7 +574,6 @@ func (b Backend) renderRelay(c Config, links LinkView) ([]byte, error) {
 		// would put addresses back in a rendered file that the kernel is free
 		// to change underneath.
 		Listen:          c.Listen,
-		AllowFrom:       allow,
 		Upstream:        DefaultResolver,
 		PolicyDir:       b.Paths.PolicyDir,
 		PublishedFile:   b.Paths.Published,

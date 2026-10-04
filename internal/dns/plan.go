@@ -6,10 +6,7 @@ import (
 	"net/netip"
 	"slices"
 	"sort"
-	"strings"
 	"time"
-
-	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 // Planning is deliberately pure and reads *observed* state rather than a cached
@@ -160,9 +157,7 @@ type UnitState struct {
 
 // Client is one address the relay has recently answered.
 //
-// Observed, never stored. It exists so that "who would this change cut off" is
-// a fact rather than a guess — the same move internal/dhcp makes by asking the
-// live lease database which clients a pool change would drop.
+// Observed, never stored.
 type Client struct {
 	Addr     netip.Addr `json:"address"`
 	Queries  int        `json:"queries"`
@@ -179,10 +174,6 @@ type Observed struct {
 
 	// Units is what systemd knows, keyed by unit name.
 	Units map[string]UnitState
-
-	// Clients are the addresses the relay has answered recently, used to tell a
-	// harmless access-control change from one that cuts somebody off.
-	Clients []Client
 }
 
 // Unit returns a unit's state, and whether anything is known about it.
@@ -364,7 +355,7 @@ func BuildPlan(b Backend, desired Config, links LinkView, reservations Reservati
 		}
 	}
 
-	plan.Impact, plan.Reasons = classify(b, desired, plan, links, obs, now)
+	plan.Impact, plan.Reasons = classify(plan)
 
 	return plan, nil
 }
@@ -394,7 +385,7 @@ func serviceAction(enabled, running, starting, changed, reloadOnly bool) Service
 }
 
 // classify reduces the plan to a single impact plus the reasons behind it.
-func classify(b Backend, desired Config, plan Plan, links LinkView, obs Observed, now time.Time) (Impact, []string) {
+func classify(plan Plan) (Impact, []string) {
 	impact := ImpactNone
 	for _, c := range plan.Changes {
 		impact = max(impact, c.Impact)
@@ -425,16 +416,6 @@ func classify(b Backend, desired Config, plan Plan, links LinkView, obs Observed
 				"because DHCP hands out this box as the only resolver")
 	}
 
-	// Answered from who has actually been resolving through us, not from
-	// whether a field changed. That is what makes "disruptive" a fact — the
-	// same move internal/dhcp makes against the live lease database.
-	if relay := obs.Unit(b.RelayUnit()); relay.Running || len(obs.Clients) > 0 {
-		if denied := Denied(desired, links, obs.Clients, now); len(denied) > 0 && !stopping {
-			impact = ImpactDisruptive
-			reasons = append(reasons, describeDenied(denied))
-		}
-	}
-
 	for _, s := range plan.Services {
 		if s.Enable == nil {
 			continue
@@ -451,76 +432,4 @@ func classify(b Backend, desired Config, plan Plan, links LinkView, obs Observed
 	}
 
 	return impact, reasons
-}
-
-// EffectiveAllowFrom resolves who may query, applying the "empty means the
-// private networks this router was given" rule so that callers never have to
-// re-derive it.
-func EffectiveAllowFrom(c Config, links LinkView) []netip.Prefix {
-	if len(c.AllowFrom) > 0 {
-		return c.AllowFrom
-	}
-	return LANPrefixes(links)
-}
-
-// RecentWindow is how far back a client counts as still resolving through us.
-//
-// Long enough that a phone which has been asleep since breakfast still counts,
-// because cutting it off is just as real a change as cutting off a laptop that
-// queried a second ago. Short enough that a device removed from the network
-// last week does not veto a legitimate tightening forever.
-const RecentWindow = 24 * time.Hour
-
-// Denied returns the clients that have recently resolved through us and would
-// stop being answered.
-//
-// The question is deliberately "will this device lose the resolver it is using",
-// not "did the access list change". It is the direct analogue of internal/dhcp's
-// Dropped, and it exists for the same reason: an operator tightening allow_from
-// to what they believe their network to be needs to hear about the guest VLAN
-// they forgot before it goes dark, not afterwards.
-func Denied(c Config, links LinkView, clients []Client, now time.Time) []Client {
-	var denied []Client
-	allowed := EffectiveAllowFrom(c, links)
-
-	for _, cl := range clients {
-		if !cl.Addr.IsValid() || now.Sub(cl.LastSeen) > RecentWindow {
-			continue
-		}
-		if !c.Enabled {
-			// Reported through the service-stop reason instead, which says it
-			// better than a list of addresses would.
-			continue
-		}
-		covered := false
-		for _, p := range allowed {
-			if p.Contains(cl.Addr) {
-				covered = true
-				break
-			}
-		}
-		if !covered {
-			denied = append(denied, cl)
-		}
-	}
-	return denied
-}
-
-func describeDenied(denied []Client) string {
-	names := make([]string, 0, len(denied))
-	for _, c := range denied {
-		names = append(names, c.Addr.String())
-	}
-	sort.Strings(names)
-
-	const show = 4
-	listed := names
-	suffix := ""
-	if len(listed) > show {
-		listed, suffix = listed[:show], fmt.Sprintf(" and %d more", len(names)-show)
-	}
-
-	return fmt.Sprintf("%s that resolved through this box recently will stop being answered, "+
-		"because no allowed source network covers them any more: %s%s",
-		core.Plural(len(denied), "device"), strings.Join(listed, ", "), suffix)
 }

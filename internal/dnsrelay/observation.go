@@ -119,10 +119,6 @@ type Stats struct {
 	// Blocked is those a policy answered itself.
 	Blocked uint64 `json:"blocked"`
 
-	// Refused is queries dropped by access control — somebody outside
-	// allow_from asked. A steady stream here is worth an operator's attention.
-	Refused uint64 `json:"refused"`
-
 	// Failed is queries the upstream did not answer in time.
 	Failed uint64 `json:"failed"`
 

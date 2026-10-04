@@ -444,72 +444,20 @@ that are not published yet and fills both fields from one. Two modules' config,
 two writes, each with its own plan — and the join in the one place that is
 allowed to know about both.
 
-### 4.8 Turning it on answers everywhere, and the source check decides who
+### 4.8 DNS answers; the firewall controls access
 
-An empty `listen` with `enabled: true` used to be refused by validation, on the
-grounds that a relay answering nowhere is an outage wearing the costume of a
-working configuration. That was also the *first* thing a new box did: the switch
-on a fresh install turned DNS on, the write came back 422, and the message named
-a field the operator had never opened.
+An empty `listen` with `enabled: true` means the relay binds port 53 on all
+addresses. Pinning a specific address remains possible, but an address copied
+into intent can go stale when a network is renumbered. An explicitly pinned address must be kept
+current: if it cannot be bound, the relay fails rather than widening its
+listen address silently.
 
-The fix at the time was for the write path to fill the field in — every private
-address on an adopted interface, port 53, **stored in intent**. That removed the
-422 and introduced a worse failure, which took a year and a renumbered LAN to
-show up.
-
-**An address stored here is a copy of a fact the kernel owns.** When the network
-changed under a box — a new lease, an upstream renumbering, a cable moved to
-another port — the stored address stopped existing. The relay could not bind it,
-`Restart=always` turned that into a crash loop, and DNS went down for the whole
-building with the reason in the journal and nothing on any screen. Worse, the
-same staleness hit the *other* derivation: `allow_from` was computed from the
-subnets around the listen addresses, so an address that matched no interface
-derived no prefixes, and an empty allow list denies everybody. One network change
-broke resolution twice.
-
-Nothing could have prevented it by being more careful. §5.2 rules out
-cross-module transactions, there is no notification path from `link` to `dns`,
-and most of those changes never pass through olr at all — so this was not a
-message somebody forgot to send. The dependency itself was the defect.
-
-**So the relay binds the wildcard and `listen` is empty by default.** A wildcard
-cannot go stale. What was given up by doing this is less than it looks: the
-listen address was never what kept the resolver off the internet. Binding
-`192.168.1.1` rather than `0.0.0.0` narrows which *socket* receives a packet; the
-source check decides whether it is answered, and it runs identically either way.
-A query arriving on the WAN from outside `allow_from` is dropped without a reply
-whichever address the socket holds.
-
-Three parts of that are load-bearing:
-
-- **`allow_from` is derived live, on every render, from the box.** Private
-  prefixes on adopted interfaces (`LANPrefixes`), never stored. That is what
-  makes it follow a renumbered network with no notification and no apply — and
-  with the bind no longer narrowing anything, it is now the *whole* of what
-  separates a LAN resolver from an open one. §5's line about binding to LAN
-  interfaces has become a line about the source check alone.
-- **Private addresses only.** The WAN gets adopted too — `gateway` and `dial`
-  both need it — so a derivation that took every adopted prefix would put
-  the uplink's own subnet in the allow list and stand up an open resolver by
-  default. §5 calls that an amplifier, and arriving at it helpfully is the worst
-  way to arrive at it.
-  **Except on a network member**, where every routable prefix is in. An
-  interface that carries a `link` network is a LAN by declaration, which is the
-  fact the private filter was only ever guessing at — and the guess was wrong
-  for IPv6: a network numbered from a delegated or a tunnel broker's prefix is
-  public, and its clients' queries over IPv6 were refused. The uplink is never a
-  network member (dial refuses it), so the amplifier stays shut.
-- **A pinned address is honoured, and is not allowed to be fatal.** An operator
-  who names addresses owns them, but "owns it" cannot mean "the house loses DNS
-  until they notice". The relay tries intent first and falls back to the
-  wildcard with a loud log line when it cannot be bound, because serving from an
-  address nobody named is a smaller wrong than not serving, and it is the only
-  one of the two that is recoverable without a console.
-
-Nothing adopted is now a **warning** rather than an error: the relay binds and
-comes up, it simply answers nobody, because there is no network to derive an
-allow list from. That is a box waiting to be finished, not a configuration to
-refuse.
+DNS does not maintain a second source-access list. In particular, delegated IPv6
+prefix changes no longer rewrite `relay.json` or ask the operator to apply DNS.
+The firewall owns which networks may reach the resolver. With the firewall off
+or misconfigured, a wildcard-bound DNS relay can answer external queries; this
+is not mitigated by the DNS module. Legacy stored `allow_from` is discarded when
+read and omitted on the next save. New requests containing it are rejected.
 
 ---
 
@@ -559,24 +507,10 @@ above stays manageable.**
 > The observation direction is a socket; see §4.5 for why that is not the same
 > thing.
 
-Also new: a network-facing UDP listener is a posture olr does not currently have
-at all — `olrd` is a unix socket and a config renderer. Access-control by source,
-or we have shipped an amplifier.
-
-> **Amended.** This said *"bind to LAN interfaces only and access-control by
-> source"*, and the first half turned out to be the expensive half. Binding to
-> named addresses bought nothing the source check was not already buying, and it
-> cost a house-wide outage every time the network changed underneath a box — see
-> §4.8. The relay binds the wildcard; `allow_from` carries the whole of this
-> paragraph on its own.
->
-> Which raises the stakes on the thing that is still missing. olr has no input
-> filter chain at all: `gateway` does NAT and forwards, and filtering is not
-> being built for now (docs/port-forwarding.md §0). So there is exactly one layer here, not
-> two. Per-interface binding (`SO_BINDTODEVICE`, the way dnsmasq's
-> `bind-dynamic` works) would restore the second without reintroducing the
-> staleness, because an interface is a stable name and an address is not. It is
-> the refinement this section should be read as asking for.
+A network-facing UDP listener needs an input boundary. The relay does not
+implement one: DNS owns resolution, while the firewall owns access to the
+router's port 53. A disabled firewall can expose the resolver to the internet;
+this deployment risk must be addressed in firewall configuration.
 
 ---
 

@@ -216,73 +216,6 @@ func TestDisablingIsDisruptive(t *testing.T) {
 	}
 }
 
-// Answered from who has actually been resolving through us, not from whether a
-// field changed — the same move internal/dhcp makes against the lease database.
-func TestNarrowingAllowFromReportsWhoLosesResolution(t *testing.T) {
-	b := testBackend(t)
-	cfg := validConfig()
-	cfg.AllowFrom = []netip.Prefix{
-		netip.MustParsePrefix("192.168.1.0/24"),
-		netip.MustParsePrefix("192.168.2.0/24"),
-	}
-	cfg.Normalize()
-
-	obs := observedFor(t, b, cfg, true)
-	obs.Clients = []Client{
-		{Addr: netip.MustParseAddr("192.168.1.10"), Queries: 40, LastSeen: time.Now()},
-		{Addr: netip.MustParseAddr("192.168.2.20"), Queries: 12, LastSeen: time.Now()},
-	}
-
-	narrowed := validConfig() // only 192.168.1.0/24
-	plan := planFor(t, b, narrowed, obs)
-
-	if plan.Impact != ImpactDisruptive {
-		t.Errorf("impact = %s, want disruptive", plan.Impact)
-	}
-	joined := strings.Join(plan.Reasons, " ")
-	if !strings.Contains(joined, "192.168.2.20") {
-		t.Errorf("the reason does not name the device that loses resolution: %v", plan.Reasons)
-	}
-	if strings.Contains(joined, "192.168.1.10") {
-		t.Errorf("a device that keeps resolving was reported as losing it: %v", plan.Reasons)
-	}
-}
-
-// A device that has not asked in a long time must not veto a legitimate
-// tightening forever.
-func TestDeniedIgnoresLongGoneClients(t *testing.T) {
-	now := time.Now()
-	cfg := validConfig()
-
-	denied := Denied(cfg, testLinks(), []Client{
-		{Addr: netip.MustParseAddr("10.1.1.1"), LastSeen: now.Add(-2 * RecentWindow)},
-	}, now)
-	if len(denied) != 0 {
-		t.Errorf("a client last seen days ago was counted: %v", denied)
-	}
-
-	denied = Denied(cfg, testLinks(), []Client{
-		{Addr: netip.MustParseAddr("10.1.1.1"), LastSeen: now},
-	}, now)
-	if len(denied) != 1 {
-		t.Errorf("a current client outside the allow list was not counted: %v", denied)
-	}
-}
-
-// Empty allow_from means the listen networks, and Denied has to apply the same
-// rule the relay will — otherwise it would report the whole LAN as cut off.
-func TestDeniedUsesTheDerivedAllowList(t *testing.T) {
-	cfg := validConfig()
-	cfg.AllowFrom = nil
-
-	denied := Denied(cfg, testLinks(), []Client{
-		{Addr: netip.MustParseAddr("192.168.1.10"), LastSeen: time.Now()},
-	}, time.Now())
-	if len(denied) != 0 {
-		t.Errorf("a client on the listen network was reported as denied: %v", denied)
-	}
-}
-
 // A unit that is running now and not enabled costs nothing until the box
 // reboots, and then costs the whole network its name resolution.
 func TestBootStateIsDrift(t *testing.T) {
@@ -387,5 +320,21 @@ func TestImpactRoundTrips(t *testing.T) {
 	var i Impact
 	if err := i.UnmarshalText([]byte("nonsense")); err == nil {
 		t.Error("an unknown impact was accepted")
+	}
+}
+
+// Network renumbering changes link facts, not DNS intent or rendered files.
+func TestNetworkRenumberingDoesNotDriftDNS(t *testing.T) {
+	b := testBackend(t)
+	cfg := validConfig()
+	cfg.Listen = nil
+	obs := observedFor(t, b, cfg, true)
+	links := testLinks()
+	lan := links["lan0"]
+	lan.Prefixes = []netip.Prefix{netip.MustParsePrefix("10.7.0.1/16"), netip.MustParsePrefix("2001:db8:1::1/64")}
+	links["lan0"] = lan
+	plan, err := BuildPlan(b, cfg, links, nil, nil, obs, time.Now())
+	if err != nil || !plan.Empty() {
+		t.Fatalf("renumbering caused DNS drift: %+v, %v", plan, err)
 	}
 }

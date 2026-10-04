@@ -2,7 +2,6 @@ package dns
 
 import (
 	"context"
-	"errors"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -359,22 +358,6 @@ func TestApplyToleratesAMissingServiceManager(t *testing.T) {
 
 	if _, err := a.Apply(context.Background(), validConfig()); err != nil {
 		t.Fatalf("Apply: %v", err)
-	}
-}
-
-// Failures degrade rather than propagate: a stopped relay has nothing to say,
-// and a plan that refused to be built because of it would be useless at exactly
-// the moment it is needed — when the operator is trying to fix DNS.
-func TestObserveToleratesAnUnreachableRelay(t *testing.T) {
-	a, _, _ := testApplier(t)
-	a.Observer = fakeObserver{err: errors.New("connection refused")}
-
-	obs, err := a.Observe(context.Background())
-	if err != nil {
-		t.Fatalf("Observe: %v", err)
-	}
-	if len(obs.Clients) != 0 {
-		t.Errorf("clients were invented from a failed read: %v", obs.Clients)
 	}
 }
 

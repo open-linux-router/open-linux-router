@@ -560,16 +560,8 @@ func run(args []string) error {
 	// means an operator who is away from the box being unable to reach the box
 	// they would fix it from.
 	//
-	// `link` goes first, and the order is load-bearing rather than tidy. An
-	// interface address is the fact the modules after it are written against:
-	// dnsmasq will not serve a range it holds no address inside, `dns` derives
-	// allow_from from the prefixes on adopted interfaces at render time, and a
-	// gateway policy describes networks this box is supposed to be on. Restore
-	// them in the other order and each one converges against a box that has not
-	// got its addresses back yet — rendering an empty allow list, which denies
-	// every client, into a file that is then correct-looking and stale until
-	// something else triggers a render.
-	//
+	// `link` goes first: dnsmasq needs router addresses inside its pools,
+	// and gateway policies describe networks the box actually holds.
 	// This is also the line whose absence was the bug: `link` programs
 	// addresses through netlink and was never in this list, so a reboot took
 	// the router's own address off the box and three modules broke downstream

@@ -42,7 +42,6 @@ func do(t *testing.T, h http.Handler, method, path, body string) *httptest.Respo
 const validPUT = `{
   "enabled": true,
   "listen": ["192.168.1.1:53"],
-  "allow_from": ["192.168.1.0/24"],
   "query_log": {"enabled": true}
 }`
 
@@ -76,11 +75,19 @@ func TestPutRejectsUnknownFields(t *testing.T) {
 	}
 }
 
+func TestPutRejectsRemovedAllowFrom(t *testing.T) {
+	h, _, _ := testHTTP(t)
+	w := do(t, h, http.MethodPut, "/config", `{"enabled":true,"allow_from":["192.168.1.0/24"]}`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("removed field was accepted: %d %s", w.Code, w.Body)
+	}
+}
+
 func TestPutRejectsAnInvalidConfig(t *testing.T) {
 	h, _, _ := testHTTP(t)
-	// An open resolver, which validation refuses outright.
+	// A listen address not on this router is invalid.
 	w := do(t, h, http.MethodPut, "/config",
-		`{"enabled":true,"listen":["192.168.1.1:53"],"allow_from":["0.0.0.0/0"]}`)
+		`{"enabled":true,"listen":["10.9.9.9:53"]}`)
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422; body %s", w.Code, w.Body)
 	}
@@ -146,10 +153,8 @@ func TestEnablingDnsStoresNoAddress(t *testing.T) {
 		t.Fatal("turned DNS on without saying what it decided")
 	}
 	joined := strings.Join(applied.Plan.Derived, "\n")
-	// Who may resolve is the decision worth publishing: an empty allow_from
-	// looks like "no restriction" and means the opposite.
-	if !strings.Contains(joined, "192.168.1.0/24") {
-		t.Errorf("derived %q, want the network it will resolve for", applied.Plan.Derived)
+	if !strings.Contains(joined, "every address") {
+		t.Errorf("derived %q, want the wildcard default", applied.Plan.Derived)
 	}
 
 	var stored Config
@@ -290,8 +295,7 @@ func TestPlanCarriesTheDiffAndTheImpact(t *testing.T) {
 	w := do(t, h, http.MethodPost, "/plan", `{
 	  "enabled": true,
 	  "listen": ["192.168.1.1:53"],
-	  "allow_from": ["192.168.1.0/24"],
-	  "query_log": {"enabled": true},
+		  "query_log": {"enabled": true},
 	  "policies": [{"name":"kids","block":["example.com"]}]
 	}`)
 	if w.Code != http.StatusOK {
@@ -329,8 +333,7 @@ func TestPlanDoesNotApply(t *testing.T) {
 	do(t, h, http.MethodPost, "/plan", `{
 	  "enabled": true,
 	  "listen": ["192.168.1.1:53"],
-	  "allow_from": ["192.168.1.0/24"],
-	  "policies": [{"name":"kids","block":["example.com"]}]
+		  "policies": [{"name":"kids","block":["example.com"]}]
 	}`)
 
 	if len(relay.calls) != 0 {
@@ -469,12 +472,8 @@ func TestStatusReadsTheCountersWithoutTheLog(t *testing.T) {
 	if counting.statsCalls != 1 {
 		t.Errorf("status read the counters %d times, want 1", counting.statsCalls)
 	}
-	// One, and from the drift half: Plan asks who is resolving through us so it
-	// can tell a harmless access-control change from one that cuts somebody off.
-	// It is the same cheap /stats read, so it is counted separately rather than
-	// mistaken for a second pass at the counters.
-	if counting.clients != 1 {
-		t.Errorf("status asked who is connected %d times, want 1", counting.clients)
+	if counting.clients != 0 {
+		t.Errorf("status read client history %d times, want 0", counting.clients)
 	}
 
 	var resp statusResponse

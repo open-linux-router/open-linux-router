@@ -178,29 +178,13 @@ func TestRenderForwarding(t *testing.T) {
 	})
 }
 
-func TestRenderRelayDerivesAllowFromTheAdoptedNetworks(t *testing.T) {
+func TestRenderRelayDoesNotCopyNetworkPrefixes(t *testing.T) {
 	b := testBackend(t)
 	cfg := validConfig()
-	cfg.AllowFrom = nil
-	// No pinned address, which is the ordinary configuration: the relay binds
-	// the wildcard and this list is the whole of what keeps it off the
-	// internet.
 	cfg.Listen = nil
-
 	relay := renderOne(t, b, cfg, b.Paths.RelayConf)
-	if !strings.Contains(relay, "192.168.1.0/24") {
-		t.Errorf("an empty allow_from did not derive the router's own network:\n%s", relay)
-	}
-	// Never open. An empty list denies everybody in the relay, and deriving is
-	// the only reading that cannot accidentally ship an amplifier.
-	if strings.Contains(relay, "0.0.0.0/0") {
-		t.Error("the derived access list is open")
-	}
-	// testLinks adopts wan0 at 203.0.113.7/24. With the bind no longer
-	// narrowing anything, an allow list that picked up the uplink would be an
-	// open resolver — this is the one assertion that still separates the two.
-	if strings.Contains(relay, "203.0.113.0/24") {
-		t.Errorf("the uplink's own network is in the allow list:\n%s", relay)
+	if strings.Contains(relay, "allow_from") || strings.Contains(relay, "192.168.1.0/24") {
+		t.Errorf("DNS should not render a source ACL: %s", relay)
 	}
 }
 
@@ -296,7 +280,6 @@ func TestRenderHijack(t *testing.T) {
 	b := testBackend(t)
 	cfg := validConfig()
 	cfg.Listen = append(cfg.Listen, netip.MustParseAddrPort("[fd00::1]:53"))
-	cfg.AllowFrom = append(cfg.AllowFrom, netip.MustParsePrefix("fd00::/64"))
 	cfg.Hijack = Hijack{Enabled: true, Interfaces: []string{"lan0"}, BlockDoT: true}
 	cfg.Normalize()
 

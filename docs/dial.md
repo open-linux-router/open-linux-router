@@ -54,8 +54,7 @@ have been one field cheaper to add a gateway to that.
 
 It would also have been wrong, and the wrongness has a name: a `link` network is
 **one this box serves** (design.md §4.4). Every module downstream keys off
-one — `dhcp` serves a range on it, `dns` derives `allow_from` from it,
-`gateway` masquerades out of it and knows a forward's destination is inside it,
+one — `dhcp` serves a range on it, `gateway` masquerades out of it and knows a forward's destination is inside it,
 `wifi` will attach a radio to it — and design.md §5.6 makes *"we never serve DHCP on a WAN
 interface"* a structural exception that "follows from role rather than from
 observation". A WAN interface inside a network would be one every one of

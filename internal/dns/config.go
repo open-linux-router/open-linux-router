@@ -47,50 +47,10 @@ type Config struct {
 	// thing to unpick then.
 	Enabled bool `json:"enabled"`
 
-	// Listen is where the relay answers queries. Empty — the default, and what
-	// almost every box should have — means the wildcard on port 53.
-	//
-	// # Why the wildcard, given docs/dns.md §5
-	//
-	// This field used to hold explicit addresses and refuse a wildcard, on the
-	// grounds that a resolver reachable from the internet is an amplifier and
-	// that "0.0.0.0 plus a firewall rule" is one missing rule away from being
-	// one. The reasoning was right about the risk and wrong about where the
-	// risk lives, and it cost availability for nothing.
-	//
-	// What it cost: an address here is a copy of a fact the kernel owns, made
-	// once at write time. When the network changed under a box — a new lease, a
-	// renumbered upstream, a cable moved to another port — the address stopped
-	// existing, the relay could not bind it, and Restart=always turned that
-	// into a crash loop that took DNS down for the whole building. Nothing
-	// could have prevented it: design.md §5.2 rules out cross-module
-	// transactions, and most of those changes do not pass through olr at all,
-	// so there is no notification anybody forgot to send. The dependency itself
-	// was the defect.
-	//
-	// What it bought: nothing. The listen address was never what kept the
-	// resolver off the internet — AllowFrom is, and it always was. Binding
-	// 192.168.1.1 rather than 0.0.0.0 narrows which *socket* receives a packet;
-	// it is the source check that decides whether the packet is answered, and
-	// that check runs identically either way. A query arriving on the WAN from
-	// a source outside the allow list is dropped without a reply (Relay.allowed
-	// and dnsrelay's serveUDP) whichever address the socket holds.
-	//
-	// So the wildcard is the default because it cannot go stale, and AllowFrom
-	// — re-derived live on every render, see LANPrefixes — is what holds the
-	// line docs/dns.md §5 draws. Setting this explicitly is still supported for
-	// an operator who wants the relay pinned to one address or moved off port
-	// 53; it is then their address to keep correct.
+	// Listen is where the relay answers queries. Empty means the wildcard on
+	// port 53; pinning an address is optional and may go stale on renumbering.
+	// The firewall controls which networks can reach the listener.
 	Listen []netip.AddrPort `json:"listen,omitempty"`
-
-	// AllowFrom are the source prefixes permitted to ask. Anything else is
-	// dropped without an answer.
-	//
-	// The second half of the same defence, and it is not redundant: an address
-	// bound to a LAN interface still answers a packet routed to it from
-	// somewhere else. Empty means the relay derives it from the listen
-	// addresses' own subnets rather than defaulting open — see Validate.
-	AllowFrom []netip.Prefix `json:"allow_from,omitempty"`
 
 	// Upstream is how names actually get resolved.
 	Upstream Upstream `json:"upstream"`
@@ -486,8 +446,6 @@ func (c *Config) Normalize() {
 	slices.SortStableFunc(c.Upstream.Servers, compareAddrPort)
 
 	slices.SortStableFunc(c.Listen, compareAddrPort)
-	slices.SortStableFunc(c.AllowFrom, comparePrefix)
-	c.AllowFrom = slices.CompactFunc(c.AllowFrom, func(a, b netip.Prefix) bool { return a == b })
 
 	// Before the hosts, which are stored relative to it.
 	c.LocalDomain = NormalizeDomain(c.LocalDomain)
@@ -558,7 +516,6 @@ func comparePrefix(a, b netip.Prefix) int {
 func (c Config) Clone() Config {
 	out := c
 	out.Listen = slices.Clone(c.Listen)
-	out.AllowFrom = slices.Clone(c.AllowFrom)
 	out.Upstream.Servers = slices.Clone(c.Upstream.Servers)
 	out.Hijack.Interfaces = slices.Clone(c.Hijack.Interfaces)
 	out.Policies = make([]Policy, len(c.Policies))
@@ -619,7 +576,18 @@ func FromDocument(d core.Document) (Config, error) {
 	if !ok {
 		return Config{}, nil
 	}
-	c, err := UnmarshalConfig(raw)
+	// Legacy stored intent may include the removed source ACL. Only the
+	// store-read path migrates it; new API requests remain strict.
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return Config{}, fmt.Errorf("%s configuration: %w", ModuleName, err)
+	}
+	delete(fields, "allow_from")
+	data, err := json.Marshal(fields)
+	if err != nil {
+		return Config{}, err
+	}
+	c, err := UnmarshalConfig(data)
 	if err != nil {
 		return Config{}, fmt.Errorf("%s configuration: %w", ModuleName, err)
 	}

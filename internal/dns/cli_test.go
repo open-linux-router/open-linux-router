@@ -186,7 +186,7 @@ func TestUnsetFlagsLeaveTheConfigAlone(t *testing.T) {
 		QueryLog: QueryLog{Enabled: true, Entries: 42},
 		Hijack:   Hijack{Enabled: true, Interfaces: []string{"lan0"}, BlockDoT: true},
 	}
-	applyFlags(t, &cfg, map[string]string{"allow-from": "192.168.1.0/24"})
+	applyFlags(t, &cfg, map[string]string{"mode": "recurse"})
 
 	if !cfg.QueryLog.Enabled || cfg.QueryLog.Entries != 42 {
 		t.Errorf("the query log was reset by an unrelated flag: %+v", cfg.QueryLog)
@@ -197,9 +197,7 @@ func TestUnsetFlagsLeaveTheConfigAlone(t *testing.T) {
 	if len(cfg.Listen) != 1 {
 		t.Errorf("the listen address was reset by an unrelated flag: %v", cfg.Listen)
 	}
-	if len(cfg.AllowFrom) != 1 {
-		t.Errorf("the flag that was set did not take: %v", cfg.AllowFrom)
-	}
+
 }
 
 func TestSettingTheLocalDomainCanonicalisesIt(t *testing.T) {

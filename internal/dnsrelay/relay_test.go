@@ -193,9 +193,8 @@ func ask(t *testing.T, at netip.AddrPort, query []byte) []byte {
 func loopbackConfig(t *testing.T, upstream netip.AddrPort) Config {
 	t.Helper()
 	return Config{
-		Listen:    []netip.AddrPort{freePort(t)},
-		AllowFrom: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")},
-		Upstream:  upstream,
+		Listen:   []netip.AddrPort{freePort(t)},
+		Upstream: upstream,
 	}
 }
 
@@ -302,55 +301,6 @@ func TestRelayBlocksWithoutAskingUpstream(t *testing.T) {
 	case <-asked:
 		t.Error("a blocked name was forwarded upstream anyway")
 	default:
-	}
-}
-
-// Dropped without an answer, not refused with one. A REFUSED reply is still a
-// reply, and answering an unsolicited source at all is what makes a resolver
-// useful as a reflector.
-func TestRelayDropsQueriesFromOutsideTheAllowList(t *testing.T) {
-	up := newFakeUpstream(t, func(query []byte) []byte { return query })
-
-	cfg := loopbackConfig(t, up.addr())
-	cfg.AllowFrom = []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
-	relay, at := startRelay(t, cfg, nil)
-
-	conn, err := net.DialUDP("udp", nil, net.UDPAddrFromAddrPort(at))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close()
-	if _, err := conn.Write(buildQuery(t, 1, "example.com.", dnsmessage.TypeA)); err != nil {
-		t.Fatal(err)
-	}
-	if err := conn.SetReadDeadline(time.Now().Add(300 * time.Millisecond)); err != nil {
-		t.Fatal(err)
-	}
-	buf := make([]byte, 512)
-	if n, err := conn.Read(buf); err == nil {
-		t.Errorf("a query from outside the allow list was answered with %d bytes", n)
-	}
-
-	// The refusal has to be counted, or a steady stream of them is invisible.
-	if got := relay.Snapshot().Refused; got == 0 {
-		t.Error("the refusal was not counted")
-	}
-}
-
-// An empty allow list denies everybody: a relay that answers nobody is a
-// visible outage somebody fixes in minutes, where one that answers the internet
-// is an amplifier nobody notices until it is used against a third party.
-func TestEmptyAllowListDeniesEverybody(t *testing.T) {
-	up := newFakeUpstream(t, func(query []byte) []byte { return query })
-	cfg := loopbackConfig(t, up.addr())
-	cfg.AllowFrom = nil
-
-	relay, err := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if relay.allowed(netip.MustParseAddr("127.0.0.1")) {
-		t.Error("an empty allow list let somebody in")
 	}
 }
 

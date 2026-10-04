@@ -302,7 +302,6 @@ export interface Record {
 export interface DnsConfig {
   enabled: boolean
   listen?: AddressAndPort[]
-  allow_from?: IPPrefix[]
   upstream: Upstream
   local_domain?: string
   hosts?: Host[]

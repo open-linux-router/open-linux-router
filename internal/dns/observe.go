@@ -69,7 +69,6 @@ type Stats struct {
 	Since    time.Time
 	Queries  uint64
 	Blocked  uint64
-	Refused  uint64
 	Failed   uint64
 	Dropped  uint64
 	Unparsed uint64
@@ -101,8 +100,7 @@ type ObserveView interface {
 	// longer pays for the rows.
 	Stats(ctx context.Context) (Stats, error)
 
-	// Clients returns who has been resolving through us, which is what tells a
-	// harmless access-control change from one that cuts somebody off.
+	// Clients returns who has been resolving through us.
 	Clients(ctx context.Context) ([]Client, error)
 }
 
@@ -229,7 +227,7 @@ func (o SocketObserver) Clients(ctx context.Context) ([]Client, error) {
 
 func viewStats(s dnsrelay.Stats) Stats {
 	return Stats{
-		Since: s.Since, Queries: s.Queries, Blocked: s.Blocked, Refused: s.Refused,
+		Since: s.Since, Queries: s.Queries, Blocked: s.Blocked,
 		Failed: s.Failed, Dropped: s.Dropped, Unparsed: s.Unparsed,
 		Held: s.Held, Capacity: s.Capacity, Clients: viewClients(s.Clients),
 	}

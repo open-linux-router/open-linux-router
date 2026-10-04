@@ -25,8 +25,7 @@ const TeeBuffer = 256
 // Relay is the running data plane: it owns :53, applies policy, and forwards
 // everything else to unbound.
 //
-// Once the fast path is read → access-control → policy → forward → write →
-// try-send, it is *done* (docs/dns.md §4.2). Every later feature lands on the
+// Once the fast path is read → policy → forward → write → try-send, it is *done* (docs/dns.md §4.2). Every later feature lands on the
 // far side of the tee and cannot regress DNS. That is the line to hold in
 // review: anything that influences the response belongs before the forward;
 // anything that merely observes goes over the channel.
@@ -52,9 +51,6 @@ type Relay struct {
 	counters Counters
 	clients  *ClientTable
 	started  time.Time
-
-	// allow is the compiled access-control list, masked once at startup.
-	allow []netip.Prefix
 
 	tee chan observation
 }
@@ -96,10 +92,6 @@ func New(cfg Config, logger *slog.Logger) (*Relay, error) {
 		started: time.Now(),
 		tee:     make(chan observation, TeeBuffer),
 	}
-	for _, p := range cfg.AllowFrom {
-		r.allow = append(r.allow, p.Masked())
-	}
-
 	if err := r.Reload(); err != nil {
 		return nil, err
 	}
@@ -203,22 +195,6 @@ func LoadPolicies(dir string) ([]Policy, error) {
 	// that a directory read order cannot change which default policy wins.
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
-}
-
-// allowed reports whether a source may query us.
-//
-// An empty list denies everybody. That is the safe direction to fail: a relay
-// that answers nobody is a visible outage somebody fixes in minutes, where one
-// that answers the internet is an amplifier nobody notices until it is used
-// against a third party (docs/dns.md §5).
-func (r *Relay) allowed(client netip.Addr) bool {
-	client = client.Unmap()
-	for _, p := range r.allow {
-		if p.Contains(client) {
-			return true
-		}
-	}
-	return false
 }
 
 // result is what resolving one query produced.

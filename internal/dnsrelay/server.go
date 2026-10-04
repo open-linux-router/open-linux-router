@@ -96,31 +96,11 @@ func (r *Relay) Run(ctx context.Context, ready func()) error {
 	return nil
 }
 
-// bind opens the relay's sockets, honouring pinned addresses and falling back
-// to the wildcard when they cannot be had.
-//
-// The fallback is the self-healing half, and the reason a failed bind is no
-// longer simply returned. An operator who pins a listen address owns it, but
-// "owns it" cannot be allowed to mean "the house loses DNS until they notice".
-// A pinned address stops existing for reasons that never reach this process — a
-// new lease, a renumbered upstream, a cable moved to another port — and under
-// Restart=always the old behaviour turned that into a crash loop with the
-// reason buried in the journal.
-//
-// So intent is tried first and honoured when it works; when it cannot be bound
-// the relay says so loudly and serves from the wildcard rather than not
-// serving. AllowFrom is unchanged either way, so this widens nothing that
-// matters — it only stops a stale address from being fatal.
+// bind honours explicit listen addresses exactly. Only the default wildcard
+// may tolerate an unavailable address family (for example IPv6 disabled).
 func (r *Relay) bind() ([]bound, error) {
-	if pinned := r.cfg.Listen; len(pinned) > 0 {
-		listeners, err := bindAll(pinned)
-		if err == nil {
-			return listeners, nil
-		}
-		r.logger.Error("could not bind the configured listen addresses; "+
-			"falling back to answering on every address, which is the default. "+
-			"Clear `listen` in the DNS configuration to make that the intent",
-			"error", err)
+	if len(r.cfg.Listen) > 0 {
+		return bindAll(r.cfg.Listen)
 	}
 
 	listeners, errs := bindAny(WildcardListen(r.cfg.Port()))
@@ -151,13 +131,6 @@ func (r *Relay) serveUDP(ctx context.Context, conn udpConn) {
 
 		client := from.Addr()
 		r.counters.Queries.Add(1)
-		if !r.allowed(client) {
-			// Dropped without an answer, not refused with one. A REFUSED reply
-			// is still a reply, and answering an unsolicited source at all is
-			// what makes a resolver useful as a reflector.
-			r.counters.Refused.Add(1)
-			continue
-		}
 		r.clients.Seen(client, time.Now())
 
 		// Copied before the goroutine, because the loop reuses buf on the very
@@ -200,12 +173,6 @@ func (r *Relay) serveTCP(ctx context.Context, ln *net.TCPListener) {
 		}
 
 		client, _ := netip.AddrFromSlice(conn.RemoteAddr().(*net.TCPAddr).IP)
-		if !r.allowed(client) {
-			r.counters.Queries.Add(1)
-			r.counters.Refused.Add(1)
-			conn.Close()
-			continue
-		}
 		go r.serveTCPConn(ctx, conn, client)
 	}
 }

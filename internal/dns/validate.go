@@ -75,7 +75,6 @@ func Validate(c Config, links LinkView, reservations ReservationView) Result {
 	var r Result
 
 	validateListen(&r, c, links)
-	validateAllowFrom(&r, c, links)
 	validateUpstream(&r, c, links)
 	validateHosts(&r, c, links, reservations)
 	validatePolicies(&r, c)
@@ -95,14 +94,11 @@ func validateListen(r *Result, c Config, links LinkView) {
 		// different sentence from "you configured this wrong", because the fix
 		// is somewhere else entirely.
 		//
-		// A warning rather than an error, unlike the version this replaces. The
-		// relay binds the wildcard fine with nothing adopted; it just answers
-		// nobody, because AllowFrom derives from adopted interfaces and an
-		// empty allow list denies everybody. That is a box waiting to be
-		// finished, not a configuration to refuse.
+		// A warning rather than an error: the listener can start, but there
+		// is no managed network to advertise it to yet.
 		if c.Enabled && !anyAdopted(links) {
 			r.warnf("listen",
-				"this router has not been given an interface yet, so DNS will answer nobody. "+
+				"this router has not been given an interface yet. "+
 					"Hand it the interface facing your network")
 		}
 		return
@@ -142,8 +138,7 @@ func validateListen(r *Result, c Config, links LinkView) {
 			// Legal, and the same thing an empty list means. Spelling it out is
 			// allowed because an operator who writes 0.0.0.0 means it, and
 			// refusing the explicit form of the default would be a rule with
-			// nothing behind it. What keeps this off the internet is AllowFrom,
-			// not the address — see the Listen field's own comment.
+			// nothing behind it. The firewall owns access to the listener.
 			continue
 		}
 		if l.Addr().IsLoopback() {
@@ -167,7 +162,7 @@ func validateListen(r *Result, c Config, links LinkView) {
 		if !info.Adopted {
 			// design.md §3.4: adopt-only. A resolver appearing on an interface
 			// the operator never handed us is the exact surprise that forbids,
-			// and on a WAN-facing interface it is an open resolver.
+			// and on a WAN-facing interface it would be surprising.
 			r.errorf(path, "%s is on %q, which is not adopted; run `olr adopt %s` first",
 				l.Addr(), info.Name, info.Name)
 			continue
@@ -175,51 +170,6 @@ func validateListen(r *Result, c Config, links LinkView) {
 		if !info.Up {
 			r.warnf(path, "%s is on %q, which is down; DNS is configured but will not serve until it comes up",
 				l.Addr(), info.Name)
-		}
-	}
-}
-
-// validateAllowFrom checks who may ask.
-func validateAllowFrom(r *Result, c Config, links LinkView) {
-	if len(c.AllowFrom) == 0 {
-		if !c.Enabled {
-			return
-		}
-		// Empty is legal and means "the private networks this router was
-		// given". It is only a problem when that derivation comes up empty,
-		// because then the relay starts and answers nobody — a silent outage
-		// that looks like a DNS bug.
-		//
-		// Reported only when there is something adopted to derive from;
-		// otherwise validateListen has already said the more useful thing, and
-		// two messages about one missing interface is one too many.
-		if anyAdopted(links) && len(LANPrefixes(links)) == 0 {
-			r.errorf("allow_from",
-				"no source networks are allowed and none could be derived, because no adopted "+
-					"interface has a private address. List the networks that should be able to "+
-					"resolve")
-		}
-		return
-	}
-
-	for i, p := range c.AllowFrom {
-		path := fmt.Sprintf("allow_from[%d]", i)
-		if !p.IsValid() {
-			r.errorf(path, "invalid prefix")
-			continue
-		}
-		if p.Bits() == 0 {
-			// Not a warning. An open resolver is not a risk the operator takes
-			// with their own network — it is a reflector pointed at somebody
-			// else's, and they find out when their uplink is saturated.
-			r.errorf(path,
-				"%s allows the whole internet to resolve through this box, which makes it an "+
-					"amplifier for attacks on other networks. List the networks that should be "+
-					"able to resolve instead", p)
-			continue
-		}
-		if p != p.Masked() {
-			r.warnf(path, "%s has host bits set; it covers %s", p, p.Masked())
 		}
 	}
 }
@@ -313,10 +263,8 @@ func validateHosts(r *Result, c Config, links LinkView, reservations Reservation
 		return
 	}
 
-	// Every prefix on an adopted interface, public ones included, and
-	// deliberately not LANPrefixes: that keeps only private prefixes, so a host
-	// legitimately given a globally routable address would be warned about for
-	// not being on a network this resolver serves.
+	// Check every prefix on an adopted interface, public ones included: a
+	// globally routable local host address may be intentional.
 	//
 	// Empty when link knows nothing yet, in which case the check below simply
 	// does not run.

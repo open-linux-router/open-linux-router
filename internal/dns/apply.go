@@ -231,15 +231,6 @@ func (a Applier) Observe(ctx context.Context) (Observed, error) {
 		obs.Units[unit] = state
 	}
 
-	// Best-effort, and never fatal. A stopped relay has nothing to say, and a
-	// plan that refused to be built because of it would be useless at exactly
-	// the moment it is needed most — when the operator is trying to fix DNS.
-	if a.Observer != nil {
-		if clients, err := a.Observer.Clients(ctx); err == nil {
-			obs.Clients = clients
-		}
-	}
-
 	return obs, nil
 }
 

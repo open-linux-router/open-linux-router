@@ -25,9 +25,8 @@ func testLinks() StaticLinks {
 // test below can state exactly the one thing it is breaking.
 func validConfig() Config {
 	c := Config{
-		Enabled:   true,
-		Listen:    []netip.AddrPort{netip.MustParseAddrPort("192.168.1.1:53")},
-		AllowFrom: []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24")},
+		Enabled: true,
+		Listen:  []netip.AddrPort{netip.MustParseAddrPort("192.168.1.1:53")},
 	}
 	c.Normalize()
 	return c
@@ -64,7 +63,7 @@ func TestValidateListen(t *testing.T) {
 	}{
 		{
 			// The default, and the thing that cannot go stale. What keeps this
-			// off the internet is allow_from, not the address.
+			// inbound access is the firewall's job.
 			name: "nothing given means the wildcard",
 			edit: func(c *Config) { c.Listen = nil },
 		},
@@ -98,7 +97,6 @@ func TestValidateListen(t *testing.T) {
 			name: "an address that is on no interface",
 			edit: func(c *Config) {
 				c.Listen = []netip.AddrPort{netip.MustParseAddrPort("10.9.9.9:53")}
-				c.AllowFrom = []netip.Prefix{netip.MustParsePrefix("10.9.9.0/24")}
 			},
 			wantErr: "listen[0]",
 		},
@@ -108,7 +106,6 @@ func TestValidateListen(t *testing.T) {
 			name: "an unadopted interface",
 			edit: func(c *Config) {
 				c.Listen = []netip.AddrPort{netip.MustParseAddrPort("192.168.30.1:53")}
-				c.AllowFrom = []netip.Prefix{netip.MustParsePrefix("192.168.30.0/24")}
 			},
 			wantErr: "listen[0]",
 		},
@@ -117,7 +114,6 @@ func TestValidateListen(t *testing.T) {
 			name: "colliding with the resolver",
 			edit: func(c *Config) {
 				c.Listen = []netip.AddrPort{netip.MustParseAddrPort("127.0.0.1:5353")}
-				c.AllowFrom = []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")}
 			},
 			wantErr: "listen[0]",
 		},
@@ -145,117 +141,6 @@ func TestValidateListen(t *testing.T) {
 				t.Errorf("want an error at %q, got %v", tc.wantErr, errorPaths(res))
 			}
 		})
-	}
-}
-
-// An open resolver is not a risk to the operator's own network. It is a
-// reflector pointed at somebody else's, and they find out when their uplink is
-// saturated — so this refuses rather than warns.
-func TestValidateRefusesAnOpenResolver(t *testing.T) {
-	for _, open := range []string{"0.0.0.0/0", "::/0"} {
-		cfg := validConfig()
-		cfg.AllowFrom = []netip.Prefix{netip.MustParsePrefix(open)}
-		res := Validate(cfg, testLinks(), nil)
-		if !hasProblem(res.Errors, "allow_from[0]") {
-			t.Errorf("%s was accepted as an allowed source: %v", open, errorPaths(res))
-			continue
-		}
-		if !strings.Contains(res.Errors[0].Message, "amplifier") {
-			t.Errorf("the refusal does not explain the consequence: %s", res.Errors[0].Message)
-		}
-	}
-}
-
-// Empty allow_from means "the networks I listen on". It is only a problem when
-// that derivation comes up empty, because then the relay starts and answers
-// nobody — a silent outage that reads as a DNS bug.
-func TestValidateEmptyAllowFromIsDerived(t *testing.T) {
-	cfg := validConfig()
-	cfg.AllowFrom = nil
-	if res := Validate(cfg, testLinks(), nil); !res.OK() {
-		t.Errorf("an empty allow_from with a derivable network was rejected: %v", errorPaths(res))
-	}
-
-	// Nothing to derive from: the box has been handed an interface, but it has
-	// only a public address, so there is no network this resolver serves. The
-	// relay would bind and answer nobody, which is the silent outage this
-	// refuses on behalf of.
-	//
-	// Note what no longer affects this: the listen address. The derivation
-	// reads the interfaces now, so moving or clearing `listen` cannot empty the
-	// allow list — which is exactly the coupling that took DNS down when a
-	// network changed underneath a box.
-	wanOnly := StaticLinks{
-		"wan0": {Name: "wan0", Adopted: true, Up: true,
-			Prefixes: []netip.Prefix{netip.MustParsePrefix("203.0.113.7/24")}},
-	}
-	cfg.Listen = nil
-	if res := Validate(cfg, wanOnly, nil); !hasProblem(res.Errors, "allow_from") {
-		t.Errorf("a config that would answer nobody was accepted: %v", errorPaths(res))
-	}
-}
-
-// The allow list is what keeps a wildcard-bound relay off the internet, so the
-// uplink's own subnet must never appear in it however the box is wired.
-func TestDerivedAllowFromExcludesTheUplink(t *testing.T) {
-	got := LANPrefixes(testLinks())
-
-	for _, p := range got {
-		if p.Contains(netip.MustParseAddr("203.0.113.7")) {
-			t.Errorf("the WAN subnet %s is in the derived allow list: %v", p, got)
-		}
-		if p.Contains(netip.MustParseAddr("192.168.30.1")) {
-			t.Errorf("unadopted guest0's subnet %s was derived: %v", p, got)
-		}
-	}
-	if len(got) != 2 {
-		t.Errorf("derived %v, want lan0's two private prefixes", got)
-	}
-}
-
-// A network numbered from a public IPv6 prefix — a tunnel broker's, an ISP's
-// delegation — is still a LAN, and its clients ask over IPv6 from that prefix.
-// The private filter refused them. On a network member every routable prefix
-// is in; on an interface that is merely adopted, the uplink, it still is not.
-func TestAPublicIPv6PrefixOnANetworkIsAllowed(t *testing.T) {
-	links := StaticLinks{
-		"lan0": {Name: "lan0", Adopted: true, Up: true, Network: "lan", Prefixes: []netip.Prefix{
-			netip.MustParsePrefix("192.168.10.1/24"),
-			netip.MustParsePrefix("2001:db8:1:1::1/64"),
-		}},
-		"wan0": {Name: "wan0", Adopted: true, Up: true, Prefixes: []netip.Prefix{
-			netip.MustParsePrefix("203.0.113.7/24"),
-			netip.MustParsePrefix("2001:db8:ffff::5/64"),
-		}},
-	}
-	got := LANPrefixes(links)
-	want := map[string]bool{"192.168.10.0/24": true, "2001:db8:1:1::/64": true}
-	if len(got) != len(want) {
-		t.Fatalf("derived %v, want %v", got, want)
-	}
-	for _, p := range got {
-		if !want[p.String()] {
-			t.Errorf("unexpected %s in %v", p, got)
-		}
-	}
-}
-
-// Derivation reads the box, not the stored config, so a renumbered network is
-// followed rather than leaving the relay answering nobody.
-func TestDerivedAllowFromFollowsTheNetwork(t *testing.T) {
-	renumbered := StaticLinks{
-		"lan0": {Name: "lan0", Adopted: true, Up: true,
-			Prefixes: []netip.Prefix{netip.MustParsePrefix("10.7.0.1/16")}},
-	}
-	// The config still names an address from the network this box used to be
-	// on — the exact state a box lands in when the upstream renumbers.
-	cfg := validConfig()
-	cfg.AllowFrom = nil
-
-	got := EffectiveAllowFrom(cfg, renumbered)
-	want := netip.MustParsePrefix("10.7.0.0/16")
-	if len(got) != 1 || got[0] != want {
-		t.Errorf("EffectiveAllowFrom = %v, want %v from the network as it is now", got, want)
 	}
 }
 

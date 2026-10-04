@@ -27,7 +27,6 @@ func writeConfigText(w io.Writer, c Config) error {
 	fmt.Fprintf(w, "DNS is %s (olr-dnsd in front of unbound)\n", state)
 
 	fmt.Fprintf(w, "\nlistening on:  %s\n", orEveryAddress(c.Listen))
-	fmt.Fprintf(w, "queries from:  %s\n", orDerived(c.AllowFrom))
 	fmt.Fprintf(w, "resolving by:  %s\n", describeUpstream(c.Upstream))
 	fmt.Fprintf(w, "redirect:      %s\n", describeHijack(c.Hijack))
 	fmt.Fprintf(w, "query log:     %s\n", describeQueryLog(c.QueryLog))
@@ -183,7 +182,6 @@ func writeStatsText(w io.Writer, s statsView) error {
 	t := table(w)
 	fmt.Fprintf(t, "queries\t%d\n", s.Queries)
 	fmt.Fprintf(t, "blocked\t%d\n", s.Blocked)
-	fmt.Fprintf(t, "refused\t%d\t(asked by a source outside allow_from)\n", s.Refused)
 	fmt.Fprintf(t, "failed\t%d\t(upstream did not answer)\n", s.Failed)
 	if err := t.Flush(); err != nil {
 		return err
@@ -421,16 +419,6 @@ func orDash(s string) string {
 		return "-"
 	}
 	return s
-}
-
-// orDerived words an empty allow_from as what it actually means, which is not
-// "nothing". An operator reading "-" there would reasonably conclude the relay
-// answers everybody, which is the opposite of the truth.
-func orDerived(prefixes []netip.Prefix) string {
-	if len(prefixes) == 0 {
-		return "this router's own networks"
-	}
-	return joinPrefixes(prefixes)
 }
 
 // orEveryAddress spells out the default rather than printing a dash.

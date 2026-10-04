@@ -29,7 +29,6 @@ const MaxTrackedClients = 4096
 type Counters struct {
 	Queries  atomic.Uint64
 	Blocked  atomic.Uint64
-	Refused  atomic.Uint64
 	Failed   atomic.Uint64
 	Dropped  atomic.Uint64
 	Unparsed atomic.Uint64
@@ -37,9 +36,7 @@ type Counters struct {
 
 // ClientTable records who has been asking.
 //
-// It is what lets olrd answer "would this change cut anybody off" with a fact
-// rather than a guess — the direct analogue of internal/dhcp consulting the
-// live lease database before calling a change disruptive.
+// It lets olrd show which clients have actually queried this resolver.
 type ClientTable struct {
 	mu       sync.Mutex
 	clients  map[netip.Addr]*clientCount
@@ -113,7 +110,6 @@ func (r *Relay) Snapshot() Stats {
 		Since:    r.started,
 		Queries:  r.counters.Queries.Load(),
 		Blocked:  r.counters.Blocked.Load(),
-		Refused:  r.counters.Refused.Load(),
 		Failed:   r.counters.Failed.Load(),
 		Dropped:  r.counters.Dropped.Load(),
 		Unparsed: r.counters.Unparsed.Load(),

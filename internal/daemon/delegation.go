@@ -21,8 +21,8 @@ import (
 // and this is the subscriber. When it moves — delegated for the first time,
 // renumbered by the ISP, expired, or given back — the delegated networks'
 // router addresses follow it, the unreachable route for the prefix is swapped,
-// and everything built from the networks re-applies: dns derives its allow list
-// from the addresses, so a network on a new prefix is refused until it does.
+// and everything built from the networks re-applies. DNS access does not
+// depend on the delegated prefix; the firewall owns that boundary.
 
 // delegationFollower reconciles the box against dial.Delegation's prefix.
 type delegationFollower struct {

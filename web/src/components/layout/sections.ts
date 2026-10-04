@@ -198,7 +198,7 @@ export const SECTIONS: Section[] = [
       {
         slug: 'listening',
         label: 'Where it answers',
-        blurb: 'Which addresses this router serves DNS on, and who is allowed to ask.',
+        blurb: 'Which addresses this router serves DNS on.',
       },
       {
         slug: 'enforcement',
