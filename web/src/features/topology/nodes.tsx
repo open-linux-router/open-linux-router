@@ -3,6 +3,7 @@ import {
   ArrowUp,
   ChevronDown,
   ChevronUp,
+  ExternalLink,
   FolderInput,
   FolderPlus,
   Layers,
@@ -37,7 +38,7 @@ import type { MapGroup } from '@/features/topology/model'
 import type { Outside } from '@/features/topology/outside'
 import { magnitude, type Flow, type TrafficView } from '@/features/topology/traffic'
 import type { DeviceRow } from '@/lib/api-types'
-import type { DevicesGroup } from '@/lib/config-types'
+import type { DevicesGroup, Service } from '@/lib/config-types'
 import { cn, formatAgo, formatBytes, formatRate, formatRateCompact } from '@/lib/utils'
 
 /**
@@ -420,6 +421,8 @@ function GroupMenu({ group, groups, actions }: { group: MapGroup; groups: Device
  */
 export function DeviceNode({
   device,
+  services,
+  serviceDomain,
   density,
   row,
   traffic,
@@ -428,6 +431,8 @@ export function DeviceNode({
   actions,
 }: {
   device: DeviceRow
+  services?: Service[]
+  serviceDomain?: string
   density: Density
   /** Drawn as a row of its container's list rather than as a card of its own. */
   row?: { first: boolean }
@@ -453,6 +458,7 @@ export function DeviceNode({
           title={name}
           className={cn(
             'flex size-full min-w-0 items-center gap-3 rounded-lg px-3 text-left transition-colors',
+            services?.length && 'pb-5',
             onSelect && 'hover:bg-foreground/[0.035]',
             focusRing,
           )}
@@ -478,6 +484,7 @@ export function DeviceNode({
             <DeviceTraffic device={device} flow={flow} rated={traffic.rated} counting={traffic.counting} />
           </span>
         </Shell>
+        <ServiceLinks services={services} domain={serviceDomain} className="absolute bottom-1.5 left-[60px] right-3" />
         {onMoveDevice && (
           <DeviceMenu
             device={device}
@@ -495,6 +502,7 @@ export function DeviceNode({
     'flex size-full min-w-0 items-center rounded-lg border bg-card text-left shadow-xs transition-[border-color,box-shadow]',
     onSelect && 'hover:border-foreground/20 hover:shadow-sm',
     focusRing,
+    services?.length && 'pb-5',
   )
 
   const body =
@@ -548,11 +556,6 @@ export function DeviceNode({
               </span>
             </span>
           )}
-          {/* Room for what a device serves, when the map learns it: published
-              names and forwarded ports would sit here as small chips, under
-              the address, and the layout's detail height would grow by one
-              line. Left out until there is a source for them — an empty slot
-              drawn on every node would be a promise the data cannot keep. */}
         </span>
       </Shell>
     )
@@ -560,6 +563,7 @@ export function DeviceNode({
   return (
     <div className="group/node relative size-full">
       {body}
+      <ServiceLinks services={services} domain={serviceDomain} className="absolute bottom-1.5 left-3 right-3" />
       {onMoveDevice && (
         <DeviceMenu
           device={device}
@@ -570,6 +574,31 @@ export function DeviceNode({
         />
       )}
     </div>
+  )
+}
+
+/** Links sit beside, not inside, the device detail button. */
+function ServiceLinks({ services, domain, className }: { services?: Service[]; domain?: string; className: string }) {
+  if (!services?.length) return null
+  return (
+    <span className={cn('flex min-w-0 items-center gap-1 overflow-hidden text-[11px] leading-4', className)}>
+      {services.slice(0, 2).map((service) => {
+        const label = domain ? `${service.name}.${domain}` : service.name
+        return domain ? (
+          <a key={service.name} href={`https://${label}`} target="_blank" rel="noopener noreferrer"
+            title={`Open ${label}`} className="inline-flex max-w-full shrink-0 items-center gap-0.5 truncate rounded bg-muted px-1.5 text-foreground hover:underline focus-visible:outline-2">
+            <span className="truncate">{service.name}</span><ExternalLink className="size-2.5 shrink-0" aria-hidden />
+          </a>
+        ) : (
+          <span key={service.name} className="shrink-0 rounded bg-muted px-1.5 text-muted-foreground">{service.name}</span>
+        )
+      })}
+      {services.length > 2 && (
+        <span className="shrink-0 text-muted-foreground" title={services.slice(2).map((s) => s.name).join(', ')}>
+          +{services.length - 2}
+        </span>
+      )}
+    </span>
   )
 }
 

@@ -1,0 +1,33 @@
+import type { DeviceRow } from '@/lib/api-types'
+import type { IngressConfig, Service } from '@/lib/config-types'
+
+/** Only attach a manually addressed service when its target identifies one device. */
+export function servicesByDevice(config: IngressConfig | undefined, devices: DeviceRow[]): Map<string, Service[]> {
+  const result = new Map<string, Service[]>()
+  if (!config?.enabled) return result
+
+  const byName = new Map<string, string | null>()
+  const byAddress = new Map<string, string | null>()
+  for (const device of devices) {
+    for (const name of new Set([device.name, device.hostname].filter((name): name is string => Boolean(name)))) {
+      const key = name.toLowerCase()
+      if (!byName.has(key)) byName.set(key, device.mac)
+      else if (byName.get(key) !== device.mac) byName.set(key, null)
+    }
+    for (const ip of new Set([device.fixed_ip, ...(device.ips ?? [])].filter((ip): ip is string => Boolean(ip)))) {
+      if (!byAddress.has(ip)) byAddress.set(ip, device.mac)
+      else if (byAddress.get(ip) !== device.mac) byAddress.set(ip, null)
+    }
+  }
+
+  for (const service of config.services ?? []) {
+    const mac = service.upstream.device
+      ? byName.get(service.upstream.device.toLowerCase())
+      : byAddress.has(service.upstream.host ?? '')
+        ? byAddress.get(service.upstream.host ?? '')
+        : byName.get((service.upstream.host ?? '').toLowerCase())
+    if (!mac) continue
+    result.set(mac, [...(result.get(mac) ?? []), service])
+  }
+  return result
+}

@@ -11,6 +11,8 @@ import { useDhcpConfig, useDhcpStatus } from '@/features/dhcp/queries'
 import { useDialStatus } from '@/features/dial/queries'
 import { useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
+import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
+import { servicesByDevice } from '@/features/topology/services'
 import { useGatewayLatency, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
 import { NetworkMap } from '@/features/topology/network-map'
@@ -60,6 +62,9 @@ export function OverviewPage() {
   const traffic = useGatewayTraffic()
   const latency = useGatewayLatency()
   const identity = useDevicesConfig()
+  const ingress = useIngressConfig()
+  const ingressStatus = useIngressStatus()
+  const services = useMemo(() => servicesByDevice(ingress.data, devices.data?.devices ?? []), [ingress.data, devices.data])
   const flows = useTrafficView(traffic.data, traffic.isError)
   const history = useRateHistory(flows)
   const dial = useDialStatus()
@@ -108,6 +113,8 @@ export function OverviewPage() {
       <section aria-label="Your network" className="space-y-4 pt-6">
         <NetworkMap
           devices={devices.data?.devices ?? []}
+          services={services}
+          serviceDomain={ingressStatus.data?.domain}
           groups={identity.data?.groups}
           traffic={flows}
           assignments={gateway.data?.assignments}

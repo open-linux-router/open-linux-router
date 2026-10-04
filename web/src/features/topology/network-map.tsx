@@ -20,7 +20,7 @@ import {
 import type { Outside } from '@/features/topology/outside'
 import { magnitude, type TrafficView } from '@/features/topology/traffic'
 import type { AssignmentStatus, DeviceRow, ExitStatus, NetworkRow } from '@/lib/api-types'
-import type { DevicesGroup, Pool } from '@/lib/config-types'
+import type { DevicesGroup, Pool, Service } from '@/lib/config-types'
 
 /**
  * The network, drawn top-down: observed default next hops, this router, then
@@ -57,6 +57,8 @@ import type { DevicesGroup, Pool } from '@/lib/config-types'
  */
 export function NetworkMap({
   devices: all,
+  services = new Map(),
+  serviceDomain,
   groups = [],
   traffic,
   assignments,
@@ -71,6 +73,8 @@ export function NetworkMap({
   ...actions
 }: {
   devices: DeviceRow[]
+  services?: Map<string, Service[]>
+  serviceDomain?: string
   groups?: DevicesGroup[]
   traffic: TrafficView
   assignments?: AssignmentStatus[]
@@ -116,6 +120,8 @@ export function NetworkMap({
   return (
     <Canvas
       devices={all}
+      services={services}
+      serviceDomain={serviceDomain}
       groups={groups}
       traffic={traffic}
       networks={networks}
@@ -147,6 +153,8 @@ const STILL: Transition = { duration: 0 }
 
 function Canvas({
   devices: all,
+  services,
+  serviceDomain,
   groups,
   traffic,
   networks,
@@ -158,6 +166,8 @@ function Canvas({
   actions,
 }: {
   devices: DeviceRow[]
+  services: Map<string, Service[]>
+  serviceDomain?: string
   groups: DevicesGroup[]
   traffic: TrafficView
   networks: NetworkInfo[]
@@ -255,6 +265,7 @@ function Canvas({
         counting: traffic.counting,
         rated: traffic.rated,
         outside: outsideInput,
+        serviceDevices: new Set(services.keys()),
       })
     if (wanted !== 'auto') return [at(wanted), wanted]
     // Decided on the unfocused map. Opening a "+N more" does not count against detail either: it is the
@@ -266,7 +277,7 @@ function Canvas({
     const whole = at('detail', undefined)
     const d: Density = !whole.narrow && !focus && (whole.fits || expanded.size > 0) ? 'detail' : 'compact'
     return [d === 'detail' ? whole : at(d), d]
-  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated, outsideInput])
+  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated, outsideInput, services])
 
   useEffect(() => {
     onDensity?.(density)
@@ -309,6 +320,8 @@ function Canvas({
         return (
           <DeviceNode
             device={item.device}
+            services={services.get(item.device.mac)}
+            serviceDomain={serviceDomain}
             density={density}
             row={item.row}
             traffic={traffic}

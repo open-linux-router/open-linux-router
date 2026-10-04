@@ -75,10 +75,11 @@ export interface NodeSize {
  * the address and the rate, and folds sooner. A detail node loses its third
  * line, the traffic, when nothing is being counted.
  */
-export function nodeSize(density: Density, counting: boolean): NodeSize {
+export function nodeSize(density: Density, counting: boolean, serviceDevices: ReadonlySet<string> = new Set()): NodeSize {
+  const extra = serviceDevices.size > 0 ? 24 : 0
   return density === 'compact'
-    ? { minW: 168, w: 144, maxW: 184, h: 40, k: 16, row: 44, list: 248 }
-    : { minW: 208, w: 232, maxW: 288, h: counting ? 68 : 56, k: 10, row: 56, list: 288 }
+    ? { minW: 168, w: 144, maxW: 184, h: 40 + extra, k: 16, row: 44, list: 248 }
+    : { minW: 208, w: 232, maxW: 288, h: (counting ? 68 : 56) + extra, k: 10, row: 56, list: 288 }
 }
 
 /** Below this the map stops branching and stacks. */
@@ -237,6 +238,7 @@ export interface LayoutInput {
   rated: boolean
   /** Observed next hops above the router. */
   outside?: OutsideInput
+  serviceDevices?: ReadonlySet<string>
 }
 
 /** The expansion key of the router's own "+N more groups". */
@@ -368,6 +370,7 @@ interface Ctx {
   /** The container that gets the "make your first group" hint. */
   hint?: string
   cache: Map<string, Plan[]>
+  serviceDevices?: ReadonlySet<string>
 }
 
 function chunk<T>(list: T[], size: number): T[][] {
@@ -390,7 +393,10 @@ type Block =
 function blocks(plan: Pick<Plan, 'note' | 'devices' | 'shelves' | 'more'>, ctx: Ctx): Block[] {
   const out: Block[] = []
   if (plan.note) out.push({ kind: 'note', h: plan.note === 'hint' ? hintHeight(ctx.narrow) : EMPTY_H })
-  if (plan.devices.length > 0) out.push({ kind: 'list', h: plan.devices.length * ctx.node.row })
+  if (plan.devices.length > 0) {
+    const height = plan.devices.reduce((h, d) => h + ctx.node.row + (ctx.serviceDevices?.has(d.mac) ? 24 : 0), 0)
+    out.push({ kind: 'list', h: height })
+  }
   for (const shelf of plan.shelves) out.push({ kind: 'shelf', h: Math.max(...shelf.map((p) => p.h)), shelf })
   if (plan.more) out.push({ kind: 'more', h: MORE_H })
   return out
@@ -483,14 +489,17 @@ function place(plan: Plan, x: number, y: number, w: number, minH: number, ctx: C
         out.push({ kind: 'note', key: `note:${plan.group.key}`, box: { x: x + PAD, y: top, w: inner, h: b.h }, note: plan.note! })
         break
       case 'list':
+        let offset = 0
         plan.devices.forEach((d, j) => {
+          const height = node.row + (ctx.serviceDevices?.has(d.mac) ? 24 : 0)
           out.push({
             kind: 'device',
             key: `d:${d.mac}`,
             device: d,
-            box: { x, y: top + j * node.row, w, h: node.row },
+            box: { x, y: top + offset, w, h: height },
             row: { first: j === 0 },
           })
+          offset += height
         })
         break
       case 'shelf': {
@@ -524,13 +533,14 @@ function place(plan: Plan, x: number, y: number, w: number, minH: number, ctx: C
 function makeCtx(input: LayoutInput, narrow: boolean): Ctx {
   const { tree } = input
   return {
-    node: nodeSize(input.density, input.counting),
+    node: nodeSize(input.density, input.counting, input.serviceDevices),
     solo: tree.top.length === 1 ? tree.top[0].key : undefined,
     expanded: input.expanded,
     filtering: tree.filtering,
     narrow,
     hint: !tree.grouped && !tree.filtering ? OTHER_KEY : undefined,
     cache: new Map(),
+    serviceDevices: input.serviceDevices,
   }
 }
 
@@ -706,7 +716,7 @@ function gridPlan(g: MapGroup, w: number, ctx: Ctx): Plan {
  */
 function layoutFocus(input: LayoutInput, focus: string): Layout {
   const { tree, width: A } = input
-  const node = nodeSize(input.density, input.counting)
+  const node = nodeSize(input.density, input.counting, input.serviceDevices)
   const items: Item[] = []
   const links: Link[] = []
   const chain = chainTo(tree, focus)
