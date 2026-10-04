@@ -600,6 +600,8 @@ export interface DialStatus {
   uplink?: UplinkStatus
   /** Absent only when the box has no default route at all. */
   route?: RouteStatus
+  /** Observed main-table IPv4 and IPv6 default routes, including multipath legs. */
+  default_routes: { family: 4 | 6; dev: string; via?: string; metric: number; gateway_state?: 'answers' | 'silent' }[]
   records: RecordStatus[]
   as_of: string
 }

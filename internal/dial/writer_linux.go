@@ -428,23 +428,33 @@ func (linuxWriter) Observe(ctx context.Context, iface string) (Observed, error) 
 		return Observed{}, err
 	}
 	byRoute := iface == ""
+	routes, err := readDefaultRoutes()
+	if err != nil {
+		return Observed{}, err
+	}
 	if byRoute {
-		dev, err := defaultDev()
-		if err != nil || dev == "" {
-			return Observed{}, err
+		for _, route := range routes {
+			if route.Family == netlink.FAMILY_V4 {
+				iface = route.Dev
+				break
+			}
 		}
-		iface = dev
+		if iface == "" && len(routes) > 0 {
+			iface = routes[0].Dev
+		}
 	}
 
-	var obs Observed
-	link, err := netlink.LinkByName(iface)
-	if err == nil {
-		obs.Present = true
-		obs.Up = link.Attrs().Flags&net.FlagUp != 0
-		if addrs, err := readUplinkV4(link); err == nil {
-			obs.Addrs = addrs
-		} else {
-			return obs, err
+	obs := Observed{DefaultRoutes: routes}
+	if iface != "" {
+		link, err := netlink.LinkByName(iface)
+		if err == nil {
+			obs.Present = true
+			obs.Up = link.Attrs().Flags&net.FlagUp != 0
+			if addrs, err := readUplinkV4(link); err == nil {
+				obs.Addrs = addrs
+			} else {
+				return obs, err
+			}
 		}
 	}
 
@@ -459,13 +469,68 @@ func (linuxWriter) Observe(ctx context.Context, iface string) (Observed, error) 
 	}
 	obs.Gateway, obs.GatewayDev = gw, dev
 	if byRoute && dev == "" {
-		// defaultVia skips a route with no next hop; defaultDev did not.
-		obs.GatewayDev = iface
+		// defaultVia skips a route with no next hop; keep the IPv4
+		// interface even when the only observed default is IPv6.
+		for _, route := range routes {
+			if route.Family == netlink.FAMILY_V4 {
+				obs.GatewayDev = route.Dev
+				break
+			}
+		}
 	}
 	if gw.IsValid() {
 		obs.GatewayState, obs.GatewaySeenOn = gatewayNeighbour(gw, dev)
 	}
+	for i := range obs.DefaultRoutes {
+		r := &obs.DefaultRoutes[i]
+		if r.Family == netlink.FAMILY_V4 && r.Via.IsValid() {
+			r.GatewayState, _ = gatewayNeighbour(r.Via, r.Dev)
+		}
+	}
 	return obs, nil
+}
+
+// readDefaultRoutes preserves every main-table default route, including the
+// individual legs of a multipath route. It never infers a gateway from the
+// address on an interface.
+func readDefaultRoutes() ([]DefaultRoute, error) {
+	var out []DefaultRoute
+	for _, family := range []int{netlink.FAMILY_V4, netlink.FAMILY_V6} {
+		routes, err := netlink.RouteListFiltered(family,
+			&netlink.Route{Table: unix.RT_TABLE_MAIN}, netlink.RT_FILTER_TABLE)
+		if family == netlink.FAMILY_V6 && (errors.Is(err, unix.EAFNOSUPPORT) || errors.Is(err, unix.EPROTONOSUPPORT)) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range routes {
+			if r.Dst != nil {
+				if ones, _ := r.Dst.Mask.Size(); ones != 0 {
+					continue
+				}
+			}
+			add := func(index int, gw net.IP) {
+				link, err := netlink.LinkByIndex(index)
+				if err != nil {
+					return
+				}
+				entry := DefaultRoute{Family: family, Dev: link.Attrs().Name, Metric: r.Priority}
+				if via, ok := netip.AddrFromSlice(gw); ok {
+					entry.Via = via.Unmap()
+				}
+				out = append(out, entry)
+			}
+			if len(r.MultiPath) > 0 {
+				for _, hop := range r.MultiPath {
+					add(hop.LinkIndex, hop.Gw)
+				}
+			} else {
+				add(r.LinkIndex, r.Gw)
+			}
+		}
+	}
+	return out, nil
 }
 
 // gatewayNeighbour reads whether the gateway answers on dev, and names another
@@ -560,6 +625,17 @@ func defaultVia() (netip.Addr, string, error) {
 				continue
 			}
 		}
+		if len(r.MultiPath) > 0 {
+			for _, hop := range r.MultiPath {
+				if gw, ok := netip.AddrFromSlice(hop.Gw); ok {
+					dev := ""
+					if link, err := netlink.LinkByIndex(hop.LinkIndex); err == nil {
+						dev = link.Attrs().Name
+					}
+					return gw.Unmap(), dev, nil
+				}
+			}
+		}
 		gw, ok := netip.AddrFromSlice(r.Gw)
 		if !ok {
 			continue
@@ -571,30 +647,6 @@ func defaultVia() (netip.Addr, string, error) {
 		return gw.Unmap(), dev, nil
 	}
 	return netip.Addr{}, "", nil
-}
-
-// defaultDev names the interface the default route leaves by, gateway or not.
-//
-// Not defaultVia: a point-to-point uplink — PPPoE is the common one — has a
-// default route with no next hop at all, and that is still the way out, with
-// the box's public address sitting on it.
-func defaultDev() (string, error) {
-	routes, err := netlink.RouteListFiltered(netlink.FAMILY_V4,
-		&netlink.Route{Table: unix.RT_TABLE_MAIN}, netlink.RT_FILTER_TABLE)
-	if err != nil {
-		return "", err
-	}
-	for _, r := range routes {
-		if r.Dst != nil {
-			if ones, _ := r.Dst.Mask.Size(); ones != 0 {
-				continue
-			}
-		}
-		if link, err := netlink.LinkByIndex(r.LinkIndex); err == nil {
-			return link.Attrs().Name, nil
-		}
-	}
-	return "", nil
 }
 
 // readUplinkV4 lists an interface's IPv4 addresses as prefixes.

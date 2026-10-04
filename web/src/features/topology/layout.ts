@@ -48,10 +48,8 @@ import type { DeviceRow } from '@/lib/api-types'
  * An earlier version drew more than one row inside one outline with a single
  * link into it, which put a box around boxes around lists.
  *
- * **Ways out are above the router.** The internet — which is the router in
- * between when there is one — and the exits this router sends traffic to are
- * drawn as their own nodes over it, row by row: the picture reads top to
- * bottom as the internet, the router, the house. withBand has the rows.
+ * **Default next hops are above the router.** Only observed main-table routes
+ * belong there; gateway policy exits and remote clients are separate concerns.
  */
 
 export type Density = 'compact' | 'detail'
@@ -163,17 +161,7 @@ export type Item =
       /** Present when the device is a row of a container's list rather than a card of its own. */
       row?: { first: boolean }
     }
-  | { kind: 'exit'; key: string; box: Box; name: string }
-  | { kind: 'internet'; key: string; box: Box }
-  | {
-      kind: 'remote'
-      key: string
-      box: Box
-      /** Which client, by its key in the Remote it came from. */
-      client?: string
-      /** Present on the last node when not everyone fits: how many it stands for. */
-      more?: number
-    }
+  | { kind: 'hop'; key: string; box: Box }
   | {
       kind: 'more'
       key: string
@@ -203,7 +191,7 @@ export interface Link {
   dashed?: boolean
   /** For links to groups set aside while another is focused. */
   faint?: boolean
-  /** For the line from a way out that is not answering. */
+  /** For the line from a next hop that is not answering. */
   fault?: boolean
 }
 
@@ -232,22 +220,9 @@ export interface Layout {
   rail?: Rail
 }
 
-/** A way out, as the layout needs it: a name, whether it answers, how busy it is. */
-export interface ExitInput {
-  name: string
-  down: boolean
-  /** A way out that refuses traffic, which the internet does not feed. */
-  blocked?: boolean
-  weight: number
-}
-
-/** What is above the router besides the ways out — see outside.ts. */
+/** The observed default-route next hops, not policy exits. */
 export interface OutsideInput {
-  /** The router between this one and the internet has stopped answering. */
-  upstreamDown: boolean
-  noRoute: boolean
-  /** Who is connected from outside, by key, in the order they are drawn. */
-  remote?: string[]
+  hops: { key: string; down: boolean }[]
 }
 
 export interface LayoutInput {
@@ -260,9 +235,7 @@ export interface LayoutInput {
   focus?: string
   counting: boolean
   rated: boolean
-  /** Drawn above the router, in this order. */
-  exits?: ExitInput[]
-  /** The internet and what is between, over the ways out. */
+  /** Observed next hops above the router. */
   outside?: OutsideInput
 }
 
@@ -285,21 +258,13 @@ export function layout(input: LayoutInput): Layout {
 /* Above the router                                                            */
 /* -------------------------------------------------------------------------- */
 
-const EXIT_W = 208
-const EXIT_MIN_W = 150
 export const EXIT_H = 52
-const INTERNET_W = 240
-const REMOTE_W = 208
-/** Who is connected, when they have rows of their own: at most this many nodes. */
-const REMOTE_STACKED = 3
+const HOP_W = 240
 const BAND_ROW_GAP = 28
 const EXIT_DROP = 48
 
 /** One box in the band over the router, before it has a place. */
-type BandNode =
-  | { kind: 'internet'; key: string; w: number; h: number }
-  | { kind: 'exit'; key: string; w: number; h: number; exit: ExitInput }
-  | { kind: 'remote'; key: string; w: number; h: number; client?: string; more?: number }
+type BandNode = { kind: 'hop'; key: string; w: number; h: number; down: boolean }
 
 /**
  * Everything above the router, in rows, and everything else moved down to
@@ -307,67 +272,19 @@ type BandNode =
  * because it is the same band on every one of them: the wide map centres it on
  * the router, the narrow one starts it at the left edge where the router is.
  *
- * Top to bottom it is the path traffic takes: the internet, the ways out this
- * router chooses among, and then the router. Every line joins one row to the
- * next, never skipping one — the same rule the map keeps below the router.
- *
- * Whoever is connected from outside is the exception to the path, and is
- * drawn as one: a node each, after the path in the row just above the router,
- * with a dashed line into it, because they arrive *at* the router. Drawing
- * them beside the internet would say the same thing and need lines that
- * crossed every row in between to say it.
+ * Each default next hop is directly connected to this router.
  */
 function withBand(below: Layout, input: LayoutInput): Layout {
-  const exits = input.exits ?? []
   const outside = input.outside
   const A = input.width
   const gap = below.narrow ? 12 : 40
-  const fit = (w: number) => Math.min(w, A)
 
   const rows: BandNode[][] = []
-  if (outside) rows.push([{ kind: 'internet', key: 'o:internet', w: fit(INTERNET_W), h: EXIT_H }])
-  if (exits.length > 0) {
-    const perRow = Math.max(1, Math.floor((A + gap) / (EXIT_MIN_W + gap)))
-    const across = Math.min(perRow, exits.length)
-    const w = Math.min(EXIT_W, (A - (across - 1) * gap) / across)
-    for (const row of chunk(exits, perRow)) {
-      rows.push(row.map((e) => ({ kind: 'exit', key: `x:${e.name}`, w, h: EXIT_H, exit: e })))
-    }
-  }
-  // Whoever is connected goes after the path in the row just above the
-  // router, where each line is one row long — as many as fit to the right of
-  // it, the last standing for the rest when not everyone does. Where that row
-  // has no room for even one — a phone, or a row of ways out — they go in rows
-  // of their own at the top, at most REMOTE_STACKED nodes, and draw no line:
-  // under the path they would sit between the ways out and the router, and
-  // those lines would appear to run into them.
-  let remoteLinked = false
-  const clients = outside?.remote ?? []
-  if (clients.length > 0) {
-    const w = fit(REMOTE_W)
-    const nodes = (room: number): BandNode[] => upTo(Math.max(0, Math.floor((room + gap) / (w + gap))))
-    const upTo = (n: number): BandNode[] => {
-      const shown = clients.length > n ? clients.slice(0, Math.max(0, n - 1)) : clients
-      const out: BandNode[] = shown.map((c) => ({ kind: 'remote', key: `o:remote:${c}`, w, h: EXIT_H, client: c }))
-      if (n > 0 && shown.length < clients.length) {
-        out.push({ kind: 'remote', key: 'o:remote: more', w, h: EXIT_H, more: clients.length - shown.length })
-      }
-      return out
-    }
-    const last = rows.at(-1)
-    // The room right of the path, which stays centred on the router.
-    const spineW = last ? last.reduce((sum, n) => sum + n.w, 0) + (last.length - 1) * gap : 0
-    const right = last ? (below.narrow ? A - spineW : (A - spineW) / 2) - gap : A
-    const beside = nodes(right)
-    if (!last) {
-      rows.push(beside)
-      remoteLinked = true
-    } else if (beside.length > 0) {
-      last.push(...beside)
-      remoteLinked = true
-    } else {
-      const across = Math.max(1, Math.floor((A + gap) / (w + gap)))
-      rows.unshift(...chunk(upTo(Math.max(across, REMOTE_STACKED)), across))
+  if (outside?.hops.length) {
+    const perRow = Math.max(1, Math.floor((A + gap) / (HOP_W + gap)))
+    for (const row of chunk(outside.hops, perRow)) {
+      const w = Math.min(HOP_W, (A - (row.length - 1) * gap) / row.length)
+      rows.push(row.map((hop) => ({ kind: 'hop', key: `o:${hop.key}`, w, h: EXIT_H, down: hop.down })))
     }
   }
   if (rows.length === 0) return below
@@ -381,16 +298,12 @@ function withBand(below: Layout, input: LayoutInput): Layout {
   const items: Item[] = []
   const links: Link[] = []
 
-  // Placed row by row, each centred on the router — or, with remote access at
-  // the end of it, with everything but remote access centred, so the path
-  // stays one straight column and remote access hangs off to the side.
+  // Each row is centred on the router, with one direct line per next hop.
   const placed: { node: BandNode; box: Box }[][] = []
   let y = 0
   rows.forEach((row, r) => {
-    const spine = row.filter((n) => n.kind !== 'remote')
-    const spineW = spine.reduce((sum, n) => sum + n.w, 0) + Math.max(0, spine.length - 1) * gap
     const rowW = row.reduce((sum, n) => sum + n.w, 0) + (row.length - 1) * gap
-    const wanted = spine.length > 0 ? centre - spineW / 2 : centre - rowW / 2
+    const wanted = centre - rowW / 2
     const x0 = below.narrow ? 0 : Math.max(0, Math.min(A - rowW, wanted))
     let x = x0
     placed.push(
@@ -405,49 +318,15 @@ function withBand(below: Layout, input: LayoutInput): Layout {
 
   for (const row of placed) {
     for (const { node, box } of row) {
-      if (node.kind === 'exit') items.push({ kind: 'exit', key: node.key, box, name: node.exit.name })
-      else if (node.kind === 'remote') items.push({ kind: 'remote', key: node.key, box, client: node.client, more: node.more })
-      else items.push({ kind: node.kind, key: node.key, box })
+      items.push({ kind: node.kind, key: node.key, box })
     }
   }
 
-  // The path: the internet feeds whatever carries traffic in the row below
-  // it — the ways out that are not blocking, or the router when there are
-  // none. The ways out and whoever is connected feed the router.
-  const heaviestExit = Math.max(0, ...exits.map((e) => e.weight))
-  placed.forEach((row, r) => {
-    const next = placed[r + 1]?.filter(({ node }) => node.kind === 'exit' && !node.exit.blocked)
+  for (const row of placed) {
     for (const { node, box } of row) {
-      switch (node.kind) {
-        case 'internet': {
-          const fault = outside!.noRoute || outside!.upstreamDown
-          const targets = next && next.length > 0 ? next : null
-          if (!targets) {
-            links.push(link(node.key, box, router, edgeWidth(1, 1, input.rated), { fault }))
-            break
-          }
-          const heaviest = Math.max(0, ...targets.map((t) => (t.node.kind === 'exit' ? t.node.exit.weight : 0)))
-          for (const t of targets) {
-            const weight = t.node.kind === 'exit' ? t.node.exit.weight : heaviest
-            links.push(
-              link(`${node.key}>${t.node.key}`, box, t.box, edgeWidth(weight, heaviest, input.rated), { fault }),
-            )
-          }
-          break
-        }
-        case 'exit':
-          links.push(
-            link(node.key, box, router, edgeWidth(node.exit.weight, heaviestExit, input.rated), {
-              fault: node.exit.down,
-            }),
-          )
-          break
-        case 'remote':
-          if (remoteLinked) links.push(link(node.key, box, router, EDGE_MIN, { dashed: true }))
-          break
-      }
+      links.push(link(node.key, box, router, edgeWidth(1, 1, input.rated), { fault: node.down }))
     }
-  })
+  }
 
   for (const item of below.items) items.push({ ...item, box: down(item.box) } as Item)
   for (const l of below.links) links.push({ ...l, y0: l.y0 + band, y1: l.y1 + band })
@@ -1069,5 +948,3 @@ function finish(
   const bottom = Math.max(router.y + router.h, ...items.map((i) => i.box.y + i.box.h))
   return { width: input.width, height: Math.ceil(bottom) + 2, narrow, fits, router, items, links }
 }
-
-

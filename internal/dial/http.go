@@ -644,11 +644,13 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 		byPath[findingOwner(cfg, p.Path)] = append(byPath[findingOwner(cfg, p.Path)], p)
 	}
 
+	routeObs := h.Applier.ObserveRoute(r.Context())
 	resp := statusResponse{
-		Uplink:  h.withHost(viewUplink(cfg.Uplink, h.Applier.Observe(r.Context(), cfg.uplinkInterface()), byPath[UplinkPath])),
-		Route:   viewRoute(h.Applier.ObserveRoute(r.Context())),
-		Records: make([]recordView, 0, len(cfg.Records)),
-		AsOf:    time.Now(),
+		Uplink:        h.withHost(viewUplink(cfg.Uplink, h.Applier.Observe(r.Context(), cfg.uplinkInterface()), byPath[UplinkPath])),
+		Route:         viewRoute(routeObs),
+		DefaultRoutes: viewDefaultRoutes(routeObs),
+		Records:       make([]recordView, 0, len(cfg.Records)),
+		AsOf:          time.Now(),
 	}
 	for _, rec := range cfg.Records {
 		state, watched := states[rec.Name]

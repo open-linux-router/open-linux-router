@@ -12,15 +12,9 @@ import { useDialStatus } from '@/features/dial/queries'
 import { useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
 import { useGatewayLatency, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
-import {
-  useRemoteClients,
-  useRemoteStatus,
-  useShadowsocksStatus,
-  useSocksStatus,
-} from '@/features/remote/queries'
 import { FirstRun } from '@/features/setup/first-run'
 import { NetworkMap } from '@/features/topology/network-map'
-import { buildOutside, buildRemote } from '@/features/topology/outside'
+import { buildOutside } from '@/features/topology/outside'
 import { useTrafficView, type TrafficView } from '@/features/topology/traffic'
 import type { DeviceRow, DhcpStatus, DnsStatus, GatewayLatency, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
 import { cn, formatBytes, formatRate } from '@/lib/utils'
@@ -69,18 +63,7 @@ export function OverviewPage() {
   const flows = useTrafficView(traffic.data, traffic.isError)
   const history = useRateHistory(flows)
   const dial = useDialStatus()
-  const tunnel = useRemoteStatus()
-  const shadowsocks = useShadowsocksStatus()
-  const socks = useSocksStatus()
-  const anyWayIn = Boolean(tunnel.data?.enabled || shadowsocks.data?.enabled || socks.data?.enabled)
-  const clients = useRemoteClients(anyWayIn)
   const outside = useMemo(() => buildOutside(dial.data, devices.data?.devices), [dial.data, devices.data])
-  const remote = useMemo(
-    () =>
-      buildRemote({ tunnel: tunnel.data, shadowsocks: shadowsocks.data, socks: socks.data, clients: clients.data }),
-    [tunnel.data, shadowsocks.data, socks.data, clients.data],
-  )
-
   const actions = useDeviceActions()
   const groupActions = useGroupActions()
 
@@ -130,7 +113,6 @@ export function OverviewPage() {
           assignments={gateway.data?.assignments}
           exits={gateway.data?.exits}
           outside={outside}
-          remote={remote}
           pools={dhcpConfig.data?.pools}
           pending={devices.isPending}
           density="auto"

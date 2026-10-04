@@ -165,8 +165,7 @@ type tunnelView struct {
 //
 // The uplink's observed half without its intended half: olr may own none of
 // it, and what it reports is only what is there. Flat facts, no verdict — the
-// overview decides from `addresses` whether something sits between this box
-// and the internet, and that is a reading of the facts, not one of them.
+// the overview uses the actual next hops rather than guessing from addresses.
 type routeView struct {
 	// Dev is the interface the default route leaves by.
 	Dev string `json:"dev"`
@@ -180,6 +179,30 @@ type routeView struct {
 
 	// GatewayState is whether Via answers on Dev — see uplinkView.
 	GatewayState string `json:"gateway_state,omitempty"`
+}
+
+type defaultRouteView struct {
+	Family       int    `json:"family"`
+	Dev          string `json:"dev"`
+	Via          string `json:"via,omitempty"`
+	Metric       int    `json:"metric"`
+	GatewayState string `json:"gateway_state,omitempty"`
+}
+
+func viewDefaultRoutes(obs Observed) []defaultRouteView {
+	out := make([]defaultRouteView, 0, len(obs.DefaultRoutes))
+	for _, r := range obs.DefaultRoutes {
+		family := 4
+		if r.Family == 10 { // Linux AF_INET6; keep the API's family as 4 or 6.
+			family = 6
+		}
+		v := defaultRouteView{Family: family, Dev: r.Dev, Metric: r.Metric, GatewayState: r.GatewayState}
+		if r.Via.IsValid() {
+			v.Via = r.Via.String()
+		}
+		out = append(out, v)
+	}
+	return out
 }
 
 // viewRoute is nil when the box has no default route at all.
@@ -204,7 +227,8 @@ type statusResponse struct {
 
 	// Route is the way out as it is, present whether or not olr owns it, and
 	// absent only when there is no default route.
-	Route *routeView `json:"route,omitempty"`
+	Route         *routeView         `json:"route,omitempty"`
+	DefaultRoutes []defaultRouteView `json:"default_routes"`
 
 	Records []recordView `json:"records"`
 

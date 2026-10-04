@@ -5,29 +5,26 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useInterfaces } from '@/features/link/queries'
 import { layout, type Box, type Density, type Item, type Layout } from '@/features/topology/layout'
 import { Links } from '@/features/topology/links'
-import { buildTree, shownExits } from '@/features/topology/model'
+import { buildTree } from '@/features/topology/model'
 import {
   DeviceNode,
-  ExitNode,
   GroupNode,
-  InternetNode,
+  NextHopNode,
   MoreNode,
   NoteNode,
   PickNode,
-  RemoteNode,
   RouterNode,
   type MapActions,
   type NetworkInfo,
 } from '@/features/topology/nodes'
-import type { Outside, Remote } from '@/features/topology/outside'
+import type { Outside } from '@/features/topology/outside'
 import { magnitude, type TrafficView } from '@/features/topology/traffic'
 import type { AssignmentStatus, DeviceRow, ExitStatus, NetworkRow } from '@/lib/api-types'
 import type { DevicesGroup, Pool } from '@/lib/config-types'
 
 /**
- * The network, drawn top-down: the ways out, this router, then the operator's
- * groups as lists of their devices — and groups inside groups as lists inside
- * lists.
+ * The network, drawn top-down: observed default next hops, this router, then
+ * the operator's groups as lists of devices and nested groups.
  *
  * It is organised by *group*, not by network. A network is how a device is
  * attached; a group is what the operator thinks it is for ("Serving",
@@ -65,7 +62,6 @@ export function NetworkMap({
   assignments,
   exits,
   outside,
-  remote,
   pools,
   pending,
   filter = '',
@@ -79,10 +75,8 @@ export function NetworkMap({
   traffic: TrafficView
   assignments?: AssignmentStatus[]
   exits?: ExitStatus[]
-  /** The internet and what is between it and this router; absent draws neither. */
+  /** Default-route next hops observed in the kernel. */
   outside?: Outside
-  /** Who is reaching in from outside; absent when no way in is switched on. */
-  remote?: Remote
   pools?: Pool[]
   pending: boolean
   filter?: string
@@ -105,7 +99,6 @@ export function NetworkMap({
     () => buildNetworks(all, assignments, exits, pools, networkRows),
     [all, assignments, exits, pools, networkRows],
   )
-  const ways = useMemo(() => shownExits(exits), [exits])
 
   if (pending) {
     return (
@@ -126,9 +119,7 @@ export function NetworkMap({
       groups={groups}
       traffic={traffic}
       networks={networks}
-      exits={ways}
       outside={outside}
-      remote={remote}
       filter={filter}
       network={network}
       density={density}
@@ -159,9 +150,7 @@ function Canvas({
   groups,
   traffic,
   networks,
-  exits,
   outside,
-  remote,
   filter,
   network,
   density: wanted,
@@ -172,20 +161,18 @@ function Canvas({
   groups: DevicesGroup[]
   traffic: TrafficView
   networks: NetworkInfo[]
-  exits: ExitStatus[]
   outside?: Outside
-  remote?: Remote
   filter: string
   network: string
   density: Density | 'auto'
   onDensity?: (density: Density) => void
   actions: MapActions
 }) {
-  // The router in front, when it is a device the operator knows, is drawn at
-  // the top as the internet node and not again in its group: one device, one
-  // node.
-  const upstreamMac = outside?.upstream?.device?.mac
-  const listed = useMemo(() => (upstreamMac ? all.filter((d) => d.mac !== upstreamMac) : all), [all, upstreamMac])
+  // A known next hop is already shown above the router, not again below.
+  const listed = useMemo(() => {
+    const upstreamMacs = new Set(outside?.hops.map((h) => h.device?.mac).filter(Boolean))
+    return all.filter((d) => !upstreamMacs.has(d.mac))
+  }, [all, outside])
 
   // Hold the order still while the pointer is over the map: see buildTree.
   const [frozen, setFrozen] = useState<Map<string, number> | null>(null)
@@ -250,25 +237,9 @@ function Canvas({
   }, [width, settled])
   const transition = settled && !reduced ? MOVE : STILL
 
-  const exitInput = useMemo(
-    () =>
-      exits.map((e) => ({
-        name: e.name,
-        down: e.probed && !e.up,
-        blocked: e.via === 'blocked',
-        weight: magnitude(traffic.flowOfExit(e.name), traffic.rated),
-      })),
-    [exits, traffic],
-  )
-
   const outsideInput = useMemo(
-    () =>
-      outside && {
-        upstreamDown: outside.upstream?.down ?? false,
-        noRoute: outside.internet.noRoute,
-        remote: remote?.clients.map((c) => c.key),
-      },
-    [outside, remote],
+    () => ({ hops: outside?.hops.map((h) => ({ key: h.key, down: h.down })) ?? [] }),
+    [outside],
   )
 
   const [geo, density] = useMemo((): [Layout | null, Density] => {
@@ -283,7 +254,6 @@ function Canvas({
         focus: f,
         counting: traffic.counting,
         rated: traffic.rated,
-        exits: exitInput,
         outside: outsideInput,
       })
     if (wanted !== 'auto') return [at(wanted), wanted]
@@ -296,7 +266,7 @@ function Canvas({
     const whole = at('detail', undefined)
     const d: Density = !whole.narrow && !focus && (whole.fits || expanded.size > 0) ? 'detail' : 'compact'
     return [d === 'detail' ? whole : at(d), d]
-  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated, exitInput, outsideInput])
+  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated, outsideInput])
 
   useEffect(() => {
     onDensity?.(density)
@@ -362,28 +332,11 @@ function Canvas({
         return <PickNode groups={item.groups} onFocus={setFocus} />
       case 'note':
         return <NoteNode note={item.note} filtering={tree.filtering} onCreateGroup={actions.onCreateGroup} />
-      case 'internet':
-        return outside ? (
-          <InternetNode internet={outside.internet} upstream={outside.upstream} onSelect={actions.onSelect} />
-        ) : null
-      case 'remote': {
-        const client = remote?.clients.find((c) => c.key === item.client)
-        return (
-          <RemoteNode
-            client={client}
-            more={item.more}
-            source={client?.where ? remote?.locations?.source : undefined}
-          />
-        )
+      case 'hop': {
+        const hop = outside?.hops.find((h) => `o:${h.key}` === item.key)
+        return hop ? <NextHopNode hop={hop} onSelect={actions.onSelect} /> : null
       }
-      case 'exit':
-        return (
-          <ExitNode
-            exit={exits.find((e) => e.name === item.name)}
-            flow={traffic.flowOfExit(item.name)}
-            rated={traffic.rated}
-          />
-        )
+
     }
   }
 

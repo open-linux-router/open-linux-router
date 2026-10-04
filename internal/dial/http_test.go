@@ -121,6 +121,10 @@ func TestStatusReportsTheRouteWithoutAnUplink(t *testing.T) {
 				Gateway:      netip.MustParseAddr("192.168.1.1"),
 				GatewayDev:   "wan0",
 				GatewayState: GatewayAnswers,
+				DefaultRoutes: []DefaultRoute{
+					{Family: 2, Dev: "wan0", Via: netip.MustParseAddr("192.168.1.1"), Metric: 100, GatewayState: GatewayAnswers},
+					{Family: 10, Dev: "wan0", Via: netip.MustParseAddr("fe80::1"), Metric: 1024},
+				},
 			}},
 		},
 	}.Handler()
@@ -140,5 +144,27 @@ func TestStatusReportsTheRouteWithoutAnUplink(t *testing.T) {
 	want := routeView{Dev: "wan0", Via: "192.168.1.1", Addresses: []string{"192.168.1.2/24"}, GatewayState: GatewayAnswers}
 	if got.Route == nil || !reflect.DeepEqual(*got.Route, want) {
 		t.Errorf("route = %+v, want %+v", got.Route, want)
+	}
+	wantRoutes := []defaultRouteView{
+		{Family: 4, Dev: "wan0", Via: "192.168.1.1", Metric: 100, GatewayState: GatewayAnswers},
+		{Family: 6, Dev: "wan0", Via: "fe80::1", Metric: 1024},
+	}
+	if !reflect.DeepEqual(got.DefaultRoutes, wantRoutes) {
+		t.Errorf("default routes = %+v, want %+v", got.DefaultRoutes, wantRoutes)
+	}
+}
+
+func TestStatusReportsDirectIPv6RouteWithoutIPv4(t *testing.T) {
+	h := HTTP{Applier: Applier{Store: testStore(t, ""), Writer: fakeWriter{observed: Observed{
+		DefaultRoutes: []DefaultRoute{{Family: 10, Dev: "olr6"}},
+	}}}}.Handler()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/status", nil))
+	var got statusResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Route != nil || !reflect.DeepEqual(got.DefaultRoutes, []defaultRouteView{{Family: 6, Dev: "olr6"}}) {
+		t.Errorf("direct IPv6 default route = %+v, legacy IPv4 route = %+v", got.DefaultRoutes, got.Route)
 	}
 }

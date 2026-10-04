@@ -212,9 +212,21 @@ type Observed struct {
 	V6DefaultDev string
 	V6DefaultVia netip.Addr
 
+	// DefaultRoutes are the main table's IPv4 and IPv6 default next hops,
+	// including equal-cost alternatives. A route without a gateway is direct.
+	DefaultRoutes []DefaultRoute
+
 	// AcceptRA is the uplink's net.ipv6.conf.<iface>.accept_ra, empty when
 	// it could not be read.
 	AcceptRA string
+}
+
+type DefaultRoute struct {
+	Family       int
+	Dev          string
+	Via          netip.Addr
+	Metric       int
+	GatewayState string
 }
 
 // TunnelObserved is what the kernel has for TunnelInterface.
