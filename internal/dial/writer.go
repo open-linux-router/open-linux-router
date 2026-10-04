@@ -227,6 +227,8 @@ type DefaultRoute struct {
 	Via          netip.Addr
 	Metric       int
 	GatewayState string
+	// GatewayMAC is the neighbour-table identity of Via on Dev, when known.
+	GatewayMAC string
 }
 
 // TunnelObserved is what the kernel has for TunnelInterface.

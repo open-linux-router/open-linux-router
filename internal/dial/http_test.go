@@ -123,7 +123,7 @@ func TestStatusReportsTheRouteWithoutAnUplink(t *testing.T) {
 				GatewayState: GatewayAnswers,
 				DefaultRoutes: []DefaultRoute{
 					{Family: 2, Dev: "wan0", Via: netip.MustParseAddr("192.168.1.1"), Metric: 100, GatewayState: GatewayAnswers},
-					{Family: 10, Dev: "wan0", Via: netip.MustParseAddr("fe80::1"), Metric: 1024},
+					{Family: 10, Dev: "wan0", Via: netip.MustParseAddr("fe80::1"), Metric: 1024, GatewayMAC: "aa:bb:cc:dd:ee:ff"},
 				},
 			}},
 		},
@@ -147,7 +147,7 @@ func TestStatusReportsTheRouteWithoutAnUplink(t *testing.T) {
 	}
 	wantRoutes := []defaultRouteView{
 		{Family: 4, Dev: "wan0", Via: "192.168.1.1", Metric: 100, GatewayState: GatewayAnswers},
-		{Family: 6, Dev: "wan0", Via: "fe80::1", Metric: 1024},
+		{Family: 6, Dev: "wan0", Via: "fe80::1", Metric: 1024, GatewayMAC: "aa:bb:cc:dd:ee:ff"},
 	}
 	if !reflect.DeepEqual(got.DefaultRoutes, wantRoutes) {
 		t.Errorf("default routes = %+v, want %+v", got.DefaultRoutes, wantRoutes)

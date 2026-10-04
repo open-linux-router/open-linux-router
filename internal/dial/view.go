@@ -187,6 +187,7 @@ type defaultRouteView struct {
 	Via          string `json:"via,omitempty"`
 	Metric       int    `json:"metric"`
 	GatewayState string `json:"gateway_state,omitempty"`
+	GatewayMAC   string `json:"gateway_mac,omitempty"`
 }
 
 func viewDefaultRoutes(obs Observed) []defaultRouteView {
@@ -196,7 +197,7 @@ func viewDefaultRoutes(obs Observed) []defaultRouteView {
 		if r.Family == 10 { // Linux AF_INET6; keep the API's family as 4 or 6.
 			family = 6
 		}
-		v := defaultRouteView{Family: family, Dev: r.Dev, Metric: r.Metric, GatewayState: r.GatewayState}
+		v := defaultRouteView{Family: family, Dev: r.Dev, Metric: r.Metric, GatewayState: r.GatewayState, GatewayMAC: r.GatewayMAC}
 		if r.Via.IsValid() {
 			v.Via = r.Via.String()
 		}

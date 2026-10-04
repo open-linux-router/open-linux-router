@@ -18,7 +18,9 @@ export function buildOutside(dial?: DialStatus, devices?: DeviceRow[]): Outside 
   const hops: NextHop[] = []
   for (const route of dial.default_routes ?? []) {
     if (route.family !== 4 && route.family !== 6) continue
-    const device = route.via ? devices?.find((d) => d.fixed_ip === route.via || d.ips?.includes(route.via!)) : undefined
+    const device = route.via ? devices?.find((d) =>
+      d.fixed_ip === route.via || d.ips?.includes(route.via!) ||
+      (route.gateway_mac && d.mac.toLowerCase() === route.gateway_mac.toLowerCase())) : undefined
     // A known device may use different IPv4 and IPv6 gateway addresses.
     const key = device ? `device:${device.mac}:${route.dev}` : `${route.dev}:${route.via ?? `direct:${route.family}`}`
     const existing = hops.find((h) => h.key === key)

@@ -483,11 +483,44 @@ func (linuxWriter) Observe(ctx context.Context, iface string) (Observed, error) 
 	}
 	for i := range obs.DefaultRoutes {
 		r := &obs.DefaultRoutes[i]
-		if r.Family == netlink.FAMILY_V4 && r.Via.IsValid() {
+		if !r.Via.IsValid() {
+			continue
+		}
+		if r.Family == netlink.FAMILY_V4 {
 			r.GatewayState, _ = gatewayNeighbour(r.Via, r.Dev)
+		}
+		if r.Family == netlink.FAMILY_V6 {
+			r.GatewayMAC = gatewayNeighbourMAC(r.Via, r.Dev)
 		}
 	}
 	return obs, nil
+}
+
+// gatewayNeighbourMAC only trusts an IPv6 neighbour on the route's own
+// interface with a resolved hardware address. A missing or incomplete entry
+// leaves the gateway unidentified instead of guessing from its fe80 address.
+func gatewayNeighbourMAC(gw netip.Addr, dev string) string {
+	link, err := netlink.LinkByName(dev)
+	if err != nil {
+		return ""
+	}
+	neighs, err := netlink.NeighList(link.Attrs().Index, netlink.FAMILY_V6)
+	if err != nil {
+		return ""
+	}
+	return neighbourMAC(neighs, gw, link.Attrs().Index)
+}
+
+func neighbourMAC(neighs []netlink.Neigh, gw netip.Addr, index int) string {
+	for _, n := range neighs {
+		ip, ok := netip.AddrFromSlice(n.IP)
+		if !ok || ip != gw || n.LinkIndex != index || len(n.HardwareAddr) == 0 ||
+			neighbourState(n.State) != GatewayAnswers {
+			continue
+		}
+		return n.HardwareAddr.String()
+	}
+	return ""
 }
 
 // readDefaultRoutes preserves every main-table default route, including the
