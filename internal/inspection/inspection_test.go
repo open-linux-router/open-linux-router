@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -33,8 +35,10 @@ func TestDeviceIPRequiresUniqueCurrentPrivateIPv4(t *testing.T) {
 		{"offline", []devices.Resolved{row(mac, false, "192.168.2.10")}, false},
 		{"missing", []devices.Resolved{row("aa:bb:cc:dd:ee:02", true, "192.168.2.10")}, false},
 		{"shared address", []devices.Resolved{row(mac, true, "192.168.2.10"), row("aa:bb:cc:dd:ee:02", true, "192.168.2.10")}, false},
+		{"dual stack", []devices.Resolved{row(mac, true, "192.168.2.10", "fd00::10", "fe80::10")}, true},
 		{"two addresses", []devices.Resolved{row(mac, true, "192.168.2.10", "192.168.2.11")}, false},
-		{"IPv6", []devices.Resolved{row(mac, true, "fd00::10")}, false},
+		{"IPv6 only", []devices.Resolved{row(mac, true, "fd00::10")}, false},
+		{"two IPv4 plus IPv6", []devices.Resolved{row(mac, true, "192.168.2.10", "192.168.2.11", "fd00::10")}, false},
 		{"public", []devices.Resolved{row(mac, true, "8.8.8.8")}, false},
 	}
 	for _, tc := range cases {
@@ -68,5 +72,25 @@ func TestCAReadNeverReturnsKey(t *testing.T) {
 	s.ca(rec, httptest.NewRequest(http.MethodGet, "/ca", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("no CA: %d", rec.Code)
+	}
+}
+
+func TestPublicCAOnlyServesCertificate(t *testing.T) {
+	s := &Service{Dir: t.TempDir()}
+	get := func() *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		s.PublicCA(rec, httptest.NewRequest(http.MethodGet, "/download/inspection-ca.crt", nil))
+		return rec
+	}
+	if rec := get(); rec.Code != http.StatusNotFound {
+		t.Fatalf("missing CA: %d", rec.Code)
+	}
+	const cert = "-----BEGIN CERTIFICATE-----\npublic\n-----END CERTIFICATE-----\n"
+	if err := os.WriteFile(filepath.Join(s.Dir, "mitmproxy-ca-cert.pem"), []byte(cert), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rec := get()
+	if rec.Code != http.StatusOK || rec.Body.String() != cert || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("CA response: %d %q %q", rec.Code, rec.Body.String(), rec.Header().Get("Cache-Control"))
 	}
 }

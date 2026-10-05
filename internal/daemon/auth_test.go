@@ -148,3 +148,29 @@ func TestAuthIsOffUnlessAsked(t *testing.T) {
 		t.Error("--auth did not turn authentication on")
 	}
 }
+
+// The QR link must be reachable from a phone without giving it the admin token.
+// Other API routes remain behind BearerAuth.
+func TestPublicCADownloadBypassesAPIAuth(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /download/inspection-ca.crt", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("public cert"))
+	})
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("api"))
+	})
+	handler := authenticateAPI("sekret", mux)
+	for _, tc := range []struct {
+		path string
+		code int
+	}{
+		{"/download/inspection-ca.crt", http.StatusOK},
+		{"/api/inspection/ca", http.StatusUnauthorized},
+	} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+		if rec.Code != tc.code {
+			t.Errorf("GET %s = %d, want %d", tc.path, rec.Code, tc.code)
+		}
+	}
+}

@@ -536,6 +536,7 @@ func run(args []string) error {
 
 	top := http.NewServeMux()
 	top.Handle(core.APIPrefix+"/", srv.Handler())
+	top.HandleFunc("GET /download/inspection-ca.crt", inspector.PublicCA)
 	top.Handle("/", webui.Handler())
 
 	// The MCP surface (§6.4), composed here for the same reason the SPA is:

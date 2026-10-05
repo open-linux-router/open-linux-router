@@ -112,6 +112,20 @@ func (s *Service) ca(w http.ResponseWriter, r *http.Request) {
 	core.WriteJSON(w, http.StatusOK, map[string]string{"pem": string(data)})
 }
 
+// PublicCA serves only the public certificate, so a phone can scan a URL
+// without receiving the router's administrative API token.
+func (s *Service) PublicCA(w http.ResponseWriter, r *http.Request) {
+	data, err := os.ReadFile(filepath.Join(s.Dir, "mitmproxy-ca-cert.pem"))
+	if err != nil {
+		http.Error(w, "start an inspection session to generate the CA", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-x509-ca-cert")
+	w.Header().Set("Content-Disposition", `attachment; filename="olr-debugging-ca.crt"`)
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
+}
+
 func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		MAC string `json:"mac"`
@@ -263,11 +277,21 @@ func (s *Service) deviceIP(ctx context.Context, mac string) (string, error) {
 	if !hasNeighbour {
 		return "", errors.New("device needs a current neighbour-table observation")
 	}
-	if len(selected.Presence.IPs) != 1 {
-		return "", errors.New("inspection currently requires exactly one observed IPv4 address; IPv6 or multiple addresses are not yet supported")
+	var ipv4 []netip.Addr
+	for _, raw := range selected.Presence.IPs {
+		ip, err := netip.ParseAddr(raw)
+		if err != nil {
+			return "", errors.New("device has an invalid observed address")
+		}
+		if ip.Is4() {
+			ipv4 = append(ipv4, ip)
+		}
 	}
-	ip, err := netip.ParseAddr(selected.Presence.IPs[0])
-	if err != nil || !ip.Is4() || !ip.IsPrivate() || owners[strings.ToLower(ip.String())] != 1 {
+	if len(ipv4) != 1 {
+		return "", errors.New("inspection requires exactly one observed IPv4 address; IPv6 traffic is not intercepted")
+	}
+	ip := ipv4[0]
+	if !ip.IsPrivate() || owners[strings.ToLower(ip.String())] != 1 {
 		return "", errors.New("device needs one unique private IPv4 address")
 	}
 	return ip.String(), nil
