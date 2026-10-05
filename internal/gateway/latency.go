@@ -26,6 +26,7 @@ type LatencyMonitor struct {
 	discoveryStarted time.Time
 	rounds           int
 	probe            func(context.Context, string) (float64, error)
+	dnsProbe         func(context.Context) (float64, error)
 }
 type latencyTarget struct {
 	Name, URL string
@@ -53,7 +54,7 @@ func NewLatencyMonitor() *LatencyMonitor {
 		{Name: "Baidu", URL: "https://www.baidu.com/"},
 		{Name: "Yandex", URL: "https://ya.ru/"},
 		{Name: "Cloudflare", URL: "https://www.cloudflare.com/cdn-cgi/trace"},
-	}, probe: probeHTTPS, snapshot: LatencySnapshot{State: "measuring", Sites: []LatencySite{}}}
+	}, probe: probeHTTPS, dnsProbe: probeDNS, snapshot: LatencySnapshot{State: "measuring", Sites: []LatencySite{}}}
 }
 func probeHTTPS(ctx context.Context, url string) (float64, error) {
 	// Fresh connections give comparable DNS + TCP + TLS + response-header times.
@@ -76,6 +77,15 @@ func probeHTTPS(ctx context.Context, url string) (float64, error) {
 	}
 	return float64(time.Since(start).Microseconds()) / 1000, nil
 }
+func probeDNS(ctx context.Context) (float64, error) {
+	start := time.Now()
+	_, err := net.DefaultResolver.LookupHost(ctx, "example.com")
+	if err != nil {
+		return 0, err
+	}
+	return float64(time.Since(start).Microseconds()) / 1000, nil
+}
+
 func (m *LatencyMonitor) Snapshot() LatencySnapshot {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -152,12 +162,12 @@ func (m *LatencyMonitor) sample(ctx context.Context) {
 	}
 	dnsCtx, dnsCancel := context.WithTimeout(ctx, 4*time.Second)
 	defer dnsCancel()
-	dnsStart := time.Now()
-	_, dnsErr := net.DefaultResolver.LookupHost(dnsCtx, "example.com")
 	var dnsMilliseconds *float64
-	if dnsErr == nil {
-		value := float64(time.Since(dnsStart).Microseconds()) / 1000
-		dnsMilliseconds = &value
+	if m.dnsProbe != nil {
+		value, err := m.dnsProbe(dnsCtx)
+		if err == nil {
+			dnsMilliseconds = &value
+		}
 	}
 	now := time.Now().UTC()
 	s := LatencySnapshot{State: "unreachable", CheckedAt: &now, Sites: sites, DNSMilliseconds: dnsMilliseconds}

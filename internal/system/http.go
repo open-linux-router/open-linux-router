@@ -13,6 +13,7 @@ import (
 // HTTP is this module's REST surface.
 type HTTP struct {
 	Applier Applier
+	Proc    string
 	Lock    *core.Lock
 	Events  *core.Events
 }
@@ -178,21 +179,25 @@ func localSource(r *http.Request) bool {
 }
 
 func (h HTTP) getMetrics(w http.ResponseWriter, r *http.Request) {
-	metrics, err := readMetrics("/proc")
+	proc := h.Proc
+	if proc == "" {
+		proc = "/proc"
+	}
+	metrics, err := readMetrics(proc)
 	if err != nil {
 		core.WriteError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
 	// A pair of CPU readings measures a recent interval rather than lifetime load.
-	first, err := readCPU("/proc/stat")
+	first, err := readCPU(proc + "/stat")
 	if err == nil {
 		select {
 		case <-r.Context().Done():
 			return
 		case <-time.After(150 * time.Millisecond):
 		}
-		second, readErr := readCPU("/proc/stat")
-		if readErr == nil && second.total > first.total {
+		second, readErr := readCPU(proc + "/stat")
+		if readErr == nil && second.total > first.total && second.idle >= first.idle {
 			used := float64((second.total-first.total)-(second.idle-first.idle)) / float64(second.total-first.total) * float64(metrics.CPUCores)
 			metrics.CPUUsedCores = &used
 		}

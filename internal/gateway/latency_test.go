@@ -11,6 +11,7 @@ import (
 
 func TestLatencySelectionAndRecovery(t *testing.T) {
 	m := NewLatencyMonitor()
+	m.dnsProbe = func(context.Context) (float64, error) { return 8, nil }
 	values := map[string]float64{m.targets[0].URL: 100, m.targets[1].URL: 20, m.targets[2].URL: 80, m.targets[3].URL: 90}
 	m.probe = func(_ context.Context, url string) (float64, error) {
 		v := values[url]
@@ -51,6 +52,7 @@ func TestLatencySelectionAndRecovery(t *testing.T) {
 
 func TestLatencyRejectsLuckyAndFailedSites(t *testing.T) {
 	m := NewLatencyMonitor()
+	m.dnsProbe = func(context.Context) (float64, error) { return 8, nil }
 	round := 0
 	m.probe = func(_ context.Context, url string) (float64, error) {
 		if url == m.targets[0].URL {
@@ -79,6 +81,7 @@ func TestLatencyRejectsLuckyAndFailedSites(t *testing.T) {
 
 func TestLatencySnapshotIsolationAndCancellation(t *testing.T) {
 	m := NewLatencyMonitor()
+	m.dnsProbe = func(context.Context) (float64, error) { return 8, nil }
 	m.probe = func(context.Context, string) (float64, error) { return 12, nil }
 	m.sample(context.Background())
 	s := m.Snapshot()
@@ -119,6 +122,7 @@ func TestHTTPSProbe(t *testing.T) {
 
 func TestLatencyProbeCadence(t *testing.T) {
 	m := NewLatencyMonitor()
+	m.dnsProbe = func(context.Context) (float64, error) { return 8, nil }
 	m.probe = func(context.Context, string) (float64, error) { return 10, nil }
 	m.sample(context.Background())
 	if m.nextInterval() != 15*time.Second {
@@ -137,5 +141,20 @@ func TestLatencyProbeCadence(t *testing.T) {
 	}
 	if m.nextInterval() != time.Minute {
 		t.Fatal("failed discovery must back off")
+	}
+}
+
+func TestLatencyDNSProbeFailure(t *testing.T) {
+	m := NewLatencyMonitor()
+	m.probe = func(context.Context, string) (float64, error) { return 20, nil }
+	m.dnsProbe = func(context.Context) (float64, error) { return 0, errors.New("DNS down") }
+	m.sample(context.Background())
+	if m.Snapshot().DNSMilliseconds != nil {
+		t.Fatal("failed lookup must not claim zero latency")
+	}
+	m.dnsProbe = func(context.Context) (float64, error) { return 12, nil }
+	m.sample(context.Background())
+	if got := m.Snapshot().DNSMilliseconds; got == nil || *got != 12 {
+		t.Fatalf("DNS latency = %v", got)
 	}
 }

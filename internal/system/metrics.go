@@ -23,9 +23,13 @@ func readMetrics(proc string) (Metrics, error) {
 	if err != nil {
 		return out, err
 	}
-	seconds, err := strconv.ParseFloat(strings.Fields(string(data))[0], 64)
-	if err != nil {
-		return out, fmt.Errorf("uptime: %w", err)
+	fields := strings.Fields(string(data))
+	if len(fields) == 0 {
+		return out, fmt.Errorf("empty uptime")
+	}
+	seconds, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil || seconds < 0 {
+		return out, fmt.Errorf("invalid uptime")
 	}
 	out.UptimeSeconds = uint64(seconds)
 	data, err = os.ReadFile(proc + "/meminfo")
@@ -38,14 +42,16 @@ func readMetrics(proc string) (Metrics, error) {
 		if len(fields) < 2 {
 			continue
 		}
-		value, parseErr := strconv.ParseUint(fields[1], 10, 64)
-		if parseErr != nil {
+		if fields[0] != "MemTotal:" && fields[0] != "MemAvailable:" {
 			continue
 		}
-		switch fields[0] {
-		case "MemTotal:":
+		value, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			return out, fmt.Errorf("invalid %s", fields[0])
+		}
+		if fields[0] == "MemTotal:" {
 			total = value * 1024
-		case "MemAvailable:":
+		} else {
 			available = value * 1024
 		}
 	}
@@ -60,11 +66,20 @@ func readMetrics(proc string) (Metrics, error) {
 	defer file.Close()
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		if strings.HasPrefix(scanner.Text(), "cpu") && len(scanner.Text()) > 3 && scanner.Text()[3] >= '0' && scanner.Text()[3] <= '9' {
-			out.CPUCores++
+		name := strings.Fields(scanner.Text())
+		if len(name) > 0 && strings.HasPrefix(name[0], "cpu") && len(name[0]) > 3 {
+			if _, err := strconv.Atoi(name[0][3:]); err == nil {
+				out.CPUCores++
+			}
 		}
 	}
-	return out, scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return out, err
+	}
+	if out.CPUCores == 0 {
+		return out, fmt.Errorf("no CPU counters")
+	}
+	return out, nil
 }
 
 type cpuSample struct{ total, idle uint64 }

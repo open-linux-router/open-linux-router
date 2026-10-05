@@ -1,8 +1,12 @@
 import { AlertTriangle, ChevronRight, Info } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useGroupActions } from '@/features/devices/group-actions'
 import { useDeviceList, useDevicesConfig } from '@/features/devices/queries'
 import { useDhcpConfig, useDhcpStatus } from '@/features/dhcp/queries'
@@ -293,6 +297,49 @@ function uptime(seconds: number): string {
   return `${days}d ${hours}h ${minutes}m`
 }
 
+// Limits are personal display settings; no router configuration is changed.
+const LIMITS_KEY = 'olr-overview-bandwidth-limits'
+
+function readLimits(): { down: number; up: number } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LIMITS_KEY) ?? '{}')
+    return {
+      down: Number.isFinite(saved.down) && saved.down > 0 ? saved.down : 0,
+      up: Number.isFinite(saved.up) && saved.up > 0 ? saved.up : 0,
+    }
+  } catch { return { down: 0, up: 0 } }
+}
+
+function BandwidthLimits({ limits, onSave }: {
+  limits: { down: number; up: number }
+  onSave: (limits: { down: number; up: number }) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [down, setDown] = useState('')
+  const [up, setUp] = useState('')
+  const valid = (value: string) => value.trim() === '' || (Number.isFinite(Number(value)) && Number(value) > 0)
+  return <Dialog open={open} onOpenChange={(value) => {
+    setOpen(value)
+    if (value) { setDown(limits.down ? String(limits.down) : ''); setUp(limits.up ? String(limits.up) : '') }
+  }}>
+    <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>Limits</Button>
+    <DialogContent>
+      <DialogHeader><DialogTitle>Bandwidth limits</DialogTitle>
+        <DialogDescription>Enter your plan speeds in Mbps to see current utilization. Saved in this browser only.</DialogDescription></DialogHeader>
+      <form onSubmit={(event) => {
+        event.preventDefault()
+        if (!valid(down) || !valid(up)) return
+        onSave({ down: Number(down), up: Number(up) })
+        setOpen(false)
+      }} className="space-y-4">
+        <div className="space-y-2"><Label htmlFor="download-limit">Download (Mbps)</Label><Input id="download-limit" type="number" min="0.001" step="any" value={down} onChange={(event) => setDown(event.target.value)} /></div>
+        <div className="space-y-2"><Label htmlFor="upload-limit">Upload (Mbps)</Label><Input id="upload-limit" type="number" min="0.001" step="any" value={up} onChange={(event) => setUp(event.target.value)} /></div>
+        <DialogFooter><Button type="submit" disabled={!valid(down) || !valid(up)}>Save</Button></DialogFooter>
+      </form>
+    </DialogContent>
+  </Dialog>
+}
+
 function Meter({ label, current, maximum, percent, tone = 'blue' }: {
   label: string
   current?: string
@@ -304,20 +351,20 @@ function Meter({ label, current, maximum, percent, tone = 'blue' }: {
     <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
       <span>{label}</span><span className="tabular-nums">{percent == null ? '—' : `${percent.toFixed(0)}%`}</span>
     </div>
-    <div role={percent == null ? undefined : 'progressbar'} aria-label={label} aria-valuenow={percent == null ? undefined : Math.round(percent)} aria-valuemin={0} aria-valuemax={100}
+    <div role={percent == null ? undefined : 'progressbar'} aria-label={label} aria-valuenow={percent == null ? undefined : Math.min(100, Math.max(0, Math.round(percent)))} aria-valuemin={0} aria-valuemax={100}
       className="relative flex h-11 items-center justify-between gap-2 overflow-hidden rounded-xl bg-muted/65 px-3 ring-1 ring-foreground/[0.06] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]">
       {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r',
         tone === 'amber' ? 'border-amber-400/50 bg-amber-200/40' : tone === 'neutral' ? 'border-slate-400/40 bg-slate-300/35' : 'border-cyan-500/40 bg-cyan-200/45')}
         style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />}
       <span className="relative z-10 truncate text-sm font-semibold tabular-nums">{current ?? '—'}</span>
-      <span className="relative z-10 shrink-0 text-xs text-muted-foreground tabular-nums">{maximum ? `of ${maximum}` : 'Limit not set'}</span>
+      <span className="relative z-10 shrink-0 text-xs text-muted-foreground tabular-nums">{maximum ? `of ${maximum}` : 'No limit set'}</span>
     </div>
   </div>
 }
 
-function StatCard({ title, children }: { title: string; children: React.ReactNode }) {
+function StatCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return <section className="min-w-0 rounded-2xl bg-card p-5 shadow-xs ring-1 ring-foreground/[0.07]">
-    <h2 className="mb-4 text-sm font-semibold">{title}</h2>{children}
+    <div className="mb-4 flex items-center justify-between"><h2 className="text-sm font-semibold">{title}</h2>{action}</div>{children}
   </section>
 }
 
@@ -335,6 +382,11 @@ function Stats({ devices, traffic, flows, host, faults, known, idle, failed, lat
   latencyFailed: boolean
   trafficFailed: boolean
 }) {
+  const [limits, setLimits] = useState(readLimits)
+  const saveLimits = (next: typeof limits) => {
+    setLimits(next)
+    try { localStorage.setItem(LIMITS_KEY, JSON.stringify(next)) } catch { /* private mode can disable storage */ }
+  }
   const here = devices?.filter((d) => d.online).length
   const moved = traffic?.usage.reduce((sum, u) => sum + u.up_bytes + u.down_bytes, 0)
   const title = failed ? 'Status unavailable' : !known ? 'Checking…' : faults.length ? 'Needs attention' : idle ? 'Not set up' : 'All systems OK'
@@ -344,7 +396,7 @@ function Stats({ devices, traffic, flows, host, faults, known, idle, failed, lat
   const memoryPercent = host?.memory_total_bytes ? host.memory_used_bytes / host.memory_total_bytes * 100 : undefined
   const dnsMeasured = !latencyFailed && !stale && latency?.dns_milliseconds != null
   const latencyValue = measured ? `${latency.milliseconds!.toFixed(0)} ms` : latency?.state === 'unreachable' ? 'No response' : '—'
-  const rate = (direction: 'downRate' | 'upRate') => flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? 'Unavailable' : '—'
+  const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? 'Unavailable' : '—'
   return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
     <StatCard title="Status">
       <div className="min-h-24 py-3"><p className={cn('text-lg font-semibold', faults.length || failed ? 'text-destructive' : 'text-foreground')}>
@@ -352,14 +404,16 @@ function Stats({ devices, traffic, flows, host, faults, known, idle, failed, lat
       <div className="py-3"><p className="text-xs text-muted-foreground">Uptime</p><p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{host ? uptime(host.uptime_seconds) : '—'}</p>
         <p className="mt-3 flex justify-between text-xs text-muted-foreground"><span>Devices online</span><span className="tabular-nums">{devices ? `${here} / ${devices.length}` : '—'}</span></p></div>
     </StatCard>
-    <StatCard title="Traffic">
-      <Meter label="↓ Download" current={rate('downRate')} />
-      <Meter label="↑ Upload" current={rate('upRate')} tone="amber" />
+    <StatCard title="Traffic" action={<BandwidthLimits limits={limits} onSave={saveLimits} />}>
+      <Meter label="↓ Download" current={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
+        percent={flows.rated && !trafficFailed && limits.down ? (flows.total.downRate ?? 0) * 8 / (limits.down * 1_000_000) * 100 : undefined} />
+      <Meter label="↑ Upload" current={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
+        percent={flows.rated && !trafficFailed && limits.up ? (flows.total.upRate ?? 0) * 8 / (limits.up * 1_000_000) * 100 : undefined} tone="amber" />
       <p className="mt-1 text-xs text-muted-foreground">Since counting started <span className="ml-1 font-medium text-foreground">{!trafficFailed && traffic?.counting && moved != null ? formatBytes(moved) : '—'}</span></p>
     </StatCard>
     <StatCard title="Latency">
-      <div className="py-2.5"><div className="flex justify-between text-xs text-muted-foreground"><span>Internet</span>{measured && <span className={cn('font-medium', latency.milliseconds! < 100 ? 'text-success-foreground' : latency.milliseconds! < 200 ? 'text-amber-600' : 'text-destructive')}>{latency.milliseconds! < 100 ? 'Good' : latency.milliseconds! < 200 ? 'Fair' : 'Slow'}</span>}</div><p className="mt-3 text-2xl font-semibold tabular-nums tracking-tight">{latencyValue}</p></div>
-      <div className="py-2.5"><div className="flex justify-between text-xs text-muted-foreground"><span>DNS</span>{dnsMeasured && <span className={cn('font-medium', latency.dns_milliseconds! < 50 ? 'text-success-foreground' : latency.dns_milliseconds! < 150 ? 'text-amber-600' : 'text-destructive')}>{latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow'}</span>}</div><p className="mt-3 text-2xl font-semibold tabular-nums tracking-tight">{dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'}</p></div>
+      <div className="py-2.5"><div className="flex justify-between text-xs text-muted-foreground"><span>Internet</span>{measured && <span className={cn('font-medium', latency.milliseconds! < 100 ? 'text-success-foreground' : latency.milliseconds! < 200 ? 'text-warning-foreground' : 'text-destructive')}>{latency.milliseconds! < 100 ? 'Good' : latency.milliseconds! < 200 ? 'Fair' : 'Slow'}</span>}</div><p className="mt-3 text-2xl font-semibold tabular-nums tracking-tight">{latencyValue}</p></div>
+      <div className="py-2.5"><div className="flex justify-between text-xs text-muted-foreground"><span>DNS</span>{dnsMeasured && <span className={cn('font-medium', latency.dns_milliseconds! < 50 ? 'text-success-foreground' : latency.dns_milliseconds! < 150 ? 'text-warning-foreground' : 'text-destructive')}>{latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow'}</span>}</div><p className="mt-3 text-2xl font-semibold tabular-nums tracking-tight">{dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'}</p></div>
     </StatCard>
     <StatCard title="System">
       <Meter label="CPU" current={host?.cpu_used_cores == null ? undefined : `${host.cpu_used_cores.toFixed(1)} cores`} maximum={host?.cpu_cores ? `${host.cpu_cores} cores` : undefined} percent={cpuPercent} />
