@@ -1,10 +1,9 @@
 import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Info, ShieldCheck } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useDeviceActions } from '@/features/devices/device-actions'
 import { useGroupActions } from '@/features/devices/group-actions'
 import { useDeviceList, useDevicesConfig } from '@/features/devices/queries'
 import { useDhcpConfig, useDhcpStatus } from '@/features/dhcp/queries'
@@ -69,7 +68,7 @@ export function OverviewPage() {
   const history = useRateHistory(flows)
   const dial = useDialStatus()
   const outside = useMemo(() => buildOutside(dial.data, devices.data?.devices), [dial.data, devices.data])
-  const actions = useDeviceActions()
+  const navigate = useNavigate()
   const groupActions = useGroupActions()
 
   const faults = collectFaults(dhcp.data, dns.data, gateway.data)
@@ -123,7 +122,7 @@ export function OverviewPage() {
           pools={dhcpConfig.data?.pools}
           pending={devices.isPending}
           density="auto"
-          onSelect={actions.select}
+          onSelect={(device) => navigate(`/devices/${encodeURIComponent(device.mac)}`)}
           onCreateGroup={groupActions.create}
           onRenameGroup={groupActions.rename}
           onDeleteGroup={groupActions.remove}
@@ -133,7 +132,6 @@ export function OverviewPage() {
         <TrafficNote traffic={traffic.data} failed={traffic.isError} flows={flows} />
       </section>
 
-      {actions.dialogs}
       {groupActions.dialogs}
     </div>
   )

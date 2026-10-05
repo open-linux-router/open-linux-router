@@ -22,6 +22,7 @@ import { IngressPage } from '@/routes/advanced/ingress'
 import { RemotePage } from '@/routes/advanced/remote'
 import { NetworksPage } from '@/routes/networks'
 import { OverviewPage } from '@/routes/overview'
+import { DevicePage } from '@/routes/device'
 import { GatewayPage } from '@/routes/gateway/index'
 import { GatewayExitsPage } from '@/routes/gateway/exits'
 import { GatewayIPv6Page } from '@/routes/gateway/ipv6'
@@ -35,6 +36,7 @@ export function App() {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<OverviewPage />} />
+          <Route path="devices/:mac" element={<DevicePage />} />
           <Route path="networks" element={<NetworksPage />} />
           <Route path="gateway">
             <Route index element={<GatewayPage />} />
