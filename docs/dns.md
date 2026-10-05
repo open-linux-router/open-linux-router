@@ -159,49 +159,27 @@ trixie. It is load-bearing — confirm before relying on it.)
 > every query reaches unbound from `127.0.0.1` and all views collapse into one,
 > so blocking moved into the relay (§4.4) and unbound is configured with no
 > views at all. §7.4's verification is therefore no longer blocking — it becomes
-> load-bearing again only if v2's per-client upstream selection is attempted
-> inside unbound rather than by pointing clients at a second resolver.
+> load-bearing only if per-client selection moves into unbound; it currently
+> stays in the relay, before unbound sees a query.
 
-The forwarding half still binds, and it is the constraint behind `upstream`
-being one setting for the whole box: **one resolver, one upstream.**
+Unbound's forwarding half is still global. Its `upstream` setting remains one
+default resolver for OLR, but the relay now selects a different resolver when
+the client's effective gateway exit names one (gateway:§2.8). Unbound itself
+does not make that per-client choice.
 
-That has a sharp edge, and it is the one hazard gateway:§4.1's recommendation
-carries. Pointing `upstream` at the proxy's own resolver is the arrangement that
-gives the proxy exact names to match its domain rules on — but the upstream is
-global, so *every* device gets whatever that resolver answers. If the proxy is
-running **fake-IP**, a device on `Internet via: Modem` receives `198.18.x`, hands
-it to the modem, and is blackholed. It will read as "the internet is broken for
-the tablet and fine for the laptop", which is a miserable thing to debug.
+Pointing the *global* upstream at a fake-IP proxy remains unsafe for mixed
+exits: every device would receive its synthetic addresses, including direct
+ones. Instead, gateway attaches an optional DNS server to each exit. The relay
+identifies the asking client by DHCPv4 lease or neighbour entry, selects its
+effective exit, then forwards permitted public questions to that server.
+Local names and blocking still run before the selection. The client always
+sees OLR as its DNS server. The relay does not rewrite fake answers, and an
+unidentified client on a subnet with conflicting per-device DNS choices gets
+SERVFAIL rather than a possibly incompatible answer.
 
-Two ways out, and the first is the recommendation:
-
-- **Ask the proxy for real addresses.** A proxy's real-address mode answers with
-  the genuine address and keeps its own ip→domain cache, so its rules still
-  match and every device — proxied or not — gets something routable. This costs
-  the operator nothing olr was relying on, because since gateway:§4 olr never
-  wants a fake IP for anything.
-- **Or forward only when everything exits via the proxy.** Then there is no
-  device left to blackhole. Fine for the single-exit network, and it stops being
-  fine the moment a second exit appears, which is not a footgun worth leaving
-  armed.
-
-The escape from the global constraint itself is one layer down, not one layer
-out. Source-matched DNAT on port 53 selects the resolver per client:
-
-```
-nft prerouting: ip saddr @proxy_clients udp dport 53 dnat to <resolver-B>
-```
-
-and this machinery is required anyway — option 6 is *advice*, DNAT is
-*enforcement*, and the DoH/DoT defence already needs every forwarded `:53`
-hijacked regardless of what a client has configured. Pointing different source
-sets at different resolvers is an extension of a rule we must write, not a new
-mechanism. That is v2's per-client upstream selection, and it is what lets a
-fake-IP proxy coexist with mixed exits properly rather than by convention.
-
-Either way it is a tradeable to be argued to the operator in their terms —
-*"a second resolver so the devices on Modem don't get a streaming site's address
-from the proxy"* — never as a limitation of a daemon they did not choose.
+The existing `:53` hijack is a separate enforcement feature: DHCP option 6 is
+advice, and a client using hardcoded plaintext DNS needs interception to stay
+under OLR policy. Encrypted DoH is outside this feature.
 
 ---
 
@@ -523,7 +501,7 @@ this deployment risk must be addressed in firewall configuration.
 | | per-client blocking, DoT `:853` drop | built **in the relay**, not in unbound views — §4.4; the block is what protects everything else |
 | | local names under a local domain | built **in unbound**, not the relay — §4.6, which is the same question answered the other way |
 | | `dhcp` reservations read for a cross-check | §4.7 — the subscription design.md §4.1 asked for, restricted to validation so it cannot drift |
-| **v2** | per-client upstream selection (proxy vs direct) | needs §2.1's return-path answer first |
+| **v2** | per-client upstream selection (proxy vs direct) | built in the relay; gateway:§2.8 |
 | | DoH `:443` blocklist, TCP and UDP | ongoing maintenance, not a one-off |
 | **Never** | recursion, DNSSEC validation, our own cache | the moment this process needs a cache, it is a design change and not a refactor |
 | | authoritative service, zone transfers | escape hatch, permanently |

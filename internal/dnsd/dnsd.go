@@ -1,9 +1,9 @@
 // Package dnsd is open-linux-router's DNS relay, olr-dnsd.
 //
-// It owns :53, applies per-client policy, and forwards everything else to
-// unbound on loopback. It is a *backend*, not a module: design.md §3.5 gives
-// the deciding test — does it have to keep running while olrd is stopped? — and
-// DNS does. A control plane that blipped the whole building's name resolution
+// It owns :53, applies per-client policy, and forwards other names to unbound
+// or the selected exit's DNS. It is a *backend*, not a module: design.md §3.5
+// gives the deciding test: does it keep running while olrd is stopped? DNS
+// does. A control plane that blipped the whole building's name resolution
 // on every restart, or took it down with an unrelated panic in an HTTP handler,
 // is the risk docs/dns.md §5 spends its length on.
 //
@@ -104,7 +104,7 @@ func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// SIGHUP re-reads the policy directory and nothing else. That asymmetry is
+// SIGHUP re-reads policies, published names and exit DNS routes. That asymmetry is
 	// the whole reason olrd renders two files rather than one: rebinding a
 	// socket needs a restart, and editing a blocklist — the common operation by
 	// a wide margin — must not interrupt a single query.

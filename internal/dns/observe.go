@@ -43,15 +43,16 @@ const Unbounded = -1
 
 // Query is one answered query, as this module models it.
 type Query struct {
-	At      time.Time
-	Client  netip.Addr
-	Name    string
-	Type    string
-	Rcode   string
-	Blocked bool
-	Policy  string
-	Answers []netip.Addr
-	Chain   []string
+	At       time.Time
+	Client   netip.Addr
+	Name     string
+	Type     string
+	Rcode    string
+	Blocked  bool
+	Policy   string
+	Upstream string
+	Answers  []netip.Addr
+	Chain    []string
 }
 
 // Name is one domain→address pairing the relay observed.
@@ -181,7 +182,7 @@ func (o SocketObserver) Queries(ctx context.Context, limit int) ([]Query, Stats,
 	for _, q := range body.Queries {
 		out = append(out, Query{
 			At: q.At, Client: q.Client, Name: q.Name, Type: q.Type, Rcode: q.Rcode,
-			Blocked: q.Blocked, Policy: q.Policy, Answers: q.Answers, Chain: q.Chain,
+			Blocked: q.Blocked, Policy: q.Policy, Upstream: q.Upstream, Answers: q.Answers, Chain: q.Chain,
 		})
 	}
 	return out, viewStats(body.Stats), nil

@@ -119,6 +119,7 @@ func (a Applier) service(unit string) (Service, error) {
 func NewApplierAt(store *core.Store, links LinkView, reservations ReservationView, root string) (Applier, error) {
 	paths := RootedPaths(root)
 	backend := NewBackend(paths).WithSource(store.Path())
+	backend.Intent = store
 
 	resolver, err := NewService(backend.ResolverUnit())
 	if err != nil {

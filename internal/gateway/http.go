@@ -35,8 +35,8 @@ type HTTP struct {
 	// Events is where a change is announced so other clients re-read.
 	Events *core.Events
 
-	// Watch is called after a successful apply so the prober can follow the new
-	// config. Nil is legal and means nothing is being probed.
+	// Watch is called after a successful apply. The daemon uses it to reconcile
+	// probes and refresh the DNS relay's effective exit selection. Nil is legal.
 	Watch func(Config)
 
 	// NAT serves the other half of this module — the port forwards, and with

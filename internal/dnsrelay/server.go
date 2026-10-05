@@ -217,33 +217,32 @@ func (r *Relay) serveTCPConn(ctx context.Context, conn net.Conn, client netip.Ad
 	}
 }
 
-// forward relays a query to the resolver behind us and returns its answer
+// forward relays a query to the selected resolver and returns its answer
 // verbatim.
 //
 // The response is never parsed here and never rebuilt. Re-serialising would
 // break DNSSEC signatures, drop EDNS options we did not model, and mangle
 // record types we have never heard of — see message.go.
-func (r *Relay) forward(ctx context.Context, query []byte, overTCP bool) ([]byte, error) {
+func (r *Relay) forward(ctx context.Context, upstream netip.AddrPort, query []byte, overTCP bool) ([]byte, error) {
 	if overTCP {
 		// A client that asked over TCP is usually expecting an answer too large
 		// for a datagram, so the transport is preserved rather than downgraded.
-		return r.forwardTCP(ctx, query)
+		return r.forwardTCP(ctx, upstream, query)
 	}
-	return r.forwardUDP(ctx, query)
+	return r.forwardUDP(ctx, upstream, query)
 }
 
-func (r *Relay) forwardUDP(ctx context.Context, query []byte) ([]byte, error) {
+func (r *Relay) forwardUDP(ctx context.Context, upstream netip.AddrPort, query []byte) ([]byte, error) {
 	// One socket per query, and no response-demultiplexing table anywhere.
 	//
 	// A shared connected socket would need queries keyed by transaction ID,
-	// a timeout sweeper, and a story for ID collisions. The upstream is unbound
-	// on loopback and the load is a house — tens of queries a second — so a
-	// socket per query costs an ephemeral port for a few milliseconds and
-	// removes an entire class of correlation bug.
+	// a timeout sweeper, and a story for ID collisions. The load is a house —
+	// tens of queries a second — so a socket per query costs an ephemeral port
+	// for a few milliseconds and removes an entire class of correlation bug.
 	var d net.Dialer
-	conn, err := d.DialContext(ctx, "udp", r.cfg.Upstream.String())
+	conn, err := d.DialContext(ctx, "udp", upstream.String())
 	if err != nil {
-		return nil, fmt.Errorf("dialling the resolver at %s: %w", r.cfg.Upstream, err)
+		return nil, fmt.Errorf("dialling the resolver at %s: %w", upstream, err)
 	}
 	defer conn.Close()
 
@@ -258,16 +257,16 @@ func (r *Relay) forwardUDP(ctx context.Context, query []byte) ([]byte, error) {
 	buf := make([]byte, maxMessage)
 	n, err := conn.Read(buf)
 	if err != nil {
-		return nil, fmt.Errorf("reading from the resolver at %s: %w", r.cfg.Upstream, err)
+		return nil, fmt.Errorf("reading from the resolver at %s: %w", upstream, err)
 	}
 	return buf[:n], nil
 }
 
-func (r *Relay) forwardTCP(ctx context.Context, query []byte) ([]byte, error) {
+func (r *Relay) forwardTCP(ctx context.Context, upstream netip.AddrPort, query []byte) ([]byte, error) {
 	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", r.cfg.Upstream.String())
+	conn, err := d.DialContext(ctx, "tcp", upstream.String())
 	if err != nil {
-		return nil, fmt.Errorf("dialling the resolver at %s: %w", r.cfg.Upstream, err)
+		return nil, fmt.Errorf("dialling the resolver at %s: %w", upstream, err)
 	}
 	defer conn.Close()
 
@@ -279,7 +278,7 @@ func (r *Relay) forwardTCP(ctx context.Context, query []byte) ([]byte, error) {
 	}
 	response, err := readTCPMessage(conn)
 	if err != nil {
-		return nil, fmt.Errorf("reading from the resolver at %s: %w", r.cfg.Upstream, err)
+		return nil, fmt.Errorf("reading from the resolver at %s: %w", upstream, err)
 	}
 	return response, nil
 }

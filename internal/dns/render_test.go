@@ -5,6 +5,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/gateway"
+	"github.com/open-linux-router/open-linux-router/internal/link"
 )
 
 func testBackend(t *testing.T) Backend {
@@ -441,3 +446,78 @@ func TestRenderLocalNamesUnderACustomDomain(t *testing.T) {
 		t.Errorf("the record did not follow the configured domain:\n%s", got)
 	}
 }
+
+func TestGatewayExitDNSRendersPerDeviceRoutes(t *testing.T) {
+	store := core.NewStore(filepath.Join(t.TempDir(), "olr.json"), "dns", "gateway", "link")
+	var doc core.Document
+	g := gateway.Config{Enabled: true, Exits: []gateway.Exit{{Name: "Clash", Via: gateway.Via{Kind: gateway.ViaNextHop, NextHop: addrPtr("172.16.1.137")}, DNS: &gateway.ExitDNS{Mode: "exit"}}},
+		Devices: []gateway.DeviceAssignment{{MAC: "aa:bb:cc:dd:ee:ff", Exit: "Clash"}}}
+	g.Normalize()
+	gb, err := gateway.MarshalConfig(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc.Set("gateway", gb)
+	l := link.Config{Networks: []link.Network{{Name: "lan", Members: []string{"ens19"}, IPv4: &link.NetworkIPv4{Subnet: netip.MustParsePrefix("172.16.1.0/24")}}}}
+	lb, err := link.MarshalConfig(l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc.Set("link", lb)
+	if err := store.Save(doc); err != nil {
+		t.Fatal(err)
+	}
+	b := testBackend(t)
+	b.Intent = store
+	out, err := b.Render(validConfig(), testLinks(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, ok := out.Get(b.Paths.Routes)
+	if !ok || !f.Reloadable {
+		t.Fatalf("missing reloadable routes: %v", out.Paths())
+	}
+	if !strings.Contains(string(f.Data), "172.16.1.137:53") || !strings.Contains(string(f.Data), "aa:bb:cc:dd:ee:ff") {
+		t.Fatalf("route projection lost exit or device: %s", f.Data)
+	}
+}
+
+func TestGatewayDNSChangeOnlyReloadsRelay(t *testing.T) {
+	store := core.NewStore(filepath.Join(t.TempDir(), "olr.json"), "dns", "gateway", "link")
+	var doc core.Document
+	g := gateway.Config{Enabled: true, Exits: []gateway.Exit{{Name: "Clash", Via: gateway.Via{Kind: gateway.ViaNextHop, NextHop: addrPtr("172.16.1.137")}}}}
+	gb, _ := gateway.MarshalConfig(g)
+	doc.Set("gateway", gb)
+	if err := store.Save(doc); err != nil {
+		t.Fatal(err)
+	}
+	b := testBackend(t)
+	b.Intent = store
+	cfg := validConfig()
+	rendered, err := b.Render(cfg, testLinks(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obs := Observed{Files: map[string][]byte{}, Units: map[string]UnitState{}}
+	for _, f := range rendered.Files {
+		obs.Files[f.Path] = f.Data
+	}
+	for _, unit := range b.Units() {
+		obs.Units[unit] = UnitState{Known: true, Running: true, EnabledAtBoot: true, Installed: true}
+	}
+	g.Exits[0].DNS = &gateway.ExitDNS{Mode: "exit"}
+	gb, _ = gateway.MarshalConfig(g)
+	doc.Set("gateway", gb)
+	if err := store.Save(doc); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := BuildPlan(b, cfg, testLinks(), nil, nil, obs, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actionFor(plan, b.RelayUnit()) != ActionReload || actionFor(plan, b.ResolverUnit()) != ActionNone {
+		t.Fatalf("changing exit DNS should reload only relay: %+v", plan.Services)
+	}
+}
+
+func addrPtr(s string) *netip.Addr { a := netip.MustParseAddr(s); return &a }

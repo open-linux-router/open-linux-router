@@ -34,6 +34,36 @@ func TestValidateAcceptsTheReferenceTopology(t *testing.T) {
 	}
 }
 
+func TestExitDNSModesValidateTheirTransport(t *testing.T) {
+	for _, tc := range []struct {
+		dns  *ExitDNS
+		path string
+	}{
+		{&ExitDNS{Mode: "exit"}, ""},
+		{&ExitDNS{Mode: "custom", Server: netip.MustParseAddrPort("192.168.1.10:53")}, ""},
+		{&ExitDNS{Mode: "custom"}, "exits[1].dns.server"},
+		{&ExitDNS{Mode: "custom", Server: netip.MustParseAddrPort("127.0.0.1:53")}, "exits[1].dns.server"},
+		{&ExitDNS{Mode: "custom", Server: netip.MustParseAddrPort("192.168.1.1:53")}, "exits[1].dns.server"},
+		{&ExitDNS{Mode: "custom", Server: netip.MustParseAddrPort("[2001:db8::1]:53")}, "exits[1].dns.server"},
+		{&ExitDNS{Mode: "invalid"}, "exits[1].dns.mode"},
+	} {
+		c := testConfig()
+		for i := range c.Exits {
+			if c.Exits[i].Name == "Proxy" {
+				c.Exits[i].DNS = tc.dns
+			}
+		}
+		c.Normalize()
+		res := Validate(c, testLinks())
+		if tc.path == "" && !res.OK() {
+			t.Errorf("%+v: %v", tc.dns, res.Errors)
+		}
+		if tc.path != "" {
+			errorAt(t, res, tc.path)
+		}
+	}
+}
+
 func TestDeviceOverridesRejectInvalidDuplicateAndMissingExit(t *testing.T) {
 	c := testConfig()
 	c.Devices = []DeviceAssignment{

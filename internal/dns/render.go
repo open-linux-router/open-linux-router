@@ -6,10 +6,13 @@ import (
 	"net/netip"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/dnsrelay"
+	"github.com/open-linux-router/open-linux-router/internal/gateway"
+	"github.com/open-linux-router/open-linux-router/internal/link"
 )
 
 // Paths locates everything the module writes or tells its backends about.
@@ -73,6 +76,13 @@ type Paths struct {
 	// with this box's own address (published.go). Re-read on SIGHUP.
 	Published string
 
+	// Routes is gateway's effective resolver selection, reloadable without
+	// touching unbound or the relay listener.
+	Routes string
+	// LeaseFile is dnsmasq's observed IPv4 lease database. The relay reads it
+	// at a bounded cadence to identify a querying device, never to set intent.
+	LeaseFile string
+
 	// HijackNFT is the nftables ruleset the relay's unit loads once the relay
 	// is bound.
 	HijackNFT string
@@ -115,6 +125,8 @@ func RootedPaths(root string) Paths {
 		RelayConf:     filepath.Join(rendered, "relay.json"),
 		PolicyDir:     filepath.Join(rendered, "policy.d"),
 		Published:     filepath.Join(rendered, "published.json"),
+		Routes:        filepath.Join(rendered, "routes.json"),
+		LeaseFile:     filepath.Join(root, "/var/lib/open-linux-router/dhcp/leases"),
 		HijackNFT:     filepath.Join(rendered, "hijack.nft"),
 		TrustAnchor:   filepath.Join(anchor, "root.key"),
 		ObserveSocket: filepath.Join(root, "/run/olr/dns/observe.sock"),
@@ -177,6 +189,9 @@ func (r *Rendered) sort() {
 // which is a question about *these* files and means nothing to anything else.
 type Backend struct {
 	Paths Paths
+	// Intent is the shared document, read only for the gateway's DNS choices.
+	// Nil keeps isolated renderer tests and fresh installs independent.
+	Intent *core.Store
 
 	// Source is the intent file named in every generated file's ownership
 	// header. An operator who finds one of these needs pointing at the file
@@ -258,7 +273,7 @@ func (Backend) Canonical(data []byte) []byte {
 // SIGHUP. Used by the planner to tell a reload from a restart, including for
 // stray files no longer rendered by the current config.
 func (b Backend) reloadable(path string) bool {
-	return strings.HasPrefix(path, b.Paths.PolicyDir+"/") || path == b.Paths.Published
+	return strings.HasPrefix(path, b.Paths.PolicyDir+"/") || path == b.Paths.Published || path == b.Paths.Routes
 }
 
 // unitFor reports which backend reads a path, for a file the current config no
@@ -292,6 +307,14 @@ func (b Backend) Render(c Config, links LinkView, published PublishedView) (Rend
 		return Rendered{}, err
 	}
 	out.add(File{Path: b.Paths.RelayConf, Mode: 0o644, Data: relay, Unit: b.RelayUnit()})
+	if b.Intent != nil {
+		routes, err := b.renderRoutes(c)
+		if err != nil {
+			return Rendered{}, err
+		}
+		out.add(File{Path: b.Paths.Routes, Mode: 0o644, Data: routes,
+			Reloadable: true, Unit: b.RelayUnit()})
+	}
 
 	for _, p := range c.Policies {
 		data, err := b.renderPolicy(p)
@@ -332,6 +355,72 @@ func (b Backend) Render(c Config, links LinkView, published PublishedView) (Rend
 
 	out.sort()
 	return out, nil
+}
+
+func (b Backend) renderRoutes(c Config) ([]byte, error) {
+	doc, err := b.Intent.Load()
+	if err != nil {
+		return nil, err
+	}
+	g, err := gateway.FromDocument(doc)
+	if err != nil {
+		return nil, err
+	}
+	l, err := link.FromDocument(doc)
+	if err != nil {
+		return nil, err
+	}
+	r := dnsrelay.Routes{LocalDomain: c.LocalDomainOrDefault()}
+	if g.Enabled {
+		r.Default = g.Default
+		for _, e := range g.Exits {
+			if e.DNS == nil {
+				continue
+			}
+			var server netip.AddrPort
+			switch e.DNS.Mode {
+			case "exit":
+				if e.Via.NextHop != nil {
+					server = netip.AddrPortFrom(*e.Via.NextHop, 53)
+				}
+			case "custom":
+				server = e.DNS.Server
+			}
+			if server.IsValid() {
+				r.Exits = append(r.Exits, dnsrelay.RouteExit{Name: e.Name, DNS: server})
+			}
+		}
+		if len(r.Exits) > 0 {
+			for _, n := range l.Networks {
+				if n.IPv4 == nil || !n.IPv4.Subnet.IsValid() {
+					continue
+				}
+				for _, iface := range n.Members {
+					name, _ := g.Assigned(iface)
+					r.Networks = append(r.Networks, dnsrelay.RouteNetwork{Prefix: n.IPv4.Subnet.Masked(), Exit: name})
+				}
+			}
+			for _, d := range g.Devices {
+				entry := dnsrelay.RouteDevice{MAC: d.MAC, Exit: d.Exit}
+				for _, n := range l.Networks {
+					if len(n.Members) > 0 && n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
+						entry.Prefixes = append(entry.Prefixes, n.IPv4.Subnet.Masked())
+					}
+				}
+				r.Devices = append(r.Devices, entry)
+			}
+		}
+	}
+	// Keep the file even with no exits: the relay requires one when this
+	// feature is wired, and a missing file is a visible incomplete apply.
+	sort.Slice(r.Exits, func(i, j int) bool { return r.Exits[i].Name < r.Exits[j].Name })
+	sort.Slice(r.Devices, func(i, j int) bool { return r.Devices[i].MAC < r.Devices[j].MAC })
+	sort.Slice(r.Networks, func(i, j int) bool { return r.Networks[i].Prefix.String() < r.Networks[j].Prefix.String() })
+	data, err := dnsrelay.MarshalRoutes(r)
+	if err != nil {
+		return nil, err
+	}
+	return append(data, '\n'), nil
 }
 
 // --- unbound ---------------------------------------------------------------
@@ -577,6 +666,9 @@ func (b Backend) renderRelay(c Config, links LinkView) ([]byte, error) {
 		Upstream:        DefaultResolver,
 		PolicyDir:       b.Paths.PolicyDir,
 		PublishedFile:   b.Paths.Published,
+		RoutesFile:      b.Paths.Routes,
+		LeaseFile:       b.Paths.LeaseFile,
+		ARPFile:         "/proc/net/arp",
 		ObserveSocket:   b.Paths.ObserveSocket,
 		QueryLogEntries: 0,
 	}

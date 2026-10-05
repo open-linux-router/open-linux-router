@@ -370,6 +370,11 @@ export interface Exit {
   on_failure?: BehaviourWhenTheExitIsDown
   snat?: boolean
   probe?: Probe
+  dns?: ExitDNS
+}
+export interface ExitDNS {
+  mode: 'olr' | 'exit' | 'custom'
+  server?: string
 }
 export interface Via {
   kind: ExitForm

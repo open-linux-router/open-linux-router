@@ -269,11 +269,9 @@ if applying the assignment would be disruptive.
 
 This is *source selection*: clients in that interface's subnet use the same
 exit unless one has its own device override (§2.7). Group overrides are not
-implemented yet (§2.5). Domain,
-GEOIP, and outbound rules within that traffic belong to the proxy (§4), not
-to olr. DNS is a separate choice: olr's upstream is global, so forwarding it
-to a fake-IP resolver while other networks go direct can strand those clients
-with unroutable fake addresses (§4.1).
+implemented yet (§2.5). Domain, GEOIP, and outbound rules within that traffic
+belong to the proxy (§4), not to olr. An exit may name its own DNS resolver;
+the relay selects it after local policy without changing DHCP's DNS address.
 
 When the proxy box is itself on the selected subnet, give it an independent
 upstream path. If its DIRECT or upstream traffic returns to olr with the same
@@ -297,6 +295,25 @@ randomized MAC is a different identity. It is not an IP-spoofing defense, and
 clients behind another L3 router appear under that router's MAC; non-Ethernet
 ingress cannot match this override. Group assignment remains a separate next
 rung, not implicitly implemented by this one.
+
+### 2.8 DNS follows the way out
+
+An exit's DNS is OLR (the default), the next-hop box on port 53, or a custom
+IPv4 IP:port. DHCP still hands every client OLR. The DNS relay sees the querying
+IP, uses current DHCPv4 leases and the IPv4 neighbour table to identify its MAC,
+then applies device → network → default selection to choose an upstream. The
+gateway's own MAC classification is unchanged. Blocking and names under OLR's
+local domain are resolved before this choice; permitted public queries are
+forwarded byte-for-byte over UDP or TCP. Query history records the upstream.
+
+The selected resolver is contacted by OLR itself, so it must be reachable from
+OLR without routing back through the client's exit. A dead resolver does not
+silently fall back to another one. Unknown or conflicting MAC identity in a
+subnet with differing device DNS choices returns SERVFAIL rather than risking
+a fake-IP answer incompatible with the client's route. This can temporarily
+affect a new or static-addressed client while DHCP/ARP catches up. IPv6 client
+identity, encrypted DNS from the client, and stale cached fake-IP answers after
+an exit switch are not solved by this feature.
 
 ---
 
@@ -667,31 +684,13 @@ own configuration. Neither needs to know the other's rules.
 
 ### 4.1 What the operator does instead
 
-Assign the source to the proxy exit and let the proxy sort it out. For the
-proxy's own domain rules to work it has to see names, and there are two ways
-that happens. Both are worth stating: the first is a setting an operator has to
-be told to make, and the second is what silently happens if they do not.
-
-- **Point olr's resolver at the proxy's.** `olr dns set --mode forward --upstream
-  <the proxy's resolver>` makes every answer the network gets come from the
-  thing that also routes it, so its rules match on an exact name. This is the
-  configuration to recommend, **with one condition attached**: the proxy must
-  answer with real addresses — its real-address mode — and not fake ones.
-  `upstream` is global (dns:§3), so a fake-IP proxy hands `198.18.x` to *every*
-  device including the ones on `Internet via: Modem`, and those are blackholed.
-  It presents as "the internet works on the laptop and not the tablet", which is
-  a miserable thing to debug. Nothing is lost by asking: olr has no use for a
-  fake IP anywhere, so real addresses cost the operator nothing they were
-  relying on.
-- **Otherwise the proxy sniffs.** TLS SNI and HTTP Host, per dns:§2.2, which
-  works today and degrades as ECH deploys. Fine as a fallback, not something to
-  design around.
-
-An operator who genuinely wants fake-IP can still run it — that is their proxy's
-business, and olr's rendered unbound deliberately does not strip `198.18.0.0/15`
-from answers (`rebindPrefixes` in `internal/dns/render.go`). What they cannot do
-yet is combine it with mixed exits, which waits on dns v2's per-client upstream
-selection.
+Assign the source to the proxy exit and let the proxy sort it out. If its domain
+rules need its own DNS answers, set that exit's DNS to the next hop (§2.8).
+OLR remains the only DNS address handed to clients, while its relay forwards
+permitted public queries to the resolver chosen by their effective exit. This
+allows fake-IP for proxied devices alongside direct devices using OLR's resolver.
+Without that setting, the proxy can still sniff TLS SNI and HTTP Host, but it
+degrades as ECH deploys (dns:§2.2).
 
 ### 4.2 What this costs, stated
 
@@ -703,12 +702,9 @@ What it buys back is worth more than it looks:
 
 - **`Internet via` becomes the only per-source question.** §2.4 drops from four
   objects to three, and the ladder covers all of what remains.
-- **DNS policy and exit assignment are now independent.** The earlier draft had
-  to forbid configuring them separately — a device handed a fake IP for an exit
-  it does not use reaches that exit silently, so the resolver's upstream had to
-  be derived from the routing decision. With no fake IPs there is nothing to
-  desynchronise: blocking, the query log and `Internet via` are three unrelated
-  settings, and an operator can reason about each without the others.
+- **DNS blocking and logging remain OLR's.** DNS upstream choice follows the
+  effective exit when that exit names a resolver; otherwise it remains unbound.
+  OLR still does not route by domain name.
 - **dns:§7.3 closes by deletion.** It asked which wins between a global domain
   rule and a per-source assignment. There is no longer a global domain rule.
 

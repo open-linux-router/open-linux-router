@@ -57,6 +57,9 @@ type Query struct {
 	Blocked bool   `json:"blocked,omitempty"`
 	Policy  string `json:"policy,omitempty"`
 
+	// Upstream names the resolver actually asked, absent for local answers.
+	Upstream string `json:"upstream,omitempty"`
+
 	// Answers are the A and AAAA records, in the order they arrived.
 	Answers []netip.Addr `json:"answers,omitempty"`
 

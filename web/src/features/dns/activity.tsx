@@ -356,6 +356,7 @@ function QueryList({
             <div className="truncate text-xs text-muted-foreground">
               {q.client} · {q.type}
               {q.answers?.length ? ` → ${q.answers.join(', ')}` : ''}
+              {q.upstream ? ` · DNS via ${q.upstream}` : ''}
             </div>
           </div>
           <QueryResult query={q} />

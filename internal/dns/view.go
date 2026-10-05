@@ -96,8 +96,9 @@ type queryView struct {
 	// Blocked and Policy together answer "why can this device not reach that
 	// site", which is the question the query log exists for. A blocked entry
 	// without the rule that blocked it would send the operator hunting.
-	Blocked bool   `json:"blocked"`
-	Policy  string `json:"policy,omitempty"`
+	Blocked  bool   `json:"blocked"`
+	Policy   string `json:"policy,omitempty"`
+	Upstream string `json:"upstream,omitempty"`
 
 	Answers []string `json:"answers,omitempty"`
 	Chain   []string `json:"chain,omitempty"`
@@ -106,7 +107,7 @@ type queryView struct {
 func viewQuery(q Query) queryView {
 	v := queryView{
 		At: q.At, Client: q.Client.String(), Name: q.Name, Type: q.Type,
-		Rcode: q.Rcode, Blocked: q.Blocked, Policy: q.Policy, Chain: q.Chain,
+		Rcode: q.Rcode, Blocked: q.Blocked, Policy: q.Policy, Upstream: q.Upstream, Chain: q.Chain,
 	}
 	for _, a := range q.Answers {
 		v.Answers = append(v.Answers, a.String())

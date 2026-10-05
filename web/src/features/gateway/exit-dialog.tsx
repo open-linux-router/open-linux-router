@@ -96,14 +96,22 @@ export function ExitDialog({
   function setForm(kind: ExitForm) {
     // Switching form clears the other form's fields rather than leaving them
     // behind, where they would read as still being in force.
-    setDraft((d) => ({ ...d, via: { kind } }))
+    setDraft((d) => ({
+      ...d,
+      via: { kind },
+      dns:
+        kind === 'blocked' || (d.dns?.mode === 'exit' && kind !== 'next_hop')
+          ? undefined
+          : d.dns,
+    }))
   }
 
   const complete =
     draft.name.trim() &&
     (draft.via.kind === 'blocked' ||
       (draft.via.kind === 'interface' && draft.via.interface?.trim()) ||
-      (draft.via.kind === 'next_hop' && draft.via.next_hop?.trim()))
+      (draft.via.kind === 'next_hop' && draft.via.next_hop?.trim())) &&
+    (draft.dns?.mode !== 'custom' || draft.dns.server?.trim())
 
   const form = FORMS.find((f) => f.value === draft.via.kind) ?? FORMS[0]
 
@@ -192,8 +200,48 @@ export function ExitDialog({
           )}
 
           {draft.via.kind !== 'blocked' && (
-            <Disclosure summary="Health check, IPv6 and other details">
+            <Disclosure summary="DNS, health check, IPv6 and other details">
               <div className="space-y-4 pt-1">
+                <div className="space-y-1.5">
+                  <Label htmlFor="exit-dns-mode">DNS for devices using this way out</Label>
+                  <Select
+                    value={draft.dns?.mode || 'olr'}
+                    onValueChange={(mode) =>
+                      field('dns', mode === 'olr' ? undefined : { mode: mode as 'exit' | 'custom' })
+                    }
+                  >
+                    <SelectTrigger id="exit-dns-mode">
+                      <SelectValue>
+                        {(mode: string) =>
+                          mode === 'exit'
+                            ? 'This box’s DNS'
+                            : mode === 'custom'
+                              ? 'A specified DNS server'
+                              : 'OLR’s DNS'
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="olr">OLR’s DNS</SelectItem>
+                      {draft.via.kind === 'next_hop' && (
+                        <SelectItem value="exit">This box’s DNS</SelectItem>
+                      )}
+                      <SelectItem value="custom">A specified DNS server</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {draft.dns?.mode === 'custom' && (
+                    <Input
+                      aria-label="DNS server address and port"
+                      value={draft.dns.server ?? ''}
+                      placeholder="192.168.1.50:53"
+                      onChange={(e) => field('dns', { mode: 'custom', server: e.target.value })}
+                    />
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Clients still ask OLR. OLR forwards their public names to this resolver;
+                    blocked and local names stay on OLR.
+                  </p>
+                </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="exit-probe">Check it is working by connecting to</Label>
                   <Input

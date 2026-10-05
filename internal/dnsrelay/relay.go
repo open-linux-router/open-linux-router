@@ -22,8 +22,8 @@ import (
 // Dropped counter is a better answer than latency.
 const TeeBuffer = 256
 
-// Relay is the running data plane: it owns :53, applies policy, and forwards
-// everything else to unbound.
+// Relay is the running data plane: it owns :53, applies local policy, and
+// selects unbound or a configured exit resolver for remaining names.
 //
 // Once the fast path is read → policy → forward → write → try-send, it is *done* (docs/dns.md §4.2). Every later feature lands on the
 // far side of the tee and cannot regress DNS. That is the line to hold in
@@ -40,6 +40,8 @@ type Relay struct {
 
 	// published is swapped on SIGHUP alongside policies, for the same reason.
 	published atomic.Pointer[map[string]bool]
+	routes    atomic.Pointer[Routes]
+	identity  identityCache
 
 	// localAddrs finds this box's addresses as seen from where a query
 	// arrived. Nil means systemLocalAddrs; a field so tests on loopback can
@@ -64,6 +66,7 @@ type observation struct {
 	blocked  bool
 	local    bool
 	policy   string
+	upstream string
 	question Question
 	haveQ    bool
 }
@@ -92,13 +95,14 @@ func New(cfg Config, logger *slog.Logger) (*Relay, error) {
 		started: time.Now(),
 		tee:     make(chan observation, TeeBuffer),
 	}
+	r.identity.leases, r.identity.arp = cfg.LeaseFile, cfg.ARPFile
 	if err := r.Reload(); err != nil {
 		return nil, err
 	}
 	return r, nil
 }
 
-// Reload re-reads the policy directory and swaps the compiled set in.
+// Reload re-reads policies, published names and exit DNS routing atomically.
 //
 // Called on SIGHUP, which is how olrd tells this process that a blocklist
 // changed. The listen addresses and the upstream are not re-read: rebinding a
@@ -118,10 +122,15 @@ func (r *Relay) Reload() error {
 		// Both halves keep their old sets, so a reload is all or nothing.
 		return err
 	}
+	routes, err := LoadRoutes(r.cfg.RoutesFile)
+	if err != nil {
+		return err
+	}
 	r.policies.Store(Compile(policies))
 	r.published.Store(&published)
-	r.logger.Info("policies loaded", "count", len(policies), "dir", r.cfg.PolicyDir,
-		"published", len(published))
+	r.routes.Store(&routes)
+	r.logger.Info("DNS rules loaded", "policies", len(policies), "dir", r.cfg.PolicyDir,
+		"published", len(published), "exit_dns", len(routes.Exits))
 	return nil
 }
 
@@ -203,6 +212,7 @@ type result struct {
 	question Question
 	haveQ    bool
 	decision Decision
+	upstream string
 
 	// local marks an answer for a published name: built here, from this box's
 	// own addresses.
@@ -256,7 +266,31 @@ func (r *Relay) resolve(ctx context.Context, client netip.Addr, query []byte, ov
 			"name", res.question.Name, "error", err)
 	}
 
-	response, err := r.forward(ctx, query, overTCP)
+	// The local zone belongs to unbound, including names that do not exist.
+	// Forwarding an unknown home.arpa name to Clash would leak the household's
+	// namespace and turn an authoritative NXDOMAIN into a proxy answer.
+
+	upstream := r.cfg.Upstream
+	if routes := r.routes.Load(); routes != nil && len(routes.Exits) > 0 {
+		local := res.haveQ && routes.LocalDomain != "" &&
+			(res.question.Name == routes.LocalDomain || strings.HasSuffix(res.question.Name, "."+routes.LocalDomain))
+		if !local && res.haveQ {
+			mac, ambiguous := r.identity.mac(client)
+			selected, ok, uncertain := routes.Select(client, mac)
+			uncertain = uncertain || (ambiguous && routes.DeviceDNSMayDiffer(client))
+			if uncertain {
+				var err error
+				res.response, err = SynthesizeFailure(query)
+				r.counters.Failed.Add(1)
+				return res, err
+			}
+			if ok {
+				upstream = selected
+			}
+		}
+	}
+	res.upstream = upstream.String()
+	response, err := r.forward(ctx, upstream, query, overTCP)
 	if err != nil {
 		r.counters.Failed.Add(1)
 		return res, err
@@ -290,6 +324,7 @@ func (r *Relay) observe(client netip.Addr, res result, at time.Time) {
 	case r.tee <- observation{
 		at: at, client: client, msg: msg,
 		blocked: res.decision.Blocked, local: res.local, policy: res.decision.Policy,
+		upstream: res.upstream,
 		question: res.question, haveQ: res.haveQ,
 	}:
 	default:
@@ -340,7 +375,7 @@ func (r *Relay) record(o observation) {
 			r.log.Add(Query{
 				At: o.at, Client: o.client, Name: o.question.Name,
 				Type: o.question.TypeName, Rcode: "UNPARSED",
-				Blocked: o.blocked, Policy: o.policy,
+				Blocked: o.blocked, Policy: o.policy, Upstream: o.upstream,
 			})
 		}
 		return
@@ -348,7 +383,7 @@ func (r *Relay) record(o observation) {
 
 	r.log.Add(Query{
 		At: o.at, Client: o.client, Name: obs.Name, Type: obs.TypeName,
-		Rcode: obs.Rcode, Blocked: o.blocked, Policy: o.policy,
+		Rcode: obs.Rcode, Blocked: o.blocked, Policy: o.policy, Upstream: o.upstream,
 		Answers: obs.Addrs, Chain: obs.Chain,
 	})
 

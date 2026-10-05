@@ -867,6 +867,7 @@ export interface QueryRow {
    */
   blocked: boolean
   policy?: string
+  upstream?: string
   answers?: string[]
   /** The CNAME chain. Its tail is why a device that asked for one name shows up
    *  talking to a CDN. */

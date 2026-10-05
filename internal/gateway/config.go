@@ -257,6 +257,18 @@ type Exit struct {
 	// because IPv4 has no gateway failover at the device layer. Validate warns
 	// when a routing exit has no probe rather than silently accepting it.
 	Probe *Probe `json:"probe,omitempty"`
+
+	// DNS chooses the resolver for clients using this exit. Nil keeps OLR's
+	// local resolver; it never changes what DNS address DHCP hands to clients.
+	DNS *ExitDNS `json:"dns,omitempty"`
+}
+
+// ExitDNS selects where OLR's relay forwards public names for this exit.
+type ExitDNS struct {
+	// Mode is olr, exit (the next hop on port 53), or custom.
+	Mode string `json:"mode"`
+	// Server is required only for custom mode. The address is reached by OLR.
+	Server netip.AddrPort `json:"server,omitempty"`
 }
 
 // Via is how an exit delivers traffic. §1.2's forms.
@@ -656,6 +668,9 @@ func (c *Config) Normalize() {
 		c.Exits[i].Name = strings.TrimSpace(c.Exits[i].Name)
 		c.Exits[i].Via.Interface = strings.TrimSpace(c.Exits[i].Via.Interface)
 		c.Exits[i].Via.Dev = strings.TrimSpace(c.Exits[i].Via.Dev)
+		if c.Exits[i].DNS != nil && c.Exits[i].DNS.Mode == "olr" && !c.Exits[i].DNS.Server.IsValid() {
+			c.Exits[i].DNS = nil
+		}
 	}
 	c.Default = strings.TrimSpace(c.Default)
 	for i := range c.Interfaces {

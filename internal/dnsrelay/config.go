@@ -56,6 +56,14 @@ type Config struct {
 	// PolicyDir holds one JSON file per policy, re-read on SIGHUP.
 	PolicyDir string `json:"policy_dir,omitempty"`
 
+	// RoutesFile is a reloadable snapshot of gateway's effective DNS choices.
+	// The relay reads it on SIGHUP, never calls the control plane per query.
+	RoutesFile string `json:"routes_file,omitempty"`
+	// LeaseFile and ARPFile are observed identities, not a second source of
+	// configured routing policy. A missing source simply cannot identify a MAC.
+	LeaseFile string `json:"lease_file,omitempty"`
+	ARPFile   string `json:"arp_file,omitempty"`
+
 	// PublishedFile names the names this box answers for itself
 	// (published.go), re-read on SIGHUP with the policies. A missing file
 	// means none.

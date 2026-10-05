@@ -166,6 +166,54 @@ func validateExits(r *Result, c Config, links LinkView) {
 		}
 
 		validateVia(r, path+".via", e, links)
+		if e.DNS != nil {
+			if e.Via.Kind == ViaBlocked {
+				r.errorf(path+".dns", "a blocked exit cannot resolve DNS")
+			}
+			switch e.DNS.Mode {
+			case "olr":
+				if e.DNS.Server.IsValid() {
+					r.errorf(path+".dns.server", "OLR DNS does not take a server")
+				}
+			case "exit":
+				if e.Via.Kind != ViaNextHop {
+					r.errorf(path+".dns.mode", "exit DNS needs a next-hop exit")
+				}
+				if e.DNS.Server.IsValid() {
+					r.errorf(path+".dns.server", "exit DNS uses the next hop on port 53")
+				}
+				if e.Via.NextHop != nil && e.Via.NextHop.Is6() {
+					r.errorf(path+".dns.mode", "IPv6 next-hop DNS is not supported for device selection yet")
+				}
+				if e.Via.NextHop != nil {
+					if infos, err := links.Interfaces(); err == nil {
+						for _, info := range infos {
+							for _, prefix := range info.Prefixes {
+								if prefix.Addr() == *e.Via.NextHop {
+									r.errorf(path+".dns.mode", "the next hop is this router; DNS forwarding would loop")
+								}
+							}
+						}
+					}
+				}
+			case "custom":
+				if !e.DNS.Server.IsValid() || e.DNS.Server.Port() == 0 ||
+					e.DNS.Server.Addr().IsUnspecified() || e.DNS.Server.Addr().IsMulticast() ||
+					e.DNS.Server.Addr().IsLoopback() || e.DNS.Server.Addr().Is6() {
+					r.errorf(path+".dns.server", "custom DNS needs an IPv4 unicast IP and port")
+				} else if infos, err := links.Interfaces(); err == nil {
+					for _, info := range infos {
+						for _, prefix := range info.Prefixes {
+							if prefix.Addr() == e.DNS.Server.Addr() {
+								r.errorf(path+".dns.server", "%s belongs to this router; forwarding DNS to itself would loop", e.DNS.Server.Addr())
+							}
+						}
+					}
+				}
+			default:
+				r.errorf(path+".dns.mode", "unknown DNS mode %q (want olr, exit or custom)", e.DNS.Mode)
+			}
+		}
 
 		if !e.IPv6.Valid() {
 			r.errorf(path+".ipv6", "unknown IPv6 handling %q; valid values are %s",

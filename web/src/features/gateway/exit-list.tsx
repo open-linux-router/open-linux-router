@@ -57,6 +57,12 @@ function describeExit(e: Exit, row?: ExitStatus): string {
         ? `Out ${e.via.interface}`
         : `To ${e.via.next_hop}`
   const used = row?.used_by?.length ? ` · used by ${row.used_by.join(', ')}` : ''
+  const dns =
+    e.dns?.mode === 'exit'
+      ? ' · DNS via this box'
+      : e.dns?.mode === 'custom'
+        ? ` · DNS ${e.dns.server}`
+        : ' · DNS via OLR'
 
   // The badge beside this row is `hidden sm:block`, so on a phone it is the
   // only thing that would say an exit has stopped working — which is the most
@@ -64,5 +70,5 @@ function describeExit(e: Exit, row?: ExitStatus): string {
   // width most people will read it at. Said in the subtitle too, where it
   // survives, rather than only in the badge.
   const down = row && row.probed && !row.up ? 'Not responding · ' : ''
-  return down + where + used
+  return down + where + dns + used
 }

@@ -132,6 +132,31 @@ func Synthesize(query []byte, response string) ([]byte, error) {
 	return b.Finish()
 }
 
+// SynthesizeFailure refuses an ambiguous device lookup without sending a
+// fake-IP-capable resolver's answer to an unknown client's routing path.
+func SynthesizeFailure(query []byte) ([]byte, error) {
+	var p dnsmessage.Parser
+	header, err := p.Start(query)
+	if err != nil {
+		return nil, err
+	}
+	q, err := p.Question()
+	if err != nil {
+		return nil, err
+	}
+	b := dnsmessage.NewBuilder(nil, dnsmessage.Header{
+		ID: header.ID, Response: true, RecursionDesired: header.RecursionDesired,
+		RecursionAvailable: true, RCode: dnsmessage.RCodeServerFailure,
+	})
+	if err := b.StartQuestions(); err != nil {
+		return nil, err
+	}
+	if err := b.Question(q); err != nil {
+		return nil, err
+	}
+	return b.Finish()
+}
+
 // Answer builds the response for a name this box serves itself (published.go).
 //
 // A and AAAA get the addresses of that family; every other type gets NODATA —

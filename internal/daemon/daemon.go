@@ -396,7 +396,8 @@ func run(args []string) error {
 	// network is being served before it is being translated.
 	followNetworks = func(ctx context.Context) []core.Step {
 		return applyDependents(ctx, logger,
-			dhcpDependent(applier), gatewayDependent(gatewayApplier), natDependent(natApplier))
+			dhcpDependent(applier), gatewayDependent(gatewayApplier), natDependent(natApplier),
+			dnsDependent(dnsApplier))
 	}
 	// The delegated prefix's subscriber. After followNetworks, because a
 	// network that moved to a new prefix is what everything built from the
@@ -431,7 +432,18 @@ func run(args []string) error {
 		Applier: gatewayApplier,
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
-		Watch:   func(cfg gateway.Config) { prober.Watch(context.Background(), cfg) },
+		Watch: func(cfg gateway.Config) {
+			prober.Watch(context.Background(), cfg)
+			// Gateway and DNS share one document. Refresh the relay's routing
+			// snapshot after the gateway write, not before it.
+			if current, err := dnsApplier.Load(); err != nil {
+				logger.Error("could not load DNS routing after gateway change", "error", err)
+			} else if current.Enabled {
+				if _, err := dnsApplier.Apply(context.Background(), current); err != nil {
+					logger.Error("could not update DNS routing after gateway change", "error", err)
+				}
+			}
+		},
 		NAT: &nat.HTTP{
 			Applier: natApplier,
 			Lock:    srv.ApplyLock(),
