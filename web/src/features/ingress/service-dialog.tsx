@@ -61,12 +61,13 @@ export function ServiceDialog({
   initial?: Service
   /** The suffix names live under, for the preview. Owned by the dns module. */
   domain?: string
-  onSubmit: (service: Service) => void
+  onSubmit: (service: Service) => Promise<boolean>
   /** Only supplied when editing. Removing is an edit to the thing you opened. */
   onRemove?: () => void
 }) {
   const [draft, setDraft] = useState<Service>(initial ?? EMPTY)
   const [target, setTarget] = useState<string>(initial?.upstream.device ?? MANUAL)
+  const [saving, setSaving] = useState(false)
   const editing = initial !== undefined
 
   const devices = useDeviceList()
@@ -278,17 +279,24 @@ export function ServiceDialog({
               Cancel
             </Button>
             <Button
-              disabled={!complete}
-              onClick={() => {
-                onSubmit({
-                  name,
-                  upstream: {
-                    ...draft.upstream,
-                    device: target === MANUAL ? undefined : target,
-                    host: target === MANUAL ? (draft.upstream.host ?? '').trim() : undefined,
-                  },
-                })
-                onOpenChange(false)
+              disabled={!complete || saving}
+              onClick={async () => {
+                setSaving(true)
+                let saved = false
+                try {
+                  saved = await onSubmit({
+                    name,
+                    link_path: draft.link_path?.trim() || undefined,
+                    upstream: {
+                      ...draft.upstream,
+                      device: target === MANUAL ? undefined : target,
+                      host: target === MANUAL ? (draft.upstream.host ?? '').trim() : undefined,
+                    },
+                  })
+                } finally {
+                  setSaving(false)
+                }
+                if (saved) onOpenChange(false)
               }}
             >
               {editing ? 'Save' : 'Publish'}
