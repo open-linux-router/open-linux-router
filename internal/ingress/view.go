@@ -89,10 +89,11 @@ type serviceView struct {
 	// fetch separately.
 	URL string `json:"url"`
 
-	Device string `json:"device,omitempty"`
-	Host   string `json:"host,omitempty"`
-	Port   uint16 `json:"port"`
-	Scheme Scheme `json:"scheme"`
+	Device         string          `json:"device,omitempty"`
+	Host           string          `json:"host,omitempty"`
+	Port           uint16          `json:"port"`
+	Scheme         Scheme          `json:"scheme"`
+	RequestHeaders []RequestHeader `json:"request_headers,omitempty"`
 
 	// Upstream is where a request actually goes right now.
 	Upstream string `json:"upstream,omitempty"`
@@ -104,12 +105,13 @@ type serviceView struct {
 
 func viewService(s Service, domain string, devices DeviceView) serviceView {
 	v := serviceView{
-		Name:   s.Name,
-		URL:    "https://" + qualify(s.Name, domain) + s.LinkPath,
-		Device: s.Upstream.Device,
-		Host:   s.Upstream.Host,
-		Port:   s.Upstream.Port,
-		Scheme: s.Upstream.Scheme.OrDefault(),
+		Name:           s.Name,
+		URL:            "https://" + qualify(s.Name, domain) + s.LinkPath,
+		Device:         s.Upstream.Device,
+		Host:           s.Upstream.Host,
+		Port:           s.Upstream.Port,
+		Scheme:         s.Upstream.Scheme.OrDefault(),
+		RequestHeaders: s.Upstream.RequestHeaders,
 	}
 
 	if s.Upstream.Device == "" {

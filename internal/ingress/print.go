@@ -63,11 +63,12 @@ func servicesOf(c Config) []serviceView {
 	out := make([]serviceView, 0, len(c.Services))
 	for _, s := range c.Services {
 		out = append(out, serviceView{
-			Name:   s.Name,
-			Device: s.Upstream.Device,
-			Host:   s.Upstream.Host,
-			Port:   s.Upstream.Port,
-			Scheme: s.Upstream.Scheme.OrDefault(),
+			Name:           s.Name,
+			Device:         s.Upstream.Device,
+			Host:           s.Upstream.Host,
+			Port:           s.Upstream.Port,
+			Scheme:         s.Upstream.Scheme.OrDefault(),
+			RequestHeaders: s.Upstream.RequestHeaders,
 		})
 	}
 	return out
@@ -121,6 +122,13 @@ func writeServiceText(w io.Writer, s serviceView) error {
 	}
 	fmt.Fprintf(t, "port\t%d\n", s.Port)
 	fmt.Fprintf(t, "scheme\t%s\n", s.Scheme)
+	for _, h := range s.RequestHeaders {
+		if h.Remove {
+			fmt.Fprintf(t, "remove header\t%s\n", h.Name)
+		} else {
+			fmt.Fprintf(t, "header\t%s: %s\n", h.Name, h.Value)
+		}
+	}
 	fmt.Fprintf(t, "goes to\t%s\n", goesTo(s))
 	return t.Flush()
 }

@@ -248,6 +248,40 @@ func validateUpstream(r *Result, path string, u Upstream, devices DeviceView) {
 	if !u.Scheme.Valid() {
 		r.errorf(path+".scheme", "unknown scheme %q (want %v)", u.Scheme, Schemes())
 	}
+	seen := map[string]bool{}
+	for i, h := range u.RequestHeaders {
+		p := fmt.Sprintf("%s.request_headers[%d]", path, i)
+		if !validHeaderName(h.Name) {
+			r.errorf(p+".name", "use a nonempty HTTP header name (letters, digits, or RFC 9110 token punctuation)")
+		}
+		key := strings.ToLower(h.Name)
+		if seen[key] {
+			r.errorf(p+".name", "duplicate header %q", h.Name)
+		}
+		seen[key] = true
+		if h.Remove && h.Value != "" {
+			r.errorf(p+".value", "a removed header cannot also have a value")
+		}
+		for _, c := range h.Value {
+			if c < 0x20 || c == 0x7f {
+				r.errorf(p+".value", "control characters are not allowed in a header value")
+				break
+			}
+		}
+	}
+}
+
+func validHeaderName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, c := range name {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || strings.ContainsRune("!#$%&'*+-.^_`|~", c) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // validateDeviceUpstream is where docs/ingress.md §1.2 is enforced.

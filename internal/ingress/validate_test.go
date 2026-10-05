@@ -277,3 +277,36 @@ func TestValidateServiceLinkPath(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateRequestHeaders(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		headers []RequestHeader
+		path    string
+	}{
+		{"empty name", []RequestHeader{{Name: ""}}, "name"},
+		{"invalid name", []RequestHeader{{Name: "X Bad"}}, "name"},
+		{"duplicate", []RequestHeader{{Name: "Host"}, {Name: "host"}}, "name"},
+		{"newline", []RequestHeader{{Name: "X-Test", Value: "ok\r\nheader: bad"}}, "value"},
+		{"remove with value", []RequestHeader{{Name: "X-Test", Remove: true, Value: "bad"}}, "value"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := good()
+			c.Services[0].Upstream.RequestHeaders = tc.headers
+			r := Validate(c, goodDNS(), goodDevices())
+			if r.OK() || !strings.HasSuffix(r.Errors[0].Path, tc.path) {
+				t.Fatalf("expected %s error, got %v", tc.path, r.Errors)
+			}
+		})
+	}
+}
+
+func TestCloneKeepsRequestHeadersIndependent(t *testing.T) {
+	original := good()
+	original.Services[0].Upstream.RequestHeaders = []RequestHeader{{Name: "Host", Value: "192.168.1.50"}}
+	copy := original.Clone()
+	copy.Services[0].Upstream.RequestHeaders[0].Value = "another-host"
+	if got := original.Services[0].Upstream.RequestHeaders[0].Value; got != "192.168.1.50" {
+		t.Fatalf("clone changed stored header: %q", got)
+	}
+}

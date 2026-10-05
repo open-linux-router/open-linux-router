@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
@@ -342,13 +343,30 @@ func (c Caddy) service(b *strings.Builder, s Service, domain string, devices Dev
 		b.WriteString("\t\t\t\ttls\n")
 		b.WriteString("\t\t\t\ttls_insecure_skip_verify\n")
 		b.WriteString("\t\t\t}\n")
+		c.requestHeaders(b, s.Upstream.RequestHeaders)
 		b.WriteString("\t\t}\n")
 	} else {
-		fmt.Fprintf(b, "\t\treverse_proxy %s\n", target)
+		if len(s.Upstream.RequestHeaders) == 0 {
+			fmt.Fprintf(b, "\t\treverse_proxy %s\n", target)
+		} else {
+			fmt.Fprintf(b, "\t\treverse_proxy %s {\n", target)
+			c.requestHeaders(b, s.Upstream.RequestHeaders)
+			b.WriteString("\t\t}\n")
+		}
 	}
 
 	b.WriteString("\t}\n")
 	return nil
+}
+
+func (Caddy) requestHeaders(b *strings.Builder, headers []RequestHeader) {
+	for _, h := range headers {
+		if h.Remove {
+			fmt.Fprintf(b, "\t\t\theader_up -%s\n", h.Name)
+		} else {
+			fmt.Fprintf(b, "\t\t\theader_up %s %s\n", h.Name, strconv.Quote(h.Value))
+		}
+	}
 }
 
 // matcherName makes a Caddy matcher label out of a service name. Names are

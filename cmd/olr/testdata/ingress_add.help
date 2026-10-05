@@ -10,17 +10,20 @@ Examples:
   olr ingress add grafana --device nuc --port 3000
   olr ingress add nas --device synology --port 5001 --scheme https
   olr ingress add hello --host 127.0.0.1 --port 8000
+  olr ingress add mi --host 172.16.1.163 --port 80 --header 'Host: 172.16.1.163'
 
 Usage:
   olr ingress add <name> [flags]
 
 Flags:
-      --device olr devices list   device to publish, by its name in olr devices list
-  -h, --help                      help for add
-      --host string               address or hostname to publish, for a target that is not a device
-      --link-path string          page path to open and use for its icon (e.g. /ui); does not change proxy routing
-      --port uint16               port the service listens on
-      --scheme string             how to reach it: http, https (default http)
+      --device olr devices list     device to publish, by its name in olr devices list
+      --header stringArray          set an upstream request header as 'Name: value', repeatable
+  -h, --help                        help for add
+      --host string                 address or hostname to publish, for a target that is not a device
+      --link-path string            page path to open and use for its icon (e.g. /ui); does not change proxy routing
+      --port uint16                 port the service listens on
+      --remove-header stringArray   remove an upstream request header, repeatable
+      --scheme string               how to reach it: http, https (default http)
 
 Global Flags:
       --dry-run         show what would change and exit without applying it

@@ -322,10 +322,12 @@ func readToken(c *cobra.Command, token, tokenFile string) (string, error) {
 // ---------------------------------------------------------------- add / rm
 
 type upstreamFlags struct {
-	device string
-	host   string
-	port   uint16
-	scheme string
+	device        string
+	host          string
+	port          uint16
+	scheme        string
+	headers       []string
+	removeHeaders []string
 }
 
 func (f *upstreamFlags) register(c *cobra.Command) {
@@ -333,6 +335,8 @@ func (f *upstreamFlags) register(c *cobra.Command) {
 	c.Flags().StringVar(&f.host, "host", "", "address or hostname to publish, for a target that is not a device")
 	c.Flags().Uint16Var(&f.port, "port", 0, "port the service listens on")
 	c.Flags().StringVar(&f.scheme, "scheme", "", fmt.Sprintf("how to reach it: %s (default http)", joinSchemes()))
+	c.Flags().StringArrayVar(&f.headers, "header", nil, "set an upstream request header as 'Name: value', repeatable")
+	c.Flags().StringArrayVar(&f.removeHeaders, "remove-header", nil, "remove an upstream request header, repeatable")
 
 	c.MarkFlagsMutuallyExclusive("device", "host")
 	cli.EnumFlag(c, "scheme", schemeNames()...)
@@ -350,6 +354,13 @@ func (f *upstreamFlags) apply(u *Upstream, c *cobra.Command) {
 	}
 	if c.Flags().Changed("scheme") {
 		u.Scheme = Scheme(f.scheme)
+	}
+	for _, entry := range f.headers {
+		name, value, _ := strings.Cut(entry, ":")
+		u.RequestHeaders = append(u.RequestHeaders, RequestHeader{Name: strings.TrimSpace(name), Value: strings.TrimPrefix(value, " ")})
+	}
+	for _, name := range f.removeHeaders {
+		u.RequestHeaders = append(u.RequestHeaders, RequestHeader{Name: strings.TrimSpace(name), Remove: true})
 	}
 }
 
@@ -369,10 +380,16 @@ func addCommand() *cobra.Command {
 			"Examples:\n" +
 			"  olr ingress add grafana --device nuc --port 3000\n" +
 			"  olr ingress add nas --device synology --port 5001 --scheme https\n" +
-			"  olr ingress add hello --host 127.0.0.1 --port 8000"
+			"  olr ingress add hello --host 127.0.0.1 --port 8000\n" +
+			"  olr ingress add mi --host 172.16.1.163 --port 80 --header 'Host: 172.16.1.163'"
 		flags.register(c)
 		c.Flags().StringVar(&linkPath, "link-path", "", "page path to open and use for its icon (e.g. /ui); does not change proxy routing")
 		c.RunE = func(c *cobra.Command, args []string) error {
+			for _, entry := range flags.headers {
+				if !strings.Contains(entry, ":") {
+					return fmt.Errorf("--header %q: use 'Name: value'", entry)
+				}
+			}
 			// One request to the item route, not load-splice-save. The daemon
 			// holds the lock across the whole edit that way, and the rule that
 			// reduces `grafana` and `grafana.home.example.com` to one entry lives

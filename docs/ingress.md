@@ -54,6 +54,17 @@ shortcut and icon discovery. It opens that page under the published name;
 it does not rewrite requests or alter the Caddyfile. If the homepage redirects
 to a page with an icon, icon discovery follows same-origin HTTPS redirects.
 
+Each upstream may also set or remove request headers sent to that service.
+By default Caddy forwards the public `Host`; some appliances redirect requests
+for unfamiliar hostnames back to their own login page (or into a loop). Set
+`Host` to the appliance's LAN address in that case, for example
+`olr ingress add mi --host 172.16.1.163 --port 80 --header 'Host: 172.16.1.163'`.
+Use repeated `--header 'Name: value'` and `--remove-header Name` flags, or the
+service editor's advanced section. This changes neither the browser's response
+headers nor TLS SNI when connecting to an HTTPS upstream. Header names must be
+unique (case-insensitively); values may be empty but not contain control
+characters.
+
 Everything else is derived and never asked:
 
 - the certificate — one wildcard covers every name that will ever exist

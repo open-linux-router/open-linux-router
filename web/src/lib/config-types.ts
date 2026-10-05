@@ -35,6 +35,7 @@
 // file still cannot be regenerated wholesale until the UI is moved onto the
 // generated names; until then this header is the record of what is hand-kept.
 // `Service.link_path` follows internal/ingress/config.go for the same reason.
+// `UpstreamIngress.request_headers` and `RequestHeaderIngress` follow it too.
 
 /**
  * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
@@ -413,6 +414,12 @@ export interface UpstreamIngress {
   host?: string
   port: number
   scheme?: UpstreamScheme
+  request_headers?: RequestHeaderIngress[]
+}
+export interface RequestHeaderIngress {
+  name: string
+  value?: string
+  remove?: boolean
 }
 export interface LinkConfig {
   adopted?: string[]

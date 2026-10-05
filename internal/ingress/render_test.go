@@ -144,6 +144,40 @@ func TestRenderHostUpstream(t *testing.T) {
 	}
 }
 
+func TestRenderRequestHeaders(t *testing.T) {
+	for _, scheme := range []Scheme{SchemeHTTP, SchemeHTTPS} {
+		t.Run(string(scheme), func(t *testing.T) {
+			got := conf(t, renderGood(t, func(c *Config) {
+				c.Services[0].Upstream.Scheme = scheme
+				c.Services[0].Upstream.RequestHeaders = []RequestHeader{
+					{Name: "Host", Value: "192.168.1.50"},
+					{Name: "X-Note", Value: "a b"},
+					{Name: "X-Remove", Remove: true},
+				}
+			}))
+			for _, want := range []string{`header_up Host "192.168.1.50"`, `header_up X-Note "a b"`, `header_up -X-Remove`} {
+				if !strings.Contains(got, want) {
+					t.Errorf("missing %q:\n%s", want, got)
+				}
+			}
+		})
+	}
+}
+
+func TestRenderQuotesHeaderValues(t *testing.T) {
+	got := conf(t, renderGood(t, func(c *Config) {
+		c.Services[0].Upstream.RequestHeaders = []RequestHeader{
+			{Name: "X-Note", Value: `a "quote" \\ slash`},
+			{Name: "X-Empty"},
+		}
+	}))
+	for _, want := range []string{`header_up X-Note "a \"quote\" \\\\ slash"`, `header_up X-Empty ""`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q:\n%s", want, got)
+		}
+	}
+}
+
 // A disabled module must render a file that parses. Otherwise it becomes the
 // reason an unrelated change fails `caddy validate`.
 func TestRenderDisabledIsStillValidSyntax(t *testing.T) {

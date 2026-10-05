@@ -103,7 +103,12 @@ export function ServiceDialog({
   const name = draft.name.trim()
   const complete =
     name !== '' && draft.upstream.port > 0 && (target !== MANUAL || (draft.upstream.host ?? '') !== '') &&
-    (!draft.link_path || /^\/(?!\/)[a-zA-Z0-9/_~.-]*$/.test(draft.link_path))
+    (!draft.link_path || /^\/(?!\/)[a-zA-Z0-9/_~.-]*$/.test(draft.link_path)) &&
+    (draft.upstream.request_headers ?? []).every((h) =>
+      /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(h.name) &&
+      ![...(h.value ?? '')].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127) && (!h.remove || !h.value),
+    ) && new Set((draft.upstream.request_headers ?? []).map((h) => h.name.toLowerCase())).size ===
+      (draft.upstream.request_headers ?? []).length
 
   return (
     <Dialog
@@ -116,7 +121,7 @@ export function ServiceDialog({
         onOpenChange(next)
       }}
     >
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{editing ? `Edit ${initial.name}` : 'Publish a service'}</DialogTitle>
           <DialogDescription>
@@ -263,6 +268,47 @@ export function ServiceDialog({
               </p>
             </div>
           </Disclosure>
+          <Disclosure summary="Upstream request headers">
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Set or remove headers sent to this service. Browser response headers are unchanged.
+                For a device that loops when accessed by its published name, set Host to its IP address.
+                HTTPS SNI is configured separately from Host.
+              </p>
+              {(draft.upstream.request_headers ?? []).map((header, index) => (
+                <div key={index} className="flex flex-wrap items-center gap-2">
+                  <Input aria-label={`Header ${index + 1} name`} className="min-w-28 flex-1"
+                    placeholder="Host" value={header.name} onChange={(e) => {
+                      const headers = [...(draft.upstream.request_headers ?? [])]
+                      headers[index] = { ...header, name: e.target.value }
+                      upstream('request_headers', headers)
+                    }} />
+                  <Input aria-label={`Header ${index + 1} value`} className="min-w-32 flex-1"
+                    placeholder="172.16.1.163" disabled={header.remove} value={header.value ?? ''}
+                    onChange={(e) => {
+                      const headers = [...(draft.upstream.request_headers ?? [])]
+                      headers[index] = { ...header, value: e.target.value }
+                      upstream('request_headers', headers)
+                    }} />
+                  <label className="flex items-center gap-1 text-xs">
+                    <input type="checkbox" checked={header.remove ?? false} onChange={(e) => {
+                      const headers = [...(draft.upstream.request_headers ?? [])]
+                      headers[index] = { ...header, remove: e.target.checked, value: e.target.checked ? '' : header.value }
+                      upstream('request_headers', headers)
+                    }} /> Remove
+                  </label>
+                  <Button type="button" size="icon" variant="ghost" aria-label={`Delete header ${index + 1}`}
+                    onClick={() => upstream('request_headers', (draft.upstream.request_headers ?? []).filter((_, i) => i !== index))}>
+                    <Trash2 />
+                  </Button>
+                </div>
+              ))}
+              <Button type="button" size="sm" variant="outline" onClick={() =>
+                upstream('request_headers', [...(draft.upstream.request_headers ?? []), { name: '', value: '' }])}>
+                Add header
+              </Button>
+            </div>
+          </Disclosure>
         </div>
 
         <DialogFooter className="sm:justify-between">
@@ -291,6 +337,9 @@ export function ServiceDialog({
                       ...draft.upstream,
                       device: target === MANUAL ? undefined : target,
                       host: target === MANUAL ? (draft.upstream.host ?? '').trim() : undefined,
+                      request_headers: draft.upstream.request_headers?.map((h) => ({
+                        name: h.name.trim(), value: h.remove ? undefined : h.value ?? '', remove: h.remove || undefined,
+                      })),
                     },
                   })
                 } finally {

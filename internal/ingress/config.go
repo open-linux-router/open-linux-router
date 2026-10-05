@@ -183,6 +183,17 @@ type Upstream struct {
 	// would make the common case impossible while protecting against an
 	// attacker who is already inside the network.
 	Scheme Scheme `json:"scheme,omitempty"`
+
+	// RequestHeaders change the request sent to this upstream, not the response
+	// sent to the browser. An empty list preserves Caddy's default headers.
+	RequestHeaders []RequestHeader `json:"request_headers,omitempty"`
+}
+
+// RequestHeader sets a header (including an empty value), or removes it.
+type RequestHeader struct {
+	Name   string `json:"name"`
+	Value  string `json:"value,omitempty"`
+	Remove bool   `json:"remove,omitempty"`
 }
 
 // Target renders the upstream as Caddy's dial address, given a resolved
@@ -280,6 +291,9 @@ func (c *Config) Normalize() {
 		s.LinkPath = strings.TrimSpace(s.LinkPath)
 		s.Upstream.Host = strings.TrimSpace(s.Upstream.Host)
 		s.Upstream.Device = strings.TrimSpace(s.Upstream.Device)
+		for j := range s.Upstream.RequestHeaders {
+			s.Upstream.RequestHeaders[j].Name = strings.TrimSpace(s.Upstream.RequestHeaders[j].Name)
+		}
 	}
 	slices.SortStableFunc(c.Services, func(a, b Service) int {
 		return strings.Compare(a.Name, b.Name)
@@ -297,6 +311,9 @@ func (c *Config) Normalize() {
 func (c Config) Clone() Config {
 	out := c
 	out.Services = slices.Clone(c.Services)
+	for i := range out.Services {
+		out.Services[i].Upstream.RequestHeaders = slices.Clone(c.Services[i].Upstream.RequestHeaders)
+	}
 	out.Certificate.Resolvers = slices.Clone(c.Certificate.Resolvers)
 	return out
 }
