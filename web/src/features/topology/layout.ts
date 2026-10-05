@@ -76,7 +76,7 @@ export interface NodeSize {
  * line, the traffic, when nothing is being counted.
  */
 export function nodeSize(density: Density, counting: boolean, serviceDevices: ReadonlySet<string> = new Set()): NodeSize {
-  const extra = serviceDevices.size > 0 ? 24 : 0
+  const extra = serviceDevices.size > 0 ? 32 : 0
   return density === 'compact'
     ? { minW: 168, w: 144, maxW: 184, h: 40 + extra, k: 16, row: 44, list: 248 }
     : { minW: 208, w: 232, maxW: 288, h: (counting ? 68 : 56) + extra, k: 10, row: 56, list: 288 }
@@ -394,7 +394,7 @@ function blocks(plan: Pick<Plan, 'note' | 'devices' | 'shelves' | 'more'>, ctx: 
   const out: Block[] = []
   if (plan.note) out.push({ kind: 'note', h: plan.note === 'hint' ? hintHeight(ctx.narrow) : EMPTY_H })
   if (plan.devices.length > 0) {
-    const height = plan.devices.reduce((h, d) => h + ctx.node.row + (ctx.serviceDevices?.has(d.mac) ? 24 : 0), 0)
+    const height = plan.devices.reduce((h, d) => h + ctx.node.row + (ctx.serviceDevices?.has(d.mac) ? 32 : 0), 0)
     out.push({ kind: 'list', h: height })
   }
   for (const shelf of plan.shelves) out.push({ kind: 'shelf', h: Math.max(...shelf.map((p) => p.h)), shelf })
@@ -491,7 +491,7 @@ function place(plan: Plan, x: number, y: number, w: number, minH: number, ctx: C
       case 'list':
         let offset = 0
         plan.devices.forEach((d, j) => {
-          const height = node.row + (ctx.serviceDevices?.has(d.mac) ? 24 : 0)
+          const height = node.row + (ctx.serviceDevices?.has(d.mac) ? 32 : 0)
           out.push({
             kind: 'device',
             key: `d:${d.mac}`,

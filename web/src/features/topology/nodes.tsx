@@ -456,7 +456,7 @@ export function DeviceNode({
           title={name}
           className={cn(
             'flex size-full min-w-0 items-center gap-3 rounded-lg px-3 text-left transition-colors',
-            services?.length && 'pb-6',
+            services?.length && 'pb-8',
             onSelect && 'hover:bg-foreground/[0.035]',
             focusRing,
           )}
@@ -482,7 +482,7 @@ export function DeviceNode({
             <DeviceTraffic device={device} flow={flow} rated={traffic.rated} counting={traffic.counting} />
           </span>
         </Shell>
-        <ServiceLinks services={services} domain={serviceDomain} className="absolute bottom-1 left-[64px] right-2" />
+        <ServiceLinks services={services} domain={serviceDomain} className="absolute bottom-0.5 left-[64px] right-2" />
       </div>
     )
   }
@@ -491,7 +491,7 @@ export function DeviceNode({
     'flex size-full min-w-0 items-center rounded-lg border bg-card text-left shadow-xs transition-[border-color,box-shadow]',
     onSelect && 'hover:border-foreground/20 hover:shadow-sm',
     focusRing,
-    services?.length && 'pb-6',
+    services?.length && 'pb-8',
   )
 
   const body =
@@ -552,7 +552,7 @@ export function DeviceNode({
   return (
     <div className="group/node relative size-full">
       {body}
-      <ServiceLinks services={services} domain={serviceDomain} className="absolute bottom-1 left-3 right-2" />
+      <ServiceLinks services={services} domain={serviceDomain} className="absolute bottom-0.5 left-3 right-2" />
     </div>
   )
 }
@@ -561,22 +561,22 @@ export function DeviceNode({
 function ServiceLinks({ services, domain, className }: { services?: Service[]; domain?: string; className: string }) {
   if (!services?.length) return null
   return (
-    <span className={cn('flex h-6 min-w-0 items-center gap-0.5 overflow-hidden pl-0.5', className)}>
+    <span className={cn('flex h-8 min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden px-1', className)}>
       {services.slice(0, 8).map((service) => {
         const label = domain ? `${service.name}.${domain}` : service.name
         const tile = <ServiceIcon key={`${service.name}:${service.link_path ?? ''}`} name={service.name} />
         return domain ? (
           <a key={service.name} href={`https://${label}${service.link_path ?? ''}`} target="_blank" rel="noopener noreferrer"
             title={`Open ${label}${service.link_path ?? ''}`} aria-label={`Open ${label}${service.link_path ?? ''}`}
-            className="flex size-5 shrink-0 items-center justify-center rounded bg-muted hover:ring-1 hover:ring-foreground/30 focus-visible:outline-2">
+            className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted transition-colors hover:bg-accent focus-visible:outline-2">
             {tile}
           </a>
         ) : (
-          <span key={service.name} title={service.name} className="flex size-5 shrink-0 items-center justify-center rounded bg-muted">{tile}</span>
+          <span key={service.name} title={service.name} className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted">{tile}</span>
         )
       })}
       {services.length > 8 && (
-        <span className="flex h-5 shrink-0 items-center text-[11px] text-muted-foreground" title={services.slice(8).map((s) => s.name).join(', ')}>
+        <span className="flex h-7 shrink-0 items-center text-[11px] text-muted-foreground" title={services.slice(8).map((s) => s.name).join(', ')}>
           +{services.length - 8}
         </span>
       )}
@@ -605,7 +605,7 @@ function ServiceIcon({ name }: { name: string }) {
     }
   }, [name])
   return icon ? (
-    <img src={icon} alt="" className="size-4 rounded-sm object-contain" />
+    <img src={icon} alt="" className="size-5 object-contain" />
   ) : (
     <span className="text-[10px] font-semibold uppercase" aria-hidden>{name.slice(0, 2)}</span>
   )
