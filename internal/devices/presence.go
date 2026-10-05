@@ -83,6 +83,11 @@ type Presence struct {
 	// mean picking a winner arbitrarily and hiding the interesting case.
 	IPs []string
 
+	// NeighborIPs contains only complete, active ARP observations. Unlike IPs,
+	// it excludes leases and stale neighbour entries, so interception can use
+	// these addresses without treating a past lease as current ownership.
+	NeighborIPs []string
+
 	// Interfaces is every interface a source saw this device on, deduplicated.
 	// Plural for the reason IPs is plural: a device that moved between networks
 	// legitimately has two, and collapsing that to one would mean picking a
@@ -161,6 +166,9 @@ func Merge(sightings []Sighting) (map[string]Presence, []Problem) {
 		if ip := strings.TrimSpace(s.IP); ip != "" && !slices.Contains(p.IPs, ip) {
 			p.IPs = append(p.IPs, ip)
 		}
+		if ip := strings.TrimSpace(s.IP); ip != "" && s.Source == SourceARP && s.Active && !slices.Contains(p.NeighborIPs, ip) {
+			p.NeighborIPs = append(p.NeighborIPs, ip)
+		}
 
 		if iface := strings.TrimSpace(s.Interface); iface != "" && !slices.Contains(p.Interfaces, iface) {
 			p.Interfaces = append(p.Interfaces, iface)
@@ -192,6 +200,7 @@ func Merge(sightings []Sighting) (map[string]Presence, []Problem) {
 	// network produce byte-identical JSON and a UI does not repaint for nothing.
 	for mac, p := range out {
 		slices.Sort(p.IPs)
+		slices.Sort(p.NeighborIPs)
 		slices.Sort(p.Interfaces)
 		slices.Sort(p.Sources)
 		out[mac] = p

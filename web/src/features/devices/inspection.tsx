@@ -84,7 +84,7 @@ export function DeviceInspection({ mac }: { mac: string }) {
       {status.isError ? <p role="alert" className="text-sm text-destructive">Inspection status is unavailable. Do not assume interception has stopped.</p> : null}
       {active && !mine ? <p className="text-sm text-muted-foreground">Another device is being inspected. Stop that session before starting this one.</p> : null}
       <div className="grid gap-4 text-sm text-muted-foreground md:grid-cols-3">
-        <p><strong className="block text-foreground">1. Prepare</strong>Install mitmproxy (mitmdump) on the router. This version requires one unique, currently observed private IPv4 address. IPv6 traffic is not intercepted; devices with multiple IPv4 addresses are not supported.</p>
+        <p><strong className="block text-foreground">1. Prepare</strong>Install mitmproxy (mitmdump) on the router. Inspection uses the device's currently observed, uniquely owned private IPv4 addresses. IPv6 traffic is not intercepted.</p>
         <p><strong className="block text-foreground">2. Trust CA for HTTPS</strong>Start once to generate the CA, then install and explicitly trust the downloaded certificate on your device. Do not install its private key. HTTP works without a CA.</p>
         <p><strong className="block text-foreground">3. Stop and remove trust</strong>Stopping or timeout clears the session and restores normal forwarding. Your device still trusts the CA until you remove it in device settings.</p>
       </div>

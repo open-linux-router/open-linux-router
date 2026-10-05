@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -68,7 +69,7 @@ type Service struct {
 
 type session struct {
 	mac      string
-	ip       string
+	ips      []string
 	expires  time.Time
 	cancel   context.CancelFunc
 	cmd      *exec.Cmd
@@ -149,7 +150,7 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusBadRequest, macErr.Error())
 		return
 	}
-	ip, err := s.deviceIP(r.Context(), normalized)
+	ips, err := s.deviceIPs(r.Context(), normalized)
 	if err != nil {
 		core.WriteError(w, http.StatusConflict, err.Error())
 		return
@@ -210,20 +211,20 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 	// A fresh table is owned wholly by this module. Cleanup of a previous
 	// daemon's table also runs at startup; never modify someone else's table.
 	// Recheck after the process starts: an address may change during startup.
-	current, checkErr := s.deviceIP(r.Context(), normalized)
-	if checkErr != nil || current != ip {
+	current, checkErr := s.deviceIPs(r.Context(), normalized)
+	if checkErr != nil || !slices.Equal(current, ips) {
 		cancel()
 		_ = cmd.Wait()
 		core.WriteError(w, http.StatusConflict, "device identity changed before interception; nothing was redirected")
 		return
 	}
-	if err = install(ip); err != nil {
+	if err = install(ips); err != nil {
 		cancel()
 		_ = cmd.Wait()
 		if cleanupErr := cleanup(); cleanupErr != nil {
 			// A partially installed rule might remain. Preserve a session
 			// owner so cleanup is retried and no new session can start.
-			q := &session{mac: normalized, ip: ip, expires: time.Now(), cancel: cancel, cmd: cmd}
+			q := &session{mac: normalized, ips: ips, expires: time.Now(), cancel: cancel, cmd: cmd}
 			s.session = q
 			q.retrying = true
 			go s.retryCleanup(q)
@@ -233,7 +234,7 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, 500, "could not install interception: "+err.Error())
 		return
 	}
-	q := &session{mac: normalized, ip: ip, expires: time.Now().Add(duration), cancel: cancel, cmd: cmd}
+	q := &session{mac: normalized, ips: ips, expires: time.Now().Add(duration), cancel: cancel, cmd: cmd}
 	s.session = q
 	go s.consume(q, stdout)
 	go s.watch(q)
@@ -245,10 +246,10 @@ func (s *Service) snapshotLocked() Status {
 	return Status{Active: true, MAC: q.mac, Expires: q.expires, Events: []Event{}, CAPresent: true}
 }
 
-func (s *Service) deviceIP(ctx context.Context, mac string) (string, error) {
+func (s *Service) deviceIPs(ctx context.Context, mac string) ([]string, error) {
 	list, problems, err := s.Devices.List(ctx)
 	if err != nil || len(problems) != 0 {
-		return "", errors.New("device identity could not be verified")
+		return nil, errors.New("device identity could not be verified")
 	}
 	var selected *devices.Resolved
 	owners := map[string]int{}
@@ -264,37 +265,29 @@ func (s *Service) deviceIP(ctx context.Context, mac string) (string, error) {
 		}
 	}
 	if selected == nil || !selected.Online() {
-		return "", errors.New("device must be online with a currently observed address")
+		return nil, errors.New("device must be online with a currently observed address")
 	}
-	// DHCP leases can remain active after a client has left and its address
-	// has been reassigned. Require a live neighbour observation as well.
-	hasNeighbour := false
-	for _, source := range selected.Presence.Sources {
-		if source == devices.SourceARP {
-			hasNeighbour = true
-		}
+	if len(selected.Presence.NeighborIPs) == 0 {
+		return nil, errors.New("device needs a current neighbour-table observation")
 	}
-	if !hasNeighbour {
-		return "", errors.New("device needs a current neighbour-table observation")
-	}
-	var ipv4 []netip.Addr
-	for _, raw := range selected.Presence.IPs {
+	var ipv4 []string
+	for _, raw := range selected.Presence.NeighborIPs {
 		ip, err := netip.ParseAddr(raw)
 		if err != nil {
-			return "", errors.New("device has an invalid observed address")
+			return nil, errors.New("device has an invalid observed address")
 		}
 		if ip.Is4() {
-			ipv4 = append(ipv4, ip)
+			if !ip.IsPrivate() || owners[strings.ToLower(ip.String())] != 1 {
+				return nil, errors.New("device needs unique private IPv4 addresses")
+			}
+			ipv4 = append(ipv4, ip.String())
 		}
 	}
-	if len(ipv4) != 1 {
-		return "", errors.New("inspection requires exactly one observed IPv4 address; IPv6 traffic is not intercepted")
+	if len(ipv4) == 0 {
+		return nil, errors.New("inspection requires an observed IPv4 address; IPv6 traffic is not intercepted")
 	}
-	ip := ipv4[0]
-	if !ip.IsPrivate() || owners[strings.ToLower(ip.String())] != 1 {
-		return "", errors.New("device needs one unique private IPv4 address")
-	}
-	return ip.String(), nil
+	slices.Sort(ipv4)
+	return slices.Compact(ipv4), nil
 }
 
 func (s *Service) consume(q *session, stdout interface{ Read([]byte) (int, error) }) {
@@ -328,9 +321,9 @@ func (s *Service) watch(q *session) {
 			return
 		case <-ticker.C:
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			ip, err := s.deviceIP(ctx, q.mac)
+			ips, err := s.deviceIPs(ctx, q.mac)
 			cancel()
-			if err != nil || ip != q.ip || time.Now().After(q.expires) {
+			if err != nil || !slices.Equal(ips, q.ips) || time.Now().After(q.expires) {
 				s.end(q)
 				return
 			}
@@ -420,9 +413,9 @@ func cleanup() error {
 	}
 	return fmt.Errorf("removing inspection table: %w: %s", err, strings.TrimSpace(string(out)))
 }
-func install(ip string) error {
-	// Restrict to TCP 80/443 from one source, before NAT. Exclude local and
-	// private destinations so router administration and LAN services survive.
+func install(ips []string) error {
+	// Restrict to TCP 80/443 from verified addresses, before NAT. Exclude local
+	// and private destinations so router administration and LAN services survive.
 	if err := nft("add", "table", "inet", table); err != nil {
 		return err
 	}
@@ -442,9 +435,13 @@ func install(ip string) error {
 		{"ip", "daddr", "10.0.0.0/8", "return"},
 		{"ip", "daddr", "172.16.0.0/12", "return"},
 		{"ip", "daddr", "192.168.0.0/16", "return"},
-		{"ip", "saddr", ip, "tcp", "dport", "{", "80,", "443", "}", "redirect", "to", ":" + port},
 	} {
 		if err := nft(append([]string{"add", "rule", "inet", table, "prerouting"}, args...)...); err != nil {
+			return err
+		}
+	}
+	for _, ip := range ips {
+		if err := nft("add", "rule", "inet", table, "prerouting", "ip", "saddr", ip, "tcp", "dport", "{", "80,", "443", "}", "redirect", "to", ":"+port); err != nil {
 			return err
 		}
 	}

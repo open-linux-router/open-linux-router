@@ -2,10 +2,12 @@ package inspection
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -21,38 +23,64 @@ func (f fakeDevices) List(context.Context) ([]devices.Resolved, []devices.Proble
 	return f.rows, f.problems, nil
 }
 func row(mac string, active bool, ips ...string) devices.Resolved {
-	return devices.Resolved{MAC: mac, Presence: &devices.Presence{Active: active, IPs: ips, Sources: []devices.Source{devices.SourceARP}}}
+	return devices.Resolved{MAC: mac, Presence: &devices.Presence{Active: active, IPs: ips, NeighborIPs: ips, Sources: []devices.Source{devices.SourceARP}}}
 }
 
-func TestDeviceIPRequiresUniqueCurrentPrivateIPv4(t *testing.T) {
+func TestDeviceIPsRequiresUniqueCurrentPrivateIPv4(t *testing.T) {
 	const mac = "aa:bb:cc:dd:ee:01"
 	cases := []struct {
 		name string
 		rows []devices.Resolved
-		ok   bool
+		want []string
 	}{
-		{"one address", []devices.Resolved{row(mac, true, "192.168.2.10")}, true},
-		{"offline", []devices.Resolved{row(mac, false, "192.168.2.10")}, false},
-		{"missing", []devices.Resolved{row("aa:bb:cc:dd:ee:02", true, "192.168.2.10")}, false},
-		{"shared address", []devices.Resolved{row(mac, true, "192.168.2.10"), row("aa:bb:cc:dd:ee:02", true, "192.168.2.10")}, false},
-		{"dual stack", []devices.Resolved{row(mac, true, "192.168.2.10", "fd00::10", "fe80::10")}, true},
-		{"two addresses", []devices.Resolved{row(mac, true, "192.168.2.10", "192.168.2.11")}, false},
-		{"IPv6 only", []devices.Resolved{row(mac, true, "fd00::10")}, false},
-		{"two IPv4 plus IPv6", []devices.Resolved{row(mac, true, "192.168.2.10", "192.168.2.11", "fd00::10")}, false},
-		{"public", []devices.Resolved{row(mac, true, "8.8.8.8")}, false},
+		{"one address", []devices.Resolved{row(mac, true, "192.168.2.10")}, []string{"192.168.2.10"}},
+		{"offline", []devices.Resolved{row(mac, false, "192.168.2.10")}, nil},
+		{"missing", []devices.Resolved{row("aa:bb:cc:dd:ee:02", true, "192.168.2.10")}, nil},
+		{"shared address", []devices.Resolved{row(mac, true, "192.168.2.10"), row("aa:bb:cc:dd:ee:02", true, "192.168.2.10")}, nil},
+		{"dual stack", []devices.Resolved{row(mac, true, "192.168.2.10", "fd00::10", "fe80::10")}, []string{"192.168.2.10"}},
+		{"two addresses", []devices.Resolved{row(mac, true, "192.168.2.11", "192.168.2.10")}, []string{"192.168.2.10", "192.168.2.11"}},
+		{"IPv6 only", []devices.Resolved{row(mac, true, "fd00::10")}, nil},
+		{"two IPv4 plus IPv6", []devices.Resolved{row(mac, true, "192.168.2.10", "192.168.2.11", "fd00::10")}, []string{"192.168.2.10", "192.168.2.11"}},
+		{"public", []devices.Resolved{row(mac, true, "8.8.8.8")}, nil},
+		{"mixed public", []devices.Resolved{row(mac, true, "192.168.2.10", "8.8.8.8")}, nil},
+		{"invalid", []devices.Resolved{row(mac, true, "not-an-ip")}, nil},
+		{"lease only", []devices.Resolved{{MAC: mac, Presence: &devices.Presence{Active: true, IPs: []string{"192.168.2.10"}}}}, nil},
+		{"old lease and active ARP", []devices.Resolved{{MAC: mac, Presence: &devices.Presence{Active: true, IPs: []string{"192.168.2.10", "192.168.2.11"}, NeighborIPs: []string{"192.168.2.11"}}}}, []string{"192.168.2.11"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &Service{Devices: fakeDevices{rows: tc.rows}}
-			ip, err := s.deviceIP(context.Background(), mac)
-			if tc.ok != (err == nil) {
-				t.Fatalf("ip=%q err=%v", ip, err)
+			ips, err := s.deviceIPs(context.Background(), mac)
+			if (tc.want == nil) != (err != nil) || !slices.Equal(ips, tc.want) {
+				t.Fatalf("ips=%q err=%v, want %q", ips, err, tc.want)
 			}
 		})
 	}
 	s := &Service{Devices: fakeDevices{rows: cases[0].rows, problems: []devices.Problem{{Message: "source unavailable"}}}}
-	if _, err := s.deviceIP(context.Background(), mac); err == nil {
+	if _, err := s.deviceIPs(context.Background(), mac); err == nil {
 		t.Fatal("accepted incomplete identity")
+	}
+}
+
+func TestInstallRedirectsEveryAddress(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "nft.log")
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$*\" >> %q\n", log)
+	if err := os.WriteFile(filepath.Join(dir, "nft"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := install([]string{"192.168.2.10", "192.168.2.11"}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ip := range []string{"192.168.2.10", "192.168.2.11"} {
+		if !strings.Contains(string(data), "ip saddr "+ip+" tcp dport") {
+			t.Errorf("missing redirect for %s in %s", ip, data)
+		}
 	}
 }
 
