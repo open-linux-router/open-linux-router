@@ -257,7 +257,9 @@ func (s *Service) deviceIPs(ctx context.Context, mac string) ([]string, error) {
 		if list[i].Presence == nil {
 			continue
 		}
-		for _, raw := range list[i].Presence.IPs {
+		// A lease (or an inactive ARP entry) can outlive address reassignment.
+		// Only current neighbour entries can contest interception ownership.
+		for _, raw := range list[i].Presence.NeighborIPs {
 			owners[strings.ToLower(raw)]++
 		}
 		if strings.EqualFold(list[i].MAC, mac) {
@@ -277,8 +279,11 @@ func (s *Service) deviceIPs(ctx context.Context, mac string) ([]string, error) {
 			return nil, errors.New("device has an invalid observed address")
 		}
 		if ip.Is4() {
-			if !ip.IsPrivate() || owners[strings.ToLower(ip.String())] != 1 {
-				return nil, errors.New("device needs unique private IPv4 addresses")
+			if !ip.IsPrivate() {
+				return nil, fmt.Errorf("inspection requires private IPv4 addresses; %s is not private", ip)
+			}
+			if owners[strings.ToLower(ip.String())] != 1 {
+				return nil, fmt.Errorf("IPv4 address %s has conflicting current neighbour observations", ip)
 			}
 			ipv4 = append(ipv4, ip.String())
 		}
