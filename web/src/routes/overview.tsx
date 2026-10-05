@@ -348,32 +348,44 @@ function Meter({ label, current, maximum, percent, tone = 'blue', arrow, onClick
   arrow?: '↓' | '↑'
   onClick?: () => void
 }) {
+  const value = current ?? '—'
+  const fill = percent == null ? 0 : Math.min(100, Math.max(0, percent))
   const content = <>
-    {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r',
-      tone === 'amber' ? 'border-amber-400/50 bg-amber-200/40' : tone === 'neutral' ? 'border-slate-400/40 bg-slate-300/35' : 'border-cyan-500/40 bg-cyan-200/45')}
-      style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />}
-    <span className="relative z-10 flex min-w-0 items-center gap-2 truncate text-sm font-semibold tabular-nums">
-      {arrow && <span aria-hidden className="text-base font-normal text-muted-foreground">{arrow}</span>}{current ?? '—'}
+    <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+      <span>{label}</span>{percent != null && <span className="tabular-nums">{percent.toFixed(0)}%</span>}
     </span>
-    <span className="relative z-10 shrink-0 text-xs text-muted-foreground tabular-nums">{maximum ? `of ${maximum}` : onClick ? 'Set limit' : '—'}</span>
+    <span className="mt-1 flex min-w-0 items-baseline justify-between gap-2">
+      <span className="min-w-0 truncate text-xl font-semibold tabular-nums tracking-tight">
+        {arrow && <span aria-hidden className="mr-1 text-base font-normal text-muted-foreground">{arrow}</span>}{value}
+      </span>
+      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{maximum ? `of ${maximum}` : onClick ? 'Set limit' : '—'}</span>
+    </span>
+    <span aria-hidden className="mt-2 block h-1 overflow-hidden rounded-full bg-muted">
+      <span className={cn('block h-full rounded-full', tone === 'amber' ? 'bg-amber-400' : tone === 'neutral' ? 'bg-slate-400' : 'bg-cyan-500')}
+        style={{ width: `${fill}%` }} />
+    </span>
   </>
-  const classes = 'relative flex h-10 w-full items-center justify-between gap-2 overflow-hidden rounded-xl bg-muted/65 px-3 text-left ring-1 ring-foreground/[0.06] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]'
-  return <div className={cn('min-w-0', onClick ? 'py-1' : 'py-1.5')}>
-    {onClick ? <button type="button" onClick={onClick} aria-label={`${label}: ${current ?? 'unavailable'}. ${maximum ? `Limit ${maximum}` : 'Set limit'}`}
-      className={cn(classes, 'cursor-pointer transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring')}>
-      {content}
-    </button> : <>
-      <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{label}</span><span className="tabular-nums">{percent == null ? '—' : `${percent.toFixed(0)}%`}</span></div>
-      <div role={percent == null ? undefined : 'progressbar'} aria-label={label} aria-valuenow={percent == null ? undefined : Math.min(100, Math.max(0, Math.round(percent)))} aria-valuemin={0} aria-valuemax={100} className={classes}>
-        {content}
-      </div>
-    </>}
-  </div>
+  return <StatRow>
+    {onClick
+      ? <button type="button" onClick={onClick} aria-label={`${label}: ${value}. ${maximum ? `Limit ${maximum}` : 'Set limit'}`}
+          className="block w-full min-w-0 cursor-pointer rounded-md text-left hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {content}
+        </button>
+      : <div role={percent == null ? undefined : 'progressbar'} aria-label={label}
+          aria-valuenow={percent == null ? undefined : Math.round(fill)} aria-valuemin={0} aria-valuemax={100} className="min-w-0">
+          {content}
+        </div>}
+  </StatRow>
+}
+
+function StatRow({ children }: { children: React.ReactNode }) {
+  return <div className="min-w-0 py-3 not-last:border-b not-last:border-border/70">{children}</div>
 }
 
 function StatCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section className="min-w-0 rounded-2xl bg-card p-4 shadow-xs ring-1 ring-foreground/[0.07]">
-    <h2 className="mb-3 text-sm font-semibold">{title}</h2>{children}
+  return <section className="min-w-0 rounded-2xl bg-card px-4 shadow-xs ring-1 ring-foreground/[0.07]">
+    <h2 className="border-b border-border/70 py-3 text-sm font-semibold">{title}</h2>
+    <div className="grid grid-rows-2">{children}</div>
   </section>
 }
 
@@ -405,30 +417,33 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, lat
   const dnsMeasured = !latencyFailed && !stale && latency?.dns_milliseconds != null
   const latencyValue = measured ? `${latency.milliseconds!.toFixed(0)} ms` : latency?.state === 'unreachable' ? 'No response' : '—'
   const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? 'Unavailable' : '—'
-  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:gap-4">
     <StatCard title="Status">
-      <div className="py-1.5"><p className={cn('text-lg font-semibold', faults.length || failed ? 'text-destructive' : 'text-foreground')}>
-        <span className={cn('mr-2 inline-block size-2 rounded-full align-middle', faults.length || failed ? 'bg-destructive' : known && !idle ? 'bg-success' : 'bg-muted-foreground')} />{title}</p></div>
-      <div className="pt-3"><p className="text-xs text-muted-foreground">Uptime</p><p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{host ? uptime(host.uptime_seconds) : '—'}</p>
-        <p className="mt-2 flex justify-between text-xs text-muted-foreground"><span>Devices online</span><span className="tabular-nums">{devices ? `${here} / ${devices.length}` : '—'}</span></p></div>
+      <StatRow>
+        <p className="text-xs text-muted-foreground">Health</p>
+        <p className={cn('mt-1 flex items-center gap-2 text-xl font-semibold tracking-tight', faults.length || failed ? 'text-destructive' : 'text-foreground')}>
+          <span className={cn('size-2 shrink-0 rounded-full', faults.length || failed ? 'bg-destructive' : known && !idle ? 'bg-success' : 'bg-muted-foreground')} />{title}
+        </p>
+      </StatRow>
+      <StatRow>
+        <p className="text-xs text-muted-foreground">Uptime</p>
+        <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight">{host ? uptime(host.uptime_seconds) : '—'}</p>
+        <p className="mt-1 text-xs text-muted-foreground">Devices online <span className="font-medium tabular-nums text-foreground">{devices ? `${here} / ${devices.length}` : '—'}</span></p>
+      </StatRow>
     </StatCard>
     <StatCard title="Traffic">
-      <div className="space-y-3 pt-2">
-        <Meter label="Download" arrow="↓" onClick={() => setEditing('down')} current={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
+      <Meter label="Download" arrow="↓" onClick={() => setEditing('down')} current={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.down ? (flows.total.downRate ?? 0) * 8 / (limits.down * 1_000_000) * 100 : undefined} />
-        <Meter label="Upload" arrow="↑" onClick={() => setEditing('up')} current={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
+      <Meter label="Upload" arrow="↑" onClick={() => setEditing('up')} current={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.up ? (flows.total.upRate ?? 0) * 8 / (limits.up * 1_000_000) * 100 : undefined} tone="amber" />
-      </div>
     </StatCard>
     <StatCard title="Latency">
-      <div className="py-1.5"><div className="flex justify-between text-xs text-muted-foreground"><span>Internet</span>{measured && <span className={cn('font-medium', latency.milliseconds! < 100 ? 'text-success-foreground' : latency.milliseconds! < 200 ? 'text-warning-foreground' : 'text-destructive')}>{latency.milliseconds! < 100 ? 'Good' : latency.milliseconds! < 200 ? 'Fair' : 'Slow'}</span>}</div><p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{latencyValue}</p></div>
-      <div className="py-1.5"><div className="flex justify-between text-xs text-muted-foreground"><span>DNS</span>{dnsMeasured && <span className={cn('font-medium', latency.dns_milliseconds! < 50 ? 'text-success-foreground' : latency.dns_milliseconds! < 150 ? 'text-warning-foreground' : 'text-destructive')}>{latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow'}</span>}</div><p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'}</p></div>
+      <StatRow><div className="flex justify-between text-xs text-muted-foreground"><span>Internet</span>{measured && <span className={cn('font-medium', latency.milliseconds! < 100 ? 'text-success-foreground' : latency.milliseconds! < 200 ? 'text-warning-foreground' : 'text-destructive')}>{latency.milliseconds! < 100 ? 'Good' : latency.milliseconds! < 200 ? 'Fair' : 'Slow'}</span>}</div><p className="mt-1 text-xl font-semibold tabular-nums tracking-tight">{latencyValue}</p></StatRow>
+      <StatRow><div className="flex justify-between text-xs text-muted-foreground"><span>DNS</span>{dnsMeasured && <span className={cn('font-medium', latency.dns_milliseconds! < 50 ? 'text-success-foreground' : latency.dns_milliseconds! < 150 ? 'text-warning-foreground' : 'text-destructive')}>{latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow'}</span>}</div><p className="mt-1 text-xl font-semibold tabular-nums tracking-tight">{dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'}</p></StatRow>
     </StatCard>
     <StatCard title="System">
-      <div className="space-y-1">
-        <Meter label="CPU" current={host?.cpu_used_cores == null ? undefined : `${host.cpu_used_cores.toFixed(1)} cores`} maximum={host?.cpu_cores ? `${host.cpu_cores} cores` : undefined} percent={cpuPercent} />
-        <Meter label="Memory" current={host ? formatBytes(host.memory_used_bytes) : undefined} maximum={host ? formatBytes(host.memory_total_bytes) : undefined} percent={memoryPercent} tone="neutral" />
-      </div>
+      <Meter label="CPU" current={host?.cpu_used_cores == null ? undefined : `${host.cpu_used_cores.toFixed(1)} cores`} maximum={host?.cpu_cores ? `${host.cpu_cores} cores` : undefined} percent={cpuPercent} />
+      <Meter label="Memory" current={host ? formatBytes(host.memory_used_bytes) : undefined} maximum={host ? formatBytes(host.memory_total_bytes) : undefined} percent={memoryPercent} tone="neutral" />
     </StatCard>
     <BandwidthLimitDialog key={editing ?? 'closed'} direction={editing} limits={limits} onClose={() => setEditing(null)} onSave={saveLimits} />
   </div>
