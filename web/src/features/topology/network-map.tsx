@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 
 import { Skeleton } from '@/components/ui/skeleton'
 import { useInterfaces } from '@/features/link/queries'
+import type { DeviceRank } from '@/features/topology/device-rank'
 import { layout, type Box, type Density, type Item, type Layout } from '@/features/topology/layout'
 import { Links } from '@/features/topology/links'
 import { buildTree } from '@/features/topology/model'
@@ -185,7 +186,7 @@ function Canvas({
   }, [all, outside])
 
   // Hold the order still while the pointer is over the map: see buildTree.
-  const [frozen, setFrozen] = useState<Map<string, number> | null>(null)
+  const [frozen, setFrozen] = useState<Map<string, DeviceRank> | null>(null)
   const tree = useMemo(
     () => buildTree({ devices: listed, groups, traffic, filter, network, frozen }),
     [listed, groups, traffic, filter, network, frozen],
@@ -356,7 +357,7 @@ function Canvas({
     <div
       ref={wrap}
       className="relative"
-      onPointerEnter={() => setFrozen(tree.weights)}
+      onPointerEnter={() => setFrozen(tree.ranks)}
       onPointerLeave={() => setFrozen(null)}
       onClick={(e) => {
         // Clicking empty space leaves focus. Anything that is a node is not

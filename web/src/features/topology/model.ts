@@ -1,4 +1,5 @@
 import { effectiveParents } from '@/features/devices/group-tree'
+import { compareDeviceRanks, type DeviceRank } from '@/features/topology/device-rank'
 import { magnitude, sumFlows, type Flow, type TrafficView } from '@/features/topology/traffic'
 import type { DeviceRow } from '@/lib/api-types'
 import type { DevicesGroup } from '@/lib/config-types'
@@ -29,9 +30,9 @@ export interface MapGroup {
   parentKey?: string
   /** 0 at the top. */
   depth: number
-  /** Devices directly in it that survived the filters, busiest first. */
+  /** Devices directly in it that survived the filters, active first, then recently heard. */
   devices: DeviceRow[]
-  /** Groups directly inside it that survived the filters, busiest first. */
+  /** Groups directly inside it that survived the filters, in name order. */
   groups: MapGroup[]
   /** Devices directly in it, before the filters — what a delete would move. */
   directCount: number
@@ -43,7 +44,7 @@ export interface MapGroup {
   online: number
   /** Traffic of every device at any depth below it. */
   flow?: Flow
-  /** Its live traffic as one number: what links are drawn and it is ordered by. */
+  /** Its live traffic as one number, for link and layout sizing. */
   weight: number
 }
 
@@ -55,8 +56,10 @@ export interface MapTree {
   filtering: boolean
   /** Filtering, and nothing matched anywhere. */
   nothing: boolean
-  /** Every group's and device's live weight, to freeze the order with. */
+  /** Live traffic weights for layout sizing. */
   weights: Map<string, number>
+  /** Device sort keys, to hold the order still while the pointer is over the map. */
+  ranks: Map<string, DeviceRank>
 }
 
 /**
@@ -69,15 +72,15 @@ export interface MapTree {
  * the house. They are in name order, the same as every group menu, at every
  * level.
  *
- * **Devices are busiest first.** The map folds whatever does not fit into
- * "+N more", and the fold has to hide the least interesting things, which on a
- * page about what the network is doing are the quiet ones. By rate when there
- * is one, else by bytes moved, then by name so equal weights do not shuffle.
+ * **Moving devices first, then recently heard.** Current download + upload
+ * rate orders devices with measurable traffic. Everything else is ordered by
+ * when the router last heard it, never by historical byte totals. This also
+ * decides what the map folds into "+N more".
  *
  * That order changes every time the counters are read, and a node that moves
  * under the pointer is a node nobody can click — the reason the first version
  * of this map sorted by name and gave up on traffic. `frozen` is the answer
- * to both: while the pointer is over the map, the caller passes the weights as
+ * to both: while the pointer is over the map, the caller passes the ranks as
  * they were when it arrived, so nothing re-sorts until it leaves. Rates on
  * screen keep updating; only the order holds still.
  *
@@ -101,7 +104,7 @@ export function buildTree({
   traffic: TrafficView
   filter: string
   network: string
-  frozen?: Map<string, number> | null
+  frozen?: Map<string, DeviceRank> | null
 }): MapTree {
   const q = filter.trim().toLowerCase()
   const filtering = q !== '' || network !== ''
@@ -113,26 +116,32 @@ export function buildTree({
         .toLowerCase()
         .includes(q))
 
-  // Live weights are recorded for the caller to freeze; the sort key is the
-  // frozen one when there is a snapshot, and something that arrived after it
-  // sorts after everything that was already there.
   const weights = new Map<string, number>()
-  const sortKey = (key: string, live: number) => {
-    weights.set(key, live)
-    return frozen ? (frozen.get(key) ?? -1) : live
-  }
-
-  // Sort keys are computed once per item, not once per comparison.
+  const ranks = new Map<string, DeviceRank>()
   const rankDevices = (list: DeviceRow[]) => {
-    const w = new Map(
-      list.map((d) => [d.mac, sortKey(deviceKey(d.mac), magnitude(traffic.flowOf(d), traffic.rated))]),
-    )
-    return list.sort(
-      (a, b) =>
-        w.get(b.mac)! - w.get(a.mac)! ||
-        Number(b.online) - Number(a.online) ||
-        (a.name || a.mac).localeCompare(b.name || b.mac),
-    )
+    for (const d of list) {
+      const flow = traffic.flowOf(d)
+      weights.set(deviceKey(d.mac), magnitude(flow, traffic.rated))
+      // The activity indicator calls rates below 1 byte/s quiet as well.
+      const rate = traffic.rated && traffic.counting && d.online
+        ? (flow?.downRate ?? 0) + (flow?.upRate ?? 0)
+        : 0
+      ranks.set(deviceKey(d.mac), {
+        rate: rate >= 1 ? rate : 0,
+        lastSeen: d.last_seen ? Date.parse(d.last_seen) || 0 : 0,
+      })
+    }
+    return list.sort((a, b) => {
+      const ar = frozen?.get(deviceKey(a.mac)) ?? ranks.get(deviceKey(a.mac))!
+      const br = frozen?.get(deviceKey(b.mac)) ?? ranks.get(deviceKey(b.mac))!
+      // A new device while frozen belongs after the existing rows.
+      if (frozen) {
+        const known = Number(frozen.has(deviceKey(b.mac))) - Number(frozen.has(deviceKey(a.mac)))
+        if (known) return known
+      }
+      return compareDeviceRanks(ar, br) ||
+        (a.name || a.mac).localeCompare(b.name || b.mac) || a.mac.localeCompare(b.mac)
+    })
   }
   const rankGroups = (list: MapGroup[]) => {
     for (const g of list) weights.set(g.key, g.weight)
@@ -231,7 +240,7 @@ export function buildTree({
   }
 
   const nothing = filtering && top.every((g) => g.devices.length === 0 && g.groups.length === 0)
-  return { top, byKey, grouped, filtering, nothing, weights }
+  return { top, byKey, grouped, filtering, nothing, weights, ranks }
 }
 
 /** The chain from the top down to a group, both included. */
