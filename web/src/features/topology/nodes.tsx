@@ -458,7 +458,7 @@ export function DeviceNode({
           onClick={open}
           title={name}
           className={cn(
-            'flex size-full min-w-0 items-center gap-3 rounded-lg px-3 text-left transition-colors',
+            'flex size-full min-w-0 items-center gap-2 rounded-lg px-3 text-left transition-colors',
             focusRing,
           )}
         >
@@ -476,16 +476,16 @@ export function DeviceNode({
             </span>
             {density === 'detail' && <Address device={device} />}
           </span>
-          {services?.length ? <span aria-hidden className={cn('shrink-0', density === 'compact' ? 'w-14' : 'w-20')} /> : null}
-          <span className={cn('shrink-0 text-right text-xs text-muted-foreground tabular-nums', density === 'compact' ? 'w-20' : 'w-24')}>
+          {services?.length ? <span aria-hidden className={cn('shrink-0', density === 'compact' ? 'w-20' : 'w-[108px]')} /> : null}
+          <span className="w-14 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
             {/* Away is said beside the dimmed name, so presence is never
                 colour alone — and a green dot on every row that is fine was
                 the one mark on the list that said nothing. */}
-            <DeviceTraffic device={device} flow={flow} rated={traffic.rated} counting={traffic.counting} />
+            <DeviceActivity device={device} flow={flow} rated={traffic.rated} counting={traffic.counting} />
           </span>
         </Shell>
         <ServiceLinks services={services} domain={serviceDomain}
-          className={cn('absolute inset-y-0', density === 'compact' ? 'right-[104px] w-14' : 'right-[120px] w-20')} compact />
+          className={cn('absolute inset-y-0 right-[76px]', density === 'compact' ? 'w-20' : 'w-[108px]')} compact />
       </div>
     )
   }
@@ -699,6 +699,36 @@ function DeviceTraffic({
     <span title={`↓ ${formatRate(down)}  ↑ ${formatRate(up)}`}>
       <span className="text-foreground/75">↓{formatRateCompact(down)}</span>
       <span className="ml-1">↑{formatRateCompact(up)}</span>
+    </span>
+  )
+}
+
+/** A small directional activity meter keeps the list scannable; exact rates remain on hover. */
+function DeviceActivity({ device, flow, rated, counting }: {
+  device: DeviceRow
+  flow?: Flow
+  rated: boolean
+  counting: boolean
+}) {
+  const moving = device.online && counting && flow && (!rated || (flow.downRate ?? 0) + (flow.upRate ?? 0) >= 1)
+  if (!moving) return <Quiet device={device} />
+  if (!rated) return <span title={`${formatBytes(flow.down + flow.up)} transferred`}>active</span>
+  const down = flow.downRate ?? 0
+  const up = flow.upRate ?? 0
+  const label = `Download ${formatRate(down)}, upload ${formatRate(up)}`
+  const level = (rate: number) => rate < 1 ? 0 : rate < 1_000 ? 1 : rate < 100_000 ? 2 : rate < 10_000_000 ? 3 : 4
+  return (
+    <span className="inline-flex flex-col gap-0.5 align-middle" title={label} aria-label={label}>
+      {([['↓', down], ['↑', up]] as const).map(([arrow, rate]) => (
+        <span key={arrow} aria-hidden className="flex items-center gap-1 text-[10px] leading-[10px]">
+          <span className="w-2 text-center">{arrow}</span>
+          <span className="flex gap-0.5">
+            {[1, 2, 3, 4].map((step) => (
+              <span key={step} className={cn('h-1.5 w-1 rounded-[1px]', level(rate) >= step ? 'bg-foreground/65' : 'bg-foreground/10')} />
+            ))}
+          </span>
+        </span>
+      ))}
     </span>
   )
 }
