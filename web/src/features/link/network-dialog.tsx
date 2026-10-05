@@ -269,7 +269,7 @@ export function NetworkDialog({
             <p className="text-xs text-warning">
               The firewall is off. With an IPv6 subnet every device on this network gets an
               address the internet can reach directly — there is no NAT in IPv6 to hide it.
-              Turn the firewall on under Gateway → Firewall.
+              Turn the firewall on under Firewall.
             </p>
           )}
         </div>
