@@ -58,19 +58,17 @@ export function formatAgo(iso: string, now = Date.now()): string {
 
 /**
  * formatRate for a row with no room: two significant figures and a one-letter
- * unit, "8.8k" and "415M" rather than "8.8 kbps" and "415 Mbps". The row
+ * unit, "8.8K" and "415M" rather than "8.8 kbps" and "415 Mbps". The row
  * already says these are rates by its arrows, and at a glance the digits that
  * matter are the first two and the letter — the rest was width taken from the
- * device's name. Anything under a kilobit rounds up to "1k": at that size the
- * number is noise, "505" without a unit would read as more than "8.8k", and
- * "<1k" was the one figure on the map written differently from the rest.
- * Nothing at all is "0".
+ * device's name. Below a kilobit, show the actual rounded bit rate rather
+ * than claiming a slow connection is already moving at 1k. Nothing is "0".
  */
 export function formatRateCompact(bytesPerSecond: number): string {
   const bits = bytesPerSecond * 8
   if (bits < 0.5) return '0'
-  if (bits < 1000) return '1k'
-  const units = ['k', 'M', 'G', 'T']
+  if (bits < 1000) return String(Math.round(bits))
+  const units = ['K', 'M', 'G', 'T']
   let value = bits / 1000
   let i = 0
   while (value >= 999.5 && i < units.length - 1) {
