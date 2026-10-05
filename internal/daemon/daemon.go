@@ -46,6 +46,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/inspection"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/mcp"
+	"github.com/open-linux-router/open-linux-router/internal/qos"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
 	"github.com/open-linux-router/open-linux-router/internal/system"
 	"github.com/open-linux-router/open-linux-router/internal/webui"
@@ -192,7 +193,7 @@ func run(args []string) error {
 	// are served to the outside (internal/daemon/firewall.go).
 	store := core.NewStore(core.RootedConfigPath(opts.root),
 		link.ModuleName, dial.ModuleName, dhcp.ModuleName, dns.ModuleName,
-		devices.ModuleName, gateway.ModuleName,
+		devices.ModuleName, gateway.ModuleName, qos.ModuleName,
 		remote.ModuleName, ingress.ModuleName, firewall.ModuleName)
 	checkStore(store, logger)
 
@@ -366,6 +367,9 @@ func run(args []string) error {
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
 	}.Routes(), devices.Config{})
+
+	qosApplier := qos.Applier{Store: store}
+	srv.Mount(qos.ModuleName, qos.HTTP{Applier: qosApplier, Lock: srv.ApplyLock(), Events: srv.Events()}.Routes(), qos.Config{})
 
 	// `gateway` is the one module whose configuration lives in the kernel
 	// rather than in a file some backend reads, so two things follow that the

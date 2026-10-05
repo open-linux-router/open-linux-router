@@ -1,5 +1,10 @@
 # Device QoS: priority and speed limits
 
+**Implementation status:** The `qos` config/API and device editor can store
+intent, but kernel enforcement is not implemented. The status endpoint reports
+it as inactive; no priority or speed limit is applied to packets yet. Do not
+turn this into an enabled-by-default feature or advertise it as working.
+
 ## 1. What the operator sees
 
 The device detail page exposes exactly two policies for traffic crossing this

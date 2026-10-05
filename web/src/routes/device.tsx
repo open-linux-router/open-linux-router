@@ -10,6 +10,7 @@ import { DeviceInspection } from '@/features/devices/inspection'
 import { DeviceInlineEditor } from '@/features/devices/device-inline-editor'
 import { useDeviceList } from '@/features/devices/queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
+import { DevicePolicy } from '@/features/qos/device-policy'
 import { useTrafficView } from '@/features/topology/traffic'
 import { formatBytes, formatRate } from '@/lib/utils'
 
@@ -56,6 +57,8 @@ export function DevicePage() {
           </CardContent>
         </Card>
       } />
+
+      <DevicePolicy mac={device.mac} />
 
       <Card>
         <CardHeader><CardTitle>DNS queries from this device</CardTitle></CardHeader>
