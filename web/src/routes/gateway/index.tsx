@@ -23,6 +23,7 @@ import { Switch } from '@/components/ui/switch'
 import { ApplyOutcome, useGatewayEditor } from '@/features/gateway/editor'
 import { DIRECT, NetworkList } from '@/features/gateway/network-list'
 import { useFirewallStatus } from '@/features/firewall/queries'
+import { useLinkConfig } from '@/features/link/queries'
 import { gatewayChange, useGatewayStatus, useReapplyGateway } from '@/features/gateway/queries'
 
 /**
@@ -38,6 +39,7 @@ export function GatewayPage() {
   const status = useGatewayStatus()
   const reapply = useReapplyGateway()
   const firewall = useFirewallStatus()
+  const link = useLinkConfig()
 
   if (!config) return gate
   const exits = config.exits ?? []
@@ -140,16 +142,28 @@ export function GatewayPage() {
         <CardHeader>
           <CardTitle>Networks</CardTitle>
           <CardDescription>
-            Change one network without affecting the rest. The most specific setting wins.
+            Choose how traffic from each network reaches the internet. This applies to every
+            device on its interface; rules for individual sites belong in the way out you choose.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <NetworkList
-            config={config}
-            status={status.data?.assignments}
-            busy={busy}
-            onChange={change}
-          />
+          {link.isError ? (
+            <Alert variant="destructive" role="alert">
+              <AlertTriangle />
+              <AlertTitle>Could not load the networks</AlertTitle>
+              <AlertDescription>{(link.error as Error).message}</AlertDescription>
+            </Alert>
+          ) : link.isPending ? (
+            <p className="text-sm text-muted-foreground">Loading networks…</p>
+          ) : (
+            <NetworkList
+              config={config}
+              networks={link.data.networks ?? []}
+              status={status.data?.assignments}
+              busy={busy}
+              onChange={change}
+            />
+          )}
         </CardContent>
       </Card>
 

@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/select'
 import { gatewayChange, type GatewayChange } from '@/features/gateway/queries'
 import type { AssignmentStatus } from '@/lib/api-types'
-import type { GatewayConfig } from '@/lib/config-types'
+import type { GatewayConfig, Network } from '@/lib/config-types'
 
 // Sentinel values for the two choices that are not an exit name.
 //
@@ -22,7 +22,7 @@ export const INHERIT = ' inherit'
 export const DIRECT = ' direct'
 
 export /**
- * One row per network, each with the sentence docs/gateway.md §1.3 settles on.
+ * One row per network member, each with the sentence docs/gateway.md §1.3 settles on.
  *
  * The effective value carries its source, which is the whole reason
  * inheritance is usable here at all: *Proxy · from the box-wide setting* tells
@@ -31,11 +31,13 @@ export /**
  */
 function NetworkList({
   config,
+  networks,
   status,
   busy,
   onChange,
 }: {
   config: GatewayConfig
+  networks: Network[]
   status?: AssignmentStatus[]
   busy: boolean
   onChange: (change: GatewayChange) => void
@@ -43,20 +45,28 @@ function NetworkList({
   const assignments = config.interfaces ?? []
   const exits = config.exits ?? []
 
-  if (assignments.length === 0) {
+  const members = networks.flatMap((network) =>
+    network.members.map((iface) => ({ network: network.name, iface })),
+  )
+
+  if (members.length === 0) {
     return (
       <ListEmpty>
-        No networks yet. Networks appear here once this router knows about them.
+        No network interfaces yet. Add a network under Networks to choose how its devices reach the internet.
       </ListEmpty>
     )
   }
 
   function set(iface: string, value: string | null) {
-    // An empty exit is a real value, not a missing one: it records "this network
-    // explicitly follows the box-wide setting". Dropping the row entirely is a
-    // different statement, and there is a DELETE for it.
-    const exit = !value || value === INHERIT ? '' : value
-    onChange(gatewayChange.assign(iface, exit))
+    // An inherited row has no stored assignment; deleting an override returns
+    // it to the same state without leaving an empty row behind.
+    if (!value || value === INHERIT) {
+      if (assignments.some((a) => a.interface === iface)) {
+        onChange(gatewayChange.removeAssignment(iface))
+      }
+      return
+    }
+    onChange(gatewayChange.assign(iface, value))
   }
 
   // Not a List: these rows carry an interactive control, and List's trailing
@@ -64,30 +74,37 @@ function NetworkList({
   // phone, on the one screen whose whole purpose is changing it.
   return (
     <ul className="divide-y overflow-hidden rounded-xl border">
-      {assignments.map((a) => {
-        const row = status?.find((s) => s.interface === a.interface)
+      {members.map(({ network, iface }) => {
+        const assignment = assignments.find((a) => a.interface === iface)
+        const row = status?.find((s) => s.interface === iface)
+        const inherited = config.default || 'this router’s own connection'
+        const effective = assignment?.exit || config.default || ''
+        const current =
+          row?.exit === effective &&
+          row.source === (assignment?.exit ? 'interface' : 'default')
         return (
           <li
-            key={a.interface}
+            key={iface}
             className="flex flex-col gap-2 bg-card px-4 py-3 sm:flex-row sm:items-center sm:gap-3"
           >
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">{a.interface}</div>
+              <div className="truncate text-sm font-medium">{network}</div>
+              <div className="truncate text-xs text-muted-foreground">On {iface}</div>
               <div className="truncate text-[0.8rem] text-muted-foreground">
-                {describeAssignment(row)}
+                {describeAssignment(current ? row : undefined, effective, Boolean(assignment?.exit))}
               </div>
             </div>
             <Select
-              value={a.exit ? a.exit : INHERIT}
+              value={assignment?.exit || INHERIT}
               disabled={busy}
-              onValueChange={(v) => set(a.interface, v)}
+              onValueChange={(v) => set(iface, v)}
             >
               <SelectTrigger
                 className="w-full sm:w-56"
-                aria-label={`Internet via, for ${a.interface}`}
+                aria-label={`Internet via, for ${network} on ${iface}`}
               >
                 <SelectValue>
-                  {(v: string) => (v === INHERIT ? 'Follow the setting above' : v)}
+                  {(v: string) => (v === INHERIT ? `Follow the setting above (${inherited})` : v)}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -106,9 +123,12 @@ function NetworkList({
   )
 }
 
-function describeAssignment(row?: AssignmentStatus): string {
-  if (!row) return ''
-  if (row.reason) return row.reason
-  const via = row.exit || 'this router’s own connection'
-  return row.source === 'default' ? `${via} — from the setting above` : via
+function describeAssignment(
+  row: AssignmentStatus | undefined,
+  exit: string,
+  overridden: boolean,
+): string {
+  if (row?.reason) return row.reason
+  const via = row?.exit || exit || 'this router’s own connection'
+  return overridden ? via : `${via} — from the setting above`
 }

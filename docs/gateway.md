@@ -248,6 +248,37 @@ The full ladder depends on devices and groups, and who owns the device inventory
 - **Then: group and device overrides**, refining the same field. The mental model
   does not change, because *most specific wins* was true from the first version.
 
+### 2.6 Using a proxy box as a next hop
+
+The current UI lists networks from `link`, including ones with no gateway
+assignment yet. Under **Ways out**, add the proxy box as **Another box on your
+network** using its stable LAN address. A TUN or transparent forwarding service
+must accept IP packets whose destination is still the original internet host;
+an HTTP/SOCKS port alone is not an exit. A TCP health-check target on the far
+side tests forwarding, not merely whether the proxy box answers ping. Leave
+next-hop SNAT on to ensure replies return through olr; IPv6 and failure default
+to block rather than quietly bypassing the proxy.
+
+Then choose that way out on the desired network's row under **Internet via**.
+The UI names the member interface because the stored assignment currently keys
+off that interface, not the network name; a network with multiple member
+interfaces needs a choice on each row. Do not set the box-wide default merely
+to test one network. The browser shows the daemon's plan and asks for confirmation
+if applying the assignment would be disruptive.
+
+This is *source selection*: all clients in that interface's subnet use the
+same exit. Device and group overrides are not implemented yet (§2.5). Domain,
+GEOIP, and outbound rules within that traffic belong to the proxy (§4), not
+to olr. DNS is a separate choice: olr's upstream is global, so forwarding it
+to a fake-IP resolver while other networks go direct can strand those clients
+with unroutable fake addresses (§4.1).
+
+When the proxy box is itself on the selected subnet, give it an independent
+upstream path. If its DIRECT or upstream traffic returns to olr with the same
+subnet source, the source classifier cannot distinguish it from a client and
+may hand it straight back to the proxy. Its own default route should instead
+lead to the real uplink; verify this before selecting the network.
+
 ---
 
 ## 3. Mechanism

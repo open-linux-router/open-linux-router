@@ -102,6 +102,10 @@ export const gatewayChange = {
     path: `${base}/assignments/${seg(iface)}`,
     body: { exit },
   }),
+  removeAssignment: (iface: string): GatewayChange => ({
+    method: 'DELETE',
+    path: `${base}/assignments/${seg(iface)}`,
+  }),
   settings: (fields: Partial<GatewayConfig>): GatewayChange => ({
     method: 'PATCH',
     path: `${base}/config`,
