@@ -447,7 +447,10 @@ export function DeviceNode({
 
   if (row) {
     return (
-      <div className="group/node relative size-full px-1 py-0.5">
+      <div className={cn(
+        'group/node relative size-full px-1 py-0.5',
+        onSelect && 'rounded-lg transition-colors hover:bg-foreground/[0.035]',
+      )}>
         {/* Hairlines between rows, inset past the icon the way a settings list
             draws them, and none above the first. */}
         {!row.first && <span aria-hidden className="absolute top-0 right-0 left-[60px] h-px bg-border/70" />}
@@ -457,7 +460,6 @@ export function DeviceNode({
           className={cn(
             'flex size-full min-w-0 items-center gap-3 rounded-lg px-3 text-left transition-colors',
             services?.length && 'pb-8',
-            onSelect && 'hover:bg-foreground/[0.035]',
             focusRing,
           )}
         >
@@ -482,7 +484,7 @@ export function DeviceNode({
             <DeviceTraffic device={device} flow={flow} rated={traffic.rated} counting={traffic.counting} />
           </span>
         </Shell>
-        <ServiceLinks services={services} domain={serviceDomain} className="absolute bottom-0.5 left-[64px] right-2" />
+        <ServiceLinks services={services} domain={serviceDomain} className="absolute bottom-0.5 left-[60px] right-2" />
       </div>
     )
   }
@@ -552,7 +554,8 @@ export function DeviceNode({
   return (
     <div className="group/node relative size-full">
       {body}
-      <ServiceLinks services={services} domain={serviceDomain} className="absolute bottom-0.5 left-3 right-2" />
+      <ServiceLinks services={services} domain={serviceDomain}
+        className={cn('absolute bottom-0.5 right-2', density === 'compact' ? 'left-10' : 'left-[54px]')} />
     </div>
   )
 }
@@ -561,18 +564,18 @@ export function DeviceNode({
 function ServiceLinks({ services, domain, className }: { services?: Service[]; domain?: string; className: string }) {
   if (!services?.length) return null
   return (
-    <span className={cn('flex h-8 min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden px-1', className)}>
+    <span className={cn('flex h-8 min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden', className)}>
       {services.slice(0, 8).map((service) => {
         const label = domain ? `${service.name}.${domain}` : service.name
         const tile = <ServiceIcon key={`${service.name}:${service.link_path ?? ''}`} name={service.name} />
         return domain ? (
           <a key={service.name} href={`https://${label}${service.link_path ?? ''}`} target="_blank" rel="noopener noreferrer"
             title={`Open ${label}${service.link_path ?? ''}`} aria-label={`Open ${label}${service.link_path ?? ''}`}
-            className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted transition-colors hover:bg-accent focus-visible:outline-2">
+            className="flex size-7 shrink-0 items-center justify-center rounded-[6px] bg-muted transition-colors hover:bg-accent focus-visible:outline-2">
             {tile}
           </a>
         ) : (
-          <span key={service.name} title={service.name} className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted">{tile}</span>
+          <span key={service.name} title={service.name} className="flex size-7 shrink-0 items-center justify-center rounded-[6px] bg-muted">{tile}</span>
         )
       })}
       {services.length > 8 && (
