@@ -1,4 +1,4 @@
-import { Activity, ArrowDown, ArrowLeft, ArrowUp, Clock3, LockKeyhole, Pencil, ShieldAlert } from 'lucide-react'
+import { Activity, ArrowDown, ArrowLeft, ArrowUp, Pencil } from 'lucide-react'
 import { Link, useParams } from 'react-router'
 
 import { Badge } from '@/components/ui/badge'
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useDnsConfig, useDnsQueries } from '@/features/dns/queries'
 import { DeviceIcon } from '@/features/devices/device-icon'
+import { DeviceInspection } from '@/features/devices/inspection'
 import { useDeviceActions } from '@/features/devices/device-actions'
 import { useDeviceList } from '@/features/devices/queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
@@ -120,34 +121,7 @@ export function DevicePage() {
         </CardContent>
       </Card>
 
-      <section className="overflow-hidden rounded-2xl border bg-card" aria-labelledby="inspection-title">
-        <div className="border-b bg-muted/40 px-5 py-5 sm:px-7">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Advanced · private by default</p>
-              <h2 id="inspection-title" className="text-xl font-semibold tracking-tight">Inspect network requests</h2>
-            </div>
-            <Badge variant="outline">Not available yet</Badge>
-          </div>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            OLR does not decrypt or save this device’s requests. Temporary, per-device inspection is planned; there is no capture session or request log on this page yet.
-          </p>
-        </div>
-        <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-3">
-          <Guide icon={Clock3} number="01" title="Start a short session">
-            Select one device for a 15-minute session. The router must confirm its current addresses before intercepting only supported TCP HTTP(S) traffic.
-          </Guide>
-          <Guide icon={LockKeyhole} number="02" title="Trust the debugging CA">
-            HTTPS inspection requires installing and trusting this router’s debugging CA on the device. No proxy address is needed. HTTP needs no CA.
-          </Guide>
-          <Guide icon={ShieldAlert} number="03" title="Stop and clear">
-            A session will stop automatically or on demand, remove interception rules and clear captured data. Stopping does not remove the CA from your device.
-          </Guide>
-        </div>
-        <div className="border-t px-5 py-4 text-xs leading-relaxed text-muted-foreground sm:px-7">
-          Planned results will separate inspected requests, connections that could not be inspected, and other connection metadata. Certificate pinning, apps that reject user CAs, non-HTTP protocols and HTTP/3 may remain invisible. Blocking UDP/443 to encourage TCP fallback can break some apps and will require an explicit choice. Request and response bodies will remain off by default.
-        </div>
-      </section>
+      <DeviceInspection mac={device.mac} />
       {actions.dialogs}
     </div>
   )
@@ -173,12 +147,5 @@ function Meter({ icon: Icon, label, bytes, rate }: { icon: typeof ArrowDown; lab
     <div className="flex items-center gap-2 text-xs text-muted-foreground"><Icon className="size-4" aria-hidden />{label}</div>
     <div className="mt-3 text-xl font-semibold tabular-nums">{bytes === undefined ? 'No address match' : formatBytes(bytes)}</div>
     {rate !== undefined && <div className="mt-1 text-xs text-muted-foreground">{formatRate(rate)} now</div>}
-  </div>
-}
-
-function Guide({ icon: Icon, number, title, children }: { icon: typeof Clock3; number: string; title: string; children: React.ReactNode }) {
-  return <div className="space-y-2">
-    <div className="flex items-center gap-2 text-sm font-medium"><Icon className="size-4 text-muted-foreground" aria-hidden /><span className="text-xs text-muted-foreground">{number}</span>{title}</div>
-    <p className="text-sm leading-relaxed text-muted-foreground">{children}</p>
   </div>
 }

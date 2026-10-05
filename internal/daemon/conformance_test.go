@@ -18,6 +18,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
+	"github.com/open-linux-router/open-linux-router/internal/inspection"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
 	"github.com/open-linux-router/open-linux-router/internal/system"
@@ -47,10 +48,11 @@ func moduleRoutes() map[string][]core.Route {
 		// Both halves of gateway, because the NAT package's routes are mounted
 		// under the same prefix and are as much of the module's surface as the
 		// routing ones (gateway.HTTP.NAT).
-		gateway.ModuleName:  gateway.HTTP{NAT: &nat.HTTP{}}.Routes(),
-		remote.ModuleName:   remote.HTTP{}.Routes(),
-		ingress.ModuleName:  ingress.HTTP{}.Routes(),
-		firewall.ModuleName: firewall.HTTP{}.Routes(),
+		gateway.ModuleName:    gateway.HTTP{NAT: &nat.HTTP{}}.Routes(),
+		remote.ModuleName:     remote.HTTP{}.Routes(),
+		ingress.ModuleName:    ingress.HTTP{}.Routes(),
+		firewall.ModuleName:   firewall.HTTP{}.Routes(),
+		inspection.ModuleName: (&inspection.Service{}).Routes(),
 	}
 }
 

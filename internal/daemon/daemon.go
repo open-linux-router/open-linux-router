@@ -24,6 +24,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -42,6 +43,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/geoip"
 	"github.com/open-linux-router/open-linux-router/internal/host"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
+	"github.com/open-linux-router/open-linux-router/internal/inspection"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/mcp"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
@@ -516,6 +518,16 @@ func run(args []string) error {
 		Events:  srv.Events(),
 	}.Routes(), firewall.Config{})
 
+	// Remove any inspection rule left by an unclean stop before accepting API
+	// requests. Failing startup is safer than leaving interception unmanaged.
+	if opts.root == "" {
+		if err := inspection.Recover(); err != nil {
+			return fmt.Errorf("recovering inspection: %w", err)
+		}
+	}
+	inspector := &inspection.Service{Devices: devicesApplier, Enabled: opts.root == "", Dir: filepath.Join(opts.root, "/var/lib/open-linux-router/inspection")}
+	srv.Mount(inspection.ModuleName, inspector.Routes(), struct{}{})
+
 	// --- routes -----------------------------------------------------------
 	//
 	// The API and the SPA are composed here rather than inside core, which has
@@ -668,6 +680,9 @@ func run(args []string) error {
 
 	<-ctx.Done()
 	logger.Info("shutting down")
+	if err := inspector.Close(); err != nil {
+		logger.Error("inspection cleanup failed", "error", err)
+	}
 	_, _ = sddaemon.SdNotify(false, sddaemon.SdNotifyStopping)
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
