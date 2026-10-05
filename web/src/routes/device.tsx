@@ -77,7 +77,7 @@ export function DevicePage() {
               {shownQueries.map((q, i) => <li key={`${q.at}-${q.client}-${q.name}-${i}`} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
                 <time dateTime={q.at} className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{new Date(q.at).toLocaleTimeString()}</time>
                 <span className="min-w-0 flex-1 break-all">{q.name}<span className="ml-2 text-xs text-muted-foreground">{q.type}</span></span>
-                {q.blocked ? <Badge variant="destructive">Blocked{q.policy ? ` · ${q.policy}` : ''}</Badge> : q.rcode !== 'NOERROR' ? <Badge variant="warning">{q.rcode}</Badge> : q.answers?.length ? <span className="break-all font-mono text-xs text-muted-foreground">{q.answers.join(', ')}</span> : <span className="text-xs text-muted-foreground">No answer</span>}
+                {q.blocked ? <Badge variant="destructive">Blocked{q.policy ? ` · ${q.policy}` : ''}</Badge> : q.rcode !== 'NOERROR' ? <Badge variant="warning">{q.rcode}</Badge> : q.answers?.length ? <DnsAnswers answers={q.answers} /> : <span className="text-xs text-muted-foreground">No answer</span>}
               </li>)}
             </ul>
           )}
@@ -103,4 +103,12 @@ function Meter({ icon: Icon, label, bytes, rate }: { icon: typeof ArrowDown; lab
     <div className="mt-3 text-xl font-semibold tabular-nums">{bytes === undefined ? 'No address match' : formatBytes(bytes)}</div>
     {rate !== undefined && <div className="mt-1 text-xs text-muted-foreground">{formatRate(rate)} now</div>}
   </div>
+}
+
+function DnsAnswers({ answers }: { answers: string[] }) {
+  const remaining = answers.length - 3
+  return <span className="flex w-full min-w-0 items-center font-mono text-xs text-muted-foreground sm:w-auto sm:max-w-[50%]" title={answers.join(', ')}>
+    <span className="truncate">{answers.slice(0, 3).join(', ')}</span>
+    {remaining > 0 && <span className="shrink-0">, {remaining} more</span>}
+  </span>
 }
