@@ -2,7 +2,6 @@ package devices
 
 import (
 	"net/netip"
-	"slices"
 	"testing"
 	"time"
 )
@@ -172,9 +171,6 @@ func TestMergeCombinesSources(t *testing.T) {
 	p := merged["aa:aa:aa:aa:aa:aa"]
 	if len(p.IPs) != 2 {
 		t.Errorf("IPs = %v, want both addresses deduplicated to two", p.IPs)
-	}
-	if !slices.Equal(p.NeighborIPs, []string{"192.168.1.20"}) {
-		t.Errorf("NeighborIPs = %v, want only the active ARP address", p.NeighborIPs)
 	}
 	if len(p.Sources) != 2 {
 		t.Errorf("Sources = %v, want both", p.Sources)

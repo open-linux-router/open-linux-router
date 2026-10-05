@@ -529,7 +529,7 @@ func run(args []string) error {
 			return fmt.Errorf("recovering inspection: %w", err)
 		}
 	}
-	inspector := &inspection.Service{Devices: devicesApplier, Enabled: opts.root == "", Dir: filepath.Join(opts.root, "/var/lib/open-linux-router/inspection")}
+	inspector := &inspection.Service{Enabled: opts.root == "", Dir: filepath.Join(opts.root, "/var/lib/open-linux-router/inspection")}
 	srv.Mount(inspection.ModuleName, inspector.Routes(), struct{}{})
 
 	// --- routes -----------------------------------------------------------

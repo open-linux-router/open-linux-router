@@ -87,7 +87,7 @@ export function DevicePage() {
         </CardContent>
       </Card>
 
-      <DeviceInspection mac={device.mac} />
+      <DeviceInspection key={device.mac} mac={device.mac} addresses={device.ips ?? []} />
     </div>
   )
 }

@@ -7,7 +7,6 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -15,13 +14,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
-	"github.com/open-linux-router/open-linux-router/internal/devices"
 )
 
 //go:embed addon.py
@@ -32,12 +29,6 @@ const table = "olr_inspection"
 const duration = 15 * time.Minute
 const port = "18081"
 const maxEvents = 200
-
-// Devices is read again during a session. A stale address must never authorize
-// another device; inability to establish ownership ends the capture.
-type Devices interface {
-	List(context.Context) ([]devices.Resolved, []devices.Problem, error)
-}
 
 type Event struct {
 	Kind            string            `json:"kind"`
@@ -54,13 +45,13 @@ type Event struct {
 type Status struct {
 	Active    bool      `json:"active"`
 	MAC       string    `json:"mac,omitempty"`
+	IP        string    `json:"ip,omitempty"`
 	Expires   time.Time `json:"expires,omitempty"`
 	Events    []Event   `json:"events"`
 	CAPresent bool      `json:"ca_present"`
 }
 
 type Service struct {
-	Devices Devices
 	Enabled bool
 	Dir     string
 	mu      sync.Mutex
@@ -69,7 +60,7 @@ type Service struct {
 
 type session struct {
 	mac      string
-	ips      []string
+	ip       string
 	expires  time.Time
 	cancel   context.CancelFunc
 	cmd      *exec.Cmd
@@ -80,7 +71,7 @@ type session struct {
 func (s *Service) Routes() []core.Route {
 	return []core.Route{
 		{Method: "GET", Path: "/status", Tool: "status", Summary: "Show the temporary device request inspection session.", Handler: s.status},
-		{Method: "POST", Path: "/session", Summary: "Start a 15-minute inspection for one device MAC.", Mutating: true, Handler: s.start},
+		{Method: "POST", Path: "/session", Summary: "Start a 15-minute inspection for an explicitly selected IPv4 address.", Mutating: true, Handler: s.start},
 		{Method: "DELETE", Path: "/session", Summary: "Stop inspection, remove interception and clear captured requests.", Mutating: true, Handler: s.stop},
 		{Method: "GET", Path: "/ca", Tool: "show ca", Summary: "Download the public debugging CA certificate, never its private key.", Handler: s.ca},
 	}
@@ -91,7 +82,7 @@ func (s *Service) snapshot() Status {
 	defer s.mu.Unlock()
 	out := Status{Events: []Event{}}
 	if q := s.session; q != nil {
-		out.Active, out.MAC, out.Expires = true, q.mac, q.expires
+		out.Active, out.MAC, out.IP, out.Expires = true, q.mac, q.ip, q.expires
 		out.Events = append(out.Events, q.events...)
 	}
 	_, err := os.Stat(filepath.Join(s.Dir, "mitmproxy-ca-cert.pem"))
@@ -130,9 +121,10 @@ func (s *Service) PublicCA(w http.ResponseWriter, r *http.Request) {
 func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		MAC string `json:"mac"`
+		IP  string `json:"ip"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body); err != nil {
-		core.WriteError(w, http.StatusBadRequest, "expected a device MAC")
+		core.WriteError(w, http.StatusBadRequest, "expected a device MAC and IPv4 address")
 		return
 	}
 	if !s.Enabled {
@@ -150,11 +142,12 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusBadRequest, macErr.Error())
 		return
 	}
-	ips, err := s.deviceIPs(r.Context(), normalized)
-	if err != nil {
-		core.WriteError(w, http.StatusConflict, err.Error())
+	ip, err := netip.ParseAddr(strings.TrimSpace(body.IP))
+	if err != nil || !ip.Is4() || ip.IsUnspecified() || ip.IsMulticast() || ip.String() == "255.255.255.255" {
+		core.WriteError(w, http.StatusBadRequest, "expected a unicast IPv4 address to inspect")
 		return
 	}
+	target := ip.String()
 	if _, err = exec.LookPath("mitmdump"); err != nil {
 		core.WriteError(w, http.StatusServiceUnavailable, "install mitmproxy (mitmdump) on the router first")
 		return
@@ -210,21 +203,13 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 	}
 	// A fresh table is owned wholly by this module. Cleanup of a previous
 	// daemon's table also runs at startup; never modify someone else's table.
-	// Recheck after the process starts: an address may change during startup.
-	current, checkErr := s.deviceIPs(r.Context(), normalized)
-	if checkErr != nil || !slices.Equal(current, ips) {
-		cancel()
-		_ = cmd.Wait()
-		core.WriteError(w, http.StatusConflict, "device identity changed before interception; nothing was redirected")
-		return
-	}
-	if err = install(ips); err != nil {
+	if err = install(target); err != nil {
 		cancel()
 		_ = cmd.Wait()
 		if cleanupErr := cleanup(); cleanupErr != nil {
 			// A partially installed rule might remain. Preserve a session
 			// owner so cleanup is retried and no new session can start.
-			q := &session{mac: normalized, ips: ips, expires: time.Now(), cancel: cancel, cmd: cmd}
+			q := &session{mac: normalized, ip: target, expires: time.Now(), cancel: cancel, cmd: cmd}
 			s.session = q
 			q.retrying = true
 			go s.retryCleanup(q)
@@ -234,7 +219,7 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, 500, "could not install interception: "+err.Error())
 		return
 	}
-	q := &session{mac: normalized, ips: ips, expires: time.Now().Add(duration), cancel: cancel, cmd: cmd}
+	q := &session{mac: normalized, ip: target, expires: time.Now().Add(duration), cancel: cancel, cmd: cmd}
 	s.session = q
 	go s.consume(q, stdout)
 	go s.watch(q)
@@ -243,62 +228,7 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) snapshotLocked() Status {
 	q := s.session
-	return Status{Active: true, MAC: q.mac, Expires: q.expires, Events: []Event{}, CAPresent: true}
-}
-
-func (s *Service) deviceIPs(ctx context.Context, mac string) ([]string, error) {
-	list, problems, err := s.Devices.List(ctx)
-	if err != nil || len(problems) != 0 {
-		return nil, errors.New("device identity could not be verified")
-	}
-	var selected *devices.Resolved
-	owners := map[string]int{}
-	for i := range list {
-		if list[i].Presence == nil {
-			continue
-		}
-		// A lease (or an inactive ARP entry) can outlive address reassignment.
-		// Only current neighbour entries can contest interception ownership.
-		for _, raw := range list[i].Presence.NeighborIPs {
-			owners[strings.ToLower(raw)]++
-		}
-		if strings.EqualFold(list[i].MAC, mac) {
-			selected = &list[i]
-		}
-	}
-	if selected == nil || !selected.Online() {
-		return nil, errors.New("device must be online with a currently observed address")
-	}
-	if len(selected.Presence.NeighborIPs) == 0 {
-		return nil, errors.New("device needs a current neighbour-table observation")
-	}
-	var ipv4 []string
-	var excluded []string
-	for _, raw := range selected.Presence.NeighborIPs {
-		ip, err := netip.ParseAddr(raw)
-		if err != nil {
-			return nil, errors.New("device has an invalid observed address")
-		}
-		if ip.Is4() {
-			if !ip.IsPrivate() {
-				excluded = append(excluded, ip.String()+" (not private)")
-				continue
-			}
-			if owners[strings.ToLower(ip.String())] != 1 {
-				excluded = append(excluded, ip.String()+" (conflicting current neighbour observations)")
-				continue
-			}
-			ipv4 = append(ipv4, ip.String())
-		}
-	}
-	if len(ipv4) == 0 {
-		if len(excluded) != 0 {
-			return nil, fmt.Errorf("inspection has no uniquely owned private IPv4 address; excluded %s", strings.Join(excluded, ", "))
-		}
-		return nil, errors.New("inspection requires an observed IPv4 address; IPv6 traffic is not intercepted")
-	}
-	slices.Sort(ipv4)
-	return slices.Compact(ipv4), nil
+	return Status{Active: true, MAC: q.mac, IP: q.ip, Expires: q.expires, Events: []Event{}, CAPresent: true}
 }
 
 func (s *Service) consume(q *session, stdout interface{ Read([]byte) (int, error) }) {
@@ -331,12 +261,8 @@ func (s *Service) watch(q *session) {
 			s.end(q)
 			return
 		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			ips, err := s.deviceIPs(ctx, q.mac)
-			cancel()
-			if err != nil || !slices.Equal(ips, q.ips) || time.Now().After(q.expires) {
+			if time.Now().After(q.expires) {
 				s.end(q)
-				return
 			}
 		}
 	}
@@ -424,8 +350,8 @@ func cleanup() error {
 	}
 	return fmt.Errorf("removing inspection table: %w: %s", err, strings.TrimSpace(string(out)))
 }
-func install(ips []string) error {
-	// Restrict to TCP 80/443 from verified addresses, before NAT. Exclude local
+func install(ip string) error {
+	// Restrict to TCP 80/443 from the chosen address, before NAT. Exclude local
 	// and private destinations so router administration and LAN services survive.
 	if err := nft("add", "table", "inet", table); err != nil {
 		return err
@@ -451,10 +377,8 @@ func install(ips []string) error {
 			return err
 		}
 	}
-	for _, ip := range ips {
-		if err := nft("add", "rule", "inet", table, "prerouting", "ip", "saddr", ip, "tcp", "dport", "{", "80,", "443", "}", "redirect", "to", ":"+port); err != nil {
-			return err
-		}
+	if err := nft("add", "rule", "inet", table, "prerouting", "ip", "saddr", ip, "tcp", "dport", "{", "80,", "443", "}", "redirect", "to", ":"+port); err != nil {
+		return err
 	}
 	return nil
 }
