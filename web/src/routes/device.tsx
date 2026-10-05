@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useDnsConfig, useDnsQueries } from '@/features/dns/queries'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import { useDeviceActions } from '@/features/devices/device-actions'
 import { useDeviceList } from '@/features/devices/queries'
@@ -15,10 +16,14 @@ export function DevicePage() {
   const { mac } = useParams()
   const devices = useDeviceList()
   const traffic = useGatewayTraffic()
+  const dnsConfig = useDnsConfig()
+  const dnsQueries = useDnsQueries()
   const flow = useTrafficView(traffic.data, traffic.isError)
   const actions = useDeviceActions()
   const device = devices.data?.devices.find((d) => d.mac.toLowerCase() === mac?.toLowerCase())
   const usage = device && flow.flowOf(device)
+  const addresses = new Set(device?.ips?.map((ip) => ip.toLowerCase()) ?? [])
+  const matchingQueries = dnsQueries.data?.queries.filter((q) => addresses.has(q.client.toLowerCase())) ?? []
 
   if (devices.isPending) return <p className="py-16 text-sm text-muted-foreground">Loading device…</p>
   if (devices.isError) return <State title="Could not load devices" detail="Try again when the router is reachable." />
@@ -87,6 +92,33 @@ export function DevicePage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader><CardTitle>DNS queries from this device</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Names this device asked OLR to resolve, not proof it visited them. Only queries from its currently observed IP addresses among the latest 200 network-wide entries are shown. Private DNS and earlier addresses may be missing.
+          </p>
+          {dnsQueries.isError ? (
+            <p className="text-sm text-muted-foreground">The DNS query log is unavailable. The resolver may be stopped.</p>
+          ) : dnsQueries.isPending ? (
+            <p className="text-sm text-muted-foreground">Loading recent queries…</p>
+          ) : !dnsConfig.data?.query_log.enabled ? (
+            <p className="text-sm text-muted-foreground">The DNS query log is off. Queries are answered but not kept.</p>
+          ) : matchingQueries.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No matching queries in the recent sample.</p>
+          ) : (
+            <ul className="max-h-80 divide-y overflow-y-auto rounded-xl border">
+              {matchingQueries.map((q, i) => <li key={`${q.at}-${q.client}-${q.name}-${i}`} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
+                <time dateTime={q.at} className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{new Date(q.at).toLocaleTimeString()}</time>
+                <span className="min-w-0 flex-1 break-all">{q.name}<span className="ml-2 text-xs text-muted-foreground">{q.type}</span></span>
+                <Badge variant={q.blocked ? 'destructive' : 'secondary'}>{q.blocked ? `Blocked${q.policy ? ` · ${q.policy}` : ''}` : q.rcode}</Badge>
+              </li>)}
+            </ul>
+          )}
+          <Button variant="outline" size="sm" render={<Link to="/dns">DNS activity and settings</Link>} />
+        </CardContent>
+      </Card>
 
       <section className="overflow-hidden rounded-2xl border bg-card" aria-labelledby="inspection-title">
         <div className="border-b bg-muted/40 px-5 py-5 sm:px-7">
