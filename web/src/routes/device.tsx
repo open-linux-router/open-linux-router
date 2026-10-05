@@ -6,13 +6,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useDnsConfig, useDnsQueries } from '@/features/dns/queries'
-import { DeviceIcon } from '@/features/devices/device-icon'
 import { DeviceInspection } from '@/features/devices/inspection'
 import { DeviceInlineEditor } from '@/features/devices/device-inline-editor'
 import { useDeviceList } from '@/features/devices/queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
 import { useTrafficView } from '@/features/topology/traffic'
-import { formatAgo, formatBytes, formatRate } from '@/lib/utils'
+import { formatBytes, formatRate } from '@/lib/utils'
 
 export function DevicePage() {
   const { mac } = useParams()
@@ -38,42 +37,7 @@ export function DevicePage() {
         <ArrowLeft className="size-4" aria-hidden /> Network overview
       </Link>
 
-      <header className="flex flex-col gap-5 rounded-2xl border bg-card p-5 sm:flex-row sm:items-center sm:p-7">
-        <DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor}
-          vendorKey={device.vendor_key} online={device.online} size="lg" />
-        <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="break-words text-2xl font-semibold tracking-tight sm:text-3xl">{device.name || device.mac}</h1>
-            <Badge variant={device.online ? 'success' : device.seen ? 'secondary' : 'outline'}>
-              {device.online ? 'Online' : device.seen ? 'Offline' : 'Never seen'}
-            </Badge>
-          </div>
-          <p className="font-mono text-xs text-muted-foreground">{device.mac}</p>
-          <p className="text-sm text-muted-foreground">
-            {device.network || 'Network unknown'}{device.group ? ` · ${device.group}` : ''}
-            {device.last_seen ? ` · Last heard ${formatAgo(device.last_seen)}` : ''}
-          </p>
-        </div>
-      </header>
-
-      <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
-        <Card>
-          <CardHeader><CardTitle>What the router knows</CardTitle></CardHeader>
-          <CardContent>
-            <dl className="divide-y text-sm">
-              <Fact label="Addresses" value={device.ips?.length ? device.ips.join(', ') : 'None observed'} mono />
-              <Fact label="Fixed address" value={device.fixed_ip || 'Not reserved'} mono={Boolean(device.fixed_ip)} />
-              <Fact label="Calls itself" value={device.hostname || 'Not reported'} />
-              <Fact label="Vendor" value={device.vendor || 'Unknown'} />
-              <Fact label="Network" value={device.network || 'Unknown'} />
-              <Fact label="Seen by" value={device.sources?.length ? device.sources.map((s) => s === 'dhcp-lease' ? 'DHCP lease' : s === 'arp' ? 'Network traffic' : s).join(', ') : 'Not observed'} />
-              <Fact label="Lease expires" value={device.expires ? new Date(device.expires).toLocaleString() : 'No expiring lease'} />
-            </dl>
-            {device.notes && <p className="mt-4 rounded-lg bg-muted/60 p-3 text-sm">{device.notes}</p>}
-            <p className="mt-4 text-xs text-muted-foreground">Addresses and presence are observations, not settings. Your changes are below.</p>
-          </CardContent>
-        </Card>
-
+      <DeviceInlineEditor key={device.mac} device={device} traffic={
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="size-4" aria-hidden /> Traffic through this router</CardTitle></CardHeader>
           <CardContent className="space-y-5">
@@ -91,9 +55,7 @@ export function DevicePage() {
             <Button variant="outline" size="sm" render={<Link to="/gateway/usage">Usage settings</Link>} />
           </CardContent>
         </Card>
-      </div>
-
-      <DeviceInlineEditor key={device.mac} device={device} />
+      } />
 
       <Card>
         <CardHeader><CardTitle>DNS queries from this device</CardTitle></CardHeader>
@@ -132,13 +94,6 @@ function State({ title, detail }: { title: string; detail: string }) {
     <h1 className="text-xl font-semibold">{title}</h1>
     <p className="text-sm text-muted-foreground">{detail}</p>
     <Button variant="outline" render={<Link to="/">Back to overview</Link>} />
-  </div>
-}
-
-function Fact({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return <div className="grid gap-1 py-2.5 sm:grid-cols-[9rem_1fr]">
-    <dt className="text-muted-foreground">{label}</dt>
-    <dd className={`min-w-0 break-all ${mono ? 'font-mono text-xs' : ''}`}>{value}</dd>
   </div>
 }
 
