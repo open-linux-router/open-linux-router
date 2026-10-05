@@ -732,8 +732,8 @@ function DeviceActivity({ device, flow, rated, counting }: {
   return (
     <span className="inline-flex w-full flex-col align-middle" title={label} aria-label={label}>
       {([['↓', down], ['↑', up]] as const).map(([arrow, rate]) => (
-        <span key={arrow} aria-hidden className="grid grid-cols-[10px_1fr] items-center gap-0.5 leading-[12px]">
-          <span className="text-center">{arrow}</span><span className="text-right">{formatRateCompact(rate)}</span>
+        <span key={arrow} aria-hidden className="flex items-center justify-end gap-0.5 leading-[12px]">
+          <span>{arrow}</span><span>{formatRateCompact(rate)}</span>
         </span>
       ))}
     </span>
