@@ -3,7 +3,6 @@ import {
   ArrowUp,
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   FolderInput,
   FolderPlus,
   Layers,
@@ -15,6 +14,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -39,6 +39,7 @@ import type { Outside } from '@/features/topology/outside'
 import { magnitude, type Flow, type TrafficView } from '@/features/topology/traffic'
 import type { DeviceRow } from '@/lib/api-types'
 import type { DevicesGroup, Service } from '@/lib/config-types'
+import { getToken } from '@/lib/api'
 import { cn, formatAgo, formatBytes, formatRate, formatRateCompact } from '@/lib/utils'
 
 /**
@@ -458,7 +459,7 @@ export function DeviceNode({
           title={name}
           className={cn(
             'flex size-full min-w-0 items-center gap-3 rounded-lg px-3 text-left transition-colors',
-            services?.length && 'pb-5',
+            services?.length && 'pb-[60px]',
             onSelect && 'hover:bg-foreground/[0.035]',
             focusRing,
           )}
@@ -502,7 +503,7 @@ export function DeviceNode({
     'flex size-full min-w-0 items-center rounded-lg border bg-card text-left shadow-xs transition-[border-color,box-shadow]',
     onSelect && 'hover:border-foreground/20 hover:shadow-sm',
     focusRing,
-    services?.length && 'pb-5',
+    services?.length && 'pb-[60px]',
   )
 
   const body =
@@ -581,24 +582,53 @@ export function DeviceNode({
 function ServiceLinks({ services, domain, className }: { services?: Service[]; domain?: string; className: string }) {
   if (!services?.length) return null
   return (
-    <span className={cn('flex min-w-0 items-center gap-1 overflow-hidden text-[11px] leading-4', className)}>
-      {services.slice(0, 2).map((service) => {
+    <span className={cn('flex h-[52px] min-w-0 flex-wrap content-center items-center gap-1 overflow-hidden', className)}>
+      {services.slice(0, 8).map((service) => {
         const label = domain ? `${service.name}.${domain}` : service.name
+        const tile = <ServiceIcon name={service.name} />
         return domain ? (
           <a key={service.name} href={`https://${label}`} target="_blank" rel="noopener noreferrer"
-            title={`Open ${label}`} className="inline-flex max-w-full shrink-0 items-center gap-0.5 truncate rounded bg-muted px-1.5 text-foreground hover:underline focus-visible:outline-2">
-            <span className="truncate">{service.name}</span><ExternalLink className="size-2.5 shrink-0" aria-hidden />
+            title={`Open ${label}`} aria-label={`Open ${label}`}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted hover:ring-1 hover:ring-foreground/30 focus-visible:outline-2">
+            {tile}
           </a>
         ) : (
-          <span key={service.name} className="shrink-0 rounded bg-muted px-1.5 text-muted-foreground">{service.name}</span>
+          <span key={service.name} title={service.name} className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted">{tile}</span>
         )
       })}
-      {services.length > 2 && (
-        <span className="shrink-0 text-muted-foreground" title={services.slice(2).map((s) => s.name).join(', ')}>
-          +{services.length - 2}
+      {services.length > 8 && (
+        <span className="flex h-6 shrink-0 items-center text-[11px] text-muted-foreground" title={services.slice(8).map((s) => s.name).join(', ')}>
+          +{services.length - 8}
         </span>
       )}
     </span>
+  )
+}
+
+function ServiceIcon({ name }: { name: string }) {
+  const [icon, setIcon] = useState<string>()
+  useEffect(() => {
+    const controller = new AbortController()
+    let objectURL: string | undefined
+    const token = getToken()
+    fetch(`/api/ingress/services/${encodeURIComponent(name)}/icon`, {
+      signal: controller.signal,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then(async (response) => {
+      if (!response.ok) return
+      objectURL = URL.createObjectURL(await response.blob())
+      if (!controller.signal.aborted) setIcon(objectURL)
+      else URL.revokeObjectURL(objectURL)
+    }).catch(() => {})
+    return () => {
+      controller.abort()
+      if (objectURL) URL.revokeObjectURL(objectURL)
+    }
+  }, [name])
+  return icon ? (
+    <img src={icon} alt="" className="size-5 rounded-sm object-contain" />
+  ) : (
+    <span className="text-[10px] font-semibold uppercase" aria-hidden>{name.slice(0, 2)}</span>
   )
 }
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +31,9 @@ type HTTP struct {
 
 	// Events is where an applied change is announced so the UI can re-read.
 	Events *core.Events
+
+	// IconClient is injectable for tests; production uses a bounded HTTPS client.
+	IconClient *http.Client
 
 	// Dependents re-applies the modules built from what this one publishes —
 	// `dns`, whose relay answers every published name with this box's address
@@ -118,6 +122,12 @@ func (h HTTP) Routes() []core.Route {
 			Handler:  h.deleteService,
 		},
 
+		{
+			Method: "GET", Path: "/services/{name}/icon",
+			Summary: "Show the best available website icon for an enabled published service.",
+			Handler: h.getServiceIcon,
+		},
+
 		// Dry run. A POST because it takes a body, not because it changes
 		// anything.
 		{
@@ -174,6 +184,40 @@ func (h HTTP) getConfig(w http.ResponseWriter, r *http.Request) {
 	// back — the only thing that reads it is the renderer, which loads the config
 	// itself.
 	core.WriteJSON(w, http.StatusOK, cfg.Redacted())
+}
+
+func (h HTTP) getServiceIcon(w http.ResponseWriter, r *http.Request) {
+	cfg, err := h.Applier.Load()
+	if err != nil {
+		core.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !cfg.Enabled {
+		http.NotFound(w, r)
+		return
+	}
+	name := r.PathValue("name")
+	found := false
+	for _, service := range cfg.Services {
+		if service.Name == name {
+			found = true
+			break
+		}
+	}
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+	domain := h.Applier.DNS.LocalDomain()
+	origin := (&url.URL{Scheme: "https", Host: qualify(name, domain)}).String()
+	data, kind, err := serviceIcon(r.Context(), h.IconClient, origin)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", kind)
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	w.Write(data)
 }
 
 func (h HTTP) putConfig(w http.ResponseWriter, r *http.Request) {

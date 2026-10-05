@@ -150,6 +150,9 @@ func TestEveryReadRouteIsPublishedAsATool(t *testing.T) {
 		// The same argument, for the same reason, about the third object: the
 		// socks5:// line carries the username and password.
 		"remote GET /socks5/link": true,
+		// Image bytes are for the browser, not a JSON tool response. The
+		// structured service list remains available to agents.
+		"ingress GET /services/{name}/icon": true,
 	}
 
 	for module, routes := range moduleRoutes() {
