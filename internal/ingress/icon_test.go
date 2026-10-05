@@ -149,6 +149,12 @@ func TestIconRouteServesPublishedService(t *testing.T) {
 	if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "image/png" {
 		t.Fatalf("icon: %d %s", w.Code, w.Body)
 	}
+	if got := w.Header().Get("Cache-Control"); got != "private, max-age=86400" {
+		t.Errorf("Cache-Control = %q", got)
+	}
+	if got := w.Header().Get("Vary"); got != "Authorization" {
+		t.Errorf("Vary = %q", got)
+	}
 }
 
 func TestServiceIconFollowsSameOriginRedirect(t *testing.T) {

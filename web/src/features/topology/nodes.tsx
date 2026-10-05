@@ -568,7 +568,8 @@ function ServiceLinks({ services, domain, className, compact = false }: { servic
     <span className={cn('flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden', compact ? 'h-full' : 'h-8', className)}>
       {services.slice(0, 8).map((service) => {
         const label = domain ? `${service.name}.${domain}` : service.name
-        const tile = <ServiceIcon key={`${service.name}:${service.link_path ?? ''}`} name={service.name} />
+        const version = serviceIconVersion(service, domain)
+        const tile = <ServiceIcon key={`${service.name}:${version}`} name={service.name} version={version} />
         return domain ? (
           <a key={service.name} href={`https://${label}${service.link_path ?? ''}`} target="_blank" rel="noopener noreferrer"
             title={`Open ${label}${service.link_path ?? ''}`} aria-label={`Open ${label}${service.link_path ?? ''}`}
@@ -588,13 +589,25 @@ function ServiceLinks({ services, domain, className, compact = false }: { servic
   )
 }
 
-function ServiceIcon({ name }: { name: string }) {
+// The browser caches successful icons for a day; change the URL when the
+// published destination or its icon-discovery path changes.
+function serviceIconVersion(service: Service, domain?: string): string {
+  const { device, host, port, scheme } = service.upstream
+  const identity = JSON.stringify([service.name, domain, service.link_path, device, host, port, scheme])
+  let hash = 2166136261
+  for (let i = 0; i < identity.length; i++) {
+    hash = Math.imul(hash ^ identity.charCodeAt(i), 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+function ServiceIcon({ name, version }: { name: string; version: string }) {
   const [icon, setIcon] = useState<string>()
   useEffect(() => {
     const controller = new AbortController()
     let objectURL: string | undefined
     const token = getToken()
-    fetch(`/api/ingress/services/${encodeURIComponent(name)}/icon`, {
+    fetch(`/api/ingress/services/${encodeURIComponent(name)}/icon?v=${version}`, {
       signal: controller.signal,
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     }).then(async (response) => {
@@ -607,7 +620,7 @@ function ServiceIcon({ name }: { name: string }) {
       controller.abort()
       if (objectURL) URL.revokeObjectURL(objectURL)
     }
-  }, [name])
+  }, [name, version])
   return icon ? (
     <img src={icon} alt="" className="size-5 object-contain" />
   ) : (
