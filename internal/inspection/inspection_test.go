@@ -42,13 +42,14 @@ func TestDeviceIPsRequiresUniqueCurrentPrivateIPv4(t *testing.T) {
 		{"IPv6 only", []devices.Resolved{row(mac, true, "fd00::10")}, nil},
 		{"two IPv4 plus IPv6", []devices.Resolved{row(mac, true, "192.168.2.10", "192.168.2.11", "fd00::10")}, []string{"192.168.2.10", "192.168.2.11"}},
 		{"public", []devices.Resolved{row(mac, true, "8.8.8.8")}, nil},
-		{"mixed public", []devices.Resolved{row(mac, true, "192.168.2.10", "8.8.8.8")}, nil},
+		{"mixed public", []devices.Resolved{row(mac, true, "192.168.2.10", "8.8.8.8")}, []string{"192.168.2.10"}},
 		{"invalid", []devices.Resolved{row(mac, true, "not-an-ip")}, nil},
 		{"lease only", []devices.Resolved{{MAC: mac, Presence: &devices.Presence{Active: true, IPs: []string{"192.168.2.10"}}}}, nil},
 		{"old lease and active ARP", []devices.Resolved{{MAC: mac, Presence: &devices.Presence{Active: true, IPs: []string{"192.168.2.10", "192.168.2.11"}, NeighborIPs: []string{"192.168.2.11"}}}}, []string{"192.168.2.11"}},
 		{"other device's old lease", []devices.Resolved{row(mac, true, "172.16.1.135"), {MAC: "aa:bb:cc:dd:ee:02", Presence: &devices.Presence{Active: true, IPs: []string{"172.16.1.135"}}}}, []string{"172.16.1.135"}},
 		{"other device's inactive ARP", []devices.Resolved{row(mac, true, "172.16.1.135"), {MAC: "aa:bb:cc:dd:ee:02", Presence: &devices.Presence{Active: false, IPs: []string{"172.16.1.135"}}}}, []string{"172.16.1.135"}},
 		{"other device's active ARP", []devices.Resolved{row(mac, true, "172.16.1.135"), row("aa:bb:cc:dd:ee:02", true, "172.16.1.135")}, nil},
+		{"conflicting old address", []devices.Resolved{row(mac, true, "172.16.1.39", "172.16.1.135"), row("aa:bb:cc:dd:ee:02", true, "172.16.1.39")}, []string{"172.16.1.135"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -64,8 +65,25 @@ func TestDeviceIPsRequiresUniqueCurrentPrivateIPv4(t *testing.T) {
 		t.Fatal("accepted incomplete identity")
 	}
 	s = &Service{Devices: fakeDevices{rows: cases[3].rows}}
-	if _, err := s.deviceIPs(context.Background(), mac); err == nil || !strings.Contains(err.Error(), "conflicting current neighbour observations") {
+	if _, err := s.deviceIPs(context.Background(), mac); err == nil || !strings.Contains(err.Error(), "192.168.2.10 (conflicting current neighbour observations)") {
 		t.Fatalf("shared active address: %v", err)
+	}
+}
+
+func TestDeviceIPsSelectsSafeAddressFromMergedObservations(t *testing.T) {
+	const current = "c4:c1:7d:e0:a3:65"
+	rows, problems := devices.Build(devices.Config{}, []devices.Sighting{
+		{MAC: current, IP: "172.16.1.39", Source: devices.SourceARP, Active: true},
+		{MAC: current, IP: "172.16.1.135", Source: devices.SourceARP, Active: true},
+		{MAC: "aa:bb:cc:dd:ee:02", IP: "172.16.1.39", Source: devices.SourceARP, Active: true},
+	}, nil, nil)
+	if len(problems) != 0 {
+		t.Fatalf("presence problems: %v", problems)
+	}
+	s := &Service{Devices: fakeDevices{rows: rows}}
+	ips, err := s.deviceIPs(context.Background(), current)
+	if err != nil || !slices.Equal(ips, []string{"172.16.1.135"}) {
+		t.Fatalf("ips=%v err=%v", ips, err)
 	}
 }
 

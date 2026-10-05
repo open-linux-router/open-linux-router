@@ -273,6 +273,7 @@ func (s *Service) deviceIPs(ctx context.Context, mac string) ([]string, error) {
 		return nil, errors.New("device needs a current neighbour-table observation")
 	}
 	var ipv4 []string
+	var excluded []string
 	for _, raw := range selected.Presence.NeighborIPs {
 		ip, err := netip.ParseAddr(raw)
 		if err != nil {
@@ -280,15 +281,20 @@ func (s *Service) deviceIPs(ctx context.Context, mac string) ([]string, error) {
 		}
 		if ip.Is4() {
 			if !ip.IsPrivate() {
-				return nil, fmt.Errorf("inspection requires private IPv4 addresses; %s is not private", ip)
+				excluded = append(excluded, ip.String()+" (not private)")
+				continue
 			}
 			if owners[strings.ToLower(ip.String())] != 1 {
-				return nil, fmt.Errorf("IPv4 address %s has conflicting current neighbour observations", ip)
+				excluded = append(excluded, ip.String()+" (conflicting current neighbour observations)")
+				continue
 			}
 			ipv4 = append(ipv4, ip.String())
 		}
 	}
 	if len(ipv4) == 0 {
+		if len(excluded) != 0 {
+			return nil, fmt.Errorf("inspection has no uniquely owned private IPv4 address; excluded %s", strings.Join(excluded, ", "))
+		}
 		return nil, errors.New("inspection requires an observed IPv4 address; IPv6 traffic is not intercepted")
 	}
 	slices.Sort(ipv4)
