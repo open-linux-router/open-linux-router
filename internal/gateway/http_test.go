@@ -438,3 +438,31 @@ func TestLatencyEndpointReadsWithoutProbing(t *testing.T) {
 		}
 	}
 }
+
+func TestLatencySitesEndpoint(t *testing.T) {
+	custom, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	monitor := NewLatencyMonitor()
+	monitor.Custom = custom
+	monitor.probe = func(context.Context, string) (float64, error) { t.Fatal("settings must not probe"); return 0, nil }
+	h := HTTP{Latency: monitor}.Handler()
+	body := []CustomLatencySite{{Name: "YouTube", URL: "https://www.youtube.com/"}}
+	w := do(t, h, http.MethodPut, "/latency/sites", body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT: %d %s", w.Code, w.Body.String())
+	}
+	w = do(t, h, http.MethodGet, "/latency", nil)
+	if w.Code != http.StatusOK || len(decode[LatencySnapshot](t, w).Custom) != 1 {
+		t.Fatal("site missing from snapshot")
+	}
+	w = do(t, h, http.MethodPut, "/latency/sites", []CustomLatencySite{{Name: "X", URL: "http://example.com"}})
+	if w.Code != http.StatusBadRequest || len(custom.Config()) != 1 {
+		t.Fatal("invalid edit changed settings")
+	}
+	w = do(t, h, http.MethodPut, "/latency/sites", []CustomLatencySite{})
+	if w.Code != http.StatusOK || len(custom.Config()) != 0 {
+		t.Fatal("cannot clear sites")
+	}
+}

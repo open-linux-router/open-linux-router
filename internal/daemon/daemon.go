@@ -378,6 +378,11 @@ func run(args []string) error {
 	// touching anything.
 	prober := gateway.NewProber()
 	latency := gateway.NewLatencyMonitor()
+	customLatency, err := gateway.NewCustomLatencyMonitor(core.RootedConfigPath(opts.root) + ".latency-sites")
+	if err != nil {
+		return fmt.Errorf("loading custom latency sites: %w", err)
+	}
+	latency.Custom = customLatency
 	prober.Log = logger
 	gatewayApplier := gateway.Applier{
 		Kernel: gateway.NewKernel(),

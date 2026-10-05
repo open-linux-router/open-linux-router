@@ -27,6 +27,7 @@ type LatencyMonitor struct {
 	rounds           int
 	probe            func(context.Context, string) (float64, error)
 	dnsProbe         func(context.Context) (float64, error)
+	Custom           *CustomLatencyMonitor
 }
 type latencyTarget struct {
 	Name, URL string
@@ -46,6 +47,7 @@ type LatencySnapshot struct {
 	Target          string        `json:"target"`
 	CheckedAt       *time.Time    `json:"checked_at"`
 	Sites           []LatencySite `json:"sites"`
+	Custom          []LatencySite `json:"custom"`
 }
 
 func NewLatencyMonitor() *LatencyMonitor {
@@ -54,7 +56,7 @@ func NewLatencyMonitor() *LatencyMonitor {
 		{Name: "Baidu", URL: "https://www.baidu.com/"},
 		{Name: "Yandex", URL: "https://ya.ru/"},
 		{Name: "Cloudflare", URL: "https://www.cloudflare.com/cdn-cgi/trace"},
-	}, probe: probeHTTPS, dnsProbe: probeDNS, snapshot: LatencySnapshot{State: "measuring", Sites: []LatencySite{}}}
+	}, probe: probeHTTPS, dnsProbe: probeDNS, snapshot: LatencySnapshot{State: "measuring", Sites: []LatencySite{}, Custom: []LatencySite{}}}
 }
 func probeHTTPS(ctx context.Context, url string) (float64, error) {
 	// Fresh connections give comparable DNS + TCP + TLS + response-header times.
@@ -98,7 +100,13 @@ func (m *LatencyMonitor) Run(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
+		var custom sync.WaitGroup
+		if m.Custom != nil {
+			custom.Add(1)
+			go func() { defer custom.Done(); m.Custom.sample(ctx) }()
+		}
 		m.sample(ctx)
+		custom.Wait()
 		timer := time.NewTimer(m.nextInterval())
 		select {
 		case <-ctx.Done():

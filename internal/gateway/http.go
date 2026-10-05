@@ -72,6 +72,7 @@ func (h HTTP) Routes() []core.Route {
 
 	routes := []core.Route{
 		{Method: "GET", Path: "/latency", Tool: "show latency", Summary: "Latest router HTTPS latency measurements and selected websites.", Handler: h.getLatency},
+		{Method: "PUT", Path: "/latency/sites", Summary: "Replace custom HTTPS latency targets.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencySites},
 		// Intent, whole document. Still the way to restore a backup or make
 		// several changes at once; the routes below are additions, not
 		// replacements.
@@ -752,8 +753,33 @@ func callerAddr(r *http.Request) netip.Addr {
 
 func (h HTTP) getLatency(w http.ResponseWriter, r *http.Request) {
 	if h.Latency == nil {
-		core.WriteJSON(w, http.StatusOK, LatencySnapshot{State: "unavailable", Sites: []LatencySite{}})
+		core.WriteJSON(w, http.StatusOK, LatencySnapshot{State: "unavailable", Sites: []LatencySite{}, Custom: []LatencySite{}})
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, h.Latency.Snapshot())
+	snapshot := h.Latency.Snapshot()
+	if h.Latency.Custom != nil {
+		snapshot.Custom = h.Latency.Custom.Snapshot()
+	}
+	core.WriteJSON(w, http.StatusOK, snapshot)
+}
+
+func (h HTTP) putLatencySites(w http.ResponseWriter, r *http.Request) {
+	if h.Latency == nil || h.Latency.Custom == nil {
+		core.WriteError(w, http.StatusServiceUnavailable, "latency monitor unavailable")
+		return
+	}
+	var sites []CustomLatencySite
+	if err := core.DecodeJSON(w, r, &sites); err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if sites == nil {
+		core.WriteError(w, http.StatusBadRequest, "expected a list of sites")
+		return
+	}
+	if err := h.Latency.Custom.Replace(sites); err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	core.WriteJSON(w, http.StatusOK, h.Latency.Custom.Config())
 }

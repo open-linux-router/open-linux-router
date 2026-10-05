@@ -33,3 +33,25 @@ older results never contribute to the current headline measurement. No success
 in the current round means a null measurement, never zero or an older success.
 The UI hides the measurement on API failure or when the sample is over 90 seconds
 older than the response receipt time. The expandable list shows per-site results.
+
+## Custom sites
+
+The Overview card's **Monitor sites** dialog accepts up to 12 named HTTPS URLs,
+for example WeChat or YouTube. Each custom site uses the same router-originated
+HTTPS HEAD probe, four-second timeout, and one-minute steady-state cadence as
+the Internet candidates. During initial discovery they are probed every 15
+seconds. Custom sites are independent: their failures never change the Internet
+headline or its candidate selection. An endpoint that rejects HEAD (for example
+with HTTP 403 or 405) will show **No response**; choose a suitable endpoint for
+that service instead. Icons for common services are built into the UI, and
+other sites show an initial; no third-party favicon requests are made.
+
+`PUT /api/gateway/latency/sites` replaces the custom list with JSON objects
+`{"name":"YouTube","url":"https://www.youtube.com/"}`. An empty array clears
+it. Names are unique, 1–40 characters, and URLs must use HTTPS without
+credentials, custom ports, or fragments. The list is stored alongside the
+router configuration as `olr.json.latency-sites`; measurements are not persisted.
+`GET /api/gateway/latency` includes `custom` measurements (with nullable
+`milliseconds` and `checked_at`) in addition to the existing `sites` candidate
+list. Edits reset custom results until the next probe. A failed probe never
+retains a previous successful value.

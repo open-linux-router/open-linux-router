@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -156,5 +158,65 @@ func TestLatencyDNSProbeFailure(t *testing.T) {
 	m.sample(context.Background())
 	if got := m.Snapshot().DNSMilliseconds; got == nil || *got != 12 {
 		t.Fatalf("DNS latency = %v", got)
+	}
+}
+
+func TestCustomLatencyPersistenceAndProbes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sites.json")
+	m, err := NewCustomLatencyMonitor(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sites := []CustomLatencySite{{Name: "YouTube", URL: "https://www.youtube.com/"}, {Name: "WeChat", URL: "https://weixin.qq.com/"}}
+	if err := m.Replace(sites); err != nil {
+		t.Fatal(err)
+	}
+	m, err = NewCustomLatencyMonitor(path)
+	if err != nil || !reflect.DeepEqual(m.Config(), sites) {
+		t.Fatalf("reload: %v %v", m.Config(), err)
+	}
+	m.probe = func(_ context.Context, url string) (float64, error) {
+		if url == sites[0].URL {
+			return 42, nil
+		}
+		return 0, errors.New("offline")
+	}
+	m.sample(context.Background())
+	got := m.Snapshot()
+	if got[0].Milliseconds == nil || *got[0].Milliseconds != 42 || got[1].Milliseconds != nil || got[1].CheckedAt.IsZero() {
+		t.Fatalf("measurements: %+v", got)
+	}
+	if err := m.Replace(sites[:1]); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Snapshot()) != 1 || m.Snapshot()[0].Milliseconds != nil {
+		t.Fatal("edit must clear stale results")
+	}
+}
+
+func TestCustomLatencyValidationPreservesSettings(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := []CustomLatencySite{{Name: "Video", URL: "https://example.com/"}}
+	if err := m.Replace(valid); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []CustomLatencySite{
+		{Name: "Video", URL: "http://example.com"},
+		{Name: "Video", URL: "https://user:pass@example.com"},
+		{Name: "Video", URL: "https://example.com:8443"},
+		{Name: "Video", URL: "https://example.com/#fragment"},
+	} {
+		if err := m.Replace([]CustomLatencySite{bad}); err == nil {
+			t.Fatalf("accepted %+v", bad)
+		}
+		if !reflect.DeepEqual(m.Config(), valid) {
+			t.Fatal("rejected edit changed settings")
+		}
+	}
+	if err := m.Replace([]CustomLatencySite{valid[0], {Name: "video", URL: "https://other.com"}}); err == nil {
+		t.Fatal("duplicate names accepted")
 	}
 }

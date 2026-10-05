@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight, Info } from 'lucide-react'
+import { AlertTriangle, ChevronRight, Info, Plus, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 
@@ -16,7 +16,7 @@ import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
 import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
 import { servicesByDevice } from '@/features/topology/services'
 import { useHostMetrics, type HostMetrics } from '@/features/system/queries'
-import { useGatewayLatency, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
+import { useGatewayLatency, useSaveLatencySites, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
 import { NetworkMap } from '@/features/topology/network-map'
 import { buildOutside } from '@/features/topology/outside'
@@ -400,6 +400,48 @@ function MetricPill({ label, value, detail, percent, tone = 'blue', health }: {
   </div></div>
 }
 
+function SiteIcon({ name }: { name: string }) {
+  const brand = name.toLowerCase()
+  const known = brand.includes('wechat') || brand.includes('微信') ? { glyph: '微', color: '#07b75a' }
+    : brand.includes('youtube') ? { glyph: '▶', color: '#e62117' }
+      : { glyph: name.slice(0, 1).toUpperCase(), color: '#406e83' }
+  return <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white"
+    style={{ backgroundColor: known.color }}>{known.glyph}</span>
+}
+
+function LatencySitesDialog({ sites, onClose }: { sites: { name: string; url: string }[]; onClose: () => void }) {
+  const [draft, setDraft] = useState(sites.map(({ name, url }) => ({ name, url })))
+  const [name, setName] = useState('')
+  const [url, setUrl] = useState('')
+  const save = useSaveLatencySites()
+  const add = () => {
+    if (!name.trim() || !url.trim() || draft.length >= 12) return
+    setDraft([...draft, { name: name.trim(), url: url.trim() }])
+    setName('')
+    setUrl('')
+  }
+  return <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+    <DialogContent className="sm:max-w-lg">
+      <DialogHeader><DialogTitle>Sites to monitor</DialogTitle><DialogDescription>
+        This router sends an HTTPS HEAD request every minute. Use a URL that accepts HEAD; results measure this router, not individual devices.
+      </DialogDescription></DialogHeader>
+      <div className="max-h-64 space-y-2 overflow-y-auto">
+        {draft.map((site, i) => <div key={i} className="flex items-center gap-2 rounded-lg bg-muted/60 p-2 text-sm">
+          <SiteIcon name={site.name} /><span className="min-w-0 flex-1 truncate" title={site.url}>{site.name}</span>
+          <Button variant="ghost" size="icon" aria-label={`Remove ${site.name}`} onClick={() => setDraft(draft.filter((_, index) => index !== i))}><Trash2 className="size-4" /></Button>
+        </div>)}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+        <Input aria-label="Site name" placeholder="WeChat" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} />
+        <Input aria-label="HTTPS URL" placeholder="https://example.com/" value={url} onChange={(e) => setUrl(e.target.value)} />
+        <Button variant="outline" onClick={add} disabled={!name.trim() || !url.startsWith('https://') || draft.length >= 12}>Add</Button>
+      </div>
+      {save.isError && <p role="alert" className="text-sm text-destructive">{save.error.message}</p>}
+      <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={save.isPending} onClick={() => save.mutate(draft, { onSuccess: onClose })}>Save sites</Button></DialogFooter>
+    </DialogContent>
+  </Dialog>
+}
+
 function Stats({ devices, flows, host, faults, known, idle, failed, latency, latencyReadAt, latencyFailed, trafficFailed }: {
   devices?: DeviceRow[]
   flows: TrafficView
@@ -415,6 +457,7 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, lat
 }) {
   const [limits, setLimits] = useState(readLimits)
   const [editing, setEditing] = useState<Direction | null>(null)
+  const [sitesOpen, setSitesOpen] = useState(false)
   const saveLimits = (next: typeof limits) => {
     setLimits(next)
     try { localStorage.setItem(LIMITS_KEY, JSON.stringify(next)) } catch { /* private mode can disable storage */ }
@@ -447,6 +490,14 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, lat
       <div className="space-y-3 pt-2">
         <MetricPill label="Internet" value={latencyValue} detail={measured ? latency.milliseconds! < 100 ? 'Good' : latency.milliseconds! < 200 ? 'Fair' : 'Slow' : undefined} />
         <MetricPill label="DNS" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} detail={dnsMeasured ? latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow' : undefined} />
+        {!latencyFailed && latency?.custom?.map((site) => {
+          const fresh = site.checked_at && latencyReadAt - Date.parse(site.checked_at) < 90_000
+          return <div key={site.name} className="flex items-center gap-2 rounded-xl bg-muted/65 px-3 py-2 text-sm ring-1 ring-foreground/[0.06]" title={site.url}>
+            <SiteIcon name={site.name} /><span className="min-w-0 flex-1 truncate text-muted-foreground">{site.name}</span>
+            <span className="font-semibold tabular-nums">{fresh ? site.milliseconds == null ? 'No response' : `${site.milliseconds.toFixed(0)} ms` : '—'}</span>
+          </div>
+        })}
+        <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => setSitesOpen(true)}><Plus className="size-3" /> Monitor sites</button>
       </div>
     </StatCard>
     <StatCard title="System">
@@ -457,6 +508,7 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, lat
           detail={host ? `${memoryPercent?.toFixed(0)}% of ${formatBytes(host.memory_total_bytes)}` : undefined} percent={memoryPercent} tone="neutral" />
       </div>
     </StatCard>
+    {sitesOpen && <LatencySitesDialog sites={latency?.custom ?? []} onClose={() => setSitesOpen(false)} />}
     <BandwidthLimitDialog key={editing ?? 'closed'} direction={editing} limits={limits} onClose={() => setEditing(null)} onSave={saveLimits} />
   </div>
 }

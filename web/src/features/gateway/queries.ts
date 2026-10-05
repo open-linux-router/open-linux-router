@@ -170,3 +170,12 @@ export function useGatewayLatency() {
     refetchInterval: OBSERVED_REFETCH_MS,
   })
 }
+
+export function useSaveLatencySites() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sites: { name: string; url: string }[]) =>
+      api.put('/api/gateway/latency/sites', sites),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['gateway', 'latency'] }),
+  })
+}
