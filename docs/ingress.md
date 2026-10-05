@@ -49,6 +49,11 @@ per service. So the object the operator creates has two fields:
 | `name` | `grafana` | the label under the network's local domain |
 | `upstream` | NUC : 3000 | where the request goes |
 
+An optional `link_path` (for example `/ui`) is only for the Overview
+shortcut and icon discovery. It opens that page under the published name;
+it does not rewrite requests or alter the Caddyfile. If the homepage redirects
+to a page with an icon, icon discovery follows same-origin HTTPS redirects.
+
 Everything else is derived and never asked:
 
 - the certificate — one wildcard covers every name that will ever exist

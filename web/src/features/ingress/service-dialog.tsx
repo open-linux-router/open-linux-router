@@ -101,7 +101,8 @@ export function ServiceDialog({
 
   const name = draft.name.trim()
   const complete =
-    name !== '' && draft.upstream.port > 0 && (target !== MANUAL || (draft.upstream.host ?? '') !== '')
+    name !== '' && draft.upstream.port > 0 && (target !== MANUAL || (draft.upstream.host ?? '') !== '') &&
+    (!draft.link_path || /^\/(?!\/)[a-zA-Z0-9/_~.-]*$/.test(draft.link_path))
 
   return (
     <Dialog
@@ -212,6 +213,15 @@ export function ServiceDialog({
             />
             <p className="text-xs text-muted-foreground">
               The port you use today, the one in the address with the number in it.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="svc-link-path">Page path (optional)</Label>
+            <Input id="svc-link-path" value={draft.link_path ?? ''} placeholder="/ui"
+              autoComplete="off" onChange={(e) => setDraft((d) => ({ ...d, link_path: e.target.value }))} />
+            <p className="text-xs text-muted-foreground">
+              Open this page and use its icon when the site's homepage has none. This does not change proxy routing.
             </p>
           </div>
 

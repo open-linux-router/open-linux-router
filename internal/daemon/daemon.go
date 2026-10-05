@@ -359,11 +359,7 @@ func run(args []string) error {
 		Seen:     seen,
 	}
 
-	webDiscovery := devices.NewWebDiscovery(devices.WebPath(opts.root))
-	webDiscovery.Client = devices.WebClient()
-	webDiscovery.Log = logger
 	srv.Mount(devices.ModuleName, devices.HTTP{
-		Web:     webDiscovery,
 		Applier: devicesApplier,
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
@@ -627,10 +623,6 @@ func run(args []string) error {
 	}, superviseEvery, logger)
 
 	go seen.Run(ctx, seenEvery, seenWrite)
-	go webDiscovery.Run(ctx, func(ctx context.Context) ([]devices.Resolved, error) {
-		list, _, err := devicesApplier.List(ctx)
-		return list, err
-	})
 	go latency.Run(ctx)
 
 	var listeners []net.Listener

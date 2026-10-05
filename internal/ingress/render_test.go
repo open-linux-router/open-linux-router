@@ -226,3 +226,20 @@ func TestNormalizeStripsTheDomainSuffix(t *testing.T) {
 		t.Errorf("the second write should have replaced the first, got %q", c.Services[0].Upstream.Host)
 	}
 }
+
+func TestLinkPathDoesNotChangeProxyConfiguration(t *testing.T) {
+	c := good()
+	backend := NewCaddy(RootedPaths(t.TempDir()))
+	before, err := backend.Render(c, goodDNS(), goodDevices())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Services[0].LinkPath = "/ui"
+	after, err := backend.Render(c, goodDNS(), goodDevices())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conf(t, before) != conf(t, after) {
+		t.Fatal("link path changed the Caddyfile")
+	}
+}

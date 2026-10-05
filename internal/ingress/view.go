@@ -105,7 +105,7 @@ type serviceView struct {
 func viewService(s Service, domain string, devices DeviceView) serviceView {
 	v := serviceView{
 		Name:   s.Name,
-		URL:    "https://" + qualify(s.Name, domain),
+		URL:    "https://" + qualify(s.Name, domain) + s.LinkPath,
 		Device: s.Upstream.Device,
 		Host:   s.Upstream.Host,
 		Port:   s.Upstream.Port,

@@ -29,8 +29,6 @@ type HTTP struct {
 
 	// Events is where a change is announced so other clients re-read.
 	Events *core.Events
-
-	Web *WebDiscovery
 }
 
 // Routes is the module's surface, declared as data so that it can be
@@ -92,17 +90,6 @@ func (h HTTP) Routes() []core.Route {
 			Summary: "Show what a change to the device inventory would do without doing it.",
 			Body:    core.BodyRelaxed,
 			Handler: h.postPlan,
-		},
-
-		{
-			Method: "GET", Path: "/web", Tool: "show discovered web pages",
-			Summary: "List device management pages found by the daily local network probe.",
-			Handler: h.getWeb,
-		},
-		{
-			Method: "GET", Path: "/web/{mac}/icon",
-			Summary: "Show the discovered management page icon for one device.",
-			Handler: h.getWebIcon,
 		},
 
 		// The join. Observed half never stored, always stamped (§4.5).
@@ -480,27 +467,4 @@ func (h HTTP) getList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	core.WriteJSON(w, http.StatusOK, resp)
-}
-
-func (h HTTP) getWeb(w http.ResponseWriter, r *http.Request) {
-	if h.Web == nil {
-		core.WriteJSON(w, http.StatusOK, []WebSite{})
-		return
-	}
-	core.WriteJSON(w, http.StatusOK, h.Web.Sites())
-}
-
-func (h HTTP) getWebIcon(w http.ResponseWriter, r *http.Request) {
-	if h.Web == nil {
-		http.NotFound(w, r)
-		return
-	}
-	data, kind := h.Web.Icon(r.PathValue("mac"))
-	if len(data) == 0 {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", kind)
-	w.Header().Set("Cache-Control", "private, max-age=3600")
-	w.Write(data)
 }

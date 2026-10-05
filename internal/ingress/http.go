@@ -197,26 +197,26 @@ func (h HTTP) getServiceIcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
-	found := false
-	for _, service := range cfg.Services {
-		if service.Name == name {
-			found = true
+	var matched *Service
+	for i := range cfg.Services {
+		if cfg.Services[i].Name == name {
+			matched = &cfg.Services[i]
 			break
 		}
 	}
-	if !found {
+	if matched == nil {
 		http.NotFound(w, r)
 		return
 	}
 	domain := h.Applier.DNS.LocalDomain()
-	origin := (&url.URL{Scheme: "https", Host: qualify(name, domain)}).String()
+	origin := (&url.URL{Scheme: "https", Host: qualify(name, domain), Path: matched.LinkPath}).String()
 	data, kind, err := serviceIcon(r.Context(), h.IconClient, origin)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", kind)
-	w.Header().Set("Cache-Control", "private, max-age=3600")
+	w.Header().Set("Cache-Control", "private, no-store")
 	w.Write(data)
 }
 

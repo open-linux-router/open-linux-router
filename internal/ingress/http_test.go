@@ -2,6 +2,7 @@ package ingress
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -264,5 +265,54 @@ func TestReapplyNeedsNoConfirm(t *testing.T) {
 	publish(t, h)
 	if w := do(t, h, http.MethodPost, "/apply", ""); w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body)
+	}
+}
+
+func TestServiceLinkPathRoundTrips(t *testing.T) {
+	h, applier := testHTTP(t)
+	publish(t, h)
+	w := do(t, h, http.MethodPut, "/services/grafana", `{"upstream":{"device":"nuc","port":3000},"link_path":"/ui"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", w.Code, w.Body)
+	}
+	stored, err := applier.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := stored.Services[0].LinkPath; got != "/ui" {
+		t.Fatalf("stored path = %q", got)
+	}
+	got := do(t, h, http.MethodGet, "/config", "")
+	if !strings.Contains(got.Body.String(), `"link_path":"/ui"`) {
+		t.Fatalf("config = %s", got.Body)
+	}
+}
+
+func TestServiceIconUsesStoredLinkPath(t *testing.T) {
+	h, applier := testHTTP(t)
+	publish(t, h)
+	if w := do(t, h, http.MethodPut, "/services/grafana", `{"upstream":{"device":"nuc","port":3000},"link_path":"/ui"}`); w.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", w.Code, w.Body)
+	}
+	var paths []string
+	iconHandler := HTTP{Applier: applier, IconClient: &http.Client{Transport: iconTransport(func(r *http.Request) (*http.Response, error) {
+		paths = append(paths, r.URL.Path)
+		body := ""
+		status := http.StatusOK
+		if r.URL.Path == "/ui" {
+			body = `<html><head><link rel="icon" href="/ui/icon.png"></head></html>`
+		} else if r.URL.Path == "/ui/icon.png" {
+			body = "\x89PNG\r\n\x1a\n" + strings.Repeat("x", 512)
+		} else {
+			status = http.StatusNotFound
+		}
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header), Request: r}, nil
+	})}}.Handler()
+	w := do(t, iconHandler, http.MethodGet, "/services/grafana/icon", "")
+	if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("icon: %d %s (%v)", w.Code, w.Body, paths)
+	}
+	if paths[0] != "/ui" {
+		t.Fatalf("first path = %s", paths[0])
 	}
 }

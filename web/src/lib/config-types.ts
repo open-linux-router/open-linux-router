@@ -34,6 +34,7 @@
 // with it, which breaks `npm run build` for every module that imports it. So the
 // file still cannot be regenerated wholesale until the UI is moved onto the
 // generated names; until then this header is the record of what is hand-kept.
+// `Service.link_path` follows internal/ingress/config.go for the same reason.
 
 /**
  * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
@@ -405,6 +406,7 @@ export interface Certificate {
 export interface Service {
   name: string
   upstream: UpstreamIngress
+  link_path?: string
 }
 export interface UpstreamIngress {
   device?: string

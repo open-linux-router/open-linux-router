@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -184,6 +185,14 @@ func validateServices(r *Result, c Config, domain string, dns DNSView, devices D
 				"Rename the service, or remove the name with `olr dns rm host %s`", qualify(s.Name, domain), s.Name)
 		}
 
+		if s.LinkPath != "" {
+			parsed, err := url.Parse(s.LinkPath)
+			if err != nil || !strings.HasPrefix(s.LinkPath, "/") || strings.HasPrefix(s.LinkPath, "//") ||
+				parsed.IsAbs() || parsed.Host != "" || parsed.User != nil || parsed.Fragment != "" ||
+				parsed.ForceQuery || parsed.RawQuery != "" || parsed.EscapedPath() != s.LinkPath || strings.Contains(s.LinkPath, "%") || strings.Contains(s.LinkPath, "\\") {
+				r.errorf(path+".link_path", "use a local path such as /ui, without a query or fragment")
+			}
+		}
 		validateUpstream(r, path+".upstream", s.Upstream, devices)
 	}
 }

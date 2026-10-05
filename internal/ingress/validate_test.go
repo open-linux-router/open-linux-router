@@ -259,3 +259,21 @@ func TestErrNamesTheModule(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestValidateServiceLinkPath(t *testing.T) {
+	for _, path := range []string{"/ui", "/ui/", "/app/v2"} {
+		c := good()
+		c.Services[0].LinkPath = path
+		if r := Validate(c, goodDNS(), goodDevices()); !r.OK() {
+			t.Errorf("%q: %v", path, r.Errors)
+		}
+	}
+	for _, path := range []string{"ui", "//other.example/", "https://other.example/", "/ui?token=secret", "/ui?", "/ui#section", "/%2f%2fother", "/ui\\evil"} {
+		c := good()
+		c.Services[0].LinkPath = path
+		r := Validate(c, goodDNS(), goodDevices())
+		if r.OK() {
+			t.Errorf("%q: expected invalid path", path)
+		}
+	}
+}

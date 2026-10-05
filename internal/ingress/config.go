@@ -131,7 +131,7 @@ func (c Certificate) ResolversOrDefault() []string {
 
 // Service is one published name.
 //
-// Two fields, and that is the module's entire claim: the certificate, the DNS
+// Two routing fields, and that is the module's entire claim: the certificate, the DNS
 // record, the proxy stanza and the `:80` redirect are all derived from things
 // established once when the module was enabled (docs/ingress.md §1).
 type Service struct {
@@ -144,6 +144,10 @@ type Service struct {
 
 	// Upstream is where a request for this name is sent.
 	Upstream Upstream `json:"upstream"`
+
+	// LinkPath is the optional page opened from the UI, not a proxy rewrite.
+	// A dashboard under /ui still receives requests through the same host.
+	LinkPath string `json:"link_path,omitempty"`
 }
 
 // Upstream is the target of a published service.
@@ -273,6 +277,7 @@ func (c *Config) Normalize() {
 	for i := range c.Services {
 		s := &c.Services[i]
 		s.Name = strings.TrimSpace(strings.ToLower(s.Name))
+		s.LinkPath = strings.TrimSpace(s.LinkPath)
 		s.Upstream.Host = strings.TrimSpace(s.Upstream.Host)
 		s.Upstream.Device = strings.TrimSpace(s.Upstream.Device)
 	}

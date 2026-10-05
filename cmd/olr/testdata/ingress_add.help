@@ -18,6 +18,7 @@ Flags:
       --device olr devices list   device to publish, by its name in olr devices list
   -h, --help                      help for add
       --host string               address or hostname to publish, for a target that is not a device
+      --link-path string          page path to open and use for its icon (e.g. /ui); does not change proxy routing
       --port uint16               port the service listens on
       --scheme string             how to reach it: http, https (default http)
 

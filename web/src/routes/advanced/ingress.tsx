@@ -314,7 +314,7 @@ function ServiceList({
   return (
     <List>
       {services.map((s) => {
-        const url = domain ? `https://${s.name}.${domain}` : undefined
+        const url = domain ? `https://${s.name}.${domain}${s.link_path ?? ''}` : undefined
         return (
           <ListRow
             key={s.name}
@@ -350,7 +350,7 @@ function ServiceList({
 function describeService(s: Service, domain?: string): string {
   const where = s.upstream.device || s.upstream.host || '?'
   const scheme = s.upstream.scheme === 'https' ? ' over https' : ''
-  const address = domain ? `${s.name}.${domain}` : s.name
+  const address = domain ? `${s.name}.${domain}${s.link_path ?? ''}` : `${s.name}${s.link_path ?? ''}`
   return `${address} → ${where}:${s.upstream.port}${scheme}`
 }
 

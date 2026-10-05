@@ -355,6 +355,7 @@ func (f *upstreamFlags) apply(u *Upstream, c *cobra.Command) {
 
 func addCommand() *cobra.Command {
 	var flags upstreamFlags
+	var linkPath string
 
 	c := verb("add", "Publish a service at a name", func(c *cobra.Command) {
 		c.Use = "add <name>"
@@ -370,12 +371,13 @@ func addCommand() *cobra.Command {
 			"  olr ingress add nas --device synology --port 5001 --scheme https\n" +
 			"  olr ingress add hello --host 127.0.0.1 --port 8000"
 		flags.register(c)
+		c.Flags().StringVar(&linkPath, "link-path", "", "page path to open and use for its icon (e.g. /ui); does not change proxy routing")
 		c.RunE = func(c *cobra.Command, args []string) error {
 			// One request to the item route, not load-splice-save. The daemon
 			// holds the lock across the whole edit that way, and the rule that
 			// reduces `grafana` and `grafana.home.example.com` to one entry lives
 			// there rather than here (http.go).
-			s := Service{Name: args[0]}
+			s := Service{Name: args[0], LinkPath: linkPath}
 			flags.apply(&s.Upstream, c)
 			return send(c, "PUT", serviceEndpoint(args[0]), s)
 		}

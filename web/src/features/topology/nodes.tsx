@@ -33,7 +33,6 @@ import { DeviceIcon } from '@/features/devices/device-icon'
 import type { GroupDeletion } from '@/features/devices/group-actions'
 import { groupOptions, MAX_GROUP_DEPTH, parentChoices } from '@/features/devices/group-tree'
 
-import type { DiscoveredWeb } from '@/features/topology/discovered'
 import type { Density, GroupVariant, Hidden } from '@/features/topology/layout'
 import type { MapGroup } from '@/features/topology/model'
 import type { Outside } from '@/features/topology/outside'
@@ -49,7 +48,6 @@ import { cn, formatAgo, formatBytes, formatRate, formatRateCompact } from '@/lib
  */
 export interface MapActions {
   onSelect?: (device: DeviceRow) => void
-  onMoveDevice?: (device: DeviceRow, group: string) => void
   onCreateGroup?: (parent?: string) => void
   onRenameGroup?: (name: string) => void
   onDeleteGroup?: (deletion: GroupDeletion) => void
@@ -424,28 +422,24 @@ function GroupMenu({ group, groups, actions }: { group: MapGroup; groups: Device
 export function DeviceNode({
   device,
   services,
-  discovered,
   serviceDomain,
   density,
   row,
   traffic,
   busiest,
-  groups,
   actions,
 }: {
   device: DeviceRow
   services?: Service[]
-  discovered?: DiscoveredWeb
   serviceDomain?: string
   density: Density
   /** Drawn as a row of its container's list rather than as a card of its own. */
   row?: { first: boolean }
   traffic: TrafficView
   busiest: number
-  groups: DevicesGroup[]
   actions: MapActions
 }) {
-  const { onSelect, onMoveDevice } = actions
+  const { onSelect } = actions
   const name = device.name || device.mac
   const flow = traffic.flowOf(device)
   const share = busiest > 0 ? magnitude(flow, traffic.rated) / busiest : 0
@@ -462,7 +456,7 @@ export function DeviceNode({
           title={name}
           className={cn(
             'flex size-full min-w-0 items-center gap-3 rounded-lg px-3 text-left transition-colors',
-            (services?.length || discovered) && 'pb-[60px]',
+            services?.length && 'pb-6',
             onSelect && 'hover:bg-foreground/[0.035]',
             focusRing,
           )}
@@ -488,16 +482,7 @@ export function DeviceNode({
             <DeviceTraffic device={device} flow={flow} rated={traffic.rated} counting={traffic.counting} />
           </span>
         </Shell>
-        <ServiceLinks services={services} discovered={discovered} domain={serviceDomain} className="absolute bottom-1.5 left-[60px] right-3" />
-        {onMoveDevice && (
-          <DeviceMenu
-            device={device}
-            groups={groups}
-            onSelect={onSelect}
-            onMove={onMoveDevice}
-            onCreateGroup={actions.onCreateGroup}
-          />
-        )}
+        <ServiceLinks services={services} domain={serviceDomain} className="absolute bottom-1 left-[64px] right-2" />
       </div>
     )
   }
@@ -506,7 +491,7 @@ export function DeviceNode({
     'flex size-full min-w-0 items-center rounded-lg border bg-card text-left shadow-xs transition-[border-color,box-shadow]',
     onSelect && 'hover:border-foreground/20 hover:shadow-sm',
     focusRing,
-    (services?.length || discovered) && 'pb-[60px]',
+    services?.length && 'pb-6',
   )
 
   const body =
@@ -567,60 +552,45 @@ export function DeviceNode({
   return (
     <div className="group/node relative size-full">
       {body}
-      <ServiceLinks services={services} discovered={discovered} domain={serviceDomain} className="absolute bottom-1.5 left-3 right-3" />
-      {onMoveDevice && (
-        <DeviceMenu
-          device={device}
-          groups={groups}
-          onSelect={onSelect}
-          onMove={onMoveDevice}
-          onCreateGroup={actions.onCreateGroup}
-        />
-      )}
+      <ServiceLinks services={services} domain={serviceDomain} className="absolute bottom-1 left-3 right-2" />
     </div>
   )
 }
 
 /** Links sit beside, not inside, the device detail button. */
-function ServiceLinks({ services = [], discovered, domain, className }: { services?: Service[]; discovered?: DiscoveredWeb; domain?: string; className: string }) {
-  if (!services.length && !discovered) return null
+function ServiceLinks({ services, domain, className }: { services?: Service[]; domain?: string; className: string }) {
+  if (!services?.length) return null
   return (
-    <span className={cn('flex h-[52px] min-w-0 flex-wrap content-center items-center gap-1 overflow-hidden', className)}>
-      {services.slice(0, discovered ? 7 : 8).map((service) => {
+    <span className={cn('flex h-6 min-w-0 items-center gap-0.5 overflow-hidden pl-0.5', className)}>
+      {services.slice(0, 8).map((service) => {
         const label = domain ? `${service.name}.${domain}` : service.name
-        const tile = <ServiceIcon name={service.name} />
+        const tile = <ServiceIcon key={`${service.name}:${service.link_path ?? ''}`} name={service.name} />
         return domain ? (
-          <a key={service.name} href={`https://${label}`} target="_blank" rel="noopener noreferrer"
-            title={`Open ${label}`} aria-label={`Open ${label}`}
-            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted hover:ring-1 hover:ring-foreground/30 focus-visible:outline-2">
+          <a key={service.name} href={`https://${label}${service.link_path ?? ''}`} target="_blank" rel="noopener noreferrer"
+            title={`Open ${label}${service.link_path ?? ''}`} aria-label={`Open ${label}${service.link_path ?? ''}`}
+            className="flex size-5 shrink-0 items-center justify-center rounded bg-muted hover:ring-1 hover:ring-foreground/30 focus-visible:outline-2">
             {tile}
           </a>
         ) : (
-          <span key={service.name} title={service.name} className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted">{tile}</span>
+          <span key={service.name} title={service.name} className="flex size-5 shrink-0 items-center justify-center rounded bg-muted">{tile}</span>
         )
       })}
-      {discovered && (
-        <a href={discovered.url} target="_blank" rel="noopener noreferrer" title={`Open ${discovered.ip}`}
-          aria-label={`Open ${discovered.ip}`} className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted hover:ring-1 hover:ring-foreground/30 focus-visible:outline-2">
-          <ServiceIcon name={discovered.ip} source={`/api/devices/web/${encodeURIComponent(discovered.mac)}/icon`} />
-        </a>
-      )}
-      {services.length > (discovered ? 7 : 8) && (
-        <span className="flex h-6 shrink-0 items-center text-[11px] text-muted-foreground" title={services.slice(discovered ? 7 : 8).map((s) => s.name).join(', ')}>
-          +{services.length - (discovered ? 7 : 8)}
+      {services.length > 8 && (
+        <span className="flex h-5 shrink-0 items-center text-[11px] text-muted-foreground" title={services.slice(8).map((s) => s.name).join(', ')}>
+          +{services.length - 8}
         </span>
       )}
     </span>
   )
 }
 
-function ServiceIcon({ name, source }: { name: string; source?: string }) {
+function ServiceIcon({ name }: { name: string }) {
   const [icon, setIcon] = useState<string>()
   useEffect(() => {
     const controller = new AbortController()
     let objectURL: string | undefined
     const token = getToken()
-    fetch(source ?? `/api/ingress/services/${encodeURIComponent(name)}/icon`, {
+    fetch(`/api/ingress/services/${encodeURIComponent(name)}/icon`, {
       signal: controller.signal,
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     }).then(async (response) => {
@@ -633,11 +603,11 @@ function ServiceIcon({ name, source }: { name: string; source?: string }) {
       controller.abort()
       if (objectURL) URL.revokeObjectURL(objectURL)
     }
-  }, [name, source])
+  }, [name])
   return icon ? (
-    <img src={icon} alt="" className="size-5 rounded-sm object-contain" />
+    <img src={icon} alt="" className="size-4 rounded-sm object-contain" />
   ) : (
-    <span className="text-[10px] font-semibold uppercase" aria-hidden>{source ? 'IP' : name.slice(0, 2)}</span>
+    <span className="text-[10px] font-semibold uppercase" aria-hidden>{name.slice(0, 2)}</span>
   )
 }
 
@@ -742,110 +712,20 @@ function Quiet({ device }: { device: DeviceRow }) {
   )
 }
 
-/**
- * The quick way to move a device, one click from the map.
- *
- * Revealed on hover, and only where there is hover: on a phone the node opens
- * the detail sheet, which has the same choice, and a button on every one of
- * sixty nodes would be clutter nobody could aim at.
- */
-function DeviceMenu({
-  device,
-  groups,
-  onSelect,
-  onMove,
-  onCreateGroup,
-}: {
-  device: DeviceRow
-  groups: DevicesGroup[]
-  onSelect?: (device: DeviceRow) => void
-  onMove: (device: DeviceRow, group: string) => void
-  /** Where a new top-level group is made, now that the map has no toolbar. */
-  onCreateGroup?: (parent?: string) => void
-}) {
-  const options = groupOptions(groups)
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="outline"
-            size="icon-xs"
-            className="absolute top-1/2 right-1.5 -translate-y-1/2 bg-card text-muted-foreground opacity-0 shadow-xs group-hover/node:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100 pointer-coarse:hidden"
-            aria-label={`${device.name || device.mac} options`}
-          />
-        }
-      >
-        <MoreHorizontal />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        {onSelect && (
-          <>
-            <DropdownMenuItem onClick={() => onSelect(device)}>
-              <Pencil /> Details…
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-          </>
-        )}
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <FolderInput /> Move to group
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="min-w-44">
-            {options.length === 0 ? (
-              <DropdownMenuItem disabled>No groups yet</DropdownMenuItem>
-            ) : (
-              <DropdownMenuRadioGroup
-                value={device.group ?? ''}
-                onValueChange={(value: string) => {
-                  if (value !== (device.group ?? '')) onMove(device, value)
-                }}
-              >
-                {options.map((g) => (
-                  <DropdownMenuRadioItem key={g.name} value={g.name}>
-                    <span style={{ paddingLeft: g.depth * 12 }}>{g.name}</span>
-                  </DropdownMenuRadioItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuRadioItem value="">No group</DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            )}
-            {onCreateGroup && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onCreateGroup()}>
-                  <FolderPlus /> New group…
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
 /* -------------------------------------------------------------------------- */
 /* Folds, picks and notes                                                     */
 /* -------------------------------------------------------------------------- */
 
-/** "+40 more devices", "+3 more groups", "+12 more devices and 2 groups". */
+/** A fold counts devices and groups, but not the "Other devices" bucket. */
 function describeHidden(h: Hidden, others?: boolean) {
   const devices = h.devices === 1 ? 'device' : 'devices'
   const groups = h.groups === 1 ? 'group' : 'groups'
-  // "Other devices" is not a group, so a fold that hides it does not count it
-  // as one.
   if (others) return h.groups > 0 ? `+${h.groups + 1} more` : 'Other devices'
   if (h.devices && h.groups) return `+${h.devices} more ${devices} and ${h.groups} ${groups}`
   if (h.groups) return `+${h.groups} more ${groups}`
   return `+${h.devices} more ${devices}`
 }
 
-/**
- * The fold. As a row it spans its container under the last child it shows;
- * as a card it takes the last place in a row of containers or of fanned-out
- * nodes. Either way it opens in place, and reads "Show fewer" once open.
- */
 export function MoreNode({
   variant,
   open,
