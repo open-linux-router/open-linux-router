@@ -730,10 +730,10 @@ function DeviceActivity({ device, flow, rated, counting }: {
   const up = flow.upRate ?? 0
   const label = `Live speed: download ${formatRate(down)}, upload ${formatRate(up)}`
   return (
-    <span className="inline-flex flex-col items-end align-middle" title={label} aria-label={label}>
+    <span className="inline-flex w-full flex-col align-middle" title={label} aria-label={label}>
       {([['↓', down], ['↑', up]] as const).map(([arrow, rate]) => (
-        <span key={arrow} aria-hidden className="inline-flex items-center gap-0.5 leading-[12px]">
-          <span>{arrow}</span><span>{formatRateCompact(rate)}</span>
+        <span key={arrow} aria-hidden className="grid grid-cols-[10px_1fr] items-center gap-0.5 leading-[12px]">
+          <span className="text-center">{arrow}</span><span className="text-right">{formatRateCompact(rate)}</span>
         </span>
       ))}
     </span>

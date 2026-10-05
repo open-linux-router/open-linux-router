@@ -61,13 +61,13 @@ export function formatAgo(iso: string, now = Date.now()): string {
  * unit, "8.8K" and "415M" rather than "8.8 kbps" and "415 Mbps". The row
  * already says these are rates by its arrows, and at a glance the digits that
  * matter are the first two and the letter — the rest was width taken from the
- * device's name. Below a kilobit, show the actual rounded bit rate rather
- * than claiming a slow connection is already moving at 1k. Nothing is "0".
+ * device's name. Below a kilobit, show the actual rounded bit rate with a B
+ * suffix rather than claiming a slow connection is already moving at 1K.
  */
 export function formatRateCompact(bytesPerSecond: number): string {
   const bits = bytesPerSecond * 8
-  if (bits < 0.5) return '0'
-  if (bits < 1000) return String(Math.round(bits))
+  if (bits < 0.5) return '0B'
+  if (bits < 1000) return `${Math.round(bits)}B`
   const units = ['K', 'M', 'G', 'T']
   let value = bits / 1000
   let i = 0
