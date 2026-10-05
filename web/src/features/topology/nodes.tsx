@@ -33,6 +33,7 @@ import { DeviceIcon } from '@/features/devices/device-icon'
 import type { GroupDeletion } from '@/features/devices/group-actions'
 import { groupOptions, MAX_GROUP_DEPTH, parentChoices } from '@/features/devices/group-tree'
 
+import type { DiscoveredWeb } from '@/features/topology/discovered'
 import type { Density, GroupVariant, Hidden } from '@/features/topology/layout'
 import type { MapGroup } from '@/features/topology/model'
 import type { Outside } from '@/features/topology/outside'
@@ -423,6 +424,7 @@ function GroupMenu({ group, groups, actions }: { group: MapGroup; groups: Device
 export function DeviceNode({
   device,
   services,
+  discovered,
   serviceDomain,
   density,
   row,
@@ -433,6 +435,7 @@ export function DeviceNode({
 }: {
   device: DeviceRow
   services?: Service[]
+  discovered?: DiscoveredWeb
   serviceDomain?: string
   density: Density
   /** Drawn as a row of its container's list rather than as a card of its own. */
@@ -459,7 +462,7 @@ export function DeviceNode({
           title={name}
           className={cn(
             'flex size-full min-w-0 items-center gap-3 rounded-lg px-3 text-left transition-colors',
-            services?.length && 'pb-[60px]',
+            (services?.length || discovered) && 'pb-[60px]',
             onSelect && 'hover:bg-foreground/[0.035]',
             focusRing,
           )}
@@ -485,7 +488,7 @@ export function DeviceNode({
             <DeviceTraffic device={device} flow={flow} rated={traffic.rated} counting={traffic.counting} />
           </span>
         </Shell>
-        <ServiceLinks services={services} domain={serviceDomain} className="absolute bottom-1.5 left-[60px] right-3" />
+        <ServiceLinks services={services} discovered={discovered} domain={serviceDomain} className="absolute bottom-1.5 left-[60px] right-3" />
         {onMoveDevice && (
           <DeviceMenu
             device={device}
@@ -503,7 +506,7 @@ export function DeviceNode({
     'flex size-full min-w-0 items-center rounded-lg border bg-card text-left shadow-xs transition-[border-color,box-shadow]',
     onSelect && 'hover:border-foreground/20 hover:shadow-sm',
     focusRing,
-    services?.length && 'pb-[60px]',
+    (services?.length || discovered) && 'pb-[60px]',
   )
 
   const body =
@@ -564,7 +567,7 @@ export function DeviceNode({
   return (
     <div className="group/node relative size-full">
       {body}
-      <ServiceLinks services={services} domain={serviceDomain} className="absolute bottom-1.5 left-3 right-3" />
+      <ServiceLinks services={services} discovered={discovered} domain={serviceDomain} className="absolute bottom-1.5 left-3 right-3" />
       {onMoveDevice && (
         <DeviceMenu
           device={device}
@@ -579,11 +582,11 @@ export function DeviceNode({
 }
 
 /** Links sit beside, not inside, the device detail button. */
-function ServiceLinks({ services, domain, className }: { services?: Service[]; domain?: string; className: string }) {
-  if (!services?.length) return null
+function ServiceLinks({ services = [], discovered, domain, className }: { services?: Service[]; discovered?: DiscoveredWeb; domain?: string; className: string }) {
+  if (!services.length && !discovered) return null
   return (
     <span className={cn('flex h-[52px] min-w-0 flex-wrap content-center items-center gap-1 overflow-hidden', className)}>
-      {services.slice(0, 8).map((service) => {
+      {services.slice(0, discovered ? 7 : 8).map((service) => {
         const label = domain ? `${service.name}.${domain}` : service.name
         const tile = <ServiceIcon name={service.name} />
         return domain ? (
@@ -596,22 +599,28 @@ function ServiceLinks({ services, domain, className }: { services?: Service[]; d
           <span key={service.name} title={service.name} className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted">{tile}</span>
         )
       })}
-      {services.length > 8 && (
-        <span className="flex h-6 shrink-0 items-center text-[11px] text-muted-foreground" title={services.slice(8).map((s) => s.name).join(', ')}>
-          +{services.length - 8}
+      {discovered && (
+        <a href={discovered.url} target="_blank" rel="noopener noreferrer" title={`Open ${discovered.ip}`}
+          aria-label={`Open ${discovered.ip}`} className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted hover:ring-1 hover:ring-foreground/30 focus-visible:outline-2">
+          <ServiceIcon name={discovered.ip} source={`/api/devices/web/${encodeURIComponent(discovered.mac)}/icon`} />
+        </a>
+      )}
+      {services.length > (discovered ? 7 : 8) && (
+        <span className="flex h-6 shrink-0 items-center text-[11px] text-muted-foreground" title={services.slice(discovered ? 7 : 8).map((s) => s.name).join(', ')}>
+          +{services.length - (discovered ? 7 : 8)}
         </span>
       )}
     </span>
   )
 }
 
-function ServiceIcon({ name }: { name: string }) {
+function ServiceIcon({ name, source }: { name: string; source?: string }) {
   const [icon, setIcon] = useState<string>()
   useEffect(() => {
     const controller = new AbortController()
     let objectURL: string | undefined
     const token = getToken()
-    fetch(`/api/ingress/services/${encodeURIComponent(name)}/icon`, {
+    fetch(source ?? `/api/ingress/services/${encodeURIComponent(name)}/icon`, {
       signal: controller.signal,
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     }).then(async (response) => {
@@ -624,11 +633,11 @@ function ServiceIcon({ name }: { name: string }) {
       controller.abort()
       if (objectURL) URL.revokeObjectURL(objectURL)
     }
-  }, [name])
+  }, [name, source])
   return icon ? (
     <img src={icon} alt="" className="size-5 rounded-sm object-contain" />
   ) : (
-    <span className="text-[10px] font-semibold uppercase" aria-hidden>{name.slice(0, 2)}</span>
+    <span className="text-[10px] font-semibold uppercase" aria-hidden>{source ? 'IP' : name.slice(0, 2)}</span>
   )
 }
 

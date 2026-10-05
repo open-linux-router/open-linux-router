@@ -17,6 +17,7 @@ import {
   type MapActions,
   type NetworkInfo,
 } from '@/features/topology/nodes'
+import type { DiscoveredWeb } from '@/features/topology/discovered'
 import type { Outside } from '@/features/topology/outside'
 import { magnitude, type TrafficView } from '@/features/topology/traffic'
 import type { AssignmentStatus, DeviceRow, ExitStatus, NetworkRow } from '@/lib/api-types'
@@ -58,6 +59,7 @@ import type { DevicesGroup, Pool, Service } from '@/lib/config-types'
 export function NetworkMap({
   devices: all,
   services = new Map(),
+  discovered = [],
   serviceDomain,
   groups = [],
   traffic,
@@ -74,6 +76,7 @@ export function NetworkMap({
 }: {
   devices: DeviceRow[]
   services?: Map<string, Service[]>
+  discovered?: DiscoveredWeb[]
   serviceDomain?: string
   groups?: DevicesGroup[]
   traffic: TrafficView
@@ -121,6 +124,7 @@ export function NetworkMap({
     <Canvas
       devices={all}
       services={services}
+      discovered={discovered}
       serviceDomain={serviceDomain}
       groups={groups}
       traffic={traffic}
@@ -154,6 +158,7 @@ const STILL: Transition = { duration: 0 }
 function Canvas({
   devices: all,
   services,
+  discovered,
   serviceDomain,
   groups,
   traffic,
@@ -167,6 +172,7 @@ function Canvas({
 }: {
   devices: DeviceRow[]
   services: Map<string, Service[]>
+  discovered: DiscoveredWeb[]
   serviceDomain?: string
   groups: DevicesGroup[]
   traffic: TrafficView
@@ -252,6 +258,20 @@ function Canvas({
     [outside],
   )
 
+  const discoveredByMac = useMemo(() => {
+    const ipOwners = new Map<string, number>()
+    for (const device of all) for (const ip of device.ips ?? []) ipOwners.set(ip, (ipOwners.get(ip) ?? 0) + 1)
+    const byMac = new Map<string, DiscoveredWeb>()
+    for (const site of discovered) {
+      const device = all.find((d) => d.mac === site.mac)
+      if (!device?.online || !device.ips?.includes(site.ip) || ipOwners.get(site.ip) !== 1) continue
+      const published = services.get(site.mac) ?? []
+      if (!published.some((s) => s.upstream.port === (site.url.startsWith('https:') ? 443 : 80) &&
+        (s.upstream.device || s.upstream.host === site.ip))) byMac.set(site.mac, site)
+    }
+    return byMac
+  }, [discovered, services, all])
+
   const [geo, density] = useMemo((): [Layout | null, Density] => {
     if (width === 0) return [null, wanted === 'auto' ? 'detail' : wanted]
     const at = (d: Density, f = focus) =>
@@ -265,7 +285,7 @@ function Canvas({
         counting: traffic.counting,
         rated: traffic.rated,
         outside: outsideInput,
-        serviceDevices: new Set(services.keys()),
+        serviceDevices: new Set([...services.keys(), ...discoveredByMac.keys()]),
       })
     if (wanted !== 'auto') return [at(wanted), wanted]
     // Decided on the unfocused map. Opening a "+N more" does not count against detail either: it is the
@@ -277,7 +297,7 @@ function Canvas({
     const whole = at('detail', undefined)
     const d: Density = !whole.narrow && !focus && (whole.fits || expanded.size > 0) ? 'detail' : 'compact'
     return [d === 'detail' ? whole : at(d), d]
-  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated, outsideInput, services])
+  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated, outsideInput, services, discoveredByMac])
 
   useEffect(() => {
     onDensity?.(density)
@@ -321,6 +341,7 @@ function Canvas({
           <DeviceNode
             device={item.device}
             services={services.get(item.device.mac)}
+            discovered={discoveredByMac.get(item.device.mac)}
             serviceDomain={serviceDomain}
             density={density}
             row={item.row}

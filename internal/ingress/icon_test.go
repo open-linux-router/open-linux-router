@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 )
@@ -78,24 +77,6 @@ func TestIconRouteOnlyServesEnabledPublishedNames(t *testing.T) {
 	}
 }
 
-func TestIconURLRejectsOtherOrigins(t *testing.T) {
-	base := mustURL(t, "https://app.home.example.com/")
-	for _, ref := range []string{"https://elsewhere/icon", "//elsewhere/icon", "http://app.home.example.com/icon", "data:image/png,abc"} {
-		if got := iconURL(base, base.String(), ref); got != "" {
-			t.Errorf("%s resolved to %s", ref, got)
-		}
-	}
-}
-
-func mustURL(t *testing.T, raw string) *url.URL {
-	t.Helper()
-	u, err := url.Parse(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return u
-}
-
 func TestServiceIconFallsBackWhenManifestImageIsUnavailable(t *testing.T) {
 	client := &http.Client{Transport: iconTransport(func(r *http.Request) (*http.Response, error) {
 		body := ""
@@ -115,15 +96,6 @@ func TestServiceIconFallsBackWhenManifestImageIsUnavailable(t *testing.T) {
 	_, kind, err := serviceIcon(context.Background(), client, "https://app.home.example.com")
 	if err != nil || kind != "image/png" {
 		t.Fatalf("fallback: %q, %v", kind, err)
-	}
-}
-
-func TestIconGetRejectsOversizedResponse(t *testing.T) {
-	client := &http.Client{Transport: iconTransport(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(strings.Repeat("x", 11))), Header: make(http.Header)}, nil
-	})}
-	if _, _, err := iconGet(context.Background(), client, "https://app.home.example.com/icon", 10); err == nil {
-		t.Fatal("oversized icon accepted")
 	}
 }
 

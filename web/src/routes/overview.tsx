@@ -12,6 +12,7 @@ import { useDialStatus } from '@/features/dial/queries'
 import { useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
 import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
+import { useDiscoveredWeb } from '@/features/topology/discovered'
 import { servicesByDevice } from '@/features/topology/services'
 import { useGatewayLatency, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
@@ -64,6 +65,7 @@ export function OverviewPage() {
   const identity = useDevicesConfig()
   const ingress = useIngressConfig()
   const ingressStatus = useIngressStatus()
+  const discovered = useDiscoveredWeb()
   const services = useMemo(() => servicesByDevice(ingress.data, devices.data?.devices ?? []), [ingress.data, devices.data])
   const flows = useTrafficView(traffic.data, traffic.isError)
   const history = useRateHistory(flows)
@@ -114,6 +116,7 @@ export function OverviewPage() {
         <NetworkMap
           devices={devices.data?.devices ?? []}
           services={services}
+          discovered={discovered.data}
           serviceDomain={ingressStatus.data?.domain}
           groups={identity.data?.groups}
           traffic={flows}
