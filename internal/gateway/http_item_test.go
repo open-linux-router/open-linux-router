@@ -14,6 +14,31 @@ import (
 // Helpers (newTestHandler, do, decode, testConfig, hop) live in http_test.go and
 // config_test.go.
 
+func TestDeviceOverrideItemRoutes(t *testing.T) {
+	h, a := newTestHandler(t, &StaticKernel{})
+	if w := do(t, h, http.MethodPut, "/config", testConfig()); w.Code != http.StatusOK {
+		t.Fatal(w.Body)
+	}
+	path := "/devices/AA-BB-CC-DD-EE-FF"
+	if w := do(t, h, http.MethodPut, path, assignmentBody{Exit: ""}); w.Code != http.StatusOK {
+		t.Fatalf("direct override: %d %s", w.Code, w.Body)
+	}
+	c, _ := a.Load()
+	if len(c.Devices) != 1 || c.Devices[0].MAC != "aa:bb:cc:dd:ee:ff" || c.Devices[0].Exit != "" {
+		t.Fatalf("stored direct override: %+v", c.Devices)
+	}
+	if w := do(t, h, http.MethodPut, path, assignmentBody{Exit: "Proxy"}); w.Code != http.StatusOK {
+		t.Fatalf("exit override: %d %s", w.Code, w.Body)
+	}
+	if w := do(t, h, http.MethodDelete, path, nil); w.Code != http.StatusOK {
+		t.Fatalf("inherit: %d %s", w.Code, w.Body)
+	}
+	c, _ = a.Load()
+	if len(c.Devices) != 0 {
+		t.Fatalf("device still overridden: %+v", c.Devices)
+	}
+}
+
 func TestPutExitAddsOneWithoutTouchingTheOthers(t *testing.T) {
 	h, a := newTestHandler(t, &StaticKernel{})
 	if w := do(t, h, http.MethodPut, "/config", testConfig()); w.Code != http.StatusOK {

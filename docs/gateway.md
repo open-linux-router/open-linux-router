@@ -245,8 +245,9 @@ The full ladder depends on devices and groups, and who owns the device inventory
 - **First: network-level assignment.** Needs only networks, which milestone 1
   delivers. Covers the motivating case if phones sit on their own network or
   SSID, which is a reasonable recommendation regardless.
-- **Then: group and device overrides**, refining the same field. The mental model
-  does not change, because *most specific wins* was true from the first version.
+- **Now: device overrides** (§2.7), refining the network's answer by source MAC.
+- **Then: group overrides**, filling the rung between network and device. The
+  mental model does not change: the most specific setting still wins.
 
 ### 2.6 Using a proxy box as a next hop
 
@@ -266,8 +267,9 @@ interfaces needs a choice on each row. Do not set the box-wide default merely
 to test one network. The browser shows the daemon's plan and asks for confirmation
 if applying the assignment would be disruptive.
 
-This is *source selection*: all clients in that interface's subnet use the
-same exit. Device and group overrides are not implemented yet (§2.5). Domain,
+This is *source selection*: clients in that interface's subnet use the same
+exit unless one has its own device override (§2.7). Group overrides are not
+implemented yet (§2.5). Domain,
 GEOIP, and outbound rules within that traffic belong to the proxy (§4), not
 to olr. DNS is a separate choice: olr's upstream is global, so forwarding it
 to a fake-IP resolver while other networks go direct can strand those clients
@@ -278,6 +280,23 @@ upstream path. If its DIRECT or upstream traffic returns to olr with the same
 subnet source, the source classifier cannot distinguish it from a client and
 may hand it straight back to the proxy. Its own default route should instead
 lead to the real uplink; verify this before selecting the network.
+
+### 2.7 One device overrides its network
+
+On a device's detail screen, **Internet via** can follow the network, select an
+exit, or explicitly use the router's normal path. The gateway owns that MAC-keyed
+assignment, independently of the device's name and DHCP lease. In the kernel,
+an Ethernet source-MAC classifier limited to an adopted interface's source
+prefix runs after conntrack restore and before the network source-prefix
+classifier. A direct override uses a reserved mark with no RPDB route, so the
+network rule cannot reassign it and it falls through to `main`; conntrack keeps
+that decision for established flows even after a policy edit.
+
+This works across DHCP address changes, but a device using a different or
+randomized MAC is a different identity. It is not an IP-spoofing defense, and
+clients behind another L3 router appear under that router's MAC; non-Ethernet
+ingress cannot match this override. Group assignment remains a separate next
+rung, not implicitly implemented by this one.
 
 ---
 
@@ -1032,7 +1051,7 @@ any work.
 | | | |
 |---|---|---|
 | **v1** | exits: `next_hop`, `interface`, `blocked` | `interface` is nearly free once `next_hop` exists, and it is how WireGuard and Tailscale arrive |
-| | `Internet via` at **network** level | group and device tiers wait on §10 #6 |
+| | `Internet via` at **network** level | group and device tiers were staged after this |
 | | nft classify + RPDB, documented mark/priority/table ranges | |
 | | `net.ipv4.ip_forward`, written and read back | §3.8 — the module programs the forwarding path, so it owns whether the box forwards |
 | | per-exit health probe, `block` on failure | dns:§1.2 depends on it |
@@ -1041,9 +1060,10 @@ any work.
 | | **egress NAT on `dial`'s uplink**, with an off switch | §3.9 — the other half of what a LAN needs, and what stops the next hop being typed twice |
 | | **port forwards, and hairpin NAT** | `docs/port-forwarding.md`, moved here from the deleted `firewall` module |
 | | **IPv6 forwarding**, its own switch | §3.8 — explicit, never inferred; the plan names the interfaces whose RA-learned route it drops |
-| **v2** | `local_socket` (TPROXY) | wants dns:§2.1's return-path answer settled first |
+| **v2** | device override by Ethernet source MAC | built; §2.7 |
+| | `local_socket` (TPROXY) | wants dns:§2.1's return-path answer settled first |
 | | per-interface `conf.<dev>.forwarding` in place of the global key | §3.8 — the narrower write, once `link`'s networks say which interfaces traffic enters and leaves by |
-| | group and device tiers of the ladder | |
+| | group tier of the ladder | |
 | | conntrack-derived per-flow detail | |
 | **Later** | multi-WAN failover policy beyond `block` / `direct` | hysteresis and probe design are their own scope |
 | | an advanced source+destination rule list | the only thing the ladder cannot express |
@@ -1121,8 +1141,9 @@ any work.
 2. **SNAT toward next-hop exits, or a dedicated segment** (§5.3, dns:§7.2).
    Determines whether accounting sees both directions and whether `ct mark`
    restore works at all. Leaning SNAT, as a per-exit field.
-3. **Who owns the device inventory** (§10 #6). Gates the group and device tiers of
-   the ladder, and per-device statistics ownership with it.
+3. **Device inventory ownership.** Resolved in `internal/devices`, keyed by MAC;
+   the group tier still needs its policy integration. Per-device statistics use
+   the gateway's kernel counters (§7).
 4. **Time-series storage** (§10 #5). Now with two workloads voting — these
    counters and dns:§7.5's query log.
 5. **Whether `google/nftables` can read per-element stateful counters** over

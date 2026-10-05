@@ -356,6 +356,11 @@ export interface GatewayConfig {
   stats?: boolean
   ipv6_forwarding?: boolean
   interfaces?: Assignment[]
+  devices?: GatewayDeviceAssignment[]
+}
+export interface GatewayDeviceAssignment {
+  mac: string
+  exit?: string
 }
 export interface Exit {
   name: string

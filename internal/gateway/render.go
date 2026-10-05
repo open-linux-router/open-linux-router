@@ -163,9 +163,10 @@ func (s StatSet) Line() string {
 
 // NFTable is the `inet olr_route` table (§3.3).
 //
-// The classify chain has four kinds of rule and they run in this order:
+// The classify chain has five kinds of rule and they run in this order:
 //
 //	restore    an established flow gets back the exit it started on
+//	device     a MAC override takes precedence over its network
 //	source     a new flow is classified by where it came from
 //	account    every packet is counted against its exit, and the decision saved
 //	unpoliced  whatever matched nothing is counted too (§7.3)
@@ -185,6 +186,9 @@ func (s StatSet) Line() string {
 type NFTable struct {
 	// Exits are the in-use exits, for the restore and accounting rules.
 	Exits []ExitRule
+	// Devices precede network source rules; the explicit-direct mark prevents
+	// the network classifier from assigning a different exit.
+	Devices []DeviceRule
 
 	// Sources are the classify rules: one per (assignment, family), matching a
 	// source prefix and setting the exit's mark.
@@ -201,6 +205,25 @@ type NFTable struct {
 	// silently reset every other rule's numbers. Named objects survive rule
 	// replacement.
 	Counters []string
+}
+
+// DeviceRule classifies an Ethernet source by its stable MAC, independent of
+// its current DHCP address. Exit is empty for an explicit direct override.
+type DeviceRule struct {
+	MAC       string
+	Exit      string
+	Mark      uint32
+	Interface string
+	Prefix    netip.Prefix
+}
+
+func (r DeviceRule) Line() string {
+	if r.Exit == "" {
+		return fmt.Sprintf("nft device %s on %s source %s direct mark %#08x unless dnat",
+			r.MAC, r.Interface, r.Prefix, r.Mark)
+	}
+	return fmt.Sprintf("nft device %s on %s source %s mark %#08x via %s unless dnat",
+		r.MAC, r.Interface, r.Prefix, r.Mark, r.Exit)
 }
 
 // ExitRule is the restore-and-account pair for one exit in use.
@@ -223,7 +246,7 @@ func (e ExitRule) AccountLine() string {
 // SourceRule marks traffic from one prefix for one exit.
 type SourceRule struct {
 	// Interface and Exit are the assignment this came from, carried for the
-	// rule comment and for error messages. Neither is matched on.
+	// rule comment and for error messages. The classifier matches the prefix.
 	Interface string
 	Exit      string
 
@@ -441,6 +464,35 @@ func Render(c Config, links LinkView, health Health) Desired {
 		})
 
 		renderExit(&d, c, e, links, health)
+	}
+	if infos, err := links.Interfaces(); err == nil {
+		// Stable output even if the observed interface order changes. The
+		// kernel evaluates these rules in the order we render them.
+		sort.Slice(infos, func(i, j int) bool { return infos[i].Name < infos[j].Name })
+		for _, a := range c.Devices {
+			for _, info := range infos {
+				if !info.Adopted {
+					continue
+				}
+				for _, prefix := range info.Prefixes {
+					if !prefix.IsValid() {
+						continue
+					}
+					if a.Exit == "" && !counters[DirectCounter] {
+						counters[DirectCounter] = true
+						d.Table.Exits = append(d.Table.Exits, ExitRule{
+							Exit: "direct", Mark: DirectMark, Counter: DirectCounter,
+						})
+					}
+					rule := DeviceRule{MAC: a.MAC, Exit: a.Exit, Mark: DirectMark,
+						Interface: info.Name, Prefix: prefix.Masked()}
+					if e, ok := c.Find(a.Exit); ok {
+						rule.Mark = e.Mark()
+					}
+					d.Table.Devices = append(d.Table.Devices, rule)
+				}
+			}
+		}
 	}
 
 	renderSources(&d, c, links)
@@ -802,6 +854,9 @@ func (d Desired) objectLines() []string {
 	// follow a packet down the list.
 	for _, e := range d.Table.Exits {
 		out = append(out, e.RestoreLine())
+	}
+	for _, r := range d.Table.Devices {
+		out = append(out, r.Line())
 	}
 	for _, s := range d.Table.Sources {
 		out = append(out, s.Line())

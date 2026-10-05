@@ -186,8 +186,8 @@ func viewStatus(s Status, warnings []Problem, now time.Time) statusView {
 type usageView struct {
 	Address string `json:"address"`
 
-	// Exit is empty for the residual — traffic no assignment matched — which is
-	// a row and not an omission (§7.3).
+	// Exit is empty for the residual and explicit-direct device traffic, both
+	// of which take the box's normal route.
 	Exit string `json:"exit"`
 
 	// Unknown marks traffic still carrying a deleted exit's mark.

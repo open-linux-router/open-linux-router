@@ -1286,6 +1286,13 @@ func (k LinuxKernel) applyNFT(d Desired) error {
 			UserData: comment(e.RestoreLine()),
 		})
 	}
+	for _, r := range d.Table.Devices {
+		conn.AddRule(&nftables.Rule{
+			Table: table, Chain: classify,
+			Exprs:    deviceExprs(r),
+			UserData: comment(r.Line()),
+		})
+	}
 	for _, s := range d.Table.Sources {
 		conn.AddRule(&nftables.Rule{
 			Table: table, Chain: classify,
@@ -1326,6 +1333,52 @@ func (k LinuxKernel) applyNFT(d Desired) error {
 	}
 
 	return conn.Flush()
+}
+
+// deviceExprs matches the Ethernet source MAC before network classification.
+// Direct has a reserved mark but no route rule: it falls through to main, and
+// conntrack preserves the choice when an assignment changes mid-connection.
+func deviceExprs(r DeviceRule) []expr.Any {
+	mac, _ := net.ParseMAC(r.MAC) // validated before rendering
+	v6 := r.Prefix.Addr().Is6()
+	proto := byte(unix.NFPROTO_IPV4)
+	offset, length := uint32(12), uint32(4)
+	if v6 {
+		proto = unix.NFPROTO_IPV6
+		offset, length = 8, 16
+	}
+	addr := r.Prefix.Masked().Addr().AsSlice()
+	mask := net.CIDRMask(r.Prefix.Bits(), len(addr)*8)
+	out := []expr.Any{
+		&expr.Meta{Key: expr.MetaKeyMARK, Register: 1},
+		maskOurMarkBits(1),
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: markBytes(0)},
+		&expr.Ct{Register: 1, Key: expr.CtKeySTATUS},
+		&expr.Bitwise{SourceRegister: 1, DestRegister: 1, Len: 4,
+			Mask: markBytes(ctStatusDstNAT), Xor: markBytes(0)},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: markBytes(0)},
+		&expr.Meta{Key: expr.MetaKeyNFPROTO, Register: 1},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{proto}},
+		&expr.Fib{Register: 1, ResultADDRTYPE: true, FlagDADDR: true},
+		&expr.Cmp{Op: expr.CmpOpNeq, Register: 1,
+			Data: binaryutil.NativeEndian.PutUint32(unix.RTN_LOCAL)},
+		&expr.Meta{Key: expr.MetaKeyIIFTYPE, Register: 1},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1,
+			Data: binaryutil.NativeEndian.PutUint16(unix.ARPHRD_ETHER)},
+		&expr.Meta{Key: expr.MetaKeyIIFNAME, Register: 1},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: nulTerminated(r.Interface)},
+		&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseNetworkHeader, Offset: offset, Len: length},
+		&expr.Bitwise{SourceRegister: 1, DestRegister: 1, Len: length,
+			Mask: mask, Xor: make([]byte, length)},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: addr},
+		&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseLLHeader, Offset: 6, Len: 6},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: mac},
+	}
+	return append(out,
+		&expr.Meta{Key: expr.MetaKeyMARK, Register: 1},
+		setOurMarkBits(1, r.Mark),
+		&expr.Meta{Key: expr.MetaKeyMARK, SourceRegister: true, Register: 1},
+	)
 }
 
 // comment stores a line in nft's own comment format, so `nft list ruleset`

@@ -25,6 +25,12 @@ const (
 	// small values — and the top byte is conventionally left for site policy.
 	MarkMask uint32 = 0x00ff0000
 
+	// DirectMark reserves slot 255 as an explicit "main table" decision,
+	// outside the allocatable exit slots 1–80.
+	// It has no RPDB rule, but conntrack can preserve it across policy edits.
+	DirectMark    uint32 = 0x00ff0000
+	DirectCounter        = "direct"
+
 	// MarkShift turns a slot into a mark: slot << MarkShift.
 	MarkShift = 16
 

@@ -6,6 +6,9 @@ import { useApplyDevicesConfig, useDevicesConfig } from '@/features/devices/quer
 import { useDhcpConfig } from '@/features/dhcp/queries'
 import { ReservationDialog } from '@/features/dhcp/reservation-dialog'
 import { useDhcpApply } from '@/features/dhcp/use-apply'
+import { ApplyOutcome } from '@/features/gateway/editor'
+import { gatewayChange, useGatewayConfig } from '@/features/gateway/queries'
+import { useGatewayApply } from '@/features/gateway/use-apply'
 import { ApiError } from '@/lib/api'
 import type { DeviceRow } from '@/lib/api-types'
 import type { Device, DevicesConfig, Reservation } from '@/lib/config-types'
@@ -29,6 +32,8 @@ export function useDeviceActions() {
   const saveIdentity = useApplyDevicesConfig()
   const dhcpConfig = useDhcpConfig()
   const dhcpApplier = useDhcpApply()
+  const gateway = useGatewayConfig()
+  const gatewayApplier = useGatewayApply()
 
   const [editing, setEditing] = useState<DeviceRow | null>(null)
   const [reserving, setReserving] = useState<DeviceRow | null>(null)
@@ -91,6 +96,7 @@ export function useDeviceActions() {
 
   const dialogs = (
     <>
+      <ApplyOutcome applier={gatewayApplier} />
       {editing && (
         <DeviceDetail
           // Keyed by MAC so opening a different device rebuilds the form rather
@@ -101,6 +107,15 @@ export function useDeviceActions() {
           onOpenChange={(open) => !open && setEditing(null)}
           busy={saveIdentity.isPending}
           groups={identity.data?.groups}
+          gateway={gateway.data}
+          gatewayBusy={gatewayApplier.busy}
+          onExitChange={(exit) =>
+            gatewayApplier.submit(
+              exit === null
+                ? gatewayChange.removeDevice(editing.mac)
+                : gatewayChange.device(editing.mac, exit),
+            )
+          }
           onSave={save}
           onForget={editing.stored ? () => save({ mac: editing.mac }) : undefined}
           onEditFixedAddress={() => {

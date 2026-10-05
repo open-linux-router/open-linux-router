@@ -77,7 +77,7 @@ func (h HTTP) Routes() []core.Route {
 		// replacements.
 		{
 			Method: "GET", Path: "/config", Tool: "show config",
-			Summary: "Show the stored gateway configuration: exits, per-network assignments and defaults.",
+			Summary: "Show exits, per-network and per-device assignments, and defaults.",
 			Handler: h.getConfig,
 		},
 		{
@@ -122,7 +122,7 @@ func (h HTTP) Routes() []core.Route {
 		},
 		{
 			Method: "DELETE", Path: "/exits/{name}",
-			Summary:  "Remove one exit, and with it every assignment that pointed at it.",
+			Summary:  "Remove one unused exit; network and device references are refused.",
 			Query:    gate,
 			Mutating: true,
 			Handler:  h.deleteExit,
@@ -140,6 +140,16 @@ func (h HTTP) Routes() []core.Route {
 			Query:    gate,
 			Mutating: true,
 			Handler:  h.deleteAssignment,
+		},
+		{
+			Method: "PUT", Path: "/devices/{mac}",
+			Summary: "Override one device's way out; an empty exit explicitly uses the normal route.",
+			Query:   gate, Mutating: true, Handler: h.putDevice,
+		},
+		{
+			Method: "DELETE", Path: "/devices/{mac}",
+			Summary: "Return a device to its network's way out.",
+			Query:   gate, Mutating: true, Handler: h.deleteDevice,
 		},
 
 		// Dry run. A POST because it takes a body, not because it changes
@@ -582,6 +592,37 @@ func (h HTTP) deleteAssignment(w http.ResponseWriter, r *http.Request) {
 	h.mutate(w, r, func(cfg *Config) error {
 		if !cfg.RemoveAssignment(iface) {
 			return notFound(fmt.Errorf("%q has no exit of its own", iface))
+		}
+		return nil
+	})
+}
+
+func (h HTTP) putDevice(w http.ResponseWriter, r *http.Request) {
+	mac, err := core.NormalizeMAC(r.PathValue("mac"))
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var body assignmentBody
+	if err := core.DecodeJSON(w, r, &body); err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.mutate(w, r, func(cfg *Config) error {
+		cfg.SetDevice(mac, body.Exit)
+		return nil
+	})
+}
+
+func (h HTTP) deleteDevice(w http.ResponseWriter, r *http.Request) {
+	mac, err := core.NormalizeMAC(r.PathValue("mac"))
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.mutate(w, r, func(cfg *Config) error {
+		if !cfg.RemoveDevice(mac) {
+			return notFound(fmt.Errorf("%s has no way out of its own", mac))
 		}
 		return nil
 	})

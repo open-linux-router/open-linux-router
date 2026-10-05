@@ -88,6 +88,15 @@ const seg = (s: string) => encodeURIComponent(s)
  * along with it is Config.Rename's job, not this file's.
  */
 export const gatewayChange = {
+  device: (mac: string, exit: string): GatewayChange => ({
+    method: 'PUT',
+    path: `${base}/devices/${seg(mac)}`,
+    body: { exit },
+  }),
+  removeDevice: (mac: string): GatewayChange => ({
+    method: 'DELETE',
+    path: `${base}/devices/${seg(mac)}`,
+  }),
   saveExit: (name: string, exit: unknown): GatewayChange => ({
     method: 'PUT',
     path: `${base}/exits/${seg(name)}`,

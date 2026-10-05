@@ -74,8 +74,44 @@ func Validate(c Config, links LinkView) Result {
 	validateExits(&r, c, links)
 	validateDefault(&r, c)
 	validateAssignments(&r, c, links)
+	validateDevices(&r, c, links)
 
 	return r
+}
+
+func validateDevices(r *Result, c Config, links LinkView) {
+	infos, err := links.Interfaces()
+	usable := false
+	if err == nil {
+		for _, info := range infos {
+			if info.Adopted && len(info.Prefixes) > 0 {
+				usable = true
+				break
+			}
+		}
+	}
+	seen := map[string]int{}
+	for i, a := range c.Devices {
+		path := fmt.Sprintf("devices[%d]", i)
+		mac, err := core.NormalizeMAC(a.MAC)
+		if err != nil {
+			r.errorf(path+".mac", "invalid device MAC %q: %v", a.MAC, err)
+		} else if len(strings.Split(mac, ":")) != 6 {
+			r.errorf(path+".mac", "a device override needs a 6-byte Ethernet MAC address")
+		} else if first, ok := seen[mac]; ok {
+			r.errorf(path+".mac", "%s is already assigned at devices[%d]", mac, first)
+		} else {
+			seen[mac] = i
+		}
+		if a.Exit != "" {
+			if _, ok := c.Find(a.Exit); !ok {
+				r.errorf(path+".exit", "there is no exit called %q", a.Exit)
+			}
+		}
+		if !usable {
+			r.warnf(path, "no adopted interface has a source prefix; this device override will not match traffic yet")
+		}
+	}
 }
 
 func validateExits(r *Result, c Config, links LinkView) {

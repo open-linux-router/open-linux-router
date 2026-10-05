@@ -35,7 +35,19 @@ func writeConfigText(w io.Writer, c Config) error {
 		return err
 	}
 	fmt.Fprintln(w)
-	return writeAssignmentsText(w, c)
+	if err := writeAssignmentsText(w, c); err != nil {
+		return err
+	}
+	if len(c.Devices) == 0 {
+		return nil
+	}
+	fmt.Fprintln(w, "\nDevice overrides:")
+	t := table(w)
+	fmt.Fprintln(t, "DEVICE MAC\tINTERNET VIA")
+	for _, a := range c.Devices {
+		fmt.Fprintf(t, "%s\t%s\n", a.MAC, describeDefault(a.Exit))
+	}
+	return t.Flush()
 }
 
 // describeIPv6Forwarding spells out the unset case, because "off" would be a

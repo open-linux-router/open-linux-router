@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"fmt"
+	"net/netip"
 	"strings"
 	"testing"
 )
@@ -224,6 +225,50 @@ func TestRulesAreInEvaluationOrder(t *testing.T) {
 	if !(restore < source && source < account && account < unpoliced) {
 		t.Errorf("rules out of evaluation order (restore %d, source %d, account %d, unpoliced %d): %s",
 			restore, source, account, unpoliced, dump(got))
+	}
+}
+
+func TestDeviceOverridesPrecedeNetworkRules(t *testing.T) {
+	c := testConfig()
+	c.SetDevice("aa:bb:cc:dd:ee:01", "")
+	c.SetDevice("aa:bb:cc:dd:ee:02", "Blocked")
+	got := lines(t, c, nil)
+	direct := sprintf("nft device aa:bb:cc:dd:ee:01 on br-lan source 192.168.1.0/24 direct mark %#08x unless dnat", DirectMark)
+	blocked, _ := c.Find("Blocked")
+	proxy, _ := c.Find("Proxy")
+	via := sprintf("nft device aa:bb:cc:dd:ee:02 on br-lan source 192.168.1.0/24 mark %#08x via Blocked unless dnat", blocked.Mark())
+	network := sprintf("nft source ip 192.168.1.0/24 mark %#08x from br-lan via Proxy unless dnat", proxy.Mark())
+	index := func(s string) int {
+		for i, line := range got {
+			if line == s {
+				return i
+			}
+		}
+		return -1
+	}
+	if index(direct) < 0 || index(via) < 0 || index(network) < 0 ||
+		index(direct) >= index(network) || index(via) >= index(network) {
+		t.Fatalf("device override must precede network classification: %s", dump(got))
+	}
+	if !contains(got, sprintf("nft restore mark %#08x for direct", DirectMark)) ||
+		!contains(got, sprintf("nft account mark %#08x counter direct for direct", DirectMark)) {
+		t.Fatalf("direct decision must survive flow changes: %s", dump(got))
+	}
+}
+
+func TestDeviceRulesAreLimitedToAdoptedInterfacesAndPrefixes(t *testing.T) {
+	c := testConfig()
+	c.SetDevice("aa:bb:cc:dd:ee:01", "Proxy")
+	links := testLinks()
+	links["br-foreign"] = LinkInfo{Prefixes: []netip.Prefix{netip.MustParsePrefix("10.9.0.1/24")}}
+	links["br-empty"] = LinkInfo{Adopted: true}
+	c.Normalize()
+	got := Render(c, links, nil).Lines()
+	for _, line := range got {
+		if strings.HasPrefix(line, "nft device ") &&
+			(strings.Contains(line, "br-foreign") || strings.Contains(line, "br-empty")) {
+			t.Errorf("device override escaped its owned network: %s", line)
+		}
 	}
 }
 

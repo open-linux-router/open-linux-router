@@ -98,6 +98,17 @@ func TestChangingAnAssignmentIsAReloadNotADisruption(t *testing.T) {
 	}
 }
 
+func TestAddingADeviceOverrideIsAReload(t *testing.T) {
+	before := testConfig()
+	k := programmed(t, before)
+	after := testConfig()
+	after.SetDevice("aa:bb:cc:dd:ee:ff", "")
+	plan := planFor(t, after, k, netip.Addr{})
+	if plan.Empty() || plan.Impact != ImpactReload {
+		t.Fatalf("device override should keep established flows: %+v", plan)
+	}
+}
+
 // §5.3.3: `disruptive` is a fact, so it needs somebody actually using the path
 // that moves.
 func TestMovingAPathNobodyIsUsingIsNotDisruptive(t *testing.T) {

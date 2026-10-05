@@ -252,6 +252,7 @@ func (a Applier) Traffic(ctx context.Context) ([]Usage, error) {
 	}
 
 	byMark := map[uint32]string{}
+	byMark[DirectMark] = ""
 	for _, e := range cfg.Exits {
 		byMark[e.Mark()] = e.Name
 	}
@@ -317,7 +318,7 @@ type ExitStatus struct {
 	Up     bool
 	Probed bool
 
-	// UsedBy lists the networks whose traffic goes through it.
+	// UsedBy lists networks and device MACs assigned to it.
 	UsedBy []string
 
 	// Mark, Table and Priority are the kernel resources it holds, surfaced

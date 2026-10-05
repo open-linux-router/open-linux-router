@@ -153,7 +153,7 @@ type Config struct {
 	IPv6Forwarding *IPv6Forwarding `json:"ipv6_forwarding,omitempty"`
 
 	// Interfaces assigns an exit per network — §2.5's first tier of the ladder,
-	// and the only one that ships here.
+	// refined by device overrides below.
 	//
 	// Keyed by kernel interface name rather than by a network, matching
 	// internal/dhcp's pools and for the reason internal/dns states in as many
@@ -162,6 +162,10 @@ type Config struct {
 	// to unpick then. The name of this field changes when link does; the shape
 	// does not.
 	Interfaces []Assignment `json:"interfaces,omitempty"`
+
+	// Devices override the network choice by source MAC. An empty exit
+	// explicitly takes the box's normal route; absence inherits the network.
+	Devices []DeviceAssignment `json:"devices,omitempty"`
 }
 
 // EgressSNAT is Config.SNAT's type.
@@ -177,11 +181,7 @@ type IPv6Forwarding bool
 
 // Assignment is one rung of the ladder: this source uses that exit.
 //
-// §2.1's tag and device tiers are v2 (§9), waiting on design.md §10 decision 6.
-// They refine this same field rather than replacing it, which is the whole
-// argument for shipping the ladder one rung at a time — *most specific wins*
-// was true from the first version, so the mental model does not change when the
-// other rungs arrive.
+// Devices now refine this field through Config.Devices; groups are later.
 type Assignment struct {
 	// Interface is the source network, named by its kernel interface.
 	Interface string `json:"interface"`
@@ -191,6 +191,12 @@ type Assignment struct {
 	// Empty is a real value and not a missing one: *IoT devices go direct* is
 	// the case §2.1 opens with, and the answer is that the IoT network keeps
 	// the default — nothing to configure, because it is already right.
+	Exit string `json:"exit,omitempty"`
+}
+
+// DeviceAssignment is a device-specific override, keyed by canonical MAC.
+type DeviceAssignment struct {
+	MAC  string `json:"mac"`
 	Exit string `json:"exit,omitempty"`
 }
 
@@ -546,10 +552,15 @@ func (c Config) InUse(name string) bool {
 			return true
 		}
 	}
+	for _, a := range c.Devices {
+		if a.Exit == name {
+			return true
+		}
+	}
 	return false
 }
 
-// UsedBy lists the interfaces whose traffic goes through this exit, sorted.
+// UsedBy lists the interfaces and device MACs assigned to this exit, sorted.
 func (c Config) UsedBy(name string) []string {
 	if name == "" {
 		return nil
@@ -558,6 +569,11 @@ func (c Config) UsedBy(name string) []string {
 	for _, a := range c.Interfaces {
 		if got, _ := c.Assigned(a.Interface); got == name {
 			out = append(out, a.Interface)
+		}
+	}
+	for _, a := range c.Devices {
+		if a.Exit == name {
+			out = append(out, a.MAC)
 		}
 	}
 	sort.Strings(out)
@@ -646,10 +662,20 @@ func (c *Config) Normalize() {
 		c.Interfaces[i].Interface = strings.TrimSpace(c.Interfaces[i].Interface)
 		c.Interfaces[i].Exit = strings.TrimSpace(c.Interfaces[i].Exit)
 	}
+	for i := range c.Devices {
+		c.Devices[i].MAC = strings.TrimSpace(c.Devices[i].MAC)
+		if mac, err := core.NormalizeMAC(c.Devices[i].MAC); err == nil {
+			c.Devices[i].MAC = mac
+		}
+		c.Devices[i].Exit = strings.TrimSpace(c.Devices[i].Exit)
+	}
 
 	slices.SortStableFunc(c.Exits, func(a, b Exit) int { return strings.Compare(a.Name, b.Name) })
 	slices.SortStableFunc(c.Interfaces, func(a, b Assignment) int {
 		return strings.Compare(a.Interface, b.Interface)
+	})
+	slices.SortStableFunc(c.Devices, func(a, b DeviceAssignment) int {
+		return strings.Compare(a.MAC, b.MAC)
 	})
 
 	// The forwards normalize themselves — names and interfaces trimmed, list
@@ -713,6 +739,36 @@ func (c *Config) RemoveAssignment(iface string) bool {
 	return false
 }
 
+// SetDevice overrides the network choice for one MAC; empty means direct.
+func (c *Config) SetDevice(mac, exit string) {
+	if norm, err := core.NormalizeMAC(mac); err == nil {
+		mac = norm
+	}
+	for i := range c.Devices {
+		if c.Devices[i].MAC == mac {
+			c.Devices[i].Exit = exit
+			c.Normalize()
+			return
+		}
+	}
+	c.Devices = append(c.Devices, DeviceAssignment{MAC: mac, Exit: exit})
+	c.Normalize()
+}
+
+// RemoveDevice returns the device to its network's setting.
+func (c *Config) RemoveDevice(mac string) bool {
+	if norm, err := core.NormalizeMAC(mac); err == nil {
+		mac = norm
+	}
+	for i, a := range c.Devices {
+		if a.MAC == mac {
+			c.Devices = append(c.Devices[:i], c.Devices[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
 // Remove drops an exit, reporting whether it was there.
 //
 // It deliberately does not clean up references to the name. A dangling Default
@@ -750,13 +806,18 @@ func (c *Config) Rename(from, to string) bool {
 			c.Interfaces[i].Exit = to
 		}
 	}
+	for i := range c.Devices {
+		if c.Devices[i].Exit == from {
+			c.Devices[i].Exit = to
+		}
+	}
 	c.Normalize()
 	return true
 }
 
 // Empty reports whether anything has been configured at all.
 func (c Config) Empty() bool {
-	return len(c.Exits) == 0 && len(c.Interfaces) == 0 && c.Default == "" &&
+	return len(c.Exits) == 0 && len(c.Interfaces) == 0 && len(c.Devices) == 0 && c.Default == "" &&
 		len(c.Forwards) == 0
 }
 

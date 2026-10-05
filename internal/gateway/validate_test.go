@@ -34,6 +34,27 @@ func TestValidateAcceptsTheReferenceTopology(t *testing.T) {
 	}
 }
 
+func TestDeviceOverridesRejectInvalidDuplicateAndMissingExit(t *testing.T) {
+	c := testConfig()
+	c.Devices = []DeviceAssignment{
+		{MAC: "bad", Exit: "Proxy"},
+		{MAC: "aa:bb:cc:dd:ee:ff", Exit: "Proxy"},
+		{MAC: "AA-BB-CC-DD-EE-FF", Exit: "Missing"},
+	}
+	r := Validate(c, testLinks())
+	errorAt(t, r, "devices[0].mac")
+	errorAt(t, r, "devices[2].mac")
+	errorAt(t, r, "devices[2].exit")
+}
+
+func TestDeviceOverrideWithoutAnAdoptedNetworkWarns(t *testing.T) {
+	c := Config{Devices: []DeviceAssignment{{MAC: "aa:bb:cc:dd:ee:ff"}}}
+	r := Validate(c, StaticLinks{})
+	if !hasWarningContaining(r, "will not match traffic") {
+		t.Fatalf("no warning for an override with no network: %+v", r)
+	}
+}
+
 // §5.1's second row, and the mistake it exists to catch: entering the proxy's
 // public address instead of its address on your own network.
 func TestNextHopMustBeDirectlyReachable(t *testing.T) {

@@ -27,7 +27,7 @@ import { DeviceIcon } from '@/features/devices/device-icon'
 import { groupOptions } from '@/features/devices/group-tree'
 import { categoryLabel } from '@/features/devices/icons'
 import type { DeviceRow } from '@/lib/api-types'
-import type { Device, DevicesGroup } from '@/lib/config-types'
+import type { Device, DevicesGroup, GatewayConfig } from '@/lib/config-types'
 import { formatAgo } from '@/lib/utils'
 
 /**
@@ -37,6 +37,8 @@ import { formatAgo } from '@/lib/utils'
  * with one.
  */
 const NO_GROUP = ' none'
+const INHERIT_EXIT = ' inherit'
+const DIRECT_EXIT = ' direct'
 
 /**
  * One device, and everything a human is allowed to say about it.
@@ -55,6 +57,9 @@ export function DeviceDetail({
   onForget,
   onEditFixedAddress,
   groups = [],
+  gateway,
+  gatewayBusy,
+  onExitChange,
   busy,
 }: {
   device: DeviceRow
@@ -66,12 +71,17 @@ export function DeviceDetail({
   onEditFixedAddress: () => void
   /** Every group there is, to choose this device's from. */
   groups?: DevicesGroup[]
+  gateway?: GatewayConfig
+  gatewayBusy?: boolean
+  onExitChange?: (exit: string | null) => Promise<boolean>
   busy?: boolean
 }) {
   const [name, setName] = useState(device.name_origin === 'operator' ? device.name : '')
   const [look, setLook] = useState<IconChoice>(() => storedLook(device))
   const [notes, setNotes] = useState(device.notes ?? '')
   const [group, setGroup] = useState(device.group ?? '')
+  const override = gateway?.devices?.find((a) => a.mac === device.mac)
+  const deviceExit = override ? override.exit || DIRECT_EXIT : INHERIT_EXIT
 
   function reset() {
     setName(device.name_origin === 'operator' ? device.name : '')
@@ -176,6 +186,54 @@ export function DeviceDetail({
           </div>
 
           <FixedAddress device={device} onEdit={onEditFixedAddress} />
+
+          {gateway && onExitChange && (
+            <div className="grid gap-2">
+              <Label htmlFor="device-exit">Internet via</Label>
+              <Select
+                value={deviceExit}
+                disabled={gatewayBusy}
+                onValueChange={async (value) => {
+                  if (!value) return
+                  await onExitChange(
+                    value === INHERIT_EXIT ? null : value === DIRECT_EXIT ? '' : value,
+                  )
+                }}
+              >
+                <SelectTrigger id="device-exit" className="w-full">
+                  <SelectValue>
+                    {(value: string) =>
+                      value === INHERIT_EXIT
+                        ? 'Follow the network setting'
+                        : value === DIRECT_EXIT
+                          ? 'This router’s own connection'
+                          : value
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={INHERIT_EXIT}>Follow the network setting</SelectItem>
+                  <SelectItem value={DIRECT_EXIT}>This router’s own connection</SelectItem>
+                  {(gateway.exits ?? []).map((exit) => (
+                    <SelectItem key={exit.name} value={exit.name}>
+                      {exit.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                For devices directly on this router&apos;s Ethernet network. A device behind another
+                router, or using a different private MAC, will not match. Changes apply immediately;
+                established connections normally keep their path.
+              </p>
+              {deviceExit === INHERIT_EXIT && (
+                <p className="text-xs text-muted-foreground">
+                  Currently follows {device.network || 'its network'}; check Internet via on the
+                  Gateway page.
+                </p>
+              )}
+            </div>
+          )}
 
           <Observed device={device} />
         </div>
