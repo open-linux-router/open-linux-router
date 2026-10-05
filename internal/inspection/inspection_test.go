@@ -2,12 +2,16 @@ package inspection
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestStartRequiresExplicitIPv4(t *testing.T) {
@@ -84,5 +88,44 @@ func TestPublicCAOnlyServesCertificate(t *testing.T) {
 	rec := get()
 	if rec.Code != http.StatusOK || rec.Body.String() != cert || rec.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("CA response: %d %q %q", rec.Code, rec.Body.String(), rec.Header().Get("Cache-Control"))
+	}
+}
+
+func TestStartRejectsStaleListener(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:"+port)
+	if err != nil {
+		t.Skipf("inspection port unavailable: %v", err)
+	}
+	defer listener.Close()
+	dir := t.TempDir()
+	for _, name := range []string{"mitmdump", "nft"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir)
+	s := &Service{Enabled: true, Dir: t.TempDir()}
+	rec := httptest.NewRecorder()
+	s.start(rec, httptest.NewRequest(http.MethodPost, "/session", strings.NewReader(`{"mac":"c4:c1:7d:e0:a3:65","ip":"172.16.1.135"}`)))
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "already in use") || s.snapshot().Active {
+		t.Fatalf("stale listener: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestProxyGroupStopsForkedChild(t *testing.T) {
+	cmd := exec.Command("sh", "-c", "sleep 30 & wait")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("proxy process group survived cancellation")
 	}
 }

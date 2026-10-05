@@ -4,7 +4,6 @@ package inspection
 
 import (
 	"bufio"
-	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
@@ -62,8 +62,8 @@ type session struct {
 	mac      string
 	ip       string
 	expires  time.Time
-	cancel   context.CancelFunc
-	cmd      *exec.Cmd
+	cancel   func()
+	done     chan struct{}
 	events   []Event
 	retrying bool
 }
@@ -170,21 +170,34 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, 500, err.Error())
 		return
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, "mitmdump", "--mode", "transparent", "--listen-host", "0.0.0.0", "--listen-port", port,
+	cmd := exec.Command("mitmdump", "--mode", "transparent", "--listen-host", "0.0.0.0", "--listen-port", port,
 		"--set", "confdir="+s.Dir, "--set", "termlog_verbosity=error", "-s", script)
-	stdout, err := cmd.StdoutPipe()
+	// mitmdump may fork; its launcher is not the lifetime of the listener.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	stdout, output, err := os.Pipe()
 	if err != nil {
-		cancel()
 		core.WriteError(w, 500, err.Error())
 		return
 	}
+	cmd.Stdout = output
 	cmd.Stderr = nil
+	if conn, dialErr := net.DialTimeout("tcp", "127.0.0.1:"+port, 100*time.Millisecond); dialErr == nil {
+		conn.Close()
+		_ = stdout.Close()
+		_ = output.Close()
+		core.WriteError(w, http.StatusServiceUnavailable, "inspection port is already in use; stop the stale proxy before starting")
+		return
+	}
 	if err = cmd.Start(); err != nil {
-		cancel()
+		_ = stdout.Close()
+		_ = output.Close()
 		core.WriteError(w, 500, err.Error())
 		return
 	}
+	_ = output.Close()
+	cancel := func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	// The launcher can exit while its listener child still owns stdout.
+	go func() { _ = cmd.Wait() }()
 	ready := false
 	for i := 0; i < 40; i++ {
 		conn, dialErr := net.DialTimeout("tcp", "127.0.0.1:"+port, 100*time.Millisecond)
@@ -197,29 +210,30 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ready {
 		cancel()
-		_ = cmd.Wait()
+		_ = stdout.Close()
 		core.WriteError(w, http.StatusServiceUnavailable, "mitmproxy did not become ready; no traffic was redirected")
 		return
 	}
 	// A fresh table is owned wholly by this module. Cleanup of a previous
 	// daemon's table also runs at startup; never modify someone else's table.
 	if err = install(target); err != nil {
-		cancel()
-		_ = cmd.Wait()
 		if cleanupErr := cleanup(); cleanupErr != nil {
 			// A partially installed rule might remain. Preserve a session
 			// owner so cleanup is retried and no new session can start.
-			q := &session{mac: normalized, ip: target, expires: time.Now(), cancel: cancel, cmd: cmd}
+			q := &session{mac: normalized, ip: target, expires: time.Now(), cancel: cancel, done: make(chan struct{})}
 			s.session = q
 			q.retrying = true
 			go s.retryCleanup(q)
+			_ = stdout.Close()
 			core.WriteError(w, 500, "inspection cleanup failed; retrying: "+cleanupErr.Error())
 			return
 		}
+		cancel()
+		_ = stdout.Close()
 		core.WriteError(w, 500, "could not install interception: "+err.Error())
 		return
 	}
-	q := &session{mac: normalized, ip: target, expires: time.Now().Add(duration), cancel: cancel, cmd: cmd}
+	q := &session{mac: normalized, ip: target, expires: time.Now().Add(duration), cancel: cancel, done: make(chan struct{})}
 	s.session = q
 	go s.consume(q, stdout)
 	go s.watch(q)
@@ -232,6 +246,12 @@ func (s *Service) snapshotLocked() Status {
 }
 
 func (s *Service) consume(q *session, stdout interface{ Read([]byte) (int, error) }) {
+	defer close(q.done)
+	defer func() {
+		if file, ok := stdout.(*os.File); ok {
+			_ = file.Close()
+		}
+	}()
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 4096), 1<<20)
 	for scanner.Scan() {
@@ -251,13 +271,11 @@ func (s *Service) consume(q *session, stdout interface{ Read([]byte) (int, error
 }
 
 func (s *Service) watch(q *session) {
-	done := make(chan struct{})
-	go func() { _ = q.cmd.Wait(); close(done) }()
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-done:
+		case <-q.done:
 			s.end(q)
 			return
 		case <-ticker.C:
