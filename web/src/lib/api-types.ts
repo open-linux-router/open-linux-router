@@ -1561,5 +1561,6 @@ export interface GatewayLatency {
   milliseconds: number | null
   target: string
   checked_at: string | null
+  dns_milliseconds: number | null
   sites: { name: string; url: string; milliseconds: number | null; checked_at: string; selected: boolean }[]
 }

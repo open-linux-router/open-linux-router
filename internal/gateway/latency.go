@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"sort"
 	"sync"
@@ -38,11 +39,12 @@ type LatencySite struct {
 	Selected     bool      `json:"selected"`
 }
 type LatencySnapshot struct {
-	State        string        `json:"state"`
-	Milliseconds *float64      `json:"milliseconds"`
-	Target       string        `json:"target"`
-	CheckedAt    *time.Time    `json:"checked_at"`
-	Sites        []LatencySite `json:"sites"`
+	State           string        `json:"state"`
+	DNSMilliseconds *float64      `json:"dns_milliseconds"`
+	Milliseconds    *float64      `json:"milliseconds"`
+	Target          string        `json:"target"`
+	CheckedAt       *time.Time    `json:"checked_at"`
+	Sites           []LatencySite `json:"sites"`
 }
 
 func NewLatencyMonitor() *LatencyMonitor {
@@ -148,8 +150,17 @@ func (m *LatencyMonitor) sample(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
+	dnsCtx, dnsCancel := context.WithTimeout(ctx, 4*time.Second)
+	defer dnsCancel()
+	dnsStart := time.Now()
+	_, dnsErr := net.DefaultResolver.LookupHost(dnsCtx, "example.com")
+	var dnsMilliseconds *float64
+	if dnsErr == nil {
+		value := float64(time.Since(dnsStart).Microseconds()) / 1000
+		dnsMilliseconds = &value
+	}
 	now := time.Now().UTC()
-	s := LatencySnapshot{State: "unreachable", CheckedAt: &now, Sites: sites}
+	s := LatencySnapshot{State: "unreachable", CheckedAt: &now, Sites: sites, DNSMilliseconds: dnsMilliseconds}
 	failed := false
 	for _, i := range indices {
 		v := sites[i].Milliseconds

@@ -1,9 +1,8 @@
-import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Info, ShieldCheck } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { AlertTriangle, ChevronRight, Info } from 'lucide-react'
+import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Skeleton } from '@/components/ui/skeleton'
 import { useGroupActions } from '@/features/devices/group-actions'
 import { useDeviceList, useDevicesConfig } from '@/features/devices/queries'
 import { useDhcpConfig, useDhcpStatus } from '@/features/dhcp/queries'
@@ -12,6 +11,7 @@ import { useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
 import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
 import { servicesByDevice } from '@/features/topology/services'
+import { useHostMetrics, type HostMetrics } from '@/features/system/queries'
 import { useGatewayLatency, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
 import { NetworkMap } from '@/features/topology/network-map'
@@ -65,7 +65,7 @@ export function OverviewPage() {
   const ingressStatus = useIngressStatus()
   const services = useMemo(() => servicesByDevice(ingress.data, devices.data?.devices ?? []), [ingress.data, devices.data])
   const flows = useTrafficView(traffic.data, traffic.isError)
-  const history = useRateHistory(flows)
+  const host = useHostMetrics()
   const dial = useDialStatus()
   const outside = useMemo(() => buildOutside(dial.data, devices.data?.devices), [dial.data, devices.data])
   const navigate = useNavigate()
@@ -86,7 +86,7 @@ export function OverviewPage() {
       <FirstRun />
 
       <h1 className="sr-only">Network overview</h1>
-      <Stats devices={devices.data?.devices} traffic={traffic.data} flows={flows} history={history}
+      <Stats devices={devices.data?.devices} traffic={traffic.data} flows={flows} host={host.data}
         faults={faults} known={known} idle={idle} failed={dhcp.isError || dns.isError || gateway.isError}
         latency={latency.data} latencyReadAt={latency.dataUpdatedAt} latencyFailed={latency.isError} trafficFailed={traffic.isError} />
 
@@ -133,22 +133,6 @@ export function OverviewPage() {
       </section>
 
       {groupActions.dialogs}
-    </div>
-  )
-}
-
-function BigRate({ label, icon: Icon, rate }: { label: string; icon: typeof ArrowDown; rate: number }) {
-  const [value, unit] = formatRate(rate).split(' ')
-  return (
-    <div>
-      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-        <Icon className="size-3" aria-hidden />
-        {label}
-      </div>
-      <div className="tabular-nums">
-        <span className="text-2xl leading-9 font-semibold tracking-tight">{value}</span>
-        <span className="ml-1 text-sm text-muted-foreground">{unit}</span>
-      </div>
     </div>
   )
 }
@@ -302,43 +286,46 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
 
 /* -------------------------------------------------------------------------- */
 
-/**
- * The total rate at each reading since the page was opened, newest last.
- *
- * olrd keeps no history, so this is the only kind of trend the page can draw
- * honestly: what this tab has itself seen. It starts empty and fills from the
- * right; nothing before the first reading is drawn, because nothing before it
- * was measured.
- */
-const HISTORY = 60
-
-function useRateHistory(flows: TrafficView): number[] {
-  const [seen, setSeen] = useState<{ total: TrafficView['total'] | null; rates: number[] }>({
-    total: null,
-    rates: [],
-  })
-  // Appended during render when a new reading arrives — the same derive-from-
-  // a-changing-value pattern useTrafficView uses, keyed on the total object,
-  // which is new exactly when a new sample was taken.
-  if (flows.rated && flows.total !== seen.total) {
-    const rate = (flows.total.downRate ?? 0) + (flows.total.upRate ?? 0)
-    setSeen({ total: flows.total, rates: [...seen.rates, rate].slice(-HISTORY) })
-  }
-  return flows.counting ? seen.rates : []
+function uptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  return `${days}d ${hours}h ${minutes}m`
 }
 
-/**
- * What the counters say, one tile each.
- *
- * Only what the data supports. The one line on the row is the rate as this
- * tab has watched it (useRateHistory); there is no "+12% from last week",
- * because there is no last week to compare with.
- */
-function Stats({ devices, traffic, flows, history, faults, known, idle, failed, latency, latencyReadAt, latencyFailed, trafficFailed }: {
+function Meter({ label, current, maximum, percent, tone = 'blue' }: {
+  label: string
+  current?: string
+  maximum?: string
+  percent?: number
+  tone?: 'blue' | 'amber' | 'neutral'
+}) {
+  return <div className="min-w-0 py-2.5">
+    <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+      <span>{label}</span><span className="tabular-nums">{percent == null ? '—' : `${percent.toFixed(0)}%`}</span>
+    </div>
+    <div role={percent == null ? undefined : 'progressbar'} aria-label={label} aria-valuenow={percent == null ? undefined : Math.round(percent)} aria-valuemin={0} aria-valuemax={100}
+      className="relative flex h-11 items-center justify-between gap-2 overflow-hidden rounded-xl bg-muted/65 px-3 ring-1 ring-foreground/[0.06] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]">
+      {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r',
+        tone === 'amber' ? 'border-amber-400/50 bg-amber-200/40' : tone === 'neutral' ? 'border-slate-400/40 bg-slate-300/35' : 'border-cyan-500/40 bg-cyan-200/45')}
+        style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />}
+      <span className="relative z-10 truncate text-sm font-semibold tabular-nums">{current ?? '—'}</span>
+      <span className="relative z-10 shrink-0 text-xs text-muted-foreground tabular-nums">{maximum ? `of ${maximum}` : 'Limit not set'}</span>
+    </div>
+  </div>
+}
+
+function StatCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return <section className="min-w-0 rounded-2xl bg-card p-5 shadow-xs ring-1 ring-foreground/[0.07]">
+    <h2 className="mb-4 text-sm font-semibold">{title}</h2>{children}
+  </section>
+}
+
+function Stats({ devices, traffic, flows, host, faults, known, idle, failed, latency, latencyReadAt, latencyFailed, trafficFailed }: {
   devices?: DeviceRow[]
   traffic?: GatewayTraffic
   flows: TrafficView
-  history: number[]
+  host?: HostMetrics
   faults: Fault[]
   known: boolean
   idle: boolean
@@ -350,149 +337,35 @@ function Stats({ devices, traffic, flows, history, faults, known, idle, failed, 
 }) {
   const here = devices?.filter((d) => d.online).length
   const moved = traffic?.usage.reduce((sum, u) => sum + u.up_bytes + u.down_bytes, 0)
-  const healthy = known && !failed && !idle && faults.length === 0
   const title = failed ? 'Status unavailable' : !known ? 'Checking…' : faults.length ? 'Needs attention' : idle ? 'Not set up' : 'All systems OK'
-  const stale = latency?.checked_at ? latencyReadAt - Date.parse(latency.checked_at) > 90 * 1000 : false
+  const stale = latency?.checked_at ? latencyReadAt - Date.parse(latency.checked_at) > 90_000 : false
   const measured = !latencyFailed && !stale && latency?.state === 'ok' && latency.milliseconds != null
-  const latencyQuality = measured ? latency.milliseconds! < 100 ? 'Good' : latency.milliseconds! < 200 ? 'Fair' : 'Slow' : undefined
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
-      <Stat label="Status" loading={false}>
-        <div className="my-auto flex items-center gap-4 py-3">
-          <span className={cn('flex size-14 shrink-0 items-center justify-center rounded-2xl', healthy
-            ? 'bg-success/15 text-success ring-1 ring-success/25'
-            : faults.length ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground')}>
-            {healthy ? <ShieldCheck className="size-9" strokeWidth={1.8} aria-hidden /> : faults.length || failed ? <AlertTriangle className="size-8" aria-hidden /> : <Info className="size-8" aria-hidden />}
-          </span>
-          <div className="min-w-0">
-            <p className="text-lg font-semibold tracking-tight">{title}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{failed ? 'Could not read router status' : !known ? 'Reading router status' : faults.length ? `${faults.length} ${faults.length === 1 ? 'issue' : 'issues'} to review below` : idle ? 'Configure your network to get started' : 'Router services are running smoothly'}</p>
-          </div>
-        </div>
-      </Stat>
-      <Stat label="Traffic" loading={false} title="Traffic through the router; local traffic within one network is not counted.">
-        <div className="relative z-10 mt-2 mb-1 flex flex-wrap gap-x-5 gap-y-1">
-          {flows.rated ? <>
-            <BigRate label="Download" icon={ArrowDown} rate={flows.total.downRate ?? 0} />
-            <BigRate label="Upload" icon={ArrowUp} rate={flows.total.upRate ?? 0} />
-          </> : <p className="py-2 text-sm text-muted-foreground">{trafficFailed ? 'Traffic unavailable' : traffic?.counting ? 'Measuring traffic…' : traffic ? 'Not being counted' : 'Loading…'}</p>}
-        </div>
-        <p className="relative z-10 mb-6 text-xs text-muted-foreground">{!trafficFailed && traffic?.counting && moved !== undefined ? `${formatBytes(moved)} total · since counting started` : '— total'}</p>
-        {history.length > 1 && <Sparkline values={history} />}
-      </Stat>
-      <Stat label="Latency" loading={!latency && !latencyFailed}
-        value={measured ? latency.milliseconds!.toFixed(0) : '—'} unit={measured ? 'ms' : undefined}
-        hint={latencyFailed || stale ? 'Measurement unavailable' : !measured ? latency?.state === 'unreachable' ? 'No response' : latency?.state === 'unavailable' ? 'Measurement unavailable' : 'Measuring…' : undefined}>
-        {latencyQuality && <div className={cn('mt-2 flex items-center gap-2 text-xs font-medium',
-          latencyQuality === 'Good' ? 'text-success-foreground' : latencyQuality === 'Fair' ? 'text-muted-foreground' : 'text-destructive')}>
-          <span className={cn('size-1.5 rounded-full', latencyQuality === 'Good' ? 'bg-success' : latencyQuality === 'Fair' ? 'bg-muted-foreground' : 'bg-destructive')} aria-hidden />
-          {latencyQuality}
-        </div>}
-      </Stat>
-      <Stat label="Devices" value={here === undefined ? undefined : String(here)} unit={devices ? `of ${devices.length}` : undefined}
-        hint={devices ? `${devices.length - (here ?? 0)} offline` : undefined}>
-        {devices && devices.length > 0 && <Presence devices={devices} />}
-      </Stat>
-    </div>
-  )
-}
-
-/**
- * One tile. `value` undefined is still loading, unless the tile says it has
- * something else to show instead of a figure.
- */
-function Stat({
-  label,
-  title,
-  value,
-  unit,
-  hint,
-  loading = value === undefined,
-  children,
-}: {
-  label: string
-  title?: string
-  value?: string
-  unit?: string
-  hint?: React.ReactNode
-  loading?: boolean
-  children?: React.ReactNode
-}) {
-  return (
-    <div
-      title={title}
-      className="relative flex min-h-40 min-w-0 flex-col overflow-hidden rounded-2xl bg-card p-4 shadow-xs ring-1 ring-foreground/[0.07]"
-    >
-      <div className="truncate text-[13px] font-medium text-muted-foreground">{label}</div>
-      {loading ? (
-        <Skeleton className="mt-2 h-8 w-20" />
-      ) : (
-        value !== undefined && (
-          <div className="mt-1 truncate tabular-nums">
-            <span className="text-[28px] leading-9 font-semibold tracking-tight">{value}</span>
-            {unit && <span className="ml-1 text-sm font-medium text-muted-foreground">{unit}</span>}
-          </div>
-        )
-      )}
-      {hint && <div className="relative z-10 text-xs text-muted-foreground">{hint}</div>}
-      {children}
-    </div>
-  )
-}
-
-/**
- * The rate as this tab has seen it, as a filled line along the tile's foot,
- * first reading at the left edge and the latest at the right.
- */
-function Sparkline({ values }: { values: number[] }) {
-  const W = 300
-  const H = 44
-  // Headroom, so the line stays clear of the words above it.
-  const max = Math.max(...values) * 1.6 || 1
-  const pts = values.map((v, i) => [(i / (values.length - 1)) * W, H - 3 - (v / max) * (H - 6)])
-  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
-  const area = `${line} L${W},${H} L${pts[0][0].toFixed(1)},${H} Z`
-  return (
-    <svg
-      aria-hidden
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="none"
-      className="pointer-events-none absolute inset-x-0 bottom-0 h-10 w-full text-foreground/40"
-    >
-      <path d={area} className="fill-foreground/[0.05]" />
-      <path d={line} fill="none" stroke="currentColor" strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-/**
- * One dot per device, here ones filled. Past a few dozen the dots stop being
- * countable and become a bar, which says the same share without pretending
- * each dot can be told apart.
- */
-function Presence({ devices }: { devices: DeviceRow[] }) {
-  const here = devices.filter((d) => d.online).length
-  if (devices.length > 40) {
-    return (
-      <div className="mt-auto pt-3">
-        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-success" style={{ width: `${(here / devices.length) * 100}%` }} />
-        </div>
-      </div>
-    )
-  }
-  const sorted = [...devices].sort((a, b) => Number(b.online) - Number(a.online))
-  return (
-    <div className="mt-auto flex flex-wrap gap-1 pt-3">
-      {sorted.map((d) => (
-        <span
-          key={d.mac}
-          title={`${d.name || d.mac}${d.online ? '' : ' — away'}`}
-          className={cn('size-2 rounded-full', d.online ? 'bg-success' : 'bg-muted-foreground/20')}
-        />
-      ))}
-    </div>
-  )
+  const cpuPercent = host?.cpu_used_cores != null && host.cpu_cores > 0 ? host.cpu_used_cores / host.cpu_cores * 100 : undefined
+  const memoryPercent = host?.memory_total_bytes ? host.memory_used_bytes / host.memory_total_bytes * 100 : undefined
+  const dnsMeasured = !latencyFailed && !stale && latency?.dns_milliseconds != null
+  const latencyValue = measured ? `${latency.milliseconds!.toFixed(0)} ms` : latency?.state === 'unreachable' ? 'No response' : '—'
+  const rate = (direction: 'downRate' | 'upRate') => flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? 'Unavailable' : '—'
+  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+    <StatCard title="Status">
+      <div className="min-h-24 py-3"><p className={cn('text-lg font-semibold', faults.length || failed ? 'text-destructive' : 'text-foreground')}>
+        <span className={cn('mr-2 inline-block size-2 rounded-full align-middle', faults.length || failed ? 'bg-destructive' : known && !idle ? 'bg-success' : 'bg-muted-foreground')} />{title}</p></div>
+      <div className="py-3"><p className="text-xs text-muted-foreground">Uptime</p><p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{host ? uptime(host.uptime_seconds) : '—'}</p>
+        <p className="mt-3 flex justify-between text-xs text-muted-foreground"><span>Devices online</span><span className="tabular-nums">{devices ? `${here} / ${devices.length}` : '—'}</span></p></div>
+    </StatCard>
+    <StatCard title="Traffic">
+      <Meter label="↓ Download" current={rate('downRate')} />
+      <Meter label="↑ Upload" current={rate('upRate')} tone="amber" />
+      <p className="mt-1 text-xs text-muted-foreground">Since counting started <span className="ml-1 font-medium text-foreground">{!trafficFailed && traffic?.counting && moved != null ? formatBytes(moved) : '—'}</span></p>
+    </StatCard>
+    <StatCard title="Latency">
+      <div className="py-2.5"><div className="flex justify-between text-xs text-muted-foreground"><span>Internet</span>{measured && <span className={cn('font-medium', latency.milliseconds! < 100 ? 'text-success-foreground' : latency.milliseconds! < 200 ? 'text-amber-600' : 'text-destructive')}>{latency.milliseconds! < 100 ? 'Good' : latency.milliseconds! < 200 ? 'Fair' : 'Slow'}</span>}</div><p className="mt-3 text-2xl font-semibold tabular-nums tracking-tight">{latencyValue}</p></div>
+      <div className="py-2.5"><div className="flex justify-between text-xs text-muted-foreground"><span>DNS</span>{dnsMeasured && <span className={cn('font-medium', latency.dns_milliseconds! < 50 ? 'text-success-foreground' : latency.dns_milliseconds! < 150 ? 'text-amber-600' : 'text-destructive')}>{latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow'}</span>}</div><p className="mt-3 text-2xl font-semibold tabular-nums tracking-tight">{dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'}</p></div>
+    </StatCard>
+    <StatCard title="System">
+      <Meter label="CPU" current={host?.cpu_used_cores == null ? undefined : `${host.cpu_used_cores.toFixed(1)} cores`} maximum={host?.cpu_cores ? `${host.cpu_cores} cores` : undefined} percent={cpuPercent} />
+      <Meter label="Memory" current={host ? formatBytes(host.memory_used_bytes) : undefined} maximum={host ? formatBytes(host.memory_total_bytes) : undefined} percent={memoryPercent} tone="neutral" />
+    </StatCard>
+  </div>
 }
 
 /**

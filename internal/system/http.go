@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
@@ -20,6 +21,7 @@ type HTTP struct {
 // rather than only served.
 func (h HTTP) Routes() []core.Route {
 	return []core.Route{
+		{Method: "GET", Path: "/metrics", Tool: "show metrics", Summary: "Host uptime, CPU and memory utilization.", Handler: h.getMetrics},
 		{
 			Method: "GET", Path: "/access", Tool: "show access",
 			Summary: "Show whether this router has been set up, and whether reaching it over " +
@@ -173,4 +175,27 @@ func localSource(r *http.Request) bool {
 	}
 	addr = addr.Unmap()
 	return addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast()
+}
+
+func (h HTTP) getMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics, err := readMetrics("/proc")
+	if err != nil {
+		core.WriteError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	// A pair of CPU readings measures a recent interval rather than lifetime load.
+	first, err := readCPU("/proc/stat")
+	if err == nil {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(150 * time.Millisecond):
+		}
+		second, readErr := readCPU("/proc/stat")
+		if readErr == nil && second.total > first.total {
+			used := float64((second.total-first.total)-(second.idle-first.idle)) / float64(second.total-first.total) * float64(metrics.CPUCores)
+			metrics.CPUUsedCores = &used
+		}
+	}
+	core.WriteJSON(w, http.StatusOK, metrics)
 }
