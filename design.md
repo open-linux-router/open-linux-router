@@ -506,7 +506,7 @@ Bounded list. Not expected to grow much. The object they all key off is the
 | | `devices` | **device identity** (§4.4); joins presence from leases + ARP | ✅ |
 | **Services** | `dhcp` | dnsmasq — DHCPv4, DHCPv6 **and RA** (§4.2) | ✅ |
 | | `dns` | unbound — **DNS only** | ✅ |
-| | `qos` | tc — CAKE / fq_codel, per-device shaping | |
+| | `qos` | tc — per-device priority and upload/download limits; see docs/qos.md | |
 | | `gateway` | **the boundary between the networks this box serves and everything else, in both directions**: static + policy routes and exits (`olr_route`), egress NAT and port forwarding (`olr_nat`), byte accounting (`olr_stat`); later bird (BGP/OSPF). Absorbed the deleted `firewall` module (docs/gateway.md §0, docs/port-forwarding.md) | ✅ |
 | | `firewall` | **a default stance, not a rule list**: one switch; blocks connections from outside the networks unless a port forward, remote access or ingress asked for them (`olr_filter`, IPv4 and IPv6). The old module of this name was NAT only and moved to `gateway` (docs/firewall.md, docs/port-forwarding.md §0) | ✅ |
 | | `remote` | getting back in from outside: **WireGuard and Shadowsocks** built as parallel objects; SOCKS5 planned beside them, never under them (docs/remote-access.md) | ✅ |
