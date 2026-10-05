@@ -39,6 +39,7 @@ type LatencySite struct {
 	Milliseconds *float64  `json:"milliseconds"`
 	CheckedAt    time.Time `json:"checked_at"`
 	Selected     bool      `json:"selected"`
+	Exit         string    `json:"exit,omitempty"`
 }
 type LatencySnapshot struct {
 	State           string        `json:"state"`
@@ -59,9 +60,17 @@ func NewLatencyMonitor() *LatencyMonitor {
 	}, probe: probeHTTPS, dnsProbe: probeDNS, snapshot: LatencySnapshot{State: "measuring", Sites: []LatencySite{}, Custom: []LatencySite{}}}
 }
 func probeHTTPS(ctx context.Context, url string) (float64, error) {
+	return probeHTTPSWithDial(ctx, url, nil)
+}
+
+func probeHTTPSMarked(ctx context.Context, url string, mark uint32) (float64, error) {
+	return probeHTTPSWithDial(ctx, url, markedLatencyDial(mark))
+}
+
+func probeHTTPSWithDial(ctx context.Context, url string, dial func(context.Context, string, string) (net.Conn, error)) (float64, error) {
 	// Fresh connections give comparable DNS + TCP + TLS + response-header times.
 	// No environment proxy, redirects, response bodies, or relaxed TLS validation.
-	transport := &http.Transport{DisableKeepAlives: true, TLSHandshakeTimeout: 3 * time.Second}
+	transport := &http.Transport{DisableKeepAlives: true, TLSHandshakeTimeout: 3 * time.Second, DialContext: dial}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)

@@ -383,6 +383,32 @@ func run(args []string) error {
 		return fmt.Errorf("loading custom latency sites: %w", err)
 	}
 	latency.Custom = customLatency
+	customLatency.ValidateExit = func(name string) error {
+		cfg, err := (gateway.Applier{Store: store}).Load()
+		if err != nil {
+			return err
+		}
+		for _, exit := range cfg.Exits {
+			if exit.Name == name {
+				return nil
+			}
+		}
+		return fmt.Errorf("gateway exit %q does not exist", name)
+	}
+	customLatency.Resolve = func(name string) (uint32, error) {
+		cfg, err := (gateway.Applier{Store: store}).Load()
+		if err != nil {
+			return 0, err
+		}
+		if cfg.Enabled {
+			for _, exit := range cfg.Exits {
+				if exit.Name == name {
+					return exit.Mark(), nil
+				}
+			}
+		}
+		return 0, fmt.Errorf("gateway exit %q is unavailable", name)
+	}
 	prober.Log = logger
 	gatewayApplier := gateway.Applier{
 		Kernel: gateway.NewKernel(),

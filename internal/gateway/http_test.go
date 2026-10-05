@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -446,9 +447,15 @@ func TestLatencySitesEndpoint(t *testing.T) {
 	}
 	monitor := NewLatencyMonitor()
 	monitor.Custom = custom
+	custom.ValidateExit = func(name string) error {
+		if name == "Proxy" {
+			return nil
+		}
+		return fmt.Errorf("unknown exit %q", name)
+	}
 	monitor.probe = func(context.Context, string) (float64, error) { t.Fatal("settings must not probe"); return 0, nil }
 	h := HTTP{Latency: monitor}.Handler()
-	body := []CustomLatencySite{{Name: "YouTube", URL: "https://www.youtube.com/"}}
+	body := []CustomLatencySite{{Name: "YouTube", URL: "https://www.youtube.com/", Exit: "Proxy"}}
 	w := do(t, h, http.MethodPut, "/latency/sites", body)
 	if w.Code != http.StatusOK {
 		t.Fatalf("PUT: %d %s", w.Code, w.Body.String())
@@ -456,6 +463,9 @@ func TestLatencySitesEndpoint(t *testing.T) {
 	w = do(t, h, http.MethodGet, "/latency", nil)
 	if w.Code != http.StatusOK || len(decode[LatencySnapshot](t, w).Custom) != 1 {
 		t.Fatal("site missing from snapshot")
+	}
+	if got := decode[LatencySnapshot](t, w).Custom; got[0].Exit != "Proxy" {
+		t.Fatalf("route missing: %+v", got)
 	}
 	w = do(t, h, http.MethodPut, "/latency/sites", []CustomLatencySite{{Name: "X", URL: "http://example.com"}})
 	if w.Code != http.StatusBadRequest || len(custom.Config()) != 1 {

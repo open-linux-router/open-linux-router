@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -218,5 +219,73 @@ func TestCustomLatencyValidationPreservesSettings(t *testing.T) {
 	}
 	if err := m.Replace([]CustomLatencySite{valid[0], {Name: "video", URL: "https://other.com"}}); err == nil {
 		t.Fatal("duplicate names accepted")
+	}
+}
+
+func TestCustomLatencyUsesSelectedExit(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.ValidateExit = func(name string) error {
+		if name != "Proxy" {
+			return errors.New("unknown exit")
+		}
+		return nil
+	}
+	m.Resolve = func(name string) (uint32, error) {
+		if name != "Proxy" {
+			t.Fatalf("resolved %q", name)
+		}
+		return 0x30000, nil
+	}
+	m.probe = func(_ context.Context, url string) (float64, error) {
+		if url != "https://direct.example/" {
+			t.Errorf("default route used for %s", url)
+		}
+		return 10, nil
+	}
+	m.probeThrough = func(_ context.Context, url string, mark uint32) (float64, error) {
+		if url != "https://proxy.example/" || mark != 0x30000 {
+			t.Errorf("wrong route: %s %#x", url, mark)
+		}
+		return 20, nil
+	}
+	sites := []CustomLatencySite{{Name: "Default", URL: "https://direct.example/"}, {Name: "Proxy site", URL: "https://proxy.example/", Exit: "Proxy"}}
+	if err := m.Replace(sites); err != nil {
+		t.Fatal(err)
+	}
+	m.sample(context.Background())
+	got := m.Snapshot()
+	if *got[0].Milliseconds != 10 || *got[1].Milliseconds != 20 || got[1].Exit != "Proxy" {
+		t.Fatalf("results: %+v", got)
+	}
+	if err := m.Replace([]CustomLatencySite{{Name: "No exit", URL: "https://example.com", Exit: "Unknown"}}); err == nil {
+		t.Fatal("unknown exit accepted")
+	}
+	m.Resolve = func(string) (uint32, error) { return 0, errors.New("exit disabled") }
+	m.sample(context.Background())
+	if m.Snapshot()[1].Milliseconds != nil {
+		t.Fatal("unavailable exit must not fall back to default")
+	}
+	reloaded, err := NewCustomLatencyMonitor(filepath.Join(filepath.Dir(m.path), "sites.json"))
+	if err != nil || !reflect.DeepEqual(reloaded.Config(), sites) {
+		t.Fatalf("stored routes: %v, %v", reloaded.Config(), err)
+	}
+}
+
+func TestHTTPSProbeUsesCustomDialer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	defer server.Close()
+	called := false
+	dial := func(ctx context.Context, network, address string) (net.Conn, error) {
+		called = true
+		return (&net.Dialer{}).DialContext(ctx, network, address)
+	}
+	if _, err := probeHTTPSWithDial(context.Background(), server.URL, dial); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("custom exit dialer was bypassed")
 	}
 }

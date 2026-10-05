@@ -55,3 +55,15 @@ router configuration as `olr.json.latency-sites`; measurements are not persisted
 `milliseconds` and `checked_at`) in addition to the existing `sites` candidate
 list. Edits reset custom results until the next probe. A failed probe never
 retains a previous successful value.
+
+Each custom site can optionally choose **Internet via** a configured gateway
+exit. The default remains the router's normal route. For a named exit, the
+probe marks its TCP socket with that exit's current routing mark (`SO_MARK` on
+Linux), so TCP, TLS, and the HTTPS response traverse the chosen path. Hostname
+resolution still uses the router's resolver and default route. A removed or
+disabled exit produces **No response**, never a fallback to the router default.
+The JSON entry gains an optional `"exit":"Proxy"` field; the name must exist
+when saved. Probes resolve the current mark for each attempt, so changing an
+exit's slot does not leave a stale mark in the site settings. This requires
+Linux and the daemon's socket-marking privilege; on other platforms selected
+exit probes fail rather than silently using the default route.

@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { useGroupActions } from '@/features/devices/group-actions'
 import { useDeviceList, useDevicesConfig } from '@/features/devices/queries'
@@ -16,7 +17,7 @@ import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
 import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
 import { servicesByDevice } from '@/features/topology/services'
 import { useHostMetrics, type HostMetrics } from '@/features/system/queries'
-import { useGatewayLatency, useSaveLatencySites, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
+import { useGatewayConfig, useGatewayLatency, useSaveLatencySites, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
 import { NetworkMap } from '@/features/topology/network-map'
 import { buildOutside } from '@/features/topology/outside'
@@ -62,6 +63,7 @@ export function OverviewPage() {
   const dhcpConfig = useDhcpConfig()
   const dns = useDnsStatus()
   const gateway = useGatewayStatus()
+  const gatewayConfig = useGatewayConfig()
   const traffic = useGatewayTraffic()
   const latency = useGatewayLatency()
   const identity = useDevicesConfig()
@@ -92,7 +94,7 @@ export function OverviewPage() {
       <h1 className="sr-only">Network overview</h1>
       <Stats devices={devices.data?.devices} flows={flows} host={host.data}
         faults={faults} known={known} idle={idle} failed={dhcp.isError || dns.isError || gateway.isError}
-        latency={latency.data} latencyReadAt={latency.dataUpdatedAt} latencyFailed={latency.isError} trafficFailed={traffic.isError} />
+        latency={latency.data} exits={gatewayConfig.data?.enabled ? gatewayConfig.data.exits?.map((exit) => exit.name) ?? [] : []} latencyReadAt={latency.dataUpdatedAt} latencyFailed={latency.isError} trafficFailed={traffic.isError} />
 
       {faults.map((fault) => (
         <Alert key={fault.key} variant={fault.tone === 'bad' ? 'destructive' : 'default'}>
@@ -409,31 +411,46 @@ function SiteIcon({ name }: { name: string }) {
     style={{ backgroundColor: known.color }}>{known.glyph}</span>
 }
 
-function LatencySitesDialog({ sites, onClose }: { sites: { name: string; url: string }[]; onClose: () => void }) {
-  const [draft, setDraft] = useState(sites.map(({ name, url }) => ({ name, url })))
+function LatencySitesDialog({ sites, exits, onClose }: { sites: { name: string; url: string; exit?: string }[]; exits: string[]; onClose: () => void }) {
+  const [draft, setDraft] = useState(sites.map(({ name, url, exit }) => ({ name, url, exit })))
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
+  const [exit, setExit] = useState(' default')
   const save = useSaveLatencySites()
   const add = () => {
     if (!name.trim() || !url.trim() || draft.length >= 12) return
-    setDraft([...draft, { name: name.trim(), url: url.trim() }])
+    setDraft([...draft, { name: name.trim(), url: url.trim(), exit: exit === ' default' ? undefined : exit }])
     setName('')
     setUrl('')
+    setExit(' default')
   }
   return <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
     <DialogContent className="sm:max-w-lg">
       <DialogHeader><DialogTitle>Sites to monitor</DialogTitle><DialogDescription>
-        This router sends an HTTPS HEAD request every minute. Use a URL that accepts HEAD; results measure this router, not individual devices.
+        This router sends an HTTPS HEAD request every minute. Choose its route for each site; DNS lookup still uses this router’s resolver.
       </DialogDescription></DialogHeader>
       <div className="max-h-64 space-y-2 overflow-y-auto">
         {draft.map((site, i) => <div key={i} className="flex items-center gap-2 rounded-lg bg-muted/60 p-2 text-sm">
-          <SiteIcon name={site.name} /><span className="min-w-0 flex-1 truncate" title={site.url}>{site.name}</span>
+          <SiteIcon name={site.name} /><span className="min-w-0 flex-1 truncate" title={`${site.url} · Internet via ${site.exit || 'router default'}`}>{site.name}</span>
+          <Select value={site.exit || ' default'} onValueChange={(value) => setDraft(draft.map((item, index) => index === i ? { ...item, exit: !value || value === ' default' ? undefined : value } : item))}>
+            <SelectTrigger className="max-w-36" aria-label={`Internet via, for ${site.name}`}><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value=" default">Router default</SelectItem>
+              {exits.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
+              {site.exit && !exits.includes(site.exit) && <SelectItem value={site.exit}>{site.exit} (unavailable)</SelectItem>}
+            </SelectContent>
+          </Select>
           <Button variant="ghost" size="icon" aria-label={`Remove ${site.name}`} onClick={() => setDraft(draft.filter((_, index) => index !== i))}><Trash2 className="size-4" /></Button>
         </div>)}
       </div>
       <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
         <Input aria-label="Site name" placeholder="WeChat" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} />
         <Input aria-label="HTTPS URL" placeholder="https://example.com/" value={url} onChange={(e) => setUrl(e.target.value)} />
+        <Select value={exit} onValueChange={(value) => setExit(value ?? ' default')}>
+          <SelectTrigger className="w-full sm:col-span-2" aria-label="Internet via for new site"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value=" default">Router default</SelectItem>
+            {exits.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Button variant="outline" onClick={add} disabled={!name.trim() || !url.startsWith('https://') || draft.length >= 12}>Add</Button>
       </div>
       {save.isError && <p role="alert" className="text-sm text-destructive">{save.error.message}</p>}
@@ -442,7 +459,7 @@ function LatencySitesDialog({ sites, onClose }: { sites: { name: string; url: st
   </Dialog>
 }
 
-function Stats({ devices, flows, host, faults, known, idle, failed, latency, latencyReadAt, latencyFailed, trafficFailed }: {
+function Stats({ devices, flows, host, faults, known, idle, failed, latency, exits, latencyReadAt, latencyFailed, trafficFailed }: {
   devices?: DeviceRow[]
   flows: TrafficView
   host?: HostMetrics
@@ -451,6 +468,7 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, lat
   idle: boolean
   failed: boolean
   latency?: GatewayLatency
+  exits: string[]
   latencyReadAt: number
   latencyFailed: boolean
   trafficFailed: boolean
@@ -492,8 +510,8 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, lat
         <MetricPill label="DNS" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} detail={dnsMeasured ? latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow' : undefined} />
         {!latencyFailed && latency?.custom?.map((site) => {
           const fresh = site.checked_at && latencyReadAt - Date.parse(site.checked_at) < 90_000
-          return <div key={site.name} className="flex items-center gap-2 rounded-xl bg-muted/65 px-3 py-2 text-sm ring-1 ring-foreground/[0.06]" title={site.url}>
-            <SiteIcon name={site.name} /><span className="min-w-0 flex-1 truncate text-muted-foreground">{site.name}</span>
+          return <div key={site.name} className="flex items-center gap-2 rounded-xl bg-muted/65 px-3 py-2 text-sm ring-1 ring-foreground/[0.06]" title={`${site.url} · Internet via ${site.exit || 'router default'}`}>
+            <SiteIcon name={site.name} /><span className="min-w-0 flex-1 truncate text-muted-foreground">{site.name}{site.exit ? ` · ${site.exit}` : ''}</span>
             <span className="font-semibold tabular-nums">{fresh ? site.milliseconds == null ? 'No response' : `${site.milliseconds.toFixed(0)} ms` : '—'}</span>
           </div>
         })}
@@ -508,7 +526,7 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, lat
           detail={host ? `${memoryPercent?.toFixed(0)}% of ${formatBytes(host.memory_total_bytes)}` : undefined} percent={memoryPercent} tone="neutral" />
       </div>
     </StatCard>
-    {sitesOpen && <LatencySitesDialog sites={latency?.custom ?? []} onClose={() => setSitesOpen(false)} />}
+    {sitesOpen && <LatencySitesDialog sites={latency?.custom ?? []} exits={exits} onClose={() => setSitesOpen(false)} />}
     <BandwidthLimitDialog key={editing ?? 'closed'} direction={editing} limits={limits} onClose={() => setEditing(null)} onSave={saveLimits} />
   </div>
 }

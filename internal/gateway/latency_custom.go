@@ -19,20 +19,25 @@ const maxCustomLatencySites = 12
 type CustomLatencySite struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`
+	Exit string `json:"exit,omitempty"`
 }
 
 // Custom targets are independent of the Internet candidate selection.
 // Their intent survives restarts, while measurements remain ephemeral.
 type CustomLatencyMonitor struct {
-	mu      sync.RWMutex
-	path    string
-	sites   []CustomLatencySite
-	results []LatencySite
-	probe   func(context.Context, string) (float64, error)
+	mu           sync.RWMutex
+	path         string
+	sites        []CustomLatencySite
+	results      []LatencySite
+	probe        func(context.Context, string) (float64, error)
+	probeThrough func(context.Context, string, uint32) (float64, error)
+	// Resolve returns the current exit mark; a missing or disabled exit is an error.
+	Resolve      func(string) (uint32, error)
+	ValidateExit func(string) error
 }
 
 func NewCustomLatencyMonitor(path string) (*CustomLatencyMonitor, error) {
-	m := &CustomLatencyMonitor{path: path, probe: probeHTTPS, results: []LatencySite{}}
+	m := &CustomLatencyMonitor{path: path, probe: probeHTTPS, probeThrough: probeHTTPSMarked, results: []LatencySite{}}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return m, nil
@@ -75,7 +80,7 @@ func validateCustomSites(sites []CustomLatencySite) error {
 func (m *CustomLatencyMonitor) resetResults() {
 	m.results = make([]LatencySite, len(m.sites))
 	for i, site := range m.sites {
-		m.results[i] = LatencySite{Name: site.Name, URL: site.URL}
+		m.results[i] = LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit}
 	}
 }
 
@@ -94,6 +99,16 @@ func (m *CustomLatencyMonitor) Config() []CustomLatencySite {
 func (m *CustomLatencyMonitor) Replace(sites []CustomLatencySite) error {
 	if err := validateCustomSites(sites); err != nil {
 		return err
+	}
+	for _, site := range sites {
+		if site.Exit != "" {
+			if m.ValidateExit == nil {
+				return errors.New("gateway exit validation unavailable")
+			}
+			if err := m.ValidateExit(site.Exit); err != nil {
+				return err
+			}
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -119,8 +134,22 @@ func (m *CustomLatencyMonitor) sample(ctx context.Context) {
 			defer wg.Done()
 			bounded, cancel := context.WithTimeout(ctx, 4*time.Second)
 			defer cancel()
-			value, err := m.probe(bounded, site.URL)
-			results[i] = LatencySite{Name: site.Name, URL: site.URL, CheckedAt: time.Now().UTC()}
+			var value float64
+			var err error
+			if site.Exit == "" {
+				value, err = m.probe(bounded, site.URL)
+			} else {
+				var mark uint32
+				if m.Resolve == nil {
+					err = errors.New("gateway exit unavailable")
+				} else {
+					mark, err = m.Resolve(site.Exit)
+				}
+				if err == nil {
+					value, err = m.probeThrough(bounded, site.URL, mark)
+				}
+			}
+			results[i] = LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, CheckedAt: time.Now().UTC()}
 			if err == nil {
 				results[i].Milliseconds = &value
 			}
