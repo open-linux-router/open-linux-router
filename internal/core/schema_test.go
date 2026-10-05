@@ -169,3 +169,27 @@ func TestReflectRejectsNil(t *testing.T) {
 		t.Error("want an error reflecting nil")
 	}
 }
+
+// Inspection has routes but no stored configuration, so its schema is an
+// anonymous empty struct. Reflecting it must not panic during MCP discovery.
+func TestReflectAnonymousStruct(t *testing.T) {
+	for _, value := range []any{struct{}{}, &struct{}{}} {
+		p, err := Reflect("inspection", value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, schema := range []struct {
+			name  string
+			value any
+		}{{"full", p.Full}, {"relaxed", p.Relaxed}} {
+			raw, err := json.Marshal(schema.value)
+			if err != nil {
+				t.Fatalf("%s: %v", schema.name, err)
+			}
+			root := typeOf(t, raw)
+			if root["type"] != "object" || root["title"] != "InspectionConfig" {
+				t.Errorf("%s = %s", schema.name, raw)
+			}
+		}
+	}
+}

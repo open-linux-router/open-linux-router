@@ -137,11 +137,26 @@ func Reflect(name string, v any) (Projections, error) {
 		return Projections{}, fmt.Errorf("cannot reflect a nil schema value")
 	}
 
+	// ExpandedStruct dereferences the root by name in invopop's definitions.
+	// Anonymous structs have no name (inspection uses struct{}), so reflect
+	// those inline instead of dereferencing a missing definition.
+	newReflector := func() *jsonschema.Reflector {
+		r := reflector()
+		t := reflect.TypeOf(v)
+		if t.Kind() == reflect.Pointer {
+			t = t.Elem()
+		}
+		if t.Name() == "" {
+			r.ExpandedStruct = false
+		}
+		return r
+	}
+
 	// Reflected twice rather than deep-copied. Relaxing mutates the tree in
 	// place, and a copy that shared one sub-schema pointer with Full would
 	// silently strip `required` from both.
-	full := reflector().Reflect(v)
-	relaxed := reflector().Reflect(v)
+	full := newReflector().Reflect(v)
+	relaxed := newReflector().Reflect(v)
 	relax(relaxed, map[*jsonschema.Schema]bool{})
 
 	// Titled explicitly, because otherwise the only name on the root is the

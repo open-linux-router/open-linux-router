@@ -449,3 +449,22 @@ func TestNewFailsWithoutAnAPI(t *testing.T) {
 		t.Error("New(nil) should fail rather than serve an empty tool list")
 	}
 }
+
+func TestNewWithConfiglessModule(t *testing.T) {
+	api := core.New()
+	api.Mount("inspection", []core.Route{{
+		Method: http.MethodGet, Path: "/status", Tool: "show status",
+		Summary: "Show inspection status.",
+		Handler: func(w http.ResponseWriter, _ *http.Request) {
+			core.WriteJSON(w, http.StatusOK, struct{}{})
+		},
+	}}, struct{}{})
+
+	s, err := New(api.Handler())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Tools()) != 1 || s.Tools()[0] != "inspection_show_status" {
+		t.Errorf("tools = %v", s.Tools())
+	}
+}
