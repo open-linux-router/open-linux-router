@@ -7,18 +7,10 @@ package on an ordinary Linux box, not flashed as a system image.
 web UI, a CLI, a REST API and an MCP server, all speaking to the same
 configuration. It stays a normal Linux machine the whole time.
 
-**Status: early.** DHCP, DNS, devices and the gateway are built, and olr can
-now connect the box itself: give it the NIC facing your modem, an address and a
-gateway, and it owns that interface and the default route from then on. Interface
-handling is otherwise deliberately minimal — olr adopts the NICs you give it and
-owns this router's own address on each network, putting it back after every
-reboot, but does not yet create bridges or VLANs or take an interface away from
-your distribution's network configuration. **There is no firewall.** olr does
-NAT — port forwarding inward, masquerade outward — and decides what is
-redirected *into* your network, not what is allowed through this box; nftables
-is there for anyone who wants rules. Wi-Fi is not written at all. If you want a
-finished router today, this is not one — but a box serving DHCP and DNS for a household works,
-and that is the path documented in [docs/install.md](docs/install.md).
+**Status: early.** The features below are implemented, but this is not yet a
+finished router. Interfaces must be handed to olr explicitly; it does not
+create bridges or VLANs. QoS policies can be saved but do not shape traffic.
+[docs/install.md](docs/install.md) covers a household DHCP/DNS deployment.
 
 ---
 
@@ -65,40 +57,34 @@ write an olr plugin — you `apt install` it, drop in a systemd unit, or add you
 own nftables table. The distro is a better plugin system than any API we could
 design, and our job is to stay out of its way.
 
-## What's underneath
+## Features and backends
 
-The networking modules that ship today are below. Each one owns a slice of
-configuration and hands the actual work to something that already does it well:
+| Feature | Underlying library or service |
+|---|---|
+| Interfaces and networks | [netlink](https://github.com/vishvananda/netlink) |
+| DHCP and IPv6 router advertisements | [dnsmasq](https://thekelleys.org.uk/dnsmasq/doc.html) |
+| DNS | [unbound](https://nlnetlabs.nl/projects/unbound/about/), [dnsmessage](https://pkg.go.dev/golang.org/x/net/dns/dnsmessage) (olr relay) |
+| Device inventory | dnsmasq leases, kernel neighbours, IEEE OUI registry |
+| Static uplink and IPv6 tunnel | [netlink](https://github.com/vishvananda/netlink) |
+| IPv6 prefix delegation | In-tree DHCPv6 client |
+| Dynamic DNS | [ddns-go](https://github.com/jeessy2/ddns-go) (ported provider code) |
+| Exits and egress NAT | [nftables](https://github.com/google/nftables), [netlink](https://github.com/vishvananda/netlink) |
+| Port forwarding and firewall | [nftables](https://github.com/google/nftables) |
+| QoS policy (storage only) | In-tree config/API; no packet shaping yet |
+| WireGuard | [WireGuard](https://www.wireguard.com/), `wg`, [netlink](https://github.com/vishvananda/netlink) |
+| Shadowsocks | [shadowsocks-rust](https://github.com/shadowsocks/shadowsocks-rust) |
+| SOCKS5 | [3proxy](https://3proxy.org/) |
+| HTTPS ingress | [Caddy](https://caddyserver.com/) |
+| Request inspection | [mitmproxy](https://mitmproxy.org/), `nft` |
+| Remote peer location | [DB-IP Lite](https://db-ip.com/db/lite.php) (in-tree MaxMind DB reader) |
+| CLI | [Cobra](https://github.com/spf13/cobra), [pflag](https://github.com/spf13/pflag) |
+| API and MCP | Go `net/http`, [jsonschema](https://github.com/invopop/jsonschema) (in-tree MCP server) |
+| Web UI | [React](https://react.dev/), [Vite](https://vite.dev/) |
+| Service supervision | [systemd](https://systemd.io/), [go-systemd](https://github.com/coreos/go-systemd) |
 
-| Module | What you configure | What actually does the work |
-|---|---|---|
-| **`link`** | Which interfaces olr is allowed to touch | Kernel **netlink**, read live per request. Drives nothing — adoption is consent, not configuration. |
-| **`dhcp`** | Pools, fixed addresses, options, leases | **dnsmasq**, in a unit of its own (`olr-dhcp.service`) reading a config olr renders. Never the distro's instance. |
-| **`dns`** | Upstreams, local names, blocking policies | **unbound** recursing on loopback, behind a small relay of ours (`olr-dnsd.service`) that owns `:53`, applies policy on the fast path, and observes on a tee. |
-| **`devices`** | Device names, categories, the inventory | No daemon. dnsmasq's lease database joined with the kernel's **ARP table**, so the statically-addressed printer shows up too, plus the **IEEE OUI registry** embedded in the binary to say who built each one. |
-| **`dial`** | The box's own way out, and a public name that follows it | **netlink** for a static uplink — the interface's address, and the default route in the main table, both put back after a reboot. Dynamic DNS is the other half. No DHCP client or PPPoE yet. |
-| **`gateway`** | The boundary with everything else, in both directions: exits, egress NAT, port forwards | **nftables** and the kernel's **policy routing database**, programmed directly over netlink — no rule files, no `nft` shell-outs. Absorbed what used to be a `firewall` module, which did no filtering. |
-| **`remote`** | How you get back into your own network from outside | Two parallel objects. **WireGuard** in the kernel — olr creates the interface over netlink and loads keys with `wg`, never `wg-quick`, whose automatic routing would fight the gateway module's — puts a device *inside* your network. **Shadowsocks** (`ssserver` in a unit of its own) lends a device this box's way out and shows it nothing else. |
-
-All of it is one binary. `olr` is the command you type, the control plane
-systemd runs, and the DNS relay behind port 53 — separate units and separate
-processes, one executable. Under it sits the Go standard library plus a short
-list of direct dependencies: [`google/nftables`](https://github.com/google/nftables)
-and [`vishvananda/netlink`](https://github.com/vishvananda/netlink) for the
-kernel, [`coreos/go-systemd`](https://github.com/coreos/go-systemd) for
-supervision over D-Bus, [`spf13/cobra`](https://github.com/spf13/cobra) for the
-CLI, and [`invopop/jsonschema`](https://github.com/invopop/jsonschema) for the
-schema reflection everything else is generated from. Keeping that list short is
-a deliberate constraint, not an accident. There is no database and no message
-bus — configuration is one JSON file. The units run as root with no systemd
-sandbox, which is a deliberate trade and not an oversight: design.md §3.5
-"Privileges" records what that bought, what it costs, and what has to happen
-before it changes back.
-
-Not written yet: Wi-Fi (hostapd), QoS (tc), the DHCP-client and PPPoE halves of
-WAN dialling, and the SOCKS5 third of remote access. Filtering — zones and
-rules — is not planned for now; see docs/port-forwarding.md §0 for why the
-module that carried the name was deleted rather than finished.
+QoS stores policy but does not shape traffic yet; see [docs/qos.md](docs/qos.md).
+Wi-Fi, bridges/VLANs, IPv4 DHCP-client and PPPoE uplinks, multi-WAN and TPROXY
+exits are not implemented. Optional backends are not necessarily bundled.
 
 ## Getting started
 
