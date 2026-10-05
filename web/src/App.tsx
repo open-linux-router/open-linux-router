@@ -23,6 +23,7 @@ import { RemotePage } from '@/routes/advanced/remote'
 import { NetworksPage } from '@/routes/gateway/networks'
 import { OverviewPage } from '@/routes/overview'
 import { DevicePage } from '@/routes/device'
+import { GroupPage } from '@/routes/group'
 import { GatewayPage } from '@/routes/gateway/index'
 import { GatewayExitsPage } from '@/routes/gateway/exits'
 import { GatewayIPv6Page } from '@/routes/gateway/ipv6'
@@ -37,6 +38,7 @@ export function App() {
         <Route element={<AppShell />}>
           <Route index element={<OverviewPage />} />
           <Route path="devices/:mac" element={<DevicePage />} />
+          <Route path="groups/:name" element={<GroupPage />} />
           <Route path="gateway">
             <Route index element={<GatewayPage />} />
             <Route path="networks" element={<NetworksPage />} />

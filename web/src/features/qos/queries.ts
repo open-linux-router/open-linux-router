@@ -21,3 +21,12 @@ export function useQosDeviceApply(mac: string) {
     onSettled: () => client.invalidateQueries({ queryKey: ['qos'] }),
   })
 }
+
+/** One device at a time, with the MAC supplied per call for group actions. */
+export function useQosDevicesApply() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (device: QosDevice) => api.put<Result>(`/api/qos/devices/${encodeURIComponent(device.mac)}`, device),
+    onSettled: () => client.invalidateQueries({ queryKey: ['qos'] }),
+  })
+}

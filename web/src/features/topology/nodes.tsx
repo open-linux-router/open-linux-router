@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -344,6 +345,10 @@ function GroupMenu({ group, groups, actions }: { group: MapGroup; groups: Device
         <MoreHorizontal />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuItem render={<Link to={`/groups/${encodeURIComponent(name)}`} />}>
+          <Layers /> View group details
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         {onRenameGroup && (
           <DropdownMenuItem onClick={() => onRenameGroup(name)}>
             <Pencil /> Rename
