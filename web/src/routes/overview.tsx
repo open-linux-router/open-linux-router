@@ -126,7 +126,7 @@ export function OverviewPage() {
           pools={dhcpConfig.data?.pools}
           pending={devices.isPending}
           density="auto"
-          onSelect={(device) => navigate(`/devices/${encodeURIComponent(device.mac)}`)}
+          onSelect={(device) => navigate(`/devices/${device.mac}`)}
           onCreateGroup={groupActions.create}
           onRenameGroup={groupActions.rename}
           onDeleteGroup={groupActions.remove}

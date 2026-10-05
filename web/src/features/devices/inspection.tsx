@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -42,15 +42,9 @@ export function DeviceInspection({ mac }: { mac: string }) {
     onSuccess: () => client.invalidateQueries({ queryKey: ['inspection'] }),
     onError: (error) => toast.error(String(error)),
   })
-  const [now, setNow] = useState(Date.now())
   const [selected, setSelected] = useState<Event | null>(null)
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(timer)
-  }, [])
   const active = status.data?.active
   const mine = active && status.data?.mac?.toLowerCase() === mac.toLowerCase()
-  const remaining = Math.max(0, Math.ceil((Date.parse(status.data?.expires ?? '') - now) / 1000))
   const requests = mine ? status.data?.events.filter((e) => e.kind === 'request') ?? [] : []
   const failed = mine ? status.data?.events.filter((e) => e.kind === 'failed') ?? [] : []
 
@@ -73,10 +67,10 @@ export function DeviceInspection({ mac }: { mac: string }) {
           <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Advanced · private by default</p>
           <h2 id="inspection-title" className="text-xl font-semibold tracking-tight">Inspect network requests</h2>
         </div>
-        <Badge variant={mine ? 'warning' : 'outline'}>{mine ? `Live · ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : 'Off'}</Badge>
+        <Badge variant={mine ? 'warning' : 'outline'}>{mine ? 'On' : 'Off'}</Badge>
       </div>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Only this device’s supported TCP HTTP(S) traffic is intercepted for up to 15 minutes. Request URLs and headers can contain private data. Bodies are not collected. Nothing is saved to disk.
+        Turn inspection on or off for this device. It automatically turns off after 15 minutes as a safety limit. Request URLs and headers can contain private data. Bodies are not collected. Nothing is saved to disk.
       </p>
     </div>
     <div className="space-y-5 p-5 sm:p-7">
@@ -88,8 +82,8 @@ export function DeviceInspection({ mac }: { mac: string }) {
         <p><strong className="block text-foreground">3. Stop and remove trust</strong>Stopping or timeout clears the session and restores normal forwarding. Your device still trusts the CA until you remove it in device settings.</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        {mine ? <Button variant="destructive" disabled={stop.isPending} onClick={() => stop.mutate()}>Stop and clear</Button>
-          : <Button disabled={Boolean(active) || start.isPending || status.isPending || status.isError} onClick={() => start.mutate()}>Start 15-minute inspection</Button>}
+        {mine ? <Button variant="destructive" disabled={stop.isPending} onClick={() => stop.mutate()}>Turn off</Button>
+          : <Button disabled={Boolean(active) || start.isPending || status.isPending || status.isError} onClick={() => start.mutate()}>Turn on</Button>}
         <Button variant="outline" disabled={!status.data?.ca_present} onClick={downloadCA}>Download public CA</Button>
       </div>
       <p className="text-xs leading-relaxed text-muted-foreground">

@@ -1,4 +1,5 @@
-import { Activity, ArrowDown, ArrowLeft, ArrowUp, Pencil } from 'lucide-react'
+import { Activity, ArrowDown, ArrowLeft, ArrowUp } from 'lucide-react'
+import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 
 import { Badge } from '@/components/ui/badge'
@@ -7,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useDnsConfig, useDnsQueries } from '@/features/dns/queries'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import { DeviceInspection } from '@/features/devices/inspection'
-import { useDeviceActions } from '@/features/devices/device-actions'
+import { DeviceInlineEditor } from '@/features/devices/device-inline-editor'
 import { useDeviceList } from '@/features/devices/queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
 import { useTrafficView } from '@/features/topology/traffic'
@@ -20,11 +21,12 @@ export function DevicePage() {
   const dnsConfig = useDnsConfig()
   const dnsQueries = useDnsQueries()
   const flow = useTrafficView(traffic.data, traffic.isError)
-  const actions = useDeviceActions()
+  const [filter, setFilter] = useState('')
   const device = devices.data?.devices.find((d) => d.mac.toLowerCase() === mac?.toLowerCase())
   const usage = device && flow.flowOf(device)
   const addresses = new Set(device?.ips?.map((ip) => ip.toLowerCase()) ?? [])
   const matchingQueries = dnsQueries.data?.queries.filter((q) => addresses.has(q.client.toLowerCase())) ?? []
+  const shownQueries = matchingQueries.filter((q) => !filter.trim() || [q.name, q.type, q.rcode, q.policy ?? '', ...(q.answers ?? [])].some((value) => value.toLowerCase().includes(filter.trim().toLowerCase())))
 
   if (devices.isPending) return <p className="py-16 text-sm text-muted-foreground">Loading device…</p>
   if (devices.isError) return <State title="Could not load devices" detail="Try again when the router is reachable." />
@@ -52,9 +54,6 @@ export function DevicePage() {
             {device.last_seen ? ` · Last heard ${formatAgo(device.last_seen)}` : ''}
           </p>
         </div>
-        <Button variant="outline" onClick={() => actions.select(device)}>
-          <Pencil className="size-4" aria-hidden /> Edit device
-        </Button>
       </header>
 
       <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
@@ -71,7 +70,7 @@ export function DevicePage() {
               <Fact label="Lease expires" value={device.expires ? new Date(device.expires).toLocaleString() : 'No expiring lease'} />
             </dl>
             {device.notes && <p className="mt-4 rounded-lg bg-muted/60 p-3 text-sm">{device.notes}</p>}
-            <p className="mt-4 text-xs text-muted-foreground">Addresses and presence are observations, not settings. Edit the name, group, route or reservation above.</p>
+            <p className="mt-4 text-xs text-muted-foreground">Addresses and presence are observations, not settings. Your changes are below.</p>
           </CardContent>
         </Card>
 
@@ -94,35 +93,36 @@ export function DevicePage() {
         </Card>
       </div>
 
+      <DeviceInlineEditor key={device.mac} device={device} />
+
       <Card>
         <CardHeader><CardTitle>DNS queries from this device</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Names this device asked OLR to resolve, not proof it visited them. Only queries from its currently observed IP addresses among the latest 200 network-wide entries are shown. Private DNS and earlier addresses may be missing.
           </p>
+          <div className="grid gap-2 sm:max-w-sm"><label htmlFor="device-dns-filter" className="text-sm font-medium">Filter queries</label><input id="device-dns-filter" className="h-9 rounded-md border bg-background px-3 text-sm" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Name, answer, type or result" /></div>
           {dnsQueries.isError ? (
             <p className="text-sm text-muted-foreground">The DNS query log is unavailable. The resolver may be stopped.</p>
           ) : dnsQueries.isPending ? (
             <p className="text-sm text-muted-foreground">Loading recent queries…</p>
           ) : !dnsConfig.data?.query_log.enabled ? (
             <p className="text-sm text-muted-foreground">The DNS query log is off. Queries are answered but not kept.</p>
-          ) : matchingQueries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No matching queries in the recent sample.</p>
+          ) : shownQueries.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{matchingQueries.length ? 'Nothing matches that filter.' : 'No matching queries in the recent sample.'}</p>
           ) : (
             <ul className="max-h-80 divide-y overflow-y-auto rounded-xl border">
-              {matchingQueries.map((q, i) => <li key={`${q.at}-${q.client}-${q.name}-${i}`} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
+              {shownQueries.map((q, i) => <li key={`${q.at}-${q.client}-${q.name}-${i}`} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
                 <time dateTime={q.at} className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{new Date(q.at).toLocaleTimeString()}</time>
                 <span className="min-w-0 flex-1 break-all">{q.name}<span className="ml-2 text-xs text-muted-foreground">{q.type}</span></span>
-                <Badge variant={q.blocked ? 'destructive' : 'secondary'}>{q.blocked ? `Blocked${q.policy ? ` · ${q.policy}` : ''}` : q.rcode}</Badge>
+                {q.blocked ? <Badge variant="destructive">Blocked{q.policy ? ` · ${q.policy}` : ''}</Badge> : q.rcode !== 'NOERROR' ? <Badge variant="warning">{q.rcode}</Badge> : q.answers?.length ? <span className="break-all font-mono text-xs text-muted-foreground">{q.answers.join(', ')}</span> : <span className="text-xs text-muted-foreground">No answer</span>}
               </li>)}
             </ul>
           )}
-          <Button variant="outline" size="sm" render={<Link to="/dns">DNS activity and settings</Link>} />
         </CardContent>
       </Card>
 
       <DeviceInspection mac={device.mac} />
-      {actions.dialogs}
     </div>
   )
 }
