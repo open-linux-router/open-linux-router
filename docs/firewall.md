@@ -28,7 +28,7 @@ complicated.
 That is the stored configuration, all of it. **Off by default** — installing olr
 changes nothing until somebody says so (§7) — and an ordinary switch in both
 directions. `olr firewall enable|disable|show|status`, `/api/firewall/…`, and a
-page at Gateway → Firewall.
+Firewall section in the web UI.
 
 There is no rule list, and that is the design rather than a gap. A home router's
 firewall is strong because of its default, not because of how many rules it

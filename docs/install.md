@@ -50,7 +50,7 @@ neither knows about the other. Two rules keep that safe:
 
 A **network** is a subnet this router *serves* — it hands out addresses there
 and answers names. The interface facing your modem is the opposite of that, and
-it has its own place in olr: **Networks → Internet uplink**, or `olr dial set
+it has its own place in olr: **Gateway → Networks → Internet uplink**, or `olr dial set
 uplink`.
 
 ```sh
@@ -70,7 +70,7 @@ taken from the distribution, and how it is given back.
 **One interface cannot be both.** olr refuses an uplink on an interface a
 network already carries, and says which network. If you set your WAN NIC up as a
 network before this existed — which was the only thing olr would accept — the
-easiest migration is the web UI: under **Networks → Internet uplink**, choose
+easiest migration is the web UI: under **Gateway → Networks → Internet uplink**, choose
 that interface. It says it carries the network, removes the network while
 keeping its address on the interface, and sets the uplink on that same address,
 so a session arriving through it stays up.
@@ -131,7 +131,7 @@ The rest of this document gives both the UI and the CLI; they are the same API.
 ## 3. Hand the interface to olr, and name the network on it
 
 **Web UI:** both halves are on one page, in the order this heading gives them.
-Networks → Interfaces → switch on `enp1s0`; then, below it, Add: subnet
+Gateway → Networks → Interfaces → switch on `enp1s0`; then, below it, Add: subnet
 `192.168.1.0/24`, this box's address `192.168.1.2`, on `enp1s0`. (A box with
 nothing adopted says so on the Overview, and that link goes to the same page.)
 

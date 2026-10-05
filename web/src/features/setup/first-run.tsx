@@ -78,7 +78,7 @@ export function FirstRun() {
                 : networks.map((n) => `${n.name} on ${n.members.join(', ')}`).join(' · ')
           }
           action={{
-            to: '/networks',
+            to: '/gateway/networks',
             label: adopted.length && networks.length ? 'Change' : 'Set it up',
           }}
         />

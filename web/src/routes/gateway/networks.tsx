@@ -1,6 +1,7 @@
 import { AlertTriangle, Check, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 
+import { SubPage } from '@/components/layout/sub-page'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -66,14 +67,22 @@ export function NetworksPage() {
   const [editing, setEditing] = useState<Network | undefined>(undefined)
   const [open, setOpen] = useState(false)
 
-  if (editor.isPending) return <PageSkeleton />
+  if (editor.isPending) {
+    return (
+      <SubPage section="/gateway" slug="networks">
+        <PageSkeleton />
+      </SubPage>
+    )
+  }
   if (editor.error) {
     return (
-      <Alert variant="destructive">
-        <AlertTriangle />
-        <AlertTitle>Could not load the networks</AlertTitle>
-        <AlertDescription>{editor.error.message}</AlertDescription>
-      </Alert>
+      <SubPage section="/gateway" slug="networks">
+        <Alert variant="destructive">
+          <AlertTriangle />
+          <AlertTitle>Could not load the networks</AlertTitle>
+          <AlertDescription>{editor.error.message}</AlertDescription>
+        </Alert>
+      </SubPage>
     )
   }
 
@@ -92,9 +101,7 @@ export function NetworksPage() {
   }
 
   return (
-    // No page header. The bar already names the section, and
-    // components/layout/app-shell gives a screen reader its <h1>.
-    <div className="space-y-6">
+    <SubPage section="/gateway" slug="networks">
       <PartialApply editor={editor} />
 
       <section className="space-y-3">
@@ -196,7 +203,7 @@ export function NetworksPage() {
       )}
 
       <ConfirmDisruptive editor={editor} />
-    </div>
+    </SubPage>
   )
 }
 

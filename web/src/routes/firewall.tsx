@@ -3,7 +3,6 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { StatusStrip } from '@/components/layout/status-strip'
-import { SubPage } from '@/components/layout/sub-page'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { List, ListRow } from '@/components/ui/list'
@@ -52,7 +51,7 @@ export function FirewallPage() {
 
   if (!status.data) {
     return (
-      <SubPage section="/gateway" slug="firewall">
+      <div className="space-y-6">
         {status.error ? (
           <Alert variant="destructive">
             <AlertTriangle />
@@ -62,14 +61,14 @@ export function FirewallPage() {
         ) : (
           <Skeleton className="h-24 w-full" />
         )}
-      </SubPage>
+      </div>
     )
   }
   const st = status.data
   const summary = summarize(st)
 
   return (
-    <SubPage section="/gateway" slug="firewall">
+    <div className="space-y-6">
       <StatusStrip
         headline={summary.headline}
         detail={summary.detail}
@@ -164,7 +163,7 @@ export function FirewallPage() {
           including ones added later.
         </p>
       </section>
-    </SubPage>
+    </div>
   )
 }
 

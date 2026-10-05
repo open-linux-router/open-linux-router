@@ -1,4 +1,4 @@
-import { Activity, Globe, Network, Router, SlidersHorizontal, Waypoints } from 'lucide-react'
+import { Activity, Globe, Network, Shield, SlidersHorizontal, Waypoints } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /**
@@ -34,21 +34,17 @@ import type { LucideIcon } from 'lucide-react'
  * a row also read as one system, where "Addresses / DNS / Internet" read as
  * three different registers.
  *
- * There is no Firewall section. The section that used to carry the name held
- * port forwarding and no filtering at all, and was removed; the real firewall,
- * when it arrived, is one switch and a list, so it is a page under Gateway —
- * the boundary it guards — rather than a tab. Port forwards are under Advanced,
- * with the page about somebody else's filtering that explains a forward which
- * does not reach.
+ * Networks is under Gateway: interfaces, local subnets and the uplink are
+ * prerequisites for deciding how traffic leaves. Firewall has its own section
+ * because its boundary and live openings deserve a direct place in the bar.
  *
  * Advanced is the one section that is not a module, and that is the point of
- * it. The five above are what every router has, and the order an operator sets
- * them up in. What is under Advanced is what a house network can go years
+ * it. The other sections are what every router has, in the order an operator
+ * sets them up in. What is under Advanced is what a house network can go years
  * without: letting the internet in to one device, a public name kept pointing
  * here, dialling in, and publishing services by name. Each used to be a
  * section of its own, which put the rarely-visited half of the app level with
- * the half every visit is about — and on a phone made the tab bar seven wide.
- * They read as one group anyway: all four are about reaching in from outside.
+ * the half every visit is about. They read as one group anyway: all four are about reaching in from outside.
  *
  * Devices is absent because it is not a section: the device list is the body of
  * the overview. Filing it under DHCP was considered and rejected — the
@@ -88,29 +84,16 @@ export const SECTIONS: Section[] = [
     groups: [],
   },
   {
-    // First after the overview, because it is what everything below it keys
-    // off: a DHCP range is served on a network, a gateway exit is chosen by
-    // network. Putting it after them would mean every one of those pages sends
-    // the operator back here before they can do anything.
-    to: '/networks',
-    label: 'Networks',
-    icon: Router,
-    end: false,
-    // Adoption lives on this page too, and did not always. It was a sub-page of
-    // DHCP, filed there because DHCP was the first module that needed it. That
-    // reason expired when this section landed: a network cannot be created on
-    // an interface nobody handed over, so adoption became the prerequisite of
-    // the page the nav already calls first — reachable only by opening a
-    // section listed *after* it and going one level down. An operator with two
-    // NICs to set up could not find it, which is the whole bug in one sentence.
-    groups: [],
-  },
-  {
     to: '/gateway',
     label: 'Gateway',
     icon: Waypoints,
     end: false,
     groups: [
+      {
+        slug: 'networks',
+        label: 'Networks',
+        blurb: 'The interfaces this router uses, the subnets it serves, and its own internet uplink.',
+      },
       {
         slug: 'exits',
         label: 'Ways out',
@@ -126,14 +109,6 @@ export const SECTIONS: Section[] = [
         slug: 'ipv6',
         label: 'IPv6',
         blurb: 'Whether IPv6 passes through this router. Off, on, or left as the router already has it.',
-      },
-      {
-        // Under Gateway rather than a section of its own: the gateway is the
-        // boundary with the internet, and this is the default stance at it.
-        slug: 'firewall',
-        label: 'Firewall',
-        blurb:
-          'Block connections from outside that nothing here asked for. What stays reachable is derived from what you have set up — port forwards, remote access, published services — so there are no rules to write or to forget to remove.',
       },
       {
         slug: 'unmanaged',
@@ -163,7 +138,7 @@ export const SECTIONS: Section[] = [
         blurb:
           'Devices that should always get the same address — printers, a NAS, anything you reach by address rather than by name.',
       },
-      // Interfaces was here, and it was the wrong place. See /networks.
+      // Interfaces are under Gateway / Networks, not DHCP.
       {
         slug: 'advanced',
         label: 'Advanced',
@@ -213,6 +188,13 @@ export const SECTIONS: Section[] = [
           'How much of the query log to keep, and settings this router does not model, passed straight through to unbound.',
       },
     ],
+  },
+  {
+    to: '/firewall',
+    label: 'Firewall',
+    icon: Shield,
+    end: false,
+    groups: [],
   },
   {
     to: '/advanced',

@@ -40,7 +40,7 @@ import { cn } from '@/lib/utils'
  * to grant — and the DHCP and DNS landing pages now say so *before* the switch
  * is touched, linking to the page this card sits on.
  *
- * That page is routes/networks, which is where adoption belongs: the next thing
+ * That page is routes/gateway/networks, which is where adoption belongs: the next thing
  * you do with an adopted interface is put a network on it, and that form is
  * directly below. It was a sub-page of DHCP until it moved, and the heading
  * above it is still the page's rather than this component's — a card heading

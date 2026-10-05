@@ -419,12 +419,9 @@ table). Putting it here would have meant a second module writing NAT rules, and
 | `olr dial rm uplink` | |
 | Networks page, third section | beside Interfaces and Networks |
 
-The uplink is on the **Networks** page rather than under Gateway, which is where
-the reporter looked first. Gateway's blurb — "how each network reaches the
-internet" — reads exactly like where this would be, so that page now says which
-of the two it is and links here. The uplink sits on Networks because everything
-you do with an interface is there: hand it over, then make it either a network
-this router serves or the one way out.
+The uplink is on **Gateway → Networks**, beside interface adoption and local
+subnets. Gateway distinguishes how traffic from the networks leaves from how
+this router itself reaches the internet, and links to the uplink there.
 
 ### 6.1 Intent beside fact, never collapsed
 

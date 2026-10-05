@@ -59,7 +59,7 @@ export function DnsPage() {
               is handed over. Switching one on changes nothing by itself.
             </p>
             <Link
-              to="/networks"
+              to="/gateway/networks"
               className="inline-flex items-center gap-1 text-sm font-medium underline underline-offset-4"
             >
               Choose an interface

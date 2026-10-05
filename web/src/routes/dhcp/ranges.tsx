@@ -14,7 +14,7 @@ export function DhcpRangesPage() {
   const { config, busy, change, applier, gate } = useDhcpEditor()
   const leases = useDhcpLeases()
   // Read to notice a range whose network has gone. Removing a network does not
-  // remove the ranges on it (routes/networks warns before it happens), and a
+  // remove the ranges on it (routes/gateway/networks warns before it happens), and a
   // range with no network looked exactly like a healthy one here — while the
   // server kept handing it out on whatever interface it was last given.
   const interfaces = useInterfaces()

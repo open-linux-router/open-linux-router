@@ -22,7 +22,6 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { ApplyOutcome, useGatewayEditor } from '@/features/gateway/editor'
 import { DIRECT, NetworkList } from '@/features/gateway/network-list'
-import { useFirewallStatus } from '@/features/firewall/queries'
 import { useLinkConfig } from '@/features/link/queries'
 import { gatewayChange, useGatewayStatus, useReapplyGateway } from '@/features/gateway/queries'
 
@@ -38,7 +37,6 @@ export function GatewayPage() {
   const { config, busy, change, applier, gate } = useGatewayEditor()
   const status = useGatewayStatus()
   const reapply = useReapplyGateway()
-  const firewall = useFirewallStatus()
   const link = useLinkConfig()
 
   if (!config) return gate
@@ -90,7 +88,7 @@ export function GatewayPage() {
             The setting every network follows unless it has one of its own. This is about the
             networks behind this router, not the router itself — where{' '}
             <em>this box</em> plugs into the internet is the uplink, under{' '}
-            <Link to="/networks" className="underline underline-offset-2">
+            <Link to="/gateway/networks" className="underline underline-offset-2">
               Networks
             </Link>
             .
@@ -171,6 +169,10 @@ export function GatewayPage() {
         section="/gateway"
         rows={[
           {
+            slug: 'networks',
+            value: link.data ? `${link.data.networks?.length ?? 0} configured` : undefined,
+          },
+          {
             slug: 'exits',
             value: exits.length ? exits.map((e) => e.name).join(', ') : 'None yet',
           },
@@ -184,7 +186,6 @@ export function GatewayPage() {
                   ? 'Forwarding'
                   : 'Off',
           },
-          { slug: 'firewall', value: firewall.data ? (firewall.data.enabled ? 'On' : 'Off') : undefined },
           // Only when there is something to show. design.md §3.4 wants
           // somebody else's rules legible, not a permanent empty page.
           ...(foreign.length
