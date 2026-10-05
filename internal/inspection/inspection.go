@@ -43,12 +43,14 @@ type Event struct {
 }
 
 type Status struct {
-	Active    bool      `json:"active"`
-	MAC       string    `json:"mac,omitempty"`
-	IP        string    `json:"ip,omitempty"`
-	Expires   time.Time `json:"expires,omitempty"`
-	Events    []Event   `json:"events"`
-	CAPresent bool      `json:"ca_present"`
+	Active        bool      `json:"active"`
+	MAC           string    `json:"mac,omitempty"`
+	IP            string    `json:"ip,omitempty"`
+	Expires       time.Time `json:"expires,omitempty"`
+	Events        []Event   `json:"events"`
+	CAPresent     bool      `json:"ca_present"`
+	Redirected    *uint64   `json:"redirected_packets,omitempty"`
+	ProxyAccepted uint64    `json:"proxy_accepted"`
 }
 
 type Service struct {
@@ -65,6 +67,7 @@ type session struct {
 	cancel   func()
 	done     chan struct{}
 	events   []Event
+	accepted uint64
 	retrying bool
 }
 
@@ -84,6 +87,10 @@ func (s *Service) snapshot() Status {
 	if q := s.session; q != nil {
 		out.Active, out.MAC, out.IP, out.Expires = true, q.mac, q.ip, q.expires
 		out.Events = append(out.Events, q.events...)
+		out.ProxyAccepted = q.accepted
+		if n, err := redirectCount(); err == nil {
+			out.Redirected = &n
+		}
 	}
 	_, err := os.Stat(filepath.Join(s.Dir, "mitmproxy-ca-cert.pem"))
 	out.CAPresent = err == nil
@@ -256,12 +263,16 @@ func (s *Service) consume(q *session, stdout interface{ Read([]byte) (int, error
 	scanner.Buffer(make([]byte, 4096), 1<<20)
 	for scanner.Scan() {
 		var event Event
-		if json.Unmarshal(scanner.Bytes(), &event) != nil || (event.Kind != "request" && event.Kind != "failed") {
+		if json.Unmarshal(scanner.Bytes(), &event) != nil || (event.Kind != "request" && event.Kind != "failed" && event.Kind != "accepted") {
 			continue
 		}
 		s.mu.Lock()
 		if s.session == q {
-			q.events = append(q.events, event)
+			if event.Kind == "accepted" {
+				q.accepted++
+			} else {
+				q.events = append(q.events, event)
+			}
 			if len(q.events) > maxEvents {
 				q.events = q.events[len(q.events)-maxEvents:]
 			}
@@ -374,6 +385,9 @@ func install(ip string) error {
 	if err := nft("add", "table", "inet", table); err != nil {
 		return err
 	}
+	if err := nft("add", "counter", "inet", table, "redirected"); err != nil {
+		return err
+	}
 	if err := nft("add", "chain", "inet", table, "prerouting", "{ type nat hook prerouting priority dstnat - 1; policy accept; }"); err != nil {
 		return err
 	}
@@ -395,8 +409,31 @@ func install(ip string) error {
 			return err
 		}
 	}
-	if err := nft("add", "rule", "inet", table, "prerouting", "ip", "saddr", ip, "tcp", "dport", "{", "80,", "443", "}", "redirect", "to", ":"+port); err != nil {
+	if err := nft("add", "rule", "inet", table, "prerouting", "ip", "saddr", ip, "tcp", "dport", "{", "80,", "443", "}", "counter", "name", "redirected", "redirect", "to", ":"+port); err != nil {
 		return err
 	}
 	return nil
+}
+
+func redirectCount() (uint64, error) {
+	out, err := exec.Command("nft", "-j", "list", "counter", "inet", table, "redirected").Output()
+	if err != nil {
+		return 0, err
+	}
+	var result struct {
+		Nftables []struct {
+			Counter *struct {
+				Packets uint64 `json:"packets"`
+			} `json:"counter"`
+		} `json:"nftables"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return 0, err
+	}
+	for _, item := range result.Nftables {
+		if item.Counter != nil {
+			return item.Counter.Packets, nil
+		}
+	}
+	return 0, fmt.Errorf("missing inspection counter")
 }

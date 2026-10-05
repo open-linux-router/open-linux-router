@@ -57,7 +57,7 @@ func TestInstallRedirectsChosenAddress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "ip saddr 172.16.1.135 tcp dport") {
+	if !strings.Contains(string(data), "add counter inet olr_inspection redirected") || !strings.Contains(string(data), "ip saddr 172.16.1.135 tcp dport { 80, 443 } counter name redirected redirect to :18081") {
 		t.Errorf("missing redirect for chosen address in %s", data)
 	}
 }
@@ -127,5 +127,20 @@ func TestProxyGroupStopsForkedChild(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("proxy process group survived cancellation")
+	}
+}
+
+func TestRedirectCount(t *testing.T) {
+	dir := t.TempDir()
+	script := `#!/bin/sh
+printf '%s\n' '{"nftables":[{"metainfo":{}},{"counter":{"family":"inet","table":"olr_inspection","name":"redirected","packets":12,"bytes":720}}]}'
+`
+	if err := os.WriteFile(filepath.Join(dir, "nft"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	got, err := redirectCount()
+	if err != nil || got != 12 {
+		t.Fatalf("redirect count = %d, %v", got, err)
 	}
 }

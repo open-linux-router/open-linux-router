@@ -26,6 +26,8 @@ interface Status {
   expires?: string
   events: Event[]
   ca_present: boolean
+  redirected_packets?: number
+  proxy_accepted: number
 }
 
 export function DeviceInspection({ mac, addresses }: { mac: string; addresses: string[] }) {
@@ -120,6 +122,9 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
           <p className="text-xs text-muted-foreground">This link serves only the public certificate, without an admin token. Anyone with the link can download it; never scan a QR from an untrusted router.</p>
         </DialogContent>
       </Dialog>
+      {mine && <p className="text-xs text-muted-foreground">
+        Diagnostic: {status.data?.redirected_packets ?? 'unavailable'} redirected TCP packets · {status.data?.proxy_accepted ?? 0} proxy connections accepted. These are session totals, not a complete connection history. If the first count stays at zero after an IPv4 HTTP test, traffic did not match the redirect; if it grows but the second stays at zero, it did not reach mitmdump.
+      </p>}
       {mine && <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-2">
           <h3 className="text-sm font-semibold">Inspected requests <Badge variant="secondary">{requests.length}</Badge></h3>

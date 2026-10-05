@@ -26,3 +26,7 @@ def error(flow: http.HTTPFlow):
         "target": flow.request.host if flow.request else "unknown",
         "reason": str(flow.error)[:300] if flow.error else "connection failed",
     })
+
+
+def client_connected(client):
+    emit({"kind": "accepted"})
