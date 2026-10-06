@@ -57,7 +57,7 @@ func TestInstallRedirectsChosenAddress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "add counter inet olr_inspection redirected") || !strings.Contains(string(data), "ip saddr 172.16.1.135 tcp dport { 80, 443 } counter name redirected redirect to :18081") {
+	if !strings.Contains(string(data), "add counter inet olr_inspection redirected") || !strings.Contains(string(data), "ip saddr 172.16.1.135 tcp dport { 80, 443 } counter name redirected redirect to :18081") || !strings.Contains(string(data), "tcp dport 18081 counter name input_seen") || !strings.Contains(string(data), "ct status != dnat counter name input_dropped drop") {
 		t.Errorf("missing redirect for chosen address in %s", data)
 	}
 }
@@ -139,7 +139,7 @@ printf '%s\n' '{"nftables":[{"metainfo":{}},{"counter":{"family":"inet","table":
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
-	got, err := redirectCount()
+	got, err := inspectionCount("redirected")
 	if err != nil || got != 12 {
 		t.Fatalf("redirect count = %d, %v", got, err)
 	}

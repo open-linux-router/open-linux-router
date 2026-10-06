@@ -50,6 +50,8 @@ type Status struct {
 	Events        []Event   `json:"events"`
 	CAPresent     bool      `json:"ca_present"`
 	Redirected    *uint64   `json:"redirected_packets,omitempty"`
+	InputSeen     *uint64   `json:"input_packets,omitempty"`
+	InputDropped  *uint64   `json:"input_dropped_packets,omitempty"`
 	ProxyAccepted uint64    `json:"proxy_accepted"`
 }
 
@@ -88,8 +90,14 @@ func (s *Service) snapshot() Status {
 		out.Active, out.MAC, out.IP, out.Expires = true, q.mac, q.ip, q.expires
 		out.Events = append(out.Events, q.events...)
 		out.ProxyAccepted = q.accepted
-		if n, err := redirectCount(); err == nil {
+		if n, err := inspectionCount("redirected"); err == nil {
 			out.Redirected = &n
+		}
+		if n, err := inspectionCount("input_seen"); err == nil {
+			out.InputSeen = &n
+		}
+		if n, err := inspectionCount("input_dropped"); err == nil {
+			out.InputDropped = &n
 		}
 	}
 	_, err := os.Stat(filepath.Join(s.Dir, "mitmproxy-ca-cert.pem"))
@@ -385,8 +393,10 @@ func install(ip string) error {
 	if err := nft("add", "table", "inet", table); err != nil {
 		return err
 	}
-	if err := nft("add", "counter", "inet", table, "redirected"); err != nil {
-		return err
+	for _, name := range []string{"redirected", "input_seen", "input_dropped"} {
+		if err := nft("add", "counter", "inet", table, name); err != nil {
+			return err
+		}
 	}
 	if err := nft("add", "chain", "inet", table, "prerouting", "{ type nat hook prerouting priority dstnat - 1; policy accept; }"); err != nil {
 		return err
@@ -394,9 +404,14 @@ func install(ip string) error {
 	if err := nft("add", "chain", "inet", table, "input", "{ type filter hook input priority -1; policy accept; }"); err != nil {
 		return err
 	}
+	// Count packets delivered to the local input hook separately from the
+	// redirect match, before deciding whether they may enter the listener.
+	if err := nft("add", "rule", "inet", table, "input", "iifname", "!=", "lo", "tcp", "dport", port, "counter", "name", "input_seen"); err != nil {
+		return err
+	}
 	// A transparent listener must bind all local addresses. Do not expose it
 	// as a direct LAN proxy: only redirected connections may enter.
-	if err := nft("add", "rule", "inet", table, "input", "iifname", "!=", "lo", "tcp", "dport", port, "ct", "status", "!=", "dnat", "drop"); err != nil {
+	if err := nft("add", "rule", "inet", table, "input", "iifname", "!=", "lo", "tcp", "dport", port, "ct", "status", "!=", "dnat", "counter", "name", "input_dropped", "drop"); err != nil {
 		return err
 	}
 	for _, args := range [][]string{
@@ -415,8 +430,8 @@ func install(ip string) error {
 	return nil
 }
 
-func redirectCount() (uint64, error) {
-	out, err := exec.Command("nft", "-j", "list", "counter", "inet", table, "redirected").Output()
+func inspectionCount(name string) (uint64, error) {
+	out, err := exec.Command("nft", "-j", "list", "counter", "inet", table, name).Output()
 	if err != nil {
 		return 0, err
 	}
