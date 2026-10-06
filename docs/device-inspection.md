@@ -12,6 +12,8 @@ Only one session and one explicitly chosen source IPv4 address are inspected at 
 
 During a session the page shows redirect-rule packet and proxy-accepted connection totals. They are diagnostics, not a complete connections list: the redirect counter counts packets matching the IPv4 TCP rule, while the proxy counter counts accepted sockets. A zero redirect count after an IPv4 HTTP test means the rule did not match; a growing redirect count with zero proxy accepts points to delivery between netfilter and mitmdump. Neither count proves that an HTTP response completed.
 
+The listener input guard accepts only the selected IPv4 source when conntrack records an original TCP destination port of 80/443; direct connections to the proxy port from the LAN are dropped. A redirect is not reliably identified by `ct status dnat`, so do not use that bit for this guard.
+
 The proxy must be ready before nftables interception is installed. OLR removes its own nftables table at stop/timeout/proxy exit and before startup, and restores normal forwarding on failure. The session holds at most 200 request/failure events in daemon memory, including headers but not bodies, and clears them on stop. Treat headers and URLs as sensitive. CA trust and the CA key remain after a session; a future rotation workflow should coordinate removing trust from devices.
 
 Validation on a real Linux router is required before relying on this in production: test HTTP and trusted HTTPS, an untrusted/pinned app, IPv4 address changes, QUIC, proxy crash, daemon restart and nft cleanup failure. macOS Go/UI tests cannot exercise the netfilter path.

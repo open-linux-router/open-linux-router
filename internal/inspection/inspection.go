@@ -409,9 +409,13 @@ func install(ip string) error {
 	if err := nft("add", "rule", "inet", table, "input", "iifname", "!=", "lo", "tcp", "dport", port, "counter", "name", "input_seen"); err != nil {
 		return err
 	}
-	// A transparent listener must bind all local addresses. Do not expose it
-	// as a direct LAN proxy: only redirected connections may enter.
-	if err := nft("add", "rule", "inet", table, "input", "iifname", "!=", "lo", "tcp", "dport", port, "ct", "status", "!=", "dnat", "counter", "name", "input_dropped", "drop"); err != nil {
+	// Redirect sets the original destination port in conntrack, but does not
+	// necessarily set the DNAT status bit. Permit only the selected source's
+	// connections that originally targeted HTTP(S), not direct LAN proxy use.
+	if err := nft("add", "rule", "inet", table, "input", "ip", "saddr", ip, "tcp", "dport", port, "ct", "original", "proto-dst", "{", "80,", "443", "}", "accept"); err != nil {
+		return err
+	}
+	if err := nft("add", "rule", "inet", table, "input", "iifname", "!=", "lo", "tcp", "dport", port, "counter", "name", "input_dropped", "drop"); err != nil {
 		return err
 	}
 	for _, args := range [][]string{
