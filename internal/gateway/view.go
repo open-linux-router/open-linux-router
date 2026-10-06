@@ -260,13 +260,6 @@ func trafficLimits() []string {
 		"A device that changes address starts a new count, and IPv6 privacy " +
 			"addresses rotate on purpose, so one device can appear as several.",
 		"Anything behind a second router is counted as that router.",
-		// The declared cost of keying on the connection's opener (StatSet.Down).
-		// Stated the way an operator would meet it rather than in conntrack
-		// terms: what they will actually see is a public address sitting in a
-		// list of their own devices.
-		"A connection opened from the internet to a device here — a forwarded " +
-			"port — is counted against the address that opened it, so it appears " +
-			"in this list as if it were a device of yours.",
 	}
 }
 

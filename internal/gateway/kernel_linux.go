@@ -327,13 +327,13 @@ func statRuleLines(conn *nftables.Conn, table *nftables.Table, chain *nftables.C
 		if !present[s.Name] {
 			continue
 		}
-		if comments[s.Line()] {
-			out = append(out, s.Line())
-			continue
+		for _, line := range []string{s.Line(), s.DNATLine()} {
+			if comments[line] {
+				out = append(out, line)
+			} else {
+				out = append(out, fmt.Sprintf("nft stat set %s built by another version", s.Name))
+			}
 		}
-		// The set exists but no rule claims to feed it the way this version
-		// would. Named, so the diff says which one.
-		out = append(out, fmt.Sprintf("nft stat set %s built by another version", s.Name))
 	}
 	return out, nil
 }
@@ -356,11 +356,11 @@ func statTableMatches(conn *nftables.Conn, table *nftables.Table, want StatTable
 	if err != nil {
 		return false, err
 	}
-	if len(have) != len(want.Sets) {
+	if len(have) != 2*len(want.Sets) {
 		return false, nil
 	}
 	for i, s := range want.Sets {
-		if have[i] != s.Line() {
+		if have[2*i] != s.Line() || have[2*i+1] != s.DNATLine() {
 			return false, nil
 		}
 	}
@@ -470,33 +470,21 @@ func (k LinuxKernel) applyStat(d Desired) error {
 		if err := conn.AddSet(set, nil); err != nil {
 			return fmt.Errorf("creating set %s: %w", s.Name, err)
 		}
-		conn.AddRule(&nftables.Rule{
-			Table:    table,
-			Chain:    chain,
-			Exprs:    accountSetExprs(s),
-			UserData: comment(s.Line()),
-		})
+		for _, dnat := range []bool{false, true} {
+			conn.AddRule(&nftables.Rule{
+				Table: table, Chain: chain,
+				Exprs:    accountSetExprs(s, dnat),
+				UserData: comment(s.ruleLine(dnat)),
+			})
+		}
 	}
 
 	return conn.Flush()
 }
 
-// accountSetExprs is `update @<set> { <addr> . meta mark }` for one direction.
-//
-// The conntrack direction is matched *before* the address is loaded, and it is
-// what makes the address mean "the device on our side" rather than "whichever
-// end this packet happens to be addressed to" (StatSet.Down has the full
-// story). Two consequences worth knowing at the call site:
-//
-//   - An untracked packet matches neither rule and is not counted. nft_ct's
-//     evaluation breaks out of the rule when there is no conntrack entry, so
-//     this is a silent omission rather than an error. In practice a router
-//     forwarding anything at all is tracking it — this module's own restore
-//     rule reads `ct mark` on the same packets — and using a ct expression at
-//     all is what pins conntrack up for the family in the first place.
-//   - Exactly one of the two rules matches each packet, where before both did.
-//     The expensive part of this chain is the set update, so that halves it.
-func accountSetExprs(s StatSet) []expr.Any {
+// accountSetExprs keys each packet on the local device. After DNAT and
+// before reverse SNAT, forwarded packet headers already contain that address.
+func accountSetExprs(s StatSet, dnat bool) []expr.Any {
 	proto := byte(unix.NFPROTO_IPV4)
 	offset, length := uint32(12), uint32(4) // ip saddr
 	dir := byte(ctDirOriginal)
@@ -504,9 +492,16 @@ func accountSetExprs(s StatSet) []expr.Any {
 		offset = 16 // ip daddr
 		dir = ctDirReply
 	}
+	if dnat {
+		if s.Down {
+			offset, dir = 16, ctDirOriginal
+		} else {
+			offset, dir = 12, ctDirReply
+		}
+	}
 	if s.V6 {
 		proto, offset, length = unix.NFPROTO_IPV6, 8, 16
-		if s.Down {
+		if s.Down != dnat {
 			offset = 24
 		}
 	}
@@ -516,6 +511,11 @@ func accountSetExprs(s StatSet) []expr.Any {
 	markReg := uint32(reg32_01)
 	if s.V6 {
 		markReg = reg32_04
+	}
+
+	status := uint32(0)
+	if dnat {
+		status = ctStatusDstNAT
 	}
 
 	return []expr.Any{
@@ -528,6 +528,11 @@ func accountSetExprs(s StatSet) []expr.Any {
 		// One byte: nft_ct_get_eval stores the direction with nft_reg_store8.
 		&expr.Ct{Key: expr.CtKeyDIRECTION, Register: 1},
 		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{dir}},
+
+		&expr.Ct{Register: 1, Key: expr.CtKeySTATUS},
+		&expr.Bitwise{SourceRegister: 1, DestRegister: 1, Len: 4,
+			Mask: markBytes(ctStatusDstNAT), Xor: markBytes(0)},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: markBytes(status)},
 
 		&expr.Payload{
 			DestRegister: reg32_00,

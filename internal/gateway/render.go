@@ -84,36 +84,11 @@ type StatTable struct {
 // discovered.
 const StatSetSize = 8192
 
-// StatSet is one direction of one family.
+// StatSet is one direction of one family. Ordinary connections are keyed on
+// their opener; DNATed connections are keyed on the translated local endpoint.
 type StatSet struct {
 	Name string
-
-	// V6 selects the key type.
-	V6 bool
-
-	// Down selects the reply direction, keyed on the destination address.
-	//
-	// Both halves of that sentence are load-bearing, and the direction is the
-	// half that took a bug to learn. Keying on `ip daddr` alone counts the
-	// wrong thing: on a packet *leaving* for the internet the destination is
-	// the far end, so the set gained an element for every remote address the
-	// house ever contacted — the device rows were right, and beside them sat
-	// one mirrored row per web server, CDN edge and telemetry endpoint. That
-	// cost three things at once: a Usage list half full of addresses nobody
-	// recognises, a set that fills its cap with strangers and then stops
-	// recording new devices, and a full dump of all four sets on every read.
-	//
-	// Matching the conntrack direction first is what makes the address mean
-	// "the device": the original direction is the one the connection was
-	// opened in, so its source is the opener, and the reply direction's
-	// destination is that same opener. Every packet now matches exactly one of
-	// the two rules instead of both, which halves the work on the forward path
-	// as well.
-	//
-	// What it does not fix is a connection opened *from* the far side — a port
-	// forward — where the opener genuinely is the remote address. That is
-	// bounded by the number of forwarded ports rather than by the size of the
-	// internet, and it is declared in the limits the endpoint carries.
+	V6   bool
 	Down bool
 }
 
@@ -137,28 +112,31 @@ func (s StatSet) KeyBytes() int {
 	return 4 + 4
 }
 
-// Line is this set's canonical form, and it doubles as the comment on the rule
-// that feeds it.
-//
-// The direction is *in* the line rather than implied by the set's name, which
-// is what makes an older box's rules visibly different from the ones this
-// version renders. observeStat reads these back off the rules, so a table left
-// behind by a version that keyed the wrong address shows up as drift and gets
-// rebuilt instead of quietly counting the internet forever.
-func (s StatSet) Line() string {
-	key := "ipv4_addr"
+// Line is the ordinary accounting rule's canonical form. Its status guard
+// also makes an old table visibly drift so an upgrade rebuilds it.
+func (s StatSet) Line() string { return s.ruleLine(false) }
+
+// DNATLine records the translated endpoint rather than the remote opener.
+func (s StatSet) DNATLine() string { return s.ruleLine(true) }
+
+func (s StatSet) ruleLine(dnat bool) string {
+	key, addr, direction, status := "ipv4_addr", "ip saddr", "original", "not dnat"
+	if s.Down {
+		addr, direction = "ip daddr", "reply"
+	}
+	if dnat {
+		status = "dnat"
+		if s.Down {
+			addr, direction = "ip daddr", "original"
+		} else {
+			addr, direction = "ip saddr", "reply"
+		}
+	}
 	if s.V6 {
 		key = "ipv6_addr"
+		addr = "ip6 " + strings.TrimPrefix(addr, "ip ")
 	}
-	which, dir := "ip saddr", "original"
-	if s.Down {
-		which, dir = "ip daddr", "reply"
-	}
-	if s.V6 {
-		which = "ip6 " + strings.TrimPrefix(which, "ip ")
-	}
-	return fmt.Sprintf("nft stat set %s %s . mark from %s where ct direction %s",
-		s.Name, key, which, dir)
+	return fmt.Sprintf("nft stat set %s %s . mark from %s where ct direction %s status %s", s.Name, key, addr, direction, status)
 }
 
 // NFTable is the `inet olr_route` table (§3.3).
@@ -835,7 +813,7 @@ func (d Desired) objectLines() []string {
 			fmt.Sprintf("nft table inet %s", StatTableName),
 			fmt.Sprintf("nft chain %s forward filter", AccountChain))
 		for _, s := range d.Stat.Sets {
-			out = append(out, s.Line())
+			out = append(out, s.Line(), s.DNATLine())
 		}
 	}
 

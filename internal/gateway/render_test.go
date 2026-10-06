@@ -420,23 +420,25 @@ func TestAccountingIsOnByDefault(t *testing.T) {
 	}
 }
 
-// The bug this pairing exists to prevent: keying the *down* set on `ip daddr`
-// with nothing qualifying it counts the far end of every outbound packet, so
-// the set fills with one row per web server instead of one row per device.
-//
-// Asserted on the canonical line rather than on the expressions, because that
-// line is what an upgraded box compares itself against — see
-// TestAccountingLineDistinguishesTheDirections.
-func TestAccountingKeysTheConnectionOpenerInBothDirections(t *testing.T) {
-	for _, s := range StatSets() {
-		line := s.Line()
-		switch {
-		case s.Down && !strings.Contains(line, "ct direction reply"):
-			t.Errorf("%s keys the destination, so it must match the reply "+
-				"direction or it counts remote addresses: %q", s.Name, line)
-		case !s.Down && !strings.Contains(line, "ct direction original"):
-			t.Errorf("%s keys the source, so it must match the original "+
-				"direction or it counts remote addresses: %q", s.Name, line)
+// Every packet must enter exactly one accounting set: ordinary connections
+// use the opener, while DNATed connections use the translated local endpoint.
+func TestAccountingKeysLocalEndpointForDNAT(t *testing.T) {
+	for _, spec := range StatSets() {
+		normal, dnat := spec.Line(), spec.DNATLine()
+		if !strings.Contains(normal, "status not dnat") || !strings.Contains(dnat, "status dnat") {
+			t.Errorf("%s must partition DNAT status: %q / %q", spec.Name, normal, dnat)
+		}
+		wantNormal, wantDNAT := "original", "reply"
+		if spec.Down {
+			wantNormal, wantDNAT = "reply", "original"
+		}
+		if !strings.Contains(normal, "ct direction "+wantNormal) || !strings.Contains(dnat, "ct direction "+wantDNAT) {
+			t.Errorf("%s has wrong direction: %q / %q", spec.Name, normal, dnat)
+		}
+		for _, line := range []string{normal, dnat} {
+			if !contains(lines(t, testConfig(), nil), line) {
+				t.Errorf("missing %q", line)
+			}
 		}
 	}
 }
@@ -453,6 +455,10 @@ func TestAccountingLineDistinguishesTheDirections(t *testing.T) {
 				"would be invisible", prev, s.Name, s.Line())
 		}
 		seen[s.Line()] = s.Name
+		if prev, dup := seen[s.DNATLine()]; dup {
+			t.Errorf("%s and %s share %q", prev, s.Name, s.DNATLine())
+		}
+		seen[s.DNATLine()] = s.Name
 	}
 }
 

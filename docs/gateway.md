@@ -821,16 +821,19 @@ while a wrong `auto-route` misroutes silently.
 
 ## 7. Statistics
 
-### 7.1 Per device and per exit, in two rules
+### 7.1 Per device and per exit, including port forwards
 
 ```
 table inet olr_stat {
-  set dev_up   { type ipv4_addr . mark ; flags dynamic ; counter ; }
-  set dev_down { type ipv4_addr . mark ; flags dynamic ; counter ; }
+  set up4   { type ipv4_addr . mark ; flags dynamic,timeout ; counter ; }
+  set down4 { type ipv4_addr . mark ; flags dynamic,timeout ; counter ; }
   chain account {
     type filter hook forward priority 0 ; policy accept ;
-    ct direction original  update @dev_up   { ip saddr . meta mark }
-    ct direction reply     update @dev_down { ip daddr . meta mark }
+    ct status != dnat ct direction original update @up4   { ip saddr . meta mark }
+    ct status != dnat ct direction reply    update @down4 { ip daddr . meta mark }
+    ct status dnat    ct direction original update @down4 { ip daddr . meta mark }
+    ct status dnat    ct direction reply    update @up4   { ip saddr . meta mark }
+    # The same four rules and sets exist for IPv6.
   }
 }
 ```
@@ -853,15 +856,17 @@ devices, and a full dump of all four sets on every read of the endpoint.
 Matching `ct direction` first fixes it without a table of local prefixes to
 maintain: the original direction is the one the connection was opened in, so its
 source is the opener, and the reply direction's destination is that same opener.
-Both rules key on the device, and each packet now matches exactly one of them
-rather than both — which halves the per-packet work on the forward path.
+Both rules key on the device, and each ordinary packet updates exactly one set.
 
-The declared cost is a connection opened **from** the internet — a forwarded
-port — where the opener really is the remote address, so it lands in the list
-looking like a device. That is bounded by the number of forwarded ports rather
-than by the size of the internet, and §7.4 states it. Untracked packets are not
-counted at all, which is theoretical on a box whose classify chain already reads
-`ct mark` on the same packets.
+For a DNATed connection the opener is remote, so the accounting chain instead
+keys on the translated local endpoint: the original-direction packet's
+post-DNAT destination is a download for that device; the reply packet's source
+is an upload. A `ct status dnat` guard partitions these from ordinary flows,
+which still key on the opener. This applies to port forwards owned by OLR or
+another nftables table. Rebuilding the table on upgrade resets cumulative
+counters once, because old remote-peer rows cannot be reassigned retroactively.
+Untracked packets are not counted at all, which is theoretical on a box
+whose classify chain already reads `ct mark` on the same packets.
 
 Live throughput is the delta between samples. Per-flow detail — connection counts
 and who talked to what — comes from **conntrack destroy events**, which hand over
@@ -918,9 +923,6 @@ different class of gap, and it is why the topology rule exists.
 - IPv6 privacy addresses rotate, so per-IP counters fragment across one device.
 - A device that changes address splits its history. Fixed leases mostly fix it.
 - Anything behind a second router counts as one device.
-- **A connection opened from the internet is counted against the address that
-  opened it** (§7.1), so a forwarded port puts a public address in a list of
-  your own devices.
 - **The table has a cap**, and a full one goes on counting the devices it
   already knows while recording no new ones. That is §7.3's rule pointed at
   ourselves: the endpoint reports how full it is, because "this device uses no
