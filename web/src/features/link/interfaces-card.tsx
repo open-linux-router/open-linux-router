@@ -49,10 +49,12 @@ import { cn } from '@/lib/utils'
 export function InterfacesCard({
   dhcp,
   disabled,
+  only,
 }: {
   /** The stored DHCP config, so a release can warn about the pool it breaks. */
   dhcp?: DhcpConfig
   disabled?: boolean
+  only?: string
 }) {
   const interfaces = useInterfaces()
   const config = useLinkConfig()
@@ -73,7 +75,7 @@ export function InterfacesCard({
   // build a complete body and a switch that silently does nothing is worse than
   // one that is visibly not ready yet.
   const busy = disabled || apply.isPending || config.isPending
-  const rows = interfaces.data?.interfaces ?? []
+  const rows = (interfaces.data?.interfaces ?? []).filter((row) => !only || row.name === only)
   const adopted = config.data?.adopted ?? []
 
   /**
@@ -181,7 +183,7 @@ export function InterfacesCard({
           </ul>
         )}
 
-        {interfaces.isSuccess && rows.length > 0 && adopted.length === 0 && (
+        {interfaces.isSuccess && rows.length > 0 && adopted.length === 0 && !only && (
           <p className="text-sm text-muted-foreground">
             Nothing is adopted yet. Switch on the interface facing your home
             network — usually the one with an address on it — and then add a

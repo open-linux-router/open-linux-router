@@ -25,6 +25,7 @@ import { OverviewPage } from '@/routes/overview'
 import { DevicePage } from '@/routes/device'
 import { GroupPage } from '@/routes/group'
 import { GatewayPage } from '@/routes/gateway/index'
+import { GatewayInterfacePage } from '@/routes/gateway/interface'
 import { GatewayExitsPage } from '@/routes/gateway/exits'
 import { GatewayIPv6Page } from '@/routes/gateway/ipv6'
 import { FirewallPage } from '@/routes/firewall'
@@ -41,6 +42,7 @@ export function App() {
           <Route path="groups/:name" element={<GroupPage />} />
           <Route path="gateway">
             <Route index element={<GatewayPage />} />
+            <Route path="interfaces/:name" element={<GatewayInterfacePage />} />
             <Route path="networks" element={<NetworksPage />} />
             <Route path="exits" element={<GatewayExitsPage />} />
             <Route path="usage" element={<GatewayUsagePage />} />

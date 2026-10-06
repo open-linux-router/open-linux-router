@@ -230,7 +230,7 @@ function subtitleOf(n: NetworkRow): string {
  * server attaches a warning naming the interface and address when it can see
  * that is what is about to happen, and it is shown here verbatim.
  */
-function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useNetworkEditor> }) {
+export function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useNetworkEditor> }) {
   const pending = editor.pending
   return (
     <Dialog open={pending !== null} onOpenChange={(o) => !o && editor.cancel()}>
@@ -271,7 +271,7 @@ function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useNetworkEdi
 
 /** A network change reaches the kernel and can land halfway; §5.2 gives it no
  * rollback, so what did happen has to be reported rather than swallowed. */
-function PartialApply({ editor }: { editor: ReturnType<typeof useNetworkEditor> }) {
+export function PartialApply({ editor }: { editor: ReturnType<typeof useNetworkEditor> }) {
   if (!editor.failure) return null
   return (
     <Alert variant="destructive" role="alert">
