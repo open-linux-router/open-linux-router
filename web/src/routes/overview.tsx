@@ -66,7 +66,8 @@ export function OverviewPage() {
   const dns = useDnsStatus()
   const gateway = useGatewayStatus()
   const gatewayConfig = useGatewayConfig()
-  const traffic = useGatewayTraffic()
+  // Only the live rates need a fast sample; the other observed data stays at 5s.
+  const traffic = useGatewayTraffic(1000)
   const latency = useGatewayLatency()
   const identity = useDevicesConfig()
   const ingress = useIngressConfig()

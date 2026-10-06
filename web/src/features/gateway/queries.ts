@@ -53,11 +53,11 @@ export function useGatewayStatus() {
  * Its own query rather than part of the status one, because it costs a walk of
  * every device on the network and is wanted at a different rate.
  */
-export function useGatewayTraffic() {
+export function useGatewayTraffic(refetchInterval = TRAFFIC_REFETCH_MS) {
   return useQuery({
     queryKey: gatewayKeys.traffic,
     queryFn: () => api.get<GatewayTraffic>('/api/gateway/traffic'),
-    refetchInterval: TRAFFIC_REFETCH_MS,
+    refetchInterval,
   })
 }
 
