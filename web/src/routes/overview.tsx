@@ -16,7 +16,7 @@ import { useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
 import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
 import { servicesByDevice } from '@/features/topology/services'
-import { useHostMetrics, usePublicAddresses, type HostMetrics, type PublicAddresses } from '@/features/system/queries'
+import { useHostMetrics, usePublicAddresses, type HostMetrics, type PublicAddress, type PublicAddresses } from '@/features/system/queries'
 import thesvgSlugs from '@/features/gateway/thesvg-slugs.json'
 import { useGatewayConfig, useGatewayLatency, useSaveLatencySites, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
@@ -406,6 +406,26 @@ function MetricPill({ label, value, detail, percent, tone = 'blue', health }: {
   </div></div>
 }
 
+function PublicAddressRow({ family, address }: { family: 'IPv4' | 'IPv6'; address?: PublicAddress }) {
+  const [open, setOpen] = useState(false)
+  const location = [address?.city, address?.region, address?.country].filter(Boolean).join(', ')
+  const network = [address?.isp, address?.organization && address.organization !== address.isp ? address.organization : undefined].filter(Boolean).join(' · ')
+  const details = [location, network, address?.asn ? `AS${address.asn}` : undefined].filter(Boolean)
+  return <div className="min-w-0 py-1">
+    <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
+      className="flex h-10 w-full min-w-0 items-center gap-2 rounded-xl bg-muted/65 px-3 text-left text-sm ring-1 ring-foreground/[0.06] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <span className="shrink-0 text-xs text-muted-foreground">{family}</span>
+      <span title={address?.ip || 'Unavailable'} className="min-w-0 flex-1 truncate font-semibold tabular-nums">{address?.ip || '—'}</span>
+      <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
+    </button>
+    {open && <div className="space-y-1 px-3 pt-2 text-xs text-muted-foreground">
+      {details.length ? details.map((detail) => <p key={detail} className="break-words">{detail}</p>)
+        : <p>{address?.ip ? 'Location unavailable' : 'Address unavailable'}</p>}
+      <p className="text-[11px]">GeoIP by ip.sb · approximate location</p>
+    </div>}
+  </div>
+}
+
 function SiteIcon({ name, url, icon: iconChoice }: { name: string; url: string; icon?: string }) {
   const [autoIcon, setAutoIcon] = useState<string>()
   useEffect(() => {
@@ -573,8 +593,8 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
     <StatCard title="Status">
       <div className="space-y-3 pt-2">
         <MetricPill value={title} health={faults.length || failed ? 'bad' : known && !idle ? 'good' : 'unknown'} />
-        <MetricPill label="IPv4 public" value={publicAddresses?.ipv4 || '—'} />
-        <MetricPill label="IPv6 public" value={publicAddresses?.ipv6 || '—'} />
+        <PublicAddressRow family="IPv4" address={publicAddresses?.ipv4} />
+        <PublicAddressRow family="IPv6" address={publicAddresses?.ipv6} />
       </div>
     </StatCard>
     <StatCard title="Traffic">
@@ -583,6 +603,8 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
           percent={flows.rated && !trafficFailed && limits.down ? (flows.total.downRate ?? 0) * 8 / (limits.down * 1_000_000) * 100 : undefined} />
         <Meter label="Upload" arrow="↑" onClick={() => setEditing('up')} current={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.up ? (flows.total.upRate ?? 0) * 8 / (limits.up * 1_000_000) * 100 : undefined} tone="amber" />
+        <MetricPill label="Total" value={flows.counting ? formatBytes(flows.total.down + flows.total.up) : trafficFailed ? 'Unavailable' : '—'}
+          detail={flows.counting ? 'since counting started' : undefined} />
       </div>
     </StatCard>
     <StatCard title={<span className="inline-flex items-center gap-1.5">Latency

@@ -20,8 +20,18 @@ export function useHostMetrics() {
 }
 
 export interface PublicAddresses {
-  ipv4: string
-  ipv6: string
+  ipv4: PublicAddress
+  ipv6: PublicAddress
+}
+
+export interface PublicAddress {
+  ip: string
+  country?: string
+  region?: string
+  city?: string
+  isp?: string
+  organization?: string
+  asn?: number
 }
 
 export function usePublicAddresses() {

@@ -4,20 +4,19 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
 func TestPublicAddressesEndpoint(t *testing.T) {
 	ipv4 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/ip" || r.Header.Get("User-Agent") != "open-linux-router" {
+		if r.URL.Path != "/geoip" || r.Header.Get("User-Agent") != "open-linux-router" {
 			t.Errorf("IPv4 request: %s %s", r.URL.Path, r.Header.Get("User-Agent"))
 		}
-		w.Write([]byte("203.0.113.42\n"))
+		w.Write([]byte(`{"ip":"203.0.113.42","country":"Exampleland","city":"Example City","isp":"Example ISP","asn":64500}`))
 	}))
 	defer ipv4.Close()
 	ipv6 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("2001:db8::42\n"))
+		w.Write([]byte(`{"ip":"2001:db8::42","region":"Example Region"}`))
 	}))
 	defer ipv6.Close()
 
@@ -34,7 +33,7 @@ func TestPublicAddressesEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.IPv4 != "203.0.113.42" || got.IPv6 != "2001:db8::42" {
+	if got.IPv4.IP != "203.0.113.42" || got.IPv4.ISP != "Example ISP" || got.IPv4.ASN != 64500 || got.IPv6.IP != "2001:db8::42" || got.IPv6.Region != "Example Region" {
 		t.Fatalf("addresses: %+v", got)
 	}
 }
@@ -42,8 +41,7 @@ func TestPublicAddressesEndpoint(t *testing.T) {
 type rewriteTransport struct{ target string }
 
 func (rt rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	url := rt.target + req.URL.Path
-	rewritten, err := http.NewRequestWithContext(req.Context(), req.Method, url, nil)
+	rewritten, err := http.NewRequestWithContext(req.Context(), req.Method, rt.target+req.URL.Path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -55,27 +53,27 @@ func TestReadPublicAddressRejectsWrongFamilyAndFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/wrong":
-			w.Write([]byte("2001:db8::1\n"))
+			w.Write([]byte(`{"ip":"2001:db8::1"}`))
 		case "/invalid":
-			w.Write([]byte("not an address"))
+			w.Write([]byte(`{"ip":"not an address"}`))
 		case "/error":
 			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		}
 	}))
 	defer server.Close()
 	for _, path := range []string{"/wrong", "/invalid", "/error"} {
-		if got := readPublicAddress(t.Context(), server.Client(), server.URL+path, true); got != "" {
-			t.Errorf("%s: got %q", path, got)
+		if got := readPublicAddress(t.Context(), server.Client(), server.URL+path, true); got.IP != "" {
+			t.Errorf("%s: got %+v", path, got)
 		}
 	}
-	if got := readPublicAddress(t.Context(), server.Client(), server.URL+"/wrong", false); !strings.HasPrefix(got, "2001:db8:") {
-		t.Errorf("IPv6: got %q", got)
+	if got := readPublicAddress(t.Context(), server.Client(), server.URL+"/wrong", false); got.IP != "2001:db8::1" {
+		t.Errorf("IPv6: got %+v", got)
 	}
 }
 
 func TestPublicAddressesKeepSuccessfulFamily(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("198.51.100.7\n"))
+		w.Write([]byte(`{"ip":"198.51.100.7"}`))
 	}))
 	defer server.Close()
 	h := HTTP{
@@ -88,7 +86,7 @@ func TestPublicAddressesKeepSuccessfulFamily(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.IPv4 != "198.51.100.7" || got.IPv6 != "" {
+	if got.IPv4.IP != "198.51.100.7" || got.IPv6.IP != "" {
 		t.Fatalf("addresses: %+v", got)
 	}
 }
