@@ -18,3 +18,17 @@ export function useHostMetrics() {
     retry: false,
   })
 }
+
+export interface PublicAddresses {
+  ipv4: string
+  ipv6: string
+}
+
+export function usePublicAddresses() {
+  return useQuery({
+    queryKey: ['system', 'public-addresses'],
+    queryFn: () => api.get<PublicAddresses>('/api/system/public-addresses'),
+    refetchInterval: 5 * 60 * 1000,
+    retry: false,
+  })
+}

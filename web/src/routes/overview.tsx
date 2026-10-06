@@ -16,14 +16,14 @@ import { useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
 import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
 import { servicesByDevice } from '@/features/topology/services'
-import { useHostMetrics, type HostMetrics } from '@/features/system/queries'
+import { useHostMetrics, usePublicAddresses, type HostMetrics, type PublicAddresses } from '@/features/system/queries'
 import thesvgSlugs from '@/features/gateway/thesvg-slugs.json'
 import { useGatewayConfig, useGatewayLatency, useSaveLatencySites, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
 import { NetworkMap } from '@/features/topology/network-map'
 import { buildOutside } from '@/features/topology/outside'
 import { useTrafficView, type TrafficView } from '@/features/topology/traffic'
-import type { DeviceRow, DhcpStatus, DnsStatus, GatewayLatency, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
+import type { DhcpStatus, DnsStatus, GatewayLatency, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
 import { getToken } from '@/lib/api'
 import { cn, formatBytes, formatRate } from '@/lib/utils'
 
@@ -75,6 +75,7 @@ export function OverviewPage() {
   const services = useMemo(() => servicesByDevice(ingress.data, devices.data?.devices ?? []), [ingress.data, devices.data])
   const flows = useTrafficView(traffic.data, traffic.isError)
   const host = useHostMetrics()
+  const publicAddresses = usePublicAddresses()
   const dial = useDialStatus()
   const outside = useMemo(() => buildOutside(dial.data, devices.data?.devices), [dial.data, devices.data])
   const navigate = useNavigate()
@@ -95,7 +96,7 @@ export function OverviewPage() {
       <FirstRun />
 
       <h1 className="sr-only">Network overview</h1>
-      <Stats devices={devices.data?.devices} flows={flows} host={host.data}
+      <Stats flows={flows} host={host.data} publicAddresses={publicAddresses.data}
         faults={faults} known={known} idle={idle} failed={dhcp.isError || dns.isError || gateway.isError}
         latency={latency.data} exits={gatewayConfig.data?.enabled ? gatewayConfig.data.exits?.map((exit) => exit.name) ?? [] : []} latencyFailed={latency.isError} trafficFailed={traffic.isError} />
 
@@ -399,7 +400,7 @@ function MetricPill({ label, value, detail, percent, tone = 'blue', health }: {
     <span className="relative z-10 flex min-w-0 items-center gap-2 truncate text-sm">
       {health && <span aria-hidden className={cn('size-2 shrink-0 rounded-full', health === 'good' ? 'bg-success' : health === 'bad' ? 'bg-destructive' : 'bg-muted-foreground')} />}
       {label && <span className="shrink-0 text-xs text-muted-foreground">{label}</span>}
-      <span className={cn('truncate font-semibold tabular-nums', health === 'bad' && 'text-destructive')}>{value}</span>
+      <span title={value} className={cn('truncate font-semibold tabular-nums', health === 'bad' && 'text-destructive')}>{value}</span>
     </span>
     {detail && <span className="relative z-10 shrink-0 text-xs text-muted-foreground tabular-nums">{detail}</span>}
   </div></div>
@@ -541,10 +542,10 @@ function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[];
   </Dialog>
 }
 
-function Stats({ devices, flows, host, faults, known, idle, failed, latency, exits, latencyFailed, trafficFailed }: {
-  devices?: DeviceRow[]
+function Stats({ flows, host, publicAddresses, faults, known, idle, failed, latency, exits, latencyFailed, trafficFailed }: {
   flows: TrafficView
   host?: HostMetrics
+  publicAddresses?: PublicAddresses
   faults: Fault[]
   known: boolean
   idle: boolean
@@ -561,7 +562,6 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
     setLimits(next)
     try { localStorage.setItem(LIMITS_KEY, JSON.stringify(next)) } catch { /* private mode can disable storage */ }
   }
-  const here = devices?.filter((d) => d.online).length
   const title = failed ? 'Status unavailable' : !known ? 'Checking…' : faults.length ? 'Needs attention' : idle ? 'Not set up' : 'All systems OK'
   const measured = !latencyFailed && latency?.state === 'ok' && latency.milliseconds != null
   const cpuPercent = host?.cpu_used_cores != null && host.cpu_cores > 0 ? host.cpu_used_cores / host.cpu_cores * 100 : undefined
@@ -573,7 +573,8 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
     <StatCard title="Status">
       <div className="space-y-3 pt-2">
         <MetricPill value={title} health={faults.length || failed ? 'bad' : known && !idle ? 'good' : 'unknown'} />
-        <MetricPill label="Uptime" value={host ? uptime(host.uptime_seconds) : '—'} detail={devices ? `${here} / ${devices.length} online` : '— online'} />
+        <MetricPill label="IPv4 public" value={publicAddresses?.ipv4 || '—'} />
+        <MetricPill label="IPv6 public" value={publicAddresses?.ipv6 || '—'} />
       </div>
     </StatCard>
     <StatCard title="Traffic">
@@ -615,6 +616,7 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
           detail={host?.cpu_cores ? `${cpuPercent?.toFixed(0)}% of ${host.cpu_cores} cores` : undefined} percent={cpuPercent} />
         <MetricPill label="Memory" value={host ? formatBytes(host.memory_used_bytes) : '—'}
           detail={host ? `${memoryPercent?.toFixed(0)}% of ${formatBytes(host.memory_total_bytes)}` : undefined} percent={memoryPercent} tone="neutral" />
+        <MetricPill label="Uptime" value={host ? uptime(host.uptime_seconds) : '—'} />
       </div>
     </StatCard>
     {sitesOpen && <LatencySitesDialog sites={latency?.custom ?? []} exits={exits} onClose={() => setSitesOpen(false)} />}

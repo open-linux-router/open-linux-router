@@ -12,10 +12,12 @@ import (
 
 // HTTP is this module's REST surface.
 type HTTP struct {
-	Applier Applier
-	Proc    string
-	Lock    *core.Lock
-	Events  *core.Events
+	Applier          Applier
+	Proc             string
+	Lock             *core.Lock
+	Events           *core.Events
+	PublicIPv4Client *http.Client
+	PublicIPv6Client *http.Client
 }
 
 // Routes is the module's surface, declared as data so it can be enumerated
@@ -23,6 +25,7 @@ type HTTP struct {
 func (h HTTP) Routes() []core.Route {
 	return []core.Route{
 		{Method: "GET", Path: "/metrics", Tool: "show metrics", Summary: "Host uptime, CPU and memory utilization.", Handler: h.getMetrics},
+		{Method: "GET", Path: "/public-addresses", Tool: "show public addresses", Summary: "IPv4 and IPv6 addresses seen by ip.sb from this router.", Handler: h.getPublicAddresses},
 		{
 			Method: "GET", Path: "/access", Tool: "show access",
 			Summary: "Show whether this router has been set up, and whether reaching it over " +
