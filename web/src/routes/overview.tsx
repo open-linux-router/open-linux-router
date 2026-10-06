@@ -375,7 +375,7 @@ function Meter({ label, current, maximum, percent, tone = 'blue', arrow, onClick
   </div>
 }
 
-function StatCard({ title, children }: { title: string; children: React.ReactNode }) {
+function StatCard({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return <section className="min-w-0 rounded-2xl bg-card p-4 shadow-xs ring-1 ring-foreground/[0.07]">
     <h2 className="mb-3 text-sm font-semibold">{title}</h2>{children}
   </section>
@@ -431,10 +431,11 @@ function SiteIcon({ name, url, icon: iconChoice }: { name: string; url: string; 
 }
 
 type MonitoredSite = { name: string; url: string; exit?: string; icon?: string }
+type DraftSite = MonitoredSite & { id: string }
 const DEFAULT_ROUTE = ' default'
 
 function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[]; exits: string[]; onClose: () => void }) {
-  const [draft, setDraft] = useState(sites.map(({ name, url, exit, icon }) => ({ name, url, exit, icon })))
+  const [draft, setDraft] = useState<DraftSite[]>(() => sites.map(({ name, url, exit, icon }) => ({ id: crypto.randomUUID(), name, url, exit, icon })))
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [exit, setExit] = useState(DEFAULT_ROUTE)
@@ -447,7 +448,7 @@ function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[];
   const update = (index: number, changes: Partial<MonitoredSite>) => setDraft((current) => current.map((site, i) => i === index ? { ...site, ...changes } : site))
   const add = () => {
     if (!name.trim() || !url.trim() || draft.length >= 12) return
-    setDraft([...draft, { name: name.trim(), url: url.trim(), exit: exit === DEFAULT_ROUTE ? undefined : exit, icon: undefined }])
+    setDraft([...draft, { id: crypto.randomUUID(), name: name.trim(), url: url.trim(), exit: exit === DEFAULT_ROUTE ? undefined : exit, icon: undefined }])
     setName('')
     setUrl('')
     setExit(DEFAULT_ROUTE)
@@ -460,6 +461,7 @@ function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[];
     setDraft(next)
     setDragging(null)
     setEditing(null)
+    setIconFor(null)
   }
   const upload = async (file?: File) => {
     if (iconFor == null || !file) return
@@ -489,7 +491,7 @@ function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[];
         HTML page response from this router. Drag to reorder, select a site to edit, or select its icon to customize it.
       </DialogDescription></DialogHeader>
       <div className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
-        {draft.map((site, i) => <div key={i} className="rounded-xl bg-muted/60 p-2 text-sm"
+        {draft.map((site, i) => <div key={site.id} className="rounded-xl bg-muted/60 p-2 text-sm"
           onDragOver={(event: DragEvent<HTMLDivElement>) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); drop(i) }}>
           <div className="flex items-center gap-2">
             <span draggable onDragStart={() => setDragging(i)} onDragEnd={() => setDragging(null)} aria-label={`Drag ${site.name} to reorder`} className="cursor-grab touch-none text-muted-foreground" title="Drag to reorder"><GripVertical className="size-4" /></span>
@@ -502,7 +504,7 @@ function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[];
                 {site.exit && !exits.includes(site.exit) && <SelectItem value={site.exit}>{site.exit} (unavailable)</SelectItem>}
               </SelectContent>
             </Select>
-            <Button variant="ghost" size="icon" aria-label={`Remove ${site.name}`} onClick={() => setDraft(draft.filter((_, index) => index !== i))}><Trash2 className="size-4" /></Button>
+            <Button variant="ghost" size="icon" aria-label={`Remove ${site.name}`} onClick={() => { setDraft(draft.filter((_, index) => index !== i)); setEditing(null); setIconFor(null) }}><Trash2 className="size-4" /></Button>
           </div>
           {editing === i && <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_2fr]">
             <Input aria-label={`Name for ${site.name}`} value={site.name} maxLength={40} onChange={(event) => update(i, { name: event.target.value })} />
@@ -520,7 +522,7 @@ function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[];
         <Button variant="outline" onClick={add} disabled={!name.trim() || !url.startsWith('https://') || draft.length >= 12}>Add</Button>
       </div>
       {save.isError && <p role="alert" className="text-sm text-destructive">{save.error.message}</p>}
-      <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={save.isPending} onClick={() => save.mutate(draft, { onSuccess: onClose })}>Save sites</Button></DialogFooter>
+      <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={save.isPending} onClick={() => save.mutate(draft.map(({ name, url, exit, icon }) => ({ name, url, exit, icon })), { onSuccess: onClose })}>Save sites</Button></DialogFooter>
     </DialogContent>
     {iconFor != null && <Dialog open onOpenChange={(open) => { if (!open) setIconFor(null) }}>
       <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Icon for {draft[iconFor]?.name}</DialogTitle><DialogDescription>Upload an image or search theSVG library. Auto uses the site favicon.</DialogDescription></DialogHeader>
@@ -583,7 +585,10 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
           percent={flows.rated && !trafficFailed && limits.up ? (flows.total.upRate ?? 0) * 8 / (limits.up * 1_000_000) * 100 : undefined} tone="amber" />
       </div>
     </StatCard>
-    <StatCard title="Page response">
+    <StatCard title={<span className="inline-flex items-center gap-1.5">Latency
+      <button type="button" className="text-muted-foreground hover:text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
+        title="Time for this router to fetch the full HTML document, including DNS, TLS, redirects and download. Images, scripts and browser rendering are not included."
+        aria-label="About latency measurements"><Info className="size-3.5" /></button></span>}>
       <div className="space-y-3 pt-2">
         <MetricPill label="Internet" value={latencyValue} detail={measured ? latency.milliseconds! < 1000 ? 'Good' : latency.milliseconds! < 3000 ? 'Fair' : 'Slow' : undefined} />
         <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} detail={dnsMeasured ? latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow' : undefined} />
