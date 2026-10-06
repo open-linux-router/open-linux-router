@@ -18,6 +18,8 @@ interface Event {
   reason?: string
   request_headers?: Record<string, string>
   response_headers?: Record<string, string>
+  response_preview?: string
+  response_note?: string
 }
 interface Status {
   active: boolean
@@ -26,6 +28,7 @@ interface Status {
   expires?: string
   events: Event[]
   ca_present: boolean
+  ca_sha256?: string
   redirected_packets?: number
   proxy_accepted: number
   exit_routed: boolean
@@ -83,7 +86,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <Badge variant={mine ? 'warning' : 'outline'}>{mine ? 'On' : 'Off'}</Badge>
       </div>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Inspect traffic from the IPv4 address you choose. It automatically turns off after 15 minutes. Request URLs and headers can contain private data. Bodies are not collected. Nothing is saved to disk.
+        Inspect traffic from the IPv4 address you choose. It automatically turns off after 15 minutes. Request URLs, headers and text response previews can contain private data. Previews are limited to 4,096 characters; bodies are not saved to disk.
       </p>
     </div>
     <div className="space-y-5 p-5 sm:p-7">
@@ -91,7 +94,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
       {active && !mine ? <p className="text-sm text-muted-foreground">Another device is being inspected. Stop that session before starting this one.</p> : null}
       <div className="grid gap-4 text-sm text-muted-foreground md:grid-cols-3">
         <p><strong className="block text-foreground">1. Prepare</strong>Install mitmproxy (mitmdump) on the router. Choose the source IPv4 address to intercept. The device list is only a suggestion; IPv6 traffic is not intercepted.</p>
-        <p><strong className="block text-foreground">2. Trust CA for HTTPS</strong>Start once to generate the CA, then install and explicitly trust the downloaded certificate on your device. Do not install its private key. HTTP works without a CA.</p>
+        <p><strong className="block text-foreground">2. Trust CA for HTTPS</strong>Start once to generate the CA, then install and explicitly enable full trust for the downloaded certificate in iPhone Settings → General → About → Certificate Trust Settings. Do not install its private key. HTTP works without a CA.</p>
         <p><strong className="block text-foreground">3. Stop and remove trust</strong>Stopping or timeout clears the session and restores normal forwarding. Your device still trusts the CA until you remove it in device settings.</p>
       </div>
       <div className="max-w-sm space-y-2">
@@ -102,6 +105,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         </div>}
         <p className="text-xs text-muted-foreground">Only traffic from this address will be redirected. If it belongs to another device or changes, that device's traffic may be inspected instead. Confirm the address before turning on.</p>
         {mine && <p className="text-xs font-medium">Inspecting {status.data?.ip} · Upstream {status.data?.exit_routed ? 'via device exit' : 'via router default'}</p>}
+        {status.data?.ca_sha256 && <p className="break-all font-mono text-xs text-muted-foreground">Router CA SHA-256: {status.data.ca_sha256.match(/../g)?.join(':')}</p>}
       </div>
       <div className="flex flex-wrap gap-2">
         {mine ? <Button variant="destructive" disabled={stop.isPending} onClick={() => stop.mutate()}>Turn off</Button>
@@ -150,8 +154,12 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
       {mine && selected && <div className="space-y-2 rounded-xl border p-4 text-sm">
         <div className="flex justify-between gap-2"><h3 className="font-medium">Request details</h3><Button variant="ghost" size="sm" onClick={() => setSelected(null)}>Close</Button></div>
         <p className="break-all">{selected.method} {selected.url} · {selected.status}</p>
-        <p className="text-xs text-muted-foreground">Headers may contain credentials. They are held only in memory for this session.</p>
+        <p className="text-xs text-muted-foreground">Headers and response previews may contain credentials. They are held only in memory for this session.</p>
+        <h4 className="font-medium">Headers</h4>
         <pre className="max-h-52 overflow-auto rounded-lg bg-muted p-3 text-xs">{JSON.stringify({ request: selected.request_headers, response: selected.response_headers }, null, 2)}</pre>
+        <h4 className="font-medium">Response preview</h4>
+        {selected.response_note && <p className="text-xs text-muted-foreground">{selected.response_note}</p>}
+        {selected.response_preview != null ? <pre className="max-h-80 overflow-auto rounded-lg bg-muted p-3 text-xs whitespace-pre-wrap break-all">{selected.response_preview}</pre> : <p className="text-xs text-muted-foreground">No text preview available.</p>}
       </div>}
     </div>
   </section>

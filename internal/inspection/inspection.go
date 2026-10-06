@@ -4,8 +4,11 @@ package inspection
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"crypto/x509"
 	"embed"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"net/http"
@@ -43,6 +46,8 @@ type Event struct {
 	Reason          string            `json:"reason,omitempty"`
 	RequestHeaders  map[string]string `json:"request_headers,omitempty"`
 	ResponseHeaders map[string]string `json:"response_headers,omitempty"`
+	ResponsePreview *string           `json:"response_preview,omitempty"`
+	ResponseNote    string            `json:"response_note,omitempty"`
 }
 
 type Status struct {
@@ -52,6 +57,7 @@ type Status struct {
 	Expires       time.Time `json:"expires,omitempty"`
 	Events        []Event   `json:"events"`
 	CAPresent     bool      `json:"ca_present"`
+	CAFingerprint string    `json:"ca_sha256,omitempty"`
 	Redirected    *uint64   `json:"redirected_packets,omitempty"`
 	InputSeen     *uint64   `json:"input_packets,omitempty"`
 	InputDropped  *uint64   `json:"input_dropped_packets,omitempty"`
@@ -108,8 +114,14 @@ func (s *Service) snapshot() Status {
 			out.InputDropped = &n
 		}
 	}
-	_, err := os.Stat(filepath.Join(s.Dir, "mitmproxy-ca-cert.pem"))
-	out.CAPresent = err == nil
+	if data, err := os.ReadFile(filepath.Join(s.Dir, "mitmproxy-ca-cert.pem")); err == nil {
+		out.CAPresent = true
+		if block, _ := pem.Decode(data); block != nil {
+			if cert, err := x509.ParseCertificate(block.Bytes); err == nil {
+				out.CAFingerprint = fmt.Sprintf("%X", sha256.Sum256(cert.Raw))
+			}
+		}
+	}
 	return out
 }
 
@@ -206,7 +218,7 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cmd := exec.Command("mitmdump", "--mode", "transparent", "--listen-host", "0.0.0.0", "--listen-port", port,
-		"--set", "confdir="+s.Dir, "--set", "termlog_verbosity=error", "-s", script)
+		"--set", "confdir="+s.Dir, "--set", "termlog_verbosity=error", "--set", "stream_large_bodies=1m", "-s", script)
 	// mitmdump may fork; its launcher is not the lifetime of the listener.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if mark != 0 {
