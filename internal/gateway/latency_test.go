@@ -104,7 +104,7 @@ func TestHTTPSProbe(t *testing.T) {
 	for _, status := range []int{204, 302, 403, 500} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodHead {
+				if r.Method != http.MethodHead && !(status == 403 && r.Method == http.MethodGet) {
 					t.Errorf("method = %s", r.Method)
 				}
 				if status == 302 {
@@ -287,5 +287,37 @@ func TestHTTPSProbeUsesCustomDialer(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("custom exit dialer was bypassed")
+	}
+}
+
+func TestHTTPSProbeFallsBackWhenHEADRejected(t *testing.T) {
+	methods := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		methods = append(methods, r.Method)
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	defer server.Close()
+	if _, err := probeHTTPS(context.Background(), server.URL); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(methods, []string{http.MethodHead, http.MethodGet}) {
+		t.Fatalf("methods = %v", methods)
+	}
+}
+
+func TestCustomLatencyReportsProbeReason(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Replace([]CustomLatencySite{{Name: "Blocked", URL: "https://example.com/"}}); err != nil {
+		t.Fatal(err)
+	}
+	m.probe = func(context.Context, string) (float64, error) { return 0, errors.New("HTTP 403") }
+	m.sample(context.Background())
+	if got := m.Snapshot()[0]; got.Error != "HTTP 403" || got.Milliseconds != nil {
+		t.Fatalf("result = %+v", got)
 	}
 }

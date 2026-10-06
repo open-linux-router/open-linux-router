@@ -476,3 +476,16 @@ func TestLatencySitesEndpoint(t *testing.T) {
 		t.Fatal("cannot clear sites")
 	}
 }
+
+func TestLatencyIconMissingSite(t *testing.T) {
+	custom, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	monitor := NewLatencyMonitor()
+	monitor.Custom = custom
+	w := do(t, (HTTP{Latency: monitor}).Handler(), http.MethodGet, "/latency/sites/missing/icon", nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d", w.Code)
+	}
+}

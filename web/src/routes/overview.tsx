@@ -1,5 +1,5 @@
 import { AlertTriangle, ChevronRight, Info, Plus, Trash2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -23,6 +23,7 @@ import { NetworkMap } from '@/features/topology/network-map'
 import { buildOutside } from '@/features/topology/outside'
 import { useTrafficView, type TrafficView } from '@/features/topology/traffic'
 import type { DeviceRow, DhcpStatus, DnsStatus, GatewayLatency, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
+import { getToken } from '@/lib/api'
 import { cn, formatBytes, formatRate } from '@/lib/utils'
 
 /**
@@ -402,13 +403,28 @@ function MetricPill({ label, value, detail, percent, tone = 'blue', health }: {
   </div></div>
 }
 
-function SiteIcon({ name }: { name: string }) {
-  const brand = name.toLowerCase()
-  const known = brand.includes('wechat') || brand.includes('微信') ? { glyph: '微', color: '#07b75a' }
-    : brand.includes('youtube') ? { glyph: '▶', color: '#e62117' }
-      : { glyph: name.slice(0, 1).toUpperCase(), color: '#406e83' }
-  return <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white"
-    style={{ backgroundColor: known.color }}>{known.glyph}</span>
+function SiteIcon({ name, url }: { name: string; url: string }) {
+  const [icon, setIcon] = useState<string>()
+  useEffect(() => {
+    const controller = new AbortController()
+    let objectURL: string | undefined
+    const token = getToken()
+    fetch(`/api/gateway/latency/sites/${encodeURIComponent(name)}/icon?v=${encodeURIComponent(url)}`, {
+      signal: controller.signal,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then(async (response) => {
+      if (!response.ok) return
+      objectURL = URL.createObjectURL(await response.blob())
+      if (!controller.signal.aborted) setIcon(objectURL)
+      else URL.revokeObjectURL(objectURL)
+    }).catch(() => {})
+    return () => {
+      controller.abort()
+      if (objectURL) URL.revokeObjectURL(objectURL)
+    }
+  }, [name, url])
+  return icon ? <img src={icon} alt="" className="size-5 shrink-0 rounded-sm object-contain" />
+    : <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground/10 text-[10px] font-bold uppercase">{name.slice(0, 2)}</span>
 }
 
 function LatencySitesDialog({ sites, exits, onClose }: { sites: { name: string; url: string; exit?: string }[]; exits: string[]; onClose: () => void }) {
@@ -431,7 +447,7 @@ function LatencySitesDialog({ sites, exits, onClose }: { sites: { name: string; 
       </DialogDescription></DialogHeader>
       <div className="max-h-64 space-y-2 overflow-y-auto">
         {draft.map((site, i) => <div key={i} className="flex items-center gap-2 rounded-lg bg-muted/60 p-2 text-sm">
-          <SiteIcon name={site.name} /><span className="min-w-0 flex-1 truncate" title={`${site.url} · Internet via ${site.exit || 'router default'}`}>{site.name}</span>
+          <SiteIcon name={site.name} url={site.url} /><span className="min-w-0 flex-1 truncate" title={`${site.url} · Internet via ${site.exit || 'router default'}`}>{site.name}</span>
           <Select value={site.exit || ' default'} onValueChange={(value) => setDraft(draft.map((item, index) => index === i ? { ...item, exit: !value || value === ' default' ? undefined : value } : item))}>
             <SelectTrigger className="max-w-36" aria-label={`Internet via, for ${site.name}`}><SelectValue /></SelectTrigger>
             <SelectContent><SelectItem value=" default">Router default</SelectItem>
@@ -508,14 +524,22 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
       <div className="space-y-3 pt-2">
         <MetricPill label="Internet" value={latencyValue} detail={measured ? latency.milliseconds! < 100 ? 'Good' : latency.milliseconds! < 200 ? 'Fair' : 'Slow' : undefined} />
         <MetricPill label="DNS" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} detail={dnsMeasured ? latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow' : undefined} />
-        {!latencyFailed && latency?.custom?.map((site) => {
-          const fresh = site.checked_at && latencyReadAt - Date.parse(site.checked_at) < 90_000
-          return <div key={site.name} className="flex items-center gap-2 rounded-xl bg-muted/65 px-3 py-2 text-sm ring-1 ring-foreground/[0.06]" title={`${site.url} · Internet via ${site.exit || 'router default'}`}>
-            <SiteIcon name={site.name} /><span className="min-w-0 flex-1 truncate text-muted-foreground">{site.name}{site.exit ? ` · ${site.exit}` : ''}</span>
-            <span className="font-semibold tabular-nums">{fresh ? site.milliseconds == null ? 'No response' : `${site.milliseconds.toFixed(0)} ms` : '—'}</span>
-          </div>
-        })}
-        <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => setSitesOpen(true)}><Plus className="size-3" /> Monitor sites</button>
+        <div className="flex flex-wrap items-center gap-2">
+          {!latencyFailed && latency?.custom?.map((site) => {
+            const fresh = site.checked_at && latencyReadAt - Date.parse(site.checked_at) < 90_000
+            const ms = fresh ? site.milliseconds : null
+            const tone = !fresh ? 'bg-muted text-muted-foreground' : ms == null ? 'bg-destructive/10 text-destructive'
+              : ms < 100 ? 'bg-success/15 text-success-foreground' : ms < 200 ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-destructive/10 text-destructive'
+            const description = `${site.name} · ${site.url} · Internet via ${site.exit || 'router default'} · ${!fresh ? 'Waiting for a probe' : ms == null ? site.error || 'No response' : `${ms.toFixed(0)} ms`}`
+            return <span key={site.name} tabIndex={0} aria-label={description} title={description}
+              className={cn('inline-flex min-h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold tabular-nums', tone)}>
+              <SiteIcon name={site.name} url={site.url} />
+              <span>{!fresh ? '—' : ms == null ? '×' : `${ms.toFixed(0)} ms`}</span>
+            </span>
+          })}
+          <button className="inline-flex min-h-9 items-center gap-1 rounded-xl px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => setSitesOpen(true)} aria-label="Monitor sites" title="Monitor sites"><Plus className="size-4" /><span className="sr-only">Monitor sites</span></button>
+        </div>
       </div>
     </StatCard>
     <StatCard title="System">

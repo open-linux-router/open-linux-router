@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -29,8 +30,10 @@ type CustomLatencyMonitor struct {
 	path         string
 	sites        []CustomLatencySite
 	results      []LatencySite
+	icons        map[string]latencyIcon
 	probe        func(context.Context, string) (float64, error)
 	probeThrough func(context.Context, string, uint32) (float64, error)
+	iconClient   func(*CustomLatencySite) (*http.Client, error)
 	// Resolve returns the current exit mark; a missing or disabled exit is an error.
 	Resolve      func(string) (uint32, error)
 	ValidateExit func(string) error
@@ -121,6 +124,7 @@ func (m *CustomLatencyMonitor) Replace(sites []CustomLatencySite) error {
 	}
 	m.sites = append([]CustomLatencySite{}, sites...)
 	m.resetResults()
+	m.icons = nil
 	return nil
 }
 
@@ -150,8 +154,13 @@ func (m *CustomLatencyMonitor) sample(ctx context.Context) {
 				}
 			}
 			results[i] = LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, CheckedAt: time.Now().UTC()}
+			if site.Exit != "" && err != nil && strings.Contains(err.Error(), "gateway exit") {
+				results[i].Error = "Gateway exit unavailable"
+			}
 			if err == nil {
 				results[i].Milliseconds = &value
+			} else if results[i].Error == "" {
+				results[i].Error = latencyError(err)
 			}
 		}(i, site)
 	}

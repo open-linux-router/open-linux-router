@@ -27,7 +27,9 @@ type iconCandidate struct {
 
 // serviceIcon only visits the published HTTPS origin; neither redirects nor
 // absolute manifest URLs can turn this into an arbitrary network fetch.
-func serviceIcon(ctx context.Context, client *http.Client, origin string) ([]byte, string, error) {
+// DiscoverIcon reads a site's same-origin favicon, page links and manifest.
+// Its client determines which route the requests use.
+func DiscoverIcon(ctx context.Context, client *http.Client, origin string) ([]byte, string, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}

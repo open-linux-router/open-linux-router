@@ -157,6 +157,8 @@ func TestEveryReadRouteIsPublishedAsATool(t *testing.T) {
 		// Image bytes are for the browser, not a JSON tool response. The
 		// structured service list remains available to agents.
 		"ingress GET /services/{name}/icon": true,
+		// Binary image bytes are for the UI; the latency JSON already names sites and outcomes.
+		"gateway GET /latency/sites/{name}/icon": true,
 	}
 
 	for module, routes := range moduleRoutes() {

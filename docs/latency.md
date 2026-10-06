@@ -10,6 +10,8 @@ route: DNS lookup, TCP connection, TLS handshake and response headers. It is
 not ICMP ping or the latency of a particular device, tunnel, or configured exit.
 Connections are fresh, TLS certificates are verified, environment proxies are
 ignored, redirects are not followed, and HTTP 2xx/3xx responses count as success.
+If HEAD returns 403, 405, or 501, a GET is tried on the same URL; a second
+rejection remains a failure. GET bodies are not read.
 Each target has a four-second deadline and targets are measured concurrently.
 A failed website does not establish that the internet as a whole is down.
 
@@ -42,9 +44,14 @@ HTTPS HEAD probe, four-second timeout, and one-minute steady-state cadence as
 the Internet candidates. During initial discovery they are probed every 15
 seconds. Custom sites are independent: their failures never change the Internet
 headline or its candidate selection. An endpoint that rejects HEAD (for example
-with HTTP 403 or 405) will show **No response**; choose a suitable endpoint for
-that service instead. Icons for common services are built into the UI, and
-other sites show an initial; no third-party favicon requests are made.
+with HTTP 403 or 405) is retried with GET; if that also fails, the site
+shows a failed status with the HTTP code or a short network error on hover.
+Choose a suitable endpoint for that service rather than interpreting a failed
+probe as proof that the entire app is down. Icons are discovered using the same
+same-origin page, manifest, and favicon lookup as ingress services,
+starting at the configured site URL. Discovery
+uses the selected exit for HTTP requests, limits response sizes, and caches
+icons for a day; an initial is shown when no icon is available.
 
 `PUT /api/gateway/latency/sites` replaces the custom list with JSON objects
 `{"name":"YouTube","url":"https://www.youtube.com/"}`. An empty array clears
@@ -52,7 +59,8 @@ it. Names are unique, 1–40 characters, and URLs must use HTTPS without
 credentials, custom ports, or fragments. The list is stored alongside the
 router configuration as `olr.json.latency-sites`; measurements are not persisted.
 `GET /api/gateway/latency` includes `custom` measurements (with nullable
-`milliseconds` and `checked_at`) in addition to the existing `sites` candidate
+`milliseconds`, `checked_at`, and a short `error` on failure) in addition to
+the existing `sites` candidate
 list. Edits reset custom results until the next probe. A failed probe never
 retains a previous successful value.
 

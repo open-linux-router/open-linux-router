@@ -2,10 +2,13 @@ package gateway
 
 import (
 	"context"
+	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -40,6 +43,7 @@ type LatencySite struct {
 	CheckedAt    time.Time `json:"checked_at"`
 	Selected     bool      `json:"selected"`
 	Exit         string    `json:"exit,omitempty"`
+	Error        string    `json:"error,omitempty"`
 }
 type LatencySnapshot struct {
 	State           string        `json:"state"`
@@ -73,21 +77,57 @@ func probeHTTPSWithDial(ctx context.Context, url string, dial func(context.Conte
 	transport := &http.Transport{DisableKeepAlives: true, TLSHandshakeTimeout: 3 * time.Second, DialContext: dial}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
-	if err != nil {
-		return 0, err
-	}
 	start := time.Now()
-	resp, err := client.Do(req)
+	request := func(method string) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, method, url, nil)
+		if err != nil {
+			return nil, err
+		}
+		return client.Do(req)
+	}
+	resp, err := request(http.MethodHead)
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
+	// Some public homepages reject HEAD while serving a normal GET.
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotImplemented {
+		resp, err = request(http.MethodGet)
+		if err != nil {
+			return 0, err
+		}
+		resp.Body.Close()
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		return 0, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	return float64(time.Since(start).Microseconds()) / 1000, nil
 }
+func latencyError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if strings.HasPrefix(err.Error(), "HTTP ") {
+		return err.Error()
+	}
+	var dns *net.DNSError
+	if errors.As(err, &dns) {
+		return "DNS lookup failed"
+	}
+	var cert *x509.UnknownAuthorityError
+	if errors.As(err, &cert) {
+		return "TLS certificate not trusted"
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return "Timed out"
+	}
+	var network net.Error
+	if errors.As(err, &network) && network.Timeout() {
+		return "Timed out"
+	}
+	return "Connection failed"
+}
+
 func probeDNS(ctx context.Context) (float64, error) {
 	start := time.Now()
 	_, err := net.DefaultResolver.LookupHost(ctx, "example.com")

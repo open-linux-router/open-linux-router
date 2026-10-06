@@ -210,7 +210,7 @@ func (h HTTP) getServiceIcon(w http.ResponseWriter, r *http.Request) {
 	}
 	domain := h.Applier.DNS.LocalDomain()
 	origin := (&url.URL{Scheme: "https", Host: qualify(name, domain), Path: matched.LinkPath}).String()
-	data, kind, err := serviceIcon(r.Context(), h.IconClient, origin)
+	data, kind, err := DiscoverIcon(r.Context(), h.IconClient, origin)
 	if err != nil {
 		http.NotFound(w, r)
 		return

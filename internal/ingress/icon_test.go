@@ -31,7 +31,7 @@ func TestServiceIconPrefersLargestManifestImage(t *testing.T) {
 		}
 		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(content)), Header: make(http.Header)}, nil
 	})}
-	data, kind, err := serviceIcon(context.Background(), client, "https://app.home.example.com")
+	data, kind, err := DiscoverIcon(context.Background(), client, "https://app.home.example.com")
 	if err != nil || kind != "image/png" || len(data) == 0 {
 		t.Fatalf("image = %q, %q, %v; paths = %v", data, kind, err, paths)
 	}
@@ -59,7 +59,7 @@ func TestServiceIconDoesNotFollowCrossOriginResourcesOrRedirects(t *testing.T) {
 		}
 		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: header, Request: r}, nil
 	})}
-	_, _, err := serviceIcon(context.Background(), client, "https://app.home.example.com")
+	_, _, err := DiscoverIcon(context.Background(), client, "https://app.home.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestServiceIconFallsBackWhenManifestImageIsUnavailable(t *testing.T) {
 		}
 		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
 	})}
-	_, kind, err := serviceIcon(context.Background(), client, "https://app.home.example.com")
+	_, kind, err := DiscoverIcon(context.Background(), client, "https://app.home.example.com")
 	if err != nil || kind != "image/png" {
 		t.Fatalf("fallback: %q, %v", kind, err)
 	}
@@ -178,7 +178,7 @@ func TestServiceIconFollowsSameOriginRedirect(t *testing.T) {
 		}
 		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: header, Request: r}, nil
 	})}
-	_, kind, err := serviceIcon(context.Background(), client, "https://app.home.example.com")
+	_, kind, err := DiscoverIcon(context.Background(), client, "https://app.home.example.com")
 	if err != nil || kind != "image/png" {
 		t.Fatalf("redirect icon: %s, %v (%v)", kind, err, paths)
 	}
@@ -203,7 +203,7 @@ func TestServiceIconUsesConfiguredPath(t *testing.T) {
 		}
 		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
 	})}
-	_, kind, err := serviceIcon(context.Background(), client, "https://clash.home.example.com/ui")
+	_, kind, err := DiscoverIcon(context.Background(), client, "https://clash.home.example.com/ui")
 	if err != nil || kind != "image/png" {
 		t.Fatalf("configured path icon: %s, %v (%v)", kind, err, paths)
 	}

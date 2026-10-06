@@ -72,6 +72,7 @@ func (h HTTP) Routes() []core.Route {
 
 	routes := []core.Route{
 		{Method: "GET", Path: "/latency", Tool: "show latency", Summary: "Latest router HTTPS latency measurements and selected websites.", Handler: h.getLatency},
+		{Method: "GET", Path: "/latency/sites/{name}/icon", Summary: "Discover a monitored site icon.", Handler: h.getLatencyIcon},
 		{Method: "PUT", Path: "/latency/sites", Summary: "Replace custom HTTPS latency targets.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencySites},
 		// Intent, whole document. Still the way to restore a backup or make
 		// several changes at once; the routes below are additions, not
@@ -782,4 +783,20 @@ func (h HTTP) putLatencySites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	core.WriteJSON(w, http.StatusOK, h.Latency.Custom.Config())
+}
+
+func (h HTTP) getLatencyIcon(w http.ResponseWriter, r *http.Request) {
+	if h.Latency == nil || h.Latency.Custom == nil {
+		http.NotFound(w, r)
+		return
+	}
+	data, kind, err := h.Latency.Custom.Icon(r.Context(), r.PathValue("name"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", kind)
+	w.Header().Set("Cache-Control", "private, max-age=86400")
+	w.Header().Set("Vary", "Authorization")
+	w.Write(data)
 }
