@@ -12,7 +12,7 @@ func TestPublicAddressesEndpoint(t *testing.T) {
 		if r.URL.Path != "/geoip" || r.Header.Get("User-Agent") != "open-linux-router" {
 			t.Errorf("IPv4 request: %s %s", r.URL.Path, r.Header.Get("User-Agent"))
 		}
-		w.Write([]byte(`{"ip":"203.0.113.42","country":"Exampleland","city":"Example City","isp":"Example ISP","asn":64500}`))
+		w.Write([]byte(`{"ip":"203.0.113.42","country":"Exampleland","country_code":"EX","city":"Example City","isp":"Example ISP","asn":64500}`))
 	}))
 	defer ipv4.Close()
 	ipv6 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +33,7 @@ func TestPublicAddressesEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.IPv4.IP != "203.0.113.42" || got.IPv4.ISP != "Example ISP" || got.IPv4.ASN != 64500 || got.IPv6.IP != "2001:db8::42" || got.IPv6.Region != "Example Region" {
+	if got.IPv4.IP != "203.0.113.42" || got.IPv4.CountryCode != "EX" || got.IPv4.ISP != "Example ISP" || got.IPv4.ASN != 64500 || got.IPv6.IP != "2001:db8::42" || got.IPv6.Region != "Example Region" {
 		t.Fatalf("addresses: %+v", got)
 	}
 }

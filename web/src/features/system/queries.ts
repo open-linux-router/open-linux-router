@@ -27,6 +27,7 @@ export interface PublicAddresses {
 export interface PublicAddress {
   ip: string
   country?: string
+  country_code?: string
   region?: string
   city?: string
   isp?: string

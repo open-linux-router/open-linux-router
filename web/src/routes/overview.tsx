@@ -383,13 +383,14 @@ function StatCard({ title, children }: { title: React.ReactNode; children: React
   </section>
 }
 
-function MetricPill({ label, value, detail, percent, tone = 'blue', health }: {
+function MetricPill({ label, value, detail, percent, tone = 'blue', health, valueRight = false }: {
   label?: string
   value: string
   detail?: string
   percent?: number
   tone?: 'blue' | 'neutral'
   health?: 'good' | 'bad' | 'unknown'
+  valueRight?: boolean
 }) {
   return <div className="min-w-0 py-1"><div role={percent == null ? undefined : 'progressbar'} aria-label={label}
     aria-valuenow={percent == null ? undefined : Math.min(100, Math.max(0, Math.round(percent)))}
@@ -397,7 +398,7 @@ function MetricPill({ label, value, detail, percent, tone = 'blue', health }: {
     className="relative flex h-10 min-w-0 items-center justify-between gap-2 overflow-hidden rounded-xl bg-muted/65 px-3 ring-1 ring-foreground/[0.06] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]">
     {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r transition-[width] duration-700 ease-out', tone === 'neutral' ? 'border-slate-400/40 bg-slate-300/35' : 'border-cyan-500/40 bg-cyan-200/45')}
       style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />}
-    <span className="relative z-10 flex min-w-0 items-center gap-2 truncate text-sm">
+    <span className={cn('relative z-10 flex min-w-0 items-center gap-2 truncate text-sm', valueRight && 'w-full justify-between')}>
       {health && <span aria-hidden className={cn('size-2 shrink-0 rounded-full', health === 'good' ? 'bg-success' : health === 'bad' ? 'bg-destructive' : 'bg-muted-foreground')} />}
       {label && <span className="shrink-0 text-xs text-muted-foreground">{label}</span>}
       <span title={value} className={cn('truncate font-semibold tabular-nums', health === 'bad' && 'text-destructive')}>{value}</span>
@@ -406,11 +407,44 @@ function MetricPill({ label, value, detail, percent, tone = 'blue', health }: {
   </div></div>
 }
 
+const ispMarks: { pattern: RegExp; slug?: string; initials?: string; color?: string }[] = [
+  { pattern: /china unicom/i, initials: 'CU', color: 'text-red-600' },
+  { pattern: /china telecom/i, initials: 'CT', color: 'text-blue-600' },
+  { pattern: /china mobile/i, initials: 'CM', color: 'text-blue-500' },
+  { pattern: /verizon/i, slug: 'verizon' },
+  { pattern: /vodafone/i, slug: 'vodafone' },
+  { pattern: /deutsche telekom|t-mobile/i, slug: 'deutsche-telekom' },
+  { pattern: /orange/i, slug: 'orange' },
+  { pattern: /british telecom|\bbt\b/i, slug: 'bt' },
+  { pattern: /spectrum/i, slug: 'spectrum' },
+  { pattern: /telstra/i, slug: 'telstra' },
+  { pattern: /airtel/i, slug: 'airtel' },
+  { pattern: /\bjio\b/i, slug: 'jio' },
+  { pattern: /telefonica|telefónica/i, slug: 'telefonica' },
+  { pattern: /cloudflare/i, slug: 'cloudflare' },
+  { pattern: /google/i, slug: 'google' },
+  { pattern: /amazon|\baws\b/i, slug: 'amazon' },
+  { pattern: /digitalocean/i, slug: 'digitalocean' },
+]
+
+function CountryIcon({ code }: { code?: string }) {
+  if (!code || !/^[a-z]{2}$/i.test(code)) return null
+  const flag = String.fromCodePoint(...[...code.toUpperCase()].map((letter) => 0x1f1e6 + letter.charCodeAt(0) - 65))
+  return <span aria-hidden className="shrink-0 text-base leading-none">{flag}</span>
+}
+
+function IspIcon({ name }: { name?: string }) {
+  const mark = name && ispMarks.find(({ pattern }) => pattern.test(name))
+  if (!mark) return null
+  return mark.slug
+    ? <img src={`https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${mark.slug}/default.svg`} alt="" className="size-4 shrink-0 object-contain" loading="lazy" />
+    : <span aria-hidden className={cn('inline-flex size-4 shrink-0 items-center justify-center text-[8px] font-bold', mark.color)}>{mark.initials}</span>
+}
+
 function PublicAddressRow({ family, address }: { family: 'IPv4' | 'IPv6'; address?: PublicAddress }) {
   const [open, setOpen] = useState(false)
   const location = [address?.city, address?.region, address?.country].filter(Boolean).join(', ')
   const network = [address?.isp, address?.organization && address.organization !== address.isp ? address.organization : undefined].filter(Boolean).join(' · ')
-  const details = [location, network, address?.asn ? `AS${address.asn}` : undefined].filter(Boolean)
   return <div className="min-w-0 py-1">
     <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
       className="flex h-10 w-full min-w-0 items-center gap-2 rounded-xl bg-muted/65 px-3 text-left text-sm ring-1 ring-foreground/[0.06] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
@@ -419,9 +453,10 @@ function PublicAddressRow({ family, address }: { family: 'IPv4' | 'IPv6'; addres
       <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
     </button>
     {open && <div className="space-y-1 px-3 pt-2 text-xs text-muted-foreground">
-      {details.length ? details.map((detail) => <p key={detail} className="break-words">{detail}</p>)
-        : <p>{address?.ip ? 'Location unavailable' : 'Address unavailable'}</p>}
-      <p className="text-[11px]">GeoIP by ip.sb · approximate location</p>
+      {location && <p className="flex items-center gap-1.5 break-words"><CountryIcon code={address?.country_code} />{location}</p>}
+      {network && <p className="flex items-center gap-1.5 break-words"><IspIcon name={address?.isp} />{network}</p>}
+      {address?.asn && <p>AS{address.asn}</p>}
+      {!location && !network && !address?.asn && <p>{address?.ip ? 'Location unavailable' : 'Address unavailable'}</p>}
     </div>}
   </div>
 }
@@ -603,8 +638,7 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
           percent={flows.rated && !trafficFailed && limits.down ? (flows.total.downRate ?? 0) * 8 / (limits.down * 1_000_000) * 100 : undefined} />
         <Meter label="Upload" arrow="↑" onClick={() => setEditing('up')} current={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.up ? (flows.total.upRate ?? 0) * 8 / (limits.up * 1_000_000) * 100 : undefined} tone="amber" />
-        <MetricPill label="Total" value={flows.counting ? formatBytes(flows.total.down + flows.total.up) : trafficFailed ? 'Unavailable' : '—'}
-          detail={flows.counting ? 'since counting started' : undefined} />
+        <MetricPill label="Total" value={flows.counting ? formatBytes(flows.total.down + flows.total.up) : trafficFailed ? 'Unavailable' : '—'} valueRight />
       </div>
     </StatCard>
     <StatCard title={<span className="inline-flex items-center gap-1.5">Latency
@@ -612,17 +646,15 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
         title="Time for this router to receive the full HTTPS response, including DNS, TLS and download. Even a login redirect or error page counts; this does not prove the app works. Images, scripts and browser rendering are not included."
         aria-label="About latency measurements"><Info className="size-3.5" /></button></span>}>
       <div className="space-y-3 pt-2">
-        <MetricPill label="Internet" value={latencyValue} detail={measured ? latency.milliseconds! < 1000 ? 'Good' : latency.milliseconds! < 3000 ? 'Fair' : 'Slow' : undefined} />
-        <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} detail={dnsMeasured ? latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow' : undefined} />
+        <MetricPill label="Internet" value={latencyValue} valueRight />
+        <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} valueRight />
         <div className="flex flex-wrap items-center gap-2">
           {latency?.custom?.map((site) => {
             const measuredSite = Boolean(site.checked_at && !site.checked_at.startsWith('0001-'))
             const ms = site.milliseconds
-            const tone = !measuredSite ? 'bg-muted text-muted-foreground' : ms == null ? 'bg-destructive/10 text-destructive'
-              : ms < 1000 ? 'bg-success/15 text-success-foreground' : ms < 3000 ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-destructive/10 text-destructive'
             const description = `${site.name} · HTTPS response from ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!measuredSite ? 'Waiting for first probe' : ms == null ? site.error || 'Failed' : `${ms.toFixed(0)} ms`}`
             return <span key={site.name} tabIndex={0} aria-label={description} title={description}
-              className={cn('inline-flex min-h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold tabular-nums', tone)}>
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-muted/65 px-2.5 text-xs font-semibold tabular-nums text-foreground ring-1 ring-foreground/[0.06]">
               <SiteIcon name={site.name} url={site.url} icon={site.icon} />
               <span>{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
             </span>
@@ -638,7 +670,7 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
           detail={host?.cpu_cores ? `${cpuPercent?.toFixed(0)}% of ${host.cpu_cores} cores` : undefined} percent={cpuPercent} />
         <MetricPill label="Memory" value={host ? formatBytes(host.memory_used_bytes) : '—'}
           detail={host ? `${memoryPercent?.toFixed(0)}% of ${formatBytes(host.memory_total_bytes)}` : undefined} percent={memoryPercent} tone="neutral" />
-        <MetricPill label="Uptime" value={host ? uptime(host.uptime_seconds) : '—'} />
+        <MetricPill label="Uptime" value={host ? uptime(host.uptime_seconds) : '—'} valueRight />
       </div>
     </StatCard>
     {sitesOpen && <LatencySitesDialog sites={latency?.custom ?? []} exits={exits} onClose={() => setSitesOpen(false)} />}

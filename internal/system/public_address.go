@@ -22,6 +22,7 @@ const (
 type PublicAddress struct {
 	IP           string `json:"ip"`
 	Country      string `json:"country,omitempty"`
+	CountryCode  string `json:"country_code,omitempty"`
 	Region       string `json:"region,omitempty"`
 	City         string `json:"city,omitempty"`
 	ISP          string `json:"isp,omitempty"`
