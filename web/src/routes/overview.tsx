@@ -488,7 +488,7 @@ function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[];
   return <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
     <DialogContent className="sm:max-w-2xl">
       <DialogHeader><DialogTitle>Sites to monitor</DialogTitle><DialogDescription>
-        HTML page response from this router. Drag to reorder, select a site to edit, or select its icon to customize it.
+        HTTPS response time from this router. Any completed HTTP response counts, even a login redirect or error page. Drag to reorder, select a site to edit, or select its icon to customize it.
       </DialogDescription></DialogHeader>
       <div className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
         {draft.map((site, i) => <div key={site.id} className="rounded-xl bg-muted/60 p-2 text-sm"
@@ -585,7 +585,7 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
     </StatCard>
     <StatCard title={<span className="inline-flex items-center gap-1.5">Latency
       <button type="button" className="text-muted-foreground hover:text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
-        title="Time for this router to fetch the full HTML document, including DNS, TLS, redirects and download. Images, scripts and browser rendering are not included."
+        title="Time for this router to receive the full HTTPS response, including DNS, TLS and download. Even a login redirect or error page counts; this does not prove the app works. Images, scripts and browser rendering are not included."
         aria-label="About latency measurements"><Info className="size-3.5" /></button></span>}>
       <div className="space-y-3 pt-2">
         <MetricPill label="Internet" value={latencyValue} detail={measured ? latency.milliseconds! < 1000 ? 'Good' : latency.milliseconds! < 3000 ? 'Fair' : 'Slow' : undefined} />
@@ -596,7 +596,7 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
             const ms = site.milliseconds
             const tone = !measuredSite ? 'bg-muted text-muted-foreground' : ms == null ? 'bg-destructive/10 text-destructive'
               : ms < 1000 ? 'bg-success/15 text-success-foreground' : ms < 3000 ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-destructive/10 text-destructive'
-            const description = `${site.name} · HTML page from ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!measuredSite ? 'Waiting for first probe' : ms == null ? site.error || 'Failed' : `${ms.toFixed(0)} ms`}`
+            const description = `${site.name} · HTTPS response from ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!measuredSite ? 'Waiting for first probe' : ms == null ? site.error || 'Failed' : `${ms.toFixed(0)} ms`}`
             return <span key={site.name} tabIndex={0} aria-label={description} title={description}
               className={cn('inline-flex min-h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold tabular-nums', tone)}>
               <SiteIcon name={site.name} url={site.url} icon={site.icon} />

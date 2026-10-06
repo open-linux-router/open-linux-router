@@ -71,9 +71,9 @@ func (h HTTP) Routes() []core.Route {
 	}
 
 	routes := []core.Route{
-		{Method: "GET", Path: "/latency", Tool: "show latency", Summary: "Latest router HTML page response measurements and selected websites.", Handler: h.getLatency},
+		{Method: "GET", Path: "/latency", Tool: "show latency", Summary: "Latest router HTTPS response measurements and selected websites.", Handler: h.getLatency},
 		{Method: "GET", Path: "/latency/sites/{name}/icon", Summary: "Discover a monitored site icon.", Handler: h.getLatencyIcon},
-		{Method: "PUT", Path: "/latency/sites", Summary: "Replace custom page response targets.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencySites},
+		{Method: "PUT", Path: "/latency/sites", Summary: "Replace custom HTTPS response targets.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencySites},
 		// Intent, whole document. Still the way to restore a backup or make
 		// several changes at once; the routes below are additions, not
 		// replacements.

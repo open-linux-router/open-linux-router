@@ -71,8 +71,8 @@ const (
 	pageProbeLimit   = 2 << 20
 )
 
-// probePage measures the whole HTTPS document, including DNS, redirects and body.
-// Assets and JavaScript are deliberately not fetched.
+// probePage measures the HTTPS response through the full body, regardless of
+// status or content type. Assets and JavaScript are not fetched.
 func probePage(ctx context.Context, target string) (float64, error) {
 	return probePageWithDial(ctx, target, nil)
 }
@@ -111,12 +111,6 @@ func probePageWithClient(ctx context.Context, target string, client *http.Client
 		return 0, err
 	}
 	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return 0, fmt.Errorf("HTTP %d", response.StatusCode)
-	}
-	if kind := response.Header.Get("Content-Type"); kind != "" && !strings.HasPrefix(strings.ToLower(kind), "text/html") {
-		return 0, fmt.Errorf("not an HTML page")
-	}
 	count, err := io.Copy(io.Discard, io.LimitReader(response.Body, pageProbeLimit+1))
 	if err != nil {
 		return 0, err
@@ -135,7 +129,7 @@ func latencyError(err error) string {
 	if errors.As(err, &dns) {
 		return "DNS lookup failed"
 	}
-	if strings.HasPrefix(err.Error(), "HTTP ") || err.Error() == "page exceeds 2 MiB" || err.Error() == "not an HTML page" {
+	if err.Error() == "page exceeds 2 MiB" {
 		return err.Error()
 	}
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {

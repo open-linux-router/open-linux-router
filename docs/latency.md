@@ -1,18 +1,22 @@
-# Overview page response
+# Overview response time
 
 `GET /api/gateway/latency` returns the latest background measurements without
 starting network traffic. Internet and custom sites use the same metric: time
-from a router-originated HTTPS GET to completion of the HTML document, including
+from a router-originated HTTPS GET to completion of the response body, including
 DNS, TCP, TLS, same-host HTTPS redirects, server response and document download.
 The router does **not** fetch images, scripts or styles, execute JavaScript or
 render a page. This is not ICMP ping or the time until a browser finishes showing
 the app. Page size and server behavior affect the number, so compare a site's
 trend rather than treating different sites as equivalent network benchmarks.
 
-Each probe has a 15-second deadline and a 2 MiB document limit. It follows up
+Each probe has a 15-second deadline and a 2 MiB response limit. It follows up
 to five same-host HTTPS redirects; cross-host and HTTP redirects are not
-followed. A non-2xx response or a non-HTML content type fails. Connections are
-fresh, environment proxies are ignored and TLS certificates are verified.
+followed. Any complete HTTP response counts as a latency measurement, including
+login redirects, challenges and HTTP 4xx/5xx responses. This means a measured
+time does not assert that the site or application is healthy. DNS, connection,
+TLS and body-read failures (including timeout or size limit) still fail.
+Connections are fresh, environment proxies are ignored and TLS certificates
+are verified.
 Internet candidates use the router's default route. Custom sites can choose a
 gateway exit; the TCP sockets are marked with its current routing mark on Linux.
 DNS still uses the router's resolver and default route. If a chosen exit is
@@ -50,7 +54,7 @@ failure replaces a prior success with a failure, not a stale success or zero.
 Only sites that have never been measured show a dash. Within the same browser
 session, the last completed outcome appears immediately after a reload until
 the API returns; cached results are reused only for the same URL and exit.
-The page response badges use Good below 1 second, Fair below 3 seconds,
+The response-time badges use Good below 1 second, Fair below 3 seconds,
 and Slow above that; those are experience hints, not network health verdicts.
 
 The monitoring dialog preserves the order of the `custom` list. Rows can be

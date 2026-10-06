@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -285,39 +286,56 @@ func TestPageProbeLimitsAndStatus(t *testing.T) {
 			}))
 			defer server.Close()
 			_, err := probePageWithClient(context.Background(), server.URL, server.Client())
-			if (err != nil) != (status != http.StatusOK) {
+			if err != nil {
 				t.Fatalf("status %d: %v", status, err)
 			}
 		})
 	}
 }
 
-func TestPageProbeRejectsCrossHostRedirect(t *testing.T) {
+func TestPageProbeCountsCrossHostRedirectResponse(t *testing.T) {
 	other := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("cross-host request reached destination") }))
 	defer other.Close()
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, other.URL, http.StatusFound) }))
 	defer server.Close()
-	_, err := probePageWithClient(context.Background(), server.URL, server.Client())
-	if err == nil || !strings.Contains(err.Error(), "HTTP 302") {
-		t.Fatalf("cross-host redirect: %v", err)
+	if _, err := probePageWithClient(context.Background(), server.URL, server.Client()); err != nil {
+		t.Fatalf("redirect response was not measured: %v", err)
 	}
 }
 
-func TestPageProbeRejectsLargeAndNonHTML(t *testing.T) {
-	for _, nonHTML := range []bool{false, true} {
+func TestPageProbeCountsAnyCompleteResponse(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusForbidden, http.StatusNotFound, 444, http.StatusInternalServerError} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(status)
+				w.Write([]byte(`{"message":"hello"}`))
+			}))
+			defer server.Close()
+			if _, err := probePageWithClient(context.Background(), server.URL, server.Client()); err != nil {
+				t.Fatalf("HTTP %d was not measured: %v", status, err)
+			}
+		})
+	}
+}
+
+func TestPageProbeRejectsOversizedOrIncompleteResponse(t *testing.T) {
+	for _, incomplete := range []bool{false, true} {
 		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if nonHTML {
-				w.Header().Set("Content-Type", "image/png")
-				w.Write([]byte("png"))
+			if incomplete {
+				w.Header().Set("Content-Length", "100")
+			}
+			w.WriteHeader(http.StatusForbidden)
+			if incomplete {
+				w.Write([]byte("short"))
 				return
 			}
-			w.Header().Set("Content-Type", "text/html")
 			w.Write([]byte(strings.Repeat("x", pageProbeLimit+1)))
 		}))
 		_, err := probePageWithClient(context.Background(), server.URL, server.Client())
 		server.Close()
 		if err == nil {
-			t.Fatalf("accepted invalid page (nonHTML=%v)", nonHTML)
+			t.Fatalf("accepted incomplete response (truncated=%v)", incomplete)
 		}
 	}
 }
