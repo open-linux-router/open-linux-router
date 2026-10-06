@@ -168,3 +168,51 @@ func TestInstallRoutesProxyThroughExit(t *testing.T) {
 		t.Fatalf("marked inspection rules: %s", got)
 	}
 }
+
+func TestViewerAccessRequiresSessionAndCookie(t *testing.T) {
+	s := &Service{}
+	req := httptest.NewRequest(http.MethodPost, "/api/inspection/viewer-access", nil)
+	rec := httptest.NewRecorder()
+	s.viewerAccess(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("inactive access = %d", rec.Code)
+	}
+	s.session = &session{webToken: "secret", expires: time.Now().Add(time.Minute)}
+	rec = httptest.NewRecorder()
+	s.viewerAccess(rec, req)
+	if rec.Code != http.StatusNoContent || len(rec.Result().Cookies()) != 1 {
+		t.Fatalf("viewer access = %d", rec.Code)
+	}
+	cookie := rec.Result().Cookies()[0]
+	if !cookie.HttpOnly || cookie.Path != "/inspection-web/" || cookie.SameSite != http.SameSiteStrictMode {
+		t.Fatalf("unsafe cookie: %+v", cookie)
+	}
+	for _, tc := range []struct {
+		name   string
+		cookie bool
+		want   int
+	}{
+		{"missing cookie", false, http.StatusUnauthorized},
+		{"authorized but upstream absent", true, http.StatusBadGateway},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tc.cookie {
+				request.AddCookie(cookie)
+			}
+			out := httptest.NewRecorder()
+			s.WebUI(out, request)
+			if out.Code != tc.want {
+				t.Fatalf("status = %d, want %d", out.Code, tc.want)
+			}
+		})
+	}
+	s.session = nil
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(cookie)
+	s.WebUI(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("stopped viewer = %d", rec.Code)
+	}
+}

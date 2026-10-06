@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/x509"
 	"embed"
 	"encoding/hex"
@@ -67,7 +68,6 @@ type Status struct {
 	InputDropped  *uint64   `json:"input_dropped_packets,omitempty"`
 	ProxyAccepted uint64    `json:"proxy_accepted"`
 	ExitRouted    bool      `json:"exit_routed"`
-	WebToken      string    `json:"web_token,omitempty"`
 }
 
 type Service struct {
@@ -98,6 +98,7 @@ func (s *Service) Routes() []core.Route {
 		{Method: "POST", Path: "/session", Summary: "Start a 15-minute inspection for observed device IPv4 addresses.", Mutating: true, Handler: s.start},
 		{Method: "DELETE", Path: "/session", Summary: "Stop inspection, remove interception and clear captured requests.", Mutating: true, Handler: s.stop},
 		{Method: "GET", Path: "/ca", Tool: "show ca", Summary: "Download the public debugging CA certificate, never its private key.", Handler: s.ca},
+		{Method: "POST", Path: "/viewer-access", Summary: "Authorize this browser to view the active inspection session.", Mutating: true, Handler: s.viewerAccess},
 	}
 }
 
@@ -110,7 +111,6 @@ func (s *Service) snapshot() Status {
 		out.Events = append(out.Events, q.events...)
 		out.ProxyAccepted = q.accepted
 		out.ExitRouted = q.mark != 0
-		out.WebToken = q.webToken
 		if n, err := inspectionCount("redirected"); err == nil {
 			out.Redirected = &n
 		}
@@ -160,14 +160,53 @@ func (s *Service) PublicCA(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-// WebUI is the authenticated, session-scoped mitmweb surface. Never expose
-// mitmweb's loopback listener directly or forward arbitrary upstream hosts.
-func (s *Service) WebUI(w http.ResponseWriter, r *http.Request) {
+const viewerCookie = "olr-inspection-viewer"
+
+func (s *Service) viewerAccess(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	active := s.session != nil && time.Now().Before(s.session.expires)
+	q := s.session
+	active := q != nil && time.Now().Before(q.expires)
+	var token string
+	var expires time.Time
+	if active {
+		token, expires = q.webToken, q.expires
+	}
 	s.mu.Unlock()
 	if !active {
 		http.NotFound(w, r)
+		return
+	}
+	if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+r.Host && origin != "https://"+r.Host {
+		http.Error(w, "invalid viewer origin", http.StatusForbidden)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: viewerCookie, Value: token, Path: "/inspection-web/", Expires: expires, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// WebUI proxies only an active session to loopback. The browser never receives
+// mitmweb's bearer token; a short-lived HttpOnly cookie proves API access.
+func (s *Service) WebUI(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	q := s.session
+	active := q != nil && time.Now().Before(q.expires)
+	var token string
+	if active {
+		token = q.webToken
+	}
+	s.mu.Unlock()
+	if !active {
+		http.NotFound(w, r)
+		return
+	}
+	cookie, err := r.Cookie(viewerCookie)
+	if err != nil || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(token)) != 1 {
+		http.Error(w, "inspection viewer access required", http.StatusUnauthorized)
+		return
+	}
+	if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+r.Host && origin != "https://"+r.Host {
+		http.Error(w, "invalid viewer origin", http.StatusForbidden)
 		return
 	}
 	if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") && r.URL.Path != "/updates" {
@@ -180,12 +219,15 @@ func (s *Service) WebUI(w http.ResponseWriter, r *http.Request) {
 	proxy.Director = func(req *http.Request) {
 		req.URL.Scheme, req.URL.Host = target.Scheme, target.Host
 		req.Host = target.Host
+		req.Header.Del("Cookie")
+		req.Header.Set("Authorization", "Bearer "+token)
 		if strings.EqualFold(req.Header.Get("Upgrade"), "websocket") {
 			req.Header.Set("Origin", "http://"+target.Host)
 		}
 	}
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		resp.Header.Del("X-Frame-Options")
+		resp.Header.Del("Set-Cookie")
 		resp.Header.Set("Cache-Control", "no-store")
 		resp.Header.Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; style-src 'self' 'unsafe-inline'")
 		return nil
@@ -369,7 +411,7 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) snapshotLocked() Status {
 	q := s.session
-	return Status{Active: true, MAC: q.mac, IPs: append([]string(nil), q.ips...), Expires: q.expires, Events: []Event{}, CAPresent: true, WebToken: q.webToken, ExitRouted: q.mark != 0}
+	return Status{Active: true, MAC: q.mac, IPs: append([]string(nil), q.ips...), Expires: q.expires, Events: []Event{}, CAPresent: true, ExitRouted: q.mark != 0}
 }
 
 func (s *Service) consume(q *session, stdout interface{ Read([]byte) (int, error) }) {

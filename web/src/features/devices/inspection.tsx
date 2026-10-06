@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import encodeQR from '@paulmillr/qr'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -30,7 +30,6 @@ interface Status {
   redirected_packets?: number
   proxy_accepted: number
   exit_routed: boolean
-  web_token?: string
 }
 
 export function DeviceInspection({ mac, addresses }: { mac: string; addresses: string[] }) {
@@ -53,7 +52,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
   })
   const [selected, setSelected] = useState<Event | null>(null)
   const [showQR, setShowQR] = useState(false)
-  const [showViewer, setShowViewer] = useState(false)
+  const [viewerReady, setViewerReady] = useState(false)
   const caURL = `${window.location.origin}/download/inspection-ca.crt`
   const caQR = useMemo(() => {
     try { return encodeQR(caURL, 'svg') } catch { return null }
@@ -62,6 +61,17 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
   const mine = active && status.data?.mac?.toLowerCase() === mac.toLowerCase()
   const requests = mine ? status.data?.events.filter((e) => e.kind === 'request') ?? [] : []
   const failed = mine ? status.data?.events.filter((e) => e.kind === 'failed') ?? [] : []
+
+  useEffect(() => {
+    if (!mine) return
+    let cancelled = false
+    api.post('/api/inspection/viewer-access').then(() => {
+      if (!cancelled) setViewerReady(true)
+    }).catch((error) => {
+      if (!cancelled) toast.error(`Could not open full inspection viewer: ${String(error)}`)
+    })
+    return () => { cancelled = true; setViewerReady(false) }
+  }, [mine, status.data?.expires])
 
   async function downloadCA() {
     try {
@@ -107,15 +117,9 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <Button variant="outline" disabled={!status.data?.ca_present} onClick={() => setShowQR(true)}>Show CA QR</Button>
       </div>
       {mine && <div className="space-y-3 rounded-lg border p-3 text-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p>Full requests and responses are available in the built-in mitmweb viewer.</p>
-          <Button variant="outline" onClick={() => setShowViewer((open) => !open)}>{showViewer ? 'Close full viewer' : 'Open full viewer'}</Button>
-        </div>
-        {showViewer && <>
-          <p className="text-xs text-muted-foreground">Use the session token below at mitmweb's login prompt. Treat it as a secret; it expires when inspection stops.</p>
-          <code className="block break-all rounded bg-muted p-2 font-mono text-xs">{status.data?.web_token}</code>
-          <iframe title="Full request and response inspection" src="/inspection-web/" className="h-[75vh] min-h-[480px] w-full rounded border bg-white" />
-        </>}
+        <p className="font-medium">Full request and response inspection</p>
+        {viewerReady ? <iframe title="Full request and response inspection" src="/inspection-web/" className="h-[75vh] min-h-[480px] w-full rounded border bg-white" />
+          : <p className="text-muted-foreground">Opening the inspection viewer…</p>}
       </div>}
       <p className="text-xs leading-relaxed text-muted-foreground">
         TCP ports 80/443 to public destinations only. When this device has an explicit gateway exit, the inspection proxy's upstream connections follow that exit too, including Clash fake IPs (198.18.0.0/15). Without an explicit exit, fake IPs bypass inspection and keep their normal route. QUIC/HTTP/3 (UDP/443), IPv6, non-HTTP traffic, pinned certificates and apps that reject user CAs are not inspected. No UDP blocking is applied. An empty list does not mean no connections occurred. The CA private key stays on this router.
