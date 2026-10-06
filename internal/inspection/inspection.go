@@ -4,9 +4,11 @@ package inspection
 
 import (
 	"bufio"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -32,9 +34,10 @@ const ModuleName = "inspection"
 const table = "olr_inspection"
 const duration = 15 * time.Minute
 const port = "18081"
+const webPort = "18082"
 const maxEvents = 200
 
-// Reserved only for the short-lived mitmdump process; no system group is created.
+// Reserved only for the short-lived mitmweb process; no system group is created.
 const proxyGID = 2147418113
 
 type Event struct {
@@ -47,8 +50,6 @@ type Event struct {
 	Reason          string            `json:"reason,omitempty"`
 	RequestHeaders  map[string]string `json:"request_headers,omitempty"`
 	ResponseHeaders map[string]string `json:"response_headers,omitempty"`
-	ResponsePreview *string           `json:"response_preview,omitempty"`
-	ResponseNote    string            `json:"response_note,omitempty"`
 }
 
 type Status struct {
@@ -64,6 +65,7 @@ type Status struct {
 	InputDropped  *uint64   `json:"input_dropped_packets,omitempty"`
 	ProxyAccepted uint64    `json:"proxy_accepted"`
 	ExitRouted    bool      `json:"exit_routed"`
+	WebToken      string    `json:"web_token,omitempty"`
 }
 
 type Service struct {
@@ -84,6 +86,7 @@ type session struct {
 	events   []Event
 	accepted uint64
 	mark     uint32
+	webToken string
 	retrying bool
 }
 
@@ -105,6 +108,7 @@ func (s *Service) snapshot() Status {
 		out.Events = append(out.Events, q.events...)
 		out.ProxyAccepted = q.accepted
 		out.ExitRouted = q.mark != 0
+		out.WebToken = q.webToken
 		if n, err := inspectionCount("redirected"); err == nil {
 			out.Redirected = &n
 		}
@@ -208,8 +212,8 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusServiceUnavailable, "inspection exit has no usable routing mark")
 		return
 	}
-	if _, err = exec.LookPath("mitmdump"); err != nil {
-		core.WriteError(w, http.StatusServiceUnavailable, "install mitmproxy (mitmdump) on the router first")
+	if _, err = exec.LookPath("mitmweb"); err != nil {
+		core.WriteError(w, http.StatusServiceUnavailable, "install mitmproxy (mitmweb) on the router first")
 		return
 	}
 	if _, err = exec.LookPath("nft"); err != nil {
@@ -224,14 +228,21 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, 500, err.Error())
 		return
 	}
+	secret := make([]byte, 24)
+	if _, err := rand.Read(secret); err != nil {
+		core.WriteError(w, 500, "could not create mitmweb access token")
+		return
+	}
+	webToken := hex.EncodeToString(secret)
 	script := filepath.Join(s.Dir, "olr-addon.py")
 	source, _ := addon.ReadFile("addon.py")
 	if err = os.WriteFile(script, source, 0o600); err != nil {
 		core.WriteError(w, 500, err.Error())
 		return
 	}
-	cmd := exec.Command("mitmdump", "--mode", "transparent", "--listen-host", "0.0.0.0", "--listen-port", port,
-		"--set", "confdir="+s.Dir, "--set", "termlog_verbosity=error", "--set", "stream_large_bodies=1m", "-s", script)
+	cmd := exec.Command("mitmweb", "--mode", "transparent", "--listen-host", "0.0.0.0", "--listen-port", port,
+		"--web-host", "127.0.0.1", "--web-port", webPort, "--no-web-open-browser",
+		"--set", "confdir="+s.Dir, "--set", "termlog_verbosity=error", "--set", "web_password="+webToken, "-s", script)
 	// mitmdump may fork; its launcher is not the lifetime of the listener.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if mark != 0 {
@@ -244,12 +255,14 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 	}
 	cmd.Stdout = output
 	cmd.Stderr = nil
-	if conn, dialErr := net.DialTimeout("tcp", "127.0.0.1:"+port, 100*time.Millisecond); dialErr == nil {
-		conn.Close()
-		_ = stdout.Close()
-		_ = output.Close()
-		core.WriteError(w, http.StatusServiceUnavailable, "inspection port is already in use; stop the stale proxy before starting")
-		return
+	for _, address := range []string{"127.0.0.1:" + port, "127.0.0.1:" + webPort} {
+		if conn, dialErr := net.DialTimeout("tcp", address, 100*time.Millisecond); dialErr == nil {
+			conn.Close()
+			_ = stdout.Close()
+			_ = output.Close()
+			core.WriteError(w, http.StatusServiceUnavailable, "inspection port "+address+" is already in use; stop the stale proxy before starting")
+			return
+		}
 	}
 	if err = cmd.Start(); err != nil {
 		_ = stdout.Close()
@@ -271,10 +284,23 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+	if ready {
+		webReady := false
+		for i := 0; i < 40; i++ {
+			conn, dialErr := net.DialTimeout("tcp", "127.0.0.1:"+webPort, 100*time.Millisecond)
+			if dialErr == nil {
+				conn.Close()
+				webReady = true
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		ready = webReady
+	}
 	if !ready {
 		cancel()
 		_ = stdout.Close()
-		core.WriteError(w, http.StatusServiceUnavailable, "mitmproxy did not become ready; no traffic was redirected")
+		core.WriteError(w, http.StatusServiceUnavailable, "mitmweb did not become ready; no traffic was redirected")
 		return
 	}
 	// A fresh table is owned wholly by this module. Cleanup of a previous
@@ -283,7 +309,7 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		if cleanupErr := cleanup(); cleanupErr != nil {
 			// A partially installed rule might remain. Preserve a session
 			// owner so cleanup is retried and no new session can start.
-			q := &session{mac: normalized, ips: ips, expires: time.Now(), mark: mark, cancel: cancel, done: make(chan struct{})}
+			q := &session{mac: normalized, ips: ips, expires: time.Now(), mark: mark, webToken: webToken, cancel: cancel, done: make(chan struct{})}
 			s.session = q
 			q.retrying = true
 			go s.retryCleanup(q)
@@ -296,7 +322,7 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, 500, "could not install interception: "+err.Error())
 		return
 	}
-	q := &session{mac: normalized, ips: ips, expires: time.Now().Add(duration), mark: mark, cancel: cancel, done: make(chan struct{})}
+	q := &session{mac: normalized, ips: ips, expires: time.Now().Add(duration), mark: mark, webToken: webToken, cancel: cancel, done: make(chan struct{})}
 	s.session = q
 	go s.consume(q, stdout)
 	go s.watch(q)
@@ -305,7 +331,7 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) snapshotLocked() Status {
 	q := s.session
-	return Status{Active: true, MAC: q.mac, IPs: append([]string(nil), q.ips...), Expires: q.expires, Events: []Event{}, CAPresent: true}
+	return Status{Active: true, MAC: q.mac, IPs: append([]string(nil), q.ips...), Expires: q.expires, Events: []Event{}, CAPresent: true, WebToken: q.webToken, ExitRouted: q.mark != 0}
 }
 
 func (s *Service) consume(q *session, stdout interface{ Read([]byte) (int, error) }) {

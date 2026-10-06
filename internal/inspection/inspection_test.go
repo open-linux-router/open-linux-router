@@ -101,7 +101,7 @@ func TestStartRejectsStaleListener(t *testing.T) {
 	}
 	defer listener.Close()
 	dir := t.TempDir()
-	for _, name := range []string{"mitmdump", "nft"} {
+	for _, name := range []string{"mitmweb", "nft"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
 			t.Fatal(err)
 		}

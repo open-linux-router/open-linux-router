@@ -18,8 +18,6 @@ interface Event {
   reason?: string
   request_headers?: Record<string, string>
   response_headers?: Record<string, string>
-  response_preview?: string
-  response_note?: string
 }
 interface Status {
   active: boolean
@@ -32,6 +30,7 @@ interface Status {
   redirected_packets?: number
   proxy_accepted: number
   exit_routed: boolean
+  web_token?: string
 }
 
 export function DeviceInspection({ mac, addresses }: { mac: string; addresses: string[] }) {
@@ -85,14 +84,14 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <Badge variant={mine ? 'warning' : 'outline'}>{mine ? 'On' : 'Off'}</Badge>
       </div>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Inspect traffic from this device on its observed IPv4 addresses. It automatically turns off after 15 minutes. Request URLs, headers and text response previews can contain private data. Previews are limited to 4,096 characters; bodies are not saved to disk.
+        Inspect traffic from this device on its observed IPv4 addresses. It automatically turns off after 15 minutes. Inspect requests here, or open mitmweb locally over SSH for full request and response bodies. Full bodies remain in mitmweb memory for this session and are cleared on stop.
       </p>
     </div>
     <div className="space-y-5 p-5 sm:p-7">
       {status.isError ? <p role="alert" className="text-sm text-destructive">Inspection status is unavailable. Do not assume interception has stopped.</p> : null}
       {active && !mine ? <p className="text-sm text-muted-foreground">Another device is being inspected. Stop that session before starting this one.</p> : null}
       <div className="grid gap-4 text-sm text-muted-foreground md:grid-cols-3">
-        <p><strong className="block text-foreground">1. Prepare</strong>Install mitmproxy (mitmdump) on the router. Observed IPv4 addresses are covered together; IPv6 traffic is not intercepted.</p>
+        <p><strong className="block text-foreground">1. Prepare</strong>Install mitmproxy (mitmweb) on the router. Observed IPv4 addresses are covered together; IPv6 traffic is not intercepted.</p>
         <p><strong className="block text-foreground">2. Trust CA for HTTPS</strong>Start once to generate the CA, then install and explicitly enable full trust for the downloaded certificate in iPhone Settings → General → About → Certificate Trust Settings. Do not install its private key. HTTP works without a CA.</p>
         <p><strong className="block text-foreground">3. Stop and remove trust</strong>Stopping or timeout clears the session and restores normal forwarding. Your device still trusts the CA until you remove it in device settings.</p>
       </div>
@@ -109,6 +108,9 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <Button variant="outline" disabled={!status.data?.ca_present} onClick={downloadCA}>Download public CA</Button>
         <Button variant="outline" disabled={!status.data?.ca_present} onClick={() => setShowQR(true)}>Show CA QR</Button>
       </div>
+      {mine && <p className="rounded-lg border p-3 text-sm">
+        Full request and response bodies: run <code className="font-mono">ssh -N -L 18082:127.0.0.1:18082 olr</code> on your computer, then open <code className="font-mono">http://127.0.0.1:18082</code> locally. Use the session token <code className="break-all font-mono">{status.data?.web_token}</code> at mitmweb's login prompt. Treat it as a secret; it expires when inspection stops. This viewer is not exposed on the LAN and closes with the session.
+      </p>}
       <p className="text-xs leading-relaxed text-muted-foreground">
         TCP ports 80/443 to public destinations only. When this device has an explicit gateway exit, the inspection proxy's upstream connections follow that exit too, including Clash fake IPs (198.18.0.0/15). Without an explicit exit, fake IPs bypass inspection and keep their normal route. QUIC/HTTP/3 (UDP/443), IPv6, non-HTTP traffic, pinned certificates and apps that reject user CAs are not inspected. No UDP blocking is applied. An empty list does not mean no connections occurred. The CA private key stays on this router.
       </p>
@@ -150,12 +152,10 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
       {mine && selected && <div className="space-y-2 rounded-xl border p-4 text-sm">
         <div className="flex justify-between gap-2"><h3 className="font-medium">Request details</h3><Button variant="ghost" size="sm" onClick={() => setSelected(null)}>Close</Button></div>
         <p className="break-all">{selected.method} {selected.url} · {selected.status}</p>
-        <p className="text-xs text-muted-foreground">Headers and response previews may contain credentials. They are held only in memory for this session.</p>
+        <p className="text-xs text-muted-foreground">Headers may contain credentials. They are held only in memory for this session.</p>
         <h4 className="font-medium">Headers</h4>
         <pre className="max-h-52 overflow-auto rounded-lg bg-muted p-3 text-xs">{JSON.stringify({ request: selected.request_headers, response: selected.response_headers }, null, 2)}</pre>
-        <h4 className="font-medium">Response preview</h4>
-        {selected.response_note && <p className="text-xs text-muted-foreground">{selected.response_note}</p>}
-        {selected.response_preview != null ? <pre className="max-h-80 overflow-auto rounded-lg bg-muted p-3 text-xs whitespace-pre-wrap break-all">{selected.response_preview}</pre> : <p className="text-xs text-muted-foreground">No text preview available.</p>}
+        <p className="text-xs text-muted-foreground">For full request and response bodies, use the local mitmweb viewer while inspection is active.</p>
       </div>}
     </div>
   </section>
