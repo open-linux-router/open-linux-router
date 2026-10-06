@@ -423,6 +423,9 @@ func install(ip string) error {
 		{"ip", "daddr", "10.0.0.0/8", "return"},
 		{"ip", "daddr", "172.16.0.0/12", "return"},
 		{"ip", "daddr", "192.168.0.0/16", "return"},
+		// Fake-IP DNS answers belong to the device's proxy exit. A local
+		// mitmdump connection would lose that assignment and time out or leak.
+		{"ip", "daddr", "198.18.0.0/15", "return"},
 	} {
 		if err := nft(append([]string{"add", "rule", "inet", table, "prerouting"}, args...)...); err != nil {
 			return err

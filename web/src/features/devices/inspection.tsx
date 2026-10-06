@@ -109,7 +109,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <Button variant="outline" disabled={!status.data?.ca_present} onClick={() => setShowQR(true)}>Show CA QR</Button>
       </div>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        TCP ports 80/443 to public destinations only. QUIC/HTTP/3 (UDP/443), IPv6, non-HTTP traffic, pinned certificates and apps that reject user CAs are not inspected. No UDP blocking is applied. An empty list does not mean no connections occurred. The CA private key stays on this router.
+        TCP ports 80/443 to public destinations only. Clash-style fake IPs (198.18.0.0/15) keep their normal route and are not inspected, so sites using fake-IP DNS may load without appearing here. QUIC/HTTP/3 (UDP/443), IPv6, non-HTTP traffic, pinned certificates and apps that reject user CAs are not inspected. No UDP blocking is applied. An empty list does not mean no connections occurred. The CA private key stays on this router.
       </p>
       <Dialog open={showQR} onOpenChange={setShowQR}>
         <DialogContent className="sm:max-w-md">
