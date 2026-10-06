@@ -48,3 +48,11 @@ candidates retain old results but never contribute to the headline. The UI
 hides samples older than 90 seconds at receipt and never presents failures as
 zero. The page response badges use Good below 1 second, Fair below 3 seconds,
 and Slow above that; those are experience hints, not network health verdicts.
+
+The monitoring dialog preserves the order of the `custom` list. Rows can be
+reordered, edited, and given a custom icon. Clicking an icon offers automatic
+favicon discovery, a resized PNG/JPEG/WebP upload (at most 96 KiB in stored
+form), or a searchable theSVG icon ID. Uploaded images are stored as validated
+base64 in the latency-site settings file; theSVG IDs are fetched from the fixed
+library path and served as bounded SVG images after validation. This icon fetch
+is independent of the latency probe.

@@ -174,7 +174,7 @@ export function useGatewayLatency() {
 export function useSaveLatencySites() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (sites: { name: string; url: string; exit?: string }[]) =>
+    mutationFn: (sites: { name: string; url: string; exit?: string; icon?: string }[]) =>
       api.put('/api/gateway/latency/sites', sites),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['gateway', 'latency'] }),
   })

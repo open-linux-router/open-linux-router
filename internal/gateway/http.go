@@ -796,6 +796,7 @@ func (h HTTP) getLatencyIcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", kind)
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	w.Header().Set("Cache-Control", "private, max-age=86400")
 	w.Header().Set("Vary", "Authorization")
 	w.Write(data)

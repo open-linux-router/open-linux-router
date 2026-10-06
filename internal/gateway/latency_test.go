@@ -320,3 +320,64 @@ func TestPageProbeRejectsLargeAndNonHTML(t *testing.T) {
 		}
 	}
 }
+
+func TestCustomLatencyIconValidation(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Replace([]CustomLatencySite{{Name: "Test", URL: "https://example.com/", Icon: "thesvg:wechat"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, icon := range []string{"thesvg:../wechat", "data:image/svg+xml;base64,PHN2Zz4=", "https://evil.example/icon.svg"} {
+		if err := m.Replace([]CustomLatencySite{{Name: "Test", URL: "https://example.com/", Icon: icon}}); err == nil {
+			t.Fatalf("accepted %s", icon)
+		}
+	}
+}
+
+func TestSafeTheSVG(t *testing.T) {
+	for _, input := range []string{`<svg xmlns="http://www.w3.org/2000/svg"><path fill="#07C160" d="M0 0"/></svg>`, `<svg><script>alert(1)</script></svg>`, `<svg><image href="https://example.com/a"/></svg>`, `<svg onload="alert(1)"/>`} {
+		safe := safeTheSVG([]byte(input))
+		if safe != strings.Contains(input, "<path") {
+			t.Fatalf("unexpected SVG safety for %s", input)
+		}
+	}
+}
+
+func TestCustomLatencyOrderAndUploadedIconPersist(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sites.json")
+	m, err := NewCustomLatencyMonitor(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A minimal valid PNG detected by net/http's content sniffer.
+	image := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+	sites := []CustomLatencySite{{Name: "Second", URL: "https://second.example/", Icon: image}, {Name: "First", URL: "https://first.example/", Icon: "thesvg:wechat"}}
+	if err := m.Replace(sites); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := NewCustomLatencyMonitor(path)
+	if err != nil || !reflect.DeepEqual(reloaded.Config(), sites) {
+		t.Fatalf("reload: %+v, %v", reloaded.Config(), err)
+	}
+	got := reloaded.Snapshot()
+	if got[0].Name != "Second" || got[0].Icon != image || got[1].Name != "First" {
+		t.Fatalf("snapshot order/icons: %+v", got)
+	}
+}
+
+func TestUploadedLatencyIconEndpoint(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	icon := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+	if err := m.Replace([]CustomLatencySite{{Name: "Test", URL: "https://example.com", Icon: icon}}); err != nil {
+		t.Fatal(err)
+	}
+	data, kind, err := m.Icon(context.Background(), "Test")
+	if err != nil || kind != "image/png" || len(data) == 0 {
+		t.Fatalf("icon: %s, %v", kind, err)
+	}
+}

@@ -1,5 +1,5 @@
-import { AlertTriangle, ChevronRight, Info, Plus, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, ChevronRight, Info, Plus, Trash2, GripVertical } from 'lucide-react'
+import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -17,6 +17,7 @@ import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
 import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
 import { servicesByDevice } from '@/features/topology/services'
 import { useHostMetrics, type HostMetrics } from '@/features/system/queries'
+import thesvgSlugs from '@/features/gateway/thesvg-slugs.json'
 import { useGatewayConfig, useGatewayLatency, useSaveLatencySites, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
 import { NetworkMap } from '@/features/topology/network-map'
@@ -403,75 +404,137 @@ function MetricPill({ label, value, detail, percent, tone = 'blue', health }: {
   </div></div>
 }
 
-function SiteIcon({ name, url }: { name: string; url: string }) {
-  const [icon, setIcon] = useState<string>()
+function SiteIcon({ name, url, icon: iconChoice }: { name: string; url: string; icon?: string }) {
+  const [autoIcon, setAutoIcon] = useState<string>()
   useEffect(() => {
+    if (iconChoice?.startsWith('data:')) return
     const controller = new AbortController()
     let objectURL: string | undefined
     const token = getToken()
-    fetch(`/api/gateway/latency/sites/${encodeURIComponent(name)}/icon?v=${encodeURIComponent(url)}`, {
+    fetch(`/api/gateway/latency/sites/${encodeURIComponent(name)}/icon?v=${encodeURIComponent(`${url}:${iconChoice ?? 'auto'}`)}`, {
       signal: controller.signal,
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     }).then(async (response) => {
       if (!response.ok) return
       objectURL = URL.createObjectURL(await response.blob())
-      if (!controller.signal.aborted) setIcon(objectURL)
+      if (!controller.signal.aborted) setAutoIcon(objectURL)
       else URL.revokeObjectURL(objectURL)
     }).catch(() => {})
     return () => {
       controller.abort()
       if (objectURL) URL.revokeObjectURL(objectURL)
     }
-  }, [name, url])
-  return icon ? <img src={icon} alt="" className="size-5 shrink-0 rounded-sm object-contain" />
+  }, [name, url, iconChoice])
+  const preview = iconChoice?.startsWith('data:') ? iconChoice : iconChoice?.startsWith('thesvg:') ? `https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${iconChoice.slice(7)}/default.svg` : autoIcon
+  return preview ? <img src={preview} alt="" className="size-5 shrink-0 rounded-sm object-contain" />
     : <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground/10 text-[10px] font-bold uppercase">{name.slice(0, 2)}</span>
 }
 
-function LatencySitesDialog({ sites, exits, onClose }: { sites: { name: string; url: string; exit?: string }[]; exits: string[]; onClose: () => void }) {
-  const [draft, setDraft] = useState(sites.map(({ name, url, exit }) => ({ name, url, exit })))
+type MonitoredSite = { name: string; url: string; exit?: string; icon?: string }
+const DEFAULT_ROUTE = ' default'
+
+function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[]; exits: string[]; onClose: () => void }) {
+  const [draft, setDraft] = useState(sites.map(({ name, url, exit, icon }) => ({ name, url, exit, icon })))
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
-  const [exit, setExit] = useState(' default')
+  const [exit, setExit] = useState(DEFAULT_ROUTE)
+  const [editing, setEditing] = useState<number | null>(null)
+  const [iconFor, setIconFor] = useState<number | null>(null)
+  const [search, setSearch] = useState('')
+  const [iconError, setIconError] = useState('')
+  const [dragging, setDragging] = useState<number | null>(null)
   const save = useSaveLatencySites()
+  const update = (index: number, changes: Partial<MonitoredSite>) => setDraft((current) => current.map((site, i) => i === index ? { ...site, ...changes } : site))
   const add = () => {
     if (!name.trim() || !url.trim() || draft.length >= 12) return
-    setDraft([...draft, { name: name.trim(), url: url.trim(), exit: exit === ' default' ? undefined : exit }])
+    setDraft([...draft, { name: name.trim(), url: url.trim(), exit: exit === DEFAULT_ROUTE ? undefined : exit, icon: undefined }])
     setName('')
     setUrl('')
-    setExit(' default')
+    setExit(DEFAULT_ROUTE)
   }
+  const drop = (target: number) => {
+    if (dragging == null || dragging === target) return
+    const next = [...draft]
+    const [site] = next.splice(dragging, 1)
+    next.splice(target, 0, site)
+    setDraft(next)
+    setDragging(null)
+    setEditing(null)
+  }
+  const upload = async (file?: File) => {
+    if (iconFor == null || !file) return
+    setIconError('')
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+      setIconError('Choose a PNG, JPEG or WebP under 2 MiB')
+      return
+    }
+    try {
+      const image = await createImageBitmap(file)
+      const canvas = document.createElement('canvas')
+      const scale = Math.min(1, 128 / Math.max(image.width, image.height))
+      canvas.width = Math.max(1, Math.round(image.width * scale))
+      canvas.height = Math.max(1, Math.round(image.height * scale))
+      canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height)
+      image.close()
+      const data = canvas.toDataURL('image/png')
+      if (data.length > 130000) throw new Error('Image is too large after resizing')
+      update(iconFor, { icon: data })
+      setIconFor(null)
+    } catch (error) { setIconError(error instanceof Error ? error.message : 'Could not read image') }
+  }
+  const matches = search.trim() ? thesvgSlugs.filter((slug) => slug.includes(search.trim().toLowerCase())).slice(0, 32) : []
   return <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-    <DialogContent className="sm:max-w-lg">
+    <DialogContent className="sm:max-w-2xl">
       <DialogHeader><DialogTitle>Sites to monitor</DialogTitle><DialogDescription>
-        Measures how long this router takes to fetch the full HTML page, including DNS, TLS and same-site redirects. Images and scripts are not loaded. Choose a route for each site.
+        HTML page response from this router. Drag to reorder, select a site to edit, or select its icon to customize it.
       </DialogDescription></DialogHeader>
-      <div className="max-h-64 space-y-2 overflow-y-auto">
-        {draft.map((site, i) => <div key={i} className="flex items-center gap-2 rounded-lg bg-muted/60 p-2 text-sm">
-          <SiteIcon name={site.name} url={site.url} /><span className="min-w-0 flex-1 truncate" title={`${site.url} · Internet via ${site.exit || 'router default'}`}>{site.name}</span>
-          <Select value={site.exit || ' default'} onValueChange={(value) => setDraft(draft.map((item, index) => index === i ? { ...item, exit: !value || value === ' default' ? undefined : value } : item))}>
-            <SelectTrigger className="max-w-36" aria-label={`Internet via, for ${site.name}`}><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value=" default">Router default</SelectItem>
-              {exits.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
-              {site.exit && !exits.includes(site.exit) && <SelectItem value={site.exit}>{site.exit} (unavailable)</SelectItem>}
-            </SelectContent>
-          </Select>
-          <Button variant="ghost" size="icon" aria-label={`Remove ${site.name}`} onClick={() => setDraft(draft.filter((_, index) => index !== i))}><Trash2 className="size-4" /></Button>
+      <div className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
+        {draft.map((site, i) => <div key={i} className="rounded-xl bg-muted/60 p-2 text-sm"
+          onDragOver={(event: DragEvent<HTMLDivElement>) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); drop(i) }}>
+          <div className="flex items-center gap-2">
+            <span draggable onDragStart={() => setDragging(i)} onDragEnd={() => setDragging(null)} aria-label={`Drag ${site.name} to reorder`} className="cursor-grab touch-none text-muted-foreground" title="Drag to reorder"><GripVertical className="size-4" /></span>
+            <button type="button" onClick={() => { setIconFor(i); setSearch(''); setIconError('') }} aria-label={`Change ${site.name} icon`} className="rounded-md p-1 hover:bg-background"><SiteIcon name={site.name} url={site.url} icon={site.icon} /></button>
+            <div className="flex flex-col sm:hidden"><button type="button" aria-label={`Move ${site.name} up`} disabled={i === 0} onClick={() => { const next = [...draft]; [next[i - 1], next[i]] = [next[i], next[i - 1]]; setDraft(next) }}>↑</button><button type="button" aria-label={`Move ${site.name} down`} disabled={i === draft.length - 1} onClick={() => { const next = [...draft]; [next[i], next[i + 1]] = [next[i + 1], next[i]]; setDraft(next) }}>↓</button></div>
+            <button type="button" onClick={() => setEditing(editing === i ? null : i)} className="min-w-0 flex-1 truncate text-left font-medium" title={site.url}>{site.name}</button>
+            <Select value={site.exit || DEFAULT_ROUTE} onValueChange={(value) => update(i, { exit: !value || value === DEFAULT_ROUTE ? undefined : value })}>
+              <SelectTrigger size="sm" className="max-w-32" aria-label={`Internet via, for ${site.name}`}><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value={DEFAULT_ROUTE}>Default</SelectItem>{exits.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+                {site.exit && !exits.includes(site.exit) && <SelectItem value={site.exit}>{site.exit} (unavailable)</SelectItem>}
+              </SelectContent>
+            </Select>
+            <Button variant="ghost" size="icon" aria-label={`Remove ${site.name}`} onClick={() => setDraft(draft.filter((_, index) => index !== i))}><Trash2 className="size-4" /></Button>
+          </div>
+          {editing === i && <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_2fr]">
+            <Input aria-label={`Name for ${site.name}`} value={site.name} maxLength={40} onChange={(event) => update(i, { name: event.target.value })} />
+            <Input aria-label={`URL for ${site.name}`} value={site.url} onChange={(event) => update(i, { url: event.target.value })} />
+          </div>}
         </div>)}
       </div>
-      <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
-        <Input aria-label="Site name" placeholder="WeChat" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} />
-        <Input aria-label="HTTPS URL" placeholder="https://example.com/" value={url} onChange={(e) => setUrl(e.target.value)} />
-        <Select value={exit} onValueChange={(value) => setExit(value ?? ' default')}>
-          <SelectTrigger className="w-full sm:col-span-2" aria-label="Internet via for new site"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value=" default">Router default</SelectItem>
-            {exits.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
-          </SelectContent>
+      <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+        <Input className="min-w-24 flex-1 sm:w-24" aria-label="Site name" placeholder="Name" maxLength={40} value={name} onChange={(event) => setName(event.target.value)} />
+        <Input className="min-w-40 flex-[2] sm:w-52" aria-label="HTTPS URL" placeholder="https://example.com/" value={url} onChange={(event) => setUrl(event.target.value)} />
+        <Select value={exit} onValueChange={(value) => setExit(value ?? DEFAULT_ROUTE)}>
+          <SelectTrigger className="w-28 shrink-0" aria-label="Internet via for new site"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value={DEFAULT_ROUTE}>Default</SelectItem>{exits.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>
         </Select>
         <Button variant="outline" onClick={add} disabled={!name.trim() || !url.startsWith('https://') || draft.length >= 12}>Add</Button>
       </div>
       {save.isError && <p role="alert" className="text-sm text-destructive">{save.error.message}</p>}
       <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={save.isPending} onClick={() => save.mutate(draft, { onSuccess: onClose })}>Save sites</Button></DialogFooter>
     </DialogContent>
+    {iconFor != null && <Dialog open onOpenChange={(open) => { if (!open) setIconFor(null) }}>
+      <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Icon for {draft[iconFor]?.name}</DialogTitle><DialogDescription>Upload an image or search theSVG library. Auto uses the site favicon.</DialogDescription></DialogHeader>
+        <div className="flex gap-2"><Button variant="outline" onClick={() => { update(iconFor, { icon: undefined }); setIconFor(null) }}>Auto</Button>
+          <label className="inline-flex h-8 cursor-pointer items-center rounded-lg border px-3 text-sm">Upload image<input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => upload(event.target.files?.[0])} /></label></div>
+        <Input aria-label="Search theSVG icons" placeholder="Search theSVG (e.g. wechat)" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <div className="grid max-h-52 grid-cols-4 gap-2 overflow-y-auto">{matches.map((slug) => <button key={slug} type="button" className="flex min-w-0 flex-col items-center gap-1 rounded-lg border p-2 text-xs hover:bg-muted" title={slug}
+          onClick={() => { update(iconFor, { icon: `thesvg:${slug}` }); setIconFor(null) }}>
+          <img src={`https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${slug}/default.svg`} alt="" className="size-7" loading="lazy" />
+          <span className="w-full truncate">{slug}</span></button>)}</div>
+        {iconError && <p role="alert" className="text-sm text-destructive">{iconError}</p>}
+        <p className="text-xs text-muted-foreground">Icons by theSVG (MIT). Only the selected ID is saved.</p>
+      </DialogContent>
+    </Dialog>}
   </Dialog>
 }
 
@@ -533,7 +596,7 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
             const description = `${site.name} · HTML page from ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!fresh ? 'Waiting for a probe' : ms == null ? site.error || 'No response' : `${ms.toFixed(0)} ms`}`
             return <span key={site.name} tabIndex={0} aria-label={description} title={description}
               className={cn('inline-flex min-h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold tabular-nums', tone)}>
-              <SiteIcon name={site.name} url={site.url} />
+              <SiteIcon name={site.name} url={site.url} icon={site.icon} />
               <span>{!fresh ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
             </span>
           })}

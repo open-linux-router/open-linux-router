@@ -44,6 +44,7 @@ type LatencySite struct {
 	CheckedAt    time.Time `json:"checked_at"`
 	Selected     bool      `json:"selected"`
 	Exit         string    `json:"exit,omitempty"`
+	Icon         string    `json:"icon,omitempty"`
 	Error        string    `json:"error,omitempty"`
 }
 type LatencySnapshot struct {

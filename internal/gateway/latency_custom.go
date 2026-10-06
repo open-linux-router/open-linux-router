@@ -21,6 +21,7 @@ type CustomLatencySite struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`
 	Exit string `json:"exit,omitempty"`
+	Icon string `json:"icon,omitempty"`
 }
 
 // Custom targets are independent of the Internet candidate selection.
@@ -68,6 +69,9 @@ func validateCustomSites(sites []CustomLatencySite) error {
 		if name == "" || len(name) > 40 {
 			return errors.New("site name must be 1-40 characters")
 		}
+		if err := validateLatencyIcon(site.Icon); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
 		if names[strings.ToLower(name)] {
 			return fmt.Errorf("duplicate site name: %s", name)
 		}
@@ -83,7 +87,7 @@ func validateCustomSites(sites []CustomLatencySite) error {
 func (m *CustomLatencyMonitor) resetResults() {
 	m.results = make([]LatencySite, len(m.sites))
 	for i, site := range m.sites {
-		m.results[i] = LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit}
+		m.results[i] = LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon}
 	}
 }
 
@@ -153,7 +157,7 @@ func (m *CustomLatencyMonitor) sample(ctx context.Context) {
 					value, err = m.probeThrough(bounded, site.URL, mark)
 				}
 			}
-			results[i] = LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, CheckedAt: time.Now().UTC()}
+			results[i] = LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, CheckedAt: time.Now().UTC()}
 			if site.Exit != "" && err != nil && strings.Contains(err.Error(), "gateway exit") {
 				results[i].Error = "Gateway exit unavailable"
 			}
