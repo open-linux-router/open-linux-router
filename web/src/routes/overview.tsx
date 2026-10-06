@@ -1,5 +1,6 @@
 import { AlertTriangle, ChevronRight, Info, Plus, Trash2, GripVertical } from 'lucide-react'
-import { useEffect, useMemo, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import { animate, useReducedMotion } from 'motion/react'
 import { Link, useNavigate } from 'react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -344,9 +345,34 @@ function BandwidthLimitDialog({ direction, limits, onClose, onSave }: {
   </Dialog>
 }
 
-function Meter({ label, current, maximum, percent, tone = 'blue', arrow, onClick }: {
+// Interpolate displayed readings without changing the sampled data or the polling rate.
+// A new sample interrupts the previous tween; reduced-motion users see it immediately.
+function AnimatedNumber({ value, format }: { value: number; format: (value: number) => string }) {
+  const reduced = useReducedMotion()
+  const current = useRef(value)
+  const [displayed, setDisplayed] = useState(value)
+  useEffect(() => {
+    if (reduced) {
+      current.current = value
+      return
+    }
+    const controls = animate(current.current, value, {
+      duration: 0.7,
+      ease: [0.22, 1, 0.36, 1],
+      onUpdate: (next) => {
+        current.current = next
+        setDisplayed(next)
+      },
+    })
+    return () => controls.stop()
+  }, [value, reduced])
+  return <>{format(reduced ? value : displayed)}</>
+}
+
+function Meter({ label, current, animated, maximum, percent, tone = 'blue', arrow, onClick }: {
   label: string
   current?: string
+  animated?: number
   maximum?: string
   percent?: number
   tone?: 'blue' | 'amber' | 'neutral'
@@ -354,17 +380,17 @@ function Meter({ label, current, maximum, percent, tone = 'blue', arrow, onClick
   onClick?: () => void
 }) {
   const content = <>
-    {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r',
+    {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r transition-[width] duration-700 ease-out',
       tone === 'amber' ? 'border-amber-400/50 bg-amber-200/40' : tone === 'neutral' ? 'border-slate-400/40 bg-slate-300/35' : 'border-cyan-500/40 bg-cyan-200/45')}
       style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />}
     <span className="relative z-10 flex min-w-0 items-center gap-2 truncate text-sm font-semibold tabular-nums">
-      {arrow && <span aria-hidden className="text-base font-normal text-muted-foreground">{arrow}</span>}{current ?? '—'}
+      {arrow && <span aria-hidden className="text-base font-normal text-muted-foreground">{arrow}</span>}{animated != null ? <AnimatedNumber value={animated} format={formatRate} /> : current ?? '—'}
     </span>
     <span className="relative z-10 shrink-0 text-xs text-muted-foreground tabular-nums">{maximum ? `of ${maximum}` : onClick ? 'Set limit' : '—'}</span>
   </>
   const classes = 'relative flex h-10 w-full items-center justify-between gap-2 overflow-hidden rounded-xl bg-muted/65 px-3 text-left ring-1 ring-foreground/[0.06] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]'
   return <div className={cn('min-w-0', onClick ? 'py-1' : 'py-1.5')}>
-    {onClick ? <button type="button" onClick={onClick} aria-label={`${label}: ${current ?? 'unavailable'}. ${maximum ? `Limit ${maximum}` : 'Set limit'}`}
+    {onClick ? <button type="button" onClick={onClick} aria-label={`${label}: ${animated != null ? formatRate(animated) : current ?? 'unavailable'}. ${maximum ? `Limit ${maximum}` : 'Set limit'}`}
       className={cn(classes, 'cursor-pointer transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring')}>
       {content}
     </button> : <>
@@ -382,10 +408,12 @@ function StatCard({ title, children }: { title: React.ReactNode; children: React
   </section>
 }
 
-function MetricPill({ label, value, detail, percent, tone = 'blue', health }: {
+function MetricPill({ label, value, animated, format, detail, percent, tone = 'blue', health }: {
   label?: string
   value: string
-  detail?: string
+  animated?: number
+  format?: (value: number) => string
+  detail?: React.ReactNode
   percent?: number
   tone?: 'blue' | 'neutral'
   health?: 'good' | 'bad' | 'unknown'
@@ -394,12 +422,12 @@ function MetricPill({ label, value, detail, percent, tone = 'blue', health }: {
     aria-valuenow={percent == null ? undefined : Math.min(100, Math.max(0, Math.round(percent)))}
     aria-valuemin={0} aria-valuemax={100}
     className="relative flex h-10 min-w-0 items-center justify-between gap-2 overflow-hidden rounded-xl bg-muted/65 px-3 ring-1 ring-foreground/[0.06] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]">
-    {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r', tone === 'neutral' ? 'border-slate-400/40 bg-slate-300/35' : 'border-cyan-500/40 bg-cyan-200/45')}
+    {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r transition-[width] duration-700 ease-out', tone === 'neutral' ? 'border-slate-400/40 bg-slate-300/35' : 'border-cyan-500/40 bg-cyan-200/45')}
       style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />}
     <span className="relative z-10 flex min-w-0 items-center gap-2 truncate text-sm">
       {health && <span aria-hidden className={cn('size-2 shrink-0 rounded-full', health === 'good' ? 'bg-success' : health === 'bad' ? 'bg-destructive' : 'bg-muted-foreground')} />}
       {label && <span className="shrink-0 text-xs text-muted-foreground">{label}</span>}
-      <span className={cn('truncate font-semibold tabular-nums', health === 'bad' && 'text-destructive')}>{value}</span>
+      <span className={cn('truncate font-semibold tabular-nums', health === 'bad' && 'text-destructive')}>{animated != null && format ? <AnimatedNumber value={animated} format={format} /> : value}</span>
     </span>
     {detail && <span className="relative z-10 shrink-0 text-xs text-muted-foreground tabular-nums">{detail}</span>}
   </div></div>
@@ -568,7 +596,7 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
   const memoryPercent = host?.memory_total_bytes ? host.memory_used_bytes / host.memory_total_bytes * 100 : undefined
   const dnsMeasured = !latencyFailed && latency?.dns_milliseconds != null
   const latencyValue = measured ? `${latency.milliseconds!.toFixed(0)} ms` : latency?.state === 'unreachable' ? 'No response' : '—'
-  const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? 'Unavailable' : '—'
+  const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? flows.total[direction] ?? 0 : undefined
   return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
     <StatCard title="Status">
       <div className="space-y-3 pt-2">
@@ -578,9 +606,9 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
     </StatCard>
     <StatCard title="Traffic">
       <div className="space-y-3 pt-2">
-        <Meter label="Download" arrow="↓" onClick={() => setEditing('down')} current={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
+        <Meter label="Download" arrow="↓" onClick={() => setEditing('down')} current={trafficFailed ? 'Unavailable' : '—'} animated={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.down ? (flows.total.downRate ?? 0) * 8 / (limits.down * 1_000_000) * 100 : undefined} />
-        <Meter label="Upload" arrow="↑" onClick={() => setEditing('up')} current={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
+        <Meter label="Upload" arrow="↑" onClick={() => setEditing('up')} current={trafficFailed ? 'Unavailable' : '—'} animated={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.up ? (flows.total.upRate ?? 0) * 8 / (limits.up * 1_000_000) * 100 : undefined} tone="amber" />
       </div>
     </StatCard>
@@ -589,8 +617,8 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
         title="Time for this router to receive the full HTTPS response, including DNS, TLS and download. Even a login redirect or error page counts; this does not prove the app works. Images, scripts and browser rendering are not included."
         aria-label="About latency measurements"><Info className="size-3.5" /></button></span>}>
       <div className="space-y-3 pt-2">
-        <MetricPill label="Internet" value={latencyValue} detail={measured ? latency.milliseconds! < 1000 ? 'Good' : latency.milliseconds! < 3000 ? 'Fair' : 'Slow' : undefined} />
-        <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} detail={dnsMeasured ? latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow' : undefined} />
+        <MetricPill label="Internet" value={latencyValue} animated={measured ? latency.milliseconds! : undefined} format={(n) => `${n.toFixed(0)} ms`} detail={measured ? latency.milliseconds! < 1000 ? 'Good' : latency.milliseconds! < 3000 ? 'Fair' : 'Slow' : undefined} />
+        <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} animated={dnsMeasured ? latency.dns_milliseconds! : undefined} format={(n) => `${n.toFixed(0)} ms`} detail={dnsMeasured ? latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow' : undefined} />
         <div className="flex flex-wrap items-center gap-2">
           {latency?.custom?.map((site) => {
             const measuredSite = Boolean(site.checked_at && !site.checked_at.startsWith('0001-'))
@@ -601,7 +629,7 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
             return <span key={site.name} tabIndex={0} aria-label={description} title={description}
               className={cn('inline-flex min-h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold tabular-nums', tone)}>
               <SiteIcon name={site.name} url={site.url} icon={site.icon} />
-              <span>{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
+              <span>{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : <AnimatedNumber value={ms} format={(n) => `${n.toFixed(0)} ms`} />}</span>
             </span>
           })}
           <button className="inline-flex min-h-9 items-center gap-1 rounded-xl px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -611,10 +639,10 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
     </StatCard>
     <StatCard title="System">
       <div className="space-y-3 pt-2">
-        <MetricPill label="CPU" value={host?.cpu_used_cores == null ? '—' : `${host.cpu_used_cores.toFixed(1)} cores`}
-          detail={host?.cpu_cores ? `${cpuPercent?.toFixed(0)}% of ${host.cpu_cores} cores` : undefined} percent={cpuPercent} />
-        <MetricPill label="Memory" value={host ? formatBytes(host.memory_used_bytes) : '—'}
-          detail={host ? `${memoryPercent?.toFixed(0)}% of ${formatBytes(host.memory_total_bytes)}` : undefined} percent={memoryPercent} tone="neutral" />
+        <MetricPill label="CPU" value={host?.cpu_used_cores == null ? '—' : `${host.cpu_used_cores.toFixed(1)} cores`} animated={host?.cpu_used_cores ?? undefined} format={(n) => `${n.toFixed(1)} cores`}
+          detail={cpuPercent != null ? <><AnimatedNumber value={cpuPercent} format={(n) => `${n.toFixed(0)}%`} /> of {host!.cpu_cores} cores</> : undefined} percent={cpuPercent} />
+        <MetricPill label="Memory" value={host ? formatBytes(host.memory_used_bytes) : '—'} animated={host?.memory_used_bytes} format={formatBytes}
+          detail={memoryPercent != null ? <><AnimatedNumber value={memoryPercent} format={(n) => `${n.toFixed(0)}%`} /> of {formatBytes(host!.memory_total_bytes)}</> : undefined} percent={memoryPercent} tone="neutral" />
       </div>
     </StatCard>
     {sitesOpen && <LatencySitesDialog sites={latency?.custom ?? []} exits={exits} onClose={() => setSitesOpen(false)} />}
