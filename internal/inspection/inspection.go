@@ -30,6 +30,9 @@ const duration = 15 * time.Minute
 const port = "18081"
 const maxEvents = 200
 
+// Reserved only for the short-lived mitmdump process; no system group is created.
+const proxyGID = 2147418113
+
 type Event struct {
 	Kind            string            `json:"kind"`
 	At              float64           `json:"at"`
@@ -53,13 +56,16 @@ type Status struct {
 	InputSeen     *uint64   `json:"input_packets,omitempty"`
 	InputDropped  *uint64   `json:"input_dropped_packets,omitempty"`
 	ProxyAccepted uint64    `json:"proxy_accepted"`
+	ExitRouted    bool      `json:"exit_routed"`
 }
 
 type Service struct {
 	Enabled bool
 	Dir     string
-	mu      sync.Mutex
-	session *session
+	// ExitMark resolves an explicit per-device exit at session start.
+	ExitMark func(string) (uint32, error)
+	mu       sync.Mutex
+	session  *session
 }
 
 type session struct {
@@ -70,6 +76,7 @@ type session struct {
 	done     chan struct{}
 	events   []Event
 	accepted uint64
+	mark     uint32
 	retrying bool
 }
 
@@ -90,6 +97,7 @@ func (s *Service) snapshot() Status {
 		out.Active, out.MAC, out.IP, out.Expires = true, q.mac, q.ip, q.expires
 		out.Events = append(out.Events, q.events...)
 		out.ProxyAccepted = q.accepted
+		out.ExitRouted = q.mark != 0
 		if n, err := inspectionCount("redirected"); err == nil {
 			out.Redirected = &n
 		}
@@ -163,6 +171,18 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target := ip.String()
+	var mark uint32
+	if s.ExitMark != nil {
+		mark, err = s.ExitMark(normalized)
+		if err != nil {
+			core.WriteError(w, http.StatusServiceUnavailable, "cannot resolve inspection exit: "+err.Error())
+			return
+		}
+	}
+	if mark&0xff00ffff != 0 || mark == 0x00ff0000 {
+		core.WriteError(w, http.StatusServiceUnavailable, "inspection exit has no usable routing mark")
+		return
+	}
 	if _, err = exec.LookPath("mitmdump"); err != nil {
 		core.WriteError(w, http.StatusServiceUnavailable, "install mitmproxy (mitmdump) on the router first")
 		return
@@ -189,6 +209,9 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		"--set", "confdir="+s.Dir, "--set", "termlog_verbosity=error", "-s", script)
 	// mitmdump may fork; its launcher is not the lifetime of the listener.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if mark != 0 {
+		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 0, Gid: proxyGID, NoSetGroups: true}
+	}
 	stdout, output, err := os.Pipe()
 	if err != nil {
 		core.WriteError(w, 500, err.Error())
@@ -231,11 +254,11 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 	}
 	// A fresh table is owned wholly by this module. Cleanup of a previous
 	// daemon's table also runs at startup; never modify someone else's table.
-	if err = install(target); err != nil {
+	if err = install(target, mark); err != nil {
 		if cleanupErr := cleanup(); cleanupErr != nil {
 			// A partially installed rule might remain. Preserve a session
 			// owner so cleanup is retried and no new session can start.
-			q := &session{mac: normalized, ip: target, expires: time.Now(), cancel: cancel, done: make(chan struct{})}
+			q := &session{mac: normalized, ip: target, expires: time.Now(), mark: mark, cancel: cancel, done: make(chan struct{})}
 			s.session = q
 			q.retrying = true
 			go s.retryCleanup(q)
@@ -248,7 +271,7 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, 500, "could not install interception: "+err.Error())
 		return
 	}
-	q := &session{mac: normalized, ip: target, expires: time.Now().Add(duration), cancel: cancel, done: make(chan struct{})}
+	q := &session{mac: normalized, ip: target, expires: time.Now().Add(duration), mark: mark, cancel: cancel, done: make(chan struct{})}
 	s.session = q
 	go s.consume(q, stdout)
 	go s.watch(q)
@@ -387,7 +410,7 @@ func cleanup() error {
 	}
 	return fmt.Errorf("removing inspection table: %w: %s", err, strings.TrimSpace(string(out)))
 }
-func install(ip string) error {
+func install(ip string, mark uint32) error {
 	// Restrict to TCP 80/443 from the chosen address, before NAT. Exclude local
 	// and private destinations so router administration and LAN services survive.
 	if err := nft("add", "table", "inet", table); err != nil {
@@ -403,6 +426,14 @@ func install(ip string) error {
 	}
 	if err := nft("add", "chain", "inet", table, "input", "{ type filter hook input priority -1; policy accept; }"); err != nil {
 		return err
+	}
+	if mark != 0 {
+		if err := nft("add", "chain", "inet", table, "output", "{ type route hook output priority mangle; policy accept; }"); err != nil {
+			return err
+		}
+		if err := nft("add", "rule", "inet", table, "output", "meta", "skgid", fmt.Sprint(proxyGID), "meta", "mark", "set", fmt.Sprintf("%#x", mark)); err != nil {
+			return err
+		}
 	}
 	// Count packets delivered to the local input hook separately from the
 	// redirect match, before deciding whether they may enter the listener.
@@ -423,11 +454,14 @@ func install(ip string) error {
 		{"ip", "daddr", "10.0.0.0/8", "return"},
 		{"ip", "daddr", "172.16.0.0/12", "return"},
 		{"ip", "daddr", "192.168.0.0/16", "return"},
-		// Fake-IP DNS answers belong to the device's proxy exit. A local
-		// mitmdump connection would lose that assignment and time out or leak.
-		{"ip", "daddr", "198.18.0.0/15", "return"},
 	} {
 		if err := nft(append([]string{"add", "rule", "inet", table, "prerouting"}, args...)...); err != nil {
+			return err
+		}
+	}
+	if mark == 0 {
+		// Without an exit mark, mitmdump cannot route a proxy's fake-IP answer.
+		if err := nft("add", "rule", "inet", table, "prerouting", "ip", "daddr", "198.18.0.0/15", "return"); err != nil {
 			return err
 		}
 	}

@@ -573,6 +573,29 @@ func run(args []string) error {
 		}
 	}
 	inspector := &inspection.Service{Enabled: opts.root == "", Dir: filepath.Join(opts.root, "/var/lib/open-linux-router/inspection")}
+	inspector.ExitMark = func(mac string) (uint32, error) {
+		cfg, err := gatewayApplier.Load()
+		if err != nil {
+			return 0, err
+		}
+		if !cfg.Enabled {
+			return 0, nil
+		}
+		for _, device := range cfg.Devices {
+			if device.MAC == mac {
+				for _, exit := range cfg.Exits {
+					if exit.Name == device.Exit {
+						if exit.Via.Kind == gateway.ViaBlocked {
+							return 0, fmt.Errorf("device exit %q is blocked", exit.Name)
+						}
+						return exit.Mark(), nil
+					}
+				}
+				return 0, fmt.Errorf("device exit %q is unavailable", device.Exit)
+			}
+		}
+		return 0, nil
+	}
 	srv.Mount(inspection.ModuleName, inspector.Routes(), struct{}{})
 
 	// --- routes -----------------------------------------------------------

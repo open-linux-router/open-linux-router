@@ -50,7 +50,7 @@ func TestInstallRedirectsChosenAddress(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	if err := install("172.16.1.135"); err != nil {
+	if err := install("172.16.1.135", 0); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(log)
@@ -142,5 +142,26 @@ printf '%s\n' '{"nftables":[{"metainfo":{}},{"counter":{"family":"inet","table":
 	got, err := inspectionCount("redirected")
 	if err != nil || got != 12 {
 		t.Fatalf("redirect count = %d, %v", got, err)
+	}
+}
+
+func TestInstallRoutesProxyThroughExit(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "nft.log")
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\n' \"$*\" >> %q\n", log)
+	if err := os.WriteFile(filepath.Join(dir, "nft"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := install("172.16.1.135", 0x10000); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "type route hook output priority mangle") || !strings.Contains(got, "meta skgid 2147418113 meta mark set 0x10000") || strings.Contains(got, "ip daddr 198.18.0.0/15 return") {
+		t.Fatalf("marked inspection rules: %s", got)
 	}
 }
