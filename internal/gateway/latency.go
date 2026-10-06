@@ -87,26 +87,21 @@ func probeHTTPSRequest(ctx context.Context, url string, dial func(context.Contex
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	start := time.Now()
-	request := func(method string) (*http.Response, error) {
-		req, err := http.NewRequestWithContext(ctx, method, url, nil)
-		if err != nil {
-			return nil, err
-		}
-		return client.Do(req)
+	method := http.MethodHead
+	if custom {
+		method = http.MethodGet
 	}
-	resp, err := request(http.MethodHead)
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return 0, err
 	}
-	resp.Body.Close()
-	// Some public homepages reject HEAD while serving a normal GET.
-	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotImplemented {
-		resp, err = request(http.MethodGet)
-		if err != nil {
-			return 0, err
-		}
-		resp.Body.Close()
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
 	}
+	// Client.Do returns at response headers. Closing without reading the body
+	// keeps this a latency probe, not a content download.
+	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 500 || (!custom && resp.StatusCode >= 400) {
 		return 0, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}

@@ -10,8 +10,8 @@ route: DNS lookup, TCP connection, TLS handshake and response headers. It is
 not ICMP ping or the latency of a particular device, tunnel, or configured exit.
 Connections are fresh, TLS certificates are verified, environment proxies are
 ignored, redirects are not followed, and HTTP 2xx/3xx responses count as success.
-If HEAD returns 403, 405, or 501, a GET is tried on the same URL; a second
-rejection remains a failure. GET bodies are not read.
+Custom site probes use GET instead, since some sites never answer HEAD.
+Only response headers are timed; GET bodies are not read.
 Each target has a four-second deadline and targets are measured concurrently.
 A failed website does not establish that the internet as a whole is down.
 
@@ -39,13 +39,11 @@ older than the response receipt time. The expandable list shows per-site results
 ## Custom sites
 
 The Overview card's **Monitor sites** dialog accepts up to 12 named HTTPS URLs,
-for example WeChat or YouTube. Each custom site uses the same router-originated
-HTTPS HEAD probe, four-second timeout, and one-minute steady-state cadence as
-the Internet candidates. During initial discovery they are probed every 15
+for example WeChat or YouTube. Each custom site uses a router-originated HTTPS GET response-header probe,
+four-second timeout, and one-minute steady-state cadence. Unlike the Internet
+headline, it does not require the site to support HEAD. During initial discovery they are probed every 15
 seconds. Custom sites are independent: their failures never change the Internet
-headline or its candidate selection. An endpoint that rejects HEAD (for example
-with HTTP 403 or 405) is retried with GET. Unlike the Internet headline,
-custom targets treat an HTTP 4xx response as reachable: it proves the site
+headline or its candidate selection. Unlike the Internet headline, custom targets treat an HTTP 4xx response as reachable: it proves the site
 answered, but does not prove that an app login or API works. HTTP 5xx, DNS,
 TLS, connection, and timeout failures show their short reason directly on the
 status badge and in its details.

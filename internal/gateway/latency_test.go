@@ -104,7 +104,7 @@ func TestHTTPSProbe(t *testing.T) {
 	for _, status := range []int{204, 302, 403, 500} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodHead && !(status == 403 && r.Method == http.MethodGet) {
+				if r.Method != http.MethodHead {
 					t.Errorf("method = %s", r.Method)
 				}
 				if status == 302 {
@@ -290,19 +290,18 @@ func TestHTTPSProbeUsesCustomDialer(t *testing.T) {
 	}
 }
 
-func TestHTTPSProbeFallsBackWhenHEADRejected(t *testing.T) {
+func TestCustomHTTPSUsesGETHeadersWithoutReadingBody(t *testing.T) {
 	methods := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		methods = append(methods, r.Method)
-		if r.Method == http.MethodHead {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
+		w.Header().Set("Content-Length", "1000000")
+		w.WriteHeader(http.StatusFound)
 	}))
 	defer server.Close()
-	if _, err := probeHTTPS(context.Background(), server.URL); err != nil {
+	if _, err := probeCustomHTTPS(context.Background(), server.URL); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(methods, []string{http.MethodHead, http.MethodGet}) {
+	if !reflect.DeepEqual(methods, []string{http.MethodGet}) {
 		t.Fatalf("methods = %v", methods)
 	}
 }
@@ -335,8 +334,8 @@ func TestCustomHTTPSCountsClientRejectionAsReachable(t *testing.T) {
 			if (err != nil) != (status >= 500) || (err == nil && value < 0) {
 				t.Fatalf("status %d: %v, %v", status, value, err)
 			}
-			if status == 403 && requests != 2 {
-				t.Fatalf("expected HEAD then GET, got %d", requests)
+			if requests != 1 {
+				t.Fatalf("expected one GET, got %d", requests)
 			}
 		})
 	}
