@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -190,8 +191,8 @@ func TestCustomLatencyPersistenceAndProbes(t *testing.T) {
 	if err := m.Replace(sites[:1]); err != nil {
 		t.Fatal(err)
 	}
-	if len(m.Snapshot()) != 1 || m.Snapshot()[0].Milliseconds != nil {
-		t.Fatal("edit must clear stale results")
+	if len(m.Snapshot()) != 1 || m.Snapshot()[0].Milliseconds == nil || *m.Snapshot()[0].Milliseconds != 42 {
+		t.Fatal("removing another site must preserve this result")
 	}
 }
 
@@ -379,5 +380,108 @@ func TestUploadedLatencyIconEndpoint(t *testing.T) {
 	data, kind, err := m.Icon(context.Background(), "Test")
 	if err != nil || kind != "image/png" || len(data) == 0 {
 		t.Fatalf("icon: %s, %v", kind, err)
+	}
+}
+
+func TestCustomLatencyEditsKeepUnchangedResults(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := []CustomLatencySite{{Name: "A", URL: "https://a.example/"}, {Name: "B", URL: "https://b.example/"}}
+	if err := m.Replace(original); err != nil {
+		t.Fatal(err)
+	}
+	m.probe = func(_ context.Context, url string) (float64, error) {
+		if url == original[0].URL {
+			return 20, nil
+		}
+		return 40, nil
+	}
+	m.sample(context.Background())
+	before := m.Snapshot()
+	reordered := []CustomLatencySite{{Name: "Renamed B", URL: original[1].URL, Icon: "thesvg:wechat"}, original[0]}
+	if err := m.Replace(reordered); err != nil {
+		t.Fatal(err)
+	}
+	got := m.Snapshot()
+	if got[0].Name != "Renamed B" || got[0].Milliseconds == nil || *got[0].Milliseconds != 40 || got[0].CheckedAt != before[1].CheckedAt || got[0].Icon != "thesvg:wechat" {
+		t.Fatalf("reorder lost B: %+v", got[0])
+	}
+	if got[1].Milliseconds == nil || *got[1].Milliseconds != 20 {
+		t.Fatalf("reorder lost A: %+v", got[1])
+	}
+	reordered[0].URL = "https://new.example/"
+	if err := m.Replace(reordered); err != nil {
+		t.Fatal(err)
+	}
+	got = m.Snapshot()
+	if got[0].Milliseconds != nil || !got[0].CheckedAt.IsZero() || got[1].Milliseconds == nil {
+		t.Fatalf("changed target retained old sample: %+v", got)
+	}
+}
+
+func TestCustomLatencyReconcilesRoundAfterReorder(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := CustomLatencySite{Name: "A", URL: "https://a.example/"}
+	b := CustomLatencySite{Name: "B", URL: "https://b.example/"}
+	if err := m.Replace([]CustomLatencySite{a, b}); err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	m.probe = func(_ context.Context, url string) (float64, error) {
+		once.Do(func() { close(started) })
+		<-release
+		if url == a.URL {
+			return 10, nil
+		}
+		return 20, nil
+	}
+	done := make(chan struct{})
+	go func() { m.sample(context.Background()); close(done) }()
+	<-started
+	if err := m.Replace([]CustomLatencySite{b, a}); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	<-done
+	got := m.Snapshot()
+	if got[0].Name != "B" || got[0].Milliseconds == nil || *got[0].Milliseconds != 20 || got[1].Name != "A" || got[1].Milliseconds == nil || *got[1].Milliseconds != 10 {
+		t.Fatalf("results attached to wrong rows: %+v", got)
+	}
+}
+
+func TestCustomLatencyKeepsResultWhileProbingThenPublishesFailure(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Replace([]CustomLatencySite{{Name: "A", URL: "https://a.example/"}}); err != nil {
+		t.Fatal(err)
+	}
+	m.probe = func(context.Context, string) (float64, error) { return 25, nil }
+	m.sample(context.Background())
+	started := make(chan struct{})
+	release := make(chan struct{})
+	m.probe = func(context.Context, string) (float64, error) {
+		close(started)
+		<-release
+		return 0, errors.New("offline")
+	}
+	done := make(chan struct{})
+	go func() { m.sample(context.Background()); close(done) }()
+	<-started
+	if got := m.Snapshot()[0]; got.Milliseconds == nil || *got.Milliseconds != 25 {
+		t.Fatalf("cleared while probing: %+v", got)
+	}
+	close(release)
+	<-done
+	if got := m.Snapshot()[0]; got.Milliseconds != nil || got.Error != "Connection failed" {
+		t.Fatalf("failure not published: %+v", got)
 	}
 }

@@ -163,10 +163,38 @@ export function useReapplyGateway() {
   })
 }
 
+const LATENCY_SNAPSHOT_KEY = 'olr.gateway.latency-snapshot'
+
+function savedLatency(): GatewayLatency | undefined {
+  try {
+    const stored = sessionStorage.getItem(LATENCY_SNAPSHOT_KEY)
+    if (!stored) return undefined
+    const snapshot = JSON.parse(stored) as GatewayLatency
+    return Array.isArray(snapshot.custom) ? snapshot : undefined
+  } catch { return undefined }
+}
+
+function hasAttempt(site: GatewayLatency['custom'][number]) {
+  return Boolean(site.checked_at && !site.checked_at.startsWith('0001-'))
+}
+
 export function useGatewayLatency() {
   return useQuery({
     queryKey: ['gateway', 'latency'],
-    queryFn: () => api.get<GatewayLatency>('/api/gateway/latency'),
+    initialData: savedLatency,
+    queryFn: async () => {
+      const next = await api.get<GatewayLatency>('/api/gateway/latency')
+      const previous = savedLatency()
+      if (previous) {
+        next.custom = next.custom.map((site) => {
+          if (hasAttempt(site)) return site
+          const old = previous.custom?.find((candidate) => candidate.url === site.url && candidate.exit === site.exit && hasAttempt(candidate))
+          return old ? { ...site, milliseconds: old.milliseconds, checked_at: old.checked_at, error: old.error } : site
+        })
+      }
+      try { sessionStorage.setItem(LATENCY_SNAPSHOT_KEY, JSON.stringify(next)) } catch { /* storage may be disabled */ }
+      return next
+    },
     refetchInterval: OBSERVED_REFETCH_MS,
   })
 }

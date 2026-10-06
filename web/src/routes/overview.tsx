@@ -96,7 +96,7 @@ export function OverviewPage() {
       <h1 className="sr-only">Network overview</h1>
       <Stats devices={devices.data?.devices} flows={flows} host={host.data}
         faults={faults} known={known} idle={idle} failed={dhcp.isError || dns.isError || gateway.isError}
-        latency={latency.data} exits={gatewayConfig.data?.enabled ? gatewayConfig.data.exits?.map((exit) => exit.name) ?? [] : []} latencyReadAt={latency.dataUpdatedAt} latencyFailed={latency.isError} trafficFailed={traffic.isError} />
+        latency={latency.data} exits={gatewayConfig.data?.enabled ? gatewayConfig.data.exits?.map((exit) => exit.name) ?? [] : []} latencyFailed={latency.isError} trafficFailed={traffic.isError} />
 
       {faults.map((fault) => (
         <Alert key={fault.key} variant={fault.tone === 'bad' ? 'destructive' : 'default'}>
@@ -540,7 +540,7 @@ function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[];
   </Dialog>
 }
 
-function Stats({ devices, flows, host, faults, known, idle, failed, latency, exits, latencyReadAt, latencyFailed, trafficFailed }: {
+function Stats({ devices, flows, host, faults, known, idle, failed, latency, exits, latencyFailed, trafficFailed }: {
   devices?: DeviceRow[]
   flows: TrafficView
   host?: HostMetrics
@@ -550,7 +550,6 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
   failed: boolean
   latency?: GatewayLatency
   exits: string[]
-  latencyReadAt: number
   latencyFailed: boolean
   trafficFailed: boolean
 }) {
@@ -563,11 +562,10 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
   }
   const here = devices?.filter((d) => d.online).length
   const title = failed ? 'Status unavailable' : !known ? 'Checking…' : faults.length ? 'Needs attention' : idle ? 'Not set up' : 'All systems OK'
-  const stale = latency?.checked_at ? latencyReadAt - Date.parse(latency.checked_at) > 90_000 : false
-  const measured = !latencyFailed && !stale && latency?.state === 'ok' && latency.milliseconds != null
+  const measured = !latencyFailed && latency?.state === 'ok' && latency.milliseconds != null
   const cpuPercent = host?.cpu_used_cores != null && host.cpu_cores > 0 ? host.cpu_used_cores / host.cpu_cores * 100 : undefined
   const memoryPercent = host?.memory_total_bytes ? host.memory_used_bytes / host.memory_total_bytes * 100 : undefined
-  const dnsMeasured = !latencyFailed && !stale && latency?.dns_milliseconds != null
+  const dnsMeasured = !latencyFailed && latency?.dns_milliseconds != null
   const latencyValue = measured ? `${latency.milliseconds!.toFixed(0)} ms` : latency?.state === 'unreachable' ? 'No response' : '—'
   const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? 'Unavailable' : '—'
   return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
@@ -593,16 +591,16 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
         <MetricPill label="Internet" value={latencyValue} detail={measured ? latency.milliseconds! < 1000 ? 'Good' : latency.milliseconds! < 3000 ? 'Fair' : 'Slow' : undefined} />
         <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} detail={dnsMeasured ? latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow' : undefined} />
         <div className="flex flex-wrap items-center gap-2">
-          {!latencyFailed && latency?.custom?.map((site) => {
-            const fresh = site.checked_at && latencyReadAt - Date.parse(site.checked_at) < 90_000
-            const ms = fresh ? site.milliseconds : null
-            const tone = !fresh ? 'bg-muted text-muted-foreground' : ms == null ? 'bg-destructive/10 text-destructive'
+          {latency?.custom?.map((site) => {
+            const measuredSite = Boolean(site.checked_at && !site.checked_at.startsWith('0001-'))
+            const ms = site.milliseconds
+            const tone = !measuredSite ? 'bg-muted text-muted-foreground' : ms == null ? 'bg-destructive/10 text-destructive'
               : ms < 1000 ? 'bg-success/15 text-success-foreground' : ms < 3000 ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-destructive/10 text-destructive'
-            const description = `${site.name} · HTML page from ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!fresh ? 'Waiting for a probe' : ms == null ? site.error || 'No response' : `${ms.toFixed(0)} ms`}`
+            const description = `${site.name} · HTML page from ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!measuredSite ? 'Waiting for first probe' : ms == null ? site.error || 'Failed' : `${ms.toFixed(0)} ms`}`
             return <span key={site.name} tabIndex={0} aria-label={description} title={description}
               className={cn('inline-flex min-h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold tabular-nums', tone)}>
               <SiteIcon name={site.name} url={site.url} icon={site.icon} />
-              <span>{!fresh ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
+              <span>{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
             </span>
           })}
           <button className="inline-flex min-h-9 items-center gap-1 rounded-xl px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"

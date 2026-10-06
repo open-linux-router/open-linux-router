@@ -85,9 +85,17 @@ func validateCustomSites(sites []CustomLatencySite) error {
 }
 
 func (m *CustomLatencyMonitor) resetResults() {
+	previous := make(map[string]LatencySite, len(m.results))
+	for _, result := range m.results {
+		previous[result.URL+"\x00"+result.Exit] = result
+	}
 	m.results = make([]LatencySite, len(m.sites))
 	for i, site := range m.sites {
-		m.results[i] = LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon}
+		result := LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon}
+		if old, ok := previous[site.URL+"\x00"+site.Exit]; ok {
+			result.Milliseconds, result.CheckedAt, result.Error = old.Milliseconds, old.CheckedAt, old.Error
+		}
+		m.results[i] = result
 	}
 }
 
@@ -174,14 +182,19 @@ func (m *CustomLatencyMonitor) sample(ctx context.Context) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// A settings edit during a probe must never publish measurements for removed targets.
-	if len(m.sites) != len(sites) {
-		return
+	// Reconcile by target rather than index: renames and reorders must not discard
+	// valid samples or attach a result to the wrong site.
+	byTarget := make(map[string]LatencySite, len(results))
+	for _, result := range results {
+		byTarget[result.URL+"\x00"+result.Exit] = result
 	}
-	for i := range sites {
-		if m.sites[i] != sites[i] {
-			return
+	for i, site := range m.sites {
+		result, ok := byTarget[site.URL+"\x00"+site.Exit]
+		if !ok {
+			continue
 		}
+		result.Name = site.Name
+		result.Icon = site.Icon
+		m.results[i] = result
 	}
-	m.results = results
 }

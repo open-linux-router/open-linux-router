@@ -44,9 +44,13 @@ The response includes `state` (`measuring`, `ok`, `unreachable`, `unavailable`),
 nullable `milliseconds`, `dns_milliseconds`, `checked_at`, the winning `target`,
 the Internet `sites` candidates and `custom` sites. Each site carries its last
 attempt, nullable measurement and a short `error` on failure. Excluded Internet
-candidates retain old results but never contribute to the headline. The UI
-hides samples older than 90 seconds at receipt and never presents failures as
-zero. The page response badges use Good below 1 second, Fair below 3 seconds,
+candidates retain old results but never contribute to the headline. Custom
+sites keep their last completed outcome while the next probe runs. A completed
+failure replaces a prior success with a failure, not a stale success or zero.
+Only sites that have never been measured show a dash. Within the same browser
+session, the last completed outcome appears immediately after a reload until
+the API returns; cached results are reused only for the same URL and exit.
+The page response badges use Good below 1 second, Fair below 3 seconds,
 and Slow above that; those are experience hints, not network health verdicts.
 
 The monitoring dialog preserves the order of the `custom` list. Rows can be
