@@ -500,9 +500,11 @@ func accountSetExprs(s StatSet, dnat bool) []expr.Any {
 		}
 	}
 	if s.V6 {
-		proto, offset, length = unix.NFPROTO_IPV6, 8, 16
-		if s.Down != dnat {
-			offset = 24
+		proto, length = unix.NFPROTO_IPV6, 16
+		if offset == 12 {
+			offset = 8 // ip6 saddr
+		} else {
+			offset = 24 // ip6 daddr
 		}
 	}
 
