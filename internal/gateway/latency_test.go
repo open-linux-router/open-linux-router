@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -100,26 +98,30 @@ func TestLatencySnapshotIsolationAndCancellation(t *testing.T) {
 	}
 }
 
-func TestHTTPSProbe(t *testing.T) {
-	for _, status := range []int{204, 302, 403, 500} {
-		t.Run(http.StatusText(status), func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodHead {
-					t.Errorf("method = %s", r.Method)
-				}
-				if status == 302 {
-					w.Header().Set("Location", "/loop")
-				}
-				w.WriteHeader(status)
-			}))
-			defer server.Close()
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			_, err := probeHTTPS(ctx, server.URL)
-			if (err != nil) != (status >= 400) {
-				t.Fatalf("status %d: %v", status, err)
-			}
-		})
+func TestConnectionProbeMeasuresDialOnly(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	go func() {
+		conn, err := listener.Accept()
+		if err == nil {
+			defer conn.Close()
+			time.Sleep(200 * time.Millisecond)
+		}
+	}()
+	called := false
+	dial := func(ctx context.Context, network, address string) (net.Conn, error) {
+		called = true
+		if address != "127.0.0.1:443" {
+			t.Errorf("address = %s", address)
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, listener.Addr().String())
+	}
+	elapsed, err := probeConnectionWithDial(context.Background(), "https://127.0.0.1/path", dial)
+	if err != nil || !called || elapsed >= 150 {
+		t.Fatalf("dial = %.1f ms, %v; called %v", elapsed, err, called)
 	}
 }
 
@@ -274,69 +276,41 @@ func TestCustomLatencyUsesSelectedExit(t *testing.T) {
 	}
 }
 
-func TestHTTPSProbeUsesCustomDialer(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
-	defer server.Close()
-	called := false
-	dial := func(ctx context.Context, network, address string) (net.Conn, error) {
-		called = true
-		return (&net.Dialer{}).DialContext(ctx, network, address)
+func TestConnectionProbeExcludesDNSAndRacesAddresses(t *testing.T) {
+	resolve := func(_ context.Context, host string) ([]net.IPAddr, error) {
+		if host != "example.com" {
+			t.Errorf("host = %s", host)
+		}
+		time.Sleep(80 * time.Millisecond)
+		return []net.IPAddr{{IP: net.ParseIP("192.0.2.1")}, {IP: net.ParseIP("192.0.2.2")}}, nil
 	}
-	if _, err := probeHTTPSWithDial(context.Background(), server.URL, dial); err != nil {
-		t.Fatal(err)
+	dial := func(ctx context.Context, _, address string) (net.Conn, error) {
+		if address == "192.0.2.1:443" {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		if address != "192.0.2.2:443" {
+			t.Errorf("address = %s", address)
+		}
+		conn, peer := net.Pipe()
+		peer.Close()
+		return conn, nil
 	}
-	if !called {
-		t.Fatal("custom exit dialer was bypassed")
-	}
-}
-
-func TestCustomHTTPSUsesGETHeadersWithoutReadingBody(t *testing.T) {
-	methods := []string{}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		methods = append(methods, r.Method)
-		w.Header().Set("Content-Length", "1000000")
-		w.WriteHeader(http.StatusFound)
-	}))
-	defer server.Close()
-	if _, err := probeCustomHTTPS(context.Background(), server.URL); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(methods, []string{http.MethodGet}) {
-		t.Fatalf("methods = %v", methods)
+	elapsed, err := probeConnectionWithResolve(context.Background(), "https://example.com/path", resolve, dial)
+	if err != nil || elapsed >= 60 {
+		t.Fatalf("TCP time included DNS or waited for broken address: %.1f ms, %v", elapsed, err)
 	}
 }
 
-func TestCustomLatencyReportsProbeReason(t *testing.T) {
-	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
-	if err != nil {
-		t.Fatal(err)
+func TestConnectionProbeFailureAndDNS(t *testing.T) {
+	_, err := probeConnectionWithDial(context.Background(), "https://127.0.0.1/", func(context.Context, string, string) (net.Conn, error) {
+		return nil, errors.New("unreachable")
+	})
+	if err == nil {
+		t.Fatal("failed dial reported success")
 	}
-	if err := m.Replace([]CustomLatencySite{{Name: "Blocked", URL: "https://example.com/"}}); err != nil {
-		t.Fatal(err)
-	}
-	m.probe = func(context.Context, string) (float64, error) { return 0, errors.New("HTTP 403") }
-	m.sample(context.Background())
-	if got := m.Snapshot()[0]; got.Error != "HTTP 403" || got.Milliseconds != nil {
-		t.Fatalf("result = %+v", got)
-	}
-}
-
-func TestCustomHTTPSCountsClientRejectionAsReachable(t *testing.T) {
-	for _, status := range []int{403, 404, 500} {
-		t.Run(http.StatusText(status), func(t *testing.T) {
-			requests := 0
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				requests++
-				w.WriteHeader(status)
-			}))
-			defer server.Close()
-			value, err := probeCustomHTTPS(context.Background(), server.URL)
-			if (err != nil) != (status >= 500) || (err == nil && value < 0) {
-				t.Fatalf("status %d: %v, %v", status, value, err)
-			}
-			if requests != 1 {
-				t.Fatalf("expected one GET, got %d", requests)
-			}
-		})
+	_, err = probeConnection(context.Background(), "https://invalid host/")
+	if err == nil {
+		t.Fatal("invalid host reported success")
 	}
 }

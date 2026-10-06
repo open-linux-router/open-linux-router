@@ -1,78 +1,55 @@
-# Overview latency
+# Overview connection latency
 
-`GET /api/gateway/latency` returns the latest background measurement. Reading
-this endpoint does not initiate network traffic. The daemon measures selected sites every minute, independently of browser
-sessions, and stops on shutdown. Initial discovery uses four rounds spaced
-15 seconds apart. Failed discovery also backs off for one minute before retrying.
+`GET /api/gateway/latency` returns background measurements; reading it does
+not start a probe. The Internet headline and every custom site use the same
+metric: **router-to-site TCP connection latency**, in milliseconds. DNS resolves
+the site's hostname first, then timing starts immediately before dialing its
+resolved address on port 443 and stops when the TCP handshake completes. It is
+similar to a ping round trip, but **not ICMP ping**: TCP and ICMP can be routed,
+filtered and prioritised differently. DNS lookup, TLS negotiation, server
+processing and page download are **not** included. The separate DNS row measures
+a lookup of `example.com`; it is not part of the connection value.
 
-The measurement is router-originated HTTPS HEAD response time over its default
-route: DNS lookup, TCP connection, TLS handshake and response headers. It is
-not ICMP ping or the latency of a particular device, tunnel, or configured exit.
-Connections are fresh, TLS certificates are verified, environment proxies are
-ignored, redirects are not followed, and HTTP 2xx/3xx responses count as success.
-Custom site probes use GET instead, since some sites never answer HEAD.
-Only response headers are timed; GET bodies are not read.
-Each target has a four-second deadline and targets are measured concurrently.
-A failed website does not establish that the internet as a whole is down.
+The router probes the Internet candidates over its default route. Custom sites
+use the same TCP measurement and can select a gateway exit; on Linux, their
+sockets use that exit's current `SO_MARK` routing mark. DNS lookup still uses
+the router's resolver and default route. A removed or disabled exit reports a
+failure rather than silently switching to the default route. Other platforms
+cannot mark sockets and report unsupported rather than probing the wrong path.
+A site's HTTPS URL supplies its hostname and icon-discovery starting point; its
+path does not affect connection timing. A successful TCP handshake establishes
+only that port 443 accepts connections, **not** that HTTPS, login or the app is
+working. Icon discovery is a separate bounded HTTPS request, using the chosen
+exit, with same-origin page, manifest and favicon rules shared with ingress.
+It does not affect the measured latency.
 
-The initial candidates are Google, Baidu, Yandex and Cloudflare. Four rounds
-compare all candidates. Sites need at least three successes and a successful
-latest response to qualify. The lowest median time wins; a second site is kept
-when its median is within 20% of the winner. The card shows the minimum of the
-successful measurements in the current round, not an all-time minimum.
+Probes run in the daemon without browser sessions. Each target has a four-second
+deadline. Resolved IPv4 and IPv6 addresses are attempted concurrently, and the
+first successful connection determines the sample; a broken address cannot
+make a working address look slow. Connections are closed immediately. The
+Internet candidates are Google, Baidu, Yandex and Cloudflare. Initial discovery
+compares all four for four rounds, 15 seconds apart. Sites need three successes
+and a successful latest response. The lowest median wins; a second candidate
+is retained if its median is within 20% of the winner. The headline shows the
+lowest successful selected measurement in the current round. Failure restarts
+discovery; all candidates are rediscovered daily. If none qualifies, another
+four-round discovery begins after a one-minute backoff. Selection and samples
+reset on daemon restart.
 
-Failure of either selected site restarts discovery on the next round. Every
-day all candidates are compared again, allowing changes
-in connectivity, regional reachability and edge deployment to change the
-selection. If no candidate qualifies, another four-round discovery begins.
-Selection and samples live only in memory and reset when the daemon restarts.
+Custom sites are independent of Internet selection and are measured on the
+same cadence: every 15 seconds during initial discovery, then every minute.
+Up to 12 named HTTPS URLs can be stored with `PUT /api/gateway/latency/sites`
+using objects such as `{"name":"YouTube","url":"https://www.youtube.com/", "exit":"Proxy"}`.
+`exit` is optional and must name a configured gateway exit when saved. An empty
+array clears the list. Names are unique and 1-40 characters; URLs cannot include
+credentials, custom ports or fragments. Settings live alongside the router
+configuration as `olr.json.latency-sites`; results are ephemeral.
 
-The response contains `state` (`measuring`, `ok`, `unreachable`, or `unavailable`),
-nullable `milliseconds` and `checked_at`, the winning `target`, and a `sites`
-list. Each site includes its URL, last attempt timestamp, nullable measurement,
-and whether it is selected. Excluded sites retain their last result; these
-older results never contribute to the current headline measurement. No success
-in the current round means a null measurement, never zero or an older success.
-The UI hides the measurement on API failure or when the sample is over 90 seconds
-older than the response receipt time. The expandable list shows per-site results.
-
-## Custom sites
-
-The Overview card's **Monitor sites** dialog accepts up to 12 named HTTPS URLs,
-for example WeChat or YouTube. Each custom site uses a router-originated HTTPS GET response-header probe,
-four-second timeout, and one-minute steady-state cadence. Unlike the Internet
-headline, it does not require the site to support HEAD. During initial discovery they are probed every 15
-seconds. Custom sites are independent: their failures never change the Internet
-headline or its candidate selection. Unlike the Internet headline, custom targets treat an HTTP 4xx response as reachable: it proves the site
-answered, but does not prove that an app login or API works. HTTP 5xx, DNS,
-TLS, connection, and timeout failures show their short reason directly on the
-status badge and in its details.
-Choose a suitable endpoint for that service rather than interpreting a failed
-probe as proof that the entire app is down. Icons are discovered using the same
-same-origin page, manifest, and favicon lookup as ingress services,
-starting at the configured site URL. Discovery
-uses the selected exit for HTTP requests, limits response sizes, and caches
-icons for a day; an initial is shown when no icon is available.
-
-`PUT /api/gateway/latency/sites` replaces the custom list with JSON objects
-`{"name":"YouTube","url":"https://www.youtube.com/"}`. An empty array clears
-it. Names are unique, 1–40 characters, and URLs must use HTTPS without
-credentials, custom ports, or fragments. The list is stored alongside the
-router configuration as `olr.json.latency-sites`; measurements are not persisted.
-`GET /api/gateway/latency` includes `custom` measurements (with nullable
-`milliseconds`, `checked_at`, and a short `error` on failure) in addition to
-the existing `sites` candidate
-list. Edits reset custom results until the next probe. A failed probe never
-retains a previous successful value.
-
-Each custom site can optionally choose **Internet via** a configured gateway
-exit. The default remains the router's normal route. For a named exit, the
-probe marks its TCP socket with that exit's current routing mark (`SO_MARK` on
-Linux), so TCP, TLS, and the HTTPS response traverse the chosen path. Hostname
-resolution still uses the router's resolver and default route. A removed or
-disabled exit produces **No response**, never a fallback to the router default.
-The JSON entry gains an optional `"exit":"Proxy"` field; the name must exist
-when saved. Probes resolve the current mark for each attempt, so changing an
-exit's slot does not leave a stale mark in the site settings. This requires
-Linux and the daemon's socket-marking privilege; on other platforms selected
-exit probes fail rather than silently using the default route.
+The response includes `state` (`measuring`, `ok`, `unreachable`, `unavailable`),
+nullable `milliseconds`, `dns_milliseconds`, `checked_at`, the winning `target`,
+the Internet `sites` candidates and `custom` sites. Each site carries its last
+attempt, nullable measurement, and a short `error` on failure. Excluded Internet
+candidates retain old results but never contribute to the headline. The UI
+hides stale results (older than 90 seconds at receipt); neither failure nor an
+old success is displayed as zero. Custom-site colors indicate this TCP
+connection latency, not application health.

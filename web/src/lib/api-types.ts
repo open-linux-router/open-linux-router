@@ -1556,7 +1556,7 @@ export interface FirewallApplyResult {
   error?: { message: string; problems?: Problem[] }
 }
 
-/** Router-originated HTTPS response timing, including DNS and connection setup. */
+/** Router-originated TCP connection time to port 443, excluding DNS lookup. */
 export interface GatewayLatency {
   state: 'measuring' | 'ok' | 'unreachable' | 'unavailable'
   milliseconds: number | null
