@@ -84,24 +84,21 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <Badge variant={mine ? 'warning' : 'outline'}>{mine ? 'On' : 'Off'}</Badge>
       </div>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Inspect traffic from this device on its observed IPv4 addresses. It automatically turns off after 15 minutes. Inspect requests here, or open mitmweb locally over SSH for full request and response bodies. Full bodies remain in mitmweb memory for this session and are cleared on stop.
+        Inspect this device's network requests without choosing an address. It automatically turns off after 15 minutes. Inspect requests here, or open mitmweb locally over SSH for full request and response bodies. Full bodies remain in mitmweb memory for this session and are cleared on stop.
       </p>
     </div>
     <div className="space-y-5 p-5 sm:p-7">
       {status.isError ? <p role="alert" className="text-sm text-destructive">Inspection status is unavailable. Do not assume interception has stopped.</p> : null}
       {active && !mine ? <p className="text-sm text-muted-foreground">Another device is being inspected. Stop that session before starting this one.</p> : null}
       <div className="grid gap-4 text-sm text-muted-foreground md:grid-cols-3">
-        <p><strong className="block text-foreground">1. Prepare</strong>Install mitmproxy (mitmweb) on the router. Observed IPv4 addresses are covered together; IPv6 traffic is not intercepted.</p>
+        <p><strong className="block text-foreground">1. Prepare</strong>Install mitmproxy (mitmweb) on the router. OLR handles this device's observed addresses automatically; IPv6 traffic is not intercepted.</p>
         <p><strong className="block text-foreground">2. Trust CA for HTTPS</strong>Start once to generate the CA, then install and explicitly enable full trust for the downloaded certificate in iPhone Settings → General → About → Certificate Trust Settings. Do not install its private key. HTTP works without a CA.</p>
         <p><strong className="block text-foreground">3. Stop and remove trust</strong>Stopping or timeout clears the session and restores normal forwarding. Your device still trusts the CA until you remove it in device settings.</p>
       </div>
-      <div className="max-w-sm space-y-2">
-        <p className="text-sm font-medium">Observed IPv4 addresses</p>
-        <p className="font-mono text-sm">{ipv4.length ? ipv4.join(' · ') : 'None observed'}</p>
-        <p className="text-xs text-muted-foreground">All listed addresses are covered, but only packets from this device's MAC are redirected. If its address changes after starting, restart inspection to refresh the list.</p>
-        {mine && <p className="text-xs font-medium">Inspecting {status.data?.ips?.join(' · ')} · Upstream {status.data?.exit_routed ? 'via device exit' : 'via router default'}</p>}
-        {status.data?.ca_sha256 && <p className="break-all font-mono text-xs text-muted-foreground">Router CA SHA-256: {status.data.ca_sha256.match(/../g)?.join(':')}</p>}
-      </div>
+      {ipv4.length === 0 && !active && <p className="text-sm text-muted-foreground">OLR has not observed an IPv4 address for this device yet. Connect it to the network and refresh this page to enable inspection.</p>}
+      {ipv4.length > 8 && !active && <p className="text-sm text-muted-foreground">Too many addresses are associated with this device to start inspection safely.</p>}
+      {mine && <p className="text-xs font-medium">Upstream {status.data?.exit_routed ? 'via device exit' : 'via router default'}</p>}
+      {status.data?.ca_sha256 && <p className="max-w-sm break-all font-mono text-xs text-muted-foreground">Router CA SHA-256: {status.data.ca_sha256.match(/../g)?.join(':')}</p>}
       <div className="flex flex-wrap gap-2">
         {mine ? <Button variant="destructive" disabled={stop.isPending} onClick={() => stop.mutate()}>Turn off</Button>
           : <Button disabled={Boolean(active) || ipv4.length === 0 || ipv4.length > 8 || start.isPending || status.isPending || status.isError} onClick={() => start.mutate()}>Turn on</Button>}
