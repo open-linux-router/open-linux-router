@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -53,7 +54,7 @@ type Event struct {
 type Status struct {
 	Active        bool      `json:"active"`
 	MAC           string    `json:"mac,omitempty"`
-	IP            string    `json:"ip,omitempty"`
+	IPs           []string  `json:"ips,omitempty"`
 	Expires       time.Time `json:"expires,omitempty"`
 	Events        []Event   `json:"events"`
 	CAPresent     bool      `json:"ca_present"`
@@ -76,7 +77,7 @@ type Service struct {
 
 type session struct {
 	mac      string
-	ip       string
+	ips      []string
 	expires  time.Time
 	cancel   func()
 	done     chan struct{}
@@ -89,7 +90,7 @@ type session struct {
 func (s *Service) Routes() []core.Route {
 	return []core.Route{
 		{Method: "GET", Path: "/status", Tool: "status", Summary: "Show the temporary device request inspection session.", Handler: s.status},
-		{Method: "POST", Path: "/session", Summary: "Start a 15-minute inspection for an explicitly selected IPv4 address.", Mutating: true, Handler: s.start},
+		{Method: "POST", Path: "/session", Summary: "Start a 15-minute inspection for observed device IPv4 addresses.", Mutating: true, Handler: s.start},
 		{Method: "DELETE", Path: "/session", Summary: "Stop inspection, remove interception and clear captured requests.", Mutating: true, Handler: s.stop},
 		{Method: "GET", Path: "/ca", Tool: "show ca", Summary: "Download the public debugging CA certificate, never its private key.", Handler: s.ca},
 	}
@@ -100,7 +101,7 @@ func (s *Service) snapshot() Status {
 	defer s.mu.Unlock()
 	out := Status{Events: []Event{}}
 	if q := s.session; q != nil {
-		out.Active, out.MAC, out.IP, out.Expires = true, q.mac, q.ip, q.expires
+		out.Active, out.MAC, out.IPs, out.Expires = true, q.mac, append([]string(nil), q.ips...), q.expires
 		out.Events = append(out.Events, q.events...)
 		out.ProxyAccepted = q.accepted
 		out.ExitRouted = q.mark != 0
@@ -155,11 +156,11 @@ func (s *Service) PublicCA(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		MAC string `json:"mac"`
-		IP  string `json:"ip"`
+		MAC string   `json:"mac"`
+		IPs []string `json:"ips"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body); err != nil {
-		core.WriteError(w, http.StatusBadRequest, "expected a device MAC and IPv4 address")
+		core.WriteError(w, http.StatusBadRequest, "expected a device MAC and IPv4 addresses")
 		return
 	}
 	if !s.Enabled {
@@ -177,13 +178,25 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusBadRequest, macErr.Error())
 		return
 	}
-	ip, err := netip.ParseAddr(strings.TrimSpace(body.IP))
-	if err != nil || !ip.Is4() || ip.IsUnspecified() || ip.IsMulticast() || ip.String() == "255.255.255.255" {
-		core.WriteError(w, http.StatusBadRequest, "expected a unicast IPv4 address to inspect")
+	if len(body.IPs) == 0 || len(body.IPs) > 8 {
+		core.WriteError(w, http.StatusBadRequest, "expected 1 to 8 IPv4 addresses to inspect")
 		return
 	}
-	target := ip.String()
-	var mark uint32
+	ips := make([]string, 0, len(body.IPs))
+	for _, raw := range body.IPs {
+		ip, err := netip.ParseAddr(strings.TrimSpace(raw))
+		if err != nil || !ip.Is4() || ip.IsUnspecified() || ip.IsMulticast() || ip.String() == "255.255.255.255" {
+			core.WriteError(w, http.StatusBadRequest, "expected unicast IPv4 addresses to inspect")
+			return
+		}
+		if !slices.Contains(ips, ip.String()) {
+			ips = append(ips, ip.String())
+		}
+	}
+	var (
+		mark uint32
+		err  error
+	)
 	if s.ExitMark != nil {
 		mark, err = s.ExitMark(normalized)
 		if err != nil {
@@ -266,11 +279,11 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 	}
 	// A fresh table is owned wholly by this module. Cleanup of a previous
 	// daemon's table also runs at startup; never modify someone else's table.
-	if err = install(target, mark); err != nil {
+	if err = install(normalized, ips, mark); err != nil {
 		if cleanupErr := cleanup(); cleanupErr != nil {
 			// A partially installed rule might remain. Preserve a session
 			// owner so cleanup is retried and no new session can start.
-			q := &session{mac: normalized, ip: target, expires: time.Now(), mark: mark, cancel: cancel, done: make(chan struct{})}
+			q := &session{mac: normalized, ips: ips, expires: time.Now(), mark: mark, cancel: cancel, done: make(chan struct{})}
 			s.session = q
 			q.retrying = true
 			go s.retryCleanup(q)
@@ -283,7 +296,7 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, 500, "could not install interception: "+err.Error())
 		return
 	}
-	q := &session{mac: normalized, ip: target, expires: time.Now().Add(duration), mark: mark, cancel: cancel, done: make(chan struct{})}
+	q := &session{mac: normalized, ips: ips, expires: time.Now().Add(duration), mark: mark, cancel: cancel, done: make(chan struct{})}
 	s.session = q
 	go s.consume(q, stdout)
 	go s.watch(q)
@@ -292,7 +305,7 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) snapshotLocked() Status {
 	q := s.session
-	return Status{Active: true, MAC: q.mac, IP: q.ip, Expires: q.expires, Events: []Event{}, CAPresent: true}
+	return Status{Active: true, MAC: q.mac, IPs: append([]string(nil), q.ips...), Expires: q.expires, Events: []Event{}, CAPresent: true}
 }
 
 func (s *Service) consume(q *session, stdout interface{ Read([]byte) (int, error) }) {
@@ -422,9 +435,9 @@ func cleanup() error {
 	}
 	return fmt.Errorf("removing inspection table: %w: %s", err, strings.TrimSpace(string(out)))
 }
-func install(ip string, mark uint32) error {
-	// Restrict to TCP 80/443 from the chosen address, before NAT. Exclude local
-	// and private destinations so router administration and LAN services survive.
+func install(mac string, ips []string, mark uint32) error {
+	// Match both the device MAC and candidate IPv4 addresses before NAT. Exclude
+	// local and private destinations so LAN services survive.
 	if err := nft("add", "table", "inet", table); err != nil {
 		return err
 	}
@@ -453,9 +466,9 @@ func install(ip string, mark uint32) error {
 		return err
 	}
 	// Redirect sets the original destination port in conntrack, but does not
-	// necessarily set the DNAT status bit. Permit only the selected source's
+	// necessarily set the DNAT status bit. Permit only this device's
 	// connections that originally targeted HTTP(S), not direct LAN proxy use.
-	if err := nft("add", "rule", "inet", table, "input", "ip", "saddr", ip, "tcp", "dport", port, "ct", "original", "proto-dst", "{", "80,", "443", "}", "accept"); err != nil {
+	if err := nft("add", "rule", "inet", table, "input", "ether", "saddr", mac, "ip", "saddr", "{", strings.Join(ips, ", "), "}", "tcp", "dport", port, "ct", "original", "proto-dst", "{", "80,", "443", "}", "accept"); err != nil {
 		return err
 	}
 	if err := nft("add", "rule", "inet", table, "input", "iifname", "!=", "lo", "tcp", "dport", port, "counter", "name", "input_dropped", "drop"); err != nil {
@@ -477,7 +490,7 @@ func install(ip string, mark uint32) error {
 			return err
 		}
 	}
-	if err := nft("add", "rule", "inet", table, "prerouting", "ip", "saddr", ip, "tcp", "dport", "{", "80,", "443", "}", "counter", "name", "redirected", "redirect", "to", ":"+port); err != nil {
+	if err := nft("add", "rule", "inet", table, "prerouting", "ether", "saddr", mac, "ip", "saddr", "{", strings.Join(ips, ", "), "}", "tcp", "dport", "{", "80,", "443", "}", "counter", "name", "redirected", "redirect", "to", ":"+port); err != nil {
 		return err
 	}
 	return nil

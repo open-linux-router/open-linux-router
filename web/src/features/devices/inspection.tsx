@@ -24,7 +24,7 @@ interface Event {
 interface Status {
   active: boolean
   mac?: string
-  ip?: string
+  ips?: string[]
   expires?: string
   events: Event[]
   ca_present: boolean
@@ -37,14 +37,13 @@ interface Status {
 export function DeviceInspection({ mac, addresses }: { mac: string; addresses: string[] }) {
   const client = useQueryClient()
   const ipv4 = addresses.filter((address) => /^\d+\.\d+\.\d+\.\d+$/.test(address))
-  const [ip, setIP] = useState(() => ipv4.length === 1 ? ipv4[0] : '')
   const status = useQuery({
     queryKey: ['inspection', 'status'],
     queryFn: () => api.get<Status>('/api/inspection/status'),
     refetchInterval: 2000,
   })
   const start = useMutation({
-    mutationFn: () => api.post<Status>('/api/inspection/session', { mac, ip: ip.trim() }),
+    mutationFn: () => api.post<Status>('/api/inspection/session', { mac, ips: ipv4 }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['inspection'] }),
     onError: (error) => toast.error(String(error)),
   })
@@ -86,30 +85,27 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <Badge variant={mine ? 'warning' : 'outline'}>{mine ? 'On' : 'Off'}</Badge>
       </div>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Inspect traffic from the IPv4 address you choose. It automatically turns off after 15 minutes. Request URLs, headers and text response previews can contain private data. Previews are limited to 4,096 characters; bodies are not saved to disk.
+        Inspect traffic from this device on its observed IPv4 addresses. It automatically turns off after 15 minutes. Request URLs, headers and text response previews can contain private data. Previews are limited to 4,096 characters; bodies are not saved to disk.
       </p>
     </div>
     <div className="space-y-5 p-5 sm:p-7">
       {status.isError ? <p role="alert" className="text-sm text-destructive">Inspection status is unavailable. Do not assume interception has stopped.</p> : null}
       {active && !mine ? <p className="text-sm text-muted-foreground">Another device is being inspected. Stop that session before starting this one.</p> : null}
       <div className="grid gap-4 text-sm text-muted-foreground md:grid-cols-3">
-        <p><strong className="block text-foreground">1. Prepare</strong>Install mitmproxy (mitmdump) on the router. Choose the source IPv4 address to intercept. The device list is only a suggestion; IPv6 traffic is not intercepted.</p>
+        <p><strong className="block text-foreground">1. Prepare</strong>Install mitmproxy (mitmdump) on the router. Observed IPv4 addresses are covered together; IPv6 traffic is not intercepted.</p>
         <p><strong className="block text-foreground">2. Trust CA for HTTPS</strong>Start once to generate the CA, then install and explicitly enable full trust for the downloaded certificate in iPhone Settings → General → About → Certificate Trust Settings. Do not install its private key. HTTP works without a CA.</p>
         <p><strong className="block text-foreground">3. Stop and remove trust</strong>Stopping or timeout clears the session and restores normal forwarding. Your device still trusts the CA until you remove it in device settings.</p>
       </div>
       <div className="max-w-sm space-y-2">
-        <label htmlFor="inspection-ip" className="block text-sm font-medium">Source IPv4 to inspect</label>
-        <input id="inspection-ip" type="text" inputMode="decimal" autoComplete="off" spellCheck={false} className="h-9 w-full rounded-md border bg-background px-3 font-mono text-sm" value={ip} onChange={(event) => setIP(event.target.value)} placeholder="172.16.1.135" disabled={Boolean(active)} />
-        {ipv4.length > 1 && <div className="flex flex-wrap gap-2" aria-label="Observed IPv4 suggestions">
-          {ipv4.map((address) => <Button key={address} size="sm" variant={ip === address ? 'secondary' : 'outline'} onClick={() => setIP(address)} disabled={Boolean(active)}>{address}</Button>)}
-        </div>}
-        <p className="text-xs text-muted-foreground">Only traffic from this address will be redirected. If it belongs to another device or changes, that device's traffic may be inspected instead. Confirm the address before turning on.</p>
-        {mine && <p className="text-xs font-medium">Inspecting {status.data?.ip} · Upstream {status.data?.exit_routed ? 'via device exit' : 'via router default'}</p>}
+        <p className="text-sm font-medium">Observed IPv4 addresses</p>
+        <p className="font-mono text-sm">{ipv4.length ? ipv4.join(' · ') : 'None observed'}</p>
+        <p className="text-xs text-muted-foreground">All listed addresses are covered, but only packets from this device's MAC are redirected. If its address changes after starting, restart inspection to refresh the list.</p>
+        {mine && <p className="text-xs font-medium">Inspecting {status.data?.ips?.join(' · ')} · Upstream {status.data?.exit_routed ? 'via device exit' : 'via router default'}</p>}
         {status.data?.ca_sha256 && <p className="break-all font-mono text-xs text-muted-foreground">Router CA SHA-256: {status.data.ca_sha256.match(/../g)?.join(':')}</p>}
       </div>
       <div className="flex flex-wrap gap-2">
         {mine ? <Button variant="destructive" disabled={stop.isPending} onClick={() => stop.mutate()}>Turn off</Button>
-          : <Button disabled={Boolean(active) || !ip.trim() || start.isPending || status.isPending || status.isError} onClick={() => start.mutate()}>Turn on</Button>}
+          : <Button disabled={Boolean(active) || ipv4.length === 0 || ipv4.length > 8 || start.isPending || status.isPending || status.isError} onClick={() => start.mutate()}>Turn on</Button>}
         <Button variant="outline" disabled={!status.data?.ca_present} onClick={downloadCA}>Download public CA</Button>
         <Button variant="outline" disabled={!status.data?.ca_present} onClick={() => setShowQR(true)}>Show CA QR</Button>
       </div>

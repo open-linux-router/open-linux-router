@@ -14,23 +14,26 @@ import (
 	"time"
 )
 
-func TestStartRequiresExplicitIPv4(t *testing.T) {
+func TestStartRequiresIPv4Candidates(t *testing.T) {
 	cases := []struct {
-		name, ip string
-		want     int
+		name, ips string
+		want      int
 	}{
-		{"missing", "", http.StatusBadRequest},
-		{"invalid", "172.16.1.999", http.StatusBadRequest},
-		{"IPv6", "fd00::1", http.StatusBadRequest},
-		{"unspecified", "0.0.0.0", http.StatusBadRequest},
-		{"multicast", "224.0.0.1", http.StatusBadRequest},
-		{"explicit address", "172.16.1.135", http.StatusServiceUnavailable},
-		{"no private restriction", "8.8.8.8", http.StatusServiceUnavailable},
+		{"missing", `[]`, http.StatusBadRequest},
+		{"too many", `["1.1.1.1","1.1.1.2","1.1.1.3","1.1.1.4","1.1.1.5","1.1.1.6","1.1.1.7","1.1.1.8","1.1.1.9"]`, http.StatusBadRequest},
+		{"mixed validity", `["172.16.1.135","224.0.0.1"]`, http.StatusBadRequest},
+		{"invalid", `["172.16.1.999"]`, http.StatusBadRequest},
+		{"IPv6", `["fd00::1"]`, http.StatusBadRequest},
+		{"unspecified", `["0.0.0.0"]`, http.StatusBadRequest},
+		{"multicast", `["224.0.0.1"]`, http.StatusBadRequest},
+		{"explicit addresses", `["172.16.1.135","172.16.1.39"]`, http.StatusServiceUnavailable},
+		{"duplicates", `["172.16.1.135","172.16.1.135"]`, http.StatusServiceUnavailable},
+		{"no private restriction", `["8.8.8.8"]`, http.StatusServiceUnavailable},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &Service{Enabled: true}
-			req := httptest.NewRequest(http.MethodPost, "/session", strings.NewReader(fmt.Sprintf(`{"mac":"c4:c1:7d:e0:a3:65","ip":%q}`, tc.ip)))
+			req := httptest.NewRequest(http.MethodPost, "/session", strings.NewReader(fmt.Sprintf(`{"mac":"c4:c1:7d:e0:a3:65","ips":%s}`, tc.ips)))
 			rec := httptest.NewRecorder()
 			// No proxy binary on PATH: valid addresses pass targeting validation.
 			t.Setenv("PATH", t.TempDir())
@@ -42,7 +45,7 @@ func TestStartRequiresExplicitIPv4(t *testing.T) {
 	}
 }
 
-func TestInstallRedirectsChosenAddress(t *testing.T) {
+func TestInstallRedirectsDeviceAddresses(t *testing.T) {
 	dir := t.TempDir()
 	log := filepath.Join(dir, "nft.log")
 	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$*\" >> %q\n", log)
@@ -50,15 +53,15 @@ func TestInstallRedirectsChosenAddress(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	if err := install("172.16.1.135", 0); err != nil {
+	if err := install("c4:c1:7d:e0:a3:65", []string{"172.16.1.135", "172.16.1.39"}, 0); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(log)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "add counter inet olr_inspection redirected") || !strings.Contains(string(data), "ip saddr 172.16.1.135 tcp dport { 80, 443 } counter name redirected redirect to :18081") || !strings.Contains(string(data), "tcp dport 18081 counter name input_seen") || !strings.Contains(string(data), "ip saddr 172.16.1.135 tcp dport 18081 ct original proto-dst { 80, 443 } accept") || !strings.Contains(string(data), "iifname != lo tcp dport 18081 counter name input_dropped drop") || !strings.Contains(string(data), "ip daddr 198.18.0.0/15 return") {
-		t.Errorf("missing redirect for chosen address in %s", data)
+	if !strings.Contains(string(data), "add counter inet olr_inspection redirected") || !strings.Contains(string(data), "ether saddr c4:c1:7d:e0:a3:65 ip saddr { 172.16.1.135, 172.16.1.39 } tcp dport { 80, 443 } counter name redirected redirect to :18081") || !strings.Contains(string(data), "tcp dport 18081 counter name input_seen") || !strings.Contains(string(data), "ether saddr c4:c1:7d:e0:a3:65 ip saddr { 172.16.1.135, 172.16.1.39 } tcp dport 18081 ct original proto-dst { 80, 443 } accept") || !strings.Contains(string(data), "iifname != lo tcp dport 18081 counter name input_dropped drop") || !strings.Contains(string(data), "ip daddr 198.18.0.0/15 return") {
+		t.Errorf("missing MAC-bound redirect for device addresses in %s", data)
 	}
 }
 
@@ -106,7 +109,7 @@ func TestStartRejectsStaleListener(t *testing.T) {
 	t.Setenv("PATH", dir)
 	s := &Service{Enabled: true, Dir: t.TempDir()}
 	rec := httptest.NewRecorder()
-	s.start(rec, httptest.NewRequest(http.MethodPost, "/session", strings.NewReader(`{"mac":"c4:c1:7d:e0:a3:65","ip":"172.16.1.135"}`)))
+	s.start(rec, httptest.NewRequest(http.MethodPost, "/session", strings.NewReader(`{"mac":"c4:c1:7d:e0:a3:65","ips":["172.16.1.135"]}`)))
 	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "already in use") || s.snapshot().Active {
 		t.Fatalf("stale listener: %d %s", rec.Code, rec.Body.String())
 	}
@@ -153,7 +156,7 @@ func TestInstallRoutesProxyThroughExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	if err := install("172.16.1.135", 0x10000); err != nil {
+	if err := install("c4:c1:7d:e0:a3:65", []string{"172.16.1.135"}, 0x10000); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(log)
