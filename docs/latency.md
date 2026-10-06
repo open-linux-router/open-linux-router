@@ -44,8 +44,11 @@ HTTPS HEAD probe, four-second timeout, and one-minute steady-state cadence as
 the Internet candidates. During initial discovery they are probed every 15
 seconds. Custom sites are independent: their failures never change the Internet
 headline or its candidate selection. An endpoint that rejects HEAD (for example
-with HTTP 403 or 405) is retried with GET; if that also fails, the site
-shows a failed status with the HTTP code or a short network error on hover.
+with HTTP 403 or 405) is retried with GET. Unlike the Internet headline,
+custom targets treat an HTTP 4xx response as reachable: it proves the site
+answered, but does not prove that an app login or API works. HTTP 5xx, DNS,
+TLS, connection, and timeout failures show their short reason directly on the
+status badge and in its details.
 Choose a suitable endpoint for that service rather than interpreting a failed
 probe as proof that the entire app is down. Icons are discovered using the same
 same-origin page, manifest, and favicon lookup as ingress services,

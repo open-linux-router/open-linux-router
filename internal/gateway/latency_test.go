@@ -321,3 +321,23 @@ func TestCustomLatencyReportsProbeReason(t *testing.T) {
 		t.Fatalf("result = %+v", got)
 	}
 }
+
+func TestCustomHTTPSCountsClientRejectionAsReachable(t *testing.T) {
+	for _, status := range []int{403, 404, 500} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			requests := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				w.WriteHeader(status)
+			}))
+			defer server.Close()
+			value, err := probeCustomHTTPS(context.Background(), server.URL)
+			if (err != nil) != (status >= 500) || (err == nil && value < 0) {
+				t.Fatalf("status %d: %v, %v", status, value, err)
+			}
+			if status == 403 && requests != 2 {
+				t.Fatalf("expected HEAD then GET, got %d", requests)
+			}
+		})
+	}
+}

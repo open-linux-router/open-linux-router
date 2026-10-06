@@ -534,7 +534,7 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
             return <span key={site.name} tabIndex={0} aria-label={description} title={description}
               className={cn('inline-flex min-h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold tabular-nums', tone)}>
               <SiteIcon name={site.name} url={site.url} />
-              <span>{!fresh ? '—' : ms == null ? '×' : `${ms.toFixed(0)} ms`}</span>
+              <span>{!fresh ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
             </span>
           })}
           <button className="inline-flex min-h-9 items-center gap-1 rounded-xl px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"

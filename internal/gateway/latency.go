@@ -67,11 +67,20 @@ func probeHTTPS(ctx context.Context, url string) (float64, error) {
 	return probeHTTPSWithDial(ctx, url, nil)
 }
 
+// A custom site checks reachability: an HTTP 4xx still proves its server answered.
+func probeCustomHTTPS(ctx context.Context, url string) (float64, error) {
+	return probeHTTPSRequest(ctx, url, nil, true)
+}
+
 func probeHTTPSMarked(ctx context.Context, url string, mark uint32) (float64, error) {
-	return probeHTTPSWithDial(ctx, url, markedLatencyDial(mark))
+	return probeHTTPSRequest(ctx, url, markedLatencyDial(mark), true)
 }
 
 func probeHTTPSWithDial(ctx context.Context, url string, dial func(context.Context, string, string) (net.Conn, error)) (float64, error) {
+	return probeHTTPSRequest(ctx, url, dial, false)
+}
+
+func probeHTTPSRequest(ctx context.Context, url string, dial func(context.Context, string, string) (net.Conn, error), custom bool) (float64, error) {
 	// Fresh connections give comparable DNS + TCP + TLS + response-header times.
 	// No environment proxy, redirects, response bodies, or relaxed TLS validation.
 	transport := &http.Transport{DisableKeepAlives: true, TLSHandshakeTimeout: 3 * time.Second, DialContext: dial}
@@ -98,7 +107,7 @@ func probeHTTPSWithDial(ctx context.Context, url string, dial func(context.Conte
 		}
 		resp.Body.Close()
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+	if resp.StatusCode < 200 || resp.StatusCode >= 500 || (!custom && resp.StatusCode >= 400) {
 		return 0, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	return float64(time.Since(start).Microseconds()) / 1000, nil
