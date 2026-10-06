@@ -443,7 +443,7 @@ function LatencySitesDialog({ sites, exits, onClose }: { sites: { name: string; 
   return <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
     <DialogContent className="sm:max-w-lg">
       <DialogHeader><DialogTitle>Sites to monitor</DialogTitle><DialogDescription>
-        Measures the TCP connection from this router to port 443, like a TCP ping. DNS lookup, TLS and page loading are not timed. Choose a route for each site.
+        Measures how long this router takes to fetch the full HTML page, including DNS, TLS and same-site redirects. Images and scripts are not loaded. Choose a route for each site.
       </DialogDescription></DialogHeader>
       <div className="max-h-64 space-y-2 overflow-y-auto">
         {draft.map((site, i) => <div key={i} className="flex items-center gap-2 rounded-lg bg-muted/60 p-2 text-sm">
@@ -520,17 +520,17 @@ function Stats({ devices, flows, host, faults, known, idle, failed, latency, exi
           percent={flows.rated && !trafficFailed && limits.up ? (flows.total.upRate ?? 0) * 8 / (limits.up * 1_000_000) * 100 : undefined} tone="amber" />
       </div>
     </StatCard>
-    <StatCard title="Latency">
+    <StatCard title="Page response">
       <div className="space-y-3 pt-2">
-        <MetricPill label="Internet TCP" value={latencyValue} detail={measured ? latency.milliseconds! < 100 ? 'Good' : latency.milliseconds! < 200 ? 'Fair' : 'Slow' : undefined} />
+        <MetricPill label="Internet" value={latencyValue} detail={measured ? latency.milliseconds! < 1000 ? 'Good' : latency.milliseconds! < 3000 ? 'Fair' : 'Slow' : undefined} />
         <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} detail={dnsMeasured ? latency.dns_milliseconds! < 50 ? 'Good' : latency.dns_milliseconds! < 150 ? 'Fair' : 'Slow' : undefined} />
         <div className="flex flex-wrap items-center gap-2">
           {!latencyFailed && latency?.custom?.map((site) => {
             const fresh = site.checked_at && latencyReadAt - Date.parse(site.checked_at) < 90_000
             const ms = fresh ? site.milliseconds : null
             const tone = !fresh ? 'bg-muted text-muted-foreground' : ms == null ? 'bg-destructive/10 text-destructive'
-              : ms < 100 ? 'bg-success/15 text-success-foreground' : ms < 200 ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-destructive/10 text-destructive'
-            const description = `${site.name} · TCP connection to ${new URL(site.url).hostname}:443 via ${site.exit || 'router default'} · ${!fresh ? 'Waiting for a probe' : ms == null ? site.error || 'No response' : `${ms.toFixed(0)} ms`}`
+              : ms < 1000 ? 'bg-success/15 text-success-foreground' : ms < 3000 ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-destructive/10 text-destructive'
+            const description = `${site.name} · HTML page from ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!fresh ? 'Waiting for a probe' : ms == null ? site.error || 'No response' : `${ms.toFixed(0)} ms`}`
             return <span key={site.name} tabIndex={0} aria-label={description} title={description}
               className={cn('inline-flex min-h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold tabular-nums', tone)}>
               <SiteIcon name={site.name} url={site.url} />

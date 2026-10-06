@@ -40,7 +40,7 @@ type CustomLatencyMonitor struct {
 }
 
 func NewCustomLatencyMonitor(path string) (*CustomLatencyMonitor, error) {
-	m := &CustomLatencyMonitor{path: path, probe: probeConnection, probeThrough: probeConnectionMarked, results: []LatencySite{}}
+	m := &CustomLatencyMonitor{path: path, probe: probePage, probeThrough: probePageMarked, results: []LatencySite{}}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return m, nil
@@ -136,7 +136,7 @@ func (m *CustomLatencyMonitor) sample(ctx context.Context) {
 		wg.Add(1)
 		go func(i int, site CustomLatencySite) {
 			defer wg.Done()
-			bounded, cancel := context.WithTimeout(ctx, 4*time.Second)
+			bounded, cancel := context.WithTimeout(ctx, pageProbeTimeout)
 			defer cancel()
 			var value float64
 			var err error

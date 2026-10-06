@@ -3,9 +3,11 @@ package gateway
 import (
 	"context"
 	"errors"
-	"net"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -98,30 +100,26 @@ func TestLatencySnapshotIsolationAndCancellation(t *testing.T) {
 	}
 }
 
-func TestConnectionProbeMeasuresDialOnly(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer listener.Close()
-	go func() {
-		conn, err := listener.Accept()
-		if err == nil {
-			defer conn.Close()
-			time.Sleep(200 * time.Millisecond)
+func TestPageProbeDownloadsDocumentAndFollowsSameOrigin(t *testing.T) {
+	methods := []string{}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		methods = append(methods, r.Method+" "+r.URL.Path)
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, "/page", http.StatusFound)
+			return
 		}
-	}()
-	called := false
-	dial := func(ctx context.Context, network, address string) (net.Conn, error) {
-		called = true
-		if address != "127.0.0.1:443" {
-			t.Errorf("address = %s", address)
-		}
-		return (&net.Dialer{}).DialContext(ctx, network, listener.Addr().String())
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<html>"))
+		time.Sleep(40 * time.Millisecond)
+		w.Write([]byte("done</html>"))
+	}))
+	defer server.Close()
+	value, err := probePageWithClient(context.Background(), server.URL, server.Client())
+	if err != nil || value < 40 {
+		t.Fatalf("page = %.1f ms, %v", value, err)
 	}
-	elapsed, err := probeConnectionWithDial(context.Background(), "https://127.0.0.1/path", dial)
-	if err != nil || !called || elapsed >= 150 {
-		t.Fatalf("dial = %.1f ms, %v; called %v", elapsed, err, called)
+	if !reflect.DeepEqual(methods, []string{"GET /", "GET /page"}) {
+		t.Fatalf("requests = %v", methods)
 	}
 }
 
@@ -276,41 +274,49 @@ func TestCustomLatencyUsesSelectedExit(t *testing.T) {
 	}
 }
 
-func TestConnectionProbeExcludesDNSAndRacesAddresses(t *testing.T) {
-	resolve := func(_ context.Context, host string) ([]net.IPAddr, error) {
-		if host != "example.com" {
-			t.Errorf("host = %s", host)
-		}
-		time.Sleep(80 * time.Millisecond)
-		return []net.IPAddr{{IP: net.ParseIP("192.0.2.1")}, {IP: net.ParseIP("192.0.2.2")}}, nil
-	}
-	dial := func(ctx context.Context, _, address string) (net.Conn, error) {
-		if address == "192.0.2.1:443" {
-			<-ctx.Done()
-			return nil, ctx.Err()
-		}
-		if address != "192.0.2.2:443" {
-			t.Errorf("address = %s", address)
-		}
-		conn, peer := net.Pipe()
-		peer.Close()
-		return conn, nil
-	}
-	elapsed, err := probeConnectionWithResolve(context.Background(), "https://example.com/path", resolve, dial)
-	if err != nil || elapsed >= 60 {
-		t.Fatalf("TCP time included DNS or waited for broken address: %.1f ms, %v", elapsed, err)
+func TestPageProbeLimitsAndStatus(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusForbidden, http.StatusInternalServerError} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(status)
+				w.Write([]byte("<html>ok</html>"))
+			}))
+			defer server.Close()
+			_, err := probePageWithClient(context.Background(), server.URL, server.Client())
+			if (err != nil) != (status != http.StatusOK) {
+				t.Fatalf("status %d: %v", status, err)
+			}
+		})
 	}
 }
 
-func TestConnectionProbeFailureAndDNS(t *testing.T) {
-	_, err := probeConnectionWithDial(context.Background(), "https://127.0.0.1/", func(context.Context, string, string) (net.Conn, error) {
-		return nil, errors.New("unreachable")
-	})
-	if err == nil {
-		t.Fatal("failed dial reported success")
+func TestPageProbeRejectsCrossHostRedirect(t *testing.T) {
+	other := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("cross-host request reached destination") }))
+	defer other.Close()
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, other.URL, http.StatusFound) }))
+	defer server.Close()
+	_, err := probePageWithClient(context.Background(), server.URL, server.Client())
+	if err == nil || !strings.Contains(err.Error(), "HTTP 302") {
+		t.Fatalf("cross-host redirect: %v", err)
 	}
-	_, err = probeConnection(context.Background(), "https://invalid host/")
-	if err == nil {
-		t.Fatal("invalid host reported success")
+}
+
+func TestPageProbeRejectsLargeAndNonHTML(t *testing.T) {
+	for _, nonHTML := range []bool{false, true} {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if nonHTML {
+				w.Header().Set("Content-Type", "image/png")
+				w.Write([]byte("png"))
+				return
+			}
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(strings.Repeat("x", pageProbeLimit+1)))
+		}))
+		_, err := probePageWithClient(context.Background(), server.URL, server.Client())
+		server.Close()
+		if err == nil {
+			t.Fatalf("accepted invalid page (nonHTML=%v)", nonHTML)
+		}
 	}
 }

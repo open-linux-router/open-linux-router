@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -55,74 +58,72 @@ type LatencySnapshot struct {
 
 func NewLatencyMonitor() *LatencyMonitor {
 	return &LatencyMonitor{targets: []latencyTarget{
-		{Name: "Google", URL: "https://www.google.com/generate_204"},
+		{Name: "Google", URL: "https://www.google.com/"},
 		{Name: "Baidu", URL: "https://www.baidu.com/"},
 		{Name: "Yandex", URL: "https://ya.ru/"},
-		{Name: "Cloudflare", URL: "https://www.cloudflare.com/cdn-cgi/trace"},
-	}, probe: probeConnection, dnsProbe: probeDNS, snapshot: LatencySnapshot{State: "measuring", Sites: []LatencySite{}, Custom: []LatencySite{}}}
+		{Name: "Cloudflare", URL: "https://www.cloudflare.com/"},
+	}, probe: probePage, dnsProbe: probeDNS, snapshot: LatencySnapshot{State: "measuring", Sites: []LatencySite{}, Custom: []LatencySite{}}}
 }
 
-// probeConnection measures the TCP handshake to the site's HTTPS port.
-// Resolution is deliberately outside the timer, like a TCP ping to a hostname.
-func probeConnection(ctx context.Context, target string) (float64, error) {
-	return probeConnectionWithDial(ctx, target, (&net.Dialer{}).DialContext)
+const (
+	pageProbeTimeout = 15 * time.Second
+	pageProbeLimit   = 2 << 20
+)
+
+// probePage measures the whole HTTPS document, including DNS, redirects and body.
+// Assets and JavaScript are deliberately not fetched.
+func probePage(ctx context.Context, target string) (float64, error) {
+	return probePageWithDial(ctx, target, nil)
 }
 
-func probeConnectionMarked(ctx context.Context, target string, mark uint32) (float64, error) {
-	return probeConnectionWithDial(ctx, target, markedLatencyDial(mark))
+func probePageMarked(ctx context.Context, target string, mark uint32) (float64, error) {
+	return probePageWithDial(ctx, target, markedLatencyDial(mark))
 }
 
-func probeConnectionWithDial(ctx context.Context, target string, dial func(context.Context, string, string) (net.Conn, error)) (float64, error) {
-	return probeConnectionWithResolve(ctx, target, net.DefaultResolver.LookupIPAddr, dial)
+func probePageWithDial(ctx context.Context, target string, dial func(context.Context, string, string) (net.Conn, error)) (float64, error) {
+	transport := &http.Transport{DisableKeepAlives: true, TLSHandshakeTimeout: 4 * time.Second, DialContext: dial}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport}
+	return probePageWithClient(ctx, target, client)
 }
 
-func probeConnectionWithResolve(ctx context.Context, target string, resolve func(context.Context, string) ([]net.IPAddr, error), dial func(context.Context, string, string) (net.Conn, error)) (float64, error) {
-	u, err := url.Parse(target)
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" {
+func probePageWithClient(ctx context.Context, target string, client *http.Client) (float64, error) {
+	origin, err := url.Parse(target)
+	if err != nil || origin.Scheme != "https" || origin.Hostname() == "" {
 		return 0, fmt.Errorf("invalid HTTPS target")
 	}
-	addresses, err := resolve(ctx, u.Hostname())
+	copyClient := *client
+	copyClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 5 || req.URL.Scheme != "https" || !strings.EqualFold(req.URL.Hostname(), origin.Hostname()) || req.URL.Port() != origin.Port() {
+			return http.ErrUseLastResponse
+		}
+		return nil
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return 0, err
 	}
-	if len(addresses) == 0 {
-		return 0, &net.DNSError{Err: "no addresses", Name: u.Hostname()}
-	}
-	// Race the resolved addresses, as browsers do. One broken IPv6 address must
-	// not turn a healthy site's latency into the four-second timeout.
-	bounded, cancel := context.WithCancel(ctx)
-	defer cancel()
-	type result struct {
-		elapsed float64
-		err     error
-	}
-	results := make(chan result, len(addresses))
+	request.Header.Set("Accept", "text/html")
 	start := time.Now()
-	for _, address := range addresses {
-		go func(ip net.IPAddr) {
-			conn, err := dial(bounded, "tcp", net.JoinHostPort(ip.String(), "443"))
-			elapsed := float64(time.Since(start).Microseconds()) / 1000
-			if err == nil {
-				conn.Close()
-			}
-			results <- result{elapsed, err}
-		}(address)
+	response, err := copyClient.Do(request)
+	if err != nil {
+		return 0, err
 	}
-	var firstErr error
-	for range addresses {
-		select {
-		case <-ctx.Done():
-			return 0, ctx.Err()
-		case r := <-results:
-			if r.err == nil {
-				return r.elapsed, nil
-			}
-			if firstErr == nil {
-				firstErr = r.err
-			}
-		}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return 0, fmt.Errorf("HTTP %d", response.StatusCode)
 	}
-	return 0, firstErr
+	if kind := response.Header.Get("Content-Type"); kind != "" && !strings.HasPrefix(strings.ToLower(kind), "text/html") {
+		return 0, fmt.Errorf("not an HTML page")
+	}
+	count, err := io.Copy(io.Discard, io.LimitReader(response.Body, pageProbeLimit+1))
+	if err != nil {
+		return 0, err
+	}
+	if count > pageProbeLimit {
+		return 0, fmt.Errorf("page exceeds 2 MiB")
+	}
+	return float64(time.Since(start).Microseconds()) / 1000, nil
 }
 
 func latencyError(err error) string {
@@ -132,6 +133,9 @@ func latencyError(err error) string {
 	var dns *net.DNSError
 	if errors.As(err, &dns) {
 		return "DNS lookup failed"
+	}
+	if strings.HasPrefix(err.Error(), "HTTP ") || err.Error() == "page exceeds 2 MiB" || err.Error() == "not an HTML page" {
+		return err.Error()
 	}
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return "Timed out"
@@ -218,7 +222,7 @@ func (m *LatencyMonitor) sample(ctx context.Context) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			bounded, cancel := context.WithTimeout(ctx, 4*time.Second)
+			bounded, cancel := context.WithTimeout(ctx, pageProbeTimeout)
 			defer cancel()
 			value, err := m.probe(bounded, m.targets[i].URL)
 			sites[i].Milliseconds = nil
