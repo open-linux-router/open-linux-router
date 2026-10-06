@@ -53,6 +53,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
   })
   const [selected, setSelected] = useState<Event | null>(null)
   const [showQR, setShowQR] = useState(false)
+  const [showViewer, setShowViewer] = useState(false)
   const caURL = `${window.location.origin}/download/inspection-ca.crt`
   const caQR = useMemo(() => {
     try { return encodeQR(caURL, 'svg') } catch { return null }
@@ -84,7 +85,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <Badge variant={mine ? 'warning' : 'outline'}>{mine ? 'On' : 'Off'}</Badge>
       </div>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Inspect this device's network requests without choosing an address. It automatically turns off after 15 minutes. Inspect requests here, or open mitmweb locally over SSH for full request and response bodies. Full bodies remain in mitmweb memory for this session and are cleared on stop.
+        Inspect this device's network requests without choosing an address. It automatically turns off after 15 minutes. Inspect requests here, or open the built-in mitmweb viewer for full request and response bodies. Full bodies remain in mitmweb memory for this session and are cleared on stop.
       </p>
     </div>
     <div className="space-y-5 p-5 sm:p-7">
@@ -105,9 +106,17 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <Button variant="outline" disabled={!status.data?.ca_present} onClick={downloadCA}>Download public CA</Button>
         <Button variant="outline" disabled={!status.data?.ca_present} onClick={() => setShowQR(true)}>Show CA QR</Button>
       </div>
-      {mine && <p className="rounded-lg border p-3 text-sm">
-        Full request and response bodies: run <code className="font-mono">ssh -N -L 18082:127.0.0.1:18082 olr</code> on your computer, then open <code className="font-mono">http://127.0.0.1:18082</code> locally. Use the session token <code className="break-all font-mono">{status.data?.web_token}</code> at mitmweb's login prompt. Treat it as a secret; it expires when inspection stops. This viewer is not exposed on the LAN and closes with the session.
-      </p>}
+      {mine && <div className="space-y-3 rounded-lg border p-3 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p>Full requests and responses are available in the built-in mitmweb viewer.</p>
+          <Button variant="outline" onClick={() => setShowViewer((open) => !open)}>{showViewer ? 'Close full viewer' : 'Open full viewer'}</Button>
+        </div>
+        {showViewer && <>
+          <p className="text-xs text-muted-foreground">Use the session token below at mitmweb's login prompt. Treat it as a secret; it expires when inspection stops.</p>
+          <code className="block break-all rounded bg-muted p-2 font-mono text-xs">{status.data?.web_token}</code>
+          <iframe title="Full request and response inspection" src="/inspection-web/" className="h-[75vh] min-h-[480px] w-full rounded border bg-white" />
+        </>}
+      </div>}
       <p className="text-xs leading-relaxed text-muted-foreground">
         TCP ports 80/443 to public destinations only. When this device has an explicit gateway exit, the inspection proxy's upstream connections follow that exit too, including Clash fake IPs (198.18.0.0/15). Without an explicit exit, fake IPs bypass inspection and keep their normal route. QUIC/HTTP/3 (UDP/443), IPv6, non-HTTP traffic, pinned certificates and apps that reject user CAs are not inspected. No UDP blocking is applied. An empty list does not mean no connections occurred. The CA private key stays on this router.
       </p>
@@ -152,7 +161,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <p className="text-xs text-muted-foreground">Headers may contain credentials. They are held only in memory for this session.</p>
         <h4 className="font-medium">Headers</h4>
         <pre className="max-h-52 overflow-auto rounded-lg bg-muted p-3 text-xs">{JSON.stringify({ request: selected.request_headers, response: selected.response_headers }, null, 2)}</pre>
-        <p className="text-xs text-muted-foreground">For full request and response bodies, use the local mitmweb viewer while inspection is active.</p>
+        <p className="text-xs text-muted-foreground">For full request and response bodies, open the built-in mitmweb viewer while inspection is active.</p>
       </div>}
     </div>
   </section>

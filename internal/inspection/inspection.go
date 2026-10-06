@@ -14,7 +14,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/netip"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -156,6 +158,42 @@ func (s *Service) PublicCA(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="olr-debugging-ca.crt"`)
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(data)
+}
+
+// WebUI is the authenticated, session-scoped mitmweb surface. Never expose
+// mitmweb's loopback listener directly or forward arbitrary upstream hosts.
+func (s *Service) WebUI(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	active := s.session != nil && time.Now().Before(s.session.expires)
+	s.mu.Unlock()
+	if !active {
+		http.NotFound(w, r)
+		return
+	}
+	if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") && r.URL.Path != "/updates" {
+		http.Error(w, "websocket endpoint not allowed", http.StatusForbidden)
+		return
+	}
+	target := &url.URL{Scheme: "http", Host: "127.0.0.1:" + webPort}
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.Transport = &http.Transport{Proxy: nil}
+	proxy.Director = func(req *http.Request) {
+		req.URL.Scheme, req.URL.Host = target.Scheme, target.Host
+		req.Host = target.Host
+		if strings.EqualFold(req.Header.Get("Upgrade"), "websocket") {
+			req.Header.Set("Origin", "http://"+target.Host)
+		}
+	}
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		resp.Header.Del("X-Frame-Options")
+		resp.Header.Set("Cache-Control", "no-store")
+		resp.Header.Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; style-src 'self' 'unsafe-inline'")
+		return nil
+	}
+	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
+		http.Error(w, "inspection viewer unavailable", http.StatusBadGateway)
+	}
+	proxy.ServeHTTP(w, r)
 }
 
 func (s *Service) start(w http.ResponseWriter, r *http.Request) {
