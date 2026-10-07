@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { ServiceIconPicker } from '@/features/ingress/service-icon-picker'
 import { useDeviceList } from '@/features/devices/queries'
 import type { Service, UpstreamScheme } from '@/lib/config-types'
 
@@ -231,6 +232,8 @@ export function ServiceDialog({
             </p>
           </div>
 
+          <ServiceIconPicker name={name} icon={draft.icon} onChange={(icon) => setDraft((d) => ({ ...d, icon }))} />
+
           {withoutFixed > 0 && target !== MANUAL && (
             // Said here rather than as a validation error later: the device
             // somebody is looking for is missing from the list above, and the
@@ -333,6 +336,7 @@ export function ServiceDialog({
                   saved = await onSubmit({
                     name,
                     link_path: draft.link_path?.trim() || undefined,
+                    icon: draft.icon || undefined,
                     upstream: {
                       ...draft.upstream,
                       device: target === MANUAL ? undefined : target,

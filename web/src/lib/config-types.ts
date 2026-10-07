@@ -418,6 +418,7 @@ export interface Service {
   name: string
   upstream: UpstreamIngress
   link_path?: string
+  icon?: string
 }
 export interface UpstreamIngress {
   device?: string

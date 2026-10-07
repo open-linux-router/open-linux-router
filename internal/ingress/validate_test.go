@@ -310,3 +310,20 @@ func TestCloneKeepsRequestHeadersIndependent(t *testing.T) {
 		t.Fatalf("clone changed stored header: %q", got)
 	}
 }
+
+func TestValidateServiceIcon(t *testing.T) {
+	for _, icon := range []string{"", "thesvg:grafana", "data:image/png;base64,iVBORw0KGgoAAA=="} {
+		c := good()
+		c.Services[0].Icon = icon
+		if r := Validate(c, goodDNS(), goodDevices()); !r.OK() {
+			t.Errorf("%q: %v", icon, r.Errors)
+		}
+	}
+	for _, icon := range []string{"thesvg:../bad", "thesvg:", "https://elsewhere/icon.svg", "data:image/svg+xml;base64,PHN2Zz4=", "data:image/png;base64,bad"} {
+		c := good()
+		c.Services[0].Icon = icon
+		if Validate(c, goodDNS(), goodDevices()).OK() {
+			t.Errorf("accepted %q", icon)
+		}
+	}
+}

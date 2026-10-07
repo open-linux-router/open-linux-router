@@ -185,6 +185,9 @@ func validateServices(r *Result, c Config, domain string, dns DNSView, devices D
 				"Rename the service, or remove the name with `olr dns rm host %s`", qualify(s.Name, domain), s.Name)
 		}
 
+		if err := ValidateCustomIcon(s.Icon); err != nil {
+			r.errorf(path+".icon", "%v", err)
+		}
 		if s.LinkPath != "" {
 			parsed, err := url.Parse(s.LinkPath)
 			if err != nil || !strings.HasPrefix(s.LinkPath, "/") || strings.HasPrefix(s.LinkPath, "//") ||

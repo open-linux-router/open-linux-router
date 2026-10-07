@@ -53,6 +53,9 @@ An optional `link_path` (for example `/ui`) is only for the Overview
 shortcut and icon discovery. It opens that page under the published name;
 it does not rewrite requests or alter the Caddyfile. If the homepage redirects
 to a page with an icon, icon discovery follows same-origin HTTPS redirects.
+The WebUI can instead save a custom PNG/JPEG/WebP logo (resized to 128 px)
+or a theSVG icon ID for each service. Clearing it restores automatic favicon
+discovery; this changes only the Overview shortcut, not proxy routing.
 
 Each upstream may also set or remove request headers sent to that service.
 By default Caddy forwards the public `Host`; some appliances redirect requests

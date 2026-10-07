@@ -20,6 +20,7 @@ Flags:
       --header stringArray          set an upstream request header as 'Name: value', repeatable
   -h, --help                        help for add
       --host string                 address or hostname to publish, for a target that is not a device
+      --icon string                 custom icon: theSVG ID (thesvg:grafana) or PNG/JPEG/WebP data URL; empty uses the site favicon
       --link-path string            page path to open and use for its icon (e.g. /ui); does not change proxy routing
       --port uint16                 port the service listens on
       --remove-header stringArray   remove an upstream request header, repeatable

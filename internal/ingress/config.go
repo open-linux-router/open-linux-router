@@ -148,6 +148,9 @@ type Service struct {
 	// LinkPath is the optional page opened from the UI, not a proxy rewrite.
 	// A dashboard under /ui still receives requests through the same host.
 	LinkPath string `json:"link_path,omitempty"`
+
+	// Icon overrides automatic favicon discovery; empty uses the site icon.
+	Icon string `json:"icon,omitempty"`
 }
 
 // Upstream is the target of a published service.

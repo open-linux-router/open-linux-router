@@ -574,7 +574,7 @@ function ServiceLinks({ services, domain, className, compact = false }: { servic
       {services.slice(0, 8).map((service) => {
         const label = domain ? `${service.name}.${domain}` : service.name
         const version = serviceIconVersion(service, domain)
-        const tile = <ServiceIcon key={`${service.name}:${version}`} name={service.name} version={version} />
+        const tile = <ServiceIcon key={`${service.name}:${version}`} name={service.name} version={version} choice={service.icon} />
         return domain ? (
           <a key={service.name} href={`https://${label}${service.link_path ?? ''}`} target="_blank" rel="noopener noreferrer"
             title={`Open ${label}${service.link_path ?? ''}`} aria-label={`Open ${label}${service.link_path ?? ''}`}
@@ -598,7 +598,7 @@ function ServiceLinks({ services, domain, className, compact = false }: { servic
 // published destination or its icon-discovery path changes.
 function serviceIconVersion(service: Service, domain?: string): string {
   const { device, host, port, scheme } = service.upstream
-  const identity = JSON.stringify([service.name, domain, service.link_path, device, host, port, scheme])
+  const identity = JSON.stringify([service.name, domain, service.link_path, service.icon, device, host, port, scheme])
   let hash = 2166136261
   for (let i = 0; i < identity.length; i++) {
     hash = Math.imul(hash ^ identity.charCodeAt(i), 16777619)
@@ -606,9 +606,10 @@ function serviceIconVersion(service: Service, domain?: string): string {
   return (hash >>> 0).toString(36)
 }
 
-function ServiceIcon({ name, version }: { name: string; version: string }) {
+function ServiceIcon({ name, version, choice }: { name: string; version: string; choice?: string }) {
   const [icon, setIcon] = useState<string>()
   useEffect(() => {
+    if (choice) return
     const controller = new AbortController()
     let objectURL: string | undefined
     const token = getToken()
@@ -625,9 +626,11 @@ function ServiceIcon({ name, version }: { name: string; version: string }) {
       controller.abort()
       if (objectURL) URL.revokeObjectURL(objectURL)
     }
-  }, [name, version])
-  return icon ? (
-    <img src={icon} alt="" className="size-5 object-contain" />
+  }, [name, version, choice])
+  const preview = choice?.startsWith('data:') ? choice : choice?.startsWith('thesvg:')
+    ? `https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${choice.slice(7)}/default.svg` : icon
+  return preview ? (
+    <img src={preview} alt="" className="size-5 object-contain" />
   ) : (
     <span className="text-[10px] font-semibold uppercase" aria-hidden>{name.slice(0, 2)}</span>
   )

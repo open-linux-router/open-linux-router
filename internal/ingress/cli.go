@@ -366,7 +366,7 @@ func (f *upstreamFlags) apply(u *Upstream, c *cobra.Command) {
 
 func addCommand() *cobra.Command {
 	var flags upstreamFlags
-	var linkPath string
+	var linkPath, icon string
 
 	c := verb("add", "Publish a service at a name", func(c *cobra.Command) {
 		c.Use = "add <name>"
@@ -384,6 +384,7 @@ func addCommand() *cobra.Command {
 			"  olr ingress add mi --host 172.16.1.163 --port 80 --header 'Host: 172.16.1.163'"
 		flags.register(c)
 		c.Flags().StringVar(&linkPath, "link-path", "", "page path to open and use for its icon (e.g. /ui); does not change proxy routing")
+		c.Flags().StringVar(&icon, "icon", "", "custom icon: theSVG ID (thesvg:grafana) or PNG/JPEG/WebP data URL; empty uses the site favicon")
 		c.RunE = func(c *cobra.Command, args []string) error {
 			for _, entry := range flags.headers {
 				if !strings.Contains(entry, ":") {
@@ -394,7 +395,7 @@ func addCommand() *cobra.Command {
 			// holds the lock across the whole edit that way, and the rule that
 			// reduces `grafana` and `grafana.home.example.com` to one entry lives
 			// there rather than here (http.go).
-			s := Service{Name: args[0], LinkPath: linkPath}
+			s := Service{Name: args[0], LinkPath: linkPath, Icon: icon}
 			flags.apply(&s.Upstream, c)
 			return send(c, "PUT", serviceEndpoint(args[0]), s)
 		}

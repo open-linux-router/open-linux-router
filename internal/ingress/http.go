@@ -208,6 +208,18 @@ func (h HTTP) getServiceIcon(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if matched.Icon != "" {
+		data, kind, err := CustomIcon(r.Context(), matched.Icon)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", kind)
+		w.Header().Set("Cache-Control", "private, max-age=86400")
+		w.Header().Set("Vary", "Authorization")
+		w.Write(data)
+		return
+	}
 	domain := h.Applier.DNS.LocalDomain()
 	origin := (&url.URL{Scheme: "https", Host: qualify(name, domain), Path: matched.LinkPath}).String()
 	data, kind, err := DiscoverIcon(r.Context(), h.IconClient, origin)

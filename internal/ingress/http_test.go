@@ -316,3 +316,28 @@ func TestServiceIconUsesStoredLinkPath(t *testing.T) {
 		t.Fatalf("first path = %s", paths[0])
 	}
 }
+
+func TestServiceCustomIconRoundTrip(t *testing.T) {
+	h, applier := testHTTP(t)
+	publish(t, h)
+	icon := "data:image/png;base64,iVBORw0KGgoAAA=="
+	body := `{"upstream":{"device":"nuc","port":3000},"icon":"` + icon + `"}`
+	if w := do(t, h, http.MethodPut, "/services/grafana", body); w.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", w.Code, w.Body)
+	}
+	got := do(t, h, http.MethodGet, "/config", "")
+	if !strings.Contains(got.Body.String(), icon) {
+		t.Fatalf("icon not persisted: %s", got.Body)
+	}
+	routes := HTTP{Applier: applier, IconClient: &http.Client{Transport: iconTransport(func(*http.Request) (*http.Response, error) {
+		t.Fatal("custom icon should not discover favicon")
+		return nil, nil
+	})}}.Handler()
+	w := do(t, routes, http.MethodGet, "/services/grafana/icon", "")
+	if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "image/png" || !strings.HasPrefix(w.Body.String(), "\x89PNG\r\n\x1a\n") {
+		t.Fatalf("icon: %d %q", w.Code, w.Body.String())
+	}
+	if w := do(t, h, http.MethodPut, "/services/grafana", `{"upstream":{"device":"nuc","port":3000},"icon":"thesvg:../escape"}`); w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid icon: %d %s", w.Code, w.Body)
+	}
+}
