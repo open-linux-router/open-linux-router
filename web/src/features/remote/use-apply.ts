@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 
 import { useApplyRemoteChange, type RemoteChangeRequest } from '@/features/remote/queries'
 import { ApiError } from '@/lib/api'
-import type { RemoteApplyResult, RemotePeerResult, RemotePlan } from '@/lib/api-types'
+import type { ProxyPlan, RemoteApplyResult, RemotePeerResult, RemotePlan } from '@/lib/api-types'
 
 /**
  * The apply interaction for the remote-access screen.
@@ -31,7 +31,7 @@ export function useRemoteApply() {
   /** A change the daemon held back because it would be disruptive. */
   const [confirming, setConfirming] = useState<{
     change: RemoteChangeRequest
-    plan: RemotePlan
+    plan: RemotePlan | ProxyPlan
   } | null>(null)
 
   /** The steps of the last failed apply, which the page keeps on screen. */
@@ -73,7 +73,7 @@ export function useRemoteApply() {
       const body = error.body as RemoteApplyResult | undefined
       const plan = body?.plan
 
-      if (error.status === 409 && plan?.blocked) {
+      if (error.status === 409 && plan && 'blocked' in plan && plan.blocked) {
         // Not a decision the operator can make from here: the interface name
         // belongs to another program, and the answer is in that program's
         // configuration or in a different name.

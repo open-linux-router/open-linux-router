@@ -15,11 +15,13 @@ import {
 } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import type { ProxyStatus } from '@/lib/api-types'
+import type { Shadowsocks } from '@/lib/config-types'
 
 import { WayMark } from './way-mark'
 
 import { ProxyLinkDialog } from './proxy-link'
 import { shadowsocksChange, useShadowsocksLink } from './queries'
+import { ShadowsocksSettings } from './shadowsocks-settings'
 import type { useRemoteApply } from './use-apply'
 
 /**
@@ -37,11 +39,14 @@ import type { useRemoteApply } from './use-apply'
  */
 export function ProxyCard({
   status,
+  config,
   applier,
 }: {
   status?: ProxyStatus
+  config: Shadowsocks
   applier: ReturnType<typeof useRemoteApply>
 }) {
+  const [editing, setEditing] = useState(false)
   const [link, setLink] = useState<{ url: string; label?: string } | null>(null)
   const fetchLink = useShadowsocksLink()
 
@@ -83,6 +88,9 @@ export function ProxyCard({
             your network.
           </CardDescription>
           <CardAction className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)} disabled={applier.busy}>
+              Settings
+            </Button>
             {enabled && !missing && (
               <Button
                 size="sm"
@@ -147,6 +155,14 @@ export function ProxyCard({
           )}
         </CardContent>
       </Card>
+
+      {editing && (
+        <ShadowsocksSettings
+          initial={config}
+          onOpenChange={setEditing}
+          onSubmit={(fields) => applier.submit(shadowsocksChange.settings(fields))}
+        />
+      )}
 
       {link && (
         <ProxyLinkDialog

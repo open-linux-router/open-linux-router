@@ -43,7 +43,7 @@ import {
 import { SettingsDialog } from '@/features/remote/settings-dialog'
 import { useRemoteApply } from '@/features/remote/use-apply'
 import { WayMark } from '@/features/remote/way-mark'
-import type { RemotePeer, RemoteStatus } from '@/lib/api-types'
+import type { ProxyPlan, RemotePeer, RemoteStatus } from '@/lib/api-types'
 
 export function RemotePage() {
   const config = useRemoteConfig()
@@ -179,7 +179,7 @@ export function RemotePage() {
           network is the reason this page exists, and the two proxies — internet
           access through this router, nothing on the network — are the narrower
           second thing. */}
-      <ProxyCard status={proxy.data} applier={applier} />
+      <ProxyCard status={proxy.data} config={config.data.shadowsocks} applier={applier} />
       <SocksCard status={socks.data} applier={applier} />
 
       <PeerDialog
@@ -390,10 +390,16 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useRemoteApply>
         </DialogHeader>
 
         <div className="space-y-4">
-          <PlanReasons plan={held.plan} />
-          <Disclosure summary="What would change">
-            <PlanDiff plan={held.plan} />
-          </Disclosure>
+          {'action' in held.plan ? (
+            <ProxyConfirmation plan={held.plan} />
+          ) : (
+            <>
+              <PlanReasons plan={held.plan} />
+              <Disclosure summary="What would change">
+                <PlanDiff plan={held.plan} />
+              </Disclosure>
+            </>
+          )}
         </div>
 
         <DialogFooter>
@@ -406,6 +412,30 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useRemoteApply>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function ProxyConfirmation({ plan }: { plan: ProxyPlan }) {
+  return (
+    <>
+      {plan.reasons?.map((reason) => <p key={reason} className="text-sm">{reason}</p>)}
+      {plan.password_generated && (
+        <p className="text-sm text-destructive">
+          A new password will be generated. Copy the new link after applying this change.
+        </p>
+      )}
+      <Disclosure summary="What would change">
+        <ul className="space-y-2 text-sm">
+          {plan.changes.map((change) => (
+            <li key={change.path}>
+              {change.kind} {change.path}
+              {!change.secret && change.diff && <pre className="overflow-x-auto text-xs">{change.diff}</pre>}
+            </li>
+          ))}
+          {plan.action !== 'none' && <li>Service: {plan.action}</li>}
+        </ul>
+      </Disclosure>
+    </>
   )
 }
 
