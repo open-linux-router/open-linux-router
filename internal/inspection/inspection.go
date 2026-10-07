@@ -226,6 +226,9 @@ func (s *Service) WebUI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	proxy.ModifyResponse = func(resp *http.Response) error {
+		if resp.StatusCode == http.StatusSwitchingProtocols {
+			return nil
+		}
 		resp.Header.Del("X-Frame-Options")
 		resp.Header.Del("Set-Cookie")
 		resp.Header.Set("Cache-Control", "no-store")
