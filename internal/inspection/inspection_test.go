@@ -216,3 +216,44 @@ func TestViewerAccessRequiresSessionAndCookie(t *testing.T) {
 		t.Fatalf("stopped viewer = %d", rec.Code)
 	}
 }
+
+func TestViewerWebSocketUpgrade(t *testing.T) {
+	// A 101 response must retain its hop-by-hop upgrade headers. Rewriting it
+	// like an HTML response makes ReverseProxy reject the protocol switch.
+	listener, err := net.Listen("tcp", "127.0.0.1:18082")
+	if err != nil {
+		t.Skipf("mitmweb port unavailable: %v", err)
+	}
+	defer listener.Close()
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/updates" || r.Header.Get("Authorization") != "Bearer secret" {
+			http.Error(w, "unexpected request", http.StatusBadRequest)
+			return
+		}
+		conn, rw, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		fmt.Fprint(rw, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n")
+		rw.Flush()
+		time.Sleep(100 * time.Millisecond)
+	})}
+	go server.Serve(listener)
+	defer server.Close()
+	s := &Service{session: &session{webToken: "secret", expires: time.Now().Add(time.Minute)}}
+	front := httptest.NewServer(http.HandlerFunc(s.WebUI))
+	defer front.Close()
+	conn, err := net.Dial("tcp", strings.TrimPrefix(front.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	fmt.Fprintf(conn, "GET /updates HTTP/1.1\r\nHost: %s\r\nOrigin: %s\r\nCookie: %s=secret\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", strings.TrimPrefix(front.URL, "http://"), front.URL, viewerCookie)
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	buf := make([]byte, 512)
+	n, err := conn.Read(buf)
+	if err != nil || !strings.Contains(string(buf[:n]), "101 Switching Protocols") {
+		t.Fatalf("upgrade = %q, %v", buf[:n], err)
+	}
+}
