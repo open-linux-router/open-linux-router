@@ -1,6 +1,6 @@
-import { AlertTriangle, ChevronRight } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, useLocation } from 'react-router'
+import { useLocation } from 'react-router'
 
 import { SettingsList } from '@/components/layout/settings-list'
 import { NetworksContent } from '@/routes/gateway/networks'
@@ -29,9 +29,6 @@ import { Switch } from '@/components/ui/switch'
 import { ApplyOutcome, useGatewayEditor } from '@/features/gateway/editor'
 import { DIRECT } from '@/features/gateway/network-list'
 import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/gateway/plan-preview'
-import { InterfaceVisual, interfaceState } from '@/features/link/interface-visual'
-import { useInterfaces } from '@/features/link/queries'
-import { useUplink } from '@/features/dial/queries'
 import { gatewayChange, useGatewayStatus, usePlanGatewayRepair, useReapplyGateway } from '@/features/gateway/queries'
 import { ApiError } from '@/lib/api'
 import type { GatewayApplyResult, GatewayPlan } from '@/lib/api-types'
@@ -51,8 +48,6 @@ export function GatewayPage() {
   const [repairError, setRepairError] = useState<string | null>(null)
   const [repairFailure, setRepairFailure] = useState<GatewayApplyResult | null>(null)
   const [repairAttempted, setRepairAttempted] = useState(false)
-  const interfaces = useInterfaces()
-  const uplink = useUplink()
   const { hash } = useLocation()
 
   useEffect(() => {
@@ -182,61 +177,25 @@ export function GatewayPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.42fr)]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Interfaces</CardTitle>
-            <CardDescription>Connections on this router. Open one to inspect its link, addresses, and settings.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {interfaces.isError ? (
-              <Alert variant="destructive" role="alert"><AlertTriangle /><AlertTitle>Could not load interfaces</AlertTitle><AlertDescription>{interfaces.error.message}</AlertDescription></Alert>
-            ) : interfaces.isPending ? (
-              <p className="text-sm text-muted-foreground">Loading interfaces…</p>
-            ) : !interfaces.data.interfaces.length ? (
-              <p className="text-sm text-muted-foreground">This machine reports no interfaces.</p>
-            ) : (
-              <ul className="divide-y rounded-xl border">
-                {interfaces.data.interfaces.map((row) => {
-                  const isUplink = row.name === uplink.data?.uplink?.interface
-                  const state = interfaceState(row)
-                  return <li key={row.name}>
-                    <Link to={`/gateway/interfaces/${encodeURIComponent(row.name)}`} className="flex min-h-20 items-center gap-4 px-4 py-3 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
-                      <InterfaceVisual row={row} uplink={isUplink} />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"><span className="font-mono text-sm font-semibold">{row.name}</span><span className="text-xs text-muted-foreground">{isUplink ? 'Internet uplink' : row.network ? `${row.network} network` : row.loopback ? 'Local only' : row.adopted ? 'Available to configure' : 'Not managed'}</span></span>
-                        <span className="mt-1 block truncate text-xs text-muted-foreground">{row.prefixes?.join(' · ') || 'No IP address'}</span>
-                      </span>
-                      <span className={`hidden shrink-0 text-xs font-medium sm:block ${state.tone}`}>{state.label}</span>
-                      <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                    </Link>
-                  </li>
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Internet via</CardTitle>
-            <CardDescription>Default route for devices on your networks. An interface can choose a different way out in its details.</CardDescription>
-            <CardAction>
-              <Switch aria-label="Apply gateway settings" checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change(gatewayChange.settings({ enabled }))} />
-            </CardAction>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Select value={config.default || DIRECT} disabled={busy} onValueChange={(v) => change(gatewayChange.settings({ default: !v || v === DIRECT ? '' : v }))}>
-              <SelectTrigger className="w-full" aria-label="Default internet route"><SelectValue>{(v: string) => v === DIRECT ? 'This router’s own connection' : v}</SelectValue></SelectTrigger>
-              <SelectContent><SelectItem value={DIRECT}>This router&rsquo;s own connection</SelectItem>{exits.map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
-            </Select>
-            {!config.enabled && <p className="text-xs text-muted-foreground">Gateway rules are off. Networks use this router&rsquo;s connection.</p>}
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="max-w-xl">
+        <CardHeader>
+          <CardTitle>Internet via</CardTitle>
+          <CardDescription>Default route for devices on your networks. An interface can choose a different way out in its details.</CardDescription>
+          <CardAction>
+            <Switch aria-label="Apply gateway settings" checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change(gatewayChange.settings({ enabled }))} />
+          </CardAction>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Select value={config.default || DIRECT} disabled={busy} onValueChange={(v) => change(gatewayChange.settings({ default: !v || v === DIRECT ? '' : v }))}>
+            <SelectTrigger className="w-full" aria-label="Default internet route"><SelectValue>{(v: string) => v === DIRECT ? 'This router’s own connection' : v}</SelectValue></SelectTrigger>
+            <SelectContent><SelectItem value={DIRECT}>This router&rsquo;s own connection</SelectItem>{exits.map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
+          </Select>
+          {!config.enabled && <p className="text-xs text-muted-foreground">Gateway rules are off. Networks use this router&rsquo;s connection.</p>}
+        </CardContent>
+      </Card>
 
       <section id="networks" className="space-y-4 border-t pt-6" aria-labelledby="networks-heading">
-        <h2 id="networks-heading" className="text-xl font-semibold tracking-tight">Networks</h2>
+        <h2 id="networks-heading" className="text-xl font-semibold tracking-tight">Interfaces &amp; networks</h2>
         <NetworksContent />
       </section>
 

@@ -1,5 +1,6 @@
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { toast } from 'sonner'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -40,11 +41,9 @@ import { cn } from '@/lib/utils'
  * to grant — and the DHCP and DNS landing pages now say so *before* the switch
  * is touched, linking to the page this card sits on.
  *
- * That page is routes/gateway/networks, which is where adoption belongs: the next thing
- * you do with an adopted interface is put a network on it, and that form is
- * directly below. It was a sub-page of DHCP until it moved, and the heading
- * above it is still the page's rather than this component's — a card heading
- * under a section heading would say "Interfaces" twice.
+ * Adoption sits above the network form on Gateway, so an interface can be
+ * handed over before a network is assigned. Detail links remain available for
+ * link diagnostics and per-interface settings.
  */
 export function InterfacesCard({
   dhcp,
@@ -288,6 +287,14 @@ function InterfaceItem({
       <Label htmlFor={id} className="sr-only">
         Give {row.name} to this router
       </Label>
+      <Link
+        to={`/gateway/interfaces/${encodeURIComponent(row.name)}`}
+        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+        aria-label={`View ${row.name} details`}
+        title={`View ${row.name} details`}
+      >
+        <ChevronRight className="size-4" aria-hidden />
+      </Link>
       <Switch
         id={id}
         checked={row.adopted}

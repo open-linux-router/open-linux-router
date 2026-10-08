@@ -99,7 +99,7 @@ export function NetworksContent() {
 
       <section className="space-y-3">
         <div className="space-y-1">
-          <h2 className="text-lg font-medium tracking-tight">Interfaces</h2>
+          <h3 className="text-lg font-medium tracking-tight">Interfaces</h3>
           <p className="max-w-prose text-sm text-muted-foreground">
             Which of this machine's interfaces this router may use. Switching one on changes
             nothing by itself — no address is set and no service is started — but until one is
@@ -114,7 +114,7 @@ export function NetworksContent() {
             foot of a three-line paragraph. */}
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
-            <h2 className="text-lg font-medium tracking-tight">Networks</h2>
+            <h3 className="text-lg font-medium tracking-tight">Served networks</h3>
             <p className="max-w-prose text-sm text-muted-foreground">
               A network is a subnet, the interface it lives on, and this router's address on
               it — one per subnet you serve. Address ranges and internet access are configured
@@ -158,7 +158,7 @@ export function NetworksContent() {
 
       <section className="space-y-3">
         <div className="space-y-1">
-          <h2 className="text-lg font-medium tracking-tight">Internet uplink</h2>
+          <h3 className="text-lg font-medium tracking-tight">Internet uplink</h3>
           <p className="max-w-prose text-sm text-muted-foreground">
             How this router itself reaches the internet: the interface facing your modem, its
             address, and where to send everything else. Not a network — a network is one this
