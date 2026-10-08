@@ -1,8 +1,9 @@
-import { Activity, ArrowDown, ArrowUp, Copy, Gauge, LoaderCircle } from 'lucide-react'
+import { Activity, ArrowDown, ArrowUp, Copy, Gauge, LoaderCircle, Radio } from 'lucide-react'
 import { useState } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { ApiError, api } from '@/lib/api'
 
 interface TestError {
@@ -42,7 +43,37 @@ interface SpeedResult {
   upload_mbps: number
 }
 
+interface PingResult {
+  target: string
+  address: string
+  sent: number
+  received: number
+  loss_percent: number
+  min_ms: number
+  avg_ms: number
+  max_ms: number
+}
+
 export function ToolsPage() {
+  const [target, setTarget] = useState('1.1.1.1')
+  const [pingResult, setPingResult] = useState<PingResult | null>(null)
+  const [pingRunning, setPingRunning] = useState(false)
+  const [pingError, setPingError] = useState<string | null>(null)
+
+  async function runPing(event: React.SubmitEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setPingRunning(true)
+    setPingResult(null)
+    setPingError(null)
+    try {
+      setPingResult(await api.post<PingResult>('/api/tools/ping', { target: target.trim() }))
+    } catch (err) {
+      setPingError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPingRunning(false)
+    }
+  }
+
   const [result, setResult] = useState<SpeedResult | null>(null)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<TestError | null>(null)
@@ -128,7 +159,40 @@ export function ToolsPage() {
           <p className="text-sm text-muted-foreground">Test server: {result.server} · {result.location}</p>
         </div>
       )}
-      <p className="text-xs text-muted-foreground">More network tools, including ping and traceroute, will appear here in the future.</p>
+      <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="ping-heading">
+        <div className="flex items-start gap-4">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Radio className="size-5" aria-hidden /></div>
+          <div className="space-y-1">
+            <h2 id="ping-heading" className="text-xl font-semibold tracking-tight">Ping a destination</h2>
+            <p className="text-sm text-muted-foreground">Send four ICMP probes from the router, not your browser, to check reachability and latency.</p>
+          </div>
+        </div>
+        <form onSubmit={runPing} className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <label className="flex-1 space-y-2 text-sm font-medium" htmlFor="ping-target">
+            Hostname or IP address
+            <Input id="ping-target" value={target} onChange={event => setTarget(event.target.value)} placeholder="example.com or 192.168.1.1" maxLength={253} required disabled={pingRunning} />
+          </label>
+          <Button type="submit" disabled={pingRunning || !target.trim()}>
+            {pingRunning && <LoaderCircle className="animate-spin" aria-hidden />}
+            {pingRunning ? 'Pinging…' : 'Run ping'}
+          </Button>
+        </form>
+        {pingRunning && <p role="status" className="mt-4 text-sm text-muted-foreground">Sending four probes. This may take up to 10 seconds.</p>}
+        {pingError && <Alert variant="destructive" className="mt-5"><AlertTitle>Ping unavailable</AlertTitle><AlertDescription className="break-words">{pingError}</AlertDescription></Alert>}
+        {pingResult && (
+          <div className="mt-6 space-y-4" aria-live="polite">
+            <p className="text-sm text-muted-foreground">{pingResult.target} resolved to <span className="font-mono text-foreground">{pingResult.address}</span></p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Metric icon={Radio} label="Packet loss" value={pingResult.loss_percent} unit="%" detail={`${pingResult.received} of ${pingResult.sent} replies`} />
+              <Metric icon={Activity} label="Average RTT" value={pingResult.avg_ms} unit="ms" detail={pingResult.received ? `Min ${pingResult.min_ms.toFixed(1)} · Max ${pingResult.max_ms.toFixed(1)} ms` : 'No replies received'} />
+              <div className="flex items-center rounded-xl border bg-card p-5 text-sm text-muted-foreground">
+                {pingResult.received === 0 ? 'No replies. The destination may be unreachable or block ICMP.' : 'Replies received from the destination.'}
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+      <p className="text-xs text-muted-foreground">Traceroute will appear here in the future.</p>
     </div>
   )
 }

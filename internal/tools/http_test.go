@@ -87,3 +87,69 @@ func TestTryServersLimitsAttemptsAndReportsFailure(t *testing.T) {
 		t.Fatalf("attempts=%d, err=%v", attempts, err)
 	}
 }
+
+func TestPingReturnsResult(t *testing.T) {
+	h := &HTTP{RunPing: func(_ context.Context, target string) (PingResult, error) {
+		if target != "example.com" {
+			t.Errorf("target = %q", target)
+		}
+		return PingResult{Target: target, Address: "192.0.2.1", Sent: 4, Received: 0, LossPercent: 100}, nil
+	}}
+	w := httptest.NewRecorder()
+	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/ping", strings.NewReader(`{"target":"example.com"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	var result PingResult
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Address != "192.0.2.1" || result.LossPercent != 100 {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestPingRejectsInvalidTargets(t *testing.T) {
+	h := &HTTP{RunPing: func(context.Context, string) (PingResult, error) {
+		t.Fatal("ran ping with invalid target")
+		return PingResult{}, nil
+	}}
+	for _, target := range []string{"", "https://example.com", "example.com:80", "-bad.example", "a..b", "host/name", "fe80::1%eth0"} {
+		t.Run(target, func(t *testing.T) {
+			body, _ := json.Marshal(map[string]string{"target": target})
+			w := httptest.NewRecorder()
+			core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/ping", strings.NewReader(string(body))))
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status %d: %s", w.Code, w.Body.String())
+			}
+		})
+	}
+	for _, target := range []string{"192.0.2.1", "2001:db8::1", "router.local"} {
+		if !validPingTarget(target) {
+			t.Errorf("valid target %q rejected", target)
+		}
+	}
+}
+
+func TestPingRejectsConcurrentRun(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	h := &HTTP{RunPing: func(context.Context, string) (PingResult, error) {
+		close(started)
+		<-release
+		return PingResult{}, nil
+	}}
+	routes := core.RouteTable(h.Routes())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		routes.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/ping", strings.NewReader(`{"target":"localhost"}`)))
+	}()
+	<-started
+	w := httptest.NewRecorder()
+	routes.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/ping", strings.NewReader(`{"target":"localhost"}`)))
+	close(release)
+	<-done
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status %d, want 409", w.Code)
+	}
+}

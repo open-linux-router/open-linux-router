@@ -26,7 +26,10 @@ type SpeedResult struct {
 }
 
 type HTTP struct {
-	running atomic.Bool
+	running     atomic.Bool
+	pingRunning atomic.Bool
+	// RunPing is replaceable in tests; nil sends real ICMP echo requests.
+	RunPing func(context.Context, string) (PingResult, error)
 	// Run is replaceable in tests; nil uses the actual network test.
 	Run func(context.Context) (SpeedResult, error)
 }
@@ -36,6 +39,10 @@ func (h *HTTP) Routes() []core.Route {
 		Method: "POST", Path: "/speedtest", Mutating: true,
 		Summary: "Measure this router's internet latency, download and upload speed using speedtest-go; consumes bandwidth.",
 		Handler: h.speedtest,
+	}, {
+		Method: "POST", Path: "/ping", Mutating: true,
+		Summary: "Send four ICMP echo requests from this router to a hostname or IP address and report packet loss and latency.",
+		Handler: h.ping,
 	}}
 }
 
