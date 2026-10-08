@@ -21,9 +21,18 @@ type Boundary interface {
 	// what must stay reachable from there.
 	Openings() ([]Opening, error)
 
+	// IPTV reads the enabled multicast path from its owning module.
+	IPTV() (IPTV, error)
+
 	// InterfaceOf names the interface holding a local address, for the
 	// lockout warning. False when no interface holds it.
 	InterfaceOf(addr netip.Addr) (string, bool)
+}
+
+// IPTV is the selected IPv4 multicast path, empty when disabled.
+type IPTV struct {
+	Upstream   string
+	Downstream []string
 }
 
 // Protocol is a transport.
@@ -85,9 +94,12 @@ type StaticBoundary struct {
 	Open       []Opening
 	Addresses  map[netip.Addr]string
 	Err        error
+	Multicast  IPTV
 }
 
 // Inside implements Boundary.
+func (b StaticBoundary) IPTV() (IPTV, error) { return b.Multicast, b.Err }
+
 func (b StaticBoundary) Inside() ([]string, error) { return b.Interfaces, b.Err }
 
 // Openings implements Boundary.

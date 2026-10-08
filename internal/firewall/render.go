@@ -58,6 +58,8 @@ const (
 	RulePortForward
 	RuleForwardICMPv6
 	RuleDrop
+	RuleIPTVIGMP
+	RuleIPTVStream
 )
 
 // Rule is one rule, in the order it is evaluated.
@@ -66,6 +68,9 @@ type Rule struct {
 
 	// Opening is set for RuleOpening.
 	Opening Opening
+
+	Upstream   string
+	Downstream string
 
 	// Counter is set for RuleDrop.
 	Counter string
@@ -86,6 +91,7 @@ type Desired struct {
 
 	// Openings are the ports served to the outside, sorted.
 	Openings []Opening
+	IPTV     IPTV
 
 	Input   []Rule
 	Forward []Rule
@@ -97,12 +103,17 @@ type Desired struct {
 // empty inside list, which would render a table that drops the operator's own
 // connection; Validate refuses that before anything reaches here.
 func Render(c Config, inside []string, openings []Opening) Desired {
+	return RenderIPTV(c, inside, openings, IPTV{})
+}
+
+func RenderIPTV(c Config, inside []string, openings []Opening, iptv IPTV) Desired {
 	d := Desired{Enabled: c.Enabled}
 	if !c.Enabled {
 		return d
 	}
 	d.Inside = normalizeInside(inside)
 	d.Openings = normalizeOpenings(openings)
+	d.IPTV = iptv
 	names := strings.Join(d.Inside, ",")
 
 	rule := func(chain string, kind RuleKind, what string) Rule {
@@ -126,6 +137,12 @@ func Render(c Config, inside []string, openings []Opening) Desired {
 		// not belong to any connection conntrack has seen.
 		rule(InputChain, RuleDHCPClient, "dhcp client accept"),
 		rule(InputChain, RuleDHCPv6Client, "dhcpv6 client accept"),
+	}
+	if iptv.Upstream != "" {
+		for _, down := range iptv.Downstream {
+			d.Input = append(d.Input, Rule{Kind: RuleIPTVIGMP, Downstream: down, Line: fmt.Sprintf("nft input igmp from %s for IPTV", down)})
+		}
+		d.Input = append(d.Input, Rule{Kind: RuleIPTVIGMP, Downstream: iptv.Upstream, Line: fmt.Sprintf("nft input igmp from %s for IPTV", iptv.Upstream)})
 	}
 	for _, o := range d.Openings {
 		d.Input = append(d.Input, Rule{Kind: RuleOpening, Opening: o, Line: o.Line()})
@@ -154,6 +171,12 @@ func Render(c Config, inside []string, openings []Opening) Desired {
 			Kind: RuleDrop, Counter: ForwardCounter,
 			Line: fmt.Sprintf("nft %s drop counter %s", ForwardChain, ForwardCounter),
 		},
+	}
+	if iptv.Upstream != "" {
+		for _, down := range iptv.Downstream {
+			rule := Rule{Kind: RuleIPTVStream, Upstream: iptv.Upstream, Downstream: down, Line: fmt.Sprintf("nft forward IPv4 multicast %s to %s for IPTV", iptv.Upstream, down)}
+			d.Forward = append(d.Forward[:len(d.Forward)-1], rule, d.Forward[len(d.Forward)-1])
+		}
 	}
 	return d
 }

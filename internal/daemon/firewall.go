@@ -10,6 +10,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/dial"
 	"github.com/open-linux-router/open-linux-router/internal/firewall"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
+	"github.com/open-linux-router/open-linux-router/internal/iptv"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
 )
@@ -114,6 +115,22 @@ func (b firewallBoundary) Openings() ([]firewall.Opening, error) {
 			Protocol: firewall.SixInFour, From: dc.Uplink.IPv6.Server})
 	}
 	return out, nil
+}
+
+func (b firewallBoundary) IPTV() (firewall.IPTV, error) {
+	doc, err := b.store.Load()
+	if err != nil {
+		return firewall.IPTV{}, err
+	}
+	cfg, err := iptv.FromDocument(doc)
+	if err != nil {
+		return firewall.IPTV{}, err
+	}
+	resolved, err := iptv.Resolve(cfg, iptvLinks{facts: b.facts})
+	if err != nil {
+		return firewall.IPTV{}, err
+	}
+	return firewall.IPTV{Upstream: resolved.Upstream, Downstream: resolved.Downstream}, nil
 }
 
 // InterfaceOf implements firewall.Boundary.

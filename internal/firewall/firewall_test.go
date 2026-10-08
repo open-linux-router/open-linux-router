@@ -228,3 +228,38 @@ func TestASixInFourOpeningNamesItsSource(t *testing.T) {
 		t.Errorf("want the two sources kept and the duplicate dropped, got %+v", got)
 	}
 }
+
+func TestIPTVRulesAreNarrowAndRemovedWhenDisabled(t *testing.T) {
+	iptv := IPTV{Upstream: "iptv0", Downstream: []string{"lan0"}}
+	desired := RenderIPTV(Config{Enabled: true}, []string{"lan0"}, nil, iptv)
+	var igmp, multicast int
+	for _, r := range desired.Input {
+		if r.Kind == RuleIPTVIGMP {
+			igmp++
+		}
+	}
+	for _, r := range desired.Forward {
+		if r.Kind == RuleIPTVStream {
+			multicast++
+			if r.Upstream != "iptv0" || r.Downstream != "lan0" {
+				t.Fatalf("broad multicast rule: %+v", r)
+			}
+		}
+	}
+	if igmp != 2 || multicast != 1 {
+		t.Fatalf("IGMP rules = %d, streams = %d", igmp, multicast)
+	}
+	if desired.Input[len(desired.Input)-1].Kind != RuleDrop || desired.Forward[len(desired.Forward)-1].Kind != RuleDrop {
+		t.Fatal("IPTV bypassed final drop")
+	}
+	off := RenderIPTV(Config{}, []string{"lan0"}, nil, iptv)
+	if len(off.Lines()) != 0 {
+		t.Fatalf("firewall off retained IPTV rules: %v", off.Lines())
+	}
+	cleared := RenderIPTV(Config{Enabled: true}, []string{"lan0"}, nil, IPTV{})
+	for _, r := range append(cleared.Input, cleared.Forward...) {
+		if r.Kind == RuleIPTVIGMP || r.Kind == RuleIPTVStream {
+			t.Fatalf("IPTV disabled but rule remains: %+v", r)
+		}
+	}
+}

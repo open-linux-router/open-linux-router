@@ -90,7 +90,14 @@ func BuildPlan(c Config, b Boundary, obs Observed, via string) (Plan, Desired, e
 		return Plan{}, Desired{}, err
 	}
 
-	desired := Render(c, inside, openings)
+	var iptv IPTV
+	if c.Enabled {
+		iptv, err = b.IPTV()
+		if err != nil {
+			return Plan{}, Desired{}, fmt.Errorf("reading IPTV: %w", err)
+		}
+	}
+	desired := RenderIPTV(c, inside, openings, iptv)
 	plan := Plan{Impact: ImpactNone, Empty: true}
 
 	if obs.Known {

@@ -13,6 +13,7 @@ Modules:
   firewall    Block connections from outside that nothing here asked for
   gateway     The boundary with the internet: exits, NAT and port forwards
   ingress     Publish internal services at https:// names
+  iptv        Routed IPTV multicast (IGMP proxy)
   link        Network interfaces olr has been given
   remote      Get back into your network from outside it
   system      Show how this router may be reached

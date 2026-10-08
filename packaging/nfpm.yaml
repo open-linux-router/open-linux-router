@@ -99,6 +99,8 @@ contents:
   # take over :53 on a box where nobody asked for either.
   - src: internal/packaging/systemd/olrd.service
     dst: /lib/systemd/system/olrd.service
+  - src: internal/packaging/systemd/olr-iptv.service
+    dst: /lib/systemd/system/olr-iptv.service
   - src: internal/packaging/systemd/olr-dhcp.service
     dst: /lib/systemd/system/olr-dhcp.service
   - src: internal/packaging/systemd/olr-dns.service

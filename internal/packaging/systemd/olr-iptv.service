@@ -1,0 +1,12 @@
+[Unit]
+Description=open-linux-router IPTV multicast proxy (igmpproxy)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/igmpproxy -n /etc/open-linux-router/rendered/iptv/igmpproxy.conf
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

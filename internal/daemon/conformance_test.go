@@ -19,6 +19,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/inspection"
+	"github.com/open-linux-router/open-linux-router/internal/iptv"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/qos"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
@@ -55,6 +56,7 @@ func moduleRoutes() map[string][]core.Route {
 		ingress.ModuleName:    ingress.HTTP{}.Routes(),
 		firewall.ModuleName:   firewall.HTTP{}.Routes(),
 		inspection.ModuleName: (&inspection.Service{}).Routes(),
+		iptv.ModuleName:       iptv.HTTP{}.Routes(),
 	}
 }
 

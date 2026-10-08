@@ -22,7 +22,7 @@ esac
 # Leaving that table behind would send every device's DNS to a port nothing is
 # listening on — a box with olr uninstalled and no working name resolution,
 # which is a far worse parting gift than a stopped service.
-for unit in olr-dnsd.service olr-dns.service olr-dhcp.service olrd.service; do
+for unit in olr-iptv.service olr-dnsd.service olr-dns.service olr-dhcp.service olrd.service; do
 	systemctl stop "$unit" >/dev/null 2>&1 || true
 	systemctl disable "$unit" >/dev/null 2>&1 || true
 done

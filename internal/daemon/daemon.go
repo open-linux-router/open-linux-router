@@ -44,6 +44,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/host"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/inspection"
+	"github.com/open-linux-router/open-linux-router/internal/iptv"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/mcp"
 	"github.com/open-linux-router/open-linux-router/internal/qos"
@@ -193,7 +194,7 @@ func run(args []string) error {
 	// are served to the outside (internal/daemon/firewall.go).
 	store := core.NewStore(core.RootedConfigPath(opts.root),
 		link.ModuleName, dial.ModuleName, dhcp.ModuleName, dns.ModuleName,
-		devices.ModuleName, gateway.ModuleName, qos.ModuleName,
+		devices.ModuleName, gateway.ModuleName, iptv.ModuleName, qos.ModuleName,
 		remote.ModuleName, ingress.ModuleName, firewall.ModuleName)
 	checkStore(store, logger)
 
@@ -565,6 +566,19 @@ func run(args []string) error {
 		Events:  srv.Events(),
 	}.Routes(), firewall.Config{})
 
+	iptvUnit, err := core.NewUnit(iptv.UnitName)
+	if err != nil {
+		logger.Warn("no service manager for IPTV", "error", err)
+	}
+	iptvApplier := iptv.Applier{Store: store, Links: iptvLinks{facts: facts}, Unit: iptvUnit, Root: opts.root}
+	srv.Mount(iptv.ModuleName, iptv.HTTP{
+		Applier: iptvApplier, Lock: srv.ApplyLock(), Events: srv.Events(),
+		Follow: func(ctx context.Context) error {
+			_, _, err := firewallApplier.Reapply(ctx)
+			return err
+		},
+	}.Routes(), iptv.Config{})
+
 	// Remove any inspection rule left by an unclean stop before accepting API
 	// requests. Failing startup is safer than leaving interception unmanaged.
 	if opts.root == "" {
@@ -693,6 +707,7 @@ func run(args []string) error {
 	startHost(ctx, srv, takeHost, logger)
 	startGateway(ctx, gatewayApplier, prober, logger)
 	startForwards(ctx, natApplier, logger)
+	startIPTV(ctx, iptvApplier, logger)
 	startRemote(ctx, remoteTunnel, remoteProxy, logger)
 	startDNS(ctx, dnsApplier, logger)
 

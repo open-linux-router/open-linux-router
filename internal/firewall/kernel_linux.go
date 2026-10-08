@@ -273,6 +273,24 @@ func ruleExprs(conn *nftables.Conn, table *nftables.Table, d Desired, r Rule) ([
 			accept,
 		}, nil
 
+	case RuleIPTVIGMP:
+		return []expr.Any{
+			nfproto(), nfprotoCmp(unix.NFPROTO_IPV4),
+			&expr.Meta{Key: expr.MetaKeyIIFNAME, Register: 1},
+			&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: ifname(r.Downstream)},
+			l4proto(), l4protoCmp(unix.IPPROTO_IGMP), accept,
+		}, nil
+	case RuleIPTVStream:
+		return []expr.Any{
+			nfproto(), nfprotoCmp(unix.NFPROTO_IPV4),
+			&expr.Meta{Key: expr.MetaKeyIIFNAME, Register: 1},
+			&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: ifname(r.Upstream)},
+			&expr.Meta{Key: expr.MetaKeyOIFNAME, Register: 1},
+			&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: ifname(r.Downstream)},
+			&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseNetworkHeader, Offset: 16, Len: 1},
+			&expr.Bitwise{SourceRegister: 1, DestRegister: 1, Len: 1, Mask: []byte{0xf0}, Xor: []byte{0}},
+			&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0xe0}}, accept,
+		}, nil
 	case RuleDrop:
 		return []expr.Any{
 			&expr.Objref{Type: unix.NFT_OBJECT_COUNTER, Name: r.Counter},
