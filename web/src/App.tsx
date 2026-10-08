@@ -14,6 +14,7 @@ import { DnsEnforcementPage } from '@/routes/dns/enforcement'
 import { DnsListeningPage } from '@/routes/dns/listening'
 import { DnsNamesPage } from '@/routes/dns/names'
 import { DnsResolvingPage } from '@/routes/dns/resolving'
+import { AccessPage } from '@/routes/access'
 import { AdvancedPage } from '@/routes/advanced/index'
 import { DdnsPage } from '@/routes/advanced/ddns'
 import { FilteringPage } from '@/routes/advanced/filtering'
@@ -72,6 +73,7 @@ export function App() {
             <Route path="enforcement" element={<DnsEnforcementPage />} />
             <Route path="advanced" element={<DnsAdvancedPage />} />
           </Route>
+          <Route path="access" element={<AccessPage />} />
           <Route path="firewall" element={<FirewallPage />} />
           <Route path="tools" element={<ToolsPage />} />
           <Route path="advanced">

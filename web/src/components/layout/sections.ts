@@ -1,4 +1,4 @@
-import { Activity, Globe, Network, Shield, SlidersHorizontal, Waypoints, Wrench } from 'lucide-react'
+import { Activity, ArrowLeftRight, Globe, Network, Shield, SlidersHorizontal, Waypoints, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /**
@@ -119,6 +119,13 @@ export const SECTIONS: Section[] = [
         blurb: 'Rules another program put in place. olr leaves them alone.',
       },
     ],
+  },
+  {
+    to: '/access',
+    label: 'Access',
+    icon: ArrowLeftRight,
+    end: true,
+    groups: [],
   },
   {
     to: '/dhcp',

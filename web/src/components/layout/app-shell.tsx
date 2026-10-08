@@ -144,9 +144,9 @@ function MobileTabBar() {
   return (
     <nav
       aria-label="Sections"
-      className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/92 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl sm:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 overflow-x-auto border-t bg-background/92 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl sm:hidden"
     >
-      <ul className="flex">
+      <ul className="flex min-w-max">
         {SECTIONS.map(({ to, label, icon: Icon, end }) => (
           <li key={to} className="flex-1">
             <NavLink
@@ -156,7 +156,7 @@ function MobileTabBar() {
                 cn(
                   // 56px clears the 44px minimum with the label stacked under
                   // the glyph.
-                  'flex min-h-14 flex-col items-center justify-center gap-0.5 text-[0.7rem] font-medium transition-colors',
+                  'flex min-h-14 min-w-16 flex-col items-center justify-center gap-0.5 text-[0.7rem] font-medium transition-colors',
                   isActive ? 'text-primary' : 'text-muted-foreground',
                 )
               }
