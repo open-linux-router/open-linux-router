@@ -55,7 +55,7 @@ export function DhcpContent() {
               address is set and no service is started.
             </p>
             <Link
-              to="/gateway/networks"
+              to="/gateway#interfaces"
               className="inline-flex items-center gap-1 text-sm font-medium underline underline-offset-4"
             >
               Choose an interface

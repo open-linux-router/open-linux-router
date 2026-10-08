@@ -1,8 +1,7 @@
-import { AlertTriangle, ArrowLeft, ArrowUpRight, Pencil } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -97,10 +96,9 @@ export function GatewayInterfacePage() {
     {gateway.gate}
     <ApplyOutcome applier={gateway.applier} />
     <PartialApply editor={editor} />
-    {editor.problems.filter((problem) => (problem.path ?? '').includes(row.name) || (network && (problem.path ?? '').includes(network.name))).map((problem) => <Alert key={problem.path + problem.message}><AlertTriangle /><AlertTitle>Worth knowing</AlertTitle><AlertDescription>{problem.message}</AlertDescription></Alert>)}
     {editing && <NetworkDialog key={initial?.name ?? row.name} open={editing} onOpenChange={setEditing} initial={initial} interfaces={editor.interfaces.filter((item) => item.name === row.name)} taken={new Set(stored.flatMap((item) => item.members))} onSubmit={save} onRemove={initial ? () => { editor.save(stored.filter((item) => item.name !== initial.name)); setEditing(false) } : undefined} />}
     <ConfirmDisruptive editor={editor} />
-    <Link to="/gateway/networks" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">All network settings <ArrowUpRight className="size-4" aria-hidden /></Link>
+    <Link to="/gateway#dhcp" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">Served networks <ArrowUpRight className="size-4" aria-hidden /></Link>
   </div>
 }
 

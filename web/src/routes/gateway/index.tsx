@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router'
 
 import { SettingsList } from '@/components/layout/settings-list'
-import { NetworksContent } from '@/routes/gateway/networks'
+import { InterfacesContent, ServedNetworksContent } from '@/routes/gateway/networks'
 import { DhcpContent } from '@/routes/dhcp/index'
 import { DnsContent } from '@/routes/dns/index'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Disclosure } from '@/components/ui/disclosure'
 import { Switch } from '@/components/ui/switch'
+import { SwitchField } from '@/components/ui/editable-field'
 import { ApplyOutcome, useGatewayEditor } from '@/features/gateway/editor'
 import { DIRECT } from '@/features/gateway/network-list'
 import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/gateway/plan-preview'
@@ -36,7 +37,7 @@ import type { GatewayApplyResult, GatewayPlan } from '@/lib/api-types'
 /**
  * The gateway, on the page you land on.
  *
- * The default route, interfaces, networks, DHCP and DNS are visible here.
+ * Interfaces and routing, DHCP networks and ranges, and DNS are visible here.
  * Less frequently changed routing details keep their own pages.
  */
 export function GatewayPage() {
@@ -177,62 +178,74 @@ export function GatewayPage() {
         </DialogContent>
       </Dialog>
 
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Internet via</CardTitle>
-          <CardDescription>Default route for devices on your networks. An interface can choose a different way out in its details.</CardDescription>
-          <CardAction>
-            <Switch aria-label="Apply gateway settings" checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change(gatewayChange.settings({ enabled }))} />
-          </CardAction>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Select value={config.default || DIRECT} disabled={busy} onValueChange={(v) => change(gatewayChange.settings({ default: !v || v === DIRECT ? '' : v }))}>
-            <SelectTrigger className="w-full" aria-label="Default internet route"><SelectValue>{(v: string) => v === DIRECT ? 'This router’s own connection' : v}</SelectValue></SelectTrigger>
-            <SelectContent><SelectItem value={DIRECT}>This router&rsquo;s own connection</SelectItem>{exits.map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
-          </Select>
-          {!config.enabled && <p className="text-xs text-muted-foreground">Gateway rules are off. Networks use this router&rsquo;s connection.</p>}
-        </CardContent>
-      </Card>
+      <section id="interfaces" className="space-y-6 scroll-mt-20" aria-labelledby="interfaces-heading">
+        <h2 id="interfaces-heading" className="text-xl font-semibold tracking-tight">Interfaces</h2>
+        <InterfacesContent />
 
-      <section id="networks" className="space-y-4 border-t pt-6" aria-labelledby="networks-heading">
-        <h2 id="networks-heading" className="text-xl font-semibold tracking-tight">Interfaces &amp; networks</h2>
-        <NetworksContent />
+        <div id="forwarding" className="grid gap-4 scroll-mt-20 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Gateway routing</CardTitle>
+              <CardDescription>
+                Apply Gateway routing rules and enable IPv4 forwarding. When off, olr does not
+                apply routing or change the machine&rsquo;s forwarding setting.
+              </CardDescription>
+              <CardAction>
+                <Switch aria-label="Apply gateway routing and IPv4 forwarding" checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change(gatewayChange.settings({ enabled }))} />
+              </CardAction>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm font-medium">Internet via</p>
+              <p className="text-sm text-muted-foreground">Default route for devices on your networks. An interface can choose a different exit in its details.</p>
+              <Select value={config.default || DIRECT} disabled={busy} onValueChange={(v) => change(gatewayChange.settings({ default: !v || v === DIRECT ? '' : v }))}>
+                <SelectTrigger className="w-full" aria-label="Default internet route"><SelectValue>{(v: string) => v === DIRECT ? 'This router’s own connection' : v}</SelectValue></SelectTrigger>
+                <SelectContent><SelectItem value={DIRECT}>This router&rsquo;s own connection</SelectItem>{exits.map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+
+          <div className="rounded-xl border bg-card p-5">
+            <SwitchField
+              id="gateway-ipv6-forwarding"
+              label="Forward IPv6"
+              hint={config.ipv6_forwarding === undefined
+                ? 'Not managed yet — this router’s IPv6 forwarding setting is left as it is. Switching on or off hands it to olr.'
+                : 'Lets IPv6 pass between networks and the internet. Turning it on may stop this router learning its own IPv6 route from upstream; you will be asked first if that applies.'}
+              checked={config.ipv6_forwarding === true}
+              busy={busy}
+              onChange={(on) => change(gatewayChange.settings({ ipv6_forwarding: on }))}
+            />
+            {!config.enabled && <p className="mt-3 text-xs text-muted-foreground">Gateway routing is off, so this setting is saved but not applied.</p>}
+          </div>
+        </div>
+
+        <SettingsList
+          section="/gateway"
+          heading="Routing settings"
+          rows={[
+            {
+              slug: 'exits',
+              value: exits.length ? exits.map((e) => e.name).join(', ') : 'None yet',
+            },
+            { slug: 'usage', value: (config.stats ?? true) ? 'Counting' : 'Off' },
+            // Another program's rules matter only when there is something to show.
+            ...(foreign.length
+              ? [{ slug: 'unmanaged', value: `${foreign.length} rule${foreign.length === 1 ? '' : 's'}` }]
+              : []),
+          ]}
+        />
       </section>
 
-      <section id="dhcp" className="space-y-4 border-t pt-6" aria-labelledby="dhcp-heading">
+      <section id="dhcp" className="space-y-6 border-t pt-6 scroll-mt-20" aria-labelledby="dhcp-heading">
         <h2 id="dhcp-heading" className="text-xl font-semibold tracking-tight">DHCP</h2>
+        <ServedNetworksContent />
         <DhcpContent />
       </section>
 
-      <section id="dns" className="space-y-4 border-t pt-6" aria-labelledby="dns-heading">
+      <section id="dns" className="space-y-4 border-t pt-6 scroll-mt-20" aria-labelledby="dns-heading">
         <h2 id="dns-heading" className="text-xl font-semibold tracking-tight">DNS</h2>
         <DnsContent />
       </section>
-
-      <SettingsList
-        section="/gateway"
-        rows={[
-          {
-            slug: 'exits',
-            value: exits.length ? exits.map((e) => e.name).join(', ') : 'None yet',
-          },
-          { slug: 'usage', value: (config.stats ?? true) ? 'Counting' : 'Off' },
-          {
-            slug: 'ipv6',
-            value:
-              config.ipv6_forwarding === undefined
-                ? 'Not managed'
-                : config.ipv6_forwarding
-                  ? 'Forwarding'
-                  : 'Off',
-          },
-          // Only when there is something to show. design.md §3.4 wants
-          // somebody else's rules legible, not a permanent empty page.
-          ...(foreign.length
-            ? [{ slug: 'unmanaged', value: `${foreign.length} rule${foreign.length === 1 ? '' : 's'}` }]
-            : []),
-        ]}
-      />
     </div>
   )
 }

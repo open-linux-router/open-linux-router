@@ -82,14 +82,9 @@ export const SECTIONS: Section[] = [
     end: false,
     groups: [
       {
-        slug: 'networks',
-        label: 'Networks',
-        blurb: 'The interfaces this router uses, the subnets it serves, and its own internet uplink.',
-      },
-      {
         slug: 'dhcp',
         label: 'DHCP',
-        blurb: 'Hand out addresses and reserve them for devices that need a fixed one.',
+        blurb: 'Define served networks, hand out addresses and reserve them for devices that need a fixed one.',
       },
       {
         slug: 'dns',
@@ -106,11 +101,6 @@ export const SECTIONS: Section[] = [
         slug: 'usage',
         label: 'Usage',
         blurb: 'How much each device has sent and received since this router started.',
-      },
-      {
-        slug: 'ipv6',
-        label: 'IPv6',
-        blurb: 'Whether IPv6 passes through this router. Off, on, or left as the router already has it.',
       },
       {
         slug: 'unmanaged',
@@ -141,7 +131,7 @@ export const SECTIONS: Section[] = [
         blurb:
           'Devices that should always get the same address — printers, a NAS, anything you reach by address rather than by name.',
       },
-      // Interfaces are under Gateway / Networks, not DHCP.
+      // Interface adoption stays under Gateway / Interfaces; served networks are beside DHCP.
       {
         slug: 'advanced',
         label: 'Advanced',

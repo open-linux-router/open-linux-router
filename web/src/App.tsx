@@ -28,7 +28,6 @@ import { GroupPage } from '@/routes/group'
 import { GatewayPage } from '@/routes/gateway/index'
 import { GatewayInterfacePage } from '@/routes/gateway/interface'
 import { GatewayExitsPage } from '@/routes/gateway/exits'
-import { GatewayIPv6Page } from '@/routes/gateway/ipv6'
 import { FirewallPage } from '@/routes/firewall'
 import { GatewayUnmanagedPage } from '@/routes/gateway/unmanaged'
 import { GatewayUsagePage } from '@/routes/gateway/usage'
@@ -44,10 +43,10 @@ export function App() {
           <Route path="gateway">
             <Route index element={<GatewayPage />} />
             <Route path="interfaces/:name" element={<GatewayInterfacePage />} />
-            <Route path="networks" element={<Navigate to="/gateway#networks" replace />} />
+            <Route path="networks" element={<Navigate to="/gateway#dhcp" replace />} />
             <Route path="exits" element={<GatewayExitsPage />} />
             <Route path="usage" element={<GatewayUsagePage />} />
-            <Route path="ipv6" element={<GatewayIPv6Page />} />
+            <Route path="ipv6" element={<Navigate to="/gateway#forwarding" replace />} />
             <Route path="unmanaged" element={<GatewayUnmanagedPage />} />
             <Route path="dhcp">
               <Route index element={<Navigate to="/gateway#dhcp" replace />} />
@@ -95,7 +94,7 @@ export function App() {
           <Route path="remote" element={<Navigate to="/advanced/remote" replace />} />
           <Route path="ingress" element={<Navigate to="/advanced/ingress" replace />} />
           <Route path="devices" element={<Navigate to="/" replace />} />
-          <Route path="dhcp/interfaces" element={<Navigate to="/gateway/networks" replace />} />
+          <Route path="dhcp/interfaces" element={<Navigate to="/gateway#interfaces" replace />} />
           <Route path="dhcp/*" element={<LegacySectionRedirect />} />
           <Route path="dns/*" element={<LegacySectionRedirect />} />
 

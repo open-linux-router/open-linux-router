@@ -22,53 +22,42 @@ import { useNetworkEditor } from '@/features/link/use-networks'
 import type { NetworkRow } from '@/lib/api-types'
 import type { Network } from '@/lib/config-types'
 
-/**
- * Everything about this router's own interfaces: which ones it has been given,
- * and what networks they carry.
- *
- * This page is the answer to a specific dead end. Adding an address range used
- * to mean choosing an interface and typing a range inside whatever subnet that
- * interface already had — and if you wanted a different subnet, the form said
- * so and there was nowhere in olr to go and change it. The subnet is declared
- * here now, and the range is checked against it.
- *
- * ## The three sections, and why they are one page
- *
- * Interfaces, then networks, then the uplink — which is the order of the work
- * and, deliberately, not the order of importance. An interface has to be handed
- * over before anything can use it; after that it becomes either a network this
- * router *serves* or the one way *out*, and those are different objects with
- * different owners. Splitting them across pages is what produced the dead end
- * below and the one the uplink section closes: somebody with three NICs gave
- * the modem-facing one a static address under Networks, because that was the
- * only place in olr that would take an address, and then had nowhere to put a
- * gateway.
- *
- * ## Why adoption is on this page, above the networks
- *
- * It used to be a sub-page of DHCP, and the dead end it produced was the same
- * shape as the one above. A network needs an adopted interface; the dialog's
- * only way of saying so was a line of small print telling you to go and find a
- * switch under a *different* section, listed after this one. Somebody setting
- * up two NICs could not find it at all.
- *
- * So it is here, and it is first. The order is the order of the work: hand an
- * interface over, then say what network it carries. It costs a configured box a
- * short list above the one it came for, which is a fair price — that list is
- * also the only place in olr that answers "is the cable in", and it is read
- * exactly when a network looks configured and does not work.
- */
-export function NetworksContent() {
+/** Interfaces and the router's own way out, independent of served networks. */
+export function InterfacesContent() {
   const editor = useNetworkEditor()
-  // Read here so a release can name the ranges it is about to invalidate; the
-  // card joins the two and olr never guesses on the operator's behalf.
   const dhcp = useDhcpConfig()
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <p className="max-w-prose text-sm text-muted-foreground">
+          Give this router an interface before using it for a network or an uplink.
+          Switching one on alone does not change its address.
+        </p>
+        <InterfacesCard dhcp={dhcp.data} />
+      </div>
+
+      <section className="space-y-3">
+        <div className="space-y-1">
+          <h3 className="text-lg font-medium tracking-tight">Internet uplink</h3>
+          <p className="max-w-prose text-sm text-muted-foreground">
+            How this router itself reaches the internet: its modem-facing interface, address,
+            and default route. Leave it alone if something else manages the route.
+          </p>
+        </div>
+        <UplinkCard interfaces={editor.interfaces} networks={editor.networks} />
+      </section>
+    </div>
+  )
+}
+
+/** A served subnet belongs beside the DHCP ranges that use it. */
+export function ServedNetworksContent() {
+  const editor = useNetworkEditor()
   const [editing, setEditing] = useState<Network | undefined>(undefined)
   const [open, setOpen] = useState(false)
 
-  if (editor.isPending) {
-    return <PageSkeleton />
-  }
+  if (editor.isPending) return <PageSkeleton />
   if (editor.error) {
     return (
       <Alert variant="destructive">
@@ -94,31 +83,15 @@ export function NetworksContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PartialApply editor={editor} />
-
-      <section className="space-y-3">
-        <div className="space-y-1">
-          <h3 className="text-lg font-medium tracking-tight">Interfaces</h3>
-          <p className="max-w-prose text-sm text-muted-foreground">
-            Which of this machine's interfaces this router may use. Switching one on changes
-            nothing by itself — no address is set and no service is started — but until one is
-            on, it cannot carry a network.
-          </p>
-        </div>
-        <InterfacesCard dhcp={dhcp.data} />
-      </section>
-
-      <section className="space-y-3">
-        {/* items-start, so Add sits level with the heading rather than at the
-            foot of a three-line paragraph. */}
+      <section id="networks" className="space-y-3 scroll-mt-20">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <h3 className="text-lg font-medium tracking-tight">Served networks</h3>
             <p className="max-w-prose text-sm text-muted-foreground">
-              A network is a subnet, the interface it lives on, and this router's address on
-              it — one per subnet you serve. Address ranges and internet access are configured
-              against a network, not against an interface.
+              Define the subnet, interface, and router address before adding a DHCP range.
+              The network's address exists even when DHCP is off.
             </p>
           </div>
           <Button
@@ -156,33 +129,6 @@ export function NetworksContent() {
         )}
       </section>
 
-      <section className="space-y-3">
-        <div className="space-y-1">
-          <h3 className="text-lg font-medium tracking-tight">Internet uplink</h3>
-          <p className="max-w-prose text-sm text-muted-foreground">
-            How this router itself reaches the internet: the interface facing your modem, its
-            address, and where to send everything else. Not a network — a network is one this
-            router serves, and it hands out addresses there. Leave this alone if something else
-            on the box already provides the default route.
-          </p>
-        </div>
-        <UplinkCard interfaces={editor.interfaces} networks={editor.networks} />
-      </section>
-
-      {editor.problems.length > 0 && (
-        <Alert>
-          <AlertTriangle />
-          <AlertTitle>Worth knowing</AlertTitle>
-          <AlertDescription>
-            <ul className="space-y-1">
-              {editor.problems.map((p) => (
-                <li key={p.path + p.message}>{p.message}</li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      )}
-
       {open && (
         <NetworkDialog
           open={open}
@@ -200,12 +146,7 @@ export function NetworksContent() {
   )
 }
 
-/**
- * The subtitle carries both halves an operator reads separately: the subnet,
- * and where this box sits on it. The derived range is here too because it is
- * the answer to "so what will DHCP hand out" — asked on this page far more
- * often than it is asked on the DHCP one.
- */
+/** A network's subnet, router address, and suggested DHCP range. */
 function subtitleOf(n: NetworkRow): string {
   const parts = [n.subnet ? `${n.subnet}, this router at ${n.router}` : 'No IPv4']
   if (n.suggested_start) parts.push(`range ${n.suggested_start}–${n.suggested_end}`)

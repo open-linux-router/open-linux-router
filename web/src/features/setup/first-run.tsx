@@ -78,7 +78,7 @@ export function FirstRun() {
                 : networks.map((n) => `${n.name} on ${n.members.join(', ')}`).join(' · ')
           }
           action={{
-            to: '/gateway/networks',
+            to: adopted.length ? '/gateway#dhcp' : '/gateway#interfaces',
             label: adopted.length && networks.length ? 'Change' : 'Set it up',
           }}
         />
