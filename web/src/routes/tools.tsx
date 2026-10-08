@@ -1,4 +1,4 @@
-import { Activity, ArrowDown, ArrowUp, Copy, Gauge, LoaderCircle, Radio, Route } from 'lucide-react'
+import { Activity, ArrowDown, ArrowUp, Copy, Gauge, LoaderCircle, Network, Radio, Route } from 'lucide-react'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
@@ -55,6 +55,13 @@ interface ServerOption {
   latency_ms: number
 }
 
+interface NATResult {
+  server: string
+  mapped: string
+  mapping: string
+  filtering: string
+}
+
 interface PingResult {
   target: string
   address: string
@@ -88,6 +95,23 @@ export function ToolsPage() {
   const options = servers.data?.servers ?? []
   const serverUnavailable = serverID !== '' && (servers.isPending || (servers.isSuccess && !options.some((item) => item.id === serverID)))
   const selectedServer = serverID
+
+  const [natResult, setNATResult] = useState<NATResult | null>(null)
+  const [natRunning, setNATRunning] = useState(false)
+  const [natError, setNATError] = useState<string | null>(null)
+
+  async function runNAT() {
+    setNATRunning(true)
+    setNATResult(null)
+    setNATError(null)
+    try {
+      setNATResult(await api.post<NATResult>('/api/tools/nat'))
+    } catch (err) {
+      setNATError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setNATRunning(false)
+    }
+  }
 
   const [target, setTarget] = useState('1.1.1.1')
   const [pingResult, setPingResult] = useState<PingResult | null>(null)
@@ -241,6 +265,27 @@ export function ToolsPage() {
           <p className="text-sm text-muted-foreground">Test server: {result.server} · {result.location} · Way out: {result.exit || 'Router default route'}</p>
         </div>
       )}
+      <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="nat-heading">
+        <div className="flex items-start gap-4">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Network className="size-5" aria-hidden /></div>
+          <div className="space-y-1">
+            <h2 id="nat-heading" className="text-xl font-semibold tracking-tight">NAT test</h2>
+            <p className="text-sm text-muted-foreground">Send UDP probes from this router over its default route to public STUN servers. This does not test a device behind the router or whether a game port is open.</p>
+          </div>
+        </div>
+        <Button className="mt-5" onClick={runNAT} disabled={natRunning}>
+          {natRunning && <LoaderCircle className="animate-spin" aria-hidden />}
+          {natRunning ? 'Testing…' : 'Run NAT test'}
+        </Button>
+        {natError && <Alert variant="destructive" className="mt-5"><AlertTitle>NAT test unavailable</AlertTitle><AlertDescription className="break-words">{natError}</AlertDescription></Alert>}
+        {natResult && <div className="mt-5 space-y-2 text-sm" aria-live="polite">
+          <p>STUN server: <span className="font-mono">{natResult.server}</span></p>
+          <p>Observed UDP address: <span className="font-mono">{natResult.mapped}</span></p>
+          <p>Mapping: {natResult.mapping}</p>
+          <p>Filtering: {natResult.filtering}</p>
+          <p className="text-xs text-muted-foreground">Mapping and filtering require a server with a reachable alternate IP and port. “Not tested” or “no changed-source reply” does not establish a NAT type.</p>
+        </div>}
+      </section>
       <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="ping-heading">
         <div className="flex items-start gap-4">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Radio className="size-5" aria-hidden /></div>
