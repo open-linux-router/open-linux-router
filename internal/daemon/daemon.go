@@ -612,7 +612,20 @@ func run(args []string) error {
 		return 0, nil
 	}
 	srv.Mount(inspection.ModuleName, inspector.Routes(), struct{}{})
-	srv.Mount(tools.ModuleName, (&tools.HTTP{}).Routes(), struct{}{})
+	srv.Mount(tools.ModuleName, (&tools.HTTP{ResolveExit: func(name string) (uint32, error) {
+		cfg, err := (gateway.Applier{Store: store}).Load()
+		if err != nil {
+			return 0, err
+		}
+		if cfg.Enabled {
+			for _, exit := range cfg.Exits {
+				if exit.Name == name && exit.Via.Kind != gateway.ViaBlocked {
+					return exit.Mark(), nil
+				}
+			}
+		}
+		return 0, fmt.Errorf("way out %q is unavailable", name)
+	}}).Routes(), struct{}{})
 
 	// --- routes -----------------------------------------------------------
 	//

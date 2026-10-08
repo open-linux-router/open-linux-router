@@ -1,9 +1,13 @@
 import { Activity, ArrowDown, ArrowUp, Copy, Gauge, LoaderCircle, Radio, Route } from 'lucide-react'
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useGatewayConfig } from '@/features/gateway/queries'
 import { ApiError, api } from '@/lib/api'
 
 interface TestError {
@@ -36,11 +40,19 @@ function explainFailure(err: unknown): TestError {
 
 interface SpeedResult {
   server: string
+  exit?: string
   location: string
   latency_ms: number
   jitter_ms: number
   download_mbps: number
   upload_mbps: number
+}
+
+interface ServerOption {
+  id: string
+  sponsor: string
+  location: string
+  latency_ms: number
 }
 
 interface PingResult {
@@ -61,6 +73,22 @@ interface TraceResult {
 }
 
 export function ToolsPage() {
+  const gateway = useGatewayConfig()
+  const [exit, setExit] = useState('')
+  const [serverID, setServerID] = useState('')
+  const exits = gateway.data?.enabled ? (gateway.data.exits ?? []).filter((item) => item.via.kind !== 'blocked') : []
+  const exitUnavailable = exit !== '' && !!gateway.data && !exits.some((item) => item.name === exit)
+  const selectedExit = exit
+  const servers = useQuery({
+    queryKey: ['tools', 'speedtest', 'servers', selectedExit],
+    queryFn: () => api.get<{ servers: ServerOption[] }>(`/api/tools/speedtest/servers?exit=${encodeURIComponent(selectedExit)}`),
+    staleTime: 60_000,
+    retry: false,
+  })
+  const options = servers.data?.servers ?? []
+  const serverUnavailable = serverID !== '' && (servers.isPending || (servers.isSuccess && !options.some((item) => item.id === serverID)))
+  const selectedServer = serverID
+
   const [target, setTarget] = useState('1.1.1.1')
   const [pingResult, setPingResult] = useState<PingResult | null>(null)
   const [pingRunning, setPingRunning] = useState(false)
@@ -105,13 +133,14 @@ export function ToolsPage() {
   const [copyFailed, setCopyFailed] = useState(false)
 
   async function run() {
+    if (exitUnavailable || serverUnavailable) return
     setRunning(true)
     setResult(null)
     setError(null)
     setCopied(false)
     setCopyFailed(false)
     try {
-      setResult(await api.post<SpeedResult>('/api/tools/speedtest'))
+      setResult(await api.post<SpeedResult>(`/api/tools/speedtest?${new URLSearchParams({ exit: selectedExit, server_id: selectedServer })}`))
     } catch (err) {
       setError(explainFailure(err))
     } finally {
@@ -144,7 +173,36 @@ export function ToolsPage() {
               Measure the router's own connection to a nearby test server. This uses your internet bandwidth and may affect other devices while it runs.
             </p>
           </div>
-          <Button onClick={run} disabled={running}>
+          <div className="grid max-w-2xl gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="speed-exit">Way out</Label>
+              <Select value={selectedExit || 'default'} onValueChange={(value) => { setExit(value === 'default' ? '' : value ?? ''); setServerID('') }} disabled={running || gateway.isPending}>
+                <SelectTrigger id="speed-exit" className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Router default route</SelectItem>
+                  {exits.map((item) => <SelectItem key={item.name} value={item.name}>{item.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Only this test uses the selected route. Network assignments stay unchanged.</p>
+              {exitUnavailable && <p className="text-xs text-destructive">This way out is no longer available. Choose another before testing.</p>}
+              {gateway.isError && <p className="text-xs text-destructive">Could not load ways out. The router default route is still available.</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="speed-server">Test server</Label>
+              <Select value={selectedServer || 'auto'} onValueChange={(value) => setServerID(value === 'auto' ? '' : value ?? '')} disabled={running || servers.isPending}>
+                <SelectTrigger id="speed-server" className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Automatic (first working server)</SelectItem>
+                  {options.map((item) => <SelectItem key={item.id} value={item.id}>{item.sponsor} · {item.location} ({item.latency_ms.toFixed(0)} ms)</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {servers.isPending && <p className="text-xs text-muted-foreground">Finding reachable servers…</p>}
+              {serverUnavailable && <p className="text-xs text-destructive">Refresh the server list or choose another server before testing.</p>}
+              {servers.isError && <p className="text-xs text-destructive">Could not list servers: {servers.error.message}. Automatic selection is still available.</p>}
+              <p className="text-xs text-muted-foreground">Up to 20 reachable servers for this route. Pick one to compare results consistently.</p>
+            </div>
+          </div>
+          <Button onClick={run} disabled={running || gateway.isPending || exitUnavailable || serverUnavailable}>
             {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Activity aria-hidden />}
             {running ? 'Testing connection…' : result ? 'Run again' : 'Start speed test'}
           </Button>
@@ -180,7 +238,7 @@ export function ToolsPage() {
             <Metric icon={ArrowDown} label="Download" value={result.download_mbps} unit="Mbps" />
             <Metric icon={ArrowUp} label="Upload" value={result.upload_mbps} unit="Mbps" />
           </div>
-          <p className="text-sm text-muted-foreground">Test server: {result.server} · {result.location}</p>
+          <p className="text-sm text-muted-foreground">Test server: {result.server} · {result.location} · Way out: {result.exit || 'Router default route'}</p>
         </div>
       )}
       <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="ping-heading">

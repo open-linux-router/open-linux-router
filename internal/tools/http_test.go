@@ -216,3 +216,34 @@ func TestLimitedTraceOutput(t *testing.T) {
 		t.Fatalf("write=%d, length=%d, truncated=%v, err=%v", n, b.Len(), b.truncated, err)
 	}
 }
+func TestSelectedServerMustBeReachable(t *testing.T) {
+	servers := speedtest.Servers{{ID: "1", Sponsor: "Near"}, {ID: "2", Sponsor: "Far"}}
+	server, err := serverByID(servers, "2")
+	if err != nil || server != servers[1] {
+		t.Fatalf("server=%v, err=%v", server, err)
+	}
+	if _, err := serverByID(servers, "3"); err == nil {
+		t.Fatal("unlisted server was accepted")
+	}
+}
+
+func TestSelectedExitIsValidatedForBothRoutes(t *testing.T) {
+	h := &HTTP{ResolveExit: func(name string) (uint32, error) {
+		if name != "working" {
+			return 0, errors.New("way out unavailable")
+		}
+		return 0x10000, nil
+	}}
+	routes := core.RouteTable(h.Routes())
+	for _, path := range []string{"/speedtest?exit=missing", "/speedtest/servers?exit=missing"} {
+		method := http.MethodPost
+		if strings.Contains(path, "servers") {
+			method = http.MethodGet
+		}
+		w := httptest.NewRecorder()
+		routes.ServeHTTP(w, httptest.NewRequest(method, path, nil))
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: got %d, want 400", path, w.Code)
+		}
+	}
+}
