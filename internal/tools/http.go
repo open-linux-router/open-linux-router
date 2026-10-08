@@ -71,29 +71,64 @@ func measure(ctx context.Context) (SpeedResult, error) {
 	if err != nil {
 		return SpeedResult{}, fmt.Errorf("finding test servers: %w", err)
 	}
-	selected, err := (*servers.Available()).FindServer(nil)
-	if err != nil || len(selected) == 0 {
+	available := *servers.Available()
+	if len(available) == 0 {
+		return SpeedResult{}, errors.New("no reachable test server available")
+	}
+	return tryServers(ctx, available, func(ctx context.Context, server *speedtest.Server) (SpeedResult, error) {
+		// Each attempt needs fresh counters and workers, even when the previous
+		// server answered ping but failed to transfer data.
+		client.Reset()
+		return testServer(ctx, server)
+	})
+}
+
+// A server that answers ping is not necessarily able to serve the test files
+// or accept uploads. Try a few alternatives without turning one click into an
+// unbounded series of bandwidth-heavy tests.
+func tryServers(ctx context.Context, servers speedtest.Servers, run func(context.Context, *speedtest.Server) (SpeedResult, error)) (SpeedResult, error) {
+	var lastErr error
+	for i, server := range servers {
+		if i == 3 || ctx.Err() != nil {
+			break
+		}
+		result, err := run(ctx, server)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = fmt.Errorf("%s (%s): %w", server.Sponsor, server.Name, err)
+	}
+	if ctx.Err() != nil {
+		return SpeedResult{}, ctx.Err()
+	}
+	if lastErr == nil {
 		return SpeedResult{}, errors.New("no test server available")
 	}
-	server := selected[0]
+	return SpeedResult{}, fmt.Errorf("no usable test server among the first three candidates; last error: %w", lastErr)
+}
+
+func testServer(ctx context.Context, server *speedtest.Server) (SpeedResult, error) {
 	if err := server.PingTestContext(ctx, nil); err != nil {
 		return SpeedResult{}, fmt.Errorf("measuring latency: %w", err)
 	}
 	if err := server.DownloadTestContext(ctx); err != nil || ctx.Err() != nil {
 		return SpeedResult{}, fmt.Errorf("measuring download: %w", firstError(err, ctx.Err()))
 	}
+	if server.DLSpeed <= 0 {
+		return SpeedResult{}, errors.New("download returned no usable data")
+	}
 	if err := server.UploadTestContext(ctx); err != nil || ctx.Err() != nil {
 		return SpeedResult{}, fmt.Errorf("measuring upload: %w", firstError(err, ctx.Err()))
 	}
-	if server.DLSpeed < 0 || server.ULSpeed < 0 {
-		return SpeedResult{}, errors.New("test server did not return a valid transfer rate")
+	if server.ULSpeed <= 0 {
+		return SpeedResult{}, errors.New("upload returned no usable data")
 	}
 	return SpeedResult{
 		Server: server.Sponsor, Location: server.Name + ", " + server.Country,
 		Latency:  float64(server.Latency) / float64(time.Millisecond),
 		Jitter:   float64(server.Jitter) / float64(time.Millisecond),
-		Download: float64(server.DLSpeed) * 8 / 1e6,
-		Upload:   float64(server.ULSpeed) * 8 / 1e6,
+		Download: server.DLSpeed.Mbps(),
+		Upload:   server.ULSpeed.Mbps(),
 	}, nil
 }
 

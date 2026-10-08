@@ -3,9 +3,13 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/showwin/speedtest-go/speedtest"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
@@ -48,5 +52,38 @@ func TestSpeedtestRejectsConcurrentRun(t *testing.T) {
 	<-done
 	if w.Code != http.StatusConflict {
 		t.Fatalf("concurrent request returned %d, want 409", w.Code)
+	}
+}
+
+func TestTryServersFallsBackAfterUnusableTransfer(t *testing.T) {
+	servers := speedtest.Servers{
+		{Sponsor: "First", Name: "Near"},
+		{Sponsor: "Second", Name: "Next"},
+	}
+	var tried []string
+	result, err := tryServers(context.Background(), servers, func(_ context.Context, server *speedtest.Server) (SpeedResult, error) {
+		tried = append(tried, server.Sponsor)
+		if server == servers[0] {
+			return SpeedResult{}, errors.New("download returned no usable data")
+		}
+		return SpeedResult{Server: server.Sponsor, Download: 100}, nil
+	})
+	if err != nil || result.Server != "Second" || len(tried) != 2 {
+		t.Fatalf("result=%+v, tried=%v, err=%v", result, tried, err)
+	}
+}
+
+func TestTryServersLimitsAttemptsAndReportsFailure(t *testing.T) {
+	servers := speedtest.Servers{
+		{Sponsor: "One", Name: "A"}, {Sponsor: "Two", Name: "B"},
+		{Sponsor: "Three", Name: "C"}, {Sponsor: "Four", Name: "D"},
+	}
+	attempts := 0
+	_, err := tryServers(context.Background(), servers, func(context.Context, *speedtest.Server) (SpeedResult, error) {
+		attempts++
+		return SpeedResult{}, errors.New("upload returned no usable data")
+	})
+	if attempts != 3 || err == nil || !strings.Contains(err.Error(), "Three (C): upload returned no usable data") {
+		t.Fatalf("attempts=%d, err=%v", attempts, err)
 	}
 }
