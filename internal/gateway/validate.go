@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/socksout"
 )
 
 // Validation is pure: no files, no netlink, no root. That is what lets the
@@ -227,6 +228,12 @@ func validateExits(r *Result, c Config, links LinkView) {
 		// §5.5 is emphatic that failing open is available and never silent, so
 		// the operator gets told what they chose rather than only what they
 		// typed.
+		if e.Via.Kind == ViaInterface && e.Via.Interface == socksout.Interface && e.IPv6OrDefault() == IPv6Direct {
+			r.errorf(path+".ipv6", "the managed SOCKS5 TUN is IPv4-only; direct IPv6 would bypass the proxy")
+		}
+		if e.Via.Kind == ViaInterface && e.Via.Interface == socksout.Interface && e.OnFailure.OrDefault() == FailDirect {
+			r.errorf(path+".on_failure", "the managed SOCKS5 TUN must fail closed; direct fallback would bypass the proxy")
+		}
 		if e.OnFailure.OrDefault() == FailDirect && c.InUse(e.Name) {
 			r.warnf(path+".on_failure",
 				"when %q is down its traffic will take the box's normal path instead of stopping, "+
@@ -262,7 +269,7 @@ func validateVia(r *Result, path string, e Exit, links LinkView) {
 	case ViaInterface:
 		if e.Via.Interface == "" {
 			r.errorf(path+".interface", "an interface exit needs an interface name")
-		} else if _, err := links.Interface(e.Via.Interface); err != nil {
+		} else if _, err := links.Interface(e.Via.Interface); err != nil && e.Via.Interface != socksout.Interface {
 			// A warning, not an error, and the difference matters: WireGuard,
 			// PPPoE and proxy TUN devices are all created by something other
 			// than us and routinely do not exist yet when the exit is

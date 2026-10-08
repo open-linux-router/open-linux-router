@@ -1,0 +1,14 @@
+[Unit]
+Description=open-linux-router outbound SOCKS5 TUN
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/bin/olr internal socks-out
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -15,6 +15,7 @@ import { DnsListeningPage } from '@/routes/dns/listening'
 import { DnsNamesPage } from '@/routes/dns/names'
 import { DnsResolvingPage } from '@/routes/dns/resolving'
 import { AccessPage } from '@/routes/access'
+import { SocksOutPage } from '@/routes/socks-out'
 import { AdvancedPage } from '@/routes/advanced/index'
 import { DdnsPage } from '@/routes/advanced/ddns'
 import { FilteringPage } from '@/routes/advanced/filtering'
@@ -74,6 +75,7 @@ export function App() {
             <Route path="advanced" element={<DnsAdvancedPage />} />
           </Route>
           <Route path="access" element={<AccessPage />} />
+          <Route path="access/socks5" element={<SocksOutPage />} />
           <Route path="firewall" element={<FirewallPage />} />
           <Route path="tools" element={<ToolsPage />} />
           <Route path="advanced">

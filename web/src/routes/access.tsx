@@ -27,9 +27,9 @@ const outward: Choice[] = [
   },
   {
     title: 'Use a SOCKS5 proxy',
-    detail: 'An application can use a proxy directly. Routing a whole LAN through one needs a separate TUN or transparent proxy, which OLR does not create yet.',
+    detail: 'OLR creates a TUN connection to an external SOCKS5 server. Choose which devices use it in Ways out.',
     icon: Waypoints,
-    note: 'Not yet configurable here',
+    to: '/access/socks5',
   },
 ]
 

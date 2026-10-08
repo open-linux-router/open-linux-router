@@ -30,10 +30,10 @@ func TestUnitsPointAtTheBinaryThatWillExist(t *testing.T) {
 			}
 		}
 	}
-	// olrd.service and olr-dnsd.service. A zero here would mean the rewrite
+	// olrd.service, olr-dnsd.service and olr-socks-out.service. A zero here would mean the rewrite
 	// silently matched nothing, which is the failure mode worth guarding.
-	if found != 2 {
-		t.Errorf("rewrote %d Exec lines, want 2 (olrd.service and olr-dnsd.service)", found)
+	if found != 3 {
+		t.Errorf("rewrote %d Exec lines, want 3 (olrd.service, olr-dnsd.service and olr-socks-out.service)", found)
 	}
 }
 
@@ -87,7 +87,7 @@ func TestTheShippedUnitsNameThePackagedPath(t *testing.T) {
 			}
 		}
 	}
-	for _, want := range []string{"olrd.service", "olr-dnsd.service"} {
+	for _, want := range []string{"olrd.service", "olr-dnsd.service", "olr-socks-out.service"} {
 		if !naming[want] {
 			t.Errorf("%s no longer execs the olr binary; if that is deliberate, "+
 				"update this test — if not, it would have shipped broken", want)

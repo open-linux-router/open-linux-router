@@ -16,6 +16,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/cli"
 	"github.com/open-linux-router/open-linux-router/internal/daemon"
 	"github.com/open-linux-router/open-linux-router/internal/dnsd"
+	"github.com/open-linux-router/open-linux-router/internal/socksout"
 )
 
 func main() {
@@ -51,6 +52,8 @@ func dispatchInternal(args []string) (code int, handled bool) {
 		return daemon.Main(rest[1:]), true
 	case rest[0] == "dns-relay":
 		return dnsd.Main(rest[1:]), true
+	case rest[0] == "socks-out":
+		return socksout.Main(rest[1:]), true
 	case rest[0] == "urls":
 		// Not a process, unlike its two neighbours, and here anyway: the .deb's
 		// postinstall has to print the URLs the web UI answers on, and the
@@ -71,6 +74,7 @@ starts these; there is no reason to type one:
 
   olr internal daemon      the control plane          (olrd.service)
   olr internal dns-relay   the DNS relay on :53       (olr-dnsd.service)
+  olr internal socks-out   outbound SOCKS5 TUN       (olr-socks-out.service)
   olr internal urls        the web UI's addresses     (the .deb's postinstall)
 
 To manage the services themselves, use olr start, olr stop or olr status.`

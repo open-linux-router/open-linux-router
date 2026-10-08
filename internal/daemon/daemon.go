@@ -50,6 +50,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/mcp"
 	"github.com/open-linux-router/open-linux-router/internal/qos"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
+	socksout "github.com/open-linux-router/open-linux-router/internal/socksout"
 	"github.com/open-linux-router/open-linux-router/internal/system"
 	"github.com/open-linux-router/open-linux-router/internal/tools"
 	"github.com/open-linux-router/open-linux-router/internal/webui"
@@ -196,7 +197,7 @@ func run(args []string) error {
 	// are served to the outside (internal/daemon/firewall.go).
 	store := core.NewStore(core.RootedConfigPath(opts.root),
 		link.ModuleName, dial.ModuleName, dhcp.ModuleName, dns.ModuleName,
-		devices.ModuleName, gateway.ModuleName, iptv.ModuleName, qos.ModuleName,
+		devices.ModuleName, gateway.ModuleName, iptv.ModuleName, socksout.ModuleName, qos.ModuleName,
 		remote.ModuleName, ingress.ModuleName, firewall.ModuleName)
 	checkStore(store, logger)
 
@@ -581,6 +582,26 @@ func run(args []string) error {
 		},
 	}.Routes(), iptv.Config{})
 
+	socksOutUnit, err := core.NewUnit(socksout.UnitName)
+	if err != nil {
+		logger.Warn("no service manager for outbound SOCKS5", "error", err)
+	}
+	socksApplier := socksout.Applier{Store: store, Unit: socksOutUnit, Root: opts.root}
+	srv.Mount(socksout.ModuleName, socksout.HTTP{
+		Applier: socksApplier, Lock: srv.ApplyLock(), Events: srv.Events(),
+		Follow: func(ctx context.Context) error {
+			cfg, err := gatewayApplier.Load()
+			if err != nil {
+				return err
+			}
+			if !cfg.Enabled {
+				return nil
+			}
+			_, _, err = gatewayApplier.Apply(ctx, cfg, netip.Addr{})
+			return err
+		},
+	}.Routes(), socksout.Config{})
+
 	// Remove any inspection rule left by an unclean stop before accepting API
 	// requests. Failing startup is safer than leaving interception unmanaged.
 	if opts.root == "" {
@@ -749,6 +770,7 @@ func run(args []string) error {
 	startLink(ctx, linkApplier, logger)
 	startDial(ctx, dialApplier, publisher, delegation, logger)
 	startHost(ctx, srv, takeHost, logger)
+	startSocksOut(ctx, socksApplier, logger)
 	startGateway(ctx, gatewayApplier, prober, logger)
 	startForwards(ctx, natApplier, logger)
 	startIPTV(ctx, iptvApplier, logger)
@@ -1406,4 +1428,15 @@ func newLogger(level string) (*slog.Logger, error) {
 	// Text to stderr: systemd captures it into the journal, which is where
 	// §3.4 says logs belong. No log file of our own.
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: l})), nil
+}
+
+func startSocksOut(ctx context.Context, a socksout.Applier, logger *slog.Logger) {
+	cfg, err := a.Load()
+	if err != nil {
+		logger.Error("SOCKS5 outbound configuration could not be read", "error", err)
+		return
+	}
+	if _, err := a.Apply(ctx, cfg, false); err != nil {
+		logger.Error("SOCKS5 outbound could not be restored", "error", err)
+	}
 }

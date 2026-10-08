@@ -5,6 +5,8 @@ import (
 	"net/netip"
 	"sort"
 	"strings"
+
+	"github.com/open-linux-router/open-linux-router/internal/socksout"
 )
 
 // Rendering the kernel state a config asks for.
@@ -307,6 +309,10 @@ type RouteSpec struct {
 	// Dev is the outgoing interface, empty when the kernel resolves it.
 	Dev string
 
+	// Priority is a route metric. A persistent unreachable fallback stays
+	// in place if the TUN disappears and its interface route is deleted.
+	Priority int
+
 	// Exit is carried for messages, and Why explains an unreachable route in
 	// the operator's terms — "Proxy does not carry IPv6" reads very differently
 	// from an unexplained refusal.
@@ -502,6 +508,13 @@ func renderExit(d *Desired, c Config, e Exit, links LinkView, health Health) {
 
 	for _, v6 := range []bool{false, true} {
 		route, ok := exitRoute(e, links, v6, down)
+		if e.Via.Kind == ViaInterface && e.Via.Interface == socksout.Interface && !v6 && !down {
+			if info, err := links.Interface(socksout.Interface); err != nil || !info.Up {
+				// At boot the backend may be disabled or not yet ready. Keep the
+				// rule's table populated so marked packets cannot fall to main.
+				route = RouteSpec{Type: RouteUnreachable}
+			}
+		}
 		if !ok {
 			// IPv6Direct: no rule, no route, so v6 takes the normal path.
 			continue
@@ -511,6 +524,11 @@ func renderExit(d *Desired, c Config, e Exit, links LinkView, health Health) {
 		route.Exit = e.Name
 
 		d.Routes = append(d.Routes, route)
+		if e.Via.Kind == ViaInterface && e.Via.Interface == socksout.Interface && route.Type == RouteVia {
+			// This route survives removal of the TUN when its process dies.
+			d.Routes = append(d.Routes, RouteSpec{Table: e.Table(), V6: v6,
+				Type: RouteUnreachable, Priority: 100, Exit: e.Name})
+		}
 		d.Rules = append(d.Rules, RuleSpec{
 			Kind:     RuleMark,
 			Priority: e.Priority(),
@@ -595,7 +613,7 @@ func exitRoute(e Exit, links LinkView, v6, down bool) (RouteSpec, bool) {
 func (e Exit) Carries(v6 bool) bool {
 	switch e.Via.Kind {
 	case ViaInterface:
-		return true
+		return !v6 || e.Via.Interface != socksout.Interface
 	case ViaNextHop:
 		if e.Via.NextHop == nil {
 			return false
@@ -879,7 +897,11 @@ func (r RuleSpec) Line() string {
 // Line is this route's canonical form, for the same reason.
 func (r RouteSpec) Line() string {
 	if r.Type == RouteUnreachable {
-		return fmt.Sprintf("route %s table %d unreachable default", family(r.V6), r.Table)
+		line := fmt.Sprintf("route %s table %d unreachable default", family(r.V6), r.Table)
+		if r.Priority > 0 {
+			line += fmt.Sprintf(" metric %d", r.Priority)
+		}
+		return line
 	}
 	line := fmt.Sprintf("route %s table %d default", family(r.V6), r.Table)
 	if r.Gateway != nil {
@@ -887,6 +909,9 @@ func (r RouteSpec) Line() string {
 	}
 	if r.Dev != "" {
 		line += " dev " + r.Dev
+	}
+	if r.Priority > 0 {
+		line += fmt.Sprintf(" metric %d", r.Priority)
 	}
 	return line
 }

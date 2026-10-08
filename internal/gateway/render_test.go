@@ -580,3 +580,38 @@ func TestIPv6ForwardingTurnedOffWritesZero(t *testing.T) {
 		t.Errorf("turned off, so it has to be written as 0: %s", dump(got))
 	}
 }
+
+func TestManagedSocksTunFailsClosedIfInterfaceDisappears(t *testing.T) {
+	c := testConfig()
+	c.Exits = append(c.Exits, Exit{Name: "SOCKS", Via: Via{Kind: ViaInterface, Interface: "olrsocks0"}})
+	c.Default = "SOCKS"
+	c.Normalize()
+	links := testLinks()
+	links["olrsocks0"] = LinkInfo{Name: "olrsocks0", Up: true}
+	got := Render(c, links, nil).Lines()
+	e, _ := c.Find("SOCKS")
+	for _, want := range []string{
+		sprintf("route ip table %d default dev olrsocks0", e.Table()),
+		sprintf("route ip table %d unreachable default metric 100", e.Table()),
+		sprintf("route ip6 table %d unreachable default", e.Table()),
+	} {
+		if !contains(got, want) {
+			t.Errorf("missing %q in %s", want, dump(got))
+		}
+	}
+	absent := Render(c, testLinks(), nil).Lines()
+	if contains(absent, sprintf("route ip table %d default dev olrsocks0", e.Table())) ||
+		!contains(absent, sprintf("route ip table %d unreachable default", e.Table())) {
+		t.Errorf("missing backend must fail closed: %s", dump(absent))
+	}
+	links["olrsocks0"] = LinkInfo{Name: "olrsocks0", Up: false}
+	down := Render(c, links, nil).Lines()
+	if !contains(down, sprintf("route ip table %d unreachable default", e.Table())) {
+		t.Errorf("down backend must fail closed: %s", dump(down))
+	}
+	e.OnFailure = FailDirect
+	c.Upsert(e)
+	if Validate(c, testLinks()).OK() {
+		t.Fatal("managed SOCKS5 exit must not fail open")
+	}
+}

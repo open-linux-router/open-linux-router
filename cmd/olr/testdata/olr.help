@@ -16,6 +16,7 @@ Modules:
   iptv        Routed IPTV multicast (IGMP proxy)
   link        Network interfaces olr has been given
   remote      Get back into your network from outside it
+  socks-out   Transparent outbound SOCKS5 for selected networks and devices
   system      Show how this router may be reached
 
 Operations:

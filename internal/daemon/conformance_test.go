@@ -23,6 +23,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/qos"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
+	socksout "github.com/open-linux-router/open-linux-router/internal/socksout"
 	"github.com/open-linux-router/open-linux-router/internal/system"
 	"github.com/open-linux-router/open-linux-router/internal/tools"
 )
@@ -58,6 +59,7 @@ func moduleRoutes() map[string][]core.Route {
 		firewall.ModuleName:   firewall.HTTP{}.Routes(),
 		inspection.ModuleName: (&inspection.Service{}).Routes(),
 		iptv.ModuleName:       iptv.HTTP{}.Routes(),
+		socksout.ModuleName:   socksout.HTTP{}.Routes(),
 		tools.ModuleName:      (&tools.HTTP{}).Routes(),
 	}
 }

@@ -813,7 +813,11 @@ func (k LinuxKernel) observeRoutes() ([]string, error) {
 
 func observedRouteLine(r netlink.Route, v6 bool) string {
 	if r.Type == unix.RTN_UNREACHABLE {
-		return fmt.Sprintf("route %s table %d unreachable default", family(v6), r.Table)
+		line := fmt.Sprintf("route %s table %d unreachable default", family(v6), r.Table)
+		if r.Priority > 0 {
+			line += fmt.Sprintf(" metric %d", r.Priority)
+		}
+		return line
 	}
 	line := fmt.Sprintf("route %s table %d default", family(v6), r.Table)
 	if r.Gw != nil {
@@ -825,6 +829,9 @@ func observedRouteLine(r netlink.Route, v6 bool) string {
 		if link, err := netlink.LinkByIndex(r.LinkIndex); err == nil {
 			line += " dev " + link.Attrs().Name
 		}
+	}
+	if r.Priority > 0 {
+		line += fmt.Sprintf(" metric %d", r.Priority)
 	}
 	return line
 }
@@ -1074,6 +1081,7 @@ func desiredRoutes(d Desired) (map[string]*netlink.Route, error) {
 		route := &netlink.Route{
 			Table:    r.Table,
 			Protocol: unix.RTPROT_STATIC,
+			Priority: r.Priority,
 		}
 		if r.V6 {
 			route.Family = netlink.FAMILY_V6
