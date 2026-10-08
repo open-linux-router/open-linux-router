@@ -247,35 +247,3 @@ func TestSelectedExitIsValidatedForBothRoutes(t *testing.T) {
 		}
 	}
 }
-
-func TestForwardReturnsResultAndRejectsConcurrentRun(t *testing.T) {
-	started, release := make(chan struct{}), make(chan struct{})
-	h := &HTTP{RunForward: func(context.Context) (ForwardResult, error) {
-		close(started)
-		<-release
-		return ForwardResult{Runs: []ForwardRun{{Name: "TCP", Mbps: 250}}}, nil
-	}}
-	routes := core.RouteTable(h.Routes())
-	done := make(chan struct{})
-	var first *httptest.ResponseRecorder
-	go func() {
-		defer close(done)
-		first = httptest.NewRecorder()
-		routes.ServeHTTP(first, httptest.NewRequest(http.MethodPost, "/forward", nil))
-	}()
-	<-started
-	second := httptest.NewRecorder()
-	routes.ServeHTTP(second, httptest.NewRequest(http.MethodPost, "/forward", nil))
-	close(release)
-	<-done
-	if second.Code != http.StatusConflict || first.Code != http.StatusOK {
-		t.Fatalf("status %d, %d", first.Code, second.Code)
-	}
-	var result ForwardResult
-	if err := json.Unmarshal(first.Body.Bytes(), &result); err != nil {
-		t.Fatal(err)
-	}
-	if len(result.Runs) != 1 || result.Runs[0].Mbps != 250 {
-		t.Fatalf("result = %+v", result)
-	}
-}

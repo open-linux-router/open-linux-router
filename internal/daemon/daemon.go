@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -612,7 +613,34 @@ func run(args []string) error {
 		return 0, nil
 	}
 	srv.Mount(inspection.ModuleName, inspector.Routes(), struct{}{})
-	srv.Mount(tools.ModuleName, (&tools.HTTP{ResolveExit: func(name string) (uint32, error) {
+	toolHTTP := &tools.HTTP{LANAddresses: func() ([]string, error) {
+		cfg, err := linkApplier.Load()
+		if err != nil {
+			return nil, err
+		}
+		observed, err := link.Kernel()
+		if err != nil {
+			return nil, err
+		}
+		var addresses []string
+		for _, network := range cfg.Networks {
+			if network.IPv4 == nil {
+				continue
+			}
+			for _, iface := range observed {
+				if !iface.Up || iface.Loopback || !slices.Contains(network.Members, iface.Name) {
+					continue
+				}
+				for _, prefix := range iface.Prefixes {
+					address := prefix.Addr()
+					if address.Is4() && address == network.IPv4.RouterAddr() {
+						addresses = append(addresses, address.String())
+					}
+				}
+			}
+		}
+		return slices.Compact(slices.Sorted(slices.Values(addresses))), nil
+	}, ResolveExit: func(name string) (uint32, error) {
 		cfg, err := (gateway.Applier{Store: store}).Load()
 		if err != nil {
 			return 0, err
@@ -625,7 +653,8 @@ func run(args []string) error {
 			}
 		}
 		return 0, fmt.Errorf("way out %q is unavailable", name)
-	}}).Routes(), struct{}{})
+	}}
+	srv.Mount(tools.ModuleName, toolHTTP.Routes(), struct{}{})
 
 	// --- routes -----------------------------------------------------------
 	//
@@ -782,6 +811,7 @@ func run(args []string) error {
 
 	<-ctx.Done()
 	logger.Info("shutting down")
+	toolHTTP.Close()
 	if err := inspector.Close(); err != nil {
 		logger.Error("inspection cleanup failed", "error", err)
 	}

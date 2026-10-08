@@ -38,20 +38,11 @@ function explainFailure(err: unknown): TestError {
   }
 }
 
-interface ForwardRun {
-  name: string
-  path_verified: boolean
-  mbps: number
-  pps?: number
-  loss_percent?: number
-  samples: { second: number; mbps: number }[]
-}
-
-interface ForwardResult {
-  runs: ForwardRun[]
-  note: string
-  nat_status: string
-  firewall_status: string
+interface LANTest {
+  addresses: string[]
+  address?: string
+  expires_at?: string
+  port: number
 }
 
 interface SpeedResult {
@@ -112,20 +103,39 @@ export function ToolsPage() {
   const serverUnavailable = serverID !== '' && (servers.isPending || (servers.isSuccess && !options.some((item) => item.id === serverID)))
   const selectedServer = serverID
 
-  const [forwardResult, setForwardResult] = useState<ForwardResult | null>(null)
-  const [forwardRunning, setForwardRunning] = useState(false)
-  const [forwardError, setForwardError] = useState<string | null>(null)
+  const lan = useQuery({
+    queryKey: ['tools', 'lan-test'],
+    queryFn: () => api.get<LANTest>('/api/tools/lan-test'),
+    refetchInterval: 5_000,
+    retry: false,
+  })
+  const [lanAddress, setLANAddress] = useState('')
+  const [lanBusy, setLANBusy] = useState(false)
+  const [lanError, setLANError] = useState<string | null>(null)
+  const [lanCopied, setLANCopied] = useState<string | null>(null)
+  const addresses = lan.data?.addresses ?? []
+  const selectedLAN = addresses.includes(lanAddress) ? lanAddress : addresses[0] ?? ''
 
-  async function runForward() {
-    setForwardRunning(true)
-    setForwardResult(null)
-    setForwardError(null)
+  async function changeLAN(start: boolean) {
+    setLANBusy(true)
+    setLANError(null)
     try {
-      setForwardResult(await api.post<ForwardResult>('/api/tools/forward'))
+      if (start) await api.post<LANTest>('/api/tools/lan-test', { address: selectedLAN })
+      else await api.send<void>('DELETE', '/api/tools/lan-test')
+      await lan.refetch()
     } catch (err) {
-      setForwardError(err instanceof Error ? err.message : String(err))
+      setLANError(err instanceof Error ? err.message : String(err))
     } finally {
-      setForwardRunning(false)
+      setLANBusy(false)
+    }
+  }
+
+  async function copyLAN(command: string) {
+    try {
+      await navigator.clipboard.writeText(command)
+      setLANCopied(command)
+    } catch {
+      setLANError('Could not copy automatically. Select the command to copy it.')
     }
   }
 
@@ -298,29 +308,44 @@ export function ToolsPage() {
           <p className="text-sm text-muted-foreground">Test server: {result.server} · {result.location} · Way out: {result.exit || 'Router default route'}</p>
         </div>
       )}
-      <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="forward-heading">
+      <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="lan-heading">
         <div className="flex items-start gap-4">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Gauge className="size-5" aria-hidden /></div>
           <div className="space-y-1">
-            <h2 id="forward-heading" className="text-xl font-semibold tracking-tight">Local forwarding self-test</h2>
-            <p className="text-sm text-muted-foreground">Estimate virtual IPv4 software forwarding without another device or internet access. Requires Linux, iproute2, iperf3 and enabled forwarding.</p>
+            <h2 id="lan-heading" className="text-xl font-semibold tracking-tight">Device-to-router link test</h2>
+            <p className="text-sm text-muted-foreground">Run iperf3 on another device to measure its connection to this router. This tests the link and router's own receive/send capacity, not LAN-to-WAN forwarding or NAT.</p>
           </div>
         </div>
-        <p className="mt-4 text-sm text-muted-foreground">Creates two temporary isolated networks and tests TCP in both directions plus 128-byte UDP packets. It shares CPU with the traffic generators and bypasses physical network cards. It verifies traffic crosses both virtual links, but does not test the configured OLR NAT or firewall policy. It does not change real interfaces or routes, but may briefly load the CPU and affect other traffic.</p>
-        <Button className="mt-5" onClick={runForward} disabled={forwardRunning}>
-          {forwardRunning && <LoaderCircle className="animate-spin" aria-hidden />}
-          {forwardRunning ? 'Measuring forwarding…' : 'Run local self-test'}
-        </Button>
-        {forwardRunning && <p role="status" className="mt-3 text-sm text-muted-foreground">Three five-second tests are running. This may take up to 45 seconds.</p>}
-        {forwardError && <Alert variant="destructive" className="mt-5"><AlertTitle>Self-test unavailable</AlertTitle><AlertDescription>{forwardError}</AlertDescription></Alert>}
-        {forwardResult && <div className="mt-6 space-y-5" aria-live="polite">
-          {forwardResult.runs.map(run => <ForwardChart key={run.name} run={run} />)}
-          <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
-            <p><span className="font-medium text-foreground">OLR NAT:</span> {forwardResult.nat_status}</p>
-            <p className="mt-2"><span className="font-medium text-foreground">OLR firewall policy:</span> {forwardResult.firewall_status}</p>
-            <p className="mt-2">{forwardResult.note}</p>
+        <p className="mt-4 text-sm text-muted-foreground">Install iperf3 on both devices. The router opens TCP port 5201 on the selected LAN address for two minutes; stop it sooner when finished. Anyone able to reach this address and port can connect during that time. A configured firewall may require a temporary TCP 5201 opening.</p>
+        {lan.isError && <Alert variant="destructive" className="mt-4"><AlertTitle>LAN addresses unavailable</AlertTitle><AlertDescription>{lan.error.message}</AlertDescription></Alert>}
+        {lan.data && <div className="mt-5 space-y-4">
+          <div className="max-w-sm space-y-1.5">
+            <Label htmlFor="lan-address">Router LAN address</Label>
+            <Select value={lan.data.address || selectedLAN} onValueChange={value => setLANAddress(value ?? '')} disabled={!!lan.data.address || lanBusy || !addresses.length}>
+              <SelectTrigger id="lan-address"><SelectValue placeholder="No configured LAN IPv4 address" /></SelectTrigger>
+              <SelectContent>{addresses.map(address => <SelectItem key={address} value={address}>{address}</SelectItem>)}</SelectContent>
+            </Select>
           </div>
+          <Button onClick={() => changeLAN(!lan.data?.address)} disabled={lanBusy || (!lan.data.address && !selectedLAN)} variant={lan.data.address ? 'outline' : 'default'}>
+            {lanBusy && <LoaderCircle className="animate-spin" aria-hidden />}
+            {lan.data.address ? 'Stop server' : 'Start server'}
+          </Button>
+          {lan.data.address && <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
+            <p className="text-sm font-medium">Listening on {lan.data.address}:{lan.data.port} until {new Date(lan.data.expires_at!).toLocaleTimeString()}</p>
+            <p className="text-xs text-muted-foreground">Run these on the other device's terminal. The first sends data to OLR; the second makes OLR send data back. Results print in that terminal.</p>
+            {[
+              `iperf3 -c ${lan.data.address} -P 4 -t 10`,
+              `iperf3 -c ${lan.data.address} -P 4 -t 10 -R`,
+            ].map((command, index) => <div key={command} className="space-y-1">
+              <p className="text-xs font-medium">{index === 0 ? 'Device → router' : 'Router → device'}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-background px-3 py-2 text-sm">{command}</code>
+                <Button variant="outline" size="sm" onClick={() => copyLAN(command)}><Copy aria-hidden />{lanCopied === command ? 'Copied' : 'Copy'}</Button>
+              </div>
+            </div>)}
+          </div>}
         </div>}
+        {lanError && <Alert variant="destructive" className="mt-4"><AlertTitle>Link test unavailable</AlertTitle><AlertDescription>{lanError}</AlertDescription></Alert>}
       </section>
       <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="nat-heading">
         <div className="flex items-start gap-4">
@@ -456,21 +481,4 @@ function filteringExplanation(value: string): string {
     case 'no changed-source reply': return 'No reply from a changed source arrived. This could be filtering, server behavior, or packet loss.'
     default: return 'No conclusion from this test.'
   }
-}
-
-function ForwardChart({ run }: { run: ForwardRun }) {
-  const max = Math.max(1, ...run.samples.map(sample => sample.mbps))
-  return <div className="rounded-xl border bg-muted/20 p-4">
-    <div className="flex flex-wrap items-baseline justify-between gap-2">
-      <h3 className="font-medium">{run.name} <span className="text-xs font-normal text-muted-foreground">· {run.path_verified ? 'Virtual forward path verified' : 'Path not verified'}</span></h3>
-      <p className="font-mono text-lg font-semibold tabular-nums">{run.mbps.toFixed(1)} Mbps</p>
-    </div>
-    <div className="mt-4 flex h-28 items-end gap-1.5" role="img" aria-label={`${run.name}: ${run.samples.map(sample => `second ${sample.second}: ${sample.mbps.toFixed(1)} Mbps`).join(', ')}`}>
-      {run.samples.map(sample => <div key={sample.second} className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-1" style={{ height: '100%' }}>
-        <div className="w-full rounded-t bg-primary/75" style={{ height: `${Math.max(2, sample.mbps / max * 85)}%` }} title={`${sample.mbps.toFixed(1)} Mbps`} />
-        <span className="text-[10px] tabular-nums text-muted-foreground">{sample.second}s</span>
-      </div>)}
-    </div>
-    {run.pps != null && <p className="mt-3 text-xs text-muted-foreground">Received {Math.round(run.pps).toLocaleString()} packets/s · {(run.loss_percent ?? 0).toFixed(1)}% loss at the test rate</p>}
-  </div>
 }
