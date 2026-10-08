@@ -278,12 +278,25 @@ export function ToolsPage() {
           {natRunning ? 'Testing…' : 'Run NAT test'}
         </Button>
         {natError && <Alert variant="destructive" className="mt-5"><AlertTitle>NAT test unavailable</AlertTitle><AlertDescription className="break-words">{natError}</AlertDescription></Alert>}
-        {natResult && <div className="mt-5 space-y-2 text-sm" aria-live="polite">
-          <p>STUN server: <span className="font-mono">{natResult.server}</span></p>
-          <p>Observed UDP address: <span className="font-mono">{natResult.mapped}</span></p>
-          <p>Mapping: {natResult.mapping}</p>
-          <p>Filtering: {natResult.filtering}</p>
-          <p className="text-xs text-muted-foreground">Mapping and filtering require a server with a reachable alternate IP and port. “Not tested” or “no changed-source reply” does not establish a NAT type.</p>
+        {natResult && <div className="mt-5 space-y-4 text-sm" aria-live="polite">
+          <div className="rounded-xl border bg-muted/40 p-4">
+            <p className="font-medium">What this test found</p>
+            <p className="mt-1 text-muted-foreground">The STUN server saw this router's UDP traffic as <span className="font-mono text-foreground">{natResult.mapped}</span>. This is the address and temporary port observed for this test, not proof that incoming connections can reach the router.</p>
+            {(natResult.mapping === 'not tested' || natResult.filtering === 'not tested') && <p className="mt-2 text-muted-foreground">The server did not provide enough usable replies to determine {natResult.mapping === 'not tested' && natResult.filtering === 'not tested' ? 'mapping or filtering' : natResult.mapping === 'not tested' ? 'mapping' : 'filtering'}. Your NAT behavior is unknown, not necessarily restrictive.</p>}
+          </div>
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border p-4">
+              <dt className="font-medium">Mapping</dt>
+              <dd className="mt-1 font-mono text-sm">{natResult.mapping}</dd>
+              <p className="mt-2 text-xs text-muted-foreground">Whether the public UDP address and port change when this router contacts different destinations. {mappingExplanation(natResult.mapping)}</p>
+            </div>
+            <div className="rounded-xl border p-4">
+              <dt className="font-medium">Filtering</dt>
+              <dd className="mt-1 font-mono text-sm">{natResult.filtering}</dd>
+              <p className="mt-2 text-xs text-muted-foreground">Whether replies from another server IP or port get through. {filteringExplanation(natResult.filtering)}</p>
+            </div>
+          </dl>
+          <p className="text-xs text-muted-foreground">STUN server: <span className="font-mono">{natResult.server}</span>. This tests the router's own default-route UDP path, not a device behind it or a game's port. It cannot be translated into an Xbox or PlayStation NAT type.</p>
         </div>}
       </section>
       <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="ping-heading">
@@ -368,4 +381,22 @@ function Metric({ icon: Icon, label, value, unit, detail }: {
       {detail && <p className="mt-2 text-xs text-muted-foreground">{detail}</p>}
     </div>
   )
+}
+
+function mappingExplanation(value: string): string {
+  switch (value) {
+    case 'endpoint-independent': return 'The same address and port were observed for the tested destinations.'
+    case 'address-dependent': return 'The mapping changed with the destination IP.'
+    case 'address-and-port-dependent': return 'The mapping changed with the destination IP and port.'
+    default: return 'No conclusion from this test.'
+  }
+}
+
+function filteringExplanation(value: string): string {
+  switch (value) {
+    case 'endpoint-independent': return 'A reply from a different IP and port arrived.'
+    case 'address-dependent': return 'A reply from the same IP but a different port arrived; the different-IP reply did not.'
+    case 'no changed-source reply': return 'No reply from a changed source arrived. This could be filtering, server behavior, or packet loss.'
+    default: return 'No conclusion from this test.'
+  }
 }
