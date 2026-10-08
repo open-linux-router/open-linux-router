@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight, Eye, EyeOff, Info, Plus, Trash2, GripVertical } from 'lucide-react'
+import { AlertTriangle, ChevronRight, Info, Plus, Trash2, GripVertical } from 'lucide-react'
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 
@@ -443,30 +443,21 @@ function IspIcon({ name }: { name?: string }) {
 
 function PublicAddressRow({ family, address }: { family: 'IPv4' | 'IPv6'; address?: PublicAddress }) {
   const [open, setOpen] = useState(false)
-  const [visible, setVisible] = useState(false)
   const location = [address?.city, address?.region, address?.country].filter(Boolean).join(', ')
   const network = [address?.isp, address?.organization && address.organization !== address.isp ? address.organization : undefined].filter(Boolean).join(' · ')
+  const summary = [address?.city || address?.region || address?.country, address?.isp || address?.organization].filter(Boolean).join(', ')
   return <div className="min-w-0 py-1">
-    <div className="flex h-10 min-w-0 items-center rounded-xl bg-muted/65 text-sm ring-1 ring-foreground/[0.06] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]">
-      <button type="button" aria-expanded={open} disabled={!visible || !address?.ip} onClick={() => setOpen(!open)}
-        className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-l-xl pl-3 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-default disabled:hover:bg-transparent">
-        <span className="shrink-0 text-xs text-muted-foreground">{family}</span>
-        <span title={visible ? address?.ip || 'Unavailable' : undefined} className="min-w-0 flex-1 truncate font-semibold tabular-nums">
-          {address?.ip ? visible ? address.ip : 'Hidden' : '—'}
-        </span>
-        {visible && <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />}
-      </button>
-      <button type="button" aria-label={`${visible ? 'Hide' : 'Show'} ${family} address`} aria-pressed={visible}
-        onClick={() => { setVisible(!visible); setOpen(false) }}
-        className="flex size-10 shrink-0 items-center justify-center rounded-r-xl text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-        {visible ? <EyeOff aria-hidden className="size-4" /> : <Eye aria-hidden className="size-4" />}
-      </button>
-    </div>
-    {visible && open && <div className="space-y-1 px-3 pt-2 text-xs text-muted-foreground">
+    <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
+      className="flex h-10 w-full min-w-0 items-center gap-2 rounded-xl bg-muted/65 px-3 text-left text-sm ring-1 ring-foreground/[0.06] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <span className="shrink-0 text-xs text-muted-foreground">{family}</span>
+      <span className="min-w-0 flex-1 truncate font-semibold" title={summary || undefined}>{summary || (address?.ip ? 'Location unavailable' : '—')}</span>
+      <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
+    </button>
+    {open && <div className="space-y-1 px-3 pt-2 text-xs text-muted-foreground">
+      <p className="break-all font-medium text-foreground">{address?.ip || 'Address unavailable'}</p>
       {location && <p className="flex items-center gap-1.5 break-words"><CountryIcon code={address?.country_code} />{location}</p>}
       {network && <p className="flex items-center gap-1.5 break-words"><IspIcon name={address?.isp} />{network}</p>}
       {address?.asn && <p>AS{address.asn}</p>}
-      {!location && !network && !address?.asn && <p>{address?.ip ? 'Location unavailable' : 'Address unavailable'}</p>}
     </div>}
   </div>
 }
