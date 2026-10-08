@@ -1,10 +1,10 @@
-import { Activity, ArrowLeftRight, Globe, Network, Shield, SlidersHorizontal, Waypoints, Wrench } from 'lucide-react'
+import { Activity, ArrowLeftRight, Shield, SlidersHorizontal, Waypoints, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /**
  * Every section of the app, and everything inside one.
  *
- * This table is the only description of a section anywhere. It renders in five
+ * This table describes top-level sections and nested Gateway destinations. It renders in five
  * places now — the top bar, the tab bar, the page title, the settings list on a
  * section's landing page, and the header of every sub-page — because writing a
  * heading four times is four ways for it to drift.
@@ -23,20 +23,10 @@ import type { LucideIcon } from 'lucide-react'
  * blurbs below are that explanation — they are not shown in the list, only on
  * the page the row leads to, which is the moment they are worth reading.
  *
- * ## Why the section names did not change
- *
- * The old rule was to use the word the audience already knows, which is why
- * dhcp's section was once called "Addresses" — nobody outside networking says
- * DHCP. That rule was right while this list *was* the front door. It is not any
- * more: the overview answers the everyday questions in plain language, so the
- * rest are free to name mechanisms, and the person who goes looking for a
- * section called DHCP is exactly the person who wants DHCP. Mechanism names in
- * a row also read as one system, where "Addresses / DNS / Internet" read as
- * three different registers.
- *
- * Networks is under Gateway: interfaces, local subnets and the uplink are
- * prerequisites for deciding how traffic leaves. Firewall has its own section
- * because its boundary and live openings deserve a direct place in the bar.
+ * Networks, DHCP and DNS live under Gateway: the interfaces and subnets it
+ * serves, the addresses it hands out, and the names it resolves belong together.
+ * Firewall has its own section because its boundary and live openings deserve
+ * a direct place in the bar; Access follows it.
  *
  * Advanced is the one section that is not a module, and that is the point of
  * it. The other sections are what every router has, in the order an operator
@@ -60,7 +50,7 @@ import type { LucideIcon } from 'lucide-react'
  * systemd units, which is the thing this page is not about.
  */
 export interface SettingGroup {
-  /** The last segment of the URL: /dns/blocking. */
+  /** The last segment of the URL: /gateway/dns/blocking. */
   slug: string
   label: string
   /** Shown on the sub-page itself, never in the list that links to it. */
@@ -72,6 +62,8 @@ export interface Section {
   label: string
   icon: LucideIcon
   end: boolean
+  /** A destination within a section, not a top-level navigation item. */
+  nested?: boolean
   groups: SettingGroup[]
 }
 
@@ -93,6 +85,16 @@ export const SECTIONS: Section[] = [
         slug: 'networks',
         label: 'Networks',
         blurb: 'The interfaces this router uses, the subnets it serves, and its own internet uplink.',
+      },
+      {
+        slug: 'dhcp',
+        label: 'DHCP',
+        blurb: 'Hand out addresses and reserve them for devices that need a fixed one.',
+      },
+      {
+        slug: 'dns',
+        label: 'DNS',
+        blurb: 'Resolve names, manage local names and control what devices can look up.',
       },
       {
         slug: 'exits',
@@ -121,16 +123,10 @@ export const SECTIONS: Section[] = [
     ],
   },
   {
-    to: '/access',
-    label: 'Access',
-    icon: ArrowLeftRight,
-    end: true,
-    groups: [],
-  },
-  {
-    to: '/dhcp',
+    to: '/gateway/dhcp',
     label: 'DHCP',
-    icon: Network,
+    icon: Waypoints,
+    nested: true,
     end: false,
     groups: [
       {
@@ -155,9 +151,10 @@ export const SECTIONS: Section[] = [
     ],
   },
   {
-    to: '/dns',
+    to: '/gateway/dns',
     label: 'DNS',
-    icon: Globe,
+    icon: Waypoints,
+    nested: true,
     end: false,
     groups: [
       {
@@ -200,6 +197,13 @@ export const SECTIONS: Section[] = [
     to: '/firewall',
     label: 'Firewall',
     icon: Shield,
+    end: false,
+    groups: [],
+  },
+  {
+    to: '/access',
+    label: 'Access',
+    icon: ArrowLeftRight,
     end: false,
     groups: [],
   },
@@ -264,7 +268,9 @@ export const SECTIONS: Section[] = [
 
 /** The section a path belongs to, section landing pages and sub-pages alike. */
 export function sectionOf(pathname: string): Section | undefined {
-  return SECTIONS.find(({ to, end }) => (end ? pathname === to : pathname.startsWith(to)))
+  return [...SECTIONS].reverse().find(({ to, end }) =>
+    end ? pathname === to : pathname === to || pathname.startsWith(`${to}/`),
+  )
 }
 
 /** One group, by the section path and slug the caller already knows. */

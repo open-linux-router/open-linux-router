@@ -205,7 +205,7 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
       detail:
         'DNS is on and the server is stopped. To the people using this network it looks like the internet is down.',
       tone: 'bad',
-      to: '/dns',
+      to: '/gateway/dns',
       action: 'Open DNS',
     })
   }
@@ -217,7 +217,7 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
       detail:
         'DHCP is on and the server is stopped. Devices here keep their address until it expires; anything joining now gets none.',
       tone: 'bad',
-      to: '/dhcp',
+      to: '/gateway/dhcp',
       action: 'Open DHCP',
     })
   }
@@ -238,7 +238,7 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
       title: 'DNS will not come back after a reboot',
       detail: `${service.unit} is running, but is not set to start at boot.`,
       tone: 'warn',
-      to: '/dns',
+      to: '/gateway/dns',
       action: 'Open DNS',
     })
   }
@@ -249,8 +249,8 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
   // saved takes effect until what broke them is fixed. StuckSettings has the
   // rest, and the box that had it.
   const stuck: { name: string; to: string; error?: string }[] = [
-    { name: 'DHCP', to: '/dhcp', error: dhcp?.enabled ? dhcp.drift_error : undefined },
-    { name: 'DNS', to: '/dns', error: dns?.enabled ? dns.drift_error : undefined },
+    { name: 'DHCP', to: '/gateway/dhcp', error: dhcp?.enabled ? dhcp.drift_error : undefined },
+    { name: 'DNS', to: '/gateway/dns', error: dns?.enabled ? dns.drift_error : undefined },
   ]
   for (const s of stuck) {
     if (!s.error) continue
@@ -272,8 +272,8 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
   // something had changed the configuration behind their back. Nothing had.
   // The section's own page still shows it, where the claim is narrower.
   const drifted: { name: string; to: string }[] = []
-  if (dhcp?.enabled && dhcp.drifted && !dhcp.drift_error) drifted.push({ name: 'DHCP', to: '/dhcp' })
-  if (dns?.enabled && dns.drifted && !dns.drift_error) drifted.push({ name: 'DNS', to: '/dns' })
+  if (dhcp?.enabled && dhcp.drifted && !dhcp.drift_error) drifted.push({ name: 'DHCP', to: '/gateway/dhcp' })
+  if (dns?.enabled && dns.drifted && !dns.drift_error) drifted.push({ name: 'DNS', to: '/gateway/dns' })
   if (gateway?.drifted) drifted.push({ name: 'The gateway', to: '/gateway' })
   for (const d of drifted) {
     out.push({

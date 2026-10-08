@@ -25,15 +25,15 @@ import { DIRECT } from '@/features/gateway/network-list'
 import { InterfaceVisual, interfaceState } from '@/features/link/interface-visual'
 import { useInterfaces } from '@/features/link/queries'
 import { useUplink } from '@/features/dial/queries'
+import { useDhcpStatus } from '@/features/dhcp/queries'
+import { useDnsStatus } from '@/features/dns/queries'
 import { gatewayChange, useGatewayStatus, useReapplyGateway } from '@/features/gateway/queries'
 
 /**
  * The gateway, on the page you land on.
  *
- * Two things, in the order docs/gateway.md §1.3 puts them: the one setting
- * every network follows, and the networks that follow it. Ways out, usage and
- * somebody else's routing rules are each a page of their own — they are what
- * you configure once, where this is what you look at.
+ * The default route and interfaces are visible here. DHCP, DNS, ways out,
+ * usage and routing details have their own pages below.
  */
 export function GatewayPage() {
   const { config, busy, change, applier, gate } = useGatewayEditor()
@@ -41,6 +41,8 @@ export function GatewayPage() {
   const reapply = useReapplyGateway()
   const interfaces = useInterfaces()
   const uplink = useUplink()
+  const dhcp = useDhcpStatus()
+  const dns = useDnsStatus()
 
   if (!config) return gate
   const exits = config.exits ?? []
@@ -144,6 +146,8 @@ export function GatewayPage() {
             slug: 'networks',
             value: interfaces.data ? `${interfaces.data.networks.length} configured` : undefined,
           },
+          { slug: 'dhcp', value: dhcp.data ? (dhcp.data.enabled ? 'On' : 'Off') : undefined },
+          { slug: 'dns', value: dns.data ? (dns.data.enabled ? 'On' : 'Off') : undefined },
           {
             slug: 'exits',
             value: exits.length ? exits.map((e) => e.name).join(', ') : 'None yet',

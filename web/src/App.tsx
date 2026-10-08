@@ -1,4 +1,4 @@
-import { Link, Navigate, Route, Routes } from 'react-router'
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router'
 
 import { AppShell } from '@/components/layout/app-shell'
 import { Button } from '@/components/ui/button'
@@ -52,31 +52,28 @@ export function App() {
             <Route path="usage" element={<GatewayUsagePage />} />
             <Route path="ipv6" element={<GatewayIPv6Page />} />
             <Route path="unmanaged" element={<GatewayUnmanagedPage />} />
-          </Route>
-          <Route path="dhcp">
-            <Route index element={<DhcpPage />} />
-            <Route path="ranges" element={<DhcpRangesPage />} />
-            <Route path="reservations" element={<DhcpReservationsPage />} />
-            <Route path="advanced" element={<DhcpAdvancedPage />} />
-          </Route>
+            <Route path="dhcp">
+              <Route index element={<DhcpPage />} />
+              <Route path="ranges" element={<DhcpRangesPage />} />
+              <Route path="reservations" element={<DhcpReservationsPage />} />
+              <Route path="advanced" element={<DhcpAdvancedPage />} />
+            </Route>
 
-          {/* A section is a landing page and one page per settings group. The
-              groups are listed in components/layout/sections.ts, which is also
-              where their labels and explanations come from — a route added here
-              without an entry there throws on render rather than drawing a page
-              with an empty heading. */}
-          <Route path="dns">
-            <Route index element={<DnsPage />} />
-            <Route path="blocking" element={<DnsBlockingPage />} />
-            <Route path="names" element={<DnsNamesPage />} />
-            <Route path="resolving" element={<DnsResolvingPage />} />
-            <Route path="listening" element={<DnsListeningPage />} />
-            <Route path="enforcement" element={<DnsEnforcementPage />} />
-            <Route path="advanced" element={<DnsAdvancedPage />} />
+            {/* DHCP and DNS keep their own status and settings pages inside Gateway.
+                Their group labels and explanations live in sections.ts. */}
+            <Route path="dns">
+              <Route index element={<DnsPage />} />
+              <Route path="blocking" element={<DnsBlockingPage />} />
+              <Route path="names" element={<DnsNamesPage />} />
+              <Route path="resolving" element={<DnsResolvingPage />} />
+              <Route path="listening" element={<DnsListeningPage />} />
+              <Route path="enforcement" element={<DnsEnforcementPage />} />
+              <Route path="advanced" element={<DnsAdvancedPage />} />
+            </Route>
           </Route>
+          <Route path="firewall" element={<FirewallPage />} />
           <Route path="access" element={<AccessPage />} />
           <Route path="access/socks5" element={<SocksOutPage />} />
-          <Route path="firewall" element={<FirewallPage />} />
           <Route path="tools" element={<ToolsPage />} />
           <Route path="advanced">
             <Route index element={<AdvancedPage />} />
@@ -103,6 +100,8 @@ export function App() {
           <Route path="ingress" element={<Navigate to="/advanced/ingress" replace />} />
           <Route path="devices" element={<Navigate to="/" replace />} />
           <Route path="dhcp/interfaces" element={<Navigate to="/gateway/networks" replace />} />
+          <Route path="dhcp/*" element={<LegacySectionRedirect />} />
+          <Route path="dns/*" element={<LegacySectionRedirect />} />
 
           <Route path="*" element={<NotFound />} />
         </Route>
@@ -123,4 +122,9 @@ function NotFound() {
       <Button variant="outline" size="sm" render={<Link to="/">Go to Overview</Link>} />
     </div>
   )
+}
+
+function LegacySectionRedirect() {
+  const { pathname, search, hash } = useLocation()
+  return <Navigate to={`/gateway${pathname}${search}${hash}`} replace />
 }

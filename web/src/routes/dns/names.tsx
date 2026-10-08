@@ -36,7 +36,7 @@ export function DnsNamesPage() {
   }
 
   return (
-    <SubPage section="/dns" slug="names">
+    <SubPage section="/gateway/dns" slug="names">
       <ApplyOutcome applier={applier} />
 
       <div className="flex justify-end">

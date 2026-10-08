@@ -28,7 +28,7 @@ export function DnsBlockingPage() {
   }
 
   return (
-    <SubPage section="/dns" slug="blocking">
+    <SubPage section="/gateway/dns" slug="blocking">
       <ApplyOutcome applier={applier} />
 
       <div className="flex justify-end">

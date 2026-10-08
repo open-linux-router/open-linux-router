@@ -76,7 +76,7 @@ export function DhcpPage() {
       />
 
       <SettingsList
-        section="/dhcp"
+        section="/gateway/dhcp"
         rows={[
           {
             slug: 'ranges',
@@ -191,7 +191,7 @@ function StatusCard({
 
       <StuckSettings
         error={config.enabled ? status?.drift_error : undefined}
-        fix={{ to: '/dhcp/ranges', label: 'Address ranges' }}
+        fix={{ to: '/gateway/dhcp/ranges', label: 'Address ranges' }}
       />
 
       {/* Usually the same dnsmasq the DNS page is complaining about: the

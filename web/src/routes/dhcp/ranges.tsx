@@ -39,7 +39,7 @@ export function DhcpRangesPage() {
   }
 
   return (
-    <SubPage section="/dhcp" slug="ranges">
+    <SubPage section="/gateway/dhcp" slug="ranges">
       <ApplyOutcome applier={applier} />
 
       <div className="flex justify-end">

@@ -81,7 +81,7 @@ export function DnsPage() {
       <ActivityCard config={config} busy={busy} onChange={change} />
 
       <SettingsList
-        section="/dns"
+        section="/gateway/dns"
         rows={[
           { slug: 'blocking', value: describeCount(config.policies?.length, 'rule') },
           { slug: 'names', value: describeCount(config.hosts?.length, 'name') },
@@ -220,7 +220,7 @@ function StatusCard({
         error={config.enabled ? status?.drift_error : undefined}
         fix={
           status?.drift_error?.startsWith('listen')
-            ? { to: '/dns/listening', label: 'Listening' }
+            ? { to: '/gateway/dns/listening', label: 'Listening' }
             : undefined
         }
       />

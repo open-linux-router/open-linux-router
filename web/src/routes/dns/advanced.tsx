@@ -10,7 +10,7 @@ export function DnsAdvancedPage() {
   const entries = config.query_log.entries ?? 0
 
   return (
-    <SubPage section="/dns" slug="advanced">
+    <SubPage section="/gateway/dns" slug="advanced">
       <ApplyOutcome applier={applier} />
 
       <EditableField

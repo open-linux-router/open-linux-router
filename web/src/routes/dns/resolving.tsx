@@ -36,7 +36,7 @@ export function DnsResolvingPage() {
     change({ ...config, upstream: { ...upstream, ...next } })
 
   return (
-    <SubPage section="/dns" slug="resolving">
+    <SubPage section="/gateway/dns" slug="resolving">
       <ApplyOutcome applier={applier} />
 
       <div className="grid gap-2">

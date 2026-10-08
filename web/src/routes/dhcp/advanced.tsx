@@ -7,7 +7,7 @@ export function DhcpAdvancedPage() {
   if (!config) return gate
 
   return (
-    <SubPage section="/dhcp" slug="advanced">
+    <SubPage section="/gateway/dhcp" slug="advanced">
       <ApplyOutcome applier={applier} />
 
       <EditableField

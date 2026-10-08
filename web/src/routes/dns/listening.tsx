@@ -7,7 +7,7 @@ export function DnsListeningPage() {
   if (!config) return gate
 
   return (
-    <SubPage section="/dns" slug="listening">
+    <SubPage section="/gateway/dns" slug="listening">
       <ApplyOutcome applier={applier} />
 
       <EditableField

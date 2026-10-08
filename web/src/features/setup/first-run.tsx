@@ -97,7 +97,7 @@ export function FirstRun() {
           // your router and catastrophic when your old one still is. The form
           // asks; a button here could only guess.
           detail="Choosing a network fills in a range. Check what it advertises if something else on this network is still your router."
-          action={{ to: '/dhcp/ranges', label: 'Set up a range' }}
+          action={{ to: '/gateway/dhcp/ranges', label: 'Set up a range' }}
         />
         <Step
           n={3}

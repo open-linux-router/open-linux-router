@@ -51,7 +51,7 @@ function DesktopNav() {
   return (
     <nav className="ml-4 hidden min-w-0 self-stretch overflow-x-auto sm:block" aria-label="Sections">
       <ul className="flex h-full items-stretch gap-1">
-        {SECTIONS.map(({ to, label, end }) => (
+        {SECTIONS.filter((section) => !section.nested).map(({ to, label, end }) => (
           <li key={to}>
             <NavLink
               to={to}
@@ -147,7 +147,7 @@ function MobileTabBar() {
       className="fixed inset-x-0 bottom-0 z-20 overflow-x-auto border-t bg-background/92 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl sm:hidden"
     >
       <ul className="flex min-w-max">
-        {SECTIONS.map(({ to, label, icon: Icon, end }) => (
+        {SECTIONS.filter((section) => !section.nested).map(({ to, label, icon: Icon, end }) => (
           <li key={to} className="flex-1">
             <NavLink
               to={to}

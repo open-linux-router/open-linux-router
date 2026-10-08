@@ -10,7 +10,7 @@ export function DnsEnforcementPage() {
   const set = (next: Partial<typeof hijack>) => change({ ...config, hijack: { ...hijack, ...next } })
 
   return (
-    <SubPage section="/dns" slug="enforcement">
+    <SubPage section="/gateway/dns" slug="enforcement">
       <ApplyOutcome applier={applier} />
 
       <SwitchField

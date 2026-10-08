@@ -29,7 +29,7 @@ export function DhcpReservationsPage() {
   }
 
   return (
-    <SubPage section="/dhcp" slug="reservations">
+    <SubPage section="/gateway/dhcp" slug="reservations">
       <ApplyOutcome applier={applier} />
 
       <div className="flex justify-end">
