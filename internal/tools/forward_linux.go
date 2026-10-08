@@ -11,6 +11,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,16 +26,19 @@ type ForwardSample struct {
 }
 
 type ForwardRun struct {
-	Name    string          `json:"name"`
-	Mbps    float64         `json:"mbps"`
-	PPS     float64         `json:"pps,omitempty"`
-	Loss    float64         `json:"loss_percent,omitempty"`
-	Samples []ForwardSample `json:"samples"`
+	Name         string          `json:"name"`
+	PathVerified bool            `json:"path_verified"`
+	Mbps         float64         `json:"mbps"`
+	PPS          float64         `json:"pps,omitempty"`
+	Loss         float64         `json:"loss_percent,omitempty"`
+	Samples      []ForwardSample `json:"samples"`
 }
 
 type ForwardResult struct {
-	Runs []ForwardRun `json:"runs"`
-	Note string       `json:"note"`
+	Runs           []ForwardRun `json:"runs"`
+	Note           string       `json:"note"`
+	NATStatus      string       `json:"nat_status"`
+	FirewallStatus string       `json:"firewall_status"`
 }
 
 func command(ctx context.Context, binary string, args ...string) ([]byte, error) {
@@ -96,17 +102,22 @@ func forwardBenchmark(ctx context.Context) (ForwardResult, error) {
 			return ForwardResult{}, fmt.Errorf("setting up isolated test network: %w", err)
 		}
 	}
-	result := ForwardResult{Runs: make([]ForwardRun, 0, 3), Note: "Same-host software forwarding only. Generator, receiver and router share CPU; virtual links bypass physical NICs. Results are not a guaranteed WAN speed."}
+	result := ForwardResult{
+		Runs:           make([]ForwardRun, 0, 3),
+		NATStatus:      "Not tested: temporary sources and virtual egress do not match the router's configured LAN and uplink.",
+		FirewallStatus: "Not tested: temporary interfaces are not the router's configured inside interfaces.",
+		Note:           "Virtual software forwarding only. Generator and receiver share CPU with the router; physical NICs are bypassed. This is not a guaranteed WAN speed.",
+	}
 	for _, stage := range []struct {
 		name string
 		args []string
 		udp  bool
 	}{
-		{"LAN to WAN (TCP)", []string{"-P", "4"}, false},
-		{"WAN to LAN (TCP)", []string{"-P", "4", "-R"}, false},
+		{"Virtual A to B (TCP)", []string{"-P", "4"}, false},
+		{"Virtual B to A (TCP)", []string{"-P", "4", "-R"}, false},
 		{"Small packets (UDP, 128 B)", []string{"-u", "-l", "128", "-b", "100M"}, true},
 	} {
-		run, err := forwardStage(ctx, ip, iperf, a, b, stage.name, stage.args, stage.udp)
+		run, err := forwardStage(ctx, ip, iperf, a, b, va, vb, stage.name, stage.args, stage.udp)
 		if err != nil {
 			return ForwardResult{}, err
 		}
@@ -115,7 +126,19 @@ func forwardBenchmark(ctx context.Context) (ForwardResult, error) {
 	return result, nil
 }
 
-func forwardStage(ctx context.Context, ip, iperf, a, b, name string, options []string, udp bool) (ForwardRun, error) {
+func forwardStage(ctx context.Context, ip, iperf, a, b, va, vb, name string, options []string, udp bool) (ForwardRun, error) {
+	ingress, egress := va, vb
+	if slices.Contains(options, "-R") {
+		ingress, egress = vb, va
+	}
+	beforeIn, err := interfaceBytes(ingress, "rx_bytes")
+	if err != nil {
+		return ForwardRun{}, err
+	}
+	beforeOut, err := interfaceBytes(egress, "tx_bytes")
+	if err != nil {
+		return ForwardRun{}, err
+	}
 	server := exec.CommandContext(ctx, ip, "netns", "exec", b, iperf, "-s", "-1", "-B", "198.19.254.6")
 	if err := server.Start(); err != nil {
 		return ForwardRun{}, fmt.Errorf("starting test receiver: %w", err)
@@ -135,13 +158,39 @@ func forwardStage(ctx context.Context, ip, iperf, a, b, name string, options []s
 	args = append(args, options...)
 	output, err := command(ctx, ip, args...)
 	if err != nil {
-		return ForwardRun{}, fmt.Errorf("%s: %w (check local firewall rules)", name, err)
+		return ForwardRun{}, fmt.Errorf("%s: %w (the host firewall may block the temporary path)", name, err)
 	}
 	run, err := parseForwardRun(name, output, udp)
 	if err != nil {
 		return ForwardRun{}, err
 	}
+	afterIn, err := interfaceBytes(ingress, "rx_bytes")
+	if err != nil {
+		return ForwardRun{}, err
+	}
+	afterOut, err := interfaceBytes(egress, "tx_bytes")
+	if err != nil {
+		return ForwardRun{}, err
+	}
+	// Both host-side links must carry substantial traffic in the expected direction.
+	if afterIn <= beforeIn+100_000 || afterOut <= beforeOut+100_000 {
+		return ForwardRun{}, fmt.Errorf("%s: forwarding path could not be verified on both virtual links", name)
+	}
+	run.PathVerified = true
 	return run, nil
+}
+
+func interfaceBytes(name, counter string) (uint64, error) {
+	// Names are generated from a random hex suffix; never use a caller-supplied path.
+	raw, err := os.ReadFile(filepath.Join("/sys/class/net", name, "statistics", counter))
+	if err != nil {
+		return 0, fmt.Errorf("reading %s %s: %w", name, counter, err)
+	}
+	value, err := strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("reading %s %s: %w", name, counter, err)
+	}
+	return value, nil
 }
 
 func parseForwardRun(name string, output []byte, udp bool) (ForwardRun, error) {

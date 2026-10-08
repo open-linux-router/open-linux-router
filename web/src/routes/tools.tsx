@@ -40,6 +40,7 @@ function explainFailure(err: unknown): TestError {
 
 interface ForwardRun {
   name: string
+  path_verified: boolean
   mbps: number
   pps?: number
   loss_percent?: number
@@ -49,6 +50,8 @@ interface ForwardRun {
 interface ForwardResult {
   runs: ForwardRun[]
   note: string
+  nat_status: string
+  firewall_status: string
 }
 
 interface SpeedResult {
@@ -300,10 +303,10 @@ export function ToolsPage() {
           <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Gauge className="size-5" aria-hidden /></div>
           <div className="space-y-1">
             <h2 id="forward-heading" className="text-xl font-semibold tracking-tight">Local forwarding self-test</h2>
-            <p className="text-sm text-muted-foreground">Estimate this machine's IPv4 software forwarding capacity without another device or internet access. Requires Linux, iproute2, iperf3 and enabled forwarding.</p>
+            <p className="text-sm text-muted-foreground">Estimate virtual IPv4 software forwarding without another device or internet access. Requires Linux, iproute2, iperf3 and enabled forwarding.</p>
           </div>
         </div>
-        <p className="mt-4 text-sm text-muted-foreground">Creates two temporary isolated networks and tests TCP in both directions plus 128-byte UDP packets. It shares CPU with the traffic generators and bypasses physical network cards. It does not change real interfaces or routes, but may briefly load the CPU and affect other traffic.</p>
+        <p className="mt-4 text-sm text-muted-foreground">Creates two temporary isolated networks and tests TCP in both directions plus 128-byte UDP packets. It shares CPU with the traffic generators and bypasses physical network cards. It verifies traffic crosses both virtual links, but does not test the configured OLR NAT or firewall policy. It does not change real interfaces or routes, but may briefly load the CPU and affect other traffic.</p>
         <Button className="mt-5" onClick={runForward} disabled={forwardRunning}>
           {forwardRunning && <LoaderCircle className="animate-spin" aria-hidden />}
           {forwardRunning ? 'Measuring forwarding…' : 'Run local self-test'}
@@ -312,7 +315,11 @@ export function ToolsPage() {
         {forwardError && <Alert variant="destructive" className="mt-5"><AlertTitle>Self-test unavailable</AlertTitle><AlertDescription>{forwardError}</AlertDescription></Alert>}
         {forwardResult && <div className="mt-6 space-y-5" aria-live="polite">
           {forwardResult.runs.map(run => <ForwardChart key={run.name} run={run} />)}
-          <p className="text-xs text-muted-foreground">{forwardResult.note}</p>
+          <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+            <p><span className="font-medium text-foreground">OLR NAT:</span> {forwardResult.nat_status}</p>
+            <p className="mt-2"><span className="font-medium text-foreground">OLR firewall policy:</span> {forwardResult.firewall_status}</p>
+            <p className="mt-2">{forwardResult.note}</p>
+          </div>
         </div>}
       </section>
       <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="nat-heading">
@@ -455,7 +462,7 @@ function ForwardChart({ run }: { run: ForwardRun }) {
   const max = Math.max(1, ...run.samples.map(sample => sample.mbps))
   return <div className="rounded-xl border bg-muted/20 p-4">
     <div className="flex flex-wrap items-baseline justify-between gap-2">
-      <h3 className="font-medium">{run.name}</h3>
+      <h3 className="font-medium">{run.name} <span className="text-xs font-normal text-muted-foreground">· {run.path_verified ? 'Virtual forward path verified' : 'Path not verified'}</span></h3>
       <p className="font-mono text-lg font-semibold tabular-nums">{run.mbps.toFixed(1)} Mbps</p>
     </div>
     <div className="mt-4 flex h-28 items-end gap-1.5" role="img" aria-label={`${run.name}: ${run.samples.map(sample => `second ${sample.second}: ${sample.mbps.toFixed(1)} Mbps`).join(', ')}`}>
@@ -464,6 +471,6 @@ function ForwardChart({ run }: { run: ForwardRun }) {
         <span className="text-[10px] tabular-nums text-muted-foreground">{sample.second}s</span>
       </div>)}
     </div>
-    {run.pps != null && <p className="mt-3 text-xs text-muted-foreground">Received {Math.round(run.pps).toLocaleString()} packets/s · {run.loss_percent?.toFixed(1)}% loss at the test rate</p>}
+    {run.pps != null && <p className="mt-3 text-xs text-muted-foreground">Received {Math.round(run.pps).toLocaleString()} packets/s · {(run.loss_percent ?? 0).toFixed(1)}% loss at the test rate</p>}
   </div>
 }
