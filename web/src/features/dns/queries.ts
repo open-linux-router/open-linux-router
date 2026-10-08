@@ -11,10 +11,8 @@ const OBSERVED_REFETCH_MS = 5000
 /**
  * How many observed rows to pull per poll.
  *
- * The relay holds QueryLog.entries — 5000 by default — and a page fetching all
- * of them every five seconds would move most of a megabyte per poll to render a
- * screenful. `stats.held` still carries the true total, so the page can say how
- * many it is not showing rather than implying a quiet network.
+ * The initial poll stays small; older pages can request more retained entries
+ * without making every visitor download the whole ring.
  */
 const OBSERVED_LIMIT = 200
 
@@ -50,11 +48,11 @@ export function useDnsStatus() {
  * endpoint can report (it 503s), and suppressing the request would replace that
  * with an empty list.
  */
-export function useDnsQueries(enabled = true) {
+export function useDnsQueries(enabled = true, limit = OBSERVED_LIMIT) {
   return useQuery({
-    queryKey: dnsKeys.queries,
-    queryFn: () => api.get<DnsQueries>(`/api/dns/queries?limit=${OBSERVED_LIMIT}`),
-    refetchInterval: OBSERVED_REFETCH_MS,
+    queryKey: [...dnsKeys.queries, limit],
+    queryFn: () => api.get<DnsQueries>(`/api/dns/queries?limit=${limit}`),
+    refetchInterval: limit <= OBSERVED_LIMIT ? OBSERVED_REFETCH_MS : false,
     enabled,
     // A 503 means the relay is down, which is a state to report and not a
     // transient to retry into a spinner.

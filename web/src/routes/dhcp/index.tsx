@@ -23,7 +23,7 @@ import type { DhcpConfig } from '@/lib/config-types'
  * showing the same list twice is what took the connected-devices card off this
  * page in the first place.
  */
-export function DhcpPage() {
+export function DhcpContent() {
   const { config, busy, change, applier, gate } = useDhcpEditor()
   const status = useDhcpStatus()
   const leases = useDhcpLeases()

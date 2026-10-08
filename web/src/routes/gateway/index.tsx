@@ -1,8 +1,11 @@
 import { AlertTriangle, ChevronRight } from 'lucide-react'
-import { useState } from 'react'
-import { Link } from 'react-router'
+import { useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router'
 
 import { SettingsList } from '@/components/layout/settings-list'
+import { NetworksContent } from '@/routes/gateway/networks'
+import { DhcpContent } from '@/routes/dhcp/index'
+import { DnsContent } from '@/routes/dns/index'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   Card,
@@ -29,8 +32,6 @@ import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/gatew
 import { InterfaceVisual, interfaceState } from '@/features/link/interface-visual'
 import { useInterfaces } from '@/features/link/queries'
 import { useUplink } from '@/features/dial/queries'
-import { useDhcpStatus } from '@/features/dhcp/queries'
-import { useDnsStatus } from '@/features/dns/queries'
 import { gatewayChange, useGatewayStatus, usePlanGatewayRepair, useReapplyGateway } from '@/features/gateway/queries'
 import { ApiError } from '@/lib/api'
 import type { GatewayApplyResult, GatewayPlan } from '@/lib/api-types'
@@ -38,8 +39,8 @@ import type { GatewayApplyResult, GatewayPlan } from '@/lib/api-types'
 /**
  * The gateway, on the page you land on.
  *
- * The default route and interfaces are visible here. DHCP, DNS, ways out,
- * usage and routing details have their own pages below.
+ * The default route, interfaces, networks, DHCP and DNS are visible here.
+ * Less frequently changed routing details keep their own pages.
  */
 export function GatewayPage() {
   const { config, busy, change, applier, gate } = useGatewayEditor()
@@ -52,8 +53,13 @@ export function GatewayPage() {
   const [repairAttempted, setRepairAttempted] = useState(false)
   const interfaces = useInterfaces()
   const uplink = useUplink()
-  const dhcp = useDhcpStatus()
-  const dns = useDnsStatus()
+  const { hash } = useLocation()
+
+  useEffect(() => {
+    if (config?.enabled !== undefined && hash) {
+      document.getElementById(hash.slice(1))?.scrollIntoView()
+    }
+  }, [config?.enabled, hash])
 
   if (!config) return gate
   const exits = config.exits ?? []
@@ -229,15 +235,24 @@ export function GatewayPage() {
         </Card>
       </div>
 
+      <section id="networks" className="space-y-4 border-t pt-6" aria-labelledby="networks-heading">
+        <h2 id="networks-heading" className="text-xl font-semibold tracking-tight">Networks</h2>
+        <NetworksContent />
+      </section>
+
+      <section id="dhcp" className="space-y-4 border-t pt-6" aria-labelledby="dhcp-heading">
+        <h2 id="dhcp-heading" className="text-xl font-semibold tracking-tight">DHCP</h2>
+        <DhcpContent />
+      </section>
+
+      <section id="dns" className="space-y-4 border-t pt-6" aria-labelledby="dns-heading">
+        <h2 id="dns-heading" className="text-xl font-semibold tracking-tight">DNS</h2>
+        <DnsContent />
+      </section>
+
       <SettingsList
         section="/gateway"
         rows={[
-          {
-            slug: 'networks',
-            value: interfaces.data ? `${interfaces.data.networks.length} configured` : undefined,
-          },
-          { slug: 'dhcp', value: dhcp.data ? (dhcp.data.enabled ? 'On' : 'Off') : undefined },
-          { slug: 'dns', value: dns.data ? (dns.data.enabled ? 'On' : 'Off') : undefined },
           {
             slug: 'exits',
             value: exits.length ? exits.map((e) => e.name).join(', ') : 'None yet',

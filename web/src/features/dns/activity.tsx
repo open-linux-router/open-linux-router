@@ -2,6 +2,7 @@ import { Search, ShieldOff } from 'lucide-react'
 import { useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardAction,
@@ -35,6 +36,8 @@ import { cn } from '@/lib/utils'
  * of the page.
  */
 type View = 'queries' | 'names'
+const PAGE_SIZE = 25
+const INITIAL_LIMIT = 200
 
 export function ActivityCard({
   config,
@@ -48,8 +51,10 @@ export function ActivityCard({
   const [view, setView] = useState<View>('queries')
   const [filter, setFilter] = useState('')
   const [blockedOnly, setBlockedOnly] = useState(false)
+  const [page, setPage] = useState(0)
+  const [queryLimit, setQueryLimit] = useState(INITIAL_LIMIT)
 
-  const queries = useDnsQueries(view === 'queries')
+  const queries = useDnsQueries(view === 'queries', queryLimit)
   const names = useDnsNames(view === 'names')
 
   const active = view === 'queries' ? queries : names
@@ -88,6 +93,7 @@ export function ActivityCard({
             onChange={(next) => {
               setView(next)
               setBlockedOnly(false)
+              setPage(0)
             }}
           />
           <div className="relative ml-auto min-w-0 flex-1 sm:max-w-56">
@@ -100,14 +106,22 @@ export function ActivityCard({
               placeholder="Filter by name or device"
               className="h-9 pl-8"
               value={filter}
-              onChange={(e) => setFilter(e.target.value)}
+              onChange={(e) => {
+                setFilter(e.target.value)
+                setPage(0)
+                if (e.target.value.trim()) setQueryLimit(Math.max(queryLimit, config.query_log.entries || 5000))
+              }}
             />
           </div>
           {view === 'queries' && (
             <button
               type="button"
               aria-pressed={blockedOnly}
-              onClick={() => setBlockedOnly((v) => !v)}
+              onClick={() => {
+                setBlockedOnly((v) => !v)
+                setPage(0)
+                if (!blockedOnly) setQueryLimit(Math.max(queryLimit, config.query_log.entries || 5000))
+              }}
               className={cn(
                 'flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors',
                 blockedOnly
@@ -131,6 +145,14 @@ export function ActivityCard({
             filter={filter}
             blockedOnly={blockedOnly}
             logging={config.query_log.enabled}
+            page={page}
+            held={queries.data?.stats?.held ?? 0}
+            onPageChange={(next) => {
+              setPage(next)
+              if ((next + 1) * PAGE_SIZE > queryLimit) {
+                setQueryLimit(Math.max(queryLimit, queries.data?.stats?.held ?? queryLimit))
+              }
+            }}
           />
         ) : (
           <NameList rows={names.data?.names ?? []} filter={filter} />
@@ -237,7 +259,7 @@ function Accounting({ stats, shown }: { stats?: DnsStats; shown: number }) {
     <div className="space-y-1 text-xs text-muted-foreground">
       <p>
         The log holds {stats.held.toLocaleString()} of {stats.capacity.toLocaleString()} entries
-        {truncated && `, and this page is showing the most recent ${shown.toLocaleString()}`}.
+        {truncated && `, and this page has loaded the most recent ${shown.toLocaleString()}`}.
       </p>
       {(stats.dropped > 0 || stats.unparsed > 0) && (
         <p className="text-warning">
@@ -301,11 +323,17 @@ function QueryList({
   filter,
   blockedOnly,
   logging,
+  page,
+  held,
+  onPageChange,
 }: {
   rows: QueryRow[]
   filter: string
   blockedOnly: boolean
   logging: boolean
+  page: number
+  held: number
+  onPageChange: (page: number) => void
 }) {
   const needle = filter.trim().toLowerCase()
   const shown = rows.filter(
@@ -335,34 +363,51 @@ function QueryList({
     return <ListEmpty>Nothing has been looked up yet.</ListEmpty>
   }
 
+  const pages = Math.ceil(shown.length / PAGE_SIZE)
+  const current = Math.min(page, Math.max(0, pages - 1))
+  const hasMore = !needle && !blockedOnly && held > rows.length
   return (
-    <ul className="divide-y overflow-hidden rounded-xl border">
-      {shown.map((q, i) => (
-        <li key={`${q.at}-${q.client}-${q.name}-${i}`} className="flex items-center gap-3 px-3 py-2">
-          {/* 24-hour regardless of locale, matching `olr dns queries`. A log
-              column has to be one fixed width or the names beside it stop
-              lining up, and a 12-hour clock wraps its AM onto a second line at
-              this size. */}
-          <span className="w-14 shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-            {new Date(q.at).toLocaleTimeString(undefined, {
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              hour12: false,
-            })}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm">{q.name}</div>
-            <div className="truncate text-xs text-muted-foreground">
-              {q.client} · {q.type}
-              {q.answers?.length ? ` → ${q.answers.join(', ')}` : ''}
-              {q.upstream ? ` · DNS via ${q.upstream}` : ''}
+    <div className="space-y-3">
+      <ul className="divide-y overflow-hidden rounded-xl border">
+        {shown.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE).map((q, i) => (
+          <li key={`${q.at}-${q.client}-${q.name}-${i}`} className="flex items-center gap-3 px-3 py-2">
+            {/* 24-hour regardless of locale, matching `olr dns queries`. A log
+                column has to be one fixed width or the names beside it stop
+                lining up, and a 12-hour clock wraps its AM onto a second line at
+                this size. */}
+            <span className="w-14 shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
+              {new Date(q.at).toLocaleTimeString(undefined, {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+              })}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm">{q.name}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                {q.client} · {q.type}
+                {q.answers?.length ? ` → ${q.answers.join(', ')}` : ''}
+                {q.upstream ? ` · DNS via ${q.upstream}` : ''}
+              </div>
             </div>
+            <QueryResult query={q} />
+          </li>
+        ))}
+      </ul>
+      {(pages > 1 || hasMore) && (
+        <nav aria-label="DNS query pages" className="flex items-center justify-between gap-3 text-sm">
+          <span className="text-muted-foreground">
+            {needle || blockedOnly ? `${shown.length} matches · ` : ''}
+            Page {current + 1} of {Math.ceil((hasMore ? held : shown.length) / PAGE_SIZE)}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={current === 0} onClick={() => onPageChange(current - 1)}>Previous</Button>
+            <Button variant="outline" size="sm" disabled={(current + 1) * PAGE_SIZE >= shown.length && !hasMore} onClick={() => onPageChange(current + 1)}>Next</Button>
           </div>
-          <QueryResult query={q} />
-        </li>
-      ))}
-    </ul>
+        </nav>
+      )}
+    </div>
   )
 }
 

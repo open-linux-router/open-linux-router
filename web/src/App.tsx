@@ -3,11 +3,9 @@ import { Link, Navigate, Route, Routes, useLocation } from 'react-router'
 import { AppShell } from '@/components/layout/app-shell'
 import { Button } from '@/components/ui/button'
 import { AuthGate } from '@/components/layout/auth-gate'
-import { DhcpPage } from '@/routes/dhcp/index'
 import { DhcpAdvancedPage } from '@/routes/dhcp/advanced'
 import { DhcpRangesPage } from '@/routes/dhcp/ranges'
 import { DhcpReservationsPage } from '@/routes/dhcp/reservations'
-import { DnsPage } from '@/routes/dns/index'
 import { DnsAdvancedPage } from '@/routes/dns/advanced'
 import { DnsBlockingPage } from '@/routes/dns/blocking'
 import { DnsEnforcementPage } from '@/routes/dns/enforcement'
@@ -23,7 +21,6 @@ import { ForwardsPage } from '@/routes/advanced/forwards'
 import { IngressPage } from '@/routes/advanced/ingress'
 import { IptvPage } from '@/routes/advanced/iptv'
 import { RemotePage } from '@/routes/advanced/remote'
-import { NetworksPage } from '@/routes/gateway/networks'
 import { OverviewPage } from '@/routes/overview'
 import { ToolsPage } from '@/routes/tools'
 import { DevicePage } from '@/routes/device'
@@ -47,22 +44,21 @@ export function App() {
           <Route path="gateway">
             <Route index element={<GatewayPage />} />
             <Route path="interfaces/:name" element={<GatewayInterfacePage />} />
-            <Route path="networks" element={<NetworksPage />} />
+            <Route path="networks" element={<Navigate to="/gateway#networks" replace />} />
             <Route path="exits" element={<GatewayExitsPage />} />
             <Route path="usage" element={<GatewayUsagePage />} />
             <Route path="ipv6" element={<GatewayIPv6Page />} />
             <Route path="unmanaged" element={<GatewayUnmanagedPage />} />
             <Route path="dhcp">
-              <Route index element={<DhcpPage />} />
+              <Route index element={<Navigate to="/gateway#dhcp" replace />} />
               <Route path="ranges" element={<DhcpRangesPage />} />
               <Route path="reservations" element={<DhcpReservationsPage />} />
               <Route path="advanced" element={<DhcpAdvancedPage />} />
             </Route>
 
-            {/* DHCP and DNS keep their own status and settings pages inside Gateway.
-                Their group labels and explanations live in sections.ts. */}
+            {/* Detailed settings remain nested; the status and activity are on Gateway. */}
             <Route path="dns">
-              <Route index element={<DnsPage />} />
+              <Route index element={<Navigate to="/gateway#dns" replace />} />
               <Route path="blocking" element={<DnsBlockingPage />} />
               <Route path="names" element={<DnsNamesPage />} />
               <Route path="resolving" element={<DnsResolvingPage />} />

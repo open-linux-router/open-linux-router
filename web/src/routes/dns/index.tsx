@@ -30,7 +30,7 @@ import type { DnsConfig } from '@/lib/config-types'
  * and a section whose landing page opened on a form would bury the most
  * valuable thing in the module one level down.
  */
-export function DnsPage() {
+export function DnsContent() {
   const { config, busy, change, applier, gate } = useDnsEditor()
   const status = useDnsStatus()
   const interfaces = useInterfaces()

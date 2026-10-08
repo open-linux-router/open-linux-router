@@ -1,7 +1,6 @@
 import { AlertTriangle, Check, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 
-import { SubPage } from '@/components/layout/sub-page'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -59,7 +58,7 @@ import type { Network } from '@/lib/config-types'
  * also the only place in olr that answers "is the cable in", and it is read
  * exactly when a network looks configured and does not work.
  */
-export function NetworksPage() {
+export function NetworksContent() {
   const editor = useNetworkEditor()
   // Read here so a release can name the ranges it is about to invalidate; the
   // card joins the two and olr never guesses on the operator's behalf.
@@ -68,21 +67,15 @@ export function NetworksPage() {
   const [open, setOpen] = useState(false)
 
   if (editor.isPending) {
-    return (
-      <SubPage section="/gateway" slug="networks">
-        <PageSkeleton />
-      </SubPage>
-    )
+    return <PageSkeleton />
   }
   if (editor.error) {
     return (
-      <SubPage section="/gateway" slug="networks">
-        <Alert variant="destructive">
-          <AlertTriangle />
-          <AlertTitle>Could not load the networks</AlertTitle>
-          <AlertDescription>{editor.error.message}</AlertDescription>
-        </Alert>
-      </SubPage>
+      <Alert variant="destructive">
+        <AlertTriangle />
+        <AlertTitle>Could not load the networks</AlertTitle>
+        <AlertDescription>{editor.error.message}</AlertDescription>
+      </Alert>
     )
   }
 
@@ -101,7 +94,7 @@ export function NetworksPage() {
   }
 
   return (
-    <SubPage section="/gateway" slug="networks">
+    <div className="space-y-6">
       <PartialApply editor={editor} />
 
       <section className="space-y-3">
@@ -203,7 +196,7 @@ export function NetworksPage() {
       )}
 
       <ConfirmDisruptive editor={editor} />
-    </SubPage>
+    </div>
   )
 }
 
