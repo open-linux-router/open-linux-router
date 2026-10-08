@@ -812,10 +812,17 @@ func (k LinuxKernel) observeRoutes() ([]string, error) {
 }
 
 func observedRouteLine(r netlink.Route, v6 bool) string {
+	// Linux assigns the IPv6 default route metric (1024) when no metric was
+	// specified. Treat that read-back value as the omitted metric we rendered,
+	// or an untouched route looks drifted after every apply.
+	priority := r.Priority
+	if v6 && priority == 1024 {
+		priority = 0
+	}
 	if r.Type == unix.RTN_UNREACHABLE {
 		line := fmt.Sprintf("route %s table %d unreachable default", family(v6), r.Table)
-		if r.Priority > 0 {
-			line += fmt.Sprintf(" metric %d", r.Priority)
+		if priority > 0 {
+			line += fmt.Sprintf(" metric %d", priority)
 		}
 		return line
 	}
@@ -830,8 +837,8 @@ func observedRouteLine(r netlink.Route, v6 bool) string {
 			line += " dev " + link.Attrs().Name
 		}
 	}
-	if r.Priority > 0 {
-		line += fmt.Sprintf(" metric %d", r.Priority)
+	if priority > 0 {
+		line += fmt.Sprintf(" metric %d", priority)
 	}
 	return line
 }
