@@ -6,11 +6,12 @@ require (
 	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/google/nftables v0.3.0
 	github.com/invopop/jsonschema v0.13.0
+	github.com/showwin/speedtest-go v1.8.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.9
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/net v0.33.0
-	golang.org/x/sys v0.28.0
+	golang.org/x/sys v0.47.0
 )
 
 require (

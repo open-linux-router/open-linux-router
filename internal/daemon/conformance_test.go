@@ -24,6 +24,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/qos"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
 	"github.com/open-linux-router/open-linux-router/internal/system"
+	"github.com/open-linux-router/open-linux-router/internal/tools"
 )
 
 // Rules the API surface holds to, in the form docs/cli.md argues for: executable
@@ -57,6 +58,7 @@ func moduleRoutes() map[string][]core.Route {
 		firewall.ModuleName:   firewall.HTTP{}.Routes(),
 		inspection.ModuleName: (&inspection.Service{}).Routes(),
 		iptv.ModuleName:       iptv.HTTP{}.Routes(),
+		tools.ModuleName:      (&tools.HTTP{}).Routes(),
 	}
 }
 

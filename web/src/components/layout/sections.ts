@@ -1,4 +1,4 @@
-import { Activity, Globe, Network, Shield, SlidersHorizontal, Waypoints } from 'lucide-react'
+import { Activity, Globe, Network, Shield, SlidersHorizontal, Waypoints, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /**
@@ -193,6 +193,13 @@ export const SECTIONS: Section[] = [
     to: '/firewall',
     label: 'Firewall',
     icon: Shield,
+    end: false,
+    groups: [],
+  },
+  {
+    to: '/tools',
+    label: 'Tools',
+    icon: Wrench,
     end: false,
     groups: [],
   },

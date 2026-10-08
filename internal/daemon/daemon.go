@@ -50,6 +50,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/qos"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
 	"github.com/open-linux-router/open-linux-router/internal/system"
+	"github.com/open-linux-router/open-linux-router/internal/tools"
 	"github.com/open-linux-router/open-linux-router/internal/webui"
 )
 
@@ -611,6 +612,7 @@ func run(args []string) error {
 		return 0, nil
 	}
 	srv.Mount(inspection.ModuleName, inspector.Routes(), struct{}{})
+	srv.Mount(tools.ModuleName, (&tools.HTTP{}).Routes(), struct{}{})
 
 	// --- routes -----------------------------------------------------------
 	//

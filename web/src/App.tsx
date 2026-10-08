@@ -22,6 +22,7 @@ import { IngressPage } from '@/routes/advanced/ingress'
 import { RemotePage } from '@/routes/advanced/remote'
 import { NetworksPage } from '@/routes/gateway/networks'
 import { OverviewPage } from '@/routes/overview'
+import { ToolsPage } from '@/routes/tools'
 import { DevicePage } from '@/routes/device'
 import { GroupPage } from '@/routes/group'
 import { GatewayPage } from '@/routes/gateway/index'
@@ -71,6 +72,7 @@ export function App() {
             <Route path="advanced" element={<DnsAdvancedPage />} />
           </Route>
           <Route path="firewall" element={<FirewallPage />} />
+          <Route path="tools" element={<ToolsPage />} />
           <Route path="advanced">
             <Route index element={<AdvancedPage />} />
             <Route path="forwards" element={<ForwardsPage />} />
