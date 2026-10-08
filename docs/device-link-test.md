@@ -18,3 +18,9 @@ The measurement terminates on the router. It measures that device's link and
 OLR's local TCP receive/send path, not forwarding between two interfaces,
 NAT, or internet speed. Wi-Fi, switches, the client and other traffic can
 limit the result before the router's NIC does.
+
+If TCP 5201 is already held by an `iperf3` process and the selected LAN address
+is reachable, Tools displays the external server and the client commands
+without starting or stopping it. The session lifetime is controlled by that
+service, not OLR. A different port holder is reported by process name/PID/unit
+where available; OLR never kills or reconfigures an existing process.

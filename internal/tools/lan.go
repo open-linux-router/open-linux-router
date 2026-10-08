@@ -20,10 +20,12 @@ type lanSession struct {
 }
 
 type lanView struct {
-	Addresses []string  `json:"addresses"`
-	Address   string    `json:"address,omitempty"`
-	Expires   time.Time `json:"expires_at,omitempty"`
-	Port      int       `json:"port"`
+	Addresses []string          `json:"addresses"`
+	Address   string            `json:"address,omitempty"`
+	Expires   time.Time         `json:"expires_at,omitempty"`
+	Port      int               `json:"port"`
+	External  map[string]string `json:"external,omitempty"`
+	Conflicts map[string]string `json:"conflicts,omitempty"`
 }
 
 func (h *HTTP) lanView() (lanView, error) {
@@ -36,6 +38,26 @@ func (h *HTTP) lanView() (lanView, error) {
 	}
 	slices.Sort(addresses)
 	view := lanView{Addresses: addresses, Port: lanPort}
+	probe := h.LANProbe
+	if probe == nil {
+		probe = probeIperf
+	}
+	for _, address := range addresses {
+		owner, err := probe(address)
+		if err != nil {
+			if view.Conflicts == nil {
+				view.Conflicts = make(map[string]string)
+			}
+			view.Conflicts[address] = err.Error()
+			continue
+		}
+		if owner != "" {
+			if view.External == nil {
+				view.External = make(map[string]string)
+			}
+			view.External[address] = owner
+		}
+	}
 	h.lanMu.Lock()
 	if h.lan != nil {
 		view.Address, view.Expires = h.lan.address, h.lan.expires
@@ -79,6 +101,19 @@ func (h *HTTP) startLAN(w http.ResponseWriter, r *http.Request) {
 	defer h.lanMu.Unlock()
 	if h.lan != nil {
 		core.WriteError(w, http.StatusConflict, "a LAN test server is already running")
+		return
+	}
+	probe := h.LANProbe
+	if probe == nil {
+		probe = probeIperf
+	}
+	owner, err := probe(request.Address)
+	if err != nil {
+		core.WriteError(w, http.StatusConflict, err.Error())
+		return
+	}
+	if owner != "" {
+		core.WriteJSON(w, http.StatusOK, lanView{Addresses: view.Addresses, Port: lanPort, External: map[string]string{request.Address: owner}})
 		return
 	}
 	start := h.StartIperf

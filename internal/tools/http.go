@@ -46,6 +46,7 @@ type HTTP struct {
 	// RunPing is replaceable in tests; nil sends real ICMP echo requests.
 	RunPing      func(context.Context, string) (PingResult, error)
 	LANAddresses func() ([]string, error)
+	LANProbe     func(string) (string, error)
 	StartIperf   func(string, int) (func(), <-chan struct{}, error)
 	lanMu        sync.Mutex
 	lan          *lanSession

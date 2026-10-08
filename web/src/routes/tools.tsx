@@ -43,6 +43,8 @@ interface LANTest {
   address?: string
   expires_at?: string
   port: number
+  external?: Record<string, string>
+  conflicts?: Record<string, string>
 }
 
 interface SpeedResult {
@@ -115,6 +117,9 @@ export function ToolsPage() {
   const [lanCopied, setLANCopied] = useState<string | null>(null)
   const addresses = lan.data?.addresses ?? []
   const selectedLAN = addresses.includes(lanAddress) ? lanAddress : addresses[0] ?? ''
+  const external = selectedLAN ? lan.data?.external?.[selectedLAN] : undefined
+  const conflict = selectedLAN ? lan.data?.conflicts?.[selectedLAN] : undefined
+  const testAddress = lan.data?.address || (external ? selectedLAN : '')
 
   async function changeLAN(start: boolean) {
     setLANBusy(true)
@@ -316,7 +321,7 @@ export function ToolsPage() {
             <p className="text-sm text-muted-foreground">Run iperf3 on another device to measure its connection to this router. This tests the link and router's own receive/send capacity, not LAN-to-WAN forwarding or NAT.</p>
           </div>
         </div>
-        <p className="mt-4 text-sm text-muted-foreground">Install iperf3 on both devices. The router opens TCP port 5201 on the selected LAN address for two minutes; stop it sooner when finished. Anyone able to reach this address and port can connect during that time. A configured firewall may require a temporary TCP 5201 opening.</p>
+        <p className="mt-4 text-sm text-muted-foreground">Install iperf3 on both devices. OLR starts a temporary server on TCP 5201 for two minutes, or detects an existing iperf3 server without taking ownership of it. Anyone able to reach this address and port can connect during that time. A configured firewall may require a temporary TCP 5201 opening.</p>
         {lan.isError && <Alert variant="destructive" className="mt-4"><AlertTitle>LAN addresses unavailable</AlertTitle><AlertDescription>{lan.error.message}</AlertDescription></Alert>}
         {lan.data && <div className="mt-5 space-y-4">
           <div className="max-w-sm space-y-1.5">
@@ -326,16 +331,18 @@ export function ToolsPage() {
               <SelectContent>{addresses.map(address => <SelectItem key={address} value={address}>{address}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <Button onClick={() => changeLAN(!lan.data?.address)} disabled={lanBusy || (!lan.data.address && !selectedLAN)} variant={lan.data.address ? 'outline' : 'default'}>
+          {conflict && !lan.data.address && <Alert variant="destructive"><AlertTitle>Port unavailable</AlertTitle><AlertDescription>{conflict}</AlertDescription></Alert>}
+          {external && !lan.data.address && <p role="status" className="text-sm text-muted-foreground">Existing iperf3 server: {external}. OLR did not start it and will not stop it.</p>}
+          {(!external || lan.data.address) && <Button onClick={() => changeLAN(!lan.data?.address)} disabled={lanBusy || (!lan.data.address && (!selectedLAN || !!conflict))} variant={lan.data.address ? 'outline' : 'default'}>
             {lanBusy && <LoaderCircle className="animate-spin" aria-hidden />}
             {lan.data.address ? 'Stop server' : 'Start server'}
-          </Button>
-          {lan.data.address && <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
-            <p className="text-sm font-medium">Listening on {lan.data.address}:{lan.data.port} until {new Date(lan.data.expires_at!).toLocaleTimeString()}</p>
+          </Button>}
+          {testAddress && <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
+            <p className="text-sm font-medium">{lan.data.address ? `OLR server listening on ${testAddress}:${lan.data.port} until ${new Date(lan.data.expires_at!).toLocaleTimeString()}` : `Existing server on ${testAddress}:${lan.data.port}; its lifetime is managed outside OLR`}</p>
             <p className="text-xs text-muted-foreground">Run these on the other device's terminal. The first sends data to OLR; the second makes OLR send data back. Results print in that terminal.</p>
             {[
-              `iperf3 -c ${lan.data.address} -P 4 -t 10`,
-              `iperf3 -c ${lan.data.address} -P 4 -t 10 -R`,
+              `iperf3 -c ${testAddress} -P 4 -t 10`,
+              `iperf3 -c ${testAddress} -P 4 -t 10 -R`,
             ].map((command, index) => <div key={command} className="space-y-1">
               <p className="text-xs font-medium">{index === 0 ? 'Device → router' : 'Router → device'}</p>
               <div className="flex flex-wrap items-center gap-2">
