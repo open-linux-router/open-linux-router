@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { GatewayApplyResult, GatewayLatency, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
+import type { GatewayApplyResult, GatewayLatency, GatewayPlan, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
 import type { GatewayConfig } from '@/lib/config-types'
 
 // The same polling story as the other modules: EventSource cannot send an
@@ -154,6 +154,12 @@ export function useApplyGatewayChange() {
  * §5.3.2 offers in place of a rollback: if an apply failed halfway, or somebody
  * ran `ip rule del` by hand, this finishes the job.
  */
+export function usePlanGatewayRepair() {
+  return useMutation({
+    mutationFn: () => api.post<GatewayPlan>('/api/gateway/plan'),
+  })
+}
+
 export function useReapplyGateway() {
   const queryClient = useQueryClient()
 

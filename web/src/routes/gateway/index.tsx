@@ -1,4 +1,5 @@
 import { AlertTriangle, ChevronRight } from 'lucide-react'
+import { useState } from 'react'
 import { Link } from 'react-router'
 
 import { SettingsList } from '@/components/layout/settings-list'
@@ -19,15 +20,20 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Disclosure } from '@/components/ui/disclosure'
 import { Switch } from '@/components/ui/switch'
 import { ApplyOutcome, useGatewayEditor } from '@/features/gateway/editor'
 import { DIRECT } from '@/features/gateway/network-list'
+import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/gateway/plan-preview'
 import { InterfaceVisual, interfaceState } from '@/features/link/interface-visual'
 import { useInterfaces } from '@/features/link/queries'
 import { useUplink } from '@/features/dial/queries'
 import { useDhcpStatus } from '@/features/dhcp/queries'
 import { useDnsStatus } from '@/features/dns/queries'
-import { gatewayChange, useGatewayStatus, useReapplyGateway } from '@/features/gateway/queries'
+import { gatewayChange, useGatewayStatus, usePlanGatewayRepair, useReapplyGateway } from '@/features/gateway/queries'
+import { ApiError } from '@/lib/api'
+import type { GatewayApplyResult, GatewayPlan } from '@/lib/api-types'
 
 /**
  * The gateway, on the page you land on.
@@ -38,7 +44,12 @@ import { gatewayChange, useGatewayStatus, useReapplyGateway } from '@/features/g
 export function GatewayPage() {
   const { config, busy, change, applier, gate } = useGatewayEditor()
   const status = useGatewayStatus()
+  const preview = usePlanGatewayRepair()
   const reapply = useReapplyGateway()
+  const [repairPlan, setRepairPlan] = useState<GatewayPlan | null>(null)
+  const [repairError, setRepairError] = useState<string | null>(null)
+  const [repairFailure, setRepairFailure] = useState<GatewayApplyResult | null>(null)
+  const [repairAttempted, setRepairAttempted] = useState(false)
   const interfaces = useInterfaces()
   const uplink = useUplink()
   const dhcp = useDhcpStatus()
@@ -48,9 +59,58 @@ export function GatewayPage() {
   const exits = config.exits ?? []
   const foreign = status.data?.foreign ?? []
 
+  async function reviewRepair() {
+    setRepairAttempted(false)
+    setRepairError(null)
+    setRepairFailure(null)
+    try {
+      const plan = await preview.mutateAsync()
+      if (!plan.known) throw new Error('The router could not read its current routing rules. Nothing was changed.')
+      if (plan.blocked) throw new Error(plan.blocked)
+      setRepairPlan(plan)
+    } catch (error) {
+      setRepairError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function confirmRepair() {
+    setRepairAttempted(true)
+    setRepairError(null)
+    try {
+      await reapply.mutateAsync()
+      setRepairPlan(null)
+      setRepairFailure(null)
+    } catch (error) {
+      setRepairPlan(null)
+      const result = error instanceof ApiError ? error.body as GatewayApplyResult | undefined : undefined
+      setRepairFailure(result?.steps?.length ? result : null)
+      setRepairError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   return (
     <div className="space-y-6">
       <ApplyOutcome applier={applier} />
+
+      {repairError && (
+        <Alert variant="destructive">
+          <AlertTriangle />
+          <AlertTitle>Could not {repairAttempted ? 'restore' : 'review'} saved routing settings</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>{repairError}</p>
+            {repairFailure?.steps?.length ? (
+              <Disclosure summary="Which steps ran">
+                <ul className="space-y-1 font-mono text-xs">
+                  {repairFailure.steps.map((step, i) => (
+                    <li key={i}>{step.done ? 'done' : step.error ? 'failed' : 'skipped'} {step.description}{step.error ? ` — ${step.error}` : ''}</li>
+                  ))}
+                </ul>
+              </Disclosure>
+            ) : null}
+            <p>{repairAttempted ? 'Some changes may already be in effect. Check the cause before trying again.' : 'No changes were made.'}</p>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {status.data && !status.data.known && (
         <Alert>
@@ -67,24 +127,54 @@ export function GatewayPage() {
       {status.data?.drifted && (
         <Alert>
           <AlertTriangle />
-          <AlertTitle>The router is not doing what these settings say</AlertTitle>
-          <AlertDescription className="space-y-3">
+          <AlertTitle>Saved routing settings do not match what is running</AlertTitle>
+          <AlertDescription className="space-y-2">
             <p>
-              Something changed the gateway outside olr — or an earlier change stopped
-              halfway. Putting it back re-programs the kernel from these settings and
-              changes none of them.
+              Some devices may be using a different internet route than the one shown here.
+              This can happen after a restart, an interrupted change, or another program changing routing.
             </p>
             <Button
               size="sm"
               variant="outline"
-              disabled={reapply.isPending}
-              onClick={() => reapply.mutate()}
+              disabled={preview.isPending || reapply.isPending}
+              onClick={() => void reviewRepair()}
             >
-              Put it back
+              {preview.isPending ? 'Checking…' : 'Review restore'}
             </Button>
           </AlertDescription>
         </Alert>
       )}
+
+      <Dialog open={repairPlan !== null} onOpenChange={(open) => !open && !reapply.isPending && setRepairPlan(null)}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Restore saved routing settings?</DialogTitle>
+            <DialogDescription>
+              This applies the settings shown on this page to the router. It does not edit your saved settings.
+              Routing may change again if another program manages it.
+            </DialogDescription>
+          </DialogHeader>
+          {repairPlan && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm">
+                <ImpactBadge impact={repairPlan.impact} />
+                <span>{impactHint(repairPlan.impact)}</span>
+              </div>
+              {repairPlan.impact === 'disruptive' && (
+                <p className="text-sm font-medium text-destructive">You may lose access to this page. Make sure you can reconnect to the router before continuing.</p>
+              )}
+              <PlanReasons plan={repairPlan} />
+              <Disclosure summary="What would change"><PlanDiff plan={repairPlan} /></Disclosure>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" disabled={reapply.isPending} onClick={() => setRepairPlan(null)}>Cancel</Button>
+            <Button disabled={reapply.isPending} onClick={() => void confirmRepair()}>
+              {reapply.isPending ? 'Restoring…' : 'Restore saved settings'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.42fr)]">
         <Card>
