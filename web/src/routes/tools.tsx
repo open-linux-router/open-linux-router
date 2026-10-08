@@ -57,6 +57,7 @@ interface PingResult {
 interface TraceResult {
   target: string
   output: string
+  map_url?: string
 }
 
 export function ToolsPage() {
@@ -237,6 +238,7 @@ export function ToolsPage() {
         {traceError && <Alert variant="destructive" className="mt-5"><AlertTitle>Traceroute unavailable</AlertTitle><AlertDescription className="break-words">{traceError}</AlertDescription></Alert>}
         {trace && <div className="mt-6" aria-live="polite">
           <p className="mb-3 text-sm text-muted-foreground">Route to {trace.target}</p>
+          {trace.map_url && <a className="mb-4 inline-flex items-center rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/15" href={trace.map_url} target="_blank" rel="noopener noreferrer">View route map on NextTrace ↗</a>}
           <pre className="overflow-x-auto rounded-xl border bg-muted/40 p-4 font-mono text-xs leading-relaxed select-text">{trace.output}</pre>
         </div>}
       </section>

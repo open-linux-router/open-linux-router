@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os/exec"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ const traceOutputLimit = 64 << 10
 type TraceResult struct {
 	Target string `json:"target"`
 	Output string `json:"output"`
+	MapURL string `json:"map_url,omitempty"`
 }
 
 func validTraceTarget(target string) bool {
@@ -71,7 +73,27 @@ func runTrace(ctx context.Context, target string) (TraceResult, error) {
 	if stdout.Len() == 0 {
 		return TraceResult{}, errors.New("nexttrace returned no route")
 	}
-	return TraceResult{Target: target, Output: stdout.String()}, nil
+	return TraceResult{Target: target, Output: stdout.String(), MapURL: traceMapURL(stdout.String())}, nil
+}
+
+// NextTrace prints this URL after its table when its map service is available.
+// Only expose the official HTTPS map endpoint as a clickable link.
+func traceMapURL(output string) string {
+	const marker = "MapTrace URL:"
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, marker) {
+			continue
+		}
+		raw := strings.TrimSpace(strings.TrimPrefix(line, marker))
+		u, err := url.Parse(raw)
+		if err == nil && u.Scheme == "https" && u.Host == "api.nxtrace.org" &&
+			strings.HasPrefix(u.Path, "/tracemap/html/") && strings.HasSuffix(u.Path, ".html") &&
+			u.RawQuery == "" && u.Fragment == "" && u.User == nil {
+			return raw
+		}
+	}
+	return ""
 }
 
 type limitedBuffer struct {

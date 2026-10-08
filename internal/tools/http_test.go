@@ -156,7 +156,7 @@ func TestPingRejectsConcurrentRun(t *testing.T) {
 
 func TestTracerouteReturnsResult(t *testing.T) {
 	h := &HTTP{Trace: func(_ context.Context, target string) (TraceResult, error) {
-		return TraceResult{Target: target, Output: "1  192.0.2.1  1ms\n"}, nil
+		return TraceResult{Target: target, Output: "1  192.0.2.1  1ms\n", MapURL: "https://api.nxtrace.org/tracemap/html/id.html"}, nil
 	}}
 	w := httptest.NewRecorder()
 	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/traceroute", strings.NewReader(`{"target":"example.com"}`)))
@@ -167,7 +167,7 @@ func TestTracerouteReturnsResult(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Target != "example.com" || !strings.Contains(result.Output, "192.0.2.1") {
+	if result.Target != "example.com" || !strings.Contains(result.Output, "192.0.2.1") || result.MapURL == "" {
 		t.Fatalf("result: %+v", result)
 	}
 }
