@@ -49,11 +49,17 @@ export function InterfacesCard({
   dhcp,
   disabled,
   only,
+  physicalOnly = false,
+  uplinkAction,
+  footer,
 }: {
   /** The stored DHCP config, so a release can warn about the pool it breaks. */
   dhcp?: DhcpConfig
   disabled?: boolean
   only?: string
+  physicalOnly?: boolean
+  uplinkAction?: React.ReactNode
+  footer?: React.ReactNode
 }) {
   const interfaces = useInterfaces()
   const config = useLinkConfig()
@@ -74,7 +80,9 @@ export function InterfacesCard({
   // build a complete body and a switch that silently does nothing is worse than
   // one that is visibly not ready yet.
   const busy = disabled || apply.isPending || config.isPending
-  const rows = (interfaces.data?.interfaces ?? []).filter((row) => !only || row.name === only)
+  const rows = (interfaces.data?.interfaces ?? []).filter((row) =>
+    (!only || row.name === only) && (!physicalOnly || row.physical),
+  )
   const adopted = config.data?.adopted ?? []
 
   /**
@@ -157,7 +165,10 @@ export function InterfacesCard({
         )}
 
         {interfaces.isSuccess && rows.length === 0 && (
-          <ListEmpty>This machine reports no network interfaces.</ListEmpty>
+          <>
+            <ListEmpty>{physicalOnly ? 'No physical interfaces found. Virtual and missing interfaces are in Advanced interfaces and routing.' : 'This machine reports no network interfaces.'}</ListEmpty>
+            {footer}
+          </>
         )}
 
         {rows.length > 0 && (
@@ -167,6 +178,7 @@ export function InterfacesCard({
                 key={row.name}
                 row={row}
                 role={roleOf(row, uplinkName)}
+                uplinkAction={row.name === uplinkName ? uplinkAction : undefined}
                 busy={!!busy}
                 onToggle={(on) => toggle(row, on)}
                 // Only where nothing in olr owns the addressing: a network's
@@ -179,6 +191,7 @@ export function InterfacesCard({
                 }
               />
             ))}
+            {footer && <li className="bg-muted/20 px-4 py-3">{footer}</li>}
           </ul>
         )}
 
@@ -186,7 +199,7 @@ export function InterfacesCard({
           <p className="text-sm text-muted-foreground">
             Nothing is adopted yet. Switch on the interface facing your home
             network — usually the one with an address on it — and then add a
-            network for it below. Switch on a second one if this router serves
+            network under DHCP. Switch on a second one if this router serves
             two subnets.
           </p>
         )}
@@ -235,12 +248,14 @@ function roleOf(row: InterfaceRow, uplink: string | undefined): string | undefin
 function InterfaceItem({
   row,
   role,
+  uplinkAction,
   busy,
   onToggle,
   onRemoveAddress,
 }: {
   row: InterfaceRow
   role?: string
+  uplinkAction?: React.ReactNode
   busy: boolean
   onToggle: (on: boolean) => void
   /** Offered only on an interface no network or uplink owns. */
@@ -284,6 +299,7 @@ function InterfaceItem({
         )}
       </div>
 
+      {uplinkAction}
       <Label htmlFor={id} className="sr-only">
         Give {row.name} to this router
       </Label>

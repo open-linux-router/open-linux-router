@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"slices"
 	"strings"
 )
@@ -41,6 +42,9 @@ type Interface struct {
 	// Loopback marks lo. Kept so that callers can exclude it by what it is
 	// rather than by matching its name.
 	Loopback bool
+
+	// Physical is backed by a device in sysfs, not merely a kernel interface.
+	Physical bool
 
 	// HardwareAddr is the MAC, empty for interfaces that have none.
 	HardwareAddr string
@@ -84,6 +88,7 @@ func Kernel() ([]Interface, error) {
 			Up:       iface.Flags&net.FlagUp != 0,
 			Running:  iface.Flags&net.FlagRunning != 0,
 			Loopback: iface.Flags&net.FlagLoopback != 0,
+			Physical: hasDevice(iface.Name),
 		}
 		if len(iface.HardwareAddr) > 0 {
 			info.HardwareAddr = iface.HardwareAddr.String()
@@ -182,4 +187,10 @@ func sortInterfaces(in []Interface) {
 		}
 		return strings.Compare(a.Name, b.Name)
 	})
+}
+
+// Virtual devices live in /sys/class/net too, but lack a hardware device link.
+func hasDevice(name string) bool {
+	_, err := os.Stat("/sys/class/net/" + name + "/device")
+	return err == nil
 }

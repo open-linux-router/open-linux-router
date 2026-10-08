@@ -7,6 +7,7 @@ import { StatusDetail, StatusStrip } from '@/components/layout/status-strip'
 import { StuckSettings } from '@/components/layout/stuck-settings'
 import { STUCK_SUMMARY } from '@/components/layout/stuck-summary'
 import { Disclosure } from '@/components/ui/disclosure'
+import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ApplyOutcome, useDhcpEditor } from '@/features/dhcp/editor'
 import { PlanDiff } from '@/features/dhcp/impact'
@@ -24,6 +25,44 @@ import type { DhcpConfig } from '@/lib/config-types'
  * page in the first place.
  */
 export function DhcpContent() {
+  const { config, busy, change, applier, gate } = useDhcpEditor()
+  const status = useDhcpStatus()
+  const leases = useDhcpLeases()
+  const interfaces = useInterfaces()
+
+  if (!config) return gate
+  const summary = describeStatus(config, status.data, status.error as Error | null)
+  const active = leases.data?.leases.filter((lease) => lease.active).length
+  const nothingAdopted = interfaces.isSuccess && !interfaces.data.interfaces.some((i) => i.adopted)
+
+  return (
+    <div className="space-y-4">
+      <ApplyOutcome applier={applier} />
+      {nothingAdopted && (
+        <Alert><AlertTriangle /><AlertTitle>Choose an interface first</AlertTitle><AlertDescription>DHCP needs an adopted interface. <Link to="/gateway#interfaces" className="underline underline-offset-4">Go to Interfaces</Link></AlertDescription></Alert>
+      )}
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <span className={`size-2.5 shrink-0 rounded-full ${summary.dot}`} aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">{summary.headline}</p>
+            <p className="text-sm text-muted-foreground">{config.enabled && active !== undefined && summary !== STUCK_SUMMARY ? `${active} devices with active leases` : summary.detail}</p>
+          </div>
+          <Switch aria-label="Hand out addresses" checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change({ ...config, enabled })} />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-sm">
+          <span className="text-muted-foreground">{config.pools?.length ?? 0} network{config.pools?.length === 1 ? '' : 's'} with address service</span>
+          <Link to="/gateway/dhcp/details" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">DHCP status and settings <ChevronRight className="size-4" aria-hidden /></Link>
+        </div>
+      </div>
+      {config.enabled && status.data?.drifted && (
+        <Alert><AlertTriangle /><AlertTitle>DHCP settings differ from what is running</AlertTitle><AlertDescription><Link className="underline underline-offset-4" to="/gateway/dhcp/details">Review and repair DHCP</Link></AlertDescription></Alert>
+      )}
+    </div>
+  )
+}
+
+export function DhcpDetailsContent() {
   const { config, busy, change, applier, gate } = useDhcpEditor()
   const status = useDhcpStatus()
   const leases = useDhcpLeases()

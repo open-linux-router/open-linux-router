@@ -189,3 +189,23 @@ func TestBuildPlanSeesDriftAgainstAnUnchangedConfig(t *testing.T) {
 		t.Error("plan is empty although the kernel does not have the network's address")
 	}
 }
+
+func TestPhysicalInterfaceView(t *testing.T) {
+	cfg := Config{}
+	observed := []Interface{
+		{Name: "enp1s0", Physical: true},
+		{Name: "wg0"},
+		{Name: "lo", Loopback: true},
+	}
+	for _, tc := range []struct {
+		name     string
+		physical bool
+	}{
+		{"enp1s0", true}, {"wg0", false}, {"lo", false},
+	} {
+		v := viewInterface(find(t, Join(cfg, observed), tc.name), observedByName(observed), cfg)
+		if v.Physical != tc.physical {
+			t.Errorf("%s physical = %v, want %v", tc.name, v.Physical, tc.physical)
+		}
+	}
+}

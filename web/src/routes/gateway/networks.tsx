@@ -14,8 +14,12 @@ import {
 import { Disclosure } from '@/components/ui/disclosure'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDhcpConfig } from '@/features/dhcp/queries'
 import { UplinkCard } from '@/features/dial/uplink-card'
+import { ApplyOutcome, useGatewayEditor } from '@/features/gateway/editor'
+import { DIRECT } from '@/features/gateway/network-list'
+import { gatewayChange } from '@/features/gateway/queries'
 import { InterfacesCard } from '@/features/link/interfaces-card'
 import { NetworkDialog } from '@/features/link/network-dialog'
 import { useNetworkEditor } from '@/features/link/use-networks'
@@ -24,29 +28,31 @@ import type { Network } from '@/lib/config-types'
 
 /** Interfaces and the router's own way out, independent of served networks. */
 export function InterfacesContent() {
-  const editor = useNetworkEditor()
   const dhcp = useDhcpConfig()
+  const links = useNetworkEditor()
+  const gateway = useGatewayEditor()
+  const exits = gateway.config?.exits ?? []
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <p className="max-w-prose text-sm text-muted-foreground">
-          Give this router an interface before using it for a network or an uplink.
-          Switching one on alone does not change its address.
-        </p>
-        <InterfacesCard dhcp={dhcp.data} />
-      </div>
-
-      <section className="space-y-3">
-        <div className="space-y-1">
-          <h3 className="text-lg font-medium tracking-tight">Internet uplink</h3>
-          <p className="max-w-prose text-sm text-muted-foreground">
-            How this router itself reaches the internet: its modem-facing interface, address,
-            and default route. Leave it alone if something else manages the route.
-          </p>
-        </div>
-        <UplinkCard interfaces={editor.interfaces} networks={editor.networks} />
-      </section>
+    <div className="space-y-3">
+      <InterfacesCard
+        dhcp={dhcp.data}
+        physicalOnly
+        uplinkAction={<span className="text-xs text-muted-foreground">Internet uplink</span>}
+        footer={gateway.config && (
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span className="font-medium">Internet via</span>
+            <Select value={gateway.config.default || DIRECT} disabled={gateway.busy} onValueChange={(v) => gateway.change(gatewayChange.settings({ default: !v || v === DIRECT ? '' : v }))}>
+              <SelectTrigger className="w-full sm:w-72" aria-label="Default internet route"><SelectValue>{(v: string) => v === DIRECT ? 'This router’s own connection' : v}</SelectValue></SelectTrigger>
+              <SelectContent><SelectItem value={DIRECT}>This router&rsquo;s own connection</SelectItem>{exits.map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
+            </Select>
+            <UplinkCard compact interfaces={links.interfaces} networks={links.networks} />
+            {!gateway.config.enabled && <span className="text-xs text-muted-foreground">Gateway routing is off; this selection is saved only.</span>}
+          </div>
+        )}
+      />
+      {gateway.gate}
+      <ApplyOutcome applier={gateway.applier} />
     </div>
   )
 }
@@ -90,8 +96,8 @@ export function ServedNetworksContent() {
           <div className="space-y-1">
             <h3 className="text-lg font-medium tracking-tight">Served networks</h3>
             <p className="max-w-prose text-sm text-muted-foreground">
-              Define the subnet, interface, and router address before adding a DHCP range.
-              The network's address exists even when DHCP is off.
+              A network names its interface and subnet. DHCP has one IPv4 range per network,
+              plus optional IPv6 address service. The router address exists even when DHCP is off.
             </p>
           </div>
           <Button

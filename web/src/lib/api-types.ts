@@ -306,6 +306,8 @@ export interface InterfaceRow {
   running: boolean
 
   loopback: boolean
+  /** Backed by a device in sysfs; virtual links remain available in advanced settings. */
+  physical: boolean
   mac?: string
 
   /** Every address on the interface, link-local excluded. */

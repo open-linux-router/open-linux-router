@@ -4,9 +4,11 @@ import { AppShell } from '@/components/layout/app-shell'
 import { Button } from '@/components/ui/button'
 import { AuthGate } from '@/components/layout/auth-gate'
 import { DhcpAdvancedPage } from '@/routes/dhcp/advanced'
+import { DhcpDetailsPage } from '@/routes/dhcp/details'
 import { DhcpRangesPage } from '@/routes/dhcp/ranges'
 import { DhcpReservationsPage } from '@/routes/dhcp/reservations'
 import { DnsAdvancedPage } from '@/routes/dns/advanced'
+import { DnsDetailsPage } from '@/routes/dns/details'
 import { DnsBlockingPage } from '@/routes/dns/blocking'
 import { DnsEnforcementPage } from '@/routes/dns/enforcement'
 import { DnsListeningPage } from '@/routes/dns/listening'
@@ -26,6 +28,7 @@ import { ToolsPage } from '@/routes/tools'
 import { DevicePage } from '@/routes/device'
 import { GroupPage } from '@/routes/group'
 import { GatewayPage } from '@/routes/gateway/index'
+import { GatewayInterfacesPage } from '@/routes/gateway/interfaces'
 import { GatewayInterfacePage } from '@/routes/gateway/interface'
 import { GatewayExitsPage } from '@/routes/gateway/exits'
 import { FirewallPage } from '@/routes/firewall'
@@ -42,13 +45,15 @@ export function App() {
           <Route path="groups/:name" element={<GroupPage />} />
           <Route path="gateway">
             <Route index element={<GatewayPage />} />
+            <Route path="interfaces" element={<GatewayInterfacesPage />} />
             <Route path="interfaces/:name" element={<GatewayInterfacePage />} />
             <Route path="networks" element={<Navigate to="/gateway#dhcp" replace />} />
             <Route path="exits" element={<GatewayExitsPage />} />
             <Route path="usage" element={<GatewayUsagePage />} />
-            <Route path="ipv6" element={<Navigate to="/gateway#forwarding" replace />} />
+            <Route path="ipv6" element={<Navigate to="/gateway/interfaces#forwarding" replace />} />
             <Route path="unmanaged" element={<GatewayUnmanagedPage />} />
             <Route path="dhcp">
+              <Route path="details" element={<DhcpDetailsPage />} />
               <Route index element={<Navigate to="/gateway#dhcp" replace />} />
               <Route path="ranges" element={<DhcpRangesPage />} />
               <Route path="reservations" element={<DhcpReservationsPage />} />
@@ -57,6 +62,7 @@ export function App() {
 
             {/* Detailed settings remain nested; the status and activity are on Gateway. */}
             <Route path="dns">
+              <Route path="details" element={<DnsDetailsPage />} />
               <Route index element={<Navigate to="/gateway#dns" replace />} />
               <Route path="blocking" element={<DnsBlockingPage />} />
               <Route path="names" element={<DnsNamesPage />} />

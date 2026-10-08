@@ -1,6 +1,5 @@
 import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
-
 import { BlockerAlerts } from '@/components/layout/blockers'
 import { SettingsList } from '@/components/layout/settings-list'
 import { StatusDetail, StatusStrip } from '@/components/layout/status-strip'
@@ -8,29 +7,62 @@ import { StuckSettings } from '@/components/layout/stuck-settings'
 import { STUCK_SUMMARY } from '@/components/layout/stuck-summary'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Disclosure } from '@/components/ui/disclosure'
+import { Switch } from '@/components/ui/switch'
 import { ActivityCard } from '@/features/dns/activity'
 import { PlanDiff } from '@/features/dns/impact'
 import { ApplyOutcome, useDnsEditor } from '@/features/dns/editor'
-import { useDnsStatus } from '@/features/dns/queries'
+import { useDnsQueries, useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, RESOLVER_UNIT, UnitLabel, serviceOf, unitLabel } from '@/features/dns/units'
 import { useInterfaces } from '@/features/link/queries'
 import type { DnsStatus } from '@/lib/api-types'
 import type { DnsConfig } from '@/lib/config-types'
 
-/**
- * DNS, on the page you land on.
- *
- * Two questions and no others: is this working, and what did it see. The
- * settings that used to sit under them — six cards, each with its paragraph —
- * are a list of six rows at the bottom, each showing what it currently says, so
- * most visits are answered without opening any of them.
- *
- * The query log stays on this page rather than becoming a seventh row, because
- * it is not a setting: it is the entire reason olr owns :53 (docs/dns.md §4),
- * and a section whose landing page opened on a form would bury the most
- * valuable thing in the module one level down.
- */
+/** A compact overview; the full query log and diagnostics live in DNS details. */
 export function DnsContent() {
+  const { config, busy, change, applier, gate } = useDnsEditor()
+  const status = useDnsStatus()
+  const queries = useDnsQueries()
+  const interfaces = useInterfaces()
+
+  if (!config) return gate
+  const summary = describeStatus(config, status.data, status.error as Error | null)
+  const nothingAdopted = interfaces.isSuccess && !interfaces.data.interfaces.some((i) => i.adopted)
+  const stats = queries.data?.stats
+
+  return (
+    <div className="space-y-4">
+      <ApplyOutcome applier={applier} />
+      {nothingAdopted && (
+        <Alert><AlertTriangle /><AlertTitle>Choose an interface first</AlertTitle><AlertDescription>DNS needs an adopted interface. <Link to="/gateway#interfaces" className="underline underline-offset-4">Go to Interfaces</Link></AlertDescription></Alert>
+      )}
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <span className={`size-2.5 shrink-0 rounded-full ${summary.dot}`} aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">{summary.headline}</p>
+            <p className="text-sm text-muted-foreground">{summary.detail}</p>
+          </div>
+          <Switch aria-label="Answer DNS for this network" checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change({ ...config, enabled })} />
+        </div>
+        <div className="grid gap-3 text-sm sm:grid-cols-2">
+          <p><span className="text-muted-foreground">Upstream</span><br />{summariseUpstream(config)}</p>
+          <p><span className="text-muted-foreground">Queries since restart</span><br />{stats ? `${stats.queries.toLocaleString()} looked up · ${stats.blocked.toLocaleString()} blocked` : queries.isError ? 'Unavailable' : 'Checking…'}</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3 text-sm">
+          <label className="flex items-center gap-2">Keep a query log
+            <Switch checked={config.query_log.enabled} disabled={busy} onCheckedChange={(enabled) => change({ ...config, query_log: { ...config.query_log, enabled } })} />
+          </label>
+          <Link to="/gateway/dns/details" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">DNS activity and advanced settings <ChevronRight className="size-4" aria-hidden /></Link>
+        </div>
+      </div>
+      {config.enabled && status.data?.drifted && (
+        <Alert><AlertTriangle /><AlertTitle>DNS settings differ from what is running</AlertTitle><AlertDescription><Link className="underline underline-offset-4" to="/gateway/dns/details">Review and repair DNS</Link></AlertDescription></Alert>
+      )}
+    </div>
+  )
+}
+
+export function DnsDetailsContent() {
   const { config, busy, change, applier, gate } = useDnsEditor()
   const status = useDnsStatus()
   const interfaces = useInterfaces()

@@ -82,6 +82,11 @@ export const SECTIONS: Section[] = [
     end: false,
     groups: [
       {
+        slug: 'interfaces',
+        label: 'Advanced interfaces and routing',
+        blurb: 'All interfaces, forwarding, routing diagnostics and less common routing settings.',
+      },
+      {
         slug: 'dhcp',
         label: 'DHCP',
         blurb: 'Define served networks, hand out addresses and reserve them for devices that need a fixed one.',
@@ -119,6 +124,7 @@ export const SECTIONS: Section[] = [
     nested: true,
     end: false,
     groups: [
+      { slug: 'details', label: 'DHCP status and settings', blurb: 'Service diagnostics, ranges, reservations and detailed DHCP settings.' },
       {
         slug: 'ranges',
         label: 'Address ranges',
@@ -147,6 +153,7 @@ export const SECTIONS: Section[] = [
     nested: true,
     end: false,
     groups: [
+      { slug: 'details', label: 'DNS activity and advanced settings', blurb: 'Queries, observed service status and detailed resolver settings.' },
       {
         slug: 'blocking',
         label: 'Blocking',

@@ -45,10 +45,12 @@ import { cn } from '@/lib/utils'
 export function UplinkCard({
   interfaces,
   networks,
+  compact = false,
 }: {
   interfaces: InterfaceRow[]
   /** The networks, so the dialog can offer to take one's interface over. */
   networks: NetworkRow[]
+  compact?: boolean
 }) {
   const editor = useUplinkEditor()
   const [open, setOpen] = useState(false)
@@ -70,8 +72,13 @@ export function UplinkCard({
     <>
       <PartialApply editor={editor} />
 
-      <Card>
-        <CardContent className="space-y-4">
+      {compact ? (
+        <Button size="sm" variant="outline" disabled={editor.busy} onClick={() => setOpen(true)}>
+          {uplink ? 'Change uplink' : 'Set up uplink'}
+        </Button>
+      ) : (
+        <Card>
+          <CardContent className="space-y-4">
           {!uplink ? (
             <ListEmpty>
               olr does not own this router&rsquo;s way out. The default route is whatever your
@@ -97,8 +104,9 @@ export function UplinkCard({
               </Button>
             )}
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {open && (
         <UplinkDialog
