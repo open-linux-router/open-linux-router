@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -35,7 +36,7 @@ func TestRunTraceUsesBoundedTraditionalMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "--traceroute\n--table\n--no-color\n--language\nen\n--max-hops\n20\n--queries\n2\n--timeout\n1000\nexample.com\n"
+	want := "--table\n--no-color\n--language\nen\n--max-hops\n20\n--queries\n2\n--timeout\n1000\nexample.com\n"
 	if result.Target != "example.com" || result.Output != want {
 		t.Fatalf("result = %+v", result)
 	}
@@ -53,5 +54,21 @@ func TestTraceMapURL(t *testing.T) {
 		if got := traceMapURL(tc.output); got != tc.want {
 			t.Errorf("traceMapURL(%q) = %q, want %q", tc.output, got, tc.want)
 		}
+	}
+}
+
+func TestRunTraceRejectsUsageWithSuccessfulExit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture")
+	}
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "nexttrace")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\necho 'unknown arguments 1.1.1.1'\necho 'usage: nexttrace [-h|--help]'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	_, err := runTrace(context.Background(), "1.1.1.1")
+	if err == nil || !strings.Contains(err.Error(), "rejected the trace arguments") {
+		t.Fatalf("err = %v", err)
 	}
 }

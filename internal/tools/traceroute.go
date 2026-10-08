@@ -54,8 +54,8 @@ func runTrace(ctx context.Context, target string) (TraceResult, error) {
 	if binary == "" {
 		return TraceResult{}, errors.New("nexttrace is not installed on the router; install it from github.com/nxtrace/NTrace-core")
 	}
-	// Explicit traditional mode protects this finite request from upstream's planned MTR default.
-	cmd := exec.CommandContext(ctx, binary, "--traceroute", "--table", "--no-color", "--language", "en",
+	// Table mode selects a finite traditional trace on both older and newer NextTrace.
+	cmd := exec.CommandContext(ctx, binary, "--table", "--no-color", "--language", "en",
 		"--max-hops", "20", "--queries", "2", "--timeout", "1000", target)
 	cmd.WaitDelay = time.Second
 	var stdout, stderr limitedBuffer
@@ -72,6 +72,11 @@ func runTrace(ctx context.Context, target string) (TraceResult, error) {
 	}
 	if stdout.Len() == 0 {
 		return TraceResult{}, errors.New("nexttrace returned no route")
+	}
+	// Some NextTrace releases print argument errors and usage to stdout with exit 0.
+	if strings.HasPrefix(stdout.String(), "unknown arguments ") || strings.HasPrefix(stdout.String(), "usage: nexttrace ") ||
+		strings.Contains(stdout.String(), "\nusage: nexttrace ") {
+		return TraceResult{}, errors.New("nexttrace rejected the trace arguments; check the installed version")
 	}
 	return TraceResult{Target: target, Output: stdout.String(), MapURL: traceMapURL(stdout.String())}, nil
 }
