@@ -16,6 +16,11 @@ and ensure it has an IPv4 address and a route toward the provider multicast
 source. OLR does not assign addresses on the IPTV upstream. IPv4 forwarding must be
 enabled (normally by the OLR gateway module).
 
+The WebUI provides the same flow under **Advanced → IPTV multicast**: select
+the adopted upstream interface and downstream LAN, preview, then enable. The
+page reports proxy service state and validation errors. Interface/VLAN creation
+and installing `igmpproxy` remain host setup outside this page.
+
 ```sh
 olr iptv set --upstream iptv0 --network lan --dry-run
 olr iptv set --upstream iptv0 --network lan

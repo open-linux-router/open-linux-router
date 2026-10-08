@@ -238,6 +238,11 @@ export const SECTIONS: Section[] = [
         blurb: 'WireGuard, Shadowsocks and SOCKS5 servers for connecting from outside.',
       },
       {
+        slug: 'iptv',
+        label: 'IPTV multicast',
+        blurb: 'Let a set-top box on your LAN subscribe to routed IPv4 IPTV streams from a separate upstream interface. This does not bridge VLANs or relay the provider DHCP.',
+      },
+      {
         // Both things on this page are live rather than settings — the
         // addresses, and a certificate whose expiry is the only number here
         // that will be different tomorrow. Filing the certificate one level

@@ -1,6 +1,7 @@
 import { SettingsList } from '@/components/layout/settings-list'
 import { useDialConfig } from '@/features/dial/queries'
 import { useIngressConfig } from '@/features/ingress/queries'
+import { useIptvConfig } from '@/features/iptv/queries'
 import { useForwardsConfig } from '@/features/nat/queries'
 import { useRemoteConfig, useRemotePeers } from '@/features/remote/queries'
 import type { RemotePeer } from '@/lib/api-types'
@@ -10,7 +11,7 @@ import type { RemoteConfig } from '@/lib/config-types'
  * Advanced, on the page you land on: a row per feature, each saying what it is
  * doing now.
  *
- * Nothing else, unlike every other landing page. The four have no status in
+ * Nothing else, unlike every other landing page. These features have no status in
  * common to summarise — a port forward's rules, a published name, a tunnel and a
  * certificate fail in four unrelated ways — so each page keeps its own status
  * strip and this one only has to say which of them are in use. A value that is
@@ -22,6 +23,7 @@ export function AdvancedPage() {
   const remote = useRemoteConfig()
   const peers = useRemotePeers()
   const ingress = useIngressConfig()
+  const iptv = useIptvConfig()
 
   const forwards = gateway.data?.forwards ?? []
   const records = dial.data?.records ?? []
@@ -48,6 +50,10 @@ export function AdvancedPage() {
         {
           slug: 'remote',
           value: remote.data && describeRemote(remote.data, devices),
+        },
+        {
+          slug: 'iptv',
+          value: iptv.data && (iptv.data.enabled ? `On · ${iptv.data.networks?.join(', ') || 'No LAN'}` : 'Off'),
         },
         {
           slug: 'ingress',

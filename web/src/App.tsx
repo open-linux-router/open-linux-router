@@ -19,6 +19,7 @@ import { DdnsPage } from '@/routes/advanced/ddns'
 import { FilteringPage } from '@/routes/advanced/filtering'
 import { ForwardsPage } from '@/routes/advanced/forwards'
 import { IngressPage } from '@/routes/advanced/ingress'
+import { IptvPage } from '@/routes/advanced/iptv'
 import { RemotePage } from '@/routes/advanced/remote'
 import { NetworksPage } from '@/routes/gateway/networks'
 import { OverviewPage } from '@/routes/overview'
@@ -80,6 +81,7 @@ export function App() {
             <Route path="ddns" element={<DdnsPage />} />
             <Route path="remote" element={<RemotePage />} />
             <Route path="ingress" element={<IngressPage />} />
+            <Route path="iptv" element={<IptvPage />} />
           </Route>
 
           {/* The addresses that moved. Redirected rather than deleted: a
