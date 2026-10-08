@@ -1,9 +1,37 @@
-import { Activity, ArrowDown, ArrowUp, Gauge, LoaderCircle } from 'lucide-react'
+import { Activity, ArrowDown, ArrowUp, Copy, Gauge, LoaderCircle } from 'lucide-react'
 import { useState } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { api } from '@/lib/api'
+import { ApiError, api } from '@/lib/api'
+
+interface TestError {
+  title: string
+  guidance: string
+  detail: string
+}
+
+function explainFailure(err: unknown): TestError {
+  const detail = err instanceof Error ? err.message : String(err)
+  if (err instanceof ApiError && err.status === 409) {
+    return { title: 'A test is already running', guidance: 'Wait for it to finish before starting another.', detail }
+  }
+  if (err instanceof ApiError && err.status === 401) {
+    return { title: 'Authentication required', guidance: 'Sign in to the router and try again.', detail }
+  }
+  if (err instanceof ApiError && err.status === 503) {
+    return {
+      title: 'Speed test unavailable',
+      guidance: 'The router could not complete a test with the available servers. Check its internet connection, then try again later. This does not mean your network is down.',
+      detail,
+    }
+  }
+  return {
+    title: 'Could not reach the speed test',
+    guidance: 'Check that this page can still reach the router, then try again. Other router settings are unaffected.',
+    detail,
+  }
+}
 
 interface SpeedResult {
   server: string
@@ -17,18 +45,33 @@ interface SpeedResult {
 export function ToolsPage() {
   const [result, setResult] = useState<SpeedResult | null>(null)
   const [running, setRunning] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<TestError | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
 
   async function run() {
     setRunning(true)
     setResult(null)
     setError(null)
+    setCopied(false)
+    setCopyFailed(false)
     try {
       setResult(await api.post<SpeedResult>('/api/tools/speedtest'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Speed test failed')
+      setError(explainFailure(err))
     } finally {
       setRunning(false)
+    }
+  }
+
+  async function copyDiagnostics() {
+    if (!error) return
+    try {
+      await navigator.clipboard.writeText(`Open Linux Router ${__APP_VERSION__}\nSpeed test: ${error.detail}`)
+      setCopied(true)
+      setCopyFailed(false)
+    } catch {
+      setCopyFailed(true)
     }
   }
 
@@ -50,14 +93,28 @@ export function ToolsPage() {
             {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Activity aria-hidden />}
             {running ? 'Testing connection…' : result ? 'Run again' : 'Start speed test'}
           </Button>
-          {running && <p role="status" className="text-sm text-muted-foreground">Finding a server, then measuring ping, download and upload. This can take up to a minute.</p>}
+          {running && <p role="status" className="text-sm text-muted-foreground">Finding a server, then measuring ping, download and upload. This may take up to 90 seconds.</p>}
         </div>
       </div>
 
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Could not complete the test</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertTitle>{error.title}</AlertTitle>
+          <AlertDescription className="space-y-3">
+            <p>{error.guidance}</p>
+            <details className="text-foreground">
+              <summary className="cursor-pointer text-xs">Technical details</summary>
+              <p className="mt-2 break-words font-mono text-xs select-text">{error.detail}</p>
+            </details>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="outline" size="sm" onClick={copyDiagnostics}>
+                <Copy aria-hidden />{copied ? 'Copied' : 'Copy diagnostics'}
+              </Button>
+              <a className="text-xs underline underline-offset-4" href="https://github.com/open-linux-router/open-linux-router/issues/new" target="_blank" rel="noreferrer">Report an issue</a>
+            </div>
+            {copyFailed && <p className="text-xs">Could not copy automatically. Select the technical details above to copy them.</p>}
+            <p className="text-xs">Nothing is sent automatically. Paste the diagnostics into an issue only if you choose to report it.</p>
+          </AlertDescription>
         </Alert>
       )}
 
