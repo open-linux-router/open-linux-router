@@ -38,6 +38,19 @@ function explainFailure(err: unknown): TestError {
   }
 }
 
+interface ForwardRun {
+  name: string
+  mbps: number
+  pps?: number
+  loss_percent?: number
+  samples: { second: number; mbps: number }[]
+}
+
+interface ForwardResult {
+  runs: ForwardRun[]
+  note: string
+}
+
 interface SpeedResult {
   server: string
   exit?: string
@@ -95,6 +108,23 @@ export function ToolsPage() {
   const options = servers.data?.servers ?? []
   const serverUnavailable = serverID !== '' && (servers.isPending || (servers.isSuccess && !options.some((item) => item.id === serverID)))
   const selectedServer = serverID
+
+  const [forwardResult, setForwardResult] = useState<ForwardResult | null>(null)
+  const [forwardRunning, setForwardRunning] = useState(false)
+  const [forwardError, setForwardError] = useState<string | null>(null)
+
+  async function runForward() {
+    setForwardRunning(true)
+    setForwardResult(null)
+    setForwardError(null)
+    try {
+      setForwardResult(await api.post<ForwardResult>('/api/tools/forward'))
+    } catch (err) {
+      setForwardError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setForwardRunning(false)
+    }
+  }
 
   const [natResult, setNATResult] = useState<NATResult | null>(null)
   const [natRunning, setNATRunning] = useState(false)
@@ -265,6 +295,26 @@ export function ToolsPage() {
           <p className="text-sm text-muted-foreground">Test server: {result.server} · {result.location} · Way out: {result.exit || 'Router default route'}</p>
         </div>
       )}
+      <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="forward-heading">
+        <div className="flex items-start gap-4">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Gauge className="size-5" aria-hidden /></div>
+          <div className="space-y-1">
+            <h2 id="forward-heading" className="text-xl font-semibold tracking-tight">Local forwarding self-test</h2>
+            <p className="text-sm text-muted-foreground">Estimate this machine's IPv4 software forwarding capacity without another device or internet access. Requires Linux, iproute2, iperf3 and enabled forwarding.</p>
+          </div>
+        </div>
+        <p className="mt-4 text-sm text-muted-foreground">Creates two temporary isolated networks and tests TCP in both directions plus 128-byte UDP packets. It shares CPU with the traffic generators and bypasses physical network cards. It does not change real interfaces or routes, but may briefly load the CPU and affect other traffic.</p>
+        <Button className="mt-5" onClick={runForward} disabled={forwardRunning}>
+          {forwardRunning && <LoaderCircle className="animate-spin" aria-hidden />}
+          {forwardRunning ? 'Measuring forwarding…' : 'Run local self-test'}
+        </Button>
+        {forwardRunning && <p role="status" className="mt-3 text-sm text-muted-foreground">Three five-second tests are running. This may take up to 45 seconds.</p>}
+        {forwardError && <Alert variant="destructive" className="mt-5"><AlertTitle>Self-test unavailable</AlertTitle><AlertDescription>{forwardError}</AlertDescription></Alert>}
+        {forwardResult && <div className="mt-6 space-y-5" aria-live="polite">
+          {forwardResult.runs.map(run => <ForwardChart key={run.name} run={run} />)}
+          <p className="text-xs text-muted-foreground">{forwardResult.note}</p>
+        </div>}
+      </section>
       <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="nat-heading">
         <div className="flex items-start gap-4">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Network className="size-5" aria-hidden /></div>
@@ -399,4 +449,21 @@ function filteringExplanation(value: string): string {
     case 'no changed-source reply': return 'No reply from a changed source arrived. This could be filtering, server behavior, or packet loss.'
     default: return 'No conclusion from this test.'
   }
+}
+
+function ForwardChart({ run }: { run: ForwardRun }) {
+  const max = Math.max(1, ...run.samples.map(sample => sample.mbps))
+  return <div className="rounded-xl border bg-muted/20 p-4">
+    <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <h3 className="font-medium">{run.name}</h3>
+      <p className="font-mono text-lg font-semibold tabular-nums">{run.mbps.toFixed(1)} Mbps</p>
+    </div>
+    <div className="mt-4 flex h-28 items-end gap-1.5" role="img" aria-label={`${run.name}: ${run.samples.map(sample => `second ${sample.second}: ${sample.mbps.toFixed(1)} Mbps`).join(', ')}`}>
+      {run.samples.map(sample => <div key={sample.second} className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-1" style={{ height: '100%' }}>
+        <div className="w-full rounded-t bg-primary/75" style={{ height: `${Math.max(2, sample.mbps / max * 85)}%` }} title={`${sample.mbps.toFixed(1)} Mbps`} />
+        <span className="text-[10px] tabular-nums text-muted-foreground">{sample.second}s</span>
+      </div>)}
+    </div>
+    {run.pps != null && <p className="mt-3 text-xs text-muted-foreground">Received {Math.round(run.pps).toLocaleString()} packets/s · {run.loss_percent?.toFixed(1)}% loss at the test rate</p>}
+  </div>
 }

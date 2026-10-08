@@ -35,14 +35,16 @@ type ServerOption struct {
 }
 
 type HTTP struct {
-	running     atomic.Bool
-	pingRunning atomic.Bool
-	tracing     atomic.Bool
-	natRunning  atomic.Bool
-	Trace       func(context.Context, string) (TraceResult, error)
-	RunNAT      func(context.Context) (NATResult, error)
+	running        atomic.Bool
+	pingRunning    atomic.Bool
+	tracing        atomic.Bool
+	natRunning     atomic.Bool
+	forwardRunning atomic.Bool
+	Trace          func(context.Context, string) (TraceResult, error)
+	RunNAT         func(context.Context) (NATResult, error)
 	// RunPing is replaceable in tests; nil sends real ICMP echo requests.
-	RunPing func(context.Context, string) (PingResult, error)
+	RunPing    func(context.Context, string) (PingResult, error)
+	RunForward func(context.Context) (ForwardResult, error)
 	// ResolveExit returns a current fwmark, rejecting disabled or blocked exits.
 	ResolveExit func(string) (uint32, error)
 	// Run is replaceable in tests; nil uses the actual network test.
@@ -55,6 +57,7 @@ func (h *HTTP) Routes() []core.Route {
 		{Method: "GET", Path: "/speedtest/servers", Tool: "show speedtest servers", Summary: "Find nearby speed test servers through the selected way out; makes network requests but transfers no test data.", Query: []core.QueryParam{exit}, Handler: h.servers},
 		{Method: "POST", Path: "/speedtest", Mutating: true, Summary: "Measure this router's internet latency, download and upload speed using speedtest-go; consumes bandwidth.", Query: []core.QueryParam{exit, {Name: "server_id", Type: "string", Summary: "Speed test server ID from the server list; empty picks a reachable server automatically."}}, Handler: h.speedtest},
 		{Method: "POST", Path: "/nat", Mutating: true, Summary: "Probe this router’s default-route UDP mapping and filtering through public STUN servers; sends UDP packets.", Handler: h.nat},
+		{Method: "POST", Path: "/forward", Mutating: true, Summary: "Benchmark isolated same-host IPv4 software forwarding; temporarily creates two network namespaces and veth links, consumes CPU and requires iperf3.", Handler: h.forward},
 		{Method: "POST", Path: "/ping", Mutating: true, Summary: "Send four ICMP echo requests from this router to a hostname or IP address and report packet loss and latency.", Handler: h.ping},
 		{Method: "POST", Path: "/traceroute", Mutating: true, Summary: "Trace the route from this router to a domain or IP using nexttrace; sends network probes.", Handler: h.traceroute},
 	}
@@ -278,6 +281,29 @@ func (h *HTTP) nat(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		core.WriteError(w, http.StatusServiceUnavailable, "NAT test failed: "+err.Error())
+		return
+	}
+	core.WriteJSON(w, http.StatusOK, result)
+}
+
+func (h *HTTP) forward(w http.ResponseWriter, r *http.Request) {
+	if !h.forwardRunning.CompareAndSwap(false, true) {
+		core.WriteError(w, http.StatusConflict, "a forwarding test is already running")
+		return
+	}
+	defer h.forwardRunning.Store(false)
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	run := h.RunForward
+	if run == nil {
+		run = forwardBenchmark
+	}
+	result, err := run(ctx)
+	if r.Context().Err() != nil {
+		return
+	}
+	if err != nil {
+		core.WriteError(w, http.StatusServiceUnavailable, "forwarding test failed: "+err.Error())
 		return
 	}
 	core.WriteJSON(w, http.StatusOK, result)
