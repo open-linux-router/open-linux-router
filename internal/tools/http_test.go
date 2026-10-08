@@ -153,3 +153,66 @@ func TestPingRejectsConcurrentRun(t *testing.T) {
 		t.Fatalf("status %d, want 409", w.Code)
 	}
 }
+
+func TestTracerouteReturnsResult(t *testing.T) {
+	h := &HTTP{Trace: func(_ context.Context, target string) (TraceResult, error) {
+		return TraceResult{Target: target, Output: "1  192.0.2.1  1ms\n"}, nil
+	}}
+	w := httptest.NewRecorder()
+	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/traceroute", strings.NewReader(`{"target":"example.com"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	var result TraceResult
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Target != "example.com" || !strings.Contains(result.Output, "192.0.2.1") {
+		t.Fatalf("result: %+v", result)
+	}
+}
+
+func TestTracerouteRejectsInvalidTargets(t *testing.T) {
+	for _, target := range []string{"", "-version", "foo bar", "https://example.com", "example.com\n--output", "a..b", "foo_bar"} {
+		t.Run(target, func(t *testing.T) {
+			h := &HTTP{Trace: func(context.Context, string) (TraceResult, error) { t.Fatal("ran trace"); return TraceResult{}, nil }}
+			w := httptest.NewRecorder()
+			body, _ := json.Marshal(map[string]string{"target": target})
+			core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/traceroute", strings.NewReader(string(body))))
+			if w.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status %d: %s", w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestTracerouteRejectsConcurrentRun(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	h := &HTTP{Trace: func(context.Context, string) (TraceResult, error) {
+		close(started)
+		<-release
+		return TraceResult{}, nil
+	}}
+	routes := core.RouteTable(h.Routes())
+	request := func() *http.Request {
+		return httptest.NewRequest(http.MethodPost, "/traceroute", strings.NewReader(`{"target":"1.1.1.1"}`))
+	}
+	done := make(chan struct{})
+	go func() { defer close(done); routes.ServeHTTP(httptest.NewRecorder(), request()) }()
+	<-started
+	w := httptest.NewRecorder()
+	routes.ServeHTTP(w, request())
+	close(release)
+	<-done
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestLimitedTraceOutput(t *testing.T) {
+	var b limitedBuffer
+	data := strings.Repeat("x", traceOutputLimit+100)
+	if n, err := b.Write([]byte(data)); n != len(data) || err != nil || b.Len() != traceOutputLimit || !b.truncated {
+		t.Fatalf("write=%d, length=%d, truncated=%v, err=%v", n, b.Len(), b.truncated, err)
+	}
+}

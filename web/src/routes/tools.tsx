@@ -1,4 +1,4 @@
-import { Activity, ArrowDown, ArrowUp, Copy, Gauge, LoaderCircle, Radio } from 'lucide-react'
+import { Activity, ArrowDown, ArrowUp, Copy, Gauge, LoaderCircle, Radio, Route } from 'lucide-react'
 import { useState } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -54,6 +54,11 @@ interface PingResult {
   max_ms: number
 }
 
+interface TraceResult {
+  target: string
+  output: string
+}
+
 export function ToolsPage() {
   const [target, setTarget] = useState('1.1.1.1')
   const [pingResult, setPingResult] = useState<PingResult | null>(null)
@@ -71,6 +76,24 @@ export function ToolsPage() {
       setPingError(err instanceof Error ? err.message : String(err))
     } finally {
       setPingRunning(false)
+    }
+  }
+
+  const [trace, setTrace] = useState<TraceResult | null>(null)
+  const [traceRunning, setTraceRunning] = useState(false)
+  const [traceError, setTraceError] = useState<string | null>(null)
+
+  async function runTraceroute(event: React.SubmitEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setTraceRunning(true)
+    setTrace(null)
+    setTraceError(null)
+    try {
+      setTrace(await api.post<TraceResult>('/api/tools/traceroute', { target: target.trim() }))
+    } catch (err) {
+      setTraceError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setTraceRunning(false)
     }
   }
 
@@ -192,7 +215,33 @@ export function ToolsPage() {
           </div>
         )}
       </section>
-      <p className="text-xs text-muted-foreground">Traceroute will appear here in the future.</p>
+      <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="trace-title">
+        <div className="flex items-start gap-4">
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Route className="size-6" aria-hidden /></div>
+          <div>
+            <h2 id="trace-title" className="text-xl font-semibold tracking-tight">Traceroute</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Follow the path from this router to a domain or IP address. Powered by NextTrace; sends network probes and may query its IP location service.</p>
+          </div>
+        </div>
+        <form onSubmit={runTraceroute} className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <label className="flex-1 space-y-2 text-sm font-medium" htmlFor="trace-target">
+            <span>Destination</span>
+            <Input id="trace-target" value={target} onChange={(event) => setTarget(event.target.value)} placeholder="example.com or 1.1.1.1" required maxLength={253} disabled={traceRunning} />
+          </label>
+          <Button type="submit" disabled={traceRunning || !target.trim()}>
+            {traceRunning ? <LoaderCircle className="animate-spin" aria-hidden /> : <Route aria-hidden />}
+            {traceRunning ? 'Tracing…' : 'Trace route'}
+          </Button>
+        </form>
+        {traceRunning && <p role="status" className="mt-4 text-sm text-muted-foreground">Probing up to 20 hops. This may take up to 75 seconds.</p>}
+        {traceError && <Alert variant="destructive" className="mt-5"><AlertTitle>Traceroute unavailable</AlertTitle><AlertDescription className="break-words">{traceError}</AlertDescription></Alert>}
+        {trace && <div className="mt-6" aria-live="polite">
+          <p className="mb-3 text-sm text-muted-foreground">Route to {trace.target}</p>
+          <pre className="overflow-x-auto rounded-xl border bg-muted/40 p-4 font-mono text-xs leading-relaxed select-text">{trace.output}</pre>
+        </div>}
+      </section>
+      <p className="text-xs text-muted-foreground">Traceroute requires <a className="underline underline-offset-4" href="https://github.com/nxtrace/NTrace-core" target="_blank" rel="noreferrer">NextTrace</a> installed on the router.</p>
+
     </div>
   )
 }

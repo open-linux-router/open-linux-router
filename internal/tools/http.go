@@ -28,6 +28,8 @@ type SpeedResult struct {
 type HTTP struct {
 	running     atomic.Bool
 	pingRunning atomic.Bool
+	tracing     atomic.Bool
+	Trace       func(context.Context, string) (TraceResult, error)
 	// RunPing is replaceable in tests; nil sends real ICMP echo requests.
 	RunPing func(context.Context, string) (PingResult, error)
 	// Run is replaceable in tests; nil uses the actual network test.
@@ -43,7 +45,46 @@ func (h *HTTP) Routes() []core.Route {
 		Method: "POST", Path: "/ping", Mutating: true,
 		Summary: "Send four ICMP echo requests from this router to a hostname or IP address and report packet loss and latency.",
 		Handler: h.ping,
+	}, {
+		Method: "POST", Path: "/traceroute", Mutating: true,
+		Summary: "Trace the route from this router to a domain or IP using nexttrace; sends network probes.",
+		Handler: h.traceroute,
 	}}
+}
+
+func (h *HTTP) traceroute(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Target string `json:"target"`
+	}
+	if err := core.DecodeJSON(w, r, &input); err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	target := input.Target
+	if !validTraceTarget(target) {
+		core.WriteError(w, http.StatusUnprocessableEntity, "enter a valid domain name or IP address")
+		return
+	}
+	if !h.tracing.CompareAndSwap(false, true) {
+		core.WriteError(w, http.StatusConflict, "a traceroute is already running")
+		return
+	}
+	defer h.tracing.Store(false)
+	ctx, cancel := context.WithTimeout(r.Context(), traceTimeout)
+	defer cancel()
+	run := h.Trace
+	if run == nil {
+		run = runTrace
+	}
+	result, err := run(ctx, target)
+	if r.Context().Err() != nil {
+		return
+	}
+	if err != nil {
+		core.WriteError(w, http.StatusServiceUnavailable, "traceroute failed: "+err.Error())
+		return
+	}
+	core.WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *HTTP) speedtest(w http.ResponseWriter, r *http.Request) {
