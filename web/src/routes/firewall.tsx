@@ -5,19 +5,19 @@ import { toast } from 'sonner'
 import { StatusStrip } from '@/components/layout/status-strip'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { List, ListRow } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useFirewallStatus, useReapplyFirewall, useSetFirewall } from '@/features/firewall/queries'
+import { TrafficMap } from '@/features/firewall/traffic-map'
 import { ApiError } from '@/lib/api'
 import type { FirewallApplyResult, FirewallStatus } from '@/lib/api-types'
 
 /**
- * The firewall: one switch, and the answer to "what can the internet reach
- * here?".
+ * The firewall: one switch, and a map of what can reach this router or its
+ * inside networks.
  *
  * There is no rule editor, and that is the design rather than a gap
  * (docs/firewall.md). Every port listed below comes from something already
- * configured elsewhere, so the list is read-only — the way to close a port is
+ * configured elsewhere, so the map is read-only — the way to close a port is
  * to switch off the thing that opened it.
  */
 export function FirewallPage() {
@@ -120,49 +120,7 @@ export function FirewallPage() {
         </Alert>
       )}
 
-      <section className="space-y-2">
-        <h2 className="px-1 text-sm font-medium text-muted-foreground">
-          Reachable from the internet
-        </h2>
-        <List>
-          <ListRow
-            title="Port forwards"
-            subtitle="Each forward is its own permission, to the one device it names."
-            to="/advanced/forwards"
-          />
-          {st.openings.map((o) => (
-            <ListRow
-              key={`${o.protocol}/${o.port ?? o.from}`}
-              title={o.for}
-              trailing={
-                <span className="font-mono text-sm text-muted-foreground">
-                  {o.protocol} {o.from ? `from ${o.from}` : o.port}
-                </span>
-              }
-            />
-          ))}
-        </List>
-        <p className="px-1 text-[0.8rem] text-muted-foreground">
-          {st.enabled
-            ? 'Everything else from outside is blocked. Replies to connections your devices make are not affected.'
-            : 'With the firewall off, these and anything else this router or your devices answer on are reachable.'}
-        </p>
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="px-1 text-sm font-medium text-muted-foreground">Inside</h2>
-        <p className="px-1 text-sm">
-          {st.inside.length ? (
-            <span className="font-mono">{st.inside.join(', ')}</span>
-          ) : (
-            'No networks yet.'
-          )}
-        </p>
-        <p className="px-1 text-[0.8rem] text-muted-foreground">
-          Your networks and the remote access tunnel. Every other interface counts as outside —
-          including ones added later.
-        </p>
-      </section>
+      <TrafficMap status={st} />
     </div>
   )
 }
