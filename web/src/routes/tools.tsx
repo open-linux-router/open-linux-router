@@ -91,7 +91,6 @@ interface TraceResult {
 function TraceView({ trace }: { trace: TraceResult }) {
   const [mapAvailable, setMapAvailable] = useState(false)
   const [checkingMap, setCheckingMap] = useState(!!trace.map_url)
-  const [showRaw, setShowRaw] = useState(false)
 
   useEffect(() => {
     if (!trace.map_url) return
@@ -117,15 +116,8 @@ function TraceView({ trace }: { trace: TraceResult }) {
   }, [trace.map_url])
 
   return <div className="mt-6" aria-live="polite">
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-      <p className="text-sm text-muted-foreground">Route to {trace.target}</p>
-      {mapAvailable && <div className="flex items-center gap-4 text-sm font-medium text-primary">
-        <button type="button" className="underline underline-offset-4" onClick={() => setShowRaw(value => !value)}>{showRaw ? 'Show route map' : 'Show raw output'}</button>
-        <a href={trace.map_url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Open map ↗</a>
-      </div>}
-    </div>
     {checkingMap && <p role="status" className="text-sm text-muted-foreground">Checking route map availability…</p>}
-    {mapAvailable && !showRaw ? <div className="overflow-hidden rounded-xl border">
+    {mapAvailable ? <div className="overflow-hidden rounded-xl border">
       <iframe title={`Route map to ${trace.target}`} src={trace.map_url} referrerPolicy="no-referrer" onError={() => setMapAvailable(false)} className="h-[60vh] min-h-[440px] w-full bg-white sm:h-[650px]" />
     </div> : !checkingMap && <>
       {trace.map_url && <p className="mb-3 text-xs text-muted-foreground">Route map unavailable here. <a className="text-primary underline underline-offset-4" href={trace.map_url} target="_blank" rel="noopener noreferrer">Open it in a new tab ↗</a></p>}
@@ -278,7 +270,7 @@ export function ToolsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="space-y-6">
       <div className="relative overflow-hidden rounded-2xl border bg-card p-6 sm:p-10">
         <div className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-primary/8 blur-3xl" />
         <div className="relative space-y-5">
@@ -489,8 +481,6 @@ export function ToolsPage() {
         {traceError && <Alert variant="destructive" className="mt-5"><AlertTitle>Traceroute unavailable</AlertTitle><AlertDescription className="break-words">{traceError}</AlertDescription></Alert>}
         {trace && <TraceView key={trace.map_url ?? trace.output} trace={trace} />}
       </section>
-      <p className="text-xs text-muted-foreground">Traceroute requires <a className="underline underline-offset-4" href="https://github.com/nxtrace/NTrace-core" target="_blank" rel="noreferrer">NextTrace</a> installed on the router.</p>
-
     </div>
   )
 }
