@@ -44,12 +44,16 @@ func TestRunTraceUsesBoundedTraditionalMode(t *testing.T) {
 
 func TestTraceMapURL(t *testing.T) {
 	good := "https://api.nxtrace.org/tracemap/html/c14e439e-3250-5310-8965-42a1e3545266.html"
+	viewer := "https://peer.as/trace?nt=c14e439e-3250-5310-8965-42a1e3545266"
 	for _, tc := range []struct{ output, want string }{
-		{"1  192.0.2.1\nMapTrace URL: " + good + "\n", good},
+		{"1  192.0.2.1\nMapTrace URL: " + good + "\n", viewer},
+		{"MapTrace URL: https://assets.nxtrace.org/tracemap/c14e439e-3250-5310-8965-42a1e3545266.html", viewer},
 		{"1  192.0.2.1\n", ""},
 		{"MapTrace URL: https://api.nxtrace.org.evil.test/tracemap/html/id.html", ""},
 		{"MapTrace URL: javascript:alert(1)", ""},
 		{"MapTrace URL: https://api.nxtrace.org/tracemap/html/id.html?redirect=evil", ""},
+		{"MapTrace URL: https://assets.nxtrace.org/tracemap/c14e439e-3250-5310-8965-42a1e3545266.html?redirect=evil", ""},
+		{"MapTrace URL: https://assets.nxtrace.org.evil.test/tracemap/c14e439e-3250-5310-8965-42a1e3545266.html", ""},
 	} {
 		if got := traceMapURL(tc.output); got != tc.want {
 			t.Errorf("traceMapURL(%q) = %q, want %q", tc.output, got, tc.want)

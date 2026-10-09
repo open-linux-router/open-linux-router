@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/url"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -81,8 +82,10 @@ func runTrace(ctx context.Context, target string) (TraceResult, error) {
 	return TraceResult{Target: target, Output: stdout.String(), MapURL: traceMapURL(stdout.String())}, nil
 }
 
-// NextTrace prints this URL after its table when its map service is available.
-// Only expose the official HTTPS map endpoint as a clickable link.
+var traceMapID = regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$`)
+
+// NextTrace has used multiple map hosts. Normalize their trace IDs to the
+// current viewer so the browser can check and embed a single origin.
 func traceMapURL(output string) string {
 	const marker = "MapTrace URL:"
 	for _, line := range strings.Split(output, "\n") {
@@ -92,10 +95,26 @@ func traceMapURL(output string) string {
 		}
 		raw := strings.TrimSpace(strings.TrimPrefix(line, marker))
 		u, err := url.Parse(raw)
-		if err == nil && u.Scheme == "https" && u.Host == "api.nxtrace.org" &&
-			strings.HasPrefix(u.Path, "/tracemap/html/") && strings.HasSuffix(u.Path, ".html") &&
-			u.RawQuery == "" && u.Fragment == "" && u.User == nil {
-			return raw
+		if err != nil || u.Scheme != "https" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+			continue
+		}
+		var id string
+		switch u.Host {
+		case "api.nxtrace.org":
+			id = strings.TrimSuffix(strings.TrimPrefix(u.Path, "/tracemap/html/"), ".html")
+			if u.Path != "/tracemap/html/"+id+".html" {
+				continue
+			}
+		case "assets.nxtrace.org":
+			id = strings.TrimSuffix(strings.TrimPrefix(u.Path, "/tracemap/"), ".html")
+			if u.Path != "/tracemap/"+id+".html" {
+				continue
+			}
+		default:
+			continue
+		}
+		if traceMapID.MatchString(id) {
+			return "https://peer.as/trace?nt=" + id
 		}
 	}
 	return ""

@@ -1,5 +1,5 @@
 import { Activity, ArrowDown, ArrowUp, Copy, Gauge, LoaderCircle, Network, Radio, Route } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -86,6 +86,52 @@ interface TraceResult {
   target: string
   output: string
   map_url?: string
+}
+
+function TraceView({ trace }: { trace: TraceResult }) {
+  const [mapAvailable, setMapAvailable] = useState(false)
+  const [checkingMap, setCheckingMap] = useState(!!trace.map_url)
+  const [showRaw, setShowRaw] = useState(false)
+
+  useEffect(() => {
+    if (!trace.map_url) return
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 8000)
+    fetch(trace.map_url, { signal: controller.signal, mode: 'cors' })
+      .then(async response => {
+        if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) return false
+        const page = await response.text()
+        // The viewer also serves its generic search page for expired trace IDs.
+        return page.includes('property="og:title"') && !page.includes('Global Route Trace — MTR')
+      })
+      .then(setMapAvailable)
+      .catch(() => setMapAvailable(false))
+      .finally(() => {
+        window.clearTimeout(timeout)
+        setCheckingMap(false)
+      })
+    return () => {
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [trace.map_url])
+
+  return <div className="mt-6" aria-live="polite">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <p className="text-sm text-muted-foreground">Route to {trace.target}</p>
+      {mapAvailable && <div className="flex items-center gap-4 text-sm font-medium text-primary">
+        <button type="button" className="underline underline-offset-4" onClick={() => setShowRaw(value => !value)}>{showRaw ? 'Show route map' : 'Show raw output'}</button>
+        <a href={trace.map_url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Open map ↗</a>
+      </div>}
+    </div>
+    {checkingMap && <p role="status" className="text-sm text-muted-foreground">Checking route map availability…</p>}
+    {mapAvailable && !showRaw ? <div className="overflow-hidden rounded-xl border">
+      <iframe title={`Route map to ${trace.target}`} src={trace.map_url} referrerPolicy="no-referrer" onError={() => setMapAvailable(false)} className="h-[60vh] min-h-[440px] w-full bg-white sm:h-[650px]" />
+    </div> : !checkingMap && <>
+      {trace.map_url && <p className="mb-3 text-xs text-muted-foreground">Route map unavailable here. <a className="text-primary underline underline-offset-4" href={trace.map_url} target="_blank" rel="noopener noreferrer">Open it in a new tab ↗</a></p>}
+      <pre className="overflow-x-auto rounded-xl border bg-muted/40 p-4 font-mono text-xs leading-relaxed select-text">{trace.output}</pre>
+    </>}
+  </div>
 }
 
 export function ToolsPage() {
@@ -441,11 +487,7 @@ export function ToolsPage() {
         </form>
         {traceRunning && <p role="status" className="mt-4 text-sm text-muted-foreground">Probing up to 20 hops. This may take up to 75 seconds.</p>}
         {traceError && <Alert variant="destructive" className="mt-5"><AlertTitle>Traceroute unavailable</AlertTitle><AlertDescription className="break-words">{traceError}</AlertDescription></Alert>}
-        {trace && <div className="mt-6" aria-live="polite">
-          <p className="mb-3 text-sm text-muted-foreground">Route to {trace.target}</p>
-          {trace.map_url && <a className="mb-4 inline-flex items-center rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/15" href={trace.map_url} target="_blank" rel="noopener noreferrer">View route map on NextTrace ↗</a>}
-          <pre className="overflow-x-auto rounded-xl border bg-muted/40 p-4 font-mono text-xs leading-relaxed select-text">{trace.output}</pre>
-        </div>}
+        {trace && <TraceView key={trace.map_url ?? trace.output} trace={trace} />}
       </section>
       <p className="text-xs text-muted-foreground">Traceroute requires <a className="underline underline-offset-4" href="https://github.com/nxtrace/NTrace-core" target="_blank" rel="noreferrer">NextTrace</a> installed on the router.</p>
 
