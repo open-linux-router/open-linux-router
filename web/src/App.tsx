@@ -34,6 +34,7 @@ import { GatewayExitsPage } from '@/routes/gateway/exits'
 import { FirewallPage } from '@/routes/firewall'
 import { GatewayUnmanagedPage } from '@/routes/gateway/unmanaged'
 import { GatewayUsagePage } from '@/routes/gateway/usage'
+import { CreditsPage } from '@/routes/credits'
 
 export function App() {
   return (
@@ -76,6 +77,7 @@ export function App() {
           <Route path="access" element={<AccessPage />} />
           <Route path="access/socks5" element={<SocksOutPage />} />
           <Route path="tools" element={<ToolsPage />} />
+          <Route path="credits" element={<CreditsPage />} />
           <Route path="advanced">
             <Route index element={<AdvancedPage />} />
             <Route path="forwards" element={<ForwardsPage />} />

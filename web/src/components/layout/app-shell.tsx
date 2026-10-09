@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation } from 'react-router'
+import { Link, NavLink, Outlet, useLocation } from 'react-router'
 
 import { Logo } from '@/components/layout/logo'
 import { SECTIONS, sectionOf } from '@/components/layout/sections'
@@ -18,7 +18,6 @@ export function AppShell() {
 
           <div className="ml-auto flex items-center gap-1">
             <TokenButton />
-            <ThemeToggle />
           </div>
         </div>
       </header>
@@ -112,19 +111,22 @@ function PageHeader() {
  */
 function SiteFooter() {
   return (
-    <footer className="border-t">
+    <footer>
       {/* The tab bar is fixed over the bottom of the viewport, and the footer is
           what now reaches it. */}
-      <div className="mx-auto flex max-w-[90rem] flex-col gap-1 px-4 pt-6 pb-24 text-xs text-muted-foreground sm:flex-row sm:items-center sm:pb-6">
-        <span>Open Linux Router {__APP_VERSION__}</span>
+      <div className="mx-auto flex max-w-[90rem] flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-6 pb-24 text-xs text-muted-foreground sm:pb-6">
+        <span>© {new Date().getFullYear()} Open Linux Router contributors</span>
+        <span>{__APP_VERSION__}</span>
         <a
           href="https://github.com/open-linux-router/open-linux-router"
           target="_blank"
           rel="noreferrer"
-          className="underline-offset-4 hover:text-foreground hover:underline sm:ml-auto"
+          className="underline-offset-4 hover:text-foreground hover:underline"
         >
-          Source
+          GitHub
         </a>
+        <Link to="/credits" className="underline-offset-4 hover:text-foreground hover:underline">Credits</Link>
+        <div className="sm:ml-auto"><ThemeToggle /></div>
       </div>
     </footer>
   )
