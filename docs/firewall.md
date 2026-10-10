@@ -125,6 +125,23 @@ A private-source exception ("allow the UI from RFC 1918 addresses on the
 uplink") was considered and left out to keep the stance simple. It is one rule
 if it turns out to be wanted.
 
+### 4.1 Web flow view
+
+The Firewall page uses two vertical ECharts Sankey fans around a small wall
+illustration: inbound above, outbound below. Source/destination nodes are hidden
+because this is a classification view, not the Overview's device topology.
+The chart uses equal layout weights, not packet counts: accepted categories
+are not measured by this module, so a proportional flow chart would invent a
+denominator. The real blocked input/forward totals appear only when the rules
+are readable, in sync, and buildable. Counts start again when the table is
+rebuilt. A blocked packet is not by itself an intrusion or anomaly.
+
+Gateway routing is a separate layer, not a mutually exclusive firewall verdict.
+The outbound fan links to that page rather than claiming gateway counts or
+outbound anomaly detection. Inbound details retain each opening's protocol,
+port and broker source restriction, with a link to review port-forward targets.
+Unknown/drifted status is labelled as intended policy; off is not protection.
+
 ## 5. Limits, stated
 
 - **Boot window.** The table is programmed when olrd starts, first of all the

@@ -145,6 +145,13 @@ function summarize(st: FirewallStatus): {
       dot: 'bg-warning',
     }
   }
+  if (st.drifted || st.problem) {
+    return {
+      headline: 'Rules not verified',
+      detail: 'The stored setting is on, but the configured protection could not be verified.',
+      dot: 'bg-warning',
+    }
+  }
   const blocked = st.blocked_input + st.blocked_forward
   return {
     headline: 'On',

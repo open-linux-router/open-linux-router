@@ -70,6 +70,9 @@ jobs:
       - name: Lint
         run: cd web && npm run lint
 
+      - name: Test
+        run: cd web && npm test
+
       # `npm run build` is `tsc -b && vite build`, so this type-checks too.
       - name: Build
         run: cd web && npm run build
