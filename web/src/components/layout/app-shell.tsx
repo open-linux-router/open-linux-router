@@ -114,7 +114,7 @@ function SiteFooter() {
     <footer>
       {/* The tab bar is fixed over the bottom of the viewport, and the footer is
           what now reaches it. */}
-      <div className="mx-auto flex max-w-[90rem] flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-6 pb-24 text-xs text-muted-foreground sm:pb-6">
+      <div className="mx-auto flex max-w-[90rem] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pt-6 pb-24 text-center text-xs text-muted-foreground sm:pb-6">
         <span>© {new Date().getFullYear()} Open Linux Router contributors</span>
         <span>{__APP_VERSION__}</span>
         <a
@@ -126,7 +126,7 @@ function SiteFooter() {
           GitHub
         </a>
         <Link to="/credits" className="underline-offset-4 hover:text-foreground hover:underline">Credits</Link>
-        <div className="sm:ml-auto"><ThemeToggle /></div>
+        <ThemeToggle />
       </div>
     </footer>
   )
