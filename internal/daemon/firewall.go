@@ -198,6 +198,17 @@ func reapplyFirewall(ctx context.Context, a firewall.Applier, srv *core.Server, 
 		err  error
 	)
 	if lockErr := srv.ApplyLock().Do(ctx, func() error {
+		if cause != "startup" {
+			c, loadErr := a.Load()
+			if loadErr != nil {
+				err = loadErr
+				return nil
+			}
+			if len(c.Ruleset) > 0 {
+				plan.Empty = true
+				return nil
+			}
+		}
 		plan, _, err = a.Reapply(ctx)
 		return nil
 	}); lockErr != nil {

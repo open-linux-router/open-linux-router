@@ -1,8 +1,8 @@
-# `firewall` module — a default stance at the boundary
+# `firewall` module — nftables rules at the boundary
 
 Status: **built.** Section references are to `design.md` unless prefixed.
 
-One sentence is the whole feature:
+The automatically generated default is:
 
 > **Nothing outside your networks may start a connection to this router, or to
 > anything behind it, unless something here asked for it.**
@@ -19,7 +19,7 @@ covered: the web UI listens on `0.0.0.0:8080` and answers on the uplink too.
 So filtering stopped being optional. What it did not need to become is
 complicated.
 
-## 2. The object: one switch
+## 2. Automatic defaults and native rules
 
 ```json
 "firewall": { "enabled": true }
@@ -30,10 +30,34 @@ changes nothing until somebody says so (§7) — and an ordinary switch in both
 directions. `olr firewall enable|disable|show|status`, `/api/firewall/…`, and a
 Firewall section in the web UI.
 
-There is no rule list, and that is the design rather than a gap. A home router's
-firewall is strong because of its default, not because of how many rules it
-has — and every exception a house network needs is already written down
-somewhere else in olr. So the module does not ask for them a second time.
+The page reads the real ruleset using `nft -j list ruleset`. Tables, chains,
+hooks, priorities, policies, rule order, handles, expressions, sets and counters
+come from nftables itself. Other tables are visible but read-only.
+
+Selecting **Edit olr_filter** copies the current `inet olr_filter` table (or the
+saved table when disabled) into a native JSON editor. Individual rules can be
+added, edited, removed and reordered; the full document editor handles chains,
+sets and complex expressions. Draft edits do not change the kernel.
+
+**Validate and preview** runs `nft -j -c -f -`. Saving requires an explicit
+confirmation because arbitrary input rules can lock the operator out and there
+is no automatic rollback. The saved `firewall.ruleset` is nft's native JSON
+listing, not an OLR policy language. Application converts listing entries to
+native `add` commands and deletes/recreates only `inet olr_filter` in one
+transaction. Kernel handles are stripped and counters start at zero. No shell
+is involved, and `flush ruleset` or commands addressing other tables are refused.
+
+Once saved, the native table replaces automatic generation. Service changes
+do not regenerate it or automatically repair externally changed rules. Startup
+restores it; explicit apply restores the saved table. The UI uses `If-Match`
+against the saved configuration and observed table to reject stale edits;
+counter movement is excluded. Direct external `nft` changes are not persisted
+until the operator copies and saves the live table in the editor.
+
+The automatic mode remains the default for existing installations. Clearing
+`ruleset` through the config API returns to automatic generation; this
+deliberately replaces user rules. The inside/opening behavior below describes
+automatic mode only. Native mode is governed by its actual chains and policies.
 
 ### 2.1 Inside and outside
 
@@ -127,31 +151,20 @@ if it turns out to be wanted.
 
 ### 4.1 Web flow view
 
-The Firewall page uses two vertical ECharts Sankey fans around a small wall
-illustration: inbound above, outbound below. Source/destination nodes are hidden
-because this is a classification view, not the Overview's device topology.
-The chart uses equal layout weights, not packet counts: accepted categories
-are not measured by this module, so a proportional flow chart would invent a
-denominator. The real blocked input/forward totals appear only when the rules
-are readable, in sync, and buildable. Counts start again when the table is
-rebuilt. A blocked packet is not by itself an intrusion or anomaly.
-
-Gateway routing is a separate layer, not a mutually exclusive firewall verdict.
-The outbound fan links to that page rather than claiming gateway counts or
-outbound anomaly detection. Inbound details retain each opening's protocol,
-port and broker source restriction, with a link to review port-forward targets.
-Unknown/drifted status is labelled as intended policy; off is not protection.
+The complete rule list is authoritative. The optional flow view projects only
+rules composed of recognized native matches, counters and a terminal
+accept/drop/reject. Each equal-width ribbon links to its actual rule handle in
+the list. Unsupported expressions, jumps, logging, NAT and non-terminal rules
+remain fully visible in the list and are counted as not representable. No
+business categories are assigned. These ribbons describe individual rule
+matches, not simulated packet paths or final verdicts across all base chains.
 
 ## 5. Limits, stated
 
-The firewall page groups policy into eight traffic roles: replies, published
-services, network essentials, unsolicited inbound, internet access,
-router-originated traffic, local network traffic and router access. Each flow
-label opens its explanation; small screens show the same categories as a list.
-Ribbons have equal layout weights, not measured volumes. Only verified blocked
-packet counters are displayed. Replies and essentials may travel either way,
-and same-LAN switched traffic may bypass the router entirely. Router-originated
-traffic is unfiltered because this module has no output chain.
+- **Native editing needs `nft` and CAP_NET_ADMIN.** The packaged dependency
+  already includes nftables; manual binary installations must provide it.
+- **Native edits take ownership of the table.** Enabling remote access or
+  publishing a service afterwards requires an explicit native rule change.
 
 - **Boot window.** The table is programmed when olrd starts, first of all the
   restores. Between the kernel bringing interfaces up and olrd starting, the

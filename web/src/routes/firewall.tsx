@@ -7,7 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useFirewallStatus, useReapplyFirewall, useSetFirewall } from '@/features/firewall/queries'
-import { TrafficMap } from '@/features/firewall/traffic-map'
+import { NativeRules } from '@/features/firewall/native-rules'
 import { ApiError } from '@/lib/api'
 import type { FirewallApplyResult, FirewallStatus } from '@/lib/api-types'
 
@@ -27,8 +27,10 @@ export function FirewallPage() {
 
   /** The daemon held the switch because it would cut this browser off. */
   const [lockout, setLockout] = useState<string | null>(null)
+  const [pendingEnabled, setPendingEnabled] = useState(true)
 
   async function send(enabled: boolean, confirm = false) {
+    setPendingEnabled(enabled)
     setLockout(null)
     try {
       await set.mutateAsync({ enabled, confirm })
@@ -61,6 +63,7 @@ export function FirewallPage() {
         ) : (
           <Skeleton className="h-24 w-full" />
         )}
+        <NativeRules />
       </div>
     )
   }
@@ -103,9 +106,9 @@ export function FirewallPage() {
                 size="sm"
                 variant="destructive"
                 disabled={set.isPending}
-                onClick={() => void send(true, true)}
+                onClick={() => void send(pendingEnabled, true)}
               >
-                Turn on anyway
+                {pendingEnabled ? 'Turn on anyway' : 'Turn off anyway'}
               </Button>
             </div>
           </AlertDescription>
@@ -115,12 +118,12 @@ export function FirewallPage() {
       {st.problem && (
         <Alert>
           <AlertTriangle />
-          <AlertTitle>Nothing is inside yet</AlertTitle>
+          <AlertTitle>{st.native ? 'Native rules could not be verified' : 'Nothing is inside yet'}</AlertTitle>
           <AlertDescription>{st.problem}</AlertDescription>
         </Alert>
       )}
 
-      <TrafficMap status={st} />
+      <NativeRules />
     </div>
   )
 }
@@ -141,9 +144,12 @@ function summarize(st: FirewallStatus): {
   if (!st.known) {
     return {
       headline: 'Status unknown',
-      detail: 'The router could not read its own firewall rules.',
+      detail: st.problem ?? 'The router could not read its own firewall rules.',
       dot: 'bg-warning',
     }
+  }
+  if (st.native) {
+    return { headline: st.problem ? 'Native rules not verified' : st.drifted ? 'Native rules changed' : 'On — native nftables rules', detail: st.problem ?? (st.drifted ? 'The kernel table differs from the saved native rules.' : 'The saved native table is in force. Review its chains and policies below.'), dot: st.problem || st.drifted ? 'bg-warning' : 'bg-success' }
   }
   if (st.drifted || st.problem) {
     return {

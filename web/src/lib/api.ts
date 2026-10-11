@@ -70,8 +70,8 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = {}
+async function request<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>, encode = JSON.stringify, decode: (text: string) => unknown = JSON.parse): Promise<T> {
+  const headers: Record<string, string> = { ...extraHeaders }
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
   if (body !== undefined) headers['Content-Type'] = 'application/json'
@@ -79,7 +79,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const response = await fetch(path, {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : encode(body),
   })
 
   if (response.status === 204) return undefined as T
@@ -88,7 +88,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   let parsed: unknown = undefined
   if (text) {
     try {
-      parsed = JSON.parse(text)
+      parsed = decode(text)
     } catch {
       // A non-JSON body from an API that always speaks JSON means something
       // upstream answered instead — a proxy, or the SPA fallback. Say so,
@@ -112,7 +112,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>('GET', path),
+  get: <T>(path: string, decode?: (text: string) => unknown) => request<T>('GET', path, undefined, undefined, undefined, decode),
   put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
   patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
@@ -126,5 +126,5 @@ export const api = {
    * held, shown to the operator, and then sent again with `confirm=true`
    * unchanged. Replaying a change is only simple if the change is a value.
    */
-  send: <T>(method: string, path: string, body?: unknown) => request<T>(method, path, body),
+  send: <T>(method: string, path: string, body?: unknown, headers?: Record<string, string>, encode?: (body: unknown) => string) => request<T>(method, path, body, headers, encode),
 }

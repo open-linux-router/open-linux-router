@@ -1,7 +1,8 @@
 // Package firewall owns the `olr_filter` table: a default stance on what may
 // reach this router, and the networks behind it, from outside.
 //
-// One switch and no rule list. docs/firewall.md has the argument; the short
+// Automatic defaults, or a persisted native nft JSON table. docs/firewall.md
+// describes the ownership switch. In automatic mode, the short
 // form is that a home router's firewall is strong because of its default, not
 // because of how many rules it has, and every exception a house network needs
 // is already written down somewhere else in olr — a port forward, a remote
@@ -37,6 +38,10 @@ type Config struct {
 	// is the module most able to cut an operator off from the box they are
 	// configuring.
 	Enabled bool `json:"enabled" jsonschema:"description=Block connections from outside that nothing here asked for."`
+
+	// Ruleset is a native nft JSON document for inet olr_filter. When present,
+	// it replaces automatic generation, including after service changes.
+	Ruleset json.RawMessage `json:"ruleset,omitempty" jsonschema:"description=Native nftables JSON for inet olr_filter; replaces automatic rules."`
 }
 
 // UnmarshalConfig parses a stored section strictly.
@@ -47,6 +52,13 @@ func UnmarshalConfig(data []byte) (Config, error) {
 	var c Config
 	if err := dec.Decode(&c); err != nil {
 		return Config{}, fmt.Errorf("parsing firewall config: %w", err)
+	}
+	if len(c.Ruleset) > 0 && string(c.Ruleset) != "null" {
+		if _, err := nativeCommands(c.Ruleset); err != nil {
+			return Config{}, err
+		}
+	} else {
+		c.Ruleset = nil
 	}
 	return c, nil
 }

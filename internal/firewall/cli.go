@@ -26,7 +26,7 @@ func Command() *cobra.Command {
 		Use:     ModuleName,
 		Short:   "Block connections from outside that nothing here asked for",
 		GroupID: cli.GroupModules,
-		Long: "A default stance, not a rule list.\n\n" +
+		Long: "Automatic defaults or a saved native nftables table.\n\n" +
 			"When it is on, nothing from outside your networks may start a connection\n" +
 			"to this router or to anything behind it. Replies to connections from\n" +
 			"inside still arrive, and so does whatever olr is already serving to the\n" +
@@ -34,7 +34,10 @@ func Command() *cobra.Command {
 			"openings come from the objects themselves, so removing one closes its\n" +
 			"port too.\n\n" +
 			"Inside means the members of your networks and the remote access tunnel;\n" +
-			"every other interface is outside.",
+			"every other interface is outside.\n\n" +
+			"When native rules are saved through the Firewall page or config API,\n" +
+			"their chains and policies replace these defaults and service changes\n" +
+			"do not regenerate them.",
 	}
 	c.AddCommand(showCommand(), statusCommand(), enableCommand(), disableCommand())
 	return c

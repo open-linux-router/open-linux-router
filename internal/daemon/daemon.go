@@ -577,7 +577,14 @@ func run(args []string) error {
 	srv.Mount(iptv.ModuleName, iptv.HTTP{
 		Applier: iptvApplier, Lock: srv.ApplyLock(), Events: srv.Events(),
 		Follow: func(ctx context.Context) error {
-			_, _, err := firewallApplier.Reapply(ctx)
+			c, err := firewallApplier.Load()
+			if err != nil {
+				return err
+			}
+			if len(c.Ruleset) > 0 {
+				return nil
+			}
+			_, _, err = firewallApplier.Reapply(ctx)
 			return err
 		},
 	}.Routes(), iptv.Config{})

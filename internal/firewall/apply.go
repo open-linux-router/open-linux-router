@@ -44,6 +44,9 @@ func (a Applier) save(c Config) error {
 
 // Plan answers "what would applying this do?" without doing it.
 func (a Applier) Plan(ctx context.Context, c Config, via string) (Plan, Desired, error) {
+	if len(c.Ruleset) > 0 {
+		return a.planNative(ctx, c)
+	}
 	obs, err := a.Kernel.Observe(ctx)
 	if err != nil {
 		return Plan{}, Desired{}, err
@@ -87,6 +90,7 @@ func (a Applier) Reapply(ctx context.Context) (Plan, []core.Step, error) {
 
 // Status is the module's account of itself.
 type Status struct {
+	Native  bool `json:"native"`
 	Enabled bool `json:"enabled"`
 
 	// Known is whether the kernel could be read at all.
@@ -118,7 +122,16 @@ func (a Applier) GetStatus(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	st := Status{Enabled: c.Enabled, Inside: []string{}, Openings: []Opening{}}
+	st := Status{Enabled: c.Enabled, Native: len(c.Ruleset) > 0, Inside: []string{}, Openings: []Opening{}}
+	if st.Native {
+		plan, _, err := a.planNative(ctx, c)
+		if err != nil {
+			st.Problem = err.Error()
+			return st, nil
+		}
+		st.Known, st.Plan, st.Drifted = true, plan, !plan.Empty
+		return st, nil
+	}
 
 	if inside, err := a.Boundary.Inside(); err == nil {
 		st.Inside = normalizeInside(inside)

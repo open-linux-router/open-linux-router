@@ -394,6 +394,8 @@ export interface Assignment {
   exit?: string
 }
 export interface FirewallConfig {
+  /** Native nftables JSON for inet olr_filter; replaces automatic rules. */
+  ruleset?: { [k: string]: unknown }
   /**
    * Block connections from outside that nothing here asked for.
    */

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strconv"
+	"strings"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
@@ -35,6 +36,7 @@ func (h HTTP) Routes() []core.Route {
 		},
 	}
 	return []core.Route{
+		{Method: "GET", Path: "/ruleset", Tool: "show ruleset", Summary: "Read the actual native nftables ruleset and saved firewall table.", Handler: h.getRuleset},
 		{
 			Method: "GET", Path: "/config", Tool: "show config",
 			Summary: "Show whether the firewall is on.",
@@ -75,6 +77,27 @@ func (h HTTP) Routes() []core.Route {
 			Handler: h.getStatus,
 		},
 	}
+}
+
+// getRuleset returns actual native objects, including externally managed tables.
+func (h HTTP) getRuleset(w http.ResponseWriter, r *http.Request) {
+	raw, err := readNative(r.Context())
+	if err != nil {
+		core.WriteError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	c, err := h.Applier.Load()
+	if err != nil {
+		core.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	revision, err := nativeRevision(raw, c)
+	if err != nil {
+		core.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.Header().Set("ETag", `"`+revision+`"`)
+	core.WriteJSON(w, http.StatusOK, nativeView{Revision: revision, Ruleset: raw, Saved: c.Ruleset, Native: len(c.Ruleset) > 0})
 }
 
 // Handler returns the module's routes.
@@ -173,6 +196,22 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, forceConfirm bool,
 			status, failure = http.StatusInternalServerError, err.Error()
 			return nil
 		}
+		if expected := r.Header.Get("If-Match"); expected != "" {
+			raw, readErr := readNative(r.Context())
+			if readErr != nil {
+				status, failure = http.StatusServiceUnavailable, readErr.Error()
+				return nil
+			}
+			revision, revisionErr := nativeRevision(raw, current)
+			if revisionErr != nil {
+				status, failure = http.StatusInternalServerError, revisionErr.Error()
+				return nil
+			}
+			if strings.Trim(expected, `"`) != revision {
+				status, failure = http.StatusPreconditionFailed, "The firewall changed while you were editing. Refresh and review the current rules before applying."
+				return nil
+			}
+		}
 		next, err := edit(&current)
 		if err != nil {
 			editErr = err
@@ -268,6 +307,10 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func writePlanError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errNativeValidation) {
+		core.WriteError(w, http.StatusUnprocessableEntity, err.Error(), core.Problem{Path: "ruleset", Message: err.Error()})
+		return
+	}
 	if errors.Is(err, ErrNoInside) {
 		core.WriteError(w, http.StatusUnprocessableEntity, "invalid firewall configuration",
 			core.Problem{Path: "enabled", Message: err.Error()})

@@ -408,10 +408,13 @@ device on the network deciding to speak.
 not config, not revisioned (§4.5) — so it lands on a separate endpoint and
 cannot deadlock against a running apply.
 
-**`olrd` executes no subprocesses.** Per §8's stack, `google/nftables` and
+**Most kernel operations execute no subprocesses.** Per §8's stack, `google/nftables` and
 `vishvananda/netlink` are direct netlink and `coreos/go-systemd/dbus` is D-Bus.
-There is no `exec.Command("nft")` and no `exec.Command("systemctl")`. That makes
-the sandbox nearly free:
+Native firewall inspection and editing use `nft` with its standard JSON format
+for lossless expression support and validation (docs/firewall.md). This bounded
+subprocess receives JSON on stdin without a shell and only replaces the owned
+filter table. Automatic generation still uses netlink directly. There is no
+`exec.Command("systemctl")`. The sandbox remains:
 
 ```ini
 NoNewPrivileges=true
@@ -508,7 +511,7 @@ Bounded list. Not expected to grow much. The object they all key off is the
 | | `dns` | unbound — **DNS only** | ✅ |
 | | `qos` | tc — per-device priority and upload/download limits; see docs/qos.md | |
 | | `gateway` | **the boundary between the networks this box serves and everything else, in both directions**: static + policy routes and exits (`olr_route`), egress NAT and port forwarding (`olr_nat`), byte accounting (`olr_stat`); later bird (BGP/OSPF). Absorbed the deleted `firewall` module (docs/gateway.md §0, docs/port-forwarding.md) | ✅ |
-| | `firewall` | **a default stance, not a rule list**: one switch; blocks connections from outside the networks unless a port forward, remote access or ingress asked for them (`olr_filter`, IPv4 and IPv6). The old module of this name was NAT only and moved to `gateway` (docs/firewall.md, docs/port-forwarding.md §0) | ✅ |
+| | `firewall` | **native nftables rules**: inspect tables/chains/ordered expressions; edit and persist `inet olr_filter`. Automatic default generation remains available until native rules are saved. The old module of this name was NAT only and moved to `gateway` (docs/firewall.md, docs/port-forwarding.md §0) | ✅ |
 | | `remote` | getting back in from outside: **WireGuard and Shadowsocks** built as parallel objects; SOCKS5 planned beside them, never under them (docs/remote-access.md) | ✅ |
 | | `wifi` | hostapd — only if the box has radios | |
 | **Operational** | `system` | hostname, time, admin users, updates, backup, logs | ✅ |

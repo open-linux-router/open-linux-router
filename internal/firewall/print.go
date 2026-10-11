@@ -7,6 +7,9 @@ import (
 )
 
 func writeConfigText(w io.Writer, c Config) {
+	if len(c.Ruleset) > 0 {
+		fmt.Fprintln(w, "Native nftables rules are stored for inet "+TableName+".")
+	}
 	if c.Enabled {
 		fmt.Fprintln(w, "The firewall is on.")
 		return
@@ -15,6 +18,14 @@ func writeConfigText(w io.Writer, c Config) {
 }
 
 func writeStatusText(w io.Writer, st Status) {
+	if st.Native {
+		fmt.Fprintf(w, "Native nftables rules: enabled=%t known=%t drifted=%t\n", st.Enabled, st.Known, st.Drifted)
+		if st.Problem != "" {
+			fmt.Fprintln(w, st.Problem)
+		}
+		fmt.Fprintln(w, "Review table inet "+TableName+" for its chains and policies.")
+		return
+	}
 	switch {
 	case !st.Enabled:
 		fmt.Fprintln(w, "The firewall is off: anything that can reach this router may connect to it.")

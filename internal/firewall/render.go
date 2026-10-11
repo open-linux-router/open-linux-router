@@ -82,6 +82,7 @@ type Rule struct {
 
 // Desired is the kernel state a config asks for.
 type Desired struct {
+	Ruleset []byte
 	// Enabled is false when the module is off, and then there is no table at
 	// all: applying removes ours and the box filters exactly as it did before.
 	Enabled bool

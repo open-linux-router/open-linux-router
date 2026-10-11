@@ -15,7 +15,8 @@ import (
 
 // The kernel half, and the only file in this module that knows what netlink
 // is. Like internal/gateway/nat it programs nftables in-process over
-// google/nftables — no `nft` binary, no rendered file, no unit.
+// google/nftables for automatic defaults. Native JSON tables use nft itself
+// (native.go), preserving expressions without a second compiler.
 
 // LinuxKernel programs the filter table.
 type LinuxKernel struct{}
@@ -102,7 +103,10 @@ func ourTable(conn *nftables.Conn) (*nftables.Table, error) {
 // recreate, in a single batch the kernel applies atomically. No window exists
 // in which the box is half-filtered, and nothing outside our table is touched
 // (design.md §3.4 bans `nft flush ruleset`).
-func (LinuxKernel) Apply(_ context.Context, d Desired) error {
+func (LinuxKernel) Apply(ctx context.Context, d Desired) error {
+	if len(d.Ruleset) > 0 {
+		return applyNative(ctx, d)
+	}
 	conn, err := nftables.New()
 	if err != nil {
 		return err

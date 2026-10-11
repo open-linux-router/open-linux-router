@@ -1546,6 +1546,7 @@ export interface FirewallOpening {
 
 /** GET /api/firewall/status — internal/firewall Status. */
 export interface FirewallStatus {
+  native?: boolean
   enabled: boolean
   known: boolean
   drifted: boolean
