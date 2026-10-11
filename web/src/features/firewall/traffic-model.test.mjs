@@ -9,6 +9,14 @@ const status = {
   plan: { changes: [], empty: true, impact: 'none' },
 }
 
+test('eight categories are grouped by role without claiming accepted packet counts', () => {
+  const branches = trafficBranches(status)
+  assert.equal(new Set(branches.map((branch) => branch.id)).size, 8)
+  assert.deepEqual(['incoming', 'outgoing', 'local'].map((group) => branches.filter((branch) => branch.group === group).length), [4, 2, 2])
+  assert.equal(branches.find((branch) => branch.id === 'router-outgoing').detail, 'Not filtered by OLR')
+  assert.ok(branches.filter((branch) => branch.id !== 'blocked').every((branch) => !/packets/.test(branch.detail)))
+})
+
 test('only observed, verified drops are reported as counted packets', () => {
   const blocked = trafficBranches(status)[2]
   assert.equal(blocked.detail, '559 packets')
@@ -30,7 +38,7 @@ test('unknown, drifted and unbuildable policies never claim verified counts', ()
 test('off state makes no protection or counter claim', () => {
   const branches = trafficBranches({ ...status, enabled: false })
   assert.ok(branches.every((branch) => branch.tone === 'inactive'))
-  assert.equal(branches[2].title, 'No inbound filtering')
+  assert.equal(branches[2].title, 'Unsolicited inbound traffic')
   assert.equal(branches[2].detail, 'Firewall is off')
 })
 

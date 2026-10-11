@@ -144,6 +144,15 @@ Unknown/drifted status is labelled as intended policy; off is not protection.
 
 ## 5. Limits, stated
 
+The firewall page groups policy into eight traffic roles: replies, published
+services, network essentials, unsolicited inbound, internet access,
+router-originated traffic, local network traffic and router access. Each flow
+label opens its explanation; small screens show the same categories as a list.
+Ribbons have equal layout weights, not measured volumes. Only verified blocked
+packet counters are displayed. Replies and essentials may travel either way,
+and same-LAN switched traffic may bypass the router entirely. Router-originated
+traffic is unfiltered because this module has no output chain.
+
 - **Boot window.** The table is programmed when olrd starts, first of all the
   restores. Between the kernel bringing interfaces up and olrd starting, the
   box is unfiltered.

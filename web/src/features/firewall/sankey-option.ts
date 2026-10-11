@@ -3,8 +3,8 @@ import type { SankeySeriesOption } from 'echarts/charts'
 /** Unit weights are layout weights, never packet counters or percentages. */
 export function sankeyOption(width: number, height: number, colors: string[], outgoing = false): SankeySeriesOption {
   const ribbon = Math.min(28, width * 0.055)
-  const outer = outgoing ? [0.27, 0.73] : [0.18, 0.5, 0.82]
-  const inner = outgoing ? [0.42, 0.58] : [0.4, 0.5, 0.6]
+  const outer = colors.map((_, i) => (i + 0.5) / colors.length)
+  const inner = colors.map((_, i) => 0.35 + 0.3 * (i + 0.5) / colors.length)
   return {
     type: 'sankey',
     orient: 'vertical',
