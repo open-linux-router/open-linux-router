@@ -310,6 +310,13 @@ export interface InterfaceRow {
   physical: boolean
   mac?: string
 
+  /** Kernel identity and optional live NIC measurements, not gateway counters. */
+  index?: number
+  /** Negotiated link speed; unavailable on some virtual interfaces/drivers. */
+  speed_mbps?: number
+  rx_bytes?: number
+  tx_bytes?: number
+
   /** Every address on the interface, link-local excluded. */
   prefixes?: string[]
 

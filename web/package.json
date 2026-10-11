@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node --test src/features/firewall/*.test.mjs src/features/topology/*.test.mjs"
+    "test": "node --test src/features/firewall/*.test.mjs src/features/topology/*.test.mjs && node scripts/test-interface-traffic.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

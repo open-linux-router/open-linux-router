@@ -1,11 +1,9 @@
-import { AlertTriangle, ArrowUpRight } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { useEffect } from 'react'
 import { Link, useLocation } from 'react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { InterfacesContent, ServedNetworksContent } from '@/routes/gateway/networks'
-import { DhcpContent } from '@/routes/dhcp/index'
-import { DnsContent } from '@/routes/dns/index'
+import { NetworkStatus } from '@/features/link/network-status'
 import { useGatewayConfig, useGatewayStatus } from '@/features/gateway/queries'
 
 /**
@@ -39,25 +37,7 @@ export function GatewayPage() {
         </Alert>
       )}
 
-      <section id="interfaces" className="space-y-6 scroll-mt-20" aria-labelledby="interfaces-heading">
-        <h2 id="interfaces-heading" className="text-xl font-semibold tracking-tight">Interfaces</h2>
-        <InterfacesContent />
-
-        <Link className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground" to="/gateway/interfaces">
-          Advanced interfaces and routing <ArrowUpRight className="size-4" aria-hidden />
-        </Link>
-      </section>
-
-      <section id="dhcp" className="space-y-6 border-t pt-6 scroll-mt-20" aria-labelledby="dhcp-heading">
-        <h2 id="dhcp-heading" className="text-xl font-semibold tracking-tight">DHCP</h2>
-        <ServedNetworksContent />
-        <DhcpContent />
-      </section>
-
-      <section id="dns" className="space-y-4 border-t pt-6 scroll-mt-20" aria-labelledby="dns-heading">
-        <h2 id="dns-heading" className="text-xl font-semibold tracking-tight">DNS</h2>
-        <DnsContent />
-      </section>
+      <NetworkStatus />
     </div>
   )
 }

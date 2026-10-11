@@ -32,9 +32,13 @@ type interfaceView struct {
 	Up      bool `json:"up"`
 	Running bool `json:"running"`
 
-	Loopback bool   `json:"loopback"`
-	Physical bool   `json:"physical"`
-	MAC      string `json:"mac,omitempty"`
+	Loopback  bool    `json:"loopback"`
+	Physical  bool    `json:"physical"`
+	MAC       string  `json:"mac,omitempty"`
+	Index     int     `json:"index,omitempty"`
+	SpeedMbps *uint64 `json:"speed_mbps,omitempty"`
+	RXBytes   *uint64 `json:"rx_bytes,omitempty"`
+	TXBytes   *uint64 `json:"tx_bytes,omitempty"`
 
 	// Prefixes are every address on the interface, link-local excluded.
 	Prefixes []string `json:"prefixes,omitempty"`
@@ -76,6 +80,10 @@ func viewInterface(info Info, observed map[string]Interface, cfg Config) interfa
 		v.Loopback = iface.Loopback
 		v.Physical = iface.Physical
 		v.MAC = iface.HardwareAddr
+		v.Index = iface.Index
+		v.SpeedMbps = iface.SpeedMbps
+		v.RXBytes = iface.RXBytes
+		v.TXBytes = iface.TXBytes
 	}
 	if prefix, ok := core.FirstIPv4(info.Prefixes); ok {
 		v.Address = prefix.Addr().String()

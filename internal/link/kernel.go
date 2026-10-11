@@ -57,6 +57,12 @@ type Interface struct {
 	// row of the interface list, and would hand `gateway` a source prefix that
 	// matches every network on the box at once.
 	Prefixes []netip.Prefix
+
+	// Optional live counters and negotiated speed. Unsupported drivers leave
+	// them absent; an observed zero differs from an unavailable reading.
+	SpeedMbps *uint64
+	RXBytes   *uint64
+	TXBytes   *uint64
 }
 
 // Source is where interface facts come from.
@@ -93,6 +99,7 @@ func Kernel() ([]Interface, error) {
 		if len(iface.HardwareAddr) > 0 {
 			info.HardwareAddr = iface.HardwareAddr.String()
 		}
+		readInterfaceMetrics(&info)
 
 		// An interface whose addresses cannot be read still belongs on the list.
 		// Dropping it would make an interface disappear from the UI for a reason

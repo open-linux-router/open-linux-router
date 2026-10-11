@@ -48,7 +48,7 @@ export function App() {
             <Route index element={<GatewayPage />} />
             <Route path="interfaces" element={<GatewayInterfacesPage />} />
             <Route path="interfaces/:name" element={<GatewayInterfacePage />} />
-            <Route path="networks" element={<Navigate to="/gateway#dhcp" replace />} />
+            <Route path="networks" element={<Navigate to="/gateway/dhcp/details" replace />} />
             <Route path="exits" element={<GatewayExitsPage />} />
             <Route path="usage" element={<GatewayUsagePage />} />
             <Route path="ipv6" element={<Navigate to="/gateway/interfaces#forwarding" replace />} />
@@ -94,7 +94,8 @@ export function App() {
               named /dhcp/interfaces in print since 0.1.0, so that one will be
               followed by people reading an older copy for a while yet. */}
           <Route path="internet" element={<Navigate to="/gateway" replace />} />
-          <Route path="networks" element={<Navigate to="/gateway/networks" replace />} />
+          <Route path="networks" element={<Navigate to="/gateway" replace />} />
+          <Route path="networks/settings" element={<Navigate to="/gateway/interfaces" replace />} />
           <Route path="gateway/firewall" element={<Navigate to="/firewall" replace />} />
           <Route path="firewall/unmanaged" element={<Navigate to="/advanced/filtering" replace />} />
           <Route path="gateway/forwards" element={<Navigate to="/advanced/forwards" replace />} />
