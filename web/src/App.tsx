@@ -25,6 +25,7 @@ import { IptvPage } from '@/routes/advanced/iptv'
 import { RemotePage } from '@/routes/advanced/remote'
 import { OverviewPage } from '@/routes/overview'
 import { ToolsPage } from '@/routes/tools'
+import { ToolPage } from '@/routes/tool-page'
 import { DevicePage } from '@/routes/device'
 import { GroupPage } from '@/routes/group'
 import { GatewayPage } from '@/routes/gateway/index'
@@ -77,6 +78,11 @@ export function App() {
           <Route path="access" element={<AccessPage />} />
           <Route path="access/socks5" element={<SocksOutPage />} />
           <Route path="tools" element={<ToolsPage />} />
+          <Route path="tools/speedtest" element={<ToolPage tool="speedtest" />} />
+          <Route path="tools/link-test" element={<ToolPage tool="link-test" />} />
+          <Route path="tools/nat" element={<ToolPage tool="nat" />} />
+          <Route path="tools/ping" element={<ToolPage tool="ping" />} />
+          <Route path="tools/traceroute" element={<ToolPage tool="traceroute" />} />
           <Route path="credits" element={<CreditsPage />} />
           <Route path="advanced">
             <Route index element={<AdvancedPage />} />
