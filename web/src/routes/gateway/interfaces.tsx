@@ -170,6 +170,17 @@ export function GatewayInterfacesPage() {
 
       <div className="space-y-3">
         <h2 className="text-lg font-medium">All interfaces</h2>
+        {links.problems.length > 0 && (
+          <Alert>
+            <AlertTriangle />
+            <AlertTitle>Interface findings</AlertTitle>
+            <AlertDescription>
+              <ul className="space-y-1">
+                {links.problems.map((problem) => <li key={problem.path + problem.message}>{problem.message}</li>)}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
         <InterfacesCard dhcp={dhcp.data} />
         <h2 className="text-lg font-medium">Internet uplink</h2>
         <UplinkCard interfaces={links.interfaces} networks={links.networks} />

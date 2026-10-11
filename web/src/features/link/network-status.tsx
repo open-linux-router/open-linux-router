@@ -48,11 +48,8 @@ export function NetworkStatus() {
 
   return (
     <div className="space-y-8">
-      <section id="interfaces" aria-labelledby="interfaces-heading" className="scroll-mt-20 grid items-start gap-4 min-[1200px]:grid-cols-[165px_minmax(0,1fr)] min-[1200px]:gap-6">
-        <div className="flex items-center justify-between gap-3 min-[1200px]:block min-[1200px]:pt-2">
-          <h2 id="interfaces-heading" className="text-lg font-semibold">Interfaces</h2>
-          <Link to="/gateway/interfaces" className={detailLink}>Manage <ChevronRight className="size-3.5" aria-hidden /></Link>
-        </div>
+      <section id="interfaces" aria-labelledby="interfaces-heading" className="scroll-mt-20">
+        <h2 id="interfaces-heading" className="sr-only">Interfaces</h2>
         <div>
           {interfaces.isPending && <div className="grid gap-4 min-[1000px]:grid-cols-3">
             {[0, 1, 2].map(i => <Skeleton key={i} className="h-[280px] rounded-2xl" />)}
@@ -66,12 +63,10 @@ export function NetworkStatus() {
         </div>
       </section>
 
-      <div className="grid gap-4 sm:grid-cols-2 min-[1200px]:ml-[189px]">
+      <div className="grid gap-4 sm:grid-cols-2">
         <ServiceCard kind="dhcp" title="DHCP" value={activeLeases} pending={leases.isPending} label="active leases" state={dhcpState} />
         <ServiceCard kind="dns" title="DNS" value={queries} pending={dns.isPending} label="queries since restart" state={dnsState} />
       </div>
-
-      {!!interfaces.data?.problems?.length && <Alert><AlertTriangle /><AlertTitle>Interface findings</AlertTitle><AlertDescription><ul>{interfaces.data.problems.map(problem => <li key={problem.path + problem.message}>{problem.message}</li>)}</ul></AlertDescription></Alert>}
 
       <Dialog open={selected !== null} onOpenChange={open => !open && setSelected(null)}>
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
@@ -89,6 +84,7 @@ export function NetworkStatus() {
             <Detail label="Transmit total" value={!interfaces.isError && chosen.tx_bytes !== undefined ? formatBytes(chosen.tx_bytes) : '—'} />
           </dl>}
           <Link to={chosen ? `/gateway/interfaces/${encodeURIComponent(chosen.name)}` : '/gateway/interfaces'} className={detailLink}>Interface settings <ChevronRight className="size-3.5" aria-hidden /></Link>
+          <Link to="/gateway/interfaces" className={detailLink}>All interfaces and routing <ChevronRight className="size-3.5" aria-hidden /></Link>
         </DialogContent>
       </Dialog>
     </div>
