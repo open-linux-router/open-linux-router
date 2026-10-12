@@ -155,7 +155,7 @@ export function NetworkDialog({
                 </SelectContent>
               </Select>
               {available.length === 0 && (
-                <p className="text-xs text-warning">
+                <p className="text-xs text-warning-foreground">
                   No interface is free. Close this and switch one on under Interfaces above,
                   or remove the network already on it.
                 </p>
@@ -189,7 +189,7 @@ export function NetworkDialog({
             // The one thing an operator must not discover after the fact. §5.5's
             // guard is not built, so this warning and the confirmation dialog
             // are the whole safety net.
-            <p className="text-xs text-warning">
+            <p className="text-xs text-warning-foreground">
               {chosen.name} currently has {chosen.address}. Applying this replaces it — if you
               are reaching this page over {chosen.name}, the connection will drop and you will
               need to come back on the new address.
@@ -266,7 +266,7 @@ export function NetworkDialog({
           )}
 
           {exposed && (
-            <p className="text-xs text-warning">
+            <p className="text-xs text-warning-foreground">
               The firewall is off. With an IPv6 subnet every device on this network gets an
               address the internet can reach directly — there is no NAT in IPv6 to hide it.
               Turn the firewall on under Firewall.

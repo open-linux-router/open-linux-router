@@ -110,8 +110,8 @@ export function NetworkMap({
       <div className="flex flex-col items-center gap-12">
         <Skeleton className="h-16 w-60 rounded-2xl" />
         <div className="flex w-full justify-center gap-4">
-          <Skeleton className="h-56 w-72 rounded-xl" />
-          <Skeleton className="h-56 w-72 rounded-xl" />
+          <Skeleton className="h-56 w-full max-w-72 rounded-xl" />
+          <Skeleton className="hidden h-56 w-72 rounded-xl sm:block" />
           <Skeleton className="hidden h-56 w-72 rounded-xl sm:block" />
         </div>
       </div>
@@ -368,7 +368,7 @@ function Canvas({
       <motion.div
         className="relative"
         initial={false}
-        animate={{ height: geo?.height ?? 160 }}
+        style={{ height: geo?.height ?? 160 }}
         transition={transition}
       >
         {geo && <Links links={geo.links} rail={geo.rail} transition={transition} />}

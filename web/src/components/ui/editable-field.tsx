@@ -45,12 +45,12 @@ export function EditableField({
   const dirty = draft !== stored
 
   return (
-    <div className="grid gap-2">
+    <div className="grid max-w-[45rem] gap-2">
       {label && <Label htmlFor={id}>{label}</Label>}
       {multiline ? (
         <Textarea
           id={id}
-          className="min-h-28 font-mono text-xs"
+          className="min-h-36 font-mono text-[0.8125rem] leading-relaxed"
           spellCheck={false}
           placeholder={placeholder}
           value={draft}
@@ -62,15 +62,15 @@ export function EditableField({
           // Bounded, unlike the textarea below it: a single address in a field
           // as wide as a 27" display is a target you have to aim at, and the
           // value it holds is never longer than this.
-          className="sm:max-w-xl"
+          className="w-full"
           placeholder={placeholder}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
         />
       )}
-      {hint && <p className="max-w-prose text-xs text-muted-foreground">{hint}</p>}
+      {hint && <p className="max-w-prose text-[0.8125rem] leading-relaxed text-muted-foreground">{hint}</p>}
       {dirty && (
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
           <Button variant="ghost" size="sm" onClick={() => setDraft(stored)}>
             Revert
           </Button>
@@ -113,9 +113,9 @@ export function SwitchField({
   onChange: (on: boolean) => void
 }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex max-w-[45rem] items-center gap-6 rounded-xl border bg-card p-4 sm:p-5">
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium">{label}</div>
+        <Label htmlFor={id} className="text-sm font-medium">{label}</Label>
         <p className="max-w-prose text-xs text-muted-foreground">{hint}</p>
       </div>
       <Switch

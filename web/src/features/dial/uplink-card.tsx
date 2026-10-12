@@ -158,7 +158,7 @@ function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
         // failure this whole object exists to stop — but removable by name,
         // because the other common source is olr itself: a network removed
         // before networks took their addresses with them.
-        <div className="space-y-2 text-sm text-warning">
+        <div className="space-y-2 text-sm text-warning-foreground">
           <p>
             {uplink.interface} also has {leftovers.join(', ')} on it, which the uplink does not
             account for. If something else on this box is addressing the interface, leave one of
@@ -186,7 +186,7 @@ function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
       {uplink.delegation && <DelegationLine uplink={uplink} delegation={uplink.delegation} />}
 
       {uplink.problems?.map((p) => (
-        <p key={p.path + p.message} className="text-sm text-warning">
+        <p key={p.path + p.message} className="text-sm text-warning-foreground">
           {p.message}
         </p>
       ))}
@@ -221,7 +221,7 @@ function TunnelLine({ tunnel }: { tunnel: TunnelStatus }) {
       <div className="font-mono">
         IPv6 · {tunnel.address} via tunnel to {tunnel.server}
       </div>
-      <p className={using ? 'text-muted-foreground' : 'text-warning'}>{state}</p>
+      <p className={using ? 'text-muted-foreground' : 'text-warning-foreground'}>{state}</p>
     </div>
   )
 }
@@ -248,14 +248,14 @@ function DelegationLine({
           Renews {until(delegation.renews)}, expires {until(delegation.expires)}.
         </p>
       ) : (
-        <p className="text-warning">
+        <p className="text-warning-foreground">
           {delegation.error
             ? `Still asking — the last attempt failed: ${delegation.error}`
             : 'Asking the ISP for a prefix.'}
         </p>
       )}
       {uplink.accept_ra && uplink.accept_ra !== '2' && (
-        <p className="text-warning">
+        <p className="text-warning-foreground">
           {uplink.interface} is not taking router advertisements the way prefix delegation
           needs (accept_ra is {uplink.accept_ra}). Applying the uplink again sets it.
         </p>
@@ -281,7 +281,7 @@ function ResolverLine({ uplink }: { uplink: UplinkStatus }) {
     // resolv.conf another program maintains; otherwise saving again puts
     // them back.
     return (
-      <p className="text-sm text-warning">
+      <p className="text-sm text-warning-foreground">
         Set to {set.join(', ')}, but this router looks names up through{' '}
         {through.length ? through.join(', ') : 'nothing at all'}.
       </p>
@@ -289,7 +289,7 @@ function ResolverLine({ uplink }: { uplink: UplinkStatus }) {
   }
   if (through.length === 0) {
     return (
-      <p className="text-sm text-warning">
+      <p className="text-sm text-warning-foreground">
         This router has no resolver of its own, so it cannot look names up — updates and
         installs fail by name while everything works by address. Add one to the uplink
         {uplink.gateway ? `: usually your modem, ${uplink.gateway}` : ''}.
@@ -342,11 +342,11 @@ function describeRoute(u: UplinkStatus): { line: string; dot: string; tone: stri
     return {
       line: `The default route actually goes via ${u.route_via} on ${u.route_dev ?? '?'} — not what is set above. Save again to re-apply it.`,
       dot: 'bg-warning',
-      tone: 'text-warning',
+      tone: 'text-warning-foreground',
     }
   }
   if (!u.up) {
-    return { line: `${u.interface} is down.`, dot: 'bg-warning', tone: 'text-warning' }
+    return { line: `${u.interface} is down.`, dot: 'bg-warning', tone: 'text-warning-foreground' }
   }
   // The route matches what was set; whether anything is on the other end of
   // it is a separate fact, and the one that decides whether the box is online.
@@ -440,7 +440,7 @@ function PartialApply({ editor }: { editor: ReturnType<typeof useUplinkEditor> }
             {editor.failure.steps?.map((step) => (
               <li key={step.description} className="flex gap-2">
                 {step.done ? (
-                  <Check className="mt-0.5 size-3.5 shrink-0 text-success" aria-label="done" />
+                  <Check className="mt-0.5 size-3.5 shrink-0 text-success-foreground" aria-label="done" />
                 ) : (
                   <X className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-label="failed" />
                 )}

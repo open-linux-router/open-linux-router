@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { PageHeading } from '@/components/layout/page-heading'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,10 +23,11 @@ export function AdminAccessPage() {
     mutationFn: () => api.post('/api/system/access/logout'),
     onSuccess: () => { setToken(null); client.clear(); window.location.reload() },
   })
-  return <div className="mx-auto max-w-lg">
+  return <div className="space-y-8">
+    <PageHeading title="Administrator access" description="Manage the password used to configure this router." back={{ to: '/', label: 'Network overview' }} />
     <Card>
       <CardHeader>
-        <CardTitle>Administrator access</CardTitle>
+        <CardTitle>Password and sessions</CardTitle>
         <CardDescription>{access.data?.password_set ? 'A password protects this router.' : 'No administrator password is set.'} Changing it signs out every browser.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

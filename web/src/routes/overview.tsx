@@ -95,7 +95,6 @@ export function OverviewPage() {
           renders nothing once the router is doing something. */}
       <FirstRun />
 
-      <h1 className="sr-only">Network overview</h1>
       <Stats flows={flows} host={host.data} publicAddresses={publicAddresses.data}
         faults={faults} known={known} idle={idle} failed={dhcp.isError || dns.isError || gateway.isError}
         latency={latency.data} exits={gatewayConfig.data?.enabled ? gatewayConfig.data.exits?.map((exit) => exit.name) ?? [] : []} latencyFailed={latency.isError} trafficFailed={traffic.isError} />
@@ -355,15 +354,15 @@ function Meter({ label, current, maximum, percent, tone = 'blue', arrow, onClick
   onClick?: () => void
 }) {
   const content = <>
-    {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r transition-[width] duration-700 ease-out',
-      tone === 'amber' ? 'border-amber-400/50 bg-amber-200/40' : tone === 'neutral' ? 'border-slate-400/40 bg-slate-300/35' : 'border-cyan-500/40 bg-cyan-200/45')}
+    {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r transition-[width] duration-150 ease-out',
+      tone === 'amber' ? 'border-transmit/30 bg-transmit-subtle' : tone === 'neutral' ? 'border-border bg-muted' : 'border-receive/30 bg-receive-subtle')}
       style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />}
     <span className="relative z-10 flex min-w-0 items-center gap-2 truncate text-sm font-semibold tabular-nums">
       {arrow && <span aria-hidden className="text-base font-normal text-muted-foreground">{arrow}</span>}{current ?? '—'}
     </span>
-    <span className="relative z-10 shrink-0 text-xs text-muted-foreground tabular-nums">{maximum ? `of ${maximum}` : onClick ? 'Set limit' : '—'}</span>
+    <span className="relative z-10 text-xs text-muted-foreground tabular-nums">{maximum ? `of ${maximum}` : onClick ? 'Set limit' : '—'}</span>
   </>
-  const classes = 'relative flex h-10 w-full items-center justify-between gap-2 overflow-hidden rounded-xl bg-muted/65 px-3 text-left ring-1 ring-foreground/[0.06] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]'
+  const classes = 'relative flex min-h-11 w-full flex-wrap items-center justify-between gap-2 overflow-hidden rounded-lg bg-muted/50 px-3 py-2'
   return <div className={cn('min-w-0', onClick ? 'py-1' : 'py-1.5')}>
     {onClick ? <button type="button" onClick={onClick} aria-label={`${label}: ${current ?? 'unavailable'}. ${maximum ? `Limit ${maximum}` : 'Set limit'}`}
       className={cn(classes, 'cursor-pointer transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring')}>
@@ -378,7 +377,7 @@ function Meter({ label, current, maximum, percent, tone = 'blue', arrow, onClick
 }
 
 function StatCard({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
-  return <section className="min-w-0 rounded-2xl bg-card p-4 shadow-xs ring-1 ring-foreground/[0.07]">
+  return <section className="min-w-0 rounded-xl border bg-card p-4 shadow-xs sm:p-5">
     <h2 className="mb-3 text-sm font-semibold">{title}</h2>{children}
   </section>
 }
@@ -395,13 +394,13 @@ function MetricPill({ label, value, detail, percent, tone = 'blue', health, valu
   return <div className="min-w-0 py-1"><div role={percent == null ? undefined : 'progressbar'} aria-label={label}
     aria-valuenow={percent == null ? undefined : Math.min(100, Math.max(0, Math.round(percent)))}
     aria-valuemin={0} aria-valuemax={100}
-    className="relative flex h-10 min-w-0 items-center justify-between gap-2 overflow-hidden rounded-xl bg-muted/65 px-3 ring-1 ring-foreground/[0.06] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]">
-    {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r transition-[width] duration-700 ease-out', tone === 'neutral' ? 'border-slate-400/40 bg-slate-300/35' : 'border-cyan-500/40 bg-cyan-200/45')}
+    className="relative flex min-h-11 min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5 overflow-hidden rounded-lg bg-muted/50 px-3 py-2">
+    {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r transition-[width] duration-150 ease-out', tone === 'neutral' ? 'border-border bg-muted' : 'border-receive/30 bg-receive-subtle')}
       style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />}
-    <span className={cn('relative z-10 flex min-w-0 items-center gap-2 truncate text-sm', valueRight && 'w-full justify-between')}>
+    <span className={cn('relative z-10 flex min-w-0 flex-wrap items-center gap-2 text-sm', valueRight && 'w-full justify-between')}>
       {health && <span aria-hidden className={cn('size-2 shrink-0 rounded-full', health === 'good' ? 'bg-success' : health === 'bad' ? 'bg-destructive' : 'bg-muted-foreground')} />}
       {label && <span className="shrink-0 text-xs text-muted-foreground">{label}</span>}
-      <span title={value} className={cn('truncate font-semibold tabular-nums', health === 'bad' && 'text-destructive')}>{value}</span>
+      <span title={value} className={cn('break-words font-semibold tabular-nums', health === 'bad' && 'text-destructive')}>{value}</span>
     </span>
     {detail && <span className="relative z-10 shrink-0 text-xs text-muted-foreground tabular-nums">{detail}</span>}
   </div></div>
@@ -448,9 +447,9 @@ function PublicAddressRow({ family, address }: { family: 'IPv4' | 'IPv6'; addres
   const summary = [address?.city || address?.region || address?.country, address?.isp || address?.organization].filter(Boolean).join(', ')
   return <div className="min-w-0 py-1">
     <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
-      className="flex h-10 w-full min-w-0 items-center gap-2 rounded-xl bg-muted/65 px-3 text-left text-sm ring-1 ring-foreground/[0.06] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-      <span className="shrink-0 text-xs text-muted-foreground">{family}</span>
-      <span className="min-w-0 flex-1 truncate font-semibold" title={summary || undefined}>{summary || (address?.ip ? 'Location unavailable' : '—')}</span>
+      className="flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+      <span className="w-full shrink-0 text-xs text-muted-foreground sm:w-auto">{family}</span>
+      <span className="min-w-0 flex-1 break-words text-[0.8125rem] font-semibold" title={summary || undefined}>{summary || (address?.ip ? 'Location unavailable' : '—')}</span>
       <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
     </button>
     {open && <div className="space-y-1 px-3 pt-2 text-xs text-muted-foreground">
@@ -625,16 +624,16 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
   const dnsMeasured = !latencyFailed && latency?.dns_milliseconds != null
   const latencyValue = measured ? `${latency.milliseconds!.toFixed(0)} ms` : latency?.state === 'unreachable' ? 'No response' : '—'
   const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? 'Unavailable' : '—'
-  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+  return <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
     <StatCard title="Status">
-      <div className="space-y-3 pt-2">
+      <div className="space-y-1 pt-1">
         <MetricPill value={title} health={faults.length || failed ? 'bad' : known && !idle ? 'good' : 'unknown'} />
         <PublicAddressRow family="IPv4" address={publicAddresses?.ipv4} />
         <PublicAddressRow family="IPv6" address={publicAddresses?.ipv6} />
       </div>
     </StatCard>
     <StatCard title="Traffic">
-      <div className="space-y-3 pt-2">
+      <div className="space-y-1 pt-1">
         <Meter label="Download" arrow="↓" onClick={() => setEditing('down')} current={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.down ? (flows.total.downRate ?? 0) * 8 / (limits.down * 1_000_000) * 100 : undefined} />
         <Meter label="Upload" arrow="↑" onClick={() => setEditing('up')} current={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
@@ -643,10 +642,10 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
       </div>
     </StatCard>
     <StatCard title={<span className="inline-flex items-center gap-1.5">Latency
-      <button type="button" className="text-muted-foreground hover:text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
+      <button type="button" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground hover:text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
         title="Time for this router to receive the full HTTPS response, including DNS, TLS and download. Even a login redirect or error page counts; this does not prove the app works. Images, scripts and browser rendering are not included."
         aria-label="About latency measurements"><Info className="size-3.5" /></button></span>}>
-      <div className="space-y-3 pt-2">
+      <div className="space-y-1 pt-1">
         <MetricPill label="Internet" value={latencyValue} valueRight />
         <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} valueRight />
         <div className="flex flex-wrap items-center gap-2">
@@ -660,13 +659,13 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
               <span>{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
             </span>
           })}
-          <button className="inline-flex min-h-9 items-center gap-1 rounded-xl px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          <button className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
             onClick={() => setSitesOpen(true)} aria-label="Monitor sites" title="Monitor sites"><Plus className="size-4" /><span className="sr-only">Monitor sites</span></button>
         </div>
       </div>
     </StatCard>
     <StatCard title="System">
-      <div className="space-y-3 pt-2">
+      <div className="space-y-1 pt-1">
         <MetricPill label="CPU" value={host?.cpu_used_cores == null ? '—' : `${host.cpu_used_cores.toFixed(1)} cores`}
           detail={host?.cpu_cores ? `${cpuPercent?.toFixed(0)}% of ${host.cpu_cores} cores` : undefined} percent={cpuPercent} />
         <MetricPill label="Memory" value={host ? formatBytes(host.memory_used_bytes) : '—'}

@@ -1,3 +1,4 @@
+import { AuthFrame } from '@/components/layout/auth-frame'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Router, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
@@ -32,7 +33,7 @@ export function SetupScreen() {
   })
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
+    <AuthFrame>
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -85,6 +86,6 @@ export function SetupScreen() {
           </p>
         </CardContent>
       </Card>
-    </div>
+    </AuthFrame>
   )
 }

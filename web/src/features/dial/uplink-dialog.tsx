@@ -147,13 +147,13 @@ export function UplinkDialog({
               </SelectContent>
             </Select>
             {available.length === 0 && (
-              <p className="text-xs text-warning">
+              <p className="text-xs text-warning-foreground">
                 No interface has been handed to this router yet. Switch on the one facing your
                 modem under Interfaces above.
               </p>
             )}
             {replacing && (
-              <p className="text-xs text-warning">
+              <p className="text-xs text-warning-foreground">
                 {iface} carries the network {replacing.name}. A network is something this router
                 serves, and the way out is not one, so setting the uplink here removes{' '}
                 {replacing.name}: this router stops handing out addresses and answering DNS on
@@ -284,7 +284,7 @@ export function UplinkDialog({
                   </div>
                 </div>
                 {!tunnelValid && (
-                  <p className="text-xs text-warning">
+                  <p className="text-xs text-warning-foreground">
                     A tunnel needs both the server and this router&rsquo;s address.
                   </p>
                 )}
@@ -293,7 +293,7 @@ export function UplinkDialog({
           </div>
 
           {!valid && iface !== '' && tunnelValid && (
-            <p className="text-xs text-warning">
+            <p className="text-xs text-warning-foreground">
               An address needs a gateway and a gateway needs an address. Leave both blank for an
               interface olr should own and not configure.
             </p>

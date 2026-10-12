@@ -56,7 +56,7 @@ export function SocksOutPage() {
       </Card>
       <Card>
         <CardHeader><CardTitle>Choose who uses it</CardTitle><CardDescription>Starting the proxy does not change any device's route. Add an interface exit for <code>olrsocks0</code>, then assign that exit to a network or device. IPv6 and backend failure block rather than bypass the proxy.</CardDescription></CardHeader>
-        <CardContent><Button variant="outline" render={<Link to="/gateway/exits">Open ways out</Link>} /></CardContent>
+        <CardContent><Button variant="outline" nativeButton={false} render={<Link to="/gateway/exits">Open ways out</Link>} /></CardContent>
       </Card>
     </SubPage>
   )

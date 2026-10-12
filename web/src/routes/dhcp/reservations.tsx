@@ -29,11 +29,7 @@ export function DhcpReservationsPage() {
   }
 
   return (
-    <SubPage section="/gateway/dhcp" slug="reservations">
-      <ApplyOutcome applier={applier} />
-
-      <div className="flex justify-end">
-        <Button
+    <SubPage section="/gateway/dhcp" slug="reservations" action={<Button
           size="sm"
           disabled={busy}
           onClick={() => {
@@ -42,8 +38,9 @@ export function DhcpReservationsPage() {
           }}
         >
           <Plus className="size-4" aria-hidden /> Add
-        </Button>
-      </div>
+        </Button>}>
+      <ApplyOutcome applier={applier} />
+
 
       {reservations.length === 0 ? (
         <ListEmpty>No reserved addresses.</ListEmpty>

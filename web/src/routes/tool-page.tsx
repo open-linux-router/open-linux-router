@@ -1,7 +1,6 @@
 import { Activity, ArrowDown, ArrowUp, Copy, LoaderCircle, Radio, Route } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { ChevronLeft } from 'lucide-react'
-import { Link } from 'react-router'
+import { PageHeading } from '@/components/layout/page-heading'
 import { TOOL_DEFINITIONS, type ToolSlug } from '@/features/tools/catalog'
 import { useQuery } from '@tanstack/react-query'
 
@@ -132,12 +131,8 @@ function TraceView({ trace }: { trace: TraceResult }) {
 export function ToolPage({ tool }: { tool: ToolSlug }) {
   const definition = TOOL_DEFINITIONS.find(item => item.slug === tool)!
   const Content = { speedtest: SpeedTest, 'link-test': LinkTest, nat: NATTest, ping: PingTest, traceroute: TracerouteTest }[tool]
-  return <div className="space-y-6">
-    <header className="space-y-2">
-      <Link to="/tools" className="-ml-1 inline-flex min-h-11 items-center gap-1 rounded-md text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"><ChevronLeft className="size-4" aria-hidden />Tools</Link>
-      <h1 id="tool-title" className="text-2xl font-semibold tracking-tight">{definition.label}</h1>
-      <p className="max-w-prose text-sm text-muted-foreground">{definition.description}</p>
-    </header>
+  return <div className="space-y-8">
+    <PageHeading id="tool-title" title={definition.label} description={definition.description} back={{ to: '/tools', label: 'Tools' }} />
     <Content key={tool} />
   </div>
 }
@@ -194,8 +189,7 @@ function SpeedTest() {
 
 
   return <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl border bg-card p-6 sm:p-10">
-        <div className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-primary/8 blur-3xl" />
+      <div className="relative overflow-hidden rounded-xl border bg-card p-4 sm:p-6">
         <div className="relative space-y-5">
           <div className="space-y-2">
             <p className="max-w-xl text-sm text-muted-foreground">
@@ -315,7 +309,7 @@ function LinkTest() {
 
 
   return <div className="space-y-6">
-      <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="tool-title">
+      <section className="rounded-xl border bg-card p-4 sm:p-6" aria-labelledby="tool-title">
         <div className="flex items-start gap-4">
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">Run iperf3 on another device to measure its connection to this router. This tests the link and router's own receive/send capacity, not LAN-to-WAN forwarding or NAT.</p>

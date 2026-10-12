@@ -71,15 +71,15 @@ export function GroupPage() {
     }
   }
 
-  return <div className="mx-auto max-w-5xl space-y-6 pb-12">
-    <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden /> Network overview</Link>
+  return <div className="space-y-6 pb-12">
+    <Link to="/" className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"><ArrowLeft className="size-4" aria-hidden /> Network overview</Link>
     <header className="rounded-2xl border bg-card p-5 sm:p-7">
-      <div className="flex items-start gap-4"><span className="rounded-xl bg-muted p-3"><FolderTree className="size-6" aria-hidden /></span><div className="min-w-0 space-y-1"><h1 className="break-words text-2xl font-semibold tracking-tight sm:text-3xl">{group.name}</h1><p className="text-sm text-muted-foreground">{group.parent ? <>Inside <Link className="underline underline-offset-4" to={`/groups/${encodeURIComponent(group.parent)}`}>{group.parent}</Link> · </> : 'Top-level group · '}{members.length} devices, {direct} directly here</p></div></div>
+      <div className="flex items-start gap-4"><span className="rounded-xl bg-muted p-3"><FolderTree className="size-6" aria-hidden /></span><div className="min-w-0 space-y-1"><h1 className="break-words text-2xl font-semibold tracking-tight ">{group.name}</h1><p className="text-sm text-muted-foreground">{group.parent ? <>Inside <Link className="underline underline-offset-4" to={`/groups/${encodeURIComponent(group.parent)}`}>{group.parent}</Link> · </> : 'Top-level group · '}{members.length} devices, {direct} directly here</p></div></div>
     </header>
 
     <Card><CardHeader><CardTitle>Devices in this group</CardTitle></CardHeader><CardContent className="space-y-4">
       <p className="text-sm text-muted-foreground">Includes devices in subgroups. Each device opens its own details and settings.</p>
-      {children.length > 0 && <div className="flex flex-wrap gap-2">{children.map((child) => <Button key={child.name} size="sm" variant="outline" render={<Link to={`/groups/${encodeURIComponent(child.name)}`} />}>{child.name}</Button>)}</div>}
+      {children.length > 0 && <div className="flex flex-wrap gap-2">{children.map((child) => <Button key={child.name} size="sm" variant="outline" nativeButton={false} render={<Link to={`/groups/${encodeURIComponent(child.name)}`} />}>{child.name}</Button>)}</div>}
       {members.length ? <List>{members.map((device) => <ListRow key={device.mac} to={`/devices/${encodeURIComponent(device.mac)}`} title={device.name || device.mac} subtitle={`${device.group === name ? 'Direct member' : device.group} · ${device.network || 'Network unknown'} · ${device.mac}`} leading={<DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor} vendorKey={device.vendor_key} online={device.online} />} trailing={<Badge variant={device.online ? 'success' : device.seen ? 'secondary' : 'outline'}>{device.online ? 'Online' : device.seen ? 'Offline' : 'Never seen'}</Badge>} />)}</List> : <ListEmpty>No devices in this group or its subgroups yet.</ListEmpty>}
     </CardContent></Card>
 
@@ -101,5 +101,5 @@ export function GroupPage() {
 }
 
 function State({ title }: { title: string }) {
-  return <div className="mx-auto max-w-5xl space-y-3 py-16 text-center"><Network className="mx-auto size-8 text-muted-foreground" aria-hidden /><h1 className="text-xl font-semibold">{title}</h1><Button variant="outline" render={<Link to="/">Back to overview</Link>} /></div>
+  return <div className="space-y-3 py-16 text-center"><Network className="mx-auto size-8 text-muted-foreground" aria-hidden /><h1 className="text-xl font-semibold">{title}</h1><Button variant="outline" nativeButton={false} render={<Link to="/">Back to overview</Link>} /></div>
 }

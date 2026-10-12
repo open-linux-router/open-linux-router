@@ -3,113 +3,48 @@ import { Link } from 'react-router'
 
 import { cn } from '@/lib/utils'
 
-/**
- * A grouped list, in the shape iOS and macOS Settings use for the same job.
- *
- * A table is the right tool for homogeneous columns you want to compare down a
- * column — leases are like that. Pools and fixed addresses are not: there are a
- * handful of them, each is an object you act on rather than a number you scan,
- * and most columns held "—" or a default. A row that leads with the thing's
- * name and pushes the rest to a quiet second line reads faster and, unlike a
- * table, needs no horizontal scrollbar on a phone.
- */
 function List({ className, ...props }: React.ComponentProps<'ul'>) {
-  return (
-    <ul
-      data-slot="list"
-      className={cn('divide-y divide-border overflow-hidden rounded-xl border', className)}
-      {...props}
-    />
-  )
+  return <ul data-slot="list" className={cn('divide-y divide-border overflow-hidden rounded-xl border bg-card', className)} {...props} />
 }
 
-/**
- * One row. Give it `onSelect` and the whole row becomes the control.
- *
- * That is deliberate, and it is why there is no per-row icon button here. Two
- * 32px glyphs sitting 4px apart cannot both carry a 44px touch target without
- * their hit areas overlapping, and the fix for that is not a bigger glyph — it
- * is to stop having two targets. Editing is the row; removing lives inside the
- * editor, which is also where the confirmation belongs.
- */
-function ListRow({
-  title,
-  subtitle,
-  leading,
-  trailing,
-  onSelect,
-  to,
-  wrap = false,
-  className,
-  ...props
-}: Omit<React.ComponentProps<'li'>, 'title' | 'onSelect'> & {
+/** Values reflow below the title on phones. Actions stay outside the row link/button. */
+function ListRow({ title, subtitle, leading, trailing, action, onSelect, to, wrap = false, className, ...props }: Omit<React.ComponentProps<'li'>, 'title' | 'onSelect'> & {
   title: React.ReactNode
   subtitle?: React.ReactNode
-  /**
-   * Something to identify the row at a glance, before its name — a device's
-   * picture, say. Kept out of `title` so it cannot end up inside the truncating
-   * text box, where a wide element would eat the name it is meant to support.
-   */
   leading?: React.ReactNode
-  /** Quiet supporting value, right-aligned. Stands down on narrow screens. */
   trailing?: React.ReactNode
+  action?: React.ReactNode
   onSelect?: () => void
-  /**
-   * Where the row goes, for a row that is a way into a page rather than an
-   * editor for a thing. Same target size and chevron as `onSelect` — the
-   * difference the operator can feel is the back button, which is exactly why a
-   * settings group is a link and a pool is a dialog.
-   */
   to?: string
-  /** Allow descriptions and mobile status values to occupy multiple lines. */
   wrap?: boolean
 }) {
-  const body = (
-    <>
-      {leading}
+  const body = <>
+    {leading}
+    <div className="min-w-0 flex-1 sm:flex sm:items-center sm:justify-between sm:gap-6">
       <div className="min-w-0 flex-1">
         <div className={cn('text-sm font-medium', wrap ? 'break-words' : 'truncate')}>{title}</div>
-        {subtitle && <div className={cn('text-[0.8rem] text-muted-foreground', wrap ? 'break-words' : 'truncate')}>{subtitle}</div>}
+        {subtitle && <div className={cn('mt-0.5 text-[0.8125rem] leading-relaxed text-muted-foreground', wrap ? 'break-words' : 'truncate')}>{subtitle}</div>}
       </div>
-      {trailing && (
-        <div className="hidden shrink-0 text-[0.8rem] text-muted-foreground sm:block">
-          {trailing}
-        </div>
-      )}
-    </>
-  )
-
-  // min-h-14 is 56px, so the row clears the 44px minimum on its own.
-  const interactive =
-    'flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent/60 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring'
-  const chevron = <ChevronRight className="size-4 shrink-0 text-muted-foreground/60" aria-hidden />
-
+      {trailing && <div className="mt-1 min-w-0 break-words text-[0.8125rem] leading-relaxed text-muted-foreground sm:mt-0 sm:max-w-[45%] sm:text-right">{trailing}</div>}
+    </div>
+  </>
+  const interactive = 'flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-accent/60 active:bg-accent focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring sm:px-5'
+  const chevron = <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
   return (
-    <li data-slot="list-row" className={cn('bg-card', className)} {...props}>
-      {to ? (
-        <Link to={to} className={interactive}>
-          {body}
-          {chevron}
-        </Link>
-      ) : onSelect ? (
-        <button type="button" onClick={onSelect} className={interactive}>
-          {body}
-          {chevron}
-        </button>
-      ) : (
-        <div className="flex min-h-14 items-center gap-3 px-4 py-2.5">{body}</div>
-      )}
+    <li data-slot="list-row" className={cn('flex items-center bg-card', className)} {...props}>
+      {to ? <Link to={to} className={interactive}>{body}{chevron}</Link>
+        : onSelect ? <button type="button" onClick={onSelect} className={interactive}>{body}{chevron}</button>
+          : <div className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-3 sm:px-5">{body}</div>}
+      {action && <div className="shrink-0 pr-3">{action}</div>}
     </li>
   )
 }
 
-/**
- * An empty state that keeps the section's shape whether or not it has rows.
- */
-function ListEmpty({ children }: { children: React.ReactNode }) {
+function ListEmpty({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-      {children}
+    <div className="rounded-xl border bg-card px-6 py-10 text-center text-sm leading-relaxed text-muted-foreground">
+      <div className="mx-auto max-w-md">{children}</div>
+      {action && <div className="mt-4 flex justify-center">{action}</div>}
     </div>
   )
 }

@@ -18,15 +18,12 @@ export function GatewayExitsPage() {
   if (!config) return gate
 
   return (
-    <SubPage section="/gateway" slug="exits">
-      <ApplyOutcome applier={applier} />
-
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+    <SubPage section="/gateway" slug="exits" action={<Button size="sm" variant="outline" onClick={() => setAdding(true)}>
           <Plus />
           Add
-        </Button>
-      </div>
+        </Button>}>
+      <ApplyOutcome applier={applier} />
+
 
       <ExitList exits={config.exits ?? []} status={status.data?.exits} onEdit={setEditing} />
 

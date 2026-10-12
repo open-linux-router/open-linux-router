@@ -7,6 +7,7 @@ import { SubPage } from '@/components/layout/sub-page'
 import { StatusStrip } from '@/components/layout/status-strip'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useInterfaces } from '@/features/link/queries'
 import {
@@ -101,7 +102,7 @@ export function IptvPage() {
         <div className="space-y-1"><h2 className="font-semibold">Signal path</h2><p className="text-sm text-muted-foreground">Choose where IPTV enters and which LANs may subscribe. Other interfaces stay out of the proxy.</p></div>
         <div className="grid gap-5 sm:grid-cols-2">
           <label className="space-y-2 text-sm font-medium" htmlFor="iptv-upstream">IPTV upstream interface
-            <select id="iptv-upstream" value={draft.upstream ?? ''} onChange={(event) => edit({ ...draft, upstream: event.target.value })} className="h-9 w-full rounded-lg border border-input bg-background px-2 text-sm">
+            <select data-slot="select-trigger" id="iptv-upstream" value={draft.upstream ?? ''} onChange={(event) => edit({ ...draft, upstream: event.target.value })} className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <option value="">Choose an interface</option>
               {available.map((iface) => <option key={iface.name} value={iface.name}>{iface.name} · {iface.address}</option>)}
               {draft.upstream && !available.some((iface) => iface.name === draft.upstream) && <option value={draft.upstream}>{draft.upstream} · unavailable</option>}
@@ -110,7 +111,7 @@ export function IptvPage() {
           <div className="space-y-2 text-sm font-medium">Downstream networks
             <div className="space-y-2 rounded-lg border p-3">
               {networks.filter((network) => network.subnet && network.members.length === 1).map((network) => (
-                <label key={network.name} className="flex cursor-pointer items-center gap-2 font-normal">
+                <label key={network.name} className="flex min-h-11 cursor-pointer items-center gap-2 font-normal">
                   <input type="checkbox" checked={selectedNetworks.includes(network.name)} onChange={(event) => edit({ ...draft, networks: event.target.checked ? [...selectedNetworks, network.name] : selectedNetworks.filter((name) => name !== network.name) })} />
                   <span>{network.name} <span className="text-muted-foreground">({network.members[0]})</span></span>
                 </label>
@@ -120,7 +121,7 @@ export function IptvPage() {
           </div>
         </div>
         <label className="block space-y-2 text-sm font-medium" htmlFor="iptv-sources">Additional source IPv4 prefixes <span className="font-normal text-muted-foreground">(optional, one per line)</span>
-          <textarea id="iptv-sources" rows={3} value={sources} onChange={(event) => { setSourceEdit(event.target.value); setPreview(null) }} placeholder="10.0.0.0/8" className="w-full rounded-lg border border-input bg-transparent px-3 py-2 font-mono text-sm" />
+          <Textarea id="iptv-sources" rows={3} value={sources} onChange={(event) => { setSourceEdit(event.target.value); setPreview(null) }} placeholder="10.0.0.0/8" className="font-mono" />
         </label>
         <p className="text-sm text-muted-foreground">Missing your IPTV interface? Set up its VLAN and IPv4 address on the router first, then <Link className="underline underline-offset-4" to="/gateway#interfaces">adopt it under Interfaces <ArrowRight className="inline size-3" /></Link>.</p>
         <div className="flex flex-wrap gap-2 border-t pt-4">

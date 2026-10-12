@@ -135,7 +135,7 @@ function NotFound() {
       </p>
       {/* An error page with no way out is a dead end, which on a phone means
           reaching for the URL bar. */}
-      <Button variant="outline" size="sm" render={<Link to="/">Go to Overview</Link>} />
+      <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/">Go to Overview</Link>} />
     </div>
   )
 }

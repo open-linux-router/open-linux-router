@@ -320,7 +320,7 @@ function ServiceList({
             key={s.name}
             title={s.name}
             subtitle={describeService(s, domain)}
-            trailing={
+            action={
               url ? (
                 // Opens the thing itself. A published address exists to be
                 // visited, and making the operator retype what the row already

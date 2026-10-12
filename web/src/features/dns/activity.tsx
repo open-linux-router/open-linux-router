@@ -125,7 +125,7 @@ export function ActivityCard({
               className={cn(
                 'flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors',
                 blockedOnly
-                  ? 'border-destructive/40 bg-destructive/10 text-destructive'
+                  ? 'border-primary/40 bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-accent/50',
               )}
             >
@@ -217,8 +217,8 @@ function Counters({ stats, pending }: { stats?: DnsStats; pending: boolean }) {
 
   const cells = [
     { label: 'Looked up', value: stats.queries, tone: '' },
-    { label: 'Blocked', value: stats.blocked, tone: stats.blocked > 0 ? 'text-destructive' : '' },
-    { label: 'No answer', value: stats.failed, tone: stats.failed > 0 ? 'text-warning' : '' },
+    { label: 'Blocked', value: stats.blocked, tone: '' },
+    { label: 'No answer', value: stats.failed, tone: stats.failed > 0 ? 'text-warning-foreground' : '' },
   ]
 
   return (
@@ -262,7 +262,7 @@ function Accounting({ stats, shown }: { stats?: DnsStats; shown: number }) {
         {truncated && `, and this page has loaded the most recent ${shown.toLocaleString()}`}.
       </p>
       {(stats.dropped > 0 || stats.unparsed > 0) && (
-        <p className="text-warning">
+        <p className="text-warning-foreground">
           Not accounted for: {stats.dropped.toLocaleString()} observation
           {stats.dropped === 1 ? '' : 's'} dropped under load,{' '}
           {stats.unparsed.toLocaleString()} response{stats.unparsed === 1 ? '' : 's'} that could not
@@ -421,7 +421,7 @@ function QueryList({
 function QueryResult({ query }: { query: QueryRow }) {
   if (query.blocked) {
     return (
-      <Badge variant="destructive" className="shrink-0">
+      <Badge variant="secondary" className="shrink-0">
         Blocked{query.policy ? ` · ${query.policy}` : ''}
       </Badge>
     )

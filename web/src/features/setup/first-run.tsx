@@ -141,7 +141,7 @@ function Step({
         className={cn(
           'mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium',
           done
-            ? 'bg-success/15 text-success'
+            ? 'bg-success/15 text-success-foreground'
             : blocked
               ? 'bg-muted text-muted-foreground/60'
               : 'bg-primary/10 text-primary',

@@ -1,3 +1,4 @@
+import { AuthFrame } from '@/components/layout/auth-frame'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { KeyRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -87,7 +88,7 @@ function PasswordPrompt() {
       setError(error instanceof Error ? error.message : 'Could not sign in')
     } finally { setBusy(false) }
   }
-  return <div className="flex min-h-svh items-center justify-center p-6">
+  return <AuthFrame>
     <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle>Sign in to this router</CardTitle>
@@ -104,7 +105,7 @@ function PasswordPrompt() {
         </form>
       </CardContent>
     </Card>
-  </div>
+  </AuthFrame>
 }
 
 function TokenPrompt() {
@@ -118,7 +119,7 @@ function TokenPrompt() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
+    <AuthFrame>
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -153,6 +154,6 @@ function TokenPrompt() {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </AuthFrame>
   )
 }

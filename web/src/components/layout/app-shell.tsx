@@ -1,175 +1,87 @@
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 
 import { Logo } from '@/components/layout/logo'
+import { PageHeading } from '@/components/layout/page-heading'
 import { SECTIONS, sectionOf } from '@/components/layout/sections'
 import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { TokenButton } from '@/components/layout/token-button'
 import { cn } from '@/lib/utils'
 
+const descriptions: Record<string, string> = {
+  '/': 'Your network, its connections and the router serving it.',
+  '/gateway': 'Interfaces, internet routes and the services on your network.',
+  '/firewall': 'Review the network boundary and the rules in force.',
+  '/access': 'Connect from home, reach your network remotely or publish a service.',
+  '/tools': 'Measure your connection, check reachability and explore a route.',
+  '/advanced': 'Additional services for your network.',
+}
+
+/** Width follows the task. Settings keep controls beside their explanations. */
+function contentWidth(path: string) {
+  if (path === '/' || path === '/gateway' || path === '/firewall') return 'max-w-none'
+  if (/^\/gateway\/(dns|dhcp)\//.test(path) && !path.endsWith('/details')) return 'max-w-[45rem]'
+  if (path === '/access/socks5' || path === '/advanced/iptv' || path === '/settings/access') return 'max-w-[45rem]'
+  if (path.startsWith('/tools/')) return 'max-w-[56rem]'
+  return 'max-w-[70rem]'
+}
+
 export function AppShell() {
+  const { pathname } = useLocation()
+  const section = sectionOf(pathname)
+  const landing = section && pathname === section.to
+
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
-      <header className="sticky top-0 z-20 border-b bg-background/75 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-[90rem] items-center gap-2.5 px-4">
-          <Logo className="size-5 shrink-0" aria-hidden />
-          <span className="shrink-0 font-semibold tracking-tight">Open Linux Router</span>
-
-          <DesktopNav />
-
-          <div className="ml-auto flex items-center gap-1">
-            <TokenButton />
-          </div>
+      <a href="#main-content" className="fixed top-2 left-4 z-50 rounded-lg bg-primary-fill px-4 py-3 text-primary-foreground -translate-y-24 focus:translate-y-0">Skip to content</a>
+      <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-[90rem] items-center gap-2.5 px-4 sm:px-6 xl:px-8">
+          <Link to="/" className="inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-2 focus-visible:outline-ring" aria-label="Open Linux Router overview">
+            <Logo className="size-5 shrink-0" aria-hidden />
+            <span className="font-semibold tracking-tight">Open Linux Router</span>
+          </Link>
+          <nav className="ml-6 hidden min-w-0 self-stretch lg:block" aria-label="Sections">
+            <ul className="flex h-full gap-1">
+              {SECTIONS.filter(s => !s.nested).map(({ to, label, end }) => (
+                <li key={to}>
+                  <NavLink to={to} end={end} className={({ isActive }) => cn(
+                    'relative flex h-full items-center px-3 text-sm transition-colors duration-150 after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring',
+                    isActive ? 'font-medium text-primary after:bg-primary' : 'text-muted-foreground hover:text-foreground',
+                  )}>{label}</NavLink>
+                </li>
+              ))}
+            </ul>
+          </nav>
+          <div className="ml-auto flex items-center gap-1"><TokenButton /></div>
         </div>
       </header>
-
-      <main className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-6">
-        <div className="space-y-6">
-          <PageHeader />
+      <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-6 outline-none sm:px-6 sm:py-8 xl:px-8">
+        <div className={cn('space-y-8', contentWidth(pathname))}>
+          {landing && <PageHeading title={pathname === '/' ? 'Network overview' : section.label} description={descriptions[pathname]} />}
           <Outlet />
         </div>
       </main>
-
-      <SiteFooter />
-      <MobileTabBar />
+      <footer>
+        <div className="mx-auto flex max-w-[90rem] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground lg:pb-6">
+          <span>© {new Date().getFullYear()} Open Linux Router contributors</span>
+          <span>{__APP_VERSION__}</span>
+          <a href="https://github.com/open-linux-router/open-linux-router" target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center hover:text-foreground hover:underline underline-offset-4">GitHub</a>
+          <Link to="/credits" className="inline-flex min-h-11 items-center hover:text-foreground hover:underline underline-offset-4">Credits</Link>
+          <Link to="/settings/access" className="inline-flex min-h-11 items-center hover:text-foreground hover:underline underline-offset-4">Administrator access</Link>
+          <ThemeToggle />
+        </div>
+      </footer>
+      <nav aria-label="Sections" className="fixed inset-x-0 bottom-0 z-20 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
+        <ul className="grid grid-cols-6">
+          {SECTIONS.filter(s => !s.nested).map(({ to, label, icon: Icon, end }) => (
+            <li key={to} className="min-w-0">
+              <NavLink to={to} end={end} className={({ isActive }) => cn(
+                'flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 text-[0.625rem] font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring',
+                isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+              )}><Icon className="size-5" aria-hidden />{label}</NavLink>
+            </li>
+          ))}
+        </ul>
+      </nav>
     </div>
-  )
-}
-
-/**
- * Sections, in the bar, on the same line as everything else.
- *
- * These used to be a 176px column beside the content, which cost every viewport
- * that width to show four links. Laid along the bar they cost nothing: the
- * header had empty middle, and the content now gets the whole container.
- *
- * Labels only. The glyphs are still in the tab bar below, where a stacked icon
- * *is* the target; here they would only make four short words into four wide
- * ones, and the bar has to fit brand, sections and two buttons at 640px.
- */
-function DesktopNav() {
-  return (
-    <nav className="ml-4 hidden min-w-0 self-stretch overflow-x-auto sm:block" aria-label="Sections">
-      <ul className="flex h-full items-stretch gap-1">
-        {SECTIONS.filter((section) => !section.nested).map(({ to, label, end }) => (
-          <li key={to}>
-            <NavLink
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                cn(
-                  // The current section is underlined against the bar's own
-                  // bottom edge rather than filled. A filled pill read as a
-                  // button — and, once focused, as a *pressed* one, with the
-                  // focus ring drawn round it — where a rule says "you are
-                  // here" and nothing else.
-                  'relative flex h-full items-center px-3 text-sm transition-colors',
-                  'after:absolute after:inset-x-3 after:-bottom-px after:h-0.5 after:rounded-full',
-                  'focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring',
-                  isActive
-                    ? 'font-medium text-foreground after:bg-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )
-              }
-            >
-              {label}
-            </NavLink>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  )
-}
-
-/**
- * The page's title, for a screen reader only.
- *
- * It used to be drawn — the section's name and a one-line blurb — at the top of
- * every landing page. Directly under a bar that already underlines that same
- * name, it said "Overview" twice and pushed the status strip, the thing a page
- * is opened for, down by two lines. A sighted operator knows where they are
- * from the bar; a screen reader still needs a level-one heading to land on.
- *
- * An address outside the table — the 404 — gets none. It is not a section, and
- * it carries its own heading.
- */
-function PageHeader() {
-  const { pathname } = useLocation()
-  const section = sectionOf(pathname)
-  // Only on a section's own landing page. A sub-page renders its own, visible
-  // header — its name is not in the bar, and it needs the back link.
-  if (!section || pathname !== section.to) return null
-
-  return <h1 className="sr-only">{section.label}</h1>
-}
-
-/**
- * What is running, and where it came from.
- *
- * The version is stamped in at build time (see vite.config.ts) rather than read
- * from the API, because there is no endpoint for it and this SPA is embedded in
- * the daemon: they are one artifact and `make web` gives them the same string.
- */
-function SiteFooter() {
-  return (
-    <footer>
-      {/* The tab bar is fixed over the bottom of the viewport, and the footer is
-          what now reaches it. */}
-      <div className="mx-auto flex max-w-[90rem] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pt-6 pb-24 text-center text-xs text-muted-foreground sm:pb-6">
-        <span>© {new Date().getFullYear()} Open Linux Router contributors</span>
-        <span>{__APP_VERSION__}</span>
-        <a
-          href="https://github.com/open-linux-router/open-linux-router"
-          target="_blank"
-          rel="noreferrer"
-          className="underline-offset-4 hover:text-foreground hover:underline"
-        >
-          GitHub
-        </a>
-        <Link to="/credits" className="underline-offset-4 hover:text-foreground hover:underline">Credits</Link>
-        <Link to="/settings/access" className="inline-flex min-h-11 items-center underline-offset-4 hover:text-foreground hover:underline">Administrator access</Link>
-        <ThemeToggle />
-      </div>
-    </footer>
-  )
-}
-
-/**
- * The only way to change section on a phone.
- *
- * The bar's own nav is `sm:block`, which means that below 640px the app would
- * have no navigation at all — every section but the one you landed on
- * unreachable without typing a URL. (It was the sidebar that was `sm:block`
- * before; moving the links into the header changed nothing about this.) A
- * bottom bar is the platform-native answer at this width and keeps the targets
- * under the thumb.
- */
-function MobileTabBar() {
-  return (
-    <nav
-      aria-label="Sections"
-      className="fixed inset-x-0 bottom-0 z-20 overflow-x-auto border-t bg-background/92 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl sm:hidden"
-    >
-      <ul className="flex min-w-max">
-        {SECTIONS.filter((section) => !section.nested).map(({ to, label, icon: Icon, end }) => (
-          <li key={to} className="flex-1">
-            <NavLink
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                cn(
-                  // 56px clears the 44px minimum with the label stacked under
-                  // the glyph.
-                  'flex min-h-14 min-w-16 flex-col items-center justify-center gap-0.5 text-[0.7rem] font-medium transition-colors',
-                  isActive ? 'text-primary' : 'text-muted-foreground',
-                )
-              }
-            >
-              <Icon className="size-5" aria-hidden />
-              {label}
-            </NavLink>
-          </li>
-        ))}
-      </ul>
-    </nav>
   )
 }

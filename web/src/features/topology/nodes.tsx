@@ -481,7 +481,7 @@ export function DeviceNode({
             </span>
             {density === 'detail' && <Address device={device} />}
           </span>
-          <span aria-hidden className={cn('shrink-0', density === 'compact' ? 'w-20' : 'w-[108px]')} />
+          {services?.length ? <span aria-hidden className="w-12 shrink-0" /> : null}
           <span className="w-[68px] shrink-0 text-right text-xs text-muted-foreground tabular-nums whitespace-nowrap">
             {/* Away is said beside the dimmed name, so presence is never
                 colour alone — and a green dot on every row that is fine was
@@ -490,7 +490,7 @@ export function DeviceNode({
           </span>
         </Shell>
         <ServiceLinks services={services} domain={serviceDomain}
-          className={cn('absolute inset-y-0 right-20', density === 'compact' ? 'w-20' : 'w-[108px]')} compact />
+          className={cn('absolute inset-y-0 right-20', 'w-12')} compact />
       </div>
     )
   }
@@ -915,14 +915,14 @@ export function Rates({ flow, className, neutral }: { flow: Flow; className?: st
     <span className={cn('inline-flex shrink-0 items-center gap-2 tabular-nums', className)}>
       <span className="inline-flex items-center gap-0.5">
         <ArrowDown
-          className={cn('size-3', neutral ? 'text-muted-foreground' : 'text-blue-600 dark:text-blue-400')}
+          className={cn('size-3', neutral ? 'text-muted-foreground' : 'text-receive')}
           aria-label="down"
         />
         {formatRate(flow.downRate ?? 0)}
       </span>
       <span className="inline-flex items-center gap-0.5 text-muted-foreground">
         <ArrowUp
-          className={cn('size-3', neutral ? 'text-muted-foreground' : 'text-teal-600 dark:text-teal-400')}
+          className={cn('size-3', neutral ? 'text-muted-foreground' : 'text-transmit')}
           aria-label="up"
         />
         {formatRate(flow.upRate ?? 0)}

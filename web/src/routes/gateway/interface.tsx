@@ -44,8 +44,8 @@ export function GatewayInterfacePage() {
     setEditing(false)
   }
 
-  return <div className="mx-auto max-w-5xl space-y-6 pb-12">
-    <Link to="/gateway" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden /> Gateway</Link>
+  return <div className="space-y-6 pb-12">
+    <Link to="/gateway" className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"><ArrowLeft className="size-4" aria-hidden /> Gateway</Link>
     <header className="flex flex-wrap items-start gap-4">
       <InterfaceVisual row={row} uplink={isUplink} />
       <div className="min-w-0 flex-1">
@@ -107,5 +107,5 @@ function Fact({ label, value, mono = false }: { label: string; value: string; mo
 }
 
 function State({ title, detail }: { title: string; detail: string }) {
-  return <div className="mx-auto max-w-5xl space-y-3 py-16 text-center"><h1 className="text-xl font-semibold">{title}</h1><p className="text-sm text-muted-foreground">{detail}</p><Button variant="outline" render={<Link to="/gateway">Back to Gateway</Link>} /></div>
+  return <div className="space-y-3 py-16 text-center"><h1 className="text-xl font-semibold">{title}</h1><p className="text-sm text-muted-foreground">{detail}</p><Button variant="outline" nativeButton={false} render={<Link to="/gateway">Back to Gateway</Link>} /></div>
 }

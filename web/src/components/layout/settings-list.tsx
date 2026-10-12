@@ -52,7 +52,7 @@ export function SettingsList({
               // on a phone it would leave six labels and no answers, which is
               // the long page again with the useful half removed. Below the
               // label it wraps instead of truncating.
-              subtitle={value ? <span className="sm:hidden">{value}</span> : undefined}
+              wrap
               trailing={value}
               to={`${section}/${slug}`}
             />

@@ -7,7 +7,16 @@
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
+    --font-sans: 'Geist Variable', system-ui, sans-serif;
+    --color-primary-fill: var(--primary-fill);
+    --color-receive: var(--receive);
+    --color-transmit: var(--transmit);
+    --color-receive-subtle: var(--receive-subtle);
+    --color-transmit-subtle: var(--transmit-subtle);
+    --color-surface-subtle: var(--muted);
+    --shadow-xs: 0 1px 2px rgb(23 27 34 / 4%);
+    --shadow-sm: 0 1px 3px rgb(23 27 34 / 6%);
+    --shadow-md: 0 8px 24px rgb(23 27 34 / 12%);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -43,100 +52,101 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
+    --radius-sm: 0.5rem;
+    --radius-md: 0.5rem;
     --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-xl: 1rem;
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    /* System blue. The one saturated colour in the light theme: it marks the
-       primary action and the focus ring, and nothing else competes with it. */
-    --primary: oklch(0.58 0.20 258);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.505 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.585 0.216 27.2);
-    /* Status colours come in pairs. The bare token is the vivid fill, used for
-       dots and solid marks; the -foreground token is the text-safe darkening of
-       it, because the vivid green only reaches ~2.2:1 on white and would fail
-       as label text. */
-    --success: oklch(0.74 0.18 145);
-    --success-foreground: oklch(0.45 0.13 145);
-    --warning: oklch(0.76 0.17 62);
-    --warning-foreground: oklch(0.47 0.11 55);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    /* Was a neutral grey at ~2.6:1 against white — under the 3:1 that a focus
-       indicator needs. The accent carries it instead. */
-    --ring: oklch(0.58 0.20 258);
-    --chart-1: oklch(0.58 0.20 258);
-    --chart-2: oklch(0.74 0.18 145);
-    --chart-3: oklch(0.76 0.17 62);
-    --chart-4: oklch(0.62 0.19 305);
-    --chart-5: oklch(0.65 0.17 20);
+    --background: #f6f7f9;
+    --foreground: #171b22;
+    --card: #ffffff;
+    --card-foreground: #171b22;
+    --popover: #ffffff;
+    --popover-foreground: #171b22;
+    /* Text and solid action fills are separate contrast pairs. */
+    --primary: #1d4ed8;
+    --primary-fill: #2563eb;
+    --primary-foreground: #ffffff;
+    --secondary: #f0f2f5;
+    --secondary-foreground: #171b22;
+    --muted: #f0f2f5;
+    --muted-foreground: #5b6472;
+    --accent: #eef2f8;
+    --accent-foreground: #171b22;
+    --destructive: #b42335;
+    --success: #22a06b;
+    --success-foreground: #167447;
+    --warning: #c58a24;
+    --warning-foreground: #935a10;
+    --border: #e2e6ec;
+    --input: #a4adbb;
+    --ring: #1d4ed8;
+    --receive: #1d4ed8;
+    --transmit: #0f766e;
+    --receive-subtle: #e8efff;
+    --transmit-subtle: #e2f3ef;
+    --chart-1: var(--receive);
+    --chart-2: var(--transmit);
+    --chart-3: #935a10;
+    --chart-4: #7e4fc6;
+    --chart-5: #b42335;
     --radius: 0.75rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --sidebar: var(--card);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: var(--accent);
+    --sidebar-accent-foreground: var(--accent-foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    /* Apple lifts blue and green a step in dark mode rather than reusing the
-       light values, which go muddy against a dark surface. */
-    --primary: oklch(0.65 0.19 258);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.715 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.68 0.20 25);
-    --success: oklch(0.77 0.19 146);
-    --success-foreground: oklch(0.85 0.16 146);
-    --warning: oklch(0.78 0.16 65);
-    --warning-foreground: oklch(0.86 0.13 70);
-    --border: oklch(1 0 0 / 12%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.65 0.19 258);
-    --chart-1: oklch(0.65 0.19 258);
-    --chart-2: oklch(0.77 0.19 146);
-    --chart-3: oklch(0.78 0.16 65);
-    --chart-4: oklch(0.70 0.18 305);
-    --chart-5: oklch(0.70 0.16 20);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --background: #111318;
+    --foreground: #f1f3f7;
+    --card: #1a1d24;
+    --card-foreground: #f1f3f7;
+    --popover: #1a1d24;
+    --popover-foreground: #f1f3f7;
+    --primary: #8ab4ff;
+    --primary-fill: #2563eb;
+    --primary-foreground: #ffffff;
+    --secondary: #232731;
+    --secondary-foreground: #f1f3f7;
+    --muted: #232731;
+    --muted-foreground: #abb4c3;
+    --accent: #283142;
+    --accent-foreground: #f1f3f7;
+    --destructive: #ff9daa;
+    --success: #42bb82;
+    --success-foreground: #70d8a5;
+    --warning: #d9a13c;
+    --warning-foreground: #f1c071;
+    --border: #343b48;
+    --input: #67758b;
+    --ring: #8ab4ff;
+    --receive: #8ab4ff;
+    --transmit: #6bd4c6;
+    --receive-subtle: #23334f;
+    --transmit-subtle: #203b3b;
+    --chart-1: var(--receive);
+    --chart-2: var(--transmit);
+    --chart-3: #f1c071;
+    --chart-4: #be9aef;
+    --chart-5: #ff9daa;
+    --sidebar: var(--card);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: var(--accent);
+    --sidebar-accent-foreground: var(--accent-foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
 }
 
 @layer base {
@@ -153,8 +163,15 @@
   html {
     @apply font-sans;
     /* Keeps a sticky header from hiding the target of an in-page jump. */
-    scroll-padding-top: 5rem;
+    scroll-padding-top: 6rem;
     }
+  button, a, input, select, textarea {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  button:not(:disabled), [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
   /* Headings tighten as they grow, the way an optical size would. */
   h1, h2, h3 {
     letter-spacing: -0.015em;
@@ -170,5 +187,27 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+/* Component contracts also cover compact variants and local height overrides. */
+@layer components {
+  [data-slot='input'], [data-slot='textarea'], [data-slot='select-trigger'] {
+    background-color: var(--card);
+  }
+  [data-slot='switch'] {
+    min-width: 44px;
+    min-height: 24px;
+  }
+  @media (max-width: 639px) {
+    [data-slot='button'], [data-slot='input'], [data-slot='select-trigger'],
+    [data-slot='dialog-close'] {
+      min-height: 44px;
+    }
+    [data-slot='button']:has(> svg:only-child), [data-slot='dialog-close'] {
+      min-width: 44px;
+    }
+    [data-slot='input'], [data-slot='textarea'], [data-slot='select-trigger'] {
+      font-size: 16px;
+    }
   }
 }

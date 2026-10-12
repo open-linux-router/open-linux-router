@@ -77,10 +77,10 @@ function CreditSection({ title, description, items }: { title: string; descripti
 
 export function CreditsPage() {
   return (
-    <div className="mx-auto max-w-5xl space-y-12 pb-12">
+    <div className="space-y-12 pb-12">
       <div className="space-y-3">
         <Link to="/" className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">Back to Overview</Link>
-        <h1 className="text-3xl font-semibold tracking-tight">Built on open work</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Built on open work</h1>
         <p className="max-w-2xl text-muted-foreground">Open Linux Router coordinates Linux services and open-source libraries rather than replacing them. Thank you to their maintainers and contributors.</p>
         <p className="text-sm text-muted-foreground">Feature backends may be optional or installed separately. Package lists cover direct dependencies; their transitive dependencies and license details are in the project manifests.</p>
       </div>

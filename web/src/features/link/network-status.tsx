@@ -15,7 +15,7 @@ import { useInterfaces } from '@/features/link/queries'
 import type { InterfaceRow } from '@/lib/api-types'
 import { cn, formatBytes, formatRate } from '@/lib/utils'
 
-const card = 'rounded-2xl border bg-card text-card-foreground shadow-sm'
+const card = 'rounded-xl border bg-card text-card-foreground shadow-xs'
 const detailLink = 'inline-flex min-h-11 items-center gap-1 text-sm font-medium text-primary hover:underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4'
 
 export function NetworkStatus() {
@@ -98,7 +98,7 @@ function InterfaceCard({ row, role, history, failed, onSelect }: {
   const current = failed ? undefined : history.at(-1)
   return (
     <button type="button" onClick={onSelect} aria-label={`${row.name}${role ? ` ${role}` : ''} details`}
-      className={cn(card, 'flex min-h-[280px] w-full min-w-0 cursor-pointer flex-col overflow-hidden p-[18px] pb-0 text-left transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring')}>
+      className={cn(card, 'flex min-h-[240px] w-full min-w-0 cursor-pointer flex-col overflow-hidden p-[18px] pb-0 text-left transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring')}>
       <div className="grid min-h-[156px] grid-cols-[80px_minmax(0,1fr)] items-start gap-3 min-[1200px]:grid-cols-[89px_minmax(0,1fr)] min-[1200px]:gap-[15px]">
         <span className="relative block aspect-square w-full" aria-hidden="true">
           <NetworkIcon kind="interface" className={cn('size-full', (!connected || failed) && 'opacity-50 grayscale')} />
@@ -107,20 +107,20 @@ function InterfaceCard({ row, role, history, failed, onSelect }: {
           <span className={cn('absolute left-[75.78%] top-[72.66%] size-[7.03%] -translate-x-1/2 -translate-y-1/2 rounded-[1px]', connected && !failed ? 'bg-[#cba34a]' : 'bg-muted-foreground/40')} />
         </span>
         <div className="min-w-0">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><strong className="break-all text-base font-semibold">{row.name}</strong><span className={cn('text-[11px]', connected && !failed ? 'text-success-foreground' : 'text-muted-foreground')}>{failed ? 'Unavailable' : connectionState(row)}</span></div>
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><strong className="break-all text-base font-semibold">{row.name}</strong><span className={cn('text-xs', connected && !failed ? 'text-success-foreground' : 'text-muted-foreground')}>{failed ? 'Unavailable' : connectionState(row)}</span></div>
           <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
             <Fact label="Link speed" value={failed ? '—' : linkSpeed(row.speed_mbps)} />
             <Fact label="IP" value={failed ? '—' : row.address || row.prefixes?.[0]?.split('/')[0] || 'Not assigned'} mono />
           </div>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium tabular-nums">
-            <span className="text-[#526da9] dark:text-[#a5b9eb]" aria-label={`Receive ${current ? formatRate(current.rx) : 'unavailable'}`}>↓ {current ? formatRate(current.rx) : '—'}</span>
-            <span className="text-[#4d827b] dark:text-[#9ecdc6]" aria-label={`Transmit ${current ? formatRate(current.tx) : 'unavailable'}`}>↑ {current ? formatRate(current.tx) : '—'}</span>
+            <span className="text-receive" aria-label={`Receive ${current ? formatRate(current.rx) : 'unavailable'}`}>↓ {current ? formatRate(current.rx) : '—'}</span>
+            <span className="text-transmit" aria-label={`Transmit ${current ? formatRate(current.tx) : 'unavailable'}`}>↑ {current ? formatRate(current.tx) : '—'}</span>
           </div>
         </div>
       </div>
       <div className="mt-auto pt-3">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
-          <span>Last 60 s</span><span className="flex gap-3"><span className="flex items-center gap-1"><i className="h-0.5 w-3 bg-[#6d88ca]" />Receive</span><span className="flex items-center gap-1"><i className="h-0.5 w-3 bg-[#6ca19c]" />Transmit</span></span>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>Last 60 s</span><span className="flex gap-3"><span className="flex items-center gap-1"><i className="h-0.5 w-3 bg-receive" />Receive</span><span className="flex items-center gap-1"><i className="h-0.5 w-3 bg-transmit" />Transmit</span></span>
         </div>
         <TrafficChart history={history} message={failed ? 'Traffic unavailable' : !connected ? 'No link' : row.rx_bytes === undefined || row.tx_bytes === undefined ? 'Traffic unavailable' : 'Measuring…'} />
       </div>
@@ -134,8 +134,8 @@ function TrafficChart({ history, message }: { history: RateSample[]; message: st
   const peak = Math.max(1, ...history.flatMap(sample => [sample.rx, sample.tx]))
   const points = (key: 'rx' | 'tx') => history.map(sample => `${((sample.at - newest + 60_000) / 60_000 * 300).toFixed(1)},${(68 - sample[key] / peak * 56).toFixed(1)}`).join(' ')
   return <svg className="mt-1 h-[76px] w-full" viewBox="0 0 300 76" preserveAspectRatio="none" role="img" aria-label="Receive and transmit rates observed over the last 60 seconds">
-    <polyline points={points('rx')} fill="none" stroke="#6d88ca" strokeWidth="1.8" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
-    <polyline points={points('tx')} fill="none" stroke="#6ca19c" strokeWidth="1.8" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+    <polyline points={points('rx')} fill="none" stroke="var(--receive)" strokeWidth="1.8" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+    <polyline points={points('tx')} fill="none" stroke="var(--transmit)" strokeWidth="1.8" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 }
 
@@ -145,7 +145,7 @@ function ServiceCard({ kind, title, value, pending, label, state }: {
   const healthy = state === 'Running'
   const problem = ['Unavailable', 'Not running', 'Needs attention'].includes(state)
   return <section id={kind} className={cn(card, 'scroll-mt-20 flex min-h-[186px] flex-col px-6 py-5')} aria-label={title}>
-    <div className="flex items-center gap-3"><NetworkIcon kind={kind} className="size-[50px] shrink-0" /><h2 className="text-base font-semibold">{title}</h2></div>
+    <div className="flex items-center gap-3"><NetworkIcon kind={kind} className="size-12 shrink-0" /><h2 className="text-base font-semibold">{title}</h2></div>
     <div className="mt-3 flex flex-wrap items-baseline gap-2">
       {pending ? <Skeleton className="h-7 w-20" /> : <strong className="text-2xl font-semibold tabular-nums">{value?.toLocaleString() ?? '—'}</strong>}
       <span className="text-xs text-muted-foreground">{label}</span>
@@ -158,7 +158,7 @@ function ServiceCard({ kind, title, value, pending, label, state }: {
 }
 
 function Fact({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return <div className="min-w-0"><span className="block text-[11px] text-muted-foreground">{label}</span><strong className={cn('mt-1 block text-xs font-medium [overflow-wrap:anywhere]', mono && 'font-mono')}>{value}</strong></div>
+  return <div className="min-w-0"><span className="block text-xs text-muted-foreground">{label}</span><strong className={cn('mt-1 block text-xs font-medium [overflow-wrap:anywhere]', mono && 'font-mono')}>{value}</strong></div>
 }
 
 function Detail({ label, value }: { label: string; value: string }) {

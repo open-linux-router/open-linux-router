@@ -30,7 +30,7 @@ export function StuckSettings({
   if (!error) return null
   return (
     <Alert>
-      <AlertTriangle className="text-warning" />
+      <AlertTriangle className="text-warning-foreground" />
       <AlertTitle>These settings cannot be put in force</AlertTitle>
       <AlertDescription className="space-y-2">
         <p>

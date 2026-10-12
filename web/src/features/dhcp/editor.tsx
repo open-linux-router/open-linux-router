@@ -57,7 +57,7 @@ export function ApplyOutcome({ applier }: { applier: ReturnType<typeof useDhcpAp
                 {applier.failure.steps?.map((step) => (
                   <li key={step.description} className="flex gap-2">
                     {step.done ? (
-                      <Check className="mt-0.5 size-3.5 shrink-0 text-success" aria-label="done" />
+                      <Check className="mt-0.5 size-3.5 shrink-0 text-success-foreground" aria-label="done" />
                     ) : (
                       <X className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-label="failed" />
                     )}

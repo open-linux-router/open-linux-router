@@ -405,7 +405,7 @@ function ReleaseDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="size-4 text-warning" aria-hidden />
+            <AlertTriangle className="size-4 text-warning-foreground" aria-hidden />
             An address range uses {row?.name}
           </DialogTitle>
           <DialogDescription>

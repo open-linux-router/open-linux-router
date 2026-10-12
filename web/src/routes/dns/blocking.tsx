@@ -28,11 +28,7 @@ export function DnsBlockingPage() {
   }
 
   return (
-    <SubPage section="/gateway/dns" slug="blocking">
-      <ApplyOutcome applier={applier} />
-
-      <div className="flex justify-end">
-        <Button
+    <SubPage section="/gateway/dns" slug="blocking" action={<Button
           size="sm"
           disabled={busy}
           onClick={() => {
@@ -41,8 +37,9 @@ export function DnsBlockingPage() {
           }}
         >
           <Plus className="size-4" aria-hidden /> Add
-        </Button>
-      </div>
+        </Button>}>
+      <ApplyOutcome applier={applier} />
+
 
       {policies.length === 0 ? (
         <ListEmpty>No rules yet. Every device may look up anything.</ListEmpty>

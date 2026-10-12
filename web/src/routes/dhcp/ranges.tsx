@@ -39,11 +39,7 @@ export function DhcpRangesPage() {
   }
 
   return (
-    <SubPage section="/gateway/dhcp" slug="ranges">
-      <ApplyOutcome applier={applier} />
-
-      <div className="flex justify-end">
-        <Button
+    <SubPage section="/gateway/dhcp" slug="ranges" action={<Button
           size="sm"
           disabled={busy}
           onClick={() => {
@@ -52,8 +48,9 @@ export function DhcpRangesPage() {
           }}
         >
           <Plus className="size-4" aria-hidden /> Add
-        </Button>
-      </div>
+        </Button>}>
+      <ApplyOutcome applier={applier} />
+
 
       {pools.length === 0 ? (
         <ListEmpty>No addresses yet. Pick a network and it will hand out addresses on it.</ListEmpty>
@@ -67,7 +64,7 @@ export function DhcpRangesPage() {
                 title={pool.network}
                 subtitle={
                   networks && !networks.has(pool.network) ? (
-                    <span className="text-warning">
+                    <span className="text-warning-foreground">
                       There is no network called {pool.network} any more, so this range cannot be
                       served. Open it to remove it, or add the network back.
                     </span>

@@ -36,11 +36,7 @@ export function DnsNamesPage() {
   }
 
   return (
-    <SubPage section="/gateway/dns" slug="names">
-      <ApplyOutcome applier={applier} />
-
-      <div className="flex justify-end">
-        <Button
+    <SubPage section="/gateway/dns" slug="names" action={<Button
           size="sm"
           disabled={busy}
           onClick={() => {
@@ -49,8 +45,9 @@ export function DnsNamesPage() {
           }}
         >
           <Plus className="size-4" aria-hidden /> Add
-        </Button>
-      </div>
+        </Button>}>
+      <ApplyOutcome applier={applier} />
+
 
       {hosts.length === 0 ? (
         <ListEmpty>No names yet. Devices here are reachable by address only.</ListEmpty>

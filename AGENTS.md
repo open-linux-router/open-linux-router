@@ -17,6 +17,8 @@ Use Go 1.27 and Node 24. From the repository root:
 
 ## Coding Style & Naming Conventions
 
+For UI changes, follow `docs/ui-style-guide.md` and update it when changing the shared visual contracts.
+
 Use `gofmt` and focused lowercase Go packages. Keep `*_test.go` beside implementation with `TestXxx` functions. UI code uses two-space indentation, single quotes, no semicolons, and PascalCase components; group features under `web/src/features/<feature>`.
 
 ## Testing Guidelines

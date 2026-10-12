@@ -33,8 +33,8 @@ export function DevicePage() {
   if (!device) return <State title="Device not found" detail="It may have been forgotten or is no longer in the device list." />
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 pb-12">
-      <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+    <div className="space-y-6 pb-12">
+      <Link to="/" className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
         <ArrowLeft className="size-4" aria-hidden /> Network overview
       </Link>
 
@@ -53,7 +53,7 @@ export function DevicePage() {
             <p className="text-xs leading-relaxed text-muted-foreground">
               Counts start when usage counting is enabled. They cover traffic forwarded by this router, not traffic between devices on the same network. Shared or changing IP addresses can affect attribution.
             </p>
-            <Button variant="outline" size="sm" render={<Link to="/gateway/usage">Usage settings</Link>} />
+            <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/gateway/usage">Usage settings</Link>} />
           </CardContent>
         </Card>
       } />
@@ -93,10 +93,10 @@ export function DevicePage() {
 }
 
 function State({ title, detail }: { title: string; detail: string }) {
-  return <div className="mx-auto max-w-5xl space-y-3 py-16 text-center">
+  return <div className="space-y-3 py-16 text-center">
     <h1 className="text-xl font-semibold">{title}</h1>
     <p className="text-sm text-muted-foreground">{detail}</p>
-    <Button variant="outline" render={<Link to="/">Back to overview</Link>} />
+    <Button variant="outline" nativeButton={false} render={<Link to="/">Back to overview</Link>} />
   </div>
 }
 

@@ -1,4 +1,8 @@
-# React + TypeScript + Vite
+# Open Linux Router web UI
+
+Read the [visual style guide](../docs/ui-style-guide.md) before changing layouts,
+colors, typography or shared components. It defines the visual direction,
+responsive rules and review checklist for future iterations.
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 

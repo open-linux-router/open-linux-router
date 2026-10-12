@@ -105,7 +105,7 @@ function AccessRow({ slug, title, description, icon: Icon, to, summary }: {
   return (
     <ListRow
       title={label}
-      subtitle={<><span>{description}</span><span className="mt-1 block sm:hidden">{state}</span></>}
+      subtitle={<><span>{description}</span></>}
       leading={<Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
       trailing={state}
       to={to ?? `/access/${slug}`}
