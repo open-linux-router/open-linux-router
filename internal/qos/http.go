@@ -30,7 +30,7 @@ func (h HTTP) getConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, 500, e.Error())
 		return
 	}
-	core.WriteJSON(w, 200, c)
+	core.WriteConfig(w, c)
 }
 func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 	core.WriteJSON(w, 200, h.Applier.Status())
@@ -91,14 +91,19 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, edit func(*Config) e
 	var c Config
 	var problem error
 	invalid := false
+	stale := false
 	e := h.Lock.Do(r.Context(), func() error {
+		c, problem = h.Applier.Load()
+		if problem != nil {
+			return nil
+		}
+		if !core.MatchConfig(w, r, c) {
+			stale = true
+			return nil
+		}
 		if replacement != nil {
 			c = *replacement
 		} else {
-			c, problem = h.Applier.Load()
-			if problem != nil {
-				return nil
-			}
 			problem = edit(&c)
 		}
 		if problem != nil {
@@ -116,6 +121,9 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, edit func(*Config) e
 	})
 	if e != nil {
 		core.WriteError(w, 503, e.Error())
+		return
+	}
+	if stale {
 		return
 	}
 	if problem != nil {

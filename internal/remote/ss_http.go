@@ -93,7 +93,7 @@ func (h HTTP) getShadowsocksConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, cfg.Redacted().Shadowsocks)
+	core.WriteConfig(w, cfg, cfg.Redacted().Shadowsocks)
 }
 
 func (h HTTP) patchShadowsocksConfig(w http.ResponseWriter, r *http.Request) {
@@ -170,6 +170,7 @@ func (h HTTP) mutateProxy(w http.ResponseWriter, r *http.Request, forceConfirm b
 	}
 	confirm = confirm || forceConfirm
 
+	stale := false
 	var (
 		editErr   error
 		invalid   Result
@@ -187,6 +188,10 @@ func (h HTTP) mutateProxy(w http.ResponseWriter, r *http.Request, forceConfirm b
 		cfg, err := proxy.Load()
 		if err != nil {
 			failed = err
+			return nil
+		}
+		if !core.MatchConfig(w, r, cfg) {
+			stale = true
 			return nil
 		}
 		previous := cfg.Clone()
@@ -240,6 +245,10 @@ func (h HTTP) mutateProxy(w http.ResponseWriter, r *http.Request, forceConfirm b
 	}); lockErr != nil {
 		core.WriteError(w, http.StatusServiceUnavailable,
 			"timed out waiting for the apply lock: "+lockErr.Error())
+		return
+	}
+
+	if stale {
 		return
 	}
 

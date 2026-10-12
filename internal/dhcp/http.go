@@ -134,7 +134,7 @@ func (h HTTP) getConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, cfg)
+	core.WriteConfig(w, cfg)
 }
 
 // putConfig replaces the whole document. Validated against the full schema
@@ -153,7 +153,7 @@ func (h HTTP) putConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	h.apply(w, r, cfg)
+	h.mutate(w, r, func(Config) (Config, error) { return cfg, nil })
 }
 
 // patchConfig changes named fields and leaves the rest alone, which is what
@@ -163,17 +163,6 @@ func (h HTTP) putConfig(w http.ResponseWriter, r *http.Request) {
 // replaces the whole list rather than merging into it. That is why adding one
 // reservation is a PUT of the new document rather than a PATCH.
 func (h HTTP) patchConfig(w http.ResponseWriter, r *http.Request) {
-	current, err := h.Applier.Load()
-	if err != nil {
-		core.WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	currentJSON, err := MarshalConfig(current)
-	if err != nil {
-		core.WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
 	patch, err := core.ReadBody(w, r)
 	if err != nil {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
@@ -183,20 +172,9 @@ func (h HTTP) patchConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusBadRequest, "empty patch body")
 		return
 	}
-
-	merged, err := core.MergePatch(currentJSON, patch)
-	if err != nil {
-		core.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	// Strict again on the merged result, so an unknown key in the patch is
-	// still caught rather than being smuggled in by the merge.
-	cfg, err := UnmarshalConfig(merged)
-	if err != nil {
-		core.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	h.apply(w, r, cfg)
+	h.mutate(w, r, func(current Config) (Config, error) {
+		return core.PatchConfig(current, patch, UnmarshalConfig)
+	})
 }
 
 // applyResponse always carries the plan and the steps, successful or not.
@@ -210,10 +188,16 @@ type applyResponse struct {
 	Error *core.ErrorBody `json:"error,omitempty"`
 }
 
+// mutate owns the entire read/merge/validate/apply transaction.
+func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(Config) (Config, error)) {
+	core.MutateConfig(w, r, h.Lock, h.Applier.Load, edit, func(cfg Config) {
+		h.apply(w, r, cfg)
+	})
+}
+
+// apply is called with the global apply lock held.
 func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
-	// Validated before the lock is taken. Validation is pure (§5.3.1), so
-	// holding the lock to do it would only make a bad request slow down a good
-	// one, and a 422 is more useful than a plan that cannot be applied.
+	// Cross-module inputs stay stable until the change is stored.
 	if res := Validate(cfg, h.Applier.Networks); !res.OK() {
 		core.WriteError(w, http.StatusUnprocessableEntity,
 			"invalid dhcp configuration", problems(res.Errors)...)
@@ -224,16 +208,7 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 		result   ApplyResult
 		applyErr error
 	)
-	// applyErr is captured rather than returned so that a failure still yields
-	// the partial result below. The lock only cares about serialising.
-	if err := h.Lock.Do(r.Context(), func() error {
-		result, applyErr = h.Applier.Apply(r.Context(), cfg)
-		return nil
-	}); err != nil {
-		core.WriteError(w, http.StatusServiceUnavailable,
-			"timed out waiting for the apply lock: "+err.Error())
-		return
-	}
+	result, applyErr = h.Applier.Apply(r.Context(), cfg)
 
 	// Published whenever anything was attempted, including a partial failure —
 	// especially then. Something on the box changed and every client's idea of
@@ -257,12 +232,7 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 // behind intent the operator already stored, and merging would make it a second
 // spelling of PATCH.
 func (h HTTP) postApply(w http.ResponseWriter, r *http.Request) {
-	cfg, err := h.Applier.Load()
-	if err != nil {
-		core.WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	h.apply(w, r, cfg)
+	h.mutate(w, r, func(current Config) (Config, error) { return current, nil })
 }
 
 // --- dry run --------------------------------------------------------------

@@ -34,6 +34,7 @@ export function useGatewayConfig() {
   return useQuery({
     queryKey: gatewayKeys.config,
     queryFn: () => api.get<GatewayConfig>('/api/gateway/config'),
+    structuralSharing: false,
   })
 }
 

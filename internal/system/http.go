@@ -136,13 +136,21 @@ func (h HTTP) postClaim(w http.ResponseWriter, r *http.Request) {
 
 	// nil: the recorded choice of no password (docs/system.md §2), which is a
 	// decision rather than a default.
-	cfg, err := h.Applier.Claim(nil)
-	switch {
-	case errors.Is(err, ErrAlreadyClaimed):
-		core.WriteError(w, http.StatusConflict, err.Error())
+	var cfg Config
+	var claimErr error
+	if err := h.Lock.Do(r.Context(), func() error {
+		cfg, claimErr = h.Applier.Claim(nil)
+		return nil
+	}); err != nil {
+		core.WriteError(w, http.StatusServiceUnavailable, "waiting for the apply lock: "+err.Error())
 		return
-	case err != nil:
-		core.WriteError(w, http.StatusInternalServerError, err.Error())
+	}
+	switch {
+	case errors.Is(claimErr, ErrAlreadyClaimed):
+		core.WriteError(w, http.StatusConflict, claimErr.Error())
+		return
+	case claimErr != nil:
+		core.WriteError(w, http.StatusInternalServerError, claimErr.Error())
 		return
 	}
 

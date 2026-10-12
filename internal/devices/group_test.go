@@ -26,6 +26,47 @@ func groupedConfig() Config {
 	}
 }
 
+func TestDeviceItemEditsPreserveOtherDevicesAndRejectStaleDocuments(t *testing.T) {
+	a := Applier{Store: core.NewStore(filepath.Join(t.TempDir(), "olr.json"), ModuleName)}
+	if _, err := a.Save(groupedConfig()); err != nil {
+		t.Fatal(err)
+	}
+	h := HTTP{Applier: a, Lock: core.NewLock(), Events: core.NewEvents()}.Handler()
+	request := func(method, path, body, revision string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r.Header.Set("If-Match", revision)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	initial := request("GET", "/config", "", "")
+	if w := request("PUT", "/devices/"+nasMAC, `{"name":"storage","group":"Serving"}`, ""); w.Code != 200 {
+		t.Fatal(w.Code, w.Body)
+	}
+	if w := request("PUT", "/devices/"+phoneMAC, `{"notes":"upstairs","group":"Personal"}`, ""); w.Code != 200 {
+		t.Fatal(w.Code, w.Body)
+	}
+	current, err := a.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	nas, _ := current.Find(nasMAC)
+	phone, _ := current.Find(phoneMAC)
+	if nas.Name != "storage" || phone.Notes != "upstairs" || len(current.Groups) != 2 {
+		t.Fatal(current)
+	}
+	if w := request("PUT", "/config", initial.Body.String(), initial.Header().Get("ETag")); w.Code != 412 {
+		t.Fatal("stale document accepted", w.Code, w.Body)
+	}
+	if w := request("DELETE", "/devices/"+nasMAC, "", ""); w.Code != 200 {
+		t.Fatal(w.Code, w.Body)
+	}
+	current, _ = a.Load()
+	if len(current.Devices) != 1 || current.Devices[0].MAC != phoneMAC || len(current.Groups) != 2 {
+		t.Fatal("forget changed unrelated inventory", current)
+	}
+}
+
 func TestGroupsRoundTrip(t *testing.T) {
 	in := groupedConfig()
 	data, err := MarshalConfig(in)

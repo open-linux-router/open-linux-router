@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { DeviceDetail } from '@/features/devices/device-detail'
-import { useApplyDevicesConfig, useDevicesConfig } from '@/features/devices/queries'
+import { useSaveDevice, useDevicesConfig } from '@/features/devices/queries'
 import { useDhcpConfig } from '@/features/dhcp/queries'
 import { ReservationDialog } from '@/features/dhcp/reservation-dialog'
 import { useDhcpApply } from '@/features/dhcp/use-apply'
@@ -11,7 +11,7 @@ import { gatewayChange, useGatewayConfig } from '@/features/gateway/queries'
 import { useGatewayApply } from '@/features/gateway/use-apply'
 import { ApiError } from '@/lib/api'
 import type { DeviceRow } from '@/lib/api-types'
-import type { Device, DevicesConfig, Reservation } from '@/lib/config-types'
+import type { Device, Reservation } from '@/lib/config-types'
 
 /**
  * Acting on one device, wherever it was clicked.
@@ -29,7 +29,7 @@ import type { Device, DevicesConfig, Reservation } from '@/lib/config-types'
  */
 export function useDeviceActions() {
   const identity = useDevicesConfig()
-  const saveIdentity = useApplyDevicesConfig()
+  const saveIdentity = useSaveDevice()
   const dhcpConfig = useDhcpConfig()
   const dhcpApplier = useDhcpApply()
   const gateway = useGatewayConfig()
@@ -38,11 +38,8 @@ export function useDeviceActions() {
   const [editing, setEditing] = useState<DeviceRow | null>(null)
   const [reserving, setReserving] = useState<DeviceRow | null>(null)
 
-  /** Stores one device's identity by rewriting the whole document. */
+  /** Stores only this device, using the server's current inventory. */
   async function save(device: Device) {
-    const current: DevicesConfig = identity.data ?? {}
-    const rest = (current.devices ?? []).filter((d) => d.mac !== device.mac)
-
     // An entry with nothing but a MAC says nothing, so saving one is a request
     // to forget rather than to store an empty record.
     //
@@ -57,10 +54,8 @@ export function useDeviceActions() {
       !device.notes &&
       !device.model &&
       !device.group
-    const next: DevicesConfig = { ...current, devices: empty ? rest : [...rest, device] }
-
     try {
-      await saveIdentity.mutateAsync(next)
+      await saveIdentity.mutateAsync({ device, forget: empty })
       toast.success(empty ? 'Device forgotten' : 'Saved')
     } catch (error) {
       if (error instanceof ApiError) {

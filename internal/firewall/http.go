@@ -116,7 +116,7 @@ func (h HTTP) getConfig(w http.ResponseWriter, _ *http.Request) {
 		core.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, c)
+	core.WriteConfig(w, c)
 }
 
 func (h HTTP) putConfig(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +196,7 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, forceConfirm bool,
 			status, failure = http.StatusInternalServerError, err.Error()
 			return nil
 		}
-		if expected := r.Header.Get("If-Match"); expected != "" {
+		if expected := r.Header.Get("If-Match"); expected != "" && !core.ConfigMatches(r, current) {
 			raw, readErr := readNative(r.Context())
 			if readErr != nil {
 				status, failure = http.StatusServiceUnavailable, readErr.Error()
@@ -212,6 +212,7 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, forceConfirm bool,
 				return nil
 			}
 		}
+
 		next, err := edit(&current)
 		if err != nil {
 			editErr = err

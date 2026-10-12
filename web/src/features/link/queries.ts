@@ -17,6 +17,7 @@ export function useLinkConfig() {
   return useQuery({
     queryKey: linkKeys.config,
     queryFn: () => api.get<LinkConfig>('/api/link/config'),
+    structuralSharing: false,
   })
 }
 

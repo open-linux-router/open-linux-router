@@ -215,7 +215,7 @@ func (h HTTP) getConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, cfg)
+	core.WriteConfig(w, cfg)
 }
 
 // putConfig replaces the whole document.
@@ -316,6 +316,7 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 
 	admin := callerAddr(r)
 
+	stale := false
 	var (
 		editErr  error
 		invalid  Result
@@ -333,6 +334,10 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 		cfg, err := h.Applier.Load()
 		if err != nil {
 			failed = err
+			return nil
+		}
+		if !core.MatchConfig(w, r, cfg) {
+			stale = true
 			return nil
 		}
 
@@ -377,6 +382,10 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 	}); err != nil {
 		core.WriteError(w, http.StatusServiceUnavailable,
 			"timed out waiting for the apply lock: "+err.Error())
+		return
+	}
+
+	if stale {
 		return
 	}
 

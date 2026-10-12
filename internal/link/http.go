@@ -132,7 +132,7 @@ func (h HTTP) getConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, cfg)
+	core.WriteConfig(w, cfg)
 }
 
 // putConfig replaces the whole document.
@@ -152,7 +152,7 @@ func (h HTTP) putConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	h.apply(w, r, cfg, opts)
+	h.mutate(w, r, func(Config) (Config, error) { return cfg, nil }, opts)
 }
 
 // options reads the query parameters an apply or a plan accepts.
@@ -181,17 +181,6 @@ func options(r *http.Request) (Options, error) {
 // spelling and the wrong one: there would then be no way to express a release
 // at all.
 func (h HTTP) patchConfig(w http.ResponseWriter, r *http.Request) {
-	current, err := h.Applier.Load()
-	if err != nil {
-		core.WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	currentJSON, err := MarshalConfig(current)
-	if err != nil {
-		core.WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
 	patch, err := core.ReadBody(w, r)
 	if err != nil {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
@@ -202,22 +191,14 @@ func (h HTTP) patchConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	merged, err := core.MergePatch(currentJSON, patch)
-	if err != nil {
-		core.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	cfg, err := UnmarshalConfig(merged)
-	if err != nil {
-		core.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
 	opts, err := options(r)
 	if err != nil {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	h.apply(w, r, cfg, opts)
+	h.mutate(w, r, func(current Config) (Config, error) {
+		return core.PatchConfig(current, patch, UnmarshalConfig)
+	}, opts)
 }
 
 // applyResponse carries the plan alongside the stored result.
@@ -233,11 +214,16 @@ type applyResponse struct {
 	Error  *core.ErrorBody `json:"error,omitempty"`
 }
 
+// mutate owns the entire read/merge/validate/apply transaction.
+func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(Config) (Config, error), opts Options) {
+	core.MutateConfig(w, r, h.Lock, h.Applier.Load, edit, func(cfg Config) {
+		h.apply(w, r, cfg, opts)
+	})
+}
+
+// apply is called with the global apply lock held.
 func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config, opts Options) {
-	// Validated before the lock is taken. The name and subnet rules are pure
-	// (§5.3.1), so holding the lock for them would only make a bad request slow
-	// down a good one. The observed half is read here too, which is a syscall
-	// rather than a lock, and re-read under the lock by Apply.
+	// Cross-module inputs stay stable until the change is stored.
 	observed := h.Applier.observeQuietly()
 	if res := Validate(cfg, observed); !res.OK() {
 		core.WriteError(w, http.StatusUnprocessableEntity,
@@ -249,18 +235,11 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config, opts Opt
 		result   ApplyResult
 		applyErr error
 	)
-	if err := h.Lock.Do(r.Context(), func() error {
-		result, applyErr = h.Applier.ApplyWith(r.Context(), cfg, opts)
-		if applyErr == nil && !result.Plan.Empty && h.Dependents != nil {
-			for _, s := range h.Dependents(r.Context()) {
-				result.Steps = append(result.Steps, Step(s))
-			}
+	result, applyErr = h.Applier.ApplyWith(r.Context(), cfg, opts)
+	if applyErr == nil && !result.Plan.Empty && h.Dependents != nil {
+		for _, s := range h.Dependents(r.Context()) {
+			result.Steps = append(result.Steps, Step(s))
 		}
-		return nil
-	}); err != nil {
-		core.WriteError(w, http.StatusServiceUnavailable,
-			"timed out waiting for the apply lock: "+err.Error())
-		return
 	}
 
 	plan := withLockoutWarning(result.Plan, r, observed)
@@ -319,16 +298,15 @@ func (h HTTP) deleteAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var claims []Claim
-	if h.Claims != nil {
-		claims = h.Claims()
-	}
-
 	var (
 		steps []Step
 		opErr error
 	)
 	if err := h.Lock.Do(r.Context(), func() error {
+		var claims []Claim
+		if h.Claims != nil {
+			claims = h.Claims()
+		}
 		steps, opErr = h.Applier.RemoveAddress(r.Context(), name, prefix, claims)
 		return nil
 	}); err != nil {

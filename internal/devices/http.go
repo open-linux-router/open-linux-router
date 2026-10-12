@@ -77,6 +77,16 @@ func (h HTTP) Routes() []core.Route {
 			Handler:  h.deleteGroup,
 		},
 		{
+			Method: "PUT", Path: "/devices/{mac}",
+			Summary:  "Create or replace one device's stored identity, preserving all other devices and groups.",
+			Mutating: true, Handler: h.putDevice,
+		},
+		{
+			Method: "DELETE", Path: "/devices/{mac}",
+			Summary:  "Forget one device's stored identity; observed presence and other modules' policies are kept.",
+			Mutating: true, Handler: h.deleteDevice,
+		},
+		{
 			Method: "PUT", Path: "/devices/{mac}/group",
 			Summary:  "Put one device in a group, or take it out of its group with an empty name.",
 			Mutating: true,
@@ -118,7 +128,7 @@ func (h HTTP) getConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, cfg)
+	core.WriteConfig(w, cfg)
 }
 
 // putConfig replaces the whole document.
@@ -133,7 +143,7 @@ func (h HTTP) putConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	h.apply(w, r, cfg)
+	h.mutate(w, r, func(current *Config) error { *current = cfg; return nil })
 }
 
 // patchConfig changes named fields and leaves the rest alone.
@@ -142,17 +152,6 @@ func (h HTTP) putConfig(w http.ResponseWriter, r *http.Request) {
 // replaces the whole list rather than merging into it, which is why naming one
 // device is a PUT of the new document rather than a PATCH of one entry.
 func (h HTTP) patchConfig(w http.ResponseWriter, r *http.Request) {
-	current, err := h.Applier.Load()
-	if err != nil {
-		core.WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	currentJSON, err := MarshalConfig(current)
-	if err != nil {
-		core.WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
 	patch, err := core.ReadBody(w, r)
 	if err != nil {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
@@ -162,18 +161,14 @@ func (h HTTP) patchConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusBadRequest, "empty patch body")
 		return
 	}
-
-	merged, err := core.MergePatch(currentJSON, patch)
-	if err != nil {
-		core.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	cfg, err := UnmarshalConfig(merged)
-	if err != nil {
-		core.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	h.apply(w, r, cfg)
+	h.mutate(w, r, func(current *Config) error {
+		next, err := core.PatchConfig(*current, patch, UnmarshalConfig)
+		if err != nil {
+			return badRequest(err)
+		}
+		*current = next
+		return nil
+	})
 }
 
 // applyResponse carries the plan alongside the stored result.
@@ -187,56 +182,38 @@ type applyResponse struct {
 	Error  *core.ErrorBody `json:"error,omitempty"`
 }
 
-func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
-	// Validated before the lock is taken. Validation is pure (§5.3.1), so
-	// holding the lock to do it would only make a bad request slow down a good
-	// one, and a 422 is more useful than a plan that cannot be applied.
-	if res := Validate(cfg); !res.OK() {
-		core.WriteError(w, http.StatusUnprocessableEntity,
-			"invalid devices configuration", problems(res.Errors)...)
+// --- one item at a time ----------------------------------------------------
+
+func (h HTTP) putDevice(w http.ResponseWriter, r *http.Request) {
+	mac, err := core.NormalizeMAC(r.PathValue("mac"))
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	var (
-		stored   Config
-		plan     planView
-		applyErr error
-	)
-	if err := h.Lock.Do(r.Context(), func() error {
-		current, err := h.Applier.Load()
-		if err != nil {
-			applyErr = err
-			return nil
+	var device Device
+	if err := core.DecodeJSON(w, r, &device); err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if device.MAC != "" {
+		bodyMAC, err := core.NormalizeMAC(device.MAC)
+		if err != nil || bodyMAC != mac {
+			core.WriteError(w, http.StatusBadRequest, "body MAC must match the device in the URL")
+			return
 		}
-		plan = buildPlan(current, cfg)
-		stored, applyErr = h.Applier.Save(cfg)
-		return nil
-	}); err != nil {
-		core.WriteError(w, http.StatusServiceUnavailable,
-			"timed out waiting for the apply lock: "+err.Error())
-		return
 	}
-
-	if applyErr != nil {
-		core.WriteJSON(w, http.StatusInternalServerError, applyResponse{
-			Plan:   plan,
-			Config: stored,
-			Error:  &core.ErrorBody{Message: applyErr.Error()},
-		})
-		return
-	}
-
-	// Only when something actually changed. Unlike an apply that touches the
-	// system, a no-op store is genuinely a no-op, so announcing it would wake
-	// every client to re-read identical bytes.
-	if !plan.Empty {
-		h.Events.Publish(core.Event{Type: core.EventApplied, Module: ModuleName})
-	}
-
-	core.WriteJSON(w, http.StatusOK, applyResponse{Plan: plan, Config: stored})
+	device.MAC = mac
+	h.mutate(w, r, func(cfg *Config) error { cfg.Upsert(device); return nil })
 }
 
-// --- one item at a time ----------------------------------------------------
+func (h HTTP) deleteDevice(w http.ResponseWriter, r *http.Request) {
+	mac, err := core.NormalizeMAC(r.PathValue("mac"))
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.mutate(w, r, func(cfg *Config) error { cfg.Remove(mac); return nil })
+}
 
 // groupBody is the body of PUT /groups/{name}. An omitted name means the one in
 // the path, so creating a group does not have to say it twice.
@@ -340,11 +317,16 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 		applyErr error
 		refused  error
 		invalid  Result
+		stale    bool
 	)
 	if err := h.Lock.Do(r.Context(), func() error {
 		current, err := h.Applier.Load()
 		if err != nil {
 			applyErr = err
+			return nil
+		}
+		if !core.MatchConfig(w, r, current) {
+			stale = true
 			return nil
 		}
 		desired := current.Clone()
@@ -366,6 +348,9 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 		return
 	}
 
+	if stale {
+		return
+	}
 	switch {
 	case refused != nil:
 		core.WriteError(w, statusFor(refused), refused.Error())

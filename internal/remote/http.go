@@ -133,7 +133,7 @@ func (h HTTP) getConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, cfg.Redacted())
+	core.WriteConfig(w, cfg, cfg.Redacted())
 }
 
 // endpointPatch is the only thing the module-level PATCH accepts.
@@ -188,6 +188,7 @@ func (h HTTP) patchConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	stale := false
 	var (
 		failed  error
 		invalid Result
@@ -200,6 +201,10 @@ func (h HTTP) patchConfig(w http.ResponseWriter, r *http.Request) {
 		cfg, err := h.Tunnel.Load()
 		if err != nil {
 			failed = err
+			return nil
+		}
+		if !core.MatchConfig(w, r, cfg) {
+			stale = true
 			return nil
 		}
 		previous := cfg.Clone()
@@ -227,6 +232,10 @@ func (h HTTP) patchConfig(w http.ResponseWriter, r *http.Request) {
 	}); lockErr != nil {
 		core.WriteError(w, http.StatusServiceUnavailable,
 			"timed out waiting for the apply lock: "+lockErr.Error())
+		return
+	}
+
+	if stale {
 		return
 	}
 

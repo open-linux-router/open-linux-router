@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api, ApiError } from '@/lib/api'
 import type { DeviceList, DevicesApplyResult, Plan } from '@/lib/api-types'
-import type { DevicesConfig } from '@/lib/config-types'
+import type { Device, DevicesConfig } from '@/lib/config-types'
 
 // Same polling story as features/dhcp/queries.ts: the UI asks again rather than
 // subscribing, because EventSource cannot carry an Authorization header. The
@@ -20,6 +20,7 @@ export function useDevicesConfig() {
   return useQuery({
     queryKey: deviceKeys.config,
     queryFn: () => api.get<DevicesConfig>('/api/devices/config'),
+    structuralSharing: false,
   })
 }
 
@@ -81,6 +82,15 @@ function useDevicesMutation<T>(fn: (vars: T) => Promise<DevicesApplyResult>) {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['devices'] })
     },
+  })
+}
+
+export function useSaveDevice() {
+  return useDevicesMutation(({ device, forget }: { device: Device; forget: boolean }) => {
+    const path = `/api/devices/devices/${encodeURIComponent(device.mac)}`
+    return forget
+      ? api.delete<DevicesApplyResult>(path)
+      : api.put<DevicesApplyResult>(path, device)
   })
 }
 

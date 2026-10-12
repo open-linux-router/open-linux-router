@@ -24,6 +24,7 @@ export function useForwardsConfig() {
   return useQuery({
     queryKey: forwardsKeys.config,
     queryFn: () => api.get<GatewayConfig>('/api/gateway/config'),
+    structuralSharing: false,
   })
 }
 

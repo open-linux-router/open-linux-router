@@ -183,7 +183,7 @@ func (h HTTP) getConfig(w http.ResponseWriter, r *http.Request) {
 	// form and the CLI prints to a terminal, and no caller needs the real value
 	// back — the only thing that reads it is the renderer, which loads the config
 	// itself.
-	core.WriteJSON(w, http.StatusOK, cfg.Redacted())
+	core.WriteConfig(w, cfg, cfg.Redacted())
 }
 
 func (h HTTP) getServiceIcon(w http.ResponseWriter, r *http.Request) {
@@ -382,6 +382,7 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 	}
 	confirm = confirm || forceConfirm
 
+	stale := false
 	var (
 		editErr  error
 		invalid  Result
@@ -397,6 +398,10 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 		cfg, err := h.Applier.Load()
 		if err != nil {
 			failed = err
+			return nil
+		}
+		if !core.MatchConfig(w, r, cfg) {
+			stale = true
 			return nil
 		}
 		if err := edit(&cfg); err != nil {
@@ -451,6 +456,10 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 	}); lockErr != nil {
 		core.WriteError(w, http.StatusServiceUnavailable,
 			"timed out waiting for the apply lock: "+lockErr.Error())
+		return
+	}
+
+	if stale {
 		return
 	}
 

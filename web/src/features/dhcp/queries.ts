@@ -24,6 +24,7 @@ export function useDhcpConfig() {
   return useQuery({
     queryKey: dhcpKeys.config,
     queryFn: () => api.get<DhcpConfig>('/api/dhcp/config'),
+    structuralSharing: false,
   })
 }
 

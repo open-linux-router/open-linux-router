@@ -20,6 +20,10 @@ export interface ErrorBody {
 /** Where the API token is kept. Only ever read and written here. */
 const TOKEN_KEY = 'olr.token'
 
+// Enumerable symbols survive an editor's object spread and are omitted by
+// JSON.stringify. Each draft carries the revision it was actually based on.
+const CONFIG_REVISION = Symbol('config revision')
+
 export function getToken(): string | null {
   try {
     return localStorage.getItem(TOKEN_KEY)
@@ -75,6 +79,10 @@ async function request<T>(method: string, path: string, body?: unknown, extraHea
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
   if (body !== undefined) headers['Content-Type'] = 'application/json'
+  if ((method === 'PUT' || method === 'PATCH') && body && typeof body === 'object') {
+    const revision = (body as { [CONFIG_REVISION]?: string })[CONFIG_REVISION]
+    if (revision && !headers['If-Match']) headers['If-Match'] = revision
+  }
 
   const response = await fetch(path, {
     method,
@@ -106,6 +114,11 @@ async function request<T>(method: string, path: string, body?: unknown, extraHea
       envelope ?? { message: `request failed (${response.status})` },
       parsed,
     )
+  }
+
+  const revision = response.headers.get('ETag')
+  if (method === 'GET' && revision && /\/config(?:\?|$)/.test(path) && parsed && typeof parsed === 'object') {
+    Object.assign(parsed, { [CONFIG_REVISION]: revision })
   }
 
   return parsed as T

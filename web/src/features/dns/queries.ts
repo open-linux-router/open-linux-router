@@ -27,6 +27,7 @@ export function useDnsConfig() {
   return useQuery({
     queryKey: dnsKeys.config,
     queryFn: () => api.get<DnsConfig>('/api/dns/config'),
+    structuralSharing: false,
   })
 }
 

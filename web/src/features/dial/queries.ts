@@ -46,6 +46,7 @@ export function useDialConfig() {
   return useQuery({
     queryKey: dialKeys.config,
     queryFn: () => api.get<DialConfig>('/api/dial/config'),
+    structuralSharing: false,
   })
 }
 

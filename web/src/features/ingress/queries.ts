@@ -29,6 +29,7 @@ export function useIngressConfig() {
   return useQuery({
     queryKey: ingressKeys.config,
     queryFn: () => api.get<IngressConfig>('/api/ingress/config'),
+    structuralSharing: false,
   })
 }
 

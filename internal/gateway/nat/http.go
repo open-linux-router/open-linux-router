@@ -187,6 +187,7 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 	}
 	confirm = confirm || forceConfirm
 
+	stale := false
 	var (
 		editErr  error
 		invalid  Result
@@ -204,6 +205,10 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 		cfg, err := h.Applier.Load()
 		if err != nil {
 			failed = err
+			return nil
+		}
+		if !core.MatchConfig(w, r, cfg) {
+			stale = true
 			return nil
 		}
 
@@ -248,6 +253,10 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 	}); err != nil {
 		core.WriteError(w, http.StatusServiceUnavailable,
 			"timed out waiting for the apply lock: "+err.Error())
+		return
+	}
+
+	if stale {
 		return
 	}
 

@@ -82,7 +82,7 @@ func (h HTTP) getSocksConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, cfg.Redacted().Socks)
+	core.WriteConfig(w, cfg, cfg.Redacted().Socks)
 }
 
 func (h HTTP) patchSocksConfig(w http.ResponseWriter, r *http.Request) {

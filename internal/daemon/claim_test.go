@@ -122,7 +122,7 @@ func TestAnUnreadableConfigFailsClosed(t *testing.T) {
 // exists for is olr on a box with a routable address, where the first thing to
 // find an open port is a scanner and not its owner.
 func TestOnlyTheLocalNetworkMayClaim(t *testing.T) {
-	h := system.HTTP{Applier: newApplier(t, unclaimed)}
+	h := system.HTTP{Applier: newApplier(t, unclaimed), Lock: core.NewLock()}
 
 	for _, tc := range []struct {
 		remote string

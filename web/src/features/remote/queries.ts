@@ -36,6 +36,7 @@ export function useRemoteConfig() {
   return useQuery({
     queryKey: remoteKeys.config,
     queryFn: () => api.get<RemoteConfig>('/api/remote/config'),
+    structuralSharing: false,
   })
 }
 
