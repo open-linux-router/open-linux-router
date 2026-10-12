@@ -19,8 +19,43 @@ stage where it is needed.
 | Diagnostic operation | What should I run? | Target, essential options and run action | Requirements and measurement scope |
 | Diagnostic result | What happened, and what next? | Outcome and decisive measurements | Evidence, limitations and a relevant next action |
 
-These are review rules for future pages, not a claim that every current page
-already meets the standard.
+Apply these rules to existing pages as well as new features. The page-by-page
+[review record](ui-page-review.md) documents the current baseline.
+
+## Simplification preserves data and consistency
+
+Reducing clutter does not mean reducing every data display. First remove repeated
+introductions, obvious instructions and duplicated labels. Then clarify grouping,
+ordering and state. Do not shrink metric cards, value typography or chart space
+to make a page appear quieter.
+
+- Keep the Overview's four metric cards, CPU, memory and uptime visible.
+- Keep download and upload limits beside their respective measurements; separate
+  controls serve separate decisions and are not automatically redundant.
+- Keep common configuration fields, addresses, counters and useful evidence
+  visible. Do not move them into disclosures solely to shorten a page.
+- Reuse existing headings, Card, ListRow, StatusStrip, fields and Dialog. Do not
+  invent a compact card, new density tier or special layout for each feature.
+- Disclose lengthy technical explanations and infrequently used advanced options.
+  Keep prerequisites and consequences beside the action they affect.
+- A page can pass review without a visible redesign. Preserve a coherent existing
+  presentation when its content already supports the user's task.
+
+## State and data contracts
+
+Distinguish loading, read failure, unknown, empty, disabled and healthy states.
+No response is not an empty rule set; saved configuration is not proof of a
+running service or end-to-end connectivity. Use neutral pending/unknown styling,
+an explicit error and a retry where useful. Name configuration counts as such.
+
+Show QoS as saved configuration until enforcement exists. Preserve diagnostic
+scope: router-originated tests do not measure a downstream device's path.
+Inspection requires explicit consent about credentials and certificate trust.
+Do not promise encrypted DNS blocking beyond the supported protocol and port.
+
+Use download then upload consistently. Device names may supplement an address
+only when the address uniquely identifies a device. Keep long domains, IPv6
+addresses and provider errors readable rather than silently truncating them.
 
 ## Disclosure and hierarchy
 

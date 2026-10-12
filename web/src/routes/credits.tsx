@@ -56,12 +56,11 @@ const web: Credit[] = [
   { name: '@types/node, @types/react & @types/react-dom', url: 'https://www.typescriptlang.org/docs/handbook/declaration-files/introduction.html', use: 'Development type definitions' },
 ]
 
-function CreditSection({ title, description, items }: { title: string; description: string; items: Credit[] }) {
+function CreditSection({ title, items }: { title: string; items: Credit[] }) {
   return (
     <section className="space-y-4" aria-label={title}>
       <div>
         <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
       <ul className="grid gap-x-8 sm:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => (
@@ -81,12 +80,12 @@ export function CreditsPage() {
       <div className="space-y-3">
         <Link to="/" className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">Back to Overview</Link>
         <h1 className="text-2xl font-semibold tracking-tight">Built on open work</h1>
-        <p className="max-w-2xl text-muted-foreground">Open Linux Router coordinates Linux services and open-source libraries rather than replacing them. Thank you to their maintainers and contributors.</p>
-        <p className="text-sm text-muted-foreground">Feature backends may be optional or installed separately. Package lists cover direct dependencies; their transitive dependencies and license details are in the project manifests.</p>
+        <p className="max-w-2xl text-muted-foreground">Thank you to the maintainers of the projects that make Open Linux Router possible.</p>
+        <p className="text-sm text-muted-foreground">Some backends are optional. Manifests contain full dependency and license information.</p>
       </div>
-      <CreditSection title="Feature backends & data" description="The tools and projects behind router features." items={backends} />
-      <CreditSection title="Go dependencies" description="Direct modules used by the daemon and CLI." items={go} />
-      <CreditSection title="Web dependencies & tooling" description="Direct packages behind the interface and its build." items={web} />
+      <CreditSection title="Feature backends & data" items={backends} />
+      <CreditSection title="Go dependencies" items={go} />
+      <CreditSection title="Web dependencies & tooling" items={web} />
       <p className="text-sm text-muted-foreground">See <a className="underline underline-offset-4" href="https://github.com/open-linux-router/open-linux-router/blob/main/go.mod" target="_blank" rel="noreferrer">go.mod</a> and <a className="underline underline-offset-4" href="https://github.com/open-linux-router/open-linux-router/blob/main/web/package.json" target="_blank" rel="noreferrer">web/package.json</a> for the current dependency lists.</p>
     </div>
   )

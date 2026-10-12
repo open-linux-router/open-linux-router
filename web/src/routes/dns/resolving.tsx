@@ -15,12 +15,12 @@ const MODE_OPTIONS: { value: Exclude<UpstreamMode, ''>; label: string; hint: str
   {
     value: 'recurse',
     label: 'Find answers itself',
-    hint: 'Asks the root servers directly. Nobody else sees everything your network looks up.',
+    hint: 'Resolves through the DNS hierarchy.',
   },
   {
     value: 'forward',
     label: 'Ask another server',
-    hint: 'Sends every lookup to the servers you name. Faster from cold, and the only way to use their filtering.',
+    hint: 'Forwards requests to the servers below.',
   },
 ]
 
@@ -78,7 +78,7 @@ export function DnsResolvingPage() {
           <SwitchField
             id="dns-tls"
             label="Encrypt the connection"
-            hint="Without this, every name your network looks up is visible to whoever carries the traffic — which is most of what choosing a particular server was meant to avoid."
+            hint="Use DNS over TLS to encrypt requests to the upstream servers."
             checked={upstream.tls ?? false}
             busy={busy}
             onChange={(tls) => set({ tls })}
@@ -92,7 +92,7 @@ export function DnsResolvingPage() {
               placeholder="cloudflare-dns.com"
               stored={upstream.tls_name ?? ''}
               onSave={(value) => set({ tls_name: value.trim() || undefined })}
-              hint="Without this the connection is encrypted but not verified — you cannot tell you are talking to the server you meant."
+              hint="Required to verify the upstream server. Blank encrypts the connection without verifying its identity."
             />
           )}
         </div>

@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { SubPage } from '@/components/layout/sub-page'
 import { StatusStrip } from '@/components/layout/status-strip'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Disclosure } from '@/components/ui/disclosure'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -87,19 +88,20 @@ export function IptvPage() {
   return (
     <SubPage section="/advanced" slug="iptv">
       <StatusStrip
-        headline={status.isError ? 'Cannot read IPTV status' : status.data?.enabled ? service?.active ? 'IGMP proxy running' : 'IPTV needs attention' : 'IPTV is off'}
-        detail={status.isError ? status.error.message : status.data?.enabled ? service?.active ? 'The proxy is running; this does not confirm a viewer has joined or that playback works.' : 'The proxy is not running; check the problem below.' : 'Nothing is sent from the IPTV interface to your LAN.'}
-        dot={status.isError ? 'bg-warning' : status.data?.enabled ? service?.active ? 'bg-success' : 'bg-warning' : 'bg-muted-foreground/40'}
+        headline={status.isPending ? 'Checking IPTV status…' : status.isError ? 'Cannot read IPTV status' : status.data?.enabled ? service?.active ? 'IGMP proxy running' : 'IPTV needs attention' : 'IPTV is off'}
+        detail={status.isPending ? 'Waiting for the router.' : status.isError ? status.error.message : status.data?.enabled ? service?.active ? 'The proxy is running; this does not confirm a viewer has joined or that playback works.' : 'The proxy is not running; check the problem below.' : 'Nothing is sent from the IPTV interface to your LAN.'}
+        dot={status.isPending ? 'bg-muted-foreground/40' : status.isError ? 'bg-warning' : status.data?.enabled ? service?.active ? 'bg-success' : 'bg-warning' : 'bg-muted-foreground/40'}
       />
       {links.isError && <Alert variant="destructive"><AlertTriangle /><AlertTitle>Cannot list interfaces</AlertTitle><AlertDescription>{links.error.message}</AlertDescription></Alert>}
       {status.data?.problem && <Alert variant="destructive"><AlertTriangle /><AlertTitle>Cannot forward IPTV</AlertTitle><AlertDescription>{status.data.problem}</AlertDescription></Alert>}
       {status.data?.enabled && status.data.plan && !status.data.plan.empty && <Alert><AlertTriangle /><AlertTitle>Settings need reapplying</AlertTitle><AlertDescription>{status.data.plan.changes?.join(', ')}</AlertDescription></Alert>}
       <Alert><Tv /><AlertTitle>Before you turn this on</AlertTitle><AlertDescription>
-        The IPTV interface must already exist, have an IPv4 address, and reach the provider's stream. IPv4 forwarding must be enabled. This only proxies routed multicast; it cannot create a VLAN, bridge the modem to the set-top box, or handle the provider's DHCP/authentication. Install igmpproxy on the router first (outside this page). An AP without IGMP snooping may slow Wi-Fi while a channel is playing.
+        Requires igmpproxy, IPv4 forwarding, and an IPTV interface with IPv4 access to the provider's stream. An AP without IGMP snooping may slow Wi-Fi during playback.
       </AlertDescription></Alert>
+      <Disclosure summary="IPTV scope"><p className="text-sm text-muted-foreground">Routes IPv4 multicast only. Configure VLANs and provider DHCP or authentication outside this page; it does not bridge the modem to a set-top box.</p></Disclosure>
 
       <section className="space-y-5 rounded-xl border bg-card p-5 sm:p-6">
-        <div className="space-y-1"><h2 className="font-semibold">Signal path</h2><p className="text-sm text-muted-foreground">Choose where IPTV enters and which LANs may subscribe. Other interfaces stay out of the proxy.</p></div>
+        <div className="space-y-1"><h2 className="font-semibold">Signal path</h2><p className="text-sm text-muted-foreground">Choose the upstream interface and subscribing LANs.</p></div>
         <div className="grid gap-5 sm:grid-cols-2">
           <label className="space-y-2 text-sm font-medium" htmlFor="iptv-upstream">IPTV upstream interface
             <select data-slot="select-trigger" id="iptv-upstream" value={draft.upstream ?? ''} onChange={(event) => edit({ ...draft, upstream: event.target.value })} className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">

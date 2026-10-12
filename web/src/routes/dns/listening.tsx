@@ -14,10 +14,10 @@ export function DnsListeningPage() {
         id="dns-listen"
         label="Listening on"
         busy={busy}
-        placeholder="every address this router holds"
+        placeholder="All router addresses (default)"
         stored={(config.listen ?? []).join(', ')}
         onSave={(value) => change({ ...config, listen: splitList(value) })}
-        hint="Leave this blank unless you have a reason not to: DNS then answers on every address this router holds, and keeps working when your network changes. Naming addresses here pins it to them, and they become yours to keep correct — if one stops existing, DNS stops. Use the firewall to control which networks can access DNS."
+        hint="Blank listens on all router addresses. A specified address must remain available or DNS may fail to start. Use the firewall to restrict access."
       />
     </SubPage>
   )

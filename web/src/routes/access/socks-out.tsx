@@ -40,13 +40,13 @@ export function SocksOutPage() {
       <Card>
         <CardHeader>
           <CardTitle>Proxy connection</CardTitle>
-          <CardDescription>{socksOutSummary(config, status).text} · IPv4 only · no SOCKS5 authentication yet</CardDescription>
+          <CardDescription>{socksOutSummary(config, status).text}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="max-w-xl space-y-2">
             <Label htmlFor="socks-out-proxy">SOCKS5 server</Label>
             <Input id="socks-out-proxy" disabled={config.isPending || config.isError || save.isPending} aria-describedby="socks-out-proxy-hint" value={draft ?? config.data?.proxy ?? ''} onChange={(e) => setDraft(e.target.value)} placeholder="socks5://192.0.2.10:1080" autoComplete="off" spellCheck={false} />
-            <p id="socks-out-proxy-hint" className="text-xs text-muted-foreground">Use an IP address and port. SOCKS5 credentials and hostnames are not supported yet.</p>
+            <p id="socks-out-proxy-hint" className="text-xs text-muted-foreground">IPv4 address and port only. Hostnames and authentication are not supported.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button disabled={save.isPending || config.isPending || config.isError || !(draft ?? config.data?.proxy)?.trim()} onClick={() => save.mutate({ enabled: true, proxy: (draft ?? config.data?.proxy)?.trim() })}>{save.isPending ? 'Applying…' : 'Save and start'}</Button>
@@ -55,7 +55,7 @@ export function SocksOutPage() {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Choose who uses it</CardTitle><CardDescription>Starting the proxy does not change any device's route. Add an interface exit for <code>olrsocks0</code>, then assign that exit to a network or device. IPv6 and backend failure block rather than bypass the proxy.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Choose who uses it</CardTitle><CardDescription>Starting does not change device routes. Create a way out through <code>olrsocks0</code> and assign it to a network or device. IPv6 and backend failure block rather than bypass the proxy.</CardDescription></CardHeader>
         <CardContent><Button variant="outline" nativeButton={false} render={<Link to="/gateway/exits">Open ways out</Link>} /></CardContent>
       </Card>
     </SubPage>

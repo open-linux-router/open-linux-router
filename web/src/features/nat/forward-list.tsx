@@ -16,8 +16,7 @@ export function ForwardList({
   if (forwards.length === 0) {
     return (
       <ListEmpty>
-        Nothing is being forwarded in. Add one to let something on the internet reach a device on
-        your network — a web server, a game, a camera.
+        No port forwards yet. Add a rule to publish a device port.
       </ListEmpty>
     )
   }
@@ -30,7 +29,8 @@ export function ForwardList({
           <ListRow
             key={f.name}
             title={f.name}
-            subtitle={describeForward(f, row)}
+            subtitle={describeForward(f)}
+            wrap
             trailing={row ? <ArrivedBadge row={row} /> : undefined}
             onSelect={() => onEdit(f)}
           />
@@ -63,15 +63,9 @@ const PROTOCOL_LABEL: Record<string, string> = {
   both: 'TCP+UDP',
 }
 
-function describeForward(f: Forward, row?: ForwardStatus): string {
+function describeForward(f: Forward): string {
   const proto = PROTOCOL_LABEL[f.protocol ?? ''] ?? 'TCP'
   const hairpin = f.hairpin === false ? ' · not from inside' : ''
 
-  // The badge beside this row is `hidden sm:block`, so on a phone it is the only
-  // thing that would say nothing has ever arrived — which is the most
-  // operationally important fact on the screen and the worst one to drop at the
-  // width most people will read it at. Said in front of the subtitle, where it
-  // survives both the breakpoint and the truncation.
-  const quiet = row?.counted && row.packets === 0 ? 'Nothing has arrived · ' : ''
-  return `${quiet}${f.in} ${proto} ${f.port} → ${f.to}${hairpin}`
+  return `${f.in} ${proto} ${f.port} → ${f.to}${hairpin}`
 }

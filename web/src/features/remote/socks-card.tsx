@@ -62,8 +62,7 @@ export function SocksCard({
             <ProxyBadge status={status} />
           </CardTitle>
           <CardDescription>
-            An unencrypted proxy with a username and password. Clients reach the internet through
-            this router, and nothing on your network.
+            Unencrypted internet proxy with authentication; no access to your home network.
           </CardDescription>
           <CardAction className="flex items-center gap-2">
             {enabled && !missing && (
@@ -103,8 +102,7 @@ export function SocksCard({
             </p>
           ) : (
             <p>
-              Off. Turning it on generates a password and starts the server. By default it listens
-              inside WireGuard only, because SOCKS5 does not encrypt anything.
+              Starting generates a password. Listens inside WireGuard by default.
             </p>
           )}
 

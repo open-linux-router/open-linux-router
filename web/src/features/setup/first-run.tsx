@@ -56,8 +56,7 @@ export function FirstRun() {
       <CardHeader>
         <CardTitle>Finish setting up</CardTitle>
         <CardDescription>
-          This router is installed and running, and is not yet doing anything on
-          your network. Nothing here changes until you say so.
+          Choose the services this router should provide.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-1">
@@ -69,10 +68,10 @@ export function FirstRun() {
         <Step
           n={1}
           done={adopted.length > 0 && networks.length > 0}
-          title="Give this router an interface, and say what network it carries"
+          title="Configure an interface"
           detail={
             adopted.length === 0
-              ? 'Nothing can be served on an interface until you hand it over. Switching one on changes nothing by itself.'
+              ? 'Choose an interface, then configure its network.'
               : networks.length === 0
                 ? `${adopted.map((i) => i.name).join(', ')} — yours to configure. Now say what subnet it serves.`
                 : networks.map((n) => `${n.name} on ${n.members.join(', ')}`).join(' · ')
@@ -90,21 +89,21 @@ export function FirstRun() {
           // exists. Pointing somebody at it earlier sends them to an empty
           // select box.
           blocked={networks.length === 0}
-          title="Hand out addresses"
+          title="Set up an address range"
           // Not a one-click, unlike DNS below, and the reason is the trap
           // docs/install.md §4 spends two paragraphs on: the gateway and DNS a
           // range advertises default to *this* box, which is right when it is
           // your router and catastrophic when your old one still is. The form
           // asks; a button here could only guess.
-          detail="Choosing a network fills in a range. Check what it advertises if something else on this network is still your router."
+          detail="Check the advertised gateway and DNS if another router is still serving this network."
           action={{ to: '/gateway/dhcp/ranges', label: 'Set up a range' }}
         />
         <Step
           n={3}
           done={dns.data.enabled}
           blocked={adopted.length === 0}
-          title="Answer name lookups"
-          detail="Devices look names up through this router, so you can see what your network is asking for and block what it should not reach."
+          title="Enable DNS"
+          detail="Resolve and log DNS requests through OLR."
           action={{
             label: 'Turn on',
             // Safe as one click, where the range above is not: nothing uses

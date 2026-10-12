@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import { SubPage } from '@/components/layout/sub-page'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/disclosure'
 import { EditableField } from '@/components/ui/editable-field'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { ApplyOutcome, useDnsEditor } from '@/features/dns/editor'
@@ -55,6 +56,7 @@ export function DnsNamesPage() {
         <List>
           {hosts.map((h) => (
             <ListRow
+              wrap
               key={h.name}
               // The qualified name, not the stored relative one: this is the
               // string somebody is about to type into a browser.
@@ -79,18 +81,15 @@ export function DnsNamesPage() {
         busy={busy}
         placeholder={DEFAULT_LOCAL_DOMAIN}
         stored={config.local_domain ?? ''}
-        hint={
-          <>
-            Every name above gets this suffix. Leave it empty for{' '}
-            <span className="font-mono">{DEFAULT_LOCAL_DOMAIN}</span>, which is
-            reserved for exactly this and can never be sold as a real domain. The
-            bare name works too on devices handed this as their search domain —
-            that is the <span className="font-mono">domain</span> field on the
-            network's DHCP settings.
-          </>
-        }
+        hint={<>Suffix for local names. Default: <span className="font-mono">{DEFAULT_LOCAL_DOMAIN}</span>.</>}
         onSave={(value) => change({ ...config, local_domain: value.trim() || undefined })}
       />
+
+      <Disclosure summary="About local domains">
+        <p className="text-sm text-muted-foreground">
+          home.arpa is reserved for home networks. Bare names also resolve when DHCP advertises this suffix as the search domain.
+        </p>
+      </Disclosure>
 
       <HostDialog
         key={editing?.name ?? 'new'}

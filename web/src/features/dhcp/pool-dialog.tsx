@@ -102,8 +102,7 @@ export function PoolDialog({
         <DialogHeader>
           <DialogTitle>{editing ? `Edit ${initial.network}` : 'Add addresses'}</DialogTitle>
           <DialogDescription>
-            What a network hands out. IPv4 and IPv6 are set separately — a
-            network can do either, or both.
+            Configure IPv4 address allocation and IPv6 advertisements separately.
           </DialogDescription>
         </DialogHeader>
 

@@ -84,8 +84,7 @@ export function ProxyCard({
             <ProxyBadge status={status} />
           </CardTitle>
           <CardDescription>
-            An encrypted proxy. Clients reach the internet through this router, and nothing on
-            your network.
+            Encrypted internet proxy; no access to your home network.
           </CardDescription>
           <CardAction className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={() => setEditing(true)} disabled={applier.busy}>
@@ -132,8 +131,7 @@ export function ProxyCard({
             </p>
           ) : (
             <p>
-              Off. Turning it on generates a password and starts the server. Every client uses the
-              same link.
+              Starting generates a shared client password.
             </p>
           )}
 

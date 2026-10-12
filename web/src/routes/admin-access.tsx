@@ -24,7 +24,7 @@ export function AdminAccessPage() {
     onSuccess: () => { setToken(null); client.clear(); window.location.reload() },
   })
   return <div className="space-y-8">
-    <PageHeading title="Administrator access" description="Manage the password used to configure this router." back={{ to: '/', label: 'Network overview' }} />
+    <PageHeading title="Administrator access" back={{ to: '/', label: 'Network overview' }} />
     <Card>
       <CardHeader>
         <CardTitle>Password and sessions</CardTitle>

@@ -15,8 +15,8 @@ export function DnsEnforcementPage() {
 
       <SwitchField
         id="dns-hijack"
-        label="Redirect their lookups back here"
-        hint="Anything sent to another DNS server is answered by this router instead. Devices need no configuration and notice nothing."
+        label="Redirect external DNS"
+        hint="Redirect standard DNS requests on the selected networks to OLR."
         checked={hijack.enabled}
         busy={busy}
         onChange={(enabled) => set({ enabled })}
@@ -31,13 +31,13 @@ export function DnsEnforcementPage() {
             placeholder="lan0, lan1"
             stored={(hijack.interfaces ?? []).join(', ')}
             onSave={(value) => set({ interfaces: splitList(value) })}
-            hint="Comma separated, and required — leaving it blank does not mean 'everywhere', because that reading would capture your internet connection too."
+            hint="Required interface names, comma separated. Blank does not mean all networks."
           />
 
           <SwitchField
             id="dns-blockdot"
             label="Also block encrypted DNS"
-            hint="A device that cannot be redirected can still slip out over an encrypted connection. Blocking that makes it wait, give up, and fall back to this router."
+            hint="Block DNS over TLS on port 853. DNS over HTTPS is not blocked; clients may fail instead of falling back."
             checked={hijack.block_dot ?? false}
             busy={busy}
             onChange={(block_dot) => set({ block_dot })}

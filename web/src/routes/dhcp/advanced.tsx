@@ -12,12 +12,12 @@ export function DhcpAdvancedPage() {
 
       <EditableField
         id="dhcp-extra"
-        label="Extra dnsmasq configuration"
+        label="Custom dnsmasq configuration"
         busy={busy}
         multiline
         stored={config.extra_dnsmasq_conf ?? ''}
         onSave={(value) => change({ ...config, extra_dnsmasq_conf: value || undefined })}
-        hint="Directives the router writes itself are refused, so this cannot quietly override a setting above."
+        hint="OLR-managed directives cannot be overridden."
       />
     </SubPage>
   )

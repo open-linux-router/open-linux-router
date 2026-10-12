@@ -7,7 +7,6 @@ import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
@@ -64,11 +63,7 @@ export function ActivityCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>What your network looked up</CardTitle>
-        <CardDescription>
-          Every device on this network resolves through here, so this is what
-          they asked for — not a sample.
-        </CardDescription>
+        <CardTitle>DNS activity</CardTitle>
         <CardAction className="flex items-center gap-2">
           <Label htmlFor="dns-querylog" className="text-xs text-muted-foreground">
             Keep a log
@@ -123,7 +118,7 @@ export function ActivityCard({
                 if (!blockedOnly) setQueryLimit(Math.max(queryLimit, config.query_log.entries || 5000))
               }}
               className={cn(
-                'flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors',
+                'flex min-h-11 sm:min-h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors',
                 blockedOnly
                   ? 'border-primary/40 bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-accent/50',
@@ -188,7 +183,7 @@ function Segmented({ value, onChange }: { value: View; onChange: (next: View) =>
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            'rounded-[calc(var(--radius)-2px)] px-3 py-1.5 text-sm transition-colors',
+            'min-h-11 sm:min-h-9 rounded-md px-3 py-1.5 text-sm transition-colors',
             value === o.value
               ? 'bg-background font-medium shadow-sm'
               : 'text-muted-foreground hover:text-foreground',
@@ -235,10 +230,7 @@ function Counters({ stats, pending }: { stats?: DnsStats; pending: boolean }) {
       </div>
       {/* The counters reset when the relay does, and saying so beats implying a
           history the log does not have. */}
-      <p className="pt-2 text-xs text-muted-foreground">
-        Since {new Date(stats.since).toLocaleString()}, when the DNS server last
-        started.
-      </p>
+
     </div>
   )
 }
@@ -258,8 +250,8 @@ function Accounting({ stats, shown }: { stats?: DnsStats; shown: number }) {
   return (
     <div className="space-y-1 text-xs text-muted-foreground">
       <p>
-        The log holds {stats.held.toLocaleString()} of {stats.capacity.toLocaleString()} entries
-        {truncated && `, and this page has loaded the most recent ${shown.toLocaleString()}`}.
+        Counters since {new Date(stats.since).toLocaleString()} · Log: {stats.held.toLocaleString()} / {stats.capacity.toLocaleString()} entries
+        {truncated && ` · Latest ${shown.toLocaleString()} loaded`}
       </p>
       {(stats.dropped > 0 || stats.unparsed > 0) && (
         <p className="text-warning-foreground">
@@ -370,7 +362,7 @@ function QueryList({
     <div className="space-y-3">
       <ul className="divide-y overflow-hidden rounded-xl border">
         {shown.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE).map((q, i) => (
-          <li key={`${q.at}-${q.client}-${q.name}-${i}`} className="flex items-center gap-3 px-3 py-2">
+          <li key={`${q.at}-${q.client}-${q.name}-${i}`} className="flex flex-wrap items-center gap-3 px-3 py-2">
             {/* 24-hour regardless of locale, matching `olr dns queries`. A log
                 column has to be one fixed width or the names beside it stop
                 lining up, and a 12-hour clock wraps its AM onto a second line at
@@ -383,9 +375,9 @@ function QueryList({
                 hour12: false,
               })}
             </span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm">{q.name}</div>
-              <div className="truncate text-xs text-muted-foreground">
+            <div className="min-w-0 flex-[1_1_10rem]">
+              <div className="break-all text-sm">{q.name}</div>
+              <div className="break-all text-xs text-muted-foreground">
                 {q.client} · {q.type}
                 {q.answers?.length ? ` → ${q.answers.join(', ')}` : ''}
                 {q.upstream ? ` · DNS via ${q.upstream}` : ''}

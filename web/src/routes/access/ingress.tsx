@@ -132,19 +132,19 @@ export function IngressPage() {
 
       <StatusStrip
         headline={
-          !current.enabled
+          status.isError ? 'Cannot read service status' : status.isPending ? 'Checking service status…' : !current.enabled
             ? 'Off'
             : services.length === 0
               ? 'Nothing published yet'
-              : `Serving ${services.length} address${services.length === 1 ? '' : 'es'}`
+              : `${services.length} configured address${services.length === 1 ? '' : 'es'}`
         }
         detail={
-          current.enabled
-            ? 'Something on your network, reachable at a proper https:// address instead of an IP and a port number.'
+          status.isError ? status.error.message : current.enabled
+            ? 'Services require their own authentication.'
             : 'These addresses are saved but switched off, so none of them answers.'
         }
         dot={
-          !current.enabled
+          status.isError || status.isPending ? 'bg-muted-foreground/40' : !current.enabled
             ? 'bg-muted-foreground/40'
             : status.data?.binary_error
               ? 'bg-destructive'
@@ -171,11 +171,10 @@ export function IngressPage() {
           <CardDescription>
             {domain ? (
               <>
-                Each one answers under <span className="font-mono">{domain}</span> and is covered by
-                the same certificate.
+                <span className="font-mono">{domain}</span>
               </>
             ) : (
-              'Each one answers under the name your network already uses.'
+              'Set a domain to publish services.'
             )}
           </CardDescription>
           <CardAction>
@@ -251,7 +250,7 @@ function CertificateCard({
           {status && <CertBadge status={status} enabled={enabled} />}
         </CardTitle>
         <CardDescription>
-          One certificate covers every address here, so adding one later needs nothing.
+          Covers all published addresses.
         </CardDescription>
         <CardAction>
           <Button size="sm" variant="outline" onClick={onEdit}>
@@ -303,8 +302,7 @@ function ServiceList({
   if (services.length === 0) {
     return (
       <ListEmpty>
-        Nothing is published yet. Add one to reach something on your network — a dashboard, a NAS, a
-        media server — by name instead of by address and port.
+        No services published yet. Add a service and its target.
       </ListEmpty>
     )
   }
@@ -318,8 +316,9 @@ function ServiceList({
         return (
           <ListRow
             key={s.name}
-            title={s.name}
-            subtitle={describeService(s, domain)}
+            title={domain ? `${s.name}.${domain}${s.link_path ?? ''}` : s.name}
+            subtitle={describeService(s)}
+            wrap
             action={
               url ? (
                 // Opens the thing itself. A published address exists to be
@@ -347,11 +346,10 @@ function ServiceList({
   )
 }
 
-function describeService(s: Service, domain?: string): string {
+function describeService(s: Service): string {
   const where = s.upstream.device || s.upstream.host || '?'
   const scheme = s.upstream.scheme === 'https' ? ' over https' : ''
-  const address = domain ? `${s.name}.${domain}${s.link_path ?? ''}` : `${s.name}${s.link_path ?? ''}`
-  return `${address} → ${where}:${s.upstream.port}${scheme}`
+  return `→ ${where}:${s.upstream.port}${scheme}`
 }
 
 /**

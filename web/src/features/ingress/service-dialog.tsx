@@ -126,8 +126,7 @@ export function ServiceDialog({
         <DialogHeader>
           <DialogTitle>{editing ? `Edit ${initial.name}` : 'Publish a service'}</DialogTitle>
           <DialogDescription>
-            Reach something on your network at a proper https:// address, with no port number and no
-            certificate warning.
+            Publish a network service at an HTTPS domain.
           </DialogDescription>
         </DialogHeader>
 

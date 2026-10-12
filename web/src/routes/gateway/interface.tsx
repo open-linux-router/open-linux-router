@@ -63,7 +63,7 @@ export function GatewayInterfacePage() {
 
     <section className="space-y-2">
       <h2 className="text-lg font-medium">Management</h2>
-      <p className="text-sm text-muted-foreground">Allow this router to configure this interface. Switching it on alone does not change its address.</p>
+      <p className="text-sm text-muted-foreground">Allow OLR to configure this interface. Enabling management alone does not change its address.</p>
       <InterfacesCard dhcp={dhcp.data} only={row.name} />
     </section>
 
@@ -81,7 +81,7 @@ export function GatewayInterfacePage() {
     {network && gateway.config && <Card>
       <CardHeader><CardTitle>Internet via</CardTitle></CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-sm text-muted-foreground">Where devices on {network.name} go. {observed?.reason || (assignment ? 'This interface has its own route.' : 'Following the Gateway default.')}</p>
+        <p className="text-sm text-muted-foreground">{observed?.reason || (assignment ? 'Interface override' : 'Following the Gateway default.')}</p>
         <Select value={assignment ? assignment.exit || DIRECT : INHERIT} disabled={gateway.busy} onValueChange={(value) => {
           if (!value || value === INHERIT) {
             if (assignment) gateway.change(gatewayChange.removeAssignment(row.name))

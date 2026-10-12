@@ -17,9 +17,7 @@ export function ExitList({
       <ListEmpty>
         {/* docs/gateway.md §10: the empty state should guide, and it is where
             the SOCKS5 question gets answered before somebody tries it. */}
-        Nothing here yet. Add the box or connection you want traffic to go
-        through. A SOCKS5 or HTTP proxy on its own cannot be used — it only
-        carries traffic that knows to ask it.
+        No ways out yet. Add an interface or gateway. An external proxy needs a routing interface first.
       </ListEmpty>
     )
   }
@@ -33,7 +31,8 @@ export function ExitList({
             key={e.name}
             title={e.name}
             subtitle={describeExit(e, row)}
-            trailing={row ? <HealthBadge row={row} /> : undefined}
+            wrap
+            trailing={e.via.kind === 'blocked' ? <Badge variant="secondary">Blocking</Badge> : row ? <HealthBadge row={row} /> : <Badge variant="secondary">Status unknown</Badge>}
             onSelect={() => onEdit(e)}
           />
         )
@@ -64,11 +63,5 @@ function describeExit(e: Exit, row?: ExitStatus): string {
         ? ` · DNS ${e.dns.server}`
         : ' · DNS via OLR'
 
-  // The badge beside this row is `hidden sm:block`, so on a phone it is the
-  // only thing that would say an exit has stopped working — which is the most
-  // operationally important fact on the screen and the worst one to drop at the
-  // width most people will read it at. Said in the subtitle too, where it
-  // survives, rather than only in the badge.
-  const down = row && row.probed && !row.up ? 'Not responding · ' : ''
-  return down + where + dns + used
+  return where + dns + used
 }

@@ -81,8 +81,7 @@ export function HostDialog({
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit name' : 'Add name'}</DialogTitle>
           <DialogDescription>
-            A name this network answers for itself, so a device can be reached by
-            name instead of by an address somebody has to remember.
+            Resolve a local name to the specified addresses.
           </DialogDescription>
         </DialogHeader>
 

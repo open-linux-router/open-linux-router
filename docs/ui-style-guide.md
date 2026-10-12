@@ -17,6 +17,11 @@ phones, a cramped six-section navigation and inconsistent color meanings.
 The shared shell, heading, list and control primitives now define the baseline.
 Use them before creating page-specific styling.
 
+Content cleanup must preserve existing data space and component consistency.
+Remove redundant wording before changing density. Keep established metric cards,
+charts and common fields; avoid introducing extra presentation variants for
+secondary information. See the [page review record](ui-page-review.md).
+
 ## Color and surfaces
 
 Use semantic Tailwind tokens from `web/src/index.css`, never page-local gray or

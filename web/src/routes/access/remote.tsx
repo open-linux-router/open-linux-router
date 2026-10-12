@@ -160,7 +160,7 @@ export function RemotePage() {
         <CardHeader>
           <CardTitle>WireGuard devices</CardTitle>
           <CardDescription>
-            One entry per device. Each has its own key, so removing one leaves the others alone.
+            Each device has its own key.
           </CardDescription>
           <CardAction>
             <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
@@ -270,12 +270,9 @@ function ReachCard({ status, onEdit }: { status?: RemoteStatus; onEdit: () => vo
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <WayMark way="wireguard" fallback={KeyRound} className="size-4" />
-          WireGuard
+          Connection settings
           {status && !status.endpoint && <Badge variant="destructive">Not set</Badge>}
         </CardTitle>
-        <CardDescription>
-          Server settings. Every device&rsquo;s configuration is generated from these.
-        </CardDescription>
         <CardAction>
           <Button size="sm" variant="outline" onClick={onEdit}>
             Settings
@@ -291,8 +288,7 @@ function ReachCard({ status, onEdit }: { status?: RemoteStatus; onEdit: () => vo
           </p>
         ) : (
           <p>
-            No public address is set, so no device can be given a working configuration yet. Set
-            it in Settings — it is the one value this router cannot work out for itself.
+            Set a public address before generating device configurations.
           </p>
         )}
         {status?.public_key && (

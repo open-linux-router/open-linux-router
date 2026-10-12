@@ -1,4 +1,5 @@
 import { Activity, ArrowDown, ArrowLeft, ArrowUp } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 
@@ -51,22 +52,20 @@ export function DevicePage() {
               <p className="text-sm text-muted-foreground">{traffic.isError ? 'Traffic counters are unavailable right now.' : 'Traffic counting is off or unavailable.'}</p>
             )}
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Counts start when usage counting is enabled. They cover traffic forwarded by this router, not traffic between devices on the same network. Shared or changing IP addresses can affect attribution.
+              Forwarded traffic since counting started. Same-network traffic is excluded; shared or changing IPs may affect attribution.
             </p>
             <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/gateway/usage">Usage settings</Link>} />
           </CardContent>
         </Card>
       } />
 
-      <DevicePolicy mac={device.mac} />
-
       <Card>
         <CardHeader><CardTitle>DNS queries from this device</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Names this device asked OLR to resolve, not proof it visited them. Only queries from its currently observed IP addresses among the latest 200 network-wide entries are shown. Private DNS and earlier addresses may be missing.
+            Queries matching current device IPs in the latest 200 network-wide entries. Private DNS and previous IPs may be missing; a query does not prove a visit.
           </p>
-          <div className="grid gap-2 sm:max-w-sm"><label htmlFor="device-dns-filter" className="text-sm font-medium">Filter queries</label><input id="device-dns-filter" className="h-9 rounded-md border bg-background px-3 text-sm" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Name, answer, type or result" /></div>
+          <div className="grid gap-2 sm:max-w-sm"><label htmlFor="device-dns-filter" className="text-sm font-medium">Filter queries</label><Input id="device-dns-filter" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Name, answer, type or result" /></div>
           {dnsQueries.isError ? (
             <p className="text-sm text-muted-foreground">The DNS query log is unavailable. The resolver may be stopped.</p>
           ) : dnsQueries.isPending ? (
@@ -79,13 +78,15 @@ export function DevicePage() {
             <ul className="max-h-80 divide-y overflow-y-auto rounded-xl border">
               {shownQueries.map((q, i) => <li key={`${q.at}-${q.client}-${q.name}-${i}`} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
                 <time dateTime={q.at} className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{new Date(q.at).toLocaleTimeString()}</time>
-                <span className="min-w-0 flex-1 break-all">{q.name}<span className="ml-2 text-xs text-muted-foreground">{q.type}</span></span>
-                {q.blocked ? <Badge variant="destructive">Blocked{q.policy ? ` · ${q.policy}` : ''}</Badge> : q.rcode !== 'NOERROR' ? <Badge variant="warning">{q.rcode}</Badge> : q.answers?.length ? <DnsAnswers answers={q.answers} /> : <span className="text-xs text-muted-foreground">No answer</span>}
+                <span className="min-w-0 flex-[1_1_10rem] break-all">{q.name}<span className="ml-2 text-xs text-muted-foreground">{q.type}</span></span>
+                {q.blocked ? <Badge variant="secondary">Blocked{q.policy ? ` · ${q.policy}` : ''}</Badge> : q.rcode !== 'NOERROR' ? <Badge variant="warning">{q.rcode}</Badge> : q.answers?.length ? <DnsAnswers answers={q.answers} /> : <span className="text-xs text-muted-foreground">No answer</span>}
               </li>)}
             </ul>
           )}
         </CardContent>
       </Card>
+
+      <DevicePolicy mac={device.mac} />
 
       <DeviceInspection key={device.mac} mac={device.mac} addresses={device.ips ?? []} />
     </div>

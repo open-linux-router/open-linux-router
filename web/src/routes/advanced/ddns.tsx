@@ -62,19 +62,19 @@ export function DdnsPage() {
     <SubPage section="/advanced" slug="ddns">
       <StatusStrip
         headline={
-          records.length === 0
+          status.isError ? 'Cannot read update status' : status.isPending ? 'Checking update status…' : records.some((r) => !states.has(r.name)) ? 'Update status unknown' : records.length === 0
             ? 'No names yet'
             : failing.length > 0
               ? `${failing.length} of ${records.length} not up to date`
               : `Keeping ${records.length} name${records.length === 1 ? '' : 's'} current`
         }
         detail={
-          records.length === 0
+          status.isError ? status.error.message : records.length === 0
             ? 'Add a name you own and this router will keep it pointing at your address.'
-            : 'Each name is checked on its own timer and updated at the provider only when your address changes.'
+            : 'Updates when the observed public address changes.'
         }
         dot={
-          records.length === 0
+          status.isError || status.isPending || records.some((r) => !states.has(r.name)) ? 'bg-muted-foreground/40' : records.length === 0
             ? 'bg-muted-foreground/40'
             : failing.length > 0
               ? 'bg-warning'
@@ -101,8 +101,7 @@ export function DdnsPage() {
 
         {records.length === 0 ? (
           <ListEmpty>
-            No names yet. Remote access and port forwards both need one unless your address never
-            changes.
+            No names configured.
           </ListEmpty>
         ) : (
           <List>
@@ -112,8 +111,9 @@ export function DdnsPage() {
                 <ListRow
                   key={r.name}
                   title={r.name}
+                  wrap
                   subtitle={describe(r, s)}
-                  trailing={<RecordBadge status={s} />}
+                  trailing={<RecordBadge status={status.isError ? undefined : s} />}
                   onSelect={() => setEditing(r)}
                 />
               )

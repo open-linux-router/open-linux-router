@@ -96,8 +96,7 @@ export function ServedNetworksContent() {
           <div className="space-y-1">
             <h3 className="text-lg font-medium tracking-tight">Served networks</h3>
             <p className="max-w-prose text-sm text-muted-foreground">
-              A network names its interface and subnet. DHCP has one IPv4 range per network,
-              plus optional IPv6 address service. The router address exists even when DHCP is off.
+              Interface and subnet for each served network. Router addresses remain active when DHCP is off.
             </p>
           </div>
           <Button
@@ -114,8 +113,7 @@ export function ServedNetworksContent() {
 
         {editor.networks.length === 0 ? (
           <ListEmpty>
-            No networks yet. Add one to say what subnet this router serves — an address range
-            needs a network to sit in.
+            No networks yet. Add a network before configuring its DHCP range.
           </ListEmpty>
         ) : (
           <List>

@@ -41,8 +41,7 @@ export function SetupScreen() {
             Set up this router
           </CardTitle>
           <CardDescription>
-            Nothing has been configured yet, and until it is, this router will not accept
-            changes over the network.
+            Choose how administrators sign in before configuring the router.
           </CardDescription>
         </CardHeader>
 

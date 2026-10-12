@@ -127,8 +127,7 @@ export function ExitDialog({
         <DialogHeader>
           <DialogTitle>{editing ? `Edit ${initial.name}` : 'Add a way out'}</DialogTitle>
           <DialogDescription>
-            A way out is somewhere this router can hand your traffic to. Once it exists you can
-            send any network through it.
+            Choose where assigned devices send their traffic.
           </DialogDescription>
         </DialogHeader>
 
@@ -141,9 +140,6 @@ export function ExitDialog({
               placeholder="Proxy"
               onChange={(e) => field('name', e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              What you will call it on the network list. Anything you like.
-            </p>
           </div>
 
           <div className="space-y-1.5">

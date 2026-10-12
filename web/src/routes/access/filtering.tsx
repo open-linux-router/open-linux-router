@@ -1,27 +1,32 @@
 import { SubPage } from '@/components/layout/sub-page'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { ListEmpty } from '@/components/ui/list'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useForwardsStatus } from '@/features/nat/queries'
 
 export function FilteringPage() {
   const status = useForwardsStatus()
   const foreign = status.data?.foreign ?? []
+  const drops = foreign.some((rule) => rule.policy.toLowerCase() === 'drop')
 
   return (
     <SubPage section="/access" slug="filtering">
-      {foreign.length === 0 ? (
-        <ListEmpty>Nothing else on this box is filtering forwarded traffic.</ListEmpty>
+      {status.isError ? (
+        <Alert variant="destructive"><AlertTitle>Could not read filtering rules</AlertTitle><AlertDescription>{status.error.message}<Button variant="outline" size="sm" onClick={() => void status.refetch()}>Try again</Button></AlertDescription></Alert>
+      ) : status.isPending ? (
+        <Skeleton className="h-24 w-full" />
+      ) : !status.data?.known ? (
+        <Alert><AlertTitle>Filtering state unknown</AlertTitle><AlertDescription>External filtering could not be verified. Check the router's permissions.</AlertDescription></Alert>
+      ) : foreign.length === 0 ? (
+        <ListEmpty>No external forwarding chains were reported.</ListEmpty>
       ) : (
         <div className="space-y-3">
-          <pre className="overflow-auto rounded-xl border bg-card p-4 font-mono text-xs leading-relaxed">
-            {foreign
-              .map((f) => `${f.family} ${f.table}  chain ${f.chain}  policy ${f.policy}`)
-              .join('\n')}
+          <pre className="overflow-auto rounded-xl border bg-card p-4 font-mono text-sm leading-relaxed">
+            {foreign.map((f) => `${f.family} ${f.table}  chain ${f.chain}  policy ${f.policy}`).join('\n')}
           </pre>
-          <p className="text-[0.8rem] text-muted-foreground">
-            It may well be accepting this traffic already — olr cannot tell, because in nftables a
-            drop is final and nothing records what did not happen. The count beside each forward is
-            what settles it.
-          </p>
+          {drops && <Alert><AlertTitle>External drop policy</AlertTitle><AlertDescription>These chains may block forwarded traffic. OLR cannot override a drop in another chain.</AlertDescription></Alert>}
+          <p className="text-sm text-muted-foreground">Chain policies do not describe every rule. Forward counters show matching traffic, not proof that the destination is reachable.</p>
         </div>
       )}
     </SubPage>

@@ -5,7 +5,8 @@ import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Disclosure } from '@/components/ui/disclosure'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { api } from '@/lib/api'
 
 interface Event {
@@ -52,6 +53,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
   })
   const [selected, setSelected] = useState<Event | null>(null)
   const [showQR, setShowQR] = useState(false)
+  const [preparing, setPreparing] = useState(false)
   const [viewerReady, setViewerReady] = useState(false)
   const caURL = `${window.location.origin}/download/inspection-ca.crt`
   const caQR = useMemo(() => {
@@ -89,41 +91,53 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
     <div className="border-b bg-muted/40 px-5 py-5 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Advanced · private by default</p>
           <h2 id="inspection-title" className="text-xl font-semibold tracking-tight">Inspect network requests</h2>
         </div>
-        <Badge variant={mine ? 'warning' : 'outline'}>{mine ? 'On' : 'Off'}</Badge>
+        <Badge variant={mine ? 'warning' : 'outline'}>{status.isPending ? 'Checking…' : status.isError ? 'Unknown' : mine ? 'On' : active ? 'Another device' : 'Off'}</Badge>
       </div>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Inspect this device's network requests without choosing an address. It automatically turns off after 15 minutes. Inspect requests here, or open the built-in mitmweb viewer for full request and response bodies. Full bodies remain in mitmweb memory for this session and are cleared on stop.
+        Inspect supported IPv4 HTTP/HTTPS requests for up to 15 minutes. Captured data may contain credentials; session data is cleared on stop.
       </p>
     </div>
     <div className="space-y-5 p-5 sm:p-7">
       {status.isError ? <p role="alert" className="text-sm text-destructive">Inspection status is unavailable. Do not assume interception has stopped.</p> : null}
       {active && !mine ? <p className="text-sm text-muted-foreground">Another device is being inspected. Stop that session before starting this one.</p> : null}
+      {(mine || status.data?.ca_present) && <Disclosure summary="Certificate setup and cleanup">
       <div className="grid gap-4 text-sm text-muted-foreground md:grid-cols-3">
         <p><strong className="block text-foreground">1. Prepare</strong>Install mitmproxy (mitmweb) on the router. OLR handles this device's observed addresses automatically; IPv6 traffic is not intercepted.</p>
         <p><strong className="block text-foreground">2. Trust CA for HTTPS</strong>Start once to generate the CA, then install and explicitly enable full trust for the downloaded certificate in iPhone Settings → General → About → Certificate Trust Settings. Do not install its private key. HTTP works without a CA.</p>
         <p><strong className="block text-foreground">3. Stop and remove trust</strong>Stopping or timeout clears the session and restores normal forwarding. Your device still trusts the CA until you remove it in device settings.</p>
       </div>
+      </Disclosure>}
       {ipv4.length === 0 && !active && <p className="text-sm text-muted-foreground">OLR has not observed an IPv4 address for this device yet. Connect it to the network and refresh this page to enable inspection.</p>}
       {ipv4.length > 8 && !active && <p className="text-sm text-muted-foreground">Too many addresses are associated with this device to start inspection safely.</p>}
-      {mine && <p className="text-xs font-medium">Upstream {status.data?.exit_routed ? 'via device exit' : 'via router default'}</p>}
+      {mine && <p className="text-sm">{status.data?.expires ? `Stops at ${new Date(status.data.expires).toLocaleTimeString()}` : 'Stop time unavailable'} · Upstream {status.data?.exit_routed ? 'via device exit' : 'via router default'}</p>}
       {status.data?.ca_sha256 && <p className="max-w-sm break-all font-mono text-xs text-muted-foreground">Router CA SHA-256: {status.data.ca_sha256.match(/../g)?.join(':')}</p>}
       <div className="flex flex-wrap gap-2">
         {mine ? <Button variant="destructive" disabled={stop.isPending} onClick={() => stop.mutate()}>Turn off</Button>
-          : <Button disabled={Boolean(active) || ipv4.length === 0 || ipv4.length > 8 || start.isPending || status.isPending || status.isError} onClick={() => start.mutate()}>Turn on</Button>}
-        <Button variant="outline" disabled={!status.data?.ca_present} onClick={downloadCA}>Download public CA</Button>
-        <Button variant="outline" disabled={!status.data?.ca_present} onClick={() => setShowQR(true)}>Show CA QR</Button>
+          : <Button disabled={Boolean(active) || ipv4.length === 0 || ipv4.length > 8 || start.isPending || status.isPending || status.isError} onClick={() => setPreparing(true)}>Start inspection</Button>}
+        {status.data?.ca_present && <>
+          <Button variant="outline" onClick={downloadCA}>Download public CA</Button>
+          <Button variant="outline" onClick={() => setShowQR(true)}>Show CA QR</Button>
+        </>}
       </div>
-      {mine && <div className="space-y-3 rounded-lg border p-3 text-sm">
-        <p className="font-medium">Full request and response inspection</p>
-        {viewerReady ? <iframe title="Full request and response inspection" src="/inspection-web/" className="h-[75vh] min-h-[480px] w-full rounded border bg-white" />
-          : <p className="text-muted-foreground">Opening the inspection viewer…</p>}
-      </div>}
-      <p className="text-xs leading-relaxed text-muted-foreground">
+
+      <Disclosure summary="Inspection scope">
+      <p className="text-sm leading-relaxed text-muted-foreground">
         TCP ports 80/443 to public destinations only. When this device has an explicit gateway exit, the inspection proxy's upstream connections follow that exit too, including Clash fake IPs (198.18.0.0/15). Without an explicit exit, fake IPs bypass inspection and keep their normal route. QUIC/HTTP/3 (UDP/443), IPv6, non-HTTP traffic, pinned certificates and apps that reject user CAs are not inspected. No UDP blocking is applied. An empty list does not mean no connections occurred. The CA private key stays on this router.
       </p>
+      </Disclosure>
+      <Dialog open={preparing} onOpenChange={setPreparing}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Start device inspection?</DialogTitle><DialogDescription>Captured requests and bodies may contain credentials. Inspection stops after 15 minutes.</DialogDescription></DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>Install mitmproxy (mitmweb) on this router first. Only supported IPv4 HTTP/HTTPS traffic is intercepted.</p>
+            <p>For HTTPS, explicitly trust the public CA on this device after starting. Remove that trust when finished; stopping inspection does not remove it.</p>
+            <p>The private CA key stays on the router. Session data is cleared on stop.</p>
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => setPreparing(false)}>Cancel</Button><Button disabled={start.isPending || status.isError || status.isPending || Boolean(active)} onClick={() => { setPreparing(false); start.mutate() }}>Start inspection</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={showQR} onOpenChange={setShowQR}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -159,6 +173,13 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
           </ul>
         </div>
       </div>}
+      {mine && <Disclosure summary="Full request and response viewer">
+        <div className="space-y-3 rounded-lg border p-3 text-sm">
+        <p className="font-medium">Full request and response inspection</p>
+        {viewerReady ? <iframe title="Full request and response inspection" src="/inspection-web/" className="h-[75vh] min-h-[480px] w-full rounded border bg-white" />
+          : <p className="text-muted-foreground">Opening the inspection viewer…</p>}
+      </div>
+      </Disclosure>}
       {mine && selected && <div className="space-y-2 rounded-xl border p-4 text-sm">
         <div className="flex justify-between gap-2"><h3 className="font-medium">Request details</h3><Button variant="ghost" size="sm" onClick={() => setSelected(null)}>Close</Button></div>
         <p className="break-all">{selected.method} {selected.url} · {selected.status}</p>

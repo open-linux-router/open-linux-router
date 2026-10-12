@@ -132,7 +132,7 @@ export function ToolPage({ tool }: { tool: ToolSlug }) {
   const definition = TOOL_DEFINITIONS.find(item => item.slug === tool)!
   const Content = { speedtest: SpeedTest, 'link-test': LinkTest, nat: NATTest, ping: PingTest, traceroute: TracerouteTest }[tool]
   return <div className="space-y-8">
-    <PageHeading id="tool-title" title={definition.label} description={definition.description} back={{ to: '/tools', label: 'Tools' }} />
+    <PageHeading id="tool-title" title={definition.label} back={{ to: '/tools', label: 'Tools' }} />
     <Content key={tool} />
   </div>
 }
@@ -206,7 +206,7 @@ function SpeedTest() {
                   {exits.map((item) => <SelectItem key={item.name} value={item.name}>{item.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Only this test uses the selected route. Network assignments stay unchanged.</p>
+              <p className="text-xs text-muted-foreground">Applies to this test only.</p>
               {exitUnavailable && <p className="text-xs text-destructive">This way out is no longer available. Choose another before testing.</p>}
               {gateway.isError && <p className="text-xs text-destructive">Could not load ways out. The router default route is still available.</p>}
             </div>
@@ -222,7 +222,7 @@ function SpeedTest() {
               {servers.isPending && <p className="text-xs text-muted-foreground">Finding reachable servers…</p>}
               {serverUnavailable && <p className="text-xs text-destructive">Refresh the server list or choose another server before testing.</p>}
               {servers.isError && <p className="text-xs text-destructive">Could not list servers: {servers.error.message}. Automatic selection is still available.</p>}
-              <p className="text-xs text-muted-foreground">Up to 20 reachable servers for this route. Pick one to compare results consistently.</p>
+              <p className="text-xs text-muted-foreground">Up to 20 reachable servers.</p>
             </div>
           </div>
           <Button onClick={run} disabled={running || gateway.isPending || exitUnavailable || serverUnavailable}>
@@ -371,7 +371,7 @@ function NATTest() {
 
 
   return <div className="space-y-6">
-      <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="tool-title">
+      <section className="rounded-xl border bg-card p-4 sm:p-6" aria-labelledby="tool-title">
         <div className="flex items-start gap-4">
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">Send UDP probes from this router over its default route to public STUN servers. This does not test a device behind the router or whether a game port is open.</p>
@@ -400,7 +400,7 @@ function NATTest() {
               <p className="mt-2 text-xs text-muted-foreground">Whether replies from another server IP or port get through. {filteringExplanation(natResult.filtering)}</p>
             </div>
           </dl>
-          <p className="text-xs text-muted-foreground">STUN server: <span className="font-mono">{natResult.server}</span>. This tests the router's own default-route UDP path, not a device behind it or a game's port. It cannot be translated into an Xbox or PlayStation NAT type.</p>
+          <p className="text-xs text-muted-foreground">STUN server: <span className="font-mono">{natResult.server}</span>. Results do not determine an Xbox or PlayStation NAT type.</p>
         </div>}
       </section>
   </div>

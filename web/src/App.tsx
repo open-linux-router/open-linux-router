@@ -130,9 +130,6 @@ function NotFound() {
   return (
     <div className="space-y-3 py-16 text-center">
       <h1 className="text-lg font-medium">Page not found</h1>
-      <p className="text-sm text-muted-foreground">
-        That address does not match anything in this app.
-      </p>
       {/* An error page with no way out is a dead end, which on a phone means
           reaching for the URL bar. */}
       <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/">Go to Overview</Link>} />

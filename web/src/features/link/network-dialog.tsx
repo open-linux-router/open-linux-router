@@ -112,9 +112,7 @@ export function NetworkDialog({
         <DialogHeader>
           <DialogTitle>{initial ? `Edit ${initial.name}` : 'Add network'}</DialogTitle>
           <DialogDescription>
-            A subnet and the interface it lives on. This router takes an address on it, and
-            everything else — address ranges, how it reaches the internet — is configured
-            against this network rather than against the interface.
+            Set the subnet and router address for an interface. DHCP and routing settings use this network.
           </DialogDescription>
         </DialogHeader>
 

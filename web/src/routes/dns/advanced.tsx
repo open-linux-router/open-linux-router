@@ -15,7 +15,7 @@ export function DnsAdvancedPage() {
 
       <EditableField
         id="dns-log-entries"
-        label="How many lookups to keep"
+        label="Query log capacity"
         busy={busy}
         placeholder="5000"
         stored={entries ? String(entries) : ''}
@@ -25,16 +25,13 @@ export function DnsAdvancedPage() {
             query_log: { ...config.query_log, entries: Number(value.trim()) || undefined },
           })
         }
-        hint="Blank for the default of 5000. A count rather than a length of time, because the log lives in memory and the number that matters is the one bounding it."
+        hint="Entries kept in memory. Default: 5,000."
       />
 
       <div className="space-y-3">
-        <Label htmlFor="dns-extra">Extra unbound configuration</Label>
+        <Label htmlFor="dns-extra">Custom Unbound configuration</Label>
         <p className="text-sm text-muted-foreground">
-          Settings this router does not model, passed straight through to
-          unbound. Kept here rather than hand-edited into the daemon's file, so
-          they stay part of your configuration and survive an upgrade.
-          Directives the router writes itself are refused.
+          OLR-managed directives cannot be overridden.
         </p>
         <EditableField
           id="dns-extra"

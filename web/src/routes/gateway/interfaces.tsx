@@ -199,7 +199,7 @@ export function GatewayInterfacesPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm font-medium">Internet via</p>
-              <p className="text-sm text-muted-foreground">Default route for devices on your networks. An interface can choose a different exit in its details.</p>
+              <p className="text-sm text-muted-foreground">Default for your networks. Override in interface details.</p>
               <Select value={config.default || DIRECT} disabled={busy} onValueChange={(v) => change(gatewayChange.settings({ default: !v || v === DIRECT ? '' : v }))}>
                 <SelectTrigger className="w-full" aria-label="Default internet route"><SelectValue>{(v: string) => v === DIRECT ? 'This router’s own connection' : v}</SelectValue></SelectTrigger>
                 <SelectContent><SelectItem value={DIRECT}>This router&rsquo;s own connection</SelectItem>{exits.map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>

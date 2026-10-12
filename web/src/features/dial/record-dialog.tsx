@@ -149,8 +149,7 @@ export function RecordDialog({
         <DialogHeader>
           <DialogTitle>{editing ? `Edit ${initial.name}` : 'Keep a name current'}</DialogTitle>
           <DialogDescription>
-            A public name that follows this router&rsquo;s address, so it keeps working when your
-            internet provider changes it.
+            Update a public DNS name when this router&rsquo;s address changes.
           </DialogDescription>
         </DialogHeader>
 

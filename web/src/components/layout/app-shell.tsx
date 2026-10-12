@@ -7,14 +7,6 @@ import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { TokenButton } from '@/components/layout/token-button'
 import { cn } from '@/lib/utils'
 
-const descriptions: Record<string, string> = {
-  '/': 'Your network, its connections and the router serving it.',
-  '/gateway': 'Interfaces, internet routes and the services on your network.',
-  '/firewall': 'Review the network boundary and the rules in force.',
-  '/access': 'Connect from home, reach your network remotely or publish a service.',
-  '/advanced': 'Additional services for your network.',
-}
-
 /** Width follows the task. Settings keep controls beside their explanations. */
 function contentWidth(path: string) {
   if (path === '/' || path === '/gateway' || path === '/firewall') return 'max-w-none'
@@ -55,7 +47,7 @@ export function AppShell() {
       </header>
       <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-6 outline-none sm:px-6 sm:py-8 xl:px-8">
         <div className={cn('space-y-8', contentWidth(pathname))}>
-          {landing && <PageHeading title={pathname === '/' ? 'Network overview' : section.label} description={descriptions[pathname]} />}
+          {landing && <PageHeading title={pathname === '/' ? 'Network overview' : section.label} />}
           <Outlet />
         </div>
       </main>

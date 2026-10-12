@@ -108,28 +108,30 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
     </header>
 
     <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
-      <Card><CardHeader><CardTitle>What the router knows</CardTitle></CardHeader><CardContent>
+      <Card><CardHeader><CardTitle>Device information</CardTitle></CardHeader><CardContent>
         <dl className="divide-y text-sm">
           <Fact label="Addresses" value={device.ips?.length ? device.ips.join(', ') : 'None observed'} mono />
+          <Fact label="Calls itself" value={device.hostname || 'Not reported'} />
+          <Fact label="Vendor" value={device.vendor || 'Unknown'} />
+          <Fact label="Network" value={device.network || 'Unknown'} />
+          <Fact label="Seen by" value={device.sources?.length ? device.sources.map((s) => s === 'dhcp-lease' ? 'DHCP lease' : s === 'arp' ? 'Network traffic' : s).join(', ') : 'Not observed'} />
+          <Fact label="Lease expires" value={device.expires ? new Date(device.expires).toLocaleString() : 'No expiring lease'} />
+        </dl>
+        <h2 className="mt-5 mb-2 text-base font-semibold">Device settings</h2>
+        <dl className="divide-y border-t text-sm">
           <div className="grid gap-1 py-2.5 sm:grid-cols-[9rem_1fr]"><dt className="text-muted-foreground">Fixed address</dt><dd>
             {editing === 'reservation' ? <div className="space-y-2"><Input autoFocus aria-label="Reserved IP address" value={ip} onChange={(e) => setIp(e.target.value)} placeholder="192.168.1.50" /><Input aria-label="Reservation hostname (optional)" value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="Hostname (optional)" /><div className="flex flex-wrap gap-2"><Button size="sm" disabled={!ip.trim() || !dhcp.data || dhcpApplier.busy} onClick={() => void saveReservation()}>Save</Button>{reservation && <Button size="sm" variant="destructive" disabled={dhcpApplier.busy} onClick={() => void saveReservation(true)}>Remove</Button>}<Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button></div></div>
               : <button type="button" disabled={!dhcp.data || dhcpApplier.busy} onClick={() => begin('reservation')} aria-label="Edit fixed address" className="group inline-flex items-center gap-2 text-left font-mono text-xs hover:text-primary">{device.fixed_ip || 'Reserve an address'}<Pencil className="size-3.5 opacity-60 group-hover:opacity-100" aria-hidden /></button>}
           </dd></div>
-          <Fact label="Calls itself" value={device.hostname || 'Not reported'} />
-          <Fact label="Vendor" value={device.vendor || 'Unknown'} />
-          <Fact label="Network" value={device.network || 'Unknown'} />
           <div className="grid gap-1 py-2.5 text-sm sm:grid-cols-[9rem_1fr]"><dt className="text-muted-foreground">Internet via</dt><dd>
             <Select value={exit} disabled={!gateway.data || gatewayApplier.busy} onValueChange={(v) => { if (v) void gatewayApplier.submit(v === INHERIT_EXIT ? gatewayChange.removeDevice(device.mac) : gatewayChange.device(device.mac, v === DIRECT_EXIT ? '' : v)) }}>
               <SelectTrigger aria-label="Change gateway route" className="h-auto w-full max-w-xs border-0 px-0 py-0 shadow-none"><SelectValue>{(v: string) => v === INHERIT_EXIT ? 'Follow network setting' : v === DIRECT_EXIT ? 'This router’s connection' : v}</SelectValue></SelectTrigger>
               <SelectContent><SelectItem value={INHERIT_EXIT}>Follow network setting</SelectItem><SelectItem value={DIRECT_EXIT}>This router’s connection</SelectItem>{(gateway.data?.exits ?? []).map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
             </Select>
           </dd></div>
-          <Fact label="Seen by" value={device.sources?.length ? device.sources.map((s) => s === 'dhcp-lease' ? 'DHCP lease' : s === 'arp' ? 'Network traffic' : s).join(', ') : 'Not observed'} />
-          <Fact label="Lease expires" value={device.expires ? new Date(device.expires).toLocaleString() : 'No expiring lease'} />
         </dl>
         <div className="mt-4 text-sm">{editing === 'notes' ? <div className="space-y-2"><Textarea autoFocus aria-label="Device notes" value={notes} onChange={(e) => setNotes(e.target.value)} /><div className="flex gap-2"><Button size="sm" disabled={identityBusy} onClick={() => save({ notes: notes.trim() || undefined })}>Save notes</Button><Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button></div></div>
           : <button type="button" disabled={identityBusy} onClick={() => begin('notes')} className="group inline-flex items-center gap-2 rounded-lg bg-muted/60 p-3 text-left">{device.notes || 'Add notes'}<Pencil className="size-3.5 text-muted-foreground opacity-60 group-hover:opacity-100" aria-hidden /></button>}</div>
-        <p className="mt-4 text-xs text-muted-foreground">Addresses and presence are observations, not settings. Click a setting to change it.</p>
       </CardContent></Card>
       {traffic}
     </div>

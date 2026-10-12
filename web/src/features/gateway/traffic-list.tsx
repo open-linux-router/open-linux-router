@@ -1,6 +1,7 @@
+import { Disclosure } from '@/components/ui/disclosure'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { GatewayTraffic, Usage } from '@/lib/api-types'
+import type { DeviceRow, GatewayTraffic, Usage } from '@/lib/api-types'
 import { formatBytes } from '@/lib/utils'
 
 export /**
@@ -12,7 +13,7 @@ export /**
  * number being *smaller* than expected, and the first question a surprising
  * number produces is "is this broken?".
  */
-function TrafficList({ traffic, enabled }: { traffic?: GatewayTraffic; enabled: boolean }) {
+function TrafficList({ traffic, enabled, devices = [] }: { traffic?: GatewayTraffic; enabled: boolean; devices?: DeviceRow[] }) {
   if (!enabled) {
     return <ListEmpty>Counting is off, so nothing is being recorded.</ListEmpty>
   }
@@ -36,15 +37,21 @@ function TrafficList({ traffic, enabled }: { traffic?: GatewayTraffic; enabled: 
     )
   }
 
+  const nameFor = (address: string) => {
+    const matches = devices.filter((device) => device.ips?.some((ip) => ip.toLowerCase() === address.toLowerCase()))
+    return matches.length === 1 ? matches[0].name : undefined
+  }
+
   return (
     <div className="space-y-4">
       <List>
         {traffic.usage.map((u) => (
           <ListRow
             key={`${u.address}/${u.exit}/${u.unknown ?? false}`}
-            title={u.address}
-            subtitle={describeUsageExit(u)}
-            trailing={`${formatBytes(u.up_bytes)} up · ${formatBytes(u.down_bytes)} down`}
+            title={nameFor(u.address) || u.address}
+            wrap
+            subtitle={[nameFor(u.address) ? u.address : undefined, describeUsageExit(u)].filter(Boolean).join(' · ')}
+            trailing={`${formatBytes(u.down_bytes)} down · ${formatBytes(u.up_bytes)} up`}
           />
         ))}
       </List>
@@ -58,8 +65,8 @@ function TrafficList({ traffic, enabled }: { traffic?: GatewayTraffic; enabled: 
         </p>
       ) : null}
       {traffic.limits?.length ? (
-        <div className="text-[0.8rem] text-muted-foreground">
-          <p className="font-medium">What these numbers do not include</p>
+        <Disclosure summary="Accounting limits">
+          <div className="text-sm text-muted-foreground">
           <ul className="mt-1 space-y-1">
             {traffic.limits.map((l) => (
               <li key={l} className="flex gap-2">
@@ -68,7 +75,8 @@ function TrafficList({ traffic, enabled }: { traffic?: GatewayTraffic; enabled: 
               </li>
             ))}
           </ul>
-        </div>
+          </div>
+        </Disclosure>
       ) : null}
     </div>
   )

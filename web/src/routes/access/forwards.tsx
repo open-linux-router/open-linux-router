@@ -38,33 +38,30 @@ export function ForwardsPage() {
       {status.data && !status.data.known && (
         <Alert>
           <AlertTriangle />
-          <AlertTitle>These forwards are saved but not in force</AlertTitle>
+          <AlertTitle>Forwarding status unknown</AlertTitle>
           <AlertDescription>
-            This router could not read its own NAT rules, so nothing below is actually
-            running. On Linux this usually means the daemon is missing permission to change them.
+            The router could not read its NAT rules. Saved configuration does not confirm which forwards are running.
           </AlertDescription>
         </Alert>
       )}
 
       <StatusStrip
         headline={
-          !config.enabled
+          status.isError ? 'Cannot read forwarding status' : status.isPending ? 'Checking forwarding status…' : !status.data?.known ? 'Forwarding status unknown' : !config.enabled
             ? 'Off'
             : forwards.length === 0
               ? 'Nothing is forwarded in'
-              : `${forwards.length} port${forwards.length === 1 ? '' : 's'} open from the internet`
+              : `${forwards.length} configured forward${forwards.length === 1 ? '' : 's'}`
         }
         detail={
-          config.enabled
-            ? 'Something on the internet connects to this router on a port, and reaches one device on your network instead.'
+          status.isError ? status.error.message : config.enabled
+            ? 'Maps router ports to devices. Upstream NAT and firewall rules may still prevent access.'
             : 'The Gateway module is switched off, so nothing from outside is reaching a device here. That one switch also stops this router\u2019s routing policy.'
         }
         dot={
-          !config.enabled
+          status.isError || status.isPending || !status.data?.known ? 'bg-muted-foreground/40' : !config.enabled
             ? 'bg-muted-foreground/40'
-            : status.data?.known === false
-              ? 'bg-warning'
-              : 'bg-success'
+            : 'bg-success'
         }
         control={{
           id: 'gateway-enabled',

@@ -74,8 +74,8 @@ export const SECTIONS: Section[] = [
     groups: [
       {
         slug: 'interfaces',
-        label: 'Advanced interfaces and routing',
-        blurb: 'All interfaces, forwarding, routing diagnostics and less common routing settings.',
+        label: 'Interfaces & routing',
+        blurb: '',
       },
       {
         slug: 'dhcp',
@@ -91,20 +91,20 @@ export const SECTIONS: Section[] = [
         slug: 'exits',
         label: 'Ways out',
         blurb:
-          'Somewhere this router can hand traffic to — another box on your network, a VPN or proxy connection, or nowhere at all.',
+          'Choose an interface, another gateway or a blocking route.',
       },
       {
         slug: 'usage',
         label: 'Usage',
-        blurb: 'How much each device has sent and received since this router started.',
+        blurb: 'Traffic forwarded through this router.',
       },
       {
         slug: 'unmanaged',
-        label: 'Routing this router does not manage',
+        label: 'External routing rules',
         // design.md §3.4: pretending we are the only actor is a bug. Somebody
         // else's rules are shown so a hand-rolled setup is legible rather than
         // mysterious.
-        blurb: 'Rules another program put in place. olr leaves them alone.',
+        blurb: 'Read-only rules outside OLR management.',
       },
     ],
   },
@@ -115,25 +115,25 @@ export const SECTIONS: Section[] = [
     nested: true,
     end: false,
     groups: [
-      { slug: 'details', label: 'DHCP status and settings', blurb: 'Service diagnostics, ranges, reservations and detailed DHCP settings.' },
+      { slug: 'details', label: 'DHCP', blurb: '' },
       {
         slug: 'ranges',
         label: 'Address ranges',
         blurb:
-          'The addresses this router hands out on each network. Leave a range blank and it is derived from the network\u2019s subnet, keeping the low addresses free for devices you configure by hand.',
+          'Addresses handed out on each network.',
       },
       {
         slug: 'reservations',
         label: 'Reserved addresses',
         blurb:
-          'Devices that should always get the same address — printers, a NAS, anything you reach by address rather than by name.',
+          'Fixed DHCP addresses for selected devices.',
       },
       // Interface adoption stays under Gateway / Interfaces; served networks are beside DHCP.
       {
         slug: 'advanced',
         label: 'Advanced',
         blurb:
-          "Settings this router does not model, passed straight through to dnsmasq. Kept here rather than hand-edited into the daemon's file, so they stay part of your configuration.",
+          'Custom dnsmasq settings. OLR-managed directives cannot be overridden.',
       },
     ],
   },
@@ -144,40 +144,40 @@ export const SECTIONS: Section[] = [
     nested: true,
     end: false,
     groups: [
-      { slug: 'details', label: 'DNS activity and advanced settings', blurb: 'Queries, observed service status and detailed resolver settings.' },
+      { slug: 'details', label: 'DNS', blurb: '' },
       {
         slug: 'blocking',
         label: 'Blocking',
         blurb:
-          'What each set of devices is allowed to look up. Anything blocked here never resolves, whatever app asked for it.',
+          'DNS blocking rules for selected devices and networks.',
       },
       {
         slug: 'names',
         label: 'Local names',
         blurb:
-          'Names this network answers for itself, so you can reach a device by name instead of by an address that DHCP may move.',
+          'Names resolved locally by this router.',
       },
       {
         slug: 'resolving',
-        label: 'How names get resolved',
-        blurb: 'Where this router goes to turn a name into an address.',
+        label: 'Upstream DNS',
+        blurb: '',
       },
       {
         slug: 'listening',
-        label: 'Where it answers',
-        blurb: 'Which addresses this router serves DNS on.',
+        label: 'DNS listening',
+        blurb: '',
       },
       {
         slug: 'enforcement',
-        label: 'Devices that ignore this router',
+        label: 'DNS enforcement',
         blurb:
-          'Handing out a DNS server is only advice. Browsers and phones routinely go straight to a public resolver instead — and when they do, nothing here applies to them and nothing here can see them.',
+          'Redirect external DNS requests on selected networks.',
       },
       {
         slug: 'advanced',
         label: 'Advanced',
         blurb:
-          'How much of the query log to keep, and settings this router does not model, passed straight through to unbound.',
+          '',
       },
     ],
   },
@@ -197,28 +197,28 @@ export const SECTIONS: Section[] = [
       {
         slug: 'socks5',
         label: 'External SOCKS5 proxy',
-        blurb: 'Connect selected home devices through an external SOCKS5 server, without changing their settings.',
+        blurb: '',
       },
       {
         slug: 'remote',
         label: 'Remote access',
-        blurb: 'Connect to your home network with WireGuard, or use its internet connection through Shadowsocks or SOCKS5.',
+        blurb: '',
       },
       {
         slug: 'ingress',
         label: 'Publish web services',
-        blurb: 'Reach selected services by name over HTTPS. Each service still needs its own access controls.',
+        blurb: 'Published services still need their own access controls.',
       },
       {
         slug: 'forwards',
         label: 'Port forwards',
-        blurb: 'Let something on the internet reach one device here. With the firewall on, a forward is also its own permission — there is nothing to open separately.',
+        blurb: 'Forwarding a port also grants its firewall permission.',
       },
       {
         // Reached from port forwards when foreign filtering exists.
         slug: 'filtering',
-        label: 'Filtering this router does not manage',
-        blurb: 'Another program on this box drops traffic passing through the router by default. olr cannot override that, so a forward may be correct and still not reach.',
+        label: 'External filtering',
+        blurb: 'Read-only forwarding policies outside OLR management.',
       },
     ],
   },
@@ -239,12 +239,12 @@ export const SECTIONS: Section[] = [
         slug: 'ddns',
         label: 'Dynamic DNS',
         blurb:
-          'Public names this router keeps pointing at itself, so they follow your address when your internet provider changes it.',
+          '',
       },
       {
         slug: 'iptv',
         label: 'IPTV multicast',
-        blurb: 'Let a set-top box on your LAN subscribe to routed IPv4 IPTV streams from a separate upstream interface. This does not bridge VLANs or relay the provider DHCP.',
+        blurb: '',
       },
     ],
   },
