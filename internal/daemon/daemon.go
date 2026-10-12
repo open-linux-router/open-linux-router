@@ -811,7 +811,7 @@ func run(args []string) error {
 	go superviseBackends(ctx, []backend{
 		dnsBackend(dnsApplier),
 		dhcpBackend(applier),
-	}, superviseEvery, logger)
+	}, srv.ApplyLock(), superviseEvery, logger)
 
 	go seen.Run(ctx, seenEvery, seenWrite)
 	go latency.Run(ctx)

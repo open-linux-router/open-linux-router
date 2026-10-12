@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
 )
@@ -69,7 +70,7 @@ type backend struct {
 // intent says should be running.
 //
 // Returns when ctx is done, so it dies with olrd rather than outliving it.
-func superviseBackends(ctx context.Context, backends []backend, every time.Duration, logger *slog.Logger) {
+func superviseBackends(ctx context.Context, backends []backend, lock *core.Lock, every time.Duration, logger *slog.Logger) {
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 
@@ -111,9 +112,19 @@ func superviseBackends(ctx context.Context, backends []backend, every time.Durat
 			if attempts[b.name] >= giveUpAfter {
 				continue
 			}
+			attempted, err := recoverBackend(ctx, b, lock)
+			if !attempted {
+				if err != nil {
+					logger.Debug("could not recheck a backend for recovery",
+						"module", b.name, "error", err)
+				} else {
+					delete(attempts, b.name)
+				}
+				continue
+			}
 			attempts[b.name]++
 
-			if err := b.start(ctx); err != nil {
+			if err != nil {
 				// Said at Error and named as what it is, because by the third
 				// one olr has stopped trying and the only thing that will fix
 				// this box is somebody reading this line.
@@ -131,6 +142,23 @@ func superviseBackends(ctx context.Context, backends []backend, every time.Durat
 				"module", b.name)
 		}
 	}
+}
+
+// recoverBackend rechecks eligibility after acquiring the same lock as API
+// writes. The earlier poll is only a hint: while waiting, an operator may have
+// disabled the backend or changed files so starting it is no longer safe.
+// Hold the lock through start's fresh config read and apply, which also saves
+// intent. Waiting or failing to read does not consume a restart attempt.
+func recoverBackend(ctx context.Context, b backend, lock *core.Lock) (attempted bool, err error) {
+	err = lock.Do(ctx, func() error {
+		pending, err := b.pending(ctx)
+		if err != nil || !pending {
+			return err
+		}
+		attempted = true
+		return b.start(ctx)
+	})
+	return attempted, err
 }
 
 // dnsBackend is the watch's view of the resolver.

@@ -5,6 +5,12 @@ object, validating cross-module references, planning and saving/applying the
 result. Bodies are read before taking the lock. GET and plan requests remain
 independent of the lock.
 
+The DHCP/DNS background recovery watch uses the same lock. Its initial poll is
+only a hint; it rechecks eligibility after acquiring the lock, then reads and
+applies current intent without releasing it. An intervening disable, file edit
+or disruptive change is therefore not overridden by a stale recovery decision.
+Cancelled lock waits and failed eligibility reads do not consume restart attempts.
+
 Config GET responses include a strong `ETag`. Send it as `If-Match` when
 replacing a fetched document or array. A concurrent change returns 412 before
 anything is written. Reload and review the draft; do not silently retry it

@@ -2,10 +2,15 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 // The watch owns its ticker, so the tests drive it by running it fast and
@@ -88,7 +93,7 @@ func runWatch(t *testing.T, b backend) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	go superviseBackends(ctx, []backend{b}, testTick, quietLogger())
+	go superviseBackends(ctx, []backend{b}, core.NewLock(), testTick, quietLogger())
 }
 
 // The whole point: intent says it should be running, it is not, and nobody had
@@ -172,6 +177,161 @@ func TestWatchDoesNotCountAFailedReadAgainstTheBackend(t *testing.T) {
 	// The bus comes back. The backend still has all of its attempts.
 	f.set(func(f *fakeBackend) { f.readErr = nil })
 	waitForAttempts(t, f, 1)
+}
+
+func TestRecoveryCancellationWhileWaitingDoesNotReadOrStart(t *testing.T) {
+	lock := core.NewLock()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	b := backend{
+		pending: func(context.Context) (bool, error) {
+			t.Error("read eligibility before acquiring the lock")
+			return true, nil
+		},
+		start: func(context.Context) error {
+			t.Error("started recovery without the lock")
+			return nil
+		},
+	}
+	if err := lock.Do(context.Background(), func() error {
+		cancel()
+		attempted, err := recoverBackend(ctx, b, lock)
+		if attempted || !errors.Is(err, context.Canceled) {
+			t.Errorf("attempted=%v error=%v, want no attempt and cancellation", attempted, err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRecoveryFailedRecheckDoesNotConsumeAttempt(t *testing.T) {
+	f := newFakeBackend(true)
+	f.readErr = errors.New("no system bus")
+	attempted, err := recoverBackend(context.Background(), f.backend(), core.NewLock())
+	if attempted || !errors.Is(err, f.readErr) || f.startCount() != 0 {
+		t.Fatalf("attempted=%v starts=%d error=%v, want only the read error", attempted, f.startCount(), err)
+	}
+}
+
+func TestRecoveryUsesCurrentIntentAndSerializesTheWholeApply(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enabled=%v", enabled), func(t *testing.T) {
+			lock := core.NewLock()
+			store := core.NewStore(filepath.Join(t.TempDir(), "olr.json"), "backend", "devices")
+			doc, err := store.Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			doc.Set("backend", []byte(`{"enabled":true,"label":"old"}`))
+			if err := store.Save(doc); err != nil {
+				t.Fatal(err)
+			}
+			load := func() (bool, string, error) {
+				doc, err := store.Load()
+				if err != nil {
+					return false, "", err
+				}
+				raw, _ := doc.Raw("backend")
+				var cfg struct {
+					Enabled bool
+					Label   string
+				}
+				err = json.Unmarshal(raw, &cfg)
+				return cfg.Enabled, cfg.Label, err
+			}
+			started, release := make(chan struct{}), make(chan struct{})
+			defer close(release)
+			b := backend{
+				pending: func(context.Context) (bool, error) {
+					if acquired, _ := lock.TryDo(func() error { return nil }); acquired {
+						return false, errors.New("eligibility check did not hold the apply lock")
+					}
+					on, _, err := load()
+					return on, err
+				},
+				start: func(context.Context) error {
+					_, label, err := load()
+					if err != nil {
+						return err
+					}
+					if label != "edited" {
+						return fmt.Errorf("recovery read stale intent: %q", label)
+					}
+					doc, err := store.Load()
+					if err != nil {
+						return err
+					}
+					close(started)
+					<-release
+					doc.Set("backend", []byte(`{"enabled":true,"label":"recovered edited"}`))
+					return store.Save(doc)
+				},
+			}
+			// A poll saw the old enabled intent. While it waits for a writer,
+			// that writer changes this module and an unrelated module together.
+			if pending, _, err := load(); err != nil || !pending {
+				t.Fatal("initial recovery hint", pending, err)
+			}
+			type result struct {
+				attempted bool
+				err       error
+			}
+			finished := make(chan result, 1)
+			if err := lock.Do(context.Background(), func() error {
+				doc.Set("backend", []byte(fmt.Sprintf(`{"enabled":%v,"label":"edited"}`, enabled)))
+				doc.Set("devices", []byte(`{"name":"concurrent edit"}`))
+				if err := store.Save(doc); err != nil {
+					return err
+				}
+				go func() {
+					attempted, err := recoverBackend(context.Background(), b, lock)
+					finished <- result{attempted, err}
+				}()
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if enabled {
+				select {
+				case <-started:
+				case got := <-finished:
+					t.Fatalf("recovery did not reach apply: %+v", got)
+				case <-time.After(5 * time.Second):
+					t.Fatal("recovery did not start")
+				}
+				if acquired, _ := lock.TryDo(func() error { return nil }); acquired {
+					t.Error("another writer could interleave with recovery apply")
+				}
+				release <- struct{}{}
+			}
+			select {
+			case got := <-finished:
+				if got.err != nil || got.attempted != enabled {
+					t.Fatalf("attempted=%v error=%v, want attempted=%v", got.attempted, got.err, enabled)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("recovery did not finish")
+			}
+			doc, err = store.Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, _ := doc.Raw("devices")
+			var device struct{ Name string }
+			if err := json.Unmarshal(raw, &device); err != nil || device.Name != "concurrent edit" {
+				t.Fatalf("unrelated config edit lost: %s, error=%v", raw, err)
+			}
+			_, label, err := load()
+			want := "edited"
+			if enabled {
+				want = "recovered edited"
+			}
+			if err != nil || label != want {
+				t.Fatalf("label=%q error=%v, want %q", label, err, want)
+			}
+		})
+	}
 }
 
 // The policy of the whole file, stated as a table because each line is a
