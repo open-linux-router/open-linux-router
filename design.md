@@ -232,15 +232,13 @@ reference (`provider_token_ref` pointing at an entry elsewhere) introduces a
 broken-link failure that a literal value cannot have. Neither cost buys anything
 on a single-admin box whose control plane already runs as root.
 
-Two things follow, and the first is not yet true:
+Two things follow:
 
-- **The document has to be protectable.** "The operator keeps their own data
-  safe" is only a real sentence if they can. Today it is not: `core.Store`
-  writes `olr.json` `0644` and re-applies that mode on every save, so an
-  operator who tightens it has it loosened again by their next change. That is
-  a defect against this rule, not a qualification of it. Nothing reads the file
+- **The document is owner-only.** `core.Store` writes `olr.json` `0600` on
+  every save. Startup also tightens existing intent and legacy config files;
+  loading the API token tightens its permissions too. Nothing reads the intent
   unprivileged — `olrd` runs as root and the CLI is an API client over the
-  `0660` socket — so nothing stands in the way of fixing it.
+  `0660` socket. Backups contain credentials and need the same protection.
 - **Redaction stays, and is a different concern.** A token must not appear in
   `plan` output, a `show`, or a log line, because those get screenshotted and
   pasted into issues. That is about not broadcasting the operator's data on

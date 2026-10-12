@@ -40,6 +40,9 @@ func LoadOrCreateToken(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	switch {
 	case err == nil:
+		if err := os.Chmod(path, 0o600); err != nil {
+			return "", fmt.Errorf("protecting %s: %w", path, err)
+		}
 		token := strings.TrimSpace(string(data))
 		if token == "" {
 			return "", fmt.Errorf("%s is empty; delete it to have a new token generated", path)

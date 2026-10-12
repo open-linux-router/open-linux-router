@@ -267,3 +267,48 @@ func TestSetCopiesTheSubtree(t *testing.T) {
 		t.Errorf("subtree aliased the caller's buffer: %s", raw)
 	}
 }
+
+func TestStoreProtectsSecretsOnCreateUpgradeAndRepeatedSave(t *testing.T) {
+	s := tempStore(t)
+	if err := s.Protect(); err != nil {
+		t.Fatal(err)
+	}
+	var doc Document
+	doc.Set("dhcp", []byte(`{"enabled":true}`))
+	for _, mode := range []os.FileMode{0, 0o644, 0o600} {
+		if mode != 0 {
+			if err := os.Chmod(s.Path(), mode); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := s.Save(doc); err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Stat(s.Path())
+		if err != nil || info.Mode().Perm() != 0o600 {
+			t.Fatalf("saved config must be 0600: info=%v, err=%v", info, err)
+		}
+	}
+	legacy := filepath.Join(filepath.Dir(s.Path()), "dhcp.json")
+	for _, path := range []string{s.Path(), legacy} {
+		if err := os.WriteFile(path, []byte(`{"secret":"unchanged"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Protect(); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{s.Path(), legacy} {
+		info, err := os.Stat(path)
+		if err != nil || info.Mode().Perm() != 0o600 {
+			t.Fatalf("existing file must be 0600: info=%v, err=%v", info, err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil || string(data) != `{"secret":"unchanged"}` {
+			t.Fatalf("Protect changed data: %s, %v", data, err)
+		}
+	}
+}

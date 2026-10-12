@@ -1038,6 +1038,9 @@ func serve(s *http.Server, l net.Listener, logger *slog.Logger) {
 // error is in the journal at boot rather than only in the reply to whoever asks
 // first.
 func checkStore(store *core.Store, logger *slog.Logger) {
+	if err := store.Protect(); err != nil {
+		logger.Error("configuration permissions could not be tightened", "error", err)
+	}
 	doc, err := store.Load()
 	if err != nil {
 		logger.Error("configuration could not be read; the API will report this on every request",

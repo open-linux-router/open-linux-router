@@ -35,6 +35,17 @@ func TestLoadOrCreateTokenGeneratesOnceAndIsReadableOnlyByOwner(t *testing.T) {
 	if second != first {
 		t.Error("a second call generated a new token instead of reading the stored one")
 	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	third, err := LoadOrCreateToken(path)
+	if err != nil || third != first {
+		t.Fatalf("tightening permissions rotated the token: %v", err)
+	}
+	info, err = os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("existing token must be 0600: info=%v, err=%v", info, err)
+	}
 }
 
 func TestLoadOrCreateTokenRejectsAnEmptyFile(t *testing.T) {

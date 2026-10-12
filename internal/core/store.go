@@ -125,6 +125,17 @@ func NewStore(path string, modules ...string) *Store {
 // Path is where the document lives, for error messages that have to name it.
 func (s *Store) Path() string { return s.path }
 
+// Protect tightens existing intent files, including legacy files which may
+// still contain credentials after migration. It does not rewrite their data.
+func (s *Store) Protect() error {
+	for _, path := range append([]string{s.path}, s.LegacyPaths()...) {
+		if err := os.Chmod(path, 0o600); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("protecting %s: %w", path, err)
+		}
+	}
+	return nil
+}
+
 // Load reads the document. A missing file is not an error — it means the box
 // has never been configured, which is exactly what a fresh install looks like.
 func (s *Store) Load() (Document, error) {
@@ -173,7 +184,9 @@ func (s *Store) Save(d Document) error {
 	if err != nil {
 		return err
 	}
-	if err := WriteFileAtomic(s.path, data, 0o644); err != nil {
+	// The document contains provider tokens and password hashes. Backends
+	// receive their own rendered files; none needs to read this as another user.
+	if err := WriteFileAtomic(s.path, data, 0o600); err != nil {
 		return fmt.Errorf("writing %s: %w", s.path, err)
 	}
 	return nil
