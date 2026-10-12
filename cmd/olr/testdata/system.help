@@ -1,0 +1,26 @@
+How this router is reached over the network.
+
+A box nobody has set up refuses to be configured over the network at
+all: the web UI is served, and every other request is turned away.
+That is what lets olr open the UI the moment it is installed without
+leaving an unprotected admin API on your LAN.
+
+Setting it up is `olr claim`, once. There is no user model here — one
+box, one optional password, no accounts.
+
+Usage:
+  olr system [command]
+
+Available Commands:
+  set         Change administrator access
+  show        Show how this router may be reached
+
+Flags:
+  -h, --help   help for system
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr system [command] --help" for more information about a command.

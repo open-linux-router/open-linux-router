@@ -71,7 +71,7 @@ type Access struct {
 // password itself, which is the cheapest way to guarantee the document never
 // grows one by accident.
 type Password struct {
-	// Hash is the PBKDF2 output, base64, with its parameters and salt.
+	// Hash is PBKDF2-SHA256 with the iteration count, salt and derived key.
 	Hash string `json:"hash" jsonschema:"description=Derived form of the password. Never the password."`
 }
 

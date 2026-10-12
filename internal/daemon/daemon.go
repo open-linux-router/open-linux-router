@@ -15,6 +15,7 @@ package daemon
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -57,14 +58,18 @@ import (
 )
 
 type options struct {
-	socket    string
-	listen    string
-	links     string
-	root      string
-	tokenPath string
-	auth      bool
-	logLevel  string
-	version   bool
+	socket        string
+	listen        string
+	links         string
+	root          string
+	tokenPath     string
+	auth          bool
+	tlsCert       string
+	tlsKey        string
+	allowedHosts  string
+	adminNetworks string
+	logLevel      string
+	version       bool
 }
 
 // Main is the control plane's entry point, reached as `olr internal daemon`.
@@ -120,6 +125,10 @@ func parseOptions(args []string, onError flag.ErrorHandling) (options, error) {
 		"file holding the API token for the TCP listener")
 	fs.BoolVar(&opts.auth, "auth", false,
 		"require the API token on the TCP listener (off by default)")
+	fs.StringVar(&opts.tlsCert, "tls-cert", "", "PEM certificate for HTTPS on the TCP listener (requires --tls-key)")
+	fs.StringVar(&opts.tlsKey, "tls-key", "", "PEM private key for HTTPS on the TCP listener (requires --tls-cert)")
+	fs.StringVar(&opts.allowedHosts, "allowed-hosts", "", "comma-separated custom Host names allowed on the TCP listener")
+	fs.StringVar(&opts.adminNetworks, "admin-networks", "", "comma-separated client CIDRs allowed to reach TCP management; empty allows all sources")
 	// Accepted and ignored. It named the default-on inverse of --auth, and a box
 	// upgrading with it still in OLRD_ARGS must not fail to start over a flag
 	// that now describes the default. OLRD_ARGS is a file operators edit by
@@ -243,6 +252,7 @@ func run(args []string) error {
 	}
 
 	srv := core.New()
+	sessions := system.NewSessions()
 
 	// `link` is mounted first, matching the store's order and the order a box
 	// is brought up in. It is the only module here that drives nothing: adopting
@@ -254,9 +264,18 @@ func run(args []string) error {
 	// all (docs/system.md §3). It drives no daemon and renders no file — the
 	// thinnest module in the tree, and structurally so.
 	srv.Mount(system.ModuleName, system.HTTP{
-		Applier: system.Applier{Store: store},
-		Lock:    srv.ApplyLock(),
-		Events:  srv.Events(),
+		Applier:       system.Applier{Store: store},
+		Lock:          srv.ApplyLock(),
+		Events:        srv.Events(),
+		Sessions:      sessions,
+		TokenRequired: opts.auth,
+		ValidToken: func(r *http.Request) bool {
+			if !opts.auth {
+				return false
+			}
+			data, err := os.ReadFile(opts.tokenPath)
+			return err == nil && core.ValidBearer(strings.TrimSpace(string(data)), r)
+		},
 	}.Routes(), system.Config{})
 
 	// Hoisted into a variable rather than built inline like the modules above
@@ -807,7 +826,7 @@ func run(args []string) error {
 	logger.Info("listening", "socket", opts.socket, "auth", "socket permissions")
 
 	if opts.listen != "" {
-		tcp, authed, err := tcpListener(opts, system.Applier{Store: store}, handler, logger)
+		tcp, authed, err := tcpListener(opts, system.Applier{Store: store}, handler, logger, sessions)
 		if err != nil {
 			unix.Close()
 			return err
@@ -979,22 +998,35 @@ func authenticateAPI(token string, top http.Handler) http.Handler {
 
 // tcpListener builds the TCP half, which is the only surface that needs
 // authenticating.
-func tcpListener(opts options, access system.Applier, handler http.Handler, logger *slog.Logger) (tcpServer, string, error) {
+func tcpListener(opts options, access system.Applier, handler http.Handler, logger *slog.Logger, sessionManager ...*system.Sessions) (tcpServer, string, error) {
 	authed := "none"
+	sessions := system.NewSessions()
+	if len(sessionManager) > 0 {
+		sessions = sessionManager[0]
+	}
+	if (opts.tlsCert == "") != (opts.tlsKey == "") {
+		return tcpServer{}, "", fmt.Errorf("--tls-cert and --tls-key must be provided together")
+	}
+	var tlsConfig *tls.Config
+	if opts.tlsCert != "" {
+		certificate, err := tls.LoadX509KeyPair(opts.tlsCert, opts.tlsKey)
+		if err != nil {
+			return tcpServer{}, "", fmt.Errorf("loading HTTPS credentials: %w", err)
+		}
+		tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}
+	}
 
-	// The gate is outermost and unconditional, so that no combination of flags
-	// can produce a listener that configures an unclaimed box. It wraps the
-	// token check rather than the reverse for the same reason the token check
-	// stopped wrapping the SPA: the claim route has to be reachable by somebody
-	// who has no credential, because getting one is what claiming is for.
+	// Claim/login remain reachable before authentication; all other API routes
+	// pass both the access credential check and the once-only claim gate.
 	handler = gateUnclaimed(access, handler)
 
+	var token string
 	if opts.auth {
-		token, err := core.LoadOrCreateToken(opts.tokenPath)
+		var err error
+		token, err = core.LoadOrCreateToken(opts.tokenPath)
 		if err != nil {
 			return tcpServer{}, "", err
 		}
-		handler = authenticateAPI(token, handler)
 		authed = "bearer token"
 	} else if cfg, err := access.Load(); err == nil && !cfg.Claimed() {
 		logger.Info("this box has not been set up yet; the web UI will ask",
@@ -1009,10 +1041,48 @@ func tcpListener(opts options, access system.Applier, handler http.Handler, logg
 			"address", opts.listen,
 			"note", "anyone who can reach this address can configure this router")
 	}
+	if cfg, err := access.Load(); err == nil && cfg.RequiresPassword() {
+		authed = "administrator password"
+	}
+	handler = system.Authenticate(access, sessions, token, handler)
+	var allowed []string
+	for _, host := range strings.Split(opts.allowedHosts, ",") {
+		if host = strings.TrimSpace(host); host != "" {
+			allowed = append(allowed, host)
+		}
+	}
+	handler = core.BrowserGuard(handler, allowed)
+	if opts.adminNetworks != "" {
+		var prefixes []netip.Prefix
+		for _, value := range strings.Split(opts.adminNetworks, ",") {
+			prefix, err := netip.ParsePrefix(strings.TrimSpace(value))
+			if err != nil {
+				return tcpServer{}, "", fmt.Errorf("invalid --admin-networks prefix: %w", err)
+			}
+			prefixes = append(prefixes, prefix.Masked())
+		}
+		next := handler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			host, _, err := net.SplitHostPort(r.RemoteAddr)
+			addr, parseErr := netip.ParseAddr(host)
+			if err == nil && parseErr == nil {
+				for _, prefix := range prefixes {
+					if prefix.Contains(addr.Unmap()) {
+						next.ServeHTTP(w, r)
+						return
+					}
+				}
+			}
+			core.WriteError(w, 403, "client address is outside the configured management networks")
+		})
+	}
 
 	l, err := core.ListenTCP(opts.listen)
 	if err != nil {
 		return tcpServer{}, "", err
+	}
+	if tlsConfig != nil {
+		l = tls.NewListener(l, tlsConfig)
 	}
 	return tcpServer{
 		server: &http.Server{

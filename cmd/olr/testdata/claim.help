@@ -1,0 +1,25 @@
+Record how this router may be reached over the network.
+
+Until this is done the box serves its web UI and refuses everything
+else over the network, so this is the step that makes it usable from
+another machine. Normally it happens in the browser — the UI asks on
+the first visit — and this exists for a box you only ever reach by SSH.
+
+Use --password to read a password from redirected stdin, or
+--no-password to allow anyone who can reach this box to configure it.
+Passwords need at least 12 characters; do not put them in command arguments.
+
+Claiming works once.
+
+Usage:
+  olr claim [flags]
+
+Flags:
+  -h, --help          help for claim
+      --no-password   require no password; anyone on the network can configure this router
+      --password      require a password read from redirected stdin
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

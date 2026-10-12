@@ -1,6 +1,9 @@
 # `system` module design — claiming a box, and the first five minutes
 
-Status: **designed, not built.** Section references are to `design.md` unless
+Status: **claiming and password authentication are implemented.** The current
+operator contract is [Administrator access](administrator-access.md); the
+design discussion below records earlier proposals and release boundaries.
+Section references are to `design.md` unless
 prefixed `ingress:` or `dns:`, which mean `docs/ingress.md` and `docs/dns.md`.
 
 This document decides what happens between `apt install` and a working router,

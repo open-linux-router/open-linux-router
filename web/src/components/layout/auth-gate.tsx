@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { KeyRound } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,12 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SetupScreen } from '@/components/layout/setup-screen'
 import { ApiError, api, setToken } from '@/lib/api'
-
-/** What GET /api/system/access answers. */
-interface AccessView {
-  claimed: boolean
-  password_set: boolean
-}
+import type { AccessView } from '@/lib/api'
 
 /**
  * Decides which of three screens the box gets: set up, log in, or the app.
@@ -26,17 +21,22 @@ interface AccessView {
  * /api/system/access is served even while unclaimed for exactly this reason
  * (internal/daemon, openWhileUnclaimed).
  *
- * The token prompt stays for boxes started with --auth, and it works now: the
- * SPA is no longer served from behind the credential it collects, which is the
- * bug that made this component unreachable for its whole existence before
- * v0.1.6.
+ * Access status is public. Credentials protect the API; the SPA must load to
+ * collect them. Session expiry returns here without exposing cached pages.
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient()
   const access = useQuery({
     queryKey: ['system', 'access'],
     queryFn: () => api.get<AccessView>('/api/system/access'),
     retry: (count, error) => !(error instanceof ApiError && error.unauthorized) && count < 2,
+    refetchInterval: 30_000,
   })
+  useEffect(() => {
+    const refresh = () => queryClient.invalidateQueries({ queryKey: ['system', 'access'] })
+    window.addEventListener('olr:unauthorized', refresh)
+    return () => window.removeEventListener('olr:unauthorized', refresh)
+  }, [queryClient])
 
   if (access.isPending) {
     return (
@@ -57,7 +57,54 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return <SetupScreen />
   }
 
+  if (access.error) {
+    return <div className="mx-auto max-w-md space-y-4 p-6" role="alert">
+      <p>Could not reach the router: {access.error.message}</p>
+      <Button onClick={() => access.refetch()}>Try again</Button>
+    </div>
+  }
+  if (access.data?.token_required && !access.data.authenticated) return <TokenPrompt />
+  if (access.data?.password_set && !access.data.authenticated) return <PasswordPrompt />
+
   return <>{children}</>
+}
+
+function PasswordPrompt() {
+  const queryClient = useQueryClient()
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function submit(event: React.FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await api.post('/api/system/access/login', { password })
+      setPassword('')
+      queryClient.clear()
+      window.location.reload()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not sign in')
+    } finally { setBusy(false) }
+  }
+  return <div className="flex min-h-svh items-center justify-center p-6">
+    <Card className="w-full max-w-md">
+      <CardHeader>
+        <CardTitle>Sign in to this router</CardTitle>
+        <CardDescription>Enter the administrator password.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input id="password" type="password" autoComplete="current-password" autoFocus value={password} onChange={(event) => setPassword(event.target.value)} disabled={busy} aria-describedby={error ? 'login-error' : undefined} />
+          </div>
+          {error && <p id="login-error" className="text-sm text-destructive" role="alert">{error}</p>}
+          <Button type="submit" className="h-11 w-full" disabled={busy || !password}>{busy ? 'Signing in…' : 'Sign in'}</Button>
+        </form>
+      </CardContent>
+    </Card>
+  </div>
 }
 
 function TokenPrompt() {

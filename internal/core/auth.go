@@ -90,14 +90,11 @@ func LoadOrCreateToken(path string) (string, error) {
 // will need either a cookie session or a fetch-based reader. That is why the
 // UI polls today rather than streaming — the choice is deferred, not missed.
 func BearerAuth(token string, next http.Handler) http.Handler {
-	want := []byte(token)
-
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got, ok := bearerToken(r)
 		// ConstantTimeCompare returns 0 for differing lengths, so the length
 		// check is not a shortcut around it — subtle requires equal lengths to
 		// give a meaningful answer at all.
-		if !ok || len(got) != len(want) || subtle.ConstantTimeCompare(got, want) != 1 {
+		if !ValidBearer(token, r) {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="olr"`)
 			WriteError(w, http.StatusUnauthorized,
 				"missing or invalid API token; see "+TokenPath)
@@ -105,6 +102,12 @@ func BearerAuth(token string, next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func ValidBearer(token string, r *http.Request) bool {
+	got, ok := bearerToken(r)
+	want := []byte(token)
+	return token != "" && ok && len(got) == len(want) && subtle.ConstantTimeCompare(got, want) == 1
 }
 
 func bearerToken(r *http.Request) ([]byte, bool) {

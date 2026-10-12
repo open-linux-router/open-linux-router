@@ -383,6 +383,7 @@ func TestHelpIsUnchanged(t *testing.T) {
 		{"remote", "enable"}, {"remote", "disable"},
 		{"ingress"}, {"ingress", "show"}, {"ingress", "add"}, {"ingress", "set"}, {"ingress", "rm"},
 		{"listen"}, {"status"}, {"enable"}, {"disable"},
+		{"claim"}, {"system"}, {"system", "set"}, {"system", "set", "password"},
 	} {
 		name := "olr"
 		if len(path) > 0 {

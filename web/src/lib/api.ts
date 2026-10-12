@@ -26,7 +26,8 @@ const CONFIG_REVISION = Symbol('config revision')
 
 export function getToken(): string | null {
   try {
-    return localStorage.getItem(TOKEN_KEY)
+    localStorage.removeItem(TOKEN_KEY)
+    return sessionStorage.getItem(TOKEN_KEY)
   } catch {
     // Private browsing modes can throw on access rather than return null.
     return null
@@ -35,11 +36,19 @@ export function getToken(): string | null {
 
 export function setToken(token: string | null) {
   try {
-    if (token) localStorage.setItem(TOKEN_KEY, token)
-    else localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(TOKEN_KEY)
+    if (token) sessionStorage.setItem(TOKEN_KEY, token)
+    else sessionStorage.removeItem(TOKEN_KEY)
   } catch {
     /* ignore — the request will simply 401 and the gate will ask again */
   }
+}
+
+export interface AccessView {
+  claimed: boolean
+  password_set: boolean
+  authenticated: boolean
+  token_required: boolean
 }
 
 /**
@@ -108,6 +117,9 @@ async function request<T>(method: string, path: string, body?: unknown, extraHea
   }
 
   if (!response.ok) {
+    if (response.status === 401 && !path.endsWith('/access/login') && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('olr:unauthorized'))
+    }
     const envelope = (parsed as { error?: ErrorBody } | undefined)?.error
     throw new ApiError(
       response.status,

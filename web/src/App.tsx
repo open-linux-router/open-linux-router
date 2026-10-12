@@ -16,6 +16,7 @@ import { DnsNamesPage } from '@/routes/dns/names'
 import { DnsResolvingPage } from '@/routes/dns/resolving'
 import { AccessPage } from '@/routes/access'
 import { SocksOutPage } from '@/routes/access/socks-out'
+import { AdminAccessPage } from '@/routes/admin-access'
 import { AdvancedPage } from '@/routes/advanced/index'
 import { DdnsPage } from '@/routes/advanced/ddns'
 import { FilteringPage } from '@/routes/access/filtering'
@@ -76,6 +77,7 @@ export function App() {
           </Route>
           <Route path="firewall" element={<FirewallPage />} />
           <Route path="access" element={<AccessPage />} />
+          <Route path="settings/access" element={<AdminAccessPage />} />
           <Route path="access/socks5" element={<SocksOutPage />} />
           <Route path="access/remote" element={<RemotePage />} />
           <Route path="access/ingress" element={<IngressPage />} />

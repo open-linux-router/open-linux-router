@@ -2,6 +2,14 @@ package core
 
 import "context"
 
+type mutationGuardKey struct{}
+
+// WithMutationGuard rechecks a TCP caller's authorization after acquiring the
+// write lock, closing the race with password rotation while a request queues.
+func WithMutationGuard(ctx context.Context, check func() error) context.Context {
+	return context.WithValue(ctx, mutationGuardKey{}, check)
+}
+
 // Lock is the one global apply lock (design.md §3.6).
 //
 // Every config write across every module takes it. Not per-module: the
@@ -44,6 +52,11 @@ func (l *Lock) Do(ctx context.Context, fn func() error) error {
 		return ctx.Err()
 	}
 	defer func() { l.ch <- struct{}{} }()
+	if check, ok := ctx.Value(mutationGuardKey{}).(func() error); ok {
+		if err := check(); err != nil {
+			return err
+		}
+	}
 
 	return fn()
 }

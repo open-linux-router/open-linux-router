@@ -3,6 +3,9 @@ package system
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -37,7 +40,7 @@ func Command() *cobra.Command {
 			"Setting it up is `olr claim`, once. There is no user model here — one\n" +
 			"box, one optional password, no accounts.",
 	}
-	c.AddCommand(showCommand())
+	c.AddCommand(showCommand(), passwordCommand())
 	return c
 }
 
@@ -70,12 +73,6 @@ func showCommand() *cobra.Command {
 }
 
 func claimCommand() *cobra.Command {
-	// Both halves of the pair exist even though only one works, and that is
-	// cli.md R4 doing its job rather than a workaround for it: a `--no-x` with
-	// no `--x` to undo is a flag the operator cannot reason about. `--password`
-	// being present and explicit about not being ready is strictly better than
-	// it being an unknown flag, which is what "coming later" would otherwise
-	// look like from the terminal.
 	var withPassword, noPassword bool
 
 	c := &cobra.Command{
@@ -87,32 +84,28 @@ func claimCommand() *cobra.Command {
 			"else over the network, so this is the step that makes it usable from\n" +
 			"another machine. Normally it happens in the browser — the UI asks on\n" +
 			"the first visit — and this exists for a box you only ever reach by SSH.\n\n" +
-			"--no-password is required, and is the only choice there is today:\n" +
-			"anyone who can reach this box on the network will be able to\n" +
-			"configure it. Requiring a password instead needs a login screen,\n" +
-			"which is the next release.\n\n" +
+			"Use --password to read a password from redirected stdin, or\n" +
+			"--no-password to allow anyone who can reach this box to configure it.\n" +
+			"Passwords need at least 12 characters; do not put them in command arguments.\n\n" +
 			"Claiming works once.",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			if err := cli.RejectDryRun(c); err != nil {
 				return err
 			}
-			// Required rather than defaulted. The flag is the operator saying
-			// out loud what they are choosing, which is the entire difference
-			// between this and v0.1.6's silent open listener — and when
-			// --password arrives it joins an interface that already asks.
-			if withPassword {
-				return fmt.Errorf("passwords are not supported yet: enforcing one needs a " +
-					"login screen, which is the next release.\n" +
-					"Claim with --no-password for now, and set a password when it lands")
-			}
-			if !noPassword {
-				return fmt.Errorf("pass --no-password to confirm that anyone on this " +
-					"network may configure this router")
+			if withPassword == noPassword {
+				return fmt.Errorf("choose exactly one of --password or --no-password")
 			}
 
 			var view AccessView
-			body := ClaimRequest{NoPassword: true}
+			body := ClaimRequest{NoPassword: noPassword}
+			if withPassword {
+				value, err := passwordInput(c)
+				if err != nil {
+					return err
+				}
+				body.Password = value
+			}
 			if err := cli.ClientFor(c).Post(ctxOf(c), claimEndpoint, body, &view); err != nil {
 				return err
 			}
@@ -123,8 +116,67 @@ func claimCommand() *cobra.Command {
 		},
 	}
 	c.Flags().BoolVar(&withPassword, "password", false,
-		"require a password (not supported yet; needs the login screen)")
+		"require a password read from redirected stdin")
 	c.Flags().BoolVar(&noPassword, "no-password", false,
 		"require no password; anyone on the network can configure this router")
 	return c
+}
+
+func passwordInput(c *cobra.Command) (string, error) {
+	reader := c.InOrStdin()
+	if file, ok := reader.(*os.File); ok {
+		info, err := file.Stat()
+		if err != nil {
+			return "", err
+		}
+		if info.Mode()&os.ModeCharDevice != 0 {
+			return "", fmt.Errorf("read the password from a protected file or pipe on stdin; interactive input would echo it")
+		}
+	}
+	data, err := io.ReadAll(io.LimitReader(reader, 1026))
+	if err != nil {
+		return "", err
+	}
+	value := strings.TrimSuffix(strings.TrimSuffix(string(data), "\n"), "\r")
+	if len(value) > 1024 || strings.ContainsAny(value, "\r\n") {
+		return "", fmt.Errorf("stdin must contain one password of at most 1024 bytes")
+	}
+	return value, nil
+}
+
+func passwordCommand() *cobra.Command {
+	var noPassword, withPassword bool
+	set := verb("set", "Change administrator access", func(c *cobra.Command) {})
+	set.RunE = nil
+	password := &cobra.Command{
+		Use: "password", Short: "Set a password from stdin, or remove it for local recovery",
+		Long: "Change the administrator password through the local control socket.\n\nRead one password from a protected file or pipe on stdin. It needs at least\n12 characters. --no-password removes it. Every browser session is revoked.\nThe API token is separate and is not changed.",
+		Args: cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if err := cli.RejectDryRun(c); err != nil {
+				return err
+			}
+			if withPassword && noPassword {
+				return fmt.Errorf("choose either --password or --no-password")
+			}
+			req := ClaimRequest{NoPassword: noPassword}
+			if !noPassword {
+				value, err := passwordInput(c)
+				if err != nil {
+					return err
+				}
+				req.Password = value
+			}
+			var view AccessView
+			if err := cli.ClientFor(c).Put(ctxOf(c), accessEndpoint+"/password", req, &view); err != nil {
+				return err
+			}
+			printAccess(c.OutOrStdout(), view)
+			return nil
+		},
+	}
+	password.Flags().BoolVar(&noPassword, "no-password", false, "remove the password; anyone who can reach this router may configure it")
+	password.Flags().BoolVar(&withPassword, "password", false, "set the password from redirected stdin (the default)")
+	set.AddCommand(password)
+	return set
 }

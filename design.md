@@ -961,6 +961,14 @@ deliberately not a user model: one box, one optional password, no accounts and
 no roles, shaped so that a later identity model replaces it rather than
 inheriting from it.
 
+Password authentication is implemented: PBKDF2-SHA256 hashes, temporary
+HttpOnly/SameSite browser sessions, login/logout and immediate revocation on
+password changes. The TCP handler also validates Host, Origin and JSON content
+type. HTTPS and client CIDR restrictions are daemon options. `--auth` retains
+the separate bearer token for API clients; the Unix socket remains the local
+recovery path. See [administrator access](docs/administrator-access.md) for the
+current operator contract and transport requirements.
+
 **Observed resources are not schema-published yet, and that is a gap.** Config
 structs are reflected; the read and plan shapes are not, so a typed client has
 to hand-write them and finds out at runtime when one drifts. Publishing response

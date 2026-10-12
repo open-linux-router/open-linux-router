@@ -126,6 +126,7 @@ function SiteFooter() {
           GitHub
         </a>
         <Link to="/credits" className="underline-offset-4 hover:text-foreground hover:underline">Credits</Link>
+        <Link to="/settings/access" className="inline-flex min-h-11 items-center underline-offset-4 hover:text-foreground hover:underline">Administrator access</Link>
         <ThemeToggle />
       </div>
     </footer>

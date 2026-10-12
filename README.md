@@ -166,19 +166,18 @@ over the network:** the page loads, and every other request is turned away until
 somebody says how they want to reach it. That's what lets the UI be there from
 the first second without leaving an unprotected admin API on your LAN.
 
-Answering it records that **there is no password**, which means anyone who can
-reach this router on your network can configure it. That's the right default on
-a home network and the wrong one anywhere else. `sudo olr claim --no-password`
-does the same from a shell, `olr system show` says where you stand, and
+Set an administrator password, or deliberately continue without one. The latter
+lets anyone who can reach this router configure it. `sudo olr claim --no-password`
+records that choice from a shell; `sudo olr claim --password` reads a password
+from redirected stdin. `olr system show` reports the choice, and
 `sudo olr listen --off` closes the listener entirely.
 
 Claiming works once, and only from your own network or the box itself — so olr
 on a machine with a public address isn't set up by whoever finds the port first.
 
-Requiring a password instead needs a login screen, and lands with it. A real
-login — users, not a shared secret — belongs to the `system` module proper; see
-[docs/system.md](docs/system.md) for the whole model and what it deliberately
-isn't.
+The **Administrator access** link in the footer changes the password and signs
+out browsers. See [administrator access](docs/administrator-access.md) for
+HTTPS, API tokens, management source restrictions and recovery over SSH.
 
 **The most useful thing this can do today:** leave your existing router in place
 doing the routing, and move DHCP onto a Linux box — so you get a real device

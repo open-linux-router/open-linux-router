@@ -16,6 +16,9 @@ type HTTP struct {
 	Proc             string
 	Lock             *core.Lock
 	Events           *core.Events
+	Sessions         *Sessions
+	TokenRequired    bool
+	ValidToken       func(*http.Request) bool
 	PublicIPv4Client *http.Client
 	PublicIPv6Client *http.Client
 }
@@ -41,6 +44,9 @@ func (h HTTP) Routes() []core.Route {
 			Mutating: true,
 			Handler:  h.postClaim,
 		},
+		{Method: "POST", Path: "/access/login", Summary: "Sign in with the administrator password; creates a temporary browser session.", Mutating: true, Handler: h.postLogin},
+		{Method: "POST", Path: "/access/logout", Summary: "End this browser's administrator session.", Mutating: true, Handler: h.postLogout},
+		{Method: "PUT", Path: "/access/password", Summary: "Set or remove the administrator password; revokes previous browser sessions. The Unix socket is the local recovery path.", Mutating: true, Handler: h.putPassword},
 	}
 }
 
@@ -58,7 +64,9 @@ type AccessView struct {
 	Claimed bool `json:"claimed"`
 
 	// PasswordSet reports whether reaching this box over the network needs one.
-	PasswordSet bool `json:"password_set"`
+	PasswordSet   bool `json:"password_set"`
+	Authenticated bool `json:"authenticated"`
+	TokenRequired bool `json:"token_required"`
 }
 
 func (h HTTP) getAccess(w http.ResponseWriter, r *http.Request) {
@@ -67,9 +75,19 @@ func (h HTTP) getAccess(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	authenticated := !cfg.RequiresPassword() && !h.TokenRequired
+	if cfg.RequiresPassword() {
+		authenticated = h.Sessions.Valid(r, cfg.Access.Password)
+	}
+	if h.ValidToken != nil && h.ValidToken(r) {
+		authenticated = true
+	}
+	w.Header().Set("Cache-Control", "no-store")
 	core.WriteJSON(w, http.StatusOK, AccessView{
-		Claimed:     cfg.Claimed(),
-		PasswordSet: cfg.RequiresPassword(),
+		Claimed:       cfg.Claimed(),
+		PasswordSet:   cfg.RequiresPassword(),
+		Authenticated: authenticated,
+		TokenRequired: h.TokenRequired && !cfg.RequiresPassword(),
 	})
 }
 
@@ -112,34 +130,17 @@ func (h HTTP) postClaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch {
-	case req.Password != "":
-		// Refused rather than stored, and this is a deliberate release
-		// boundary rather than an oversight. Nothing enforces a password yet
-		// and no screen collects one, so accepting it here would leave a
-		// credential in the document that either does nothing — a stored lie —
-		// or locks the operator out of a box with no login form to get back in
-		// through. The document shape is already decided (Access.Password), so
-		// turning this on is additive.
-		core.WriteError(w, http.StatusNotImplemented,
-			"passwords are not supported yet; claim with no_password and set one when "+
-				"the next release adds the login screen",
-			core.Problem{Path: "password", Message: "not supported yet"})
-		return
-
-	case !req.NoPassword:
-		core.WriteError(w, http.StatusBadRequest,
-			"set no_password to claim this router",
-			core.Problem{Path: "no_password", Message: "must be true"})
+	password, err := h.passwordFor(r, req)
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// nil: the recorded choice of no password (docs/system.md §2), which is a
-	// decision rather than a default.
+	// Claim only once, with the chosen derived credential or deliberate none.
 	var cfg Config
 	var claimErr error
 	if err := h.Lock.Do(r.Context(), func() error {
-		cfg, claimErr = h.Applier.Claim(nil)
+		cfg, claimErr = h.Applier.Claim(password)
 		return nil
 	}); err != nil {
 		core.WriteError(w, http.StatusServiceUnavailable, "waiting for the apply lock: "+err.Error())
@@ -158,6 +159,101 @@ func (h HTTP) postClaim(w http.ResponseWriter, r *http.Request) {
 		Claimed:     cfg.Claimed(),
 		PasswordSet: cfg.RequiresPassword(),
 	})
+}
+
+func (h HTTP) passwordFor(r *http.Request, req ClaimRequest) (*Password, error) {
+	if req.Password == "" && req.NoPassword {
+		return nil, nil
+	}
+	if req.Password == "" || req.NoPassword {
+		return nil, errors.New("provide a password, or explicitly choose no_password")
+	}
+	if h.Sessions != nil {
+		finish, ok := h.Sessions.Begin(r)
+		if !ok {
+			return nil, errors.New("too many password requests; try again in a minute")
+		}
+		defer finish()
+	}
+	return HashPassword(req.Password)
+}
+
+func (h HTTP) postLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := core.DecodeJSON(w, r, &req); err != nil {
+		core.WriteError(w, 400, err.Error())
+		return
+	}
+	if h.Sessions == nil {
+		core.WriteError(w, 503, "password sessions are unavailable")
+		return
+	}
+	finish, allowed := h.Sessions.Begin(r)
+	if !allowed {
+		w.Header().Set("Retry-After", "60")
+		core.WriteError(w, 429, "too many sign-in attempts; try again in a minute")
+		return
+	}
+	defer finish()
+	cfg, err := h.Applier.Load()
+	if err != nil {
+		core.WriteError(w, 503, "cannot read administrator access configuration")
+		return
+	}
+	if !cfg.RequiresPassword() || !cfg.Access.Password.Matches(req.Password) {
+		core.WriteError(w, 401, "invalid administrator password")
+		return
+	}
+	// Check again under the write lock: a password rotation must not authorize
+	// a session with a credential that was valid before the expensive hash.
+	if err := h.Lock.Do(r.Context(), func() error {
+		current, err := h.Applier.Load()
+		if err != nil {
+			return err
+		}
+		if !current.RequiresPassword() || current.Access.Password.Hash != cfg.Access.Password.Hash {
+			core.WriteError(w, 401, "administrator password changed; sign in again")
+			return nil
+		}
+		if err := h.Sessions.Issue(w, r, current.Access.Password); err != nil {
+			return err
+		}
+		core.WriteJSON(w, 200, AccessView{Claimed: true, PasswordSet: true, Authenticated: true})
+		return nil
+	}); err != nil {
+		core.WriteError(w, 503, err.Error())
+	}
+}
+
+func (h HTTP) postLogout(w http.ResponseWriter, r *http.Request) {
+	h.Sessions.Logout(w, r)
+	core.WriteJSON(w, 200, map[string]bool{"authenticated": false})
+}
+
+func (h HTTP) putPassword(w http.ResponseWriter, r *http.Request) {
+	var req ClaimRequest
+	if err := core.DecodeJSON(w, r, &req); err != nil {
+		core.WriteError(w, 400, err.Error())
+		return
+	}
+	password, err := h.passwordFor(r, req)
+	if err != nil {
+		core.WriteError(w, 400, err.Error())
+		return
+	}
+	if err := h.Lock.Do(r.Context(), func() error {
+		cfg, err := h.Applier.SetPassword(password)
+		if err != nil {
+			return err
+		}
+		h.Sessions.RevokeAll()
+		core.WriteJSON(w, 200, AccessView{Claimed: cfg.Claimed(), PasswordSet: cfg.RequiresPassword(), Authenticated: !cfg.RequiresPassword()})
+		return nil
+	}); err != nil {
+		core.WriteError(w, 503, err.Error())
+	}
 }
 
 // localSource reports whether a request came from somewhere allowed to claim.
@@ -183,7 +279,7 @@ func localSource(r *http.Request) bool {
 		// Includes the unix socket, whose RemoteAddr is not an IP at all. That
 		// caller has already satisfied the socket's file mode, which outranks
 		// anything this function could check.
-		return true
+		return host == "@" || host == "" || host == "unix"
 	}
 	addr = addr.Unmap()
 	return addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast()
