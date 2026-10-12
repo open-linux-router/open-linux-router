@@ -378,7 +378,7 @@ function Meter({ label, current, maximum, percent, tone = 'blue', arrow, onClick
 
 function StatCard({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return <section className="min-w-0 rounded-xl border bg-card p-4 shadow-xs sm:p-5">
-    <h2 className="mb-3 text-sm font-semibold">{title}</h2>{children}
+    <h2 className="mb-3 flex h-6 items-center text-sm font-semibold">{title}</h2>{children}
   </section>
 }
 
@@ -397,10 +397,10 @@ function MetricPill({ label, value, detail, percent, tone = 'blue', health, valu
     className="relative flex min-h-11 min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5 overflow-hidden rounded-lg bg-muted/50 px-3 py-2">
     {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r transition-[width] duration-150 ease-out', tone === 'neutral' ? 'border-border bg-muted' : 'border-receive/30 bg-receive-subtle')}
       style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />}
-    <span className={cn('relative z-10 flex min-w-0 flex-wrap items-center gap-2 text-sm', valueRight && 'w-full justify-between')}>
+    <span className={cn('relative z-10 flex min-w-0 items-center gap-2 text-sm', health ? 'flex-1' : 'flex-wrap', valueRight && 'w-full justify-between')}>
       {health && <span aria-hidden className={cn('size-2 shrink-0 rounded-full', health === 'good' ? 'bg-success' : health === 'bad' ? 'bg-destructive' : 'bg-muted-foreground')} />}
       {label && <span className="shrink-0 text-xs text-muted-foreground">{label}</span>}
-      <span title={value} className={cn('break-words font-semibold tabular-nums', health === 'bad' && 'text-destructive')}>{value}</span>
+      <span title={value} className={cn('min-w-0 break-words font-semibold tabular-nums', health === 'bad' && 'text-destructive')}>{value}</span>
     </span>
     {detail && <span className="relative z-10 shrink-0 text-xs text-muted-foreground tabular-nums">{detail}</span>}
   </div></div>
@@ -642,7 +642,7 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
       </div>
     </StatCard>
     <StatCard title={<span className="inline-flex items-center gap-1.5">Latency
-      <button type="button" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground hover:text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
+      <button type="button" className="relative inline-flex size-6 items-center justify-center rounded-md text-muted-foreground before:absolute before:size-11 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
         title="Time for this router to receive the full HTTPS response, including DNS, TLS and download. Even a login redirect or error page counts; this does not prove the app works. Images, scripts and browser rendering are not included."
         aria-label="About latency measurements"><Info className="size-3.5" /></button></span>}>
       <div className="space-y-1 pt-1">

@@ -25,7 +25,7 @@ OLR capabilities, and a calm, consistent interface. This record accompanies the
 | HTTPS ingress | Preserve certificate details and all service domains/targets; show configuration counts accurately; keep service-authentication warning. |
 | Port forwards | Keep shared routing switch and counters; distinguish unknown rules from inactive rules; configuration counts do not promise public reachability. |
 | External filtering | Distinguish loading/error/unknown/empty; retain policy and counters without claiming end-to-end connectivity. |
-| Tools directory | Retain the approved five-entry directory with illustration, name and chevron. |
+| Tools directory | Use five consistent Lucide outline icons on themed surfaces, full names and chevrons; remove baked-in raster backgrounds. |
 | All five tool operations | Preserve inputs/results and router-originated measurement scope; remove duplicate page subtitle; shorten selector hints; retain bandwidth and privacy consequences. |
 | Advanced | Keep existing capability entries; remove generic shell description. |
 | DDNS | Preserve provider/source/publication information and forms; explicit loading/error/unknown status; short empty state. |
@@ -39,3 +39,25 @@ Review does not require changing every file. Keep useful existing content and
 layouts where they meet the standard. Future iterations should validate empty,
 populated, loading and error states as well as desktop/mobile and both themes.
 Browser fixture checks validate presentation, not live router networking.
+
+## Visual consistency review — 2026-10-12
+
+Reviewed all 43 current pages and entry states at 1440px, 375px and 768px,
+plus desktop dark mode (172 captures). Coverage includes device/group details,
+all Gateway/DNS/DHCP pages, Firewall, all Access pages, all five diagnostics,
+Advanced/DDNS/IPTV, administrator access, Credits, not-found, both sign-in
+methods, setup and first-run. Opened the add dialogs for exits, DHCP ranges and
+reservations, DNS blocking and local names, and port forwards on desktop and
+phone. No browser exceptions or page-wide horizontal overflow were observed.
+The synthetic ingress service icon is absent; its intended fallback is shown.
+
+Corrections: use one centered 1280px shell for every route, align Overview metric
+heading line boxes, keep the health dot beside its label on phones, replace
+background-baked tool illustrations with consistent themed outline icons, and
+let switch panels share the page boundaries while retaining readable form widths.
+Administrator password controls keep a 720px maximum inside their full-width card.
+Existing device imagery and useful monitoring/data space are preserved.
+
+Validated with Node 24 web lint/build/tests and Go 1.27 Linux vet/tests. Lint has
+existing warnings; production build retains the existing bundle-size warning.
+The environment lacks make, so the Go commands behind make check were run directly.

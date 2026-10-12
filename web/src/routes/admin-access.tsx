@@ -30,7 +30,7 @@ export function AdminAccessPage() {
         <CardTitle>Password and sessions</CardTitle>
         <CardDescription>{access.data?.password_set ? 'A password protects this router.' : 'No administrator password is set.'} Changing it signs out every browser.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 [&>*]:max-w-[45rem]">
         <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); save.mutate(false) }}>
           <div className="space-y-2">
             <Label htmlFor="new-password">New password</Label>

@@ -41,7 +41,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (access.isPending) {
     return (
-      <div className="mx-auto max-w-[90rem] space-y-4 p-6">
+      <div className="mx-auto max-w-[80rem] space-y-4 px-4 py-6 sm:px-6 sm:py-8 xl:px-8">
         <Skeleton className="h-14 w-full" />
         <Skeleton className="h-48 w-full" />
       </div>

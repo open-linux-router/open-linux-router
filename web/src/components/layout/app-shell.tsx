@@ -7,15 +7,6 @@ import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { TokenButton } from '@/components/layout/token-button'
 import { cn } from '@/lib/utils'
 
-/** Width follows the task. Settings keep controls beside their explanations. */
-function contentWidth(path: string) {
-  if (path === '/' || path === '/gateway' || path === '/firewall') return 'max-w-none'
-  if (/^\/gateway\/(dns|dhcp)\//.test(path) && !path.endsWith('/details')) return 'max-w-[45rem]'
-  if (path === '/access/socks5' || path === '/advanced/iptv' || path === '/settings/access') return 'max-w-[45rem]'
-  if (path.startsWith('/tools/')) return 'max-w-[56rem]'
-  return 'max-w-[70rem]'
-}
-
 export function AppShell() {
   const { pathname } = useLocation()
   const section = sectionOf(pathname)
@@ -25,7 +16,7 @@ export function AppShell() {
     <div className="flex min-h-svh flex-col bg-background text-foreground">
       <a href="#main-content" className="fixed top-2 left-4 z-50 rounded-lg bg-primary-fill px-4 py-3 text-primary-foreground -translate-y-24 focus:translate-y-0">Skip to content</a>
       <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-[90rem] items-center gap-2.5 px-4 sm:px-6 xl:px-8">
+        <div className="mx-auto flex h-16 max-w-[80rem] items-center gap-2.5 px-4 sm:px-6 xl:px-8">
           <Link to="/" className="inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-2 focus-visible:outline-ring" aria-label="Open Linux Router overview">
             <Logo className="size-5 shrink-0" aria-hidden />
             <span className="font-semibold tracking-tight">Open Linux Router</span>
@@ -45,14 +36,14 @@ export function AppShell() {
           <div className="ml-auto flex items-center gap-1"><TokenButton /></div>
         </div>
       </header>
-      <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-6 outline-none sm:px-6 sm:py-8 xl:px-8">
-        <div className={cn('space-y-8', contentWidth(pathname))}>
+      <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[80rem] flex-1 px-4 py-6 outline-none sm:px-6 sm:py-8 xl:px-8">
+        <div className="min-w-0 space-y-8">
           {landing && <PageHeading title={pathname === '/' ? 'Network overview' : section.label} />}
           <Outlet />
         </div>
       </main>
       <footer>
-        <div className="mx-auto flex max-w-[90rem] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground lg:pb-6">
+        <div className="mx-auto flex max-w-[80rem] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground lg:pb-6">
           <span>© {new Date().getFullYear()} Open Linux Router contributors</span>
           <span>{__APP_VERSION__}</span>
           <a href="https://github.com/open-linux-router/open-linux-router" target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center hover:text-foreground hover:underline underline-offset-4">GitHub</a>

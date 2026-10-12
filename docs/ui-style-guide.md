@@ -58,19 +58,15 @@ border. Use muted fills for small metrics, not another elevated card.
 
 ## Layout and hierarchy
 
-The shell has a 1440px maximum width, a 64px header and horizontal gutters of
+The shell has a 1280px maximum width, a 64px header and horizontal gutters of
 16px on phones, 24px from 640px, and 32px from 1280px. Content starts with
 24px vertical space on phones and 32px on larger screens.
 
-| Task | Content maximum |
-| --- | --- |
-| Overview, Gateway, Firewall monitoring | Available shell width |
-| DNS/DHCP settings, SOCKS5, IPTV, administrator access | 720px |
-| Individual diagnostic tools | 896px |
-| Collections, details, Tools gallery and other pages | 1120px |
-
-Keep content left aligned with the shell. Do not introduce another centered
-container within a detail page. Use `PageHeading` and `SubPage`: a visible
+All page containers use the available shell width, centered in the viewport.
+Header, page headings, cards and footer share the same outer boundaries. Do not
+apply route-dependent page widths. Individual fields and explanatory paragraphs
+may constrain their own reading width without narrowing the entire page.
+Use `PageHeading` and `SubPage`: a visible
 title, an explanation only when needed, optional back link or breadcrumb, and optional
 primary action. Nested DNS and DHCP breadcrumbs lead through Gateway. Preserve
 existing redirects and deep links when moving settings.
@@ -89,8 +85,11 @@ Use 12px only for compact auxiliary metadata. Mobile text inputs are 16px to
 avoid browser zoom. Use tabular numerals for live rates and counters, and
 monospace for addresses, commands and configuration.
 
-Device imagery identifies device categories. Tool directory entries use 80px
-imagery (64px on phones), an 18px name and one directional chevron. Descriptions and instructions
+Device imagery identifies device categories. Tool directory entries use Lucide
+outline icons with a 1.75px stroke in a themed 56px surface (48px on phones),
+an 18px name and one directional chevron. Avoid raster illustrations with baked-in
+backgrounds. Overview metric headings have the same 24px line box; auxiliary
+icons extend their hit area without increasing the heading height. Descriptions and instructions
 belong on the individual tool page. No decorative glows or additional gradients are needed.
 Use Lucide consistently for functional icons, normally 16–20px. The two-color
 brand mark retains its own colors in both themes.

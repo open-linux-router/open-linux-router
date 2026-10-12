@@ -103,7 +103,7 @@ The Tools page's goals are quick selection, a visible range of OLR capabilities
 and a calm presentation. Its current contract is:
 
 - Show all five real tools in a uniform directory.
-- Each entry contains a recognizable illustration, one tool name and a chevron.
+- Each entry contains a recognizable Lucide outline icon, one tool name and a chevron.
 - The whole entry is a keyboard-accessible link.
 - No category, paragraph, instruction footer or generic page subtitle.
 - Keep full names visible on phones; retain contrast and focus in both themes.
