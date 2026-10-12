@@ -7,7 +7,7 @@ export function FilteringPage() {
   const foreign = status.data?.foreign ?? []
 
   return (
-    <SubPage section="/advanced" slug="filtering">
+    <SubPage section="/access" slug="filtering">
       {foreign.length === 0 ? (
         <ListEmpty>Nothing else on this box is filtering forwarded traffic.</ListEmpty>
       ) : (

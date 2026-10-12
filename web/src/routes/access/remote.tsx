@@ -57,14 +57,14 @@ export function RemotePage() {
   const [editing, setEditing] = useState<RemotePeer | null>(null)
   const [settings, setSettings] = useState(false)
 
-  if (config.isPending) return <PageSkeleton />
+  if (config.isPending) return <SubPage section="/access" slug="remote"><PageSkeleton /></SubPage>
   if (config.isError) {
     return (
-      <Alert variant="destructive">
+      <SubPage section="/access" slug="remote"><Alert variant="destructive">
         <AlertTriangle />
         <AlertTitle>Could not load remote access</AlertTitle>
         <AlertDescription>{(config.error as Error).message}</AlertDescription>
-      </Alert>
+      </Alert></SubPage>
     )
   }
 
@@ -73,7 +73,7 @@ export function RemotePage() {
   const change = (c: RemoteChangeRequest) => applier.submit(c)
 
   return (
-    <SubPage section="/advanced" slug="remote">
+    <SubPage section="/access" slug="remote">
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />

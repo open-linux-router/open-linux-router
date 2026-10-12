@@ -13,7 +13,7 @@ import { forwardsChange, useForwardsStatus } from '@/features/nat/queries'
 import type { Forward } from '@/lib/config-types'
 
 /**
- * Port forwards, on their own page under Advanced.
+ * Port forwards, on their own page under Access.
  *
  * One kind of object and looking at it is the whole visit, so the forwards are
  * the page rather than a row leading to one. The only thing behind a row here
@@ -27,12 +27,12 @@ export function ForwardsPage() {
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Forward | null>(null)
 
-  if (!config) return gate
+  if (!config) return <SubPage section="/access" slug="forwards">{gate}</SubPage>
   const forwards = config.forwards ?? []
   const foreign = status.data?.foreign ?? []
 
   return (
-    <SubPage section="/advanced" slug="forwards">
+    <SubPage section="/access" slug="forwards">
       <ApplyOutcome applier={applier} />
 
       {status.data && !status.data.known && (
@@ -101,7 +101,7 @@ export function ForwardsPage() {
 
       {foreign.length > 0 && (
         <SettingsList
-          section="/advanced"
+          section="/access"
           rows={[
             {
               slug: 'filtering',

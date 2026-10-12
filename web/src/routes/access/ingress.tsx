@@ -50,14 +50,14 @@ export function IngressPage() {
   const [editing, setEditing] = useState<Service | null>(null)
   const [cert, setCert] = useState(false)
 
-  if (config.isPending) return <PageSkeleton />
+  if (config.isPending) return <SubPage section="/access" slug="ingress"><PageSkeleton /></SubPage>
   if (config.isError) {
     return (
-      <Alert variant="destructive">
+      <SubPage section="/access" slug="ingress"><Alert variant="destructive">
         <AlertTriangle />
         <AlertTitle>Could not load the published services</AlertTitle>
         <AlertDescription>{(config.error as Error).message}</AlertDescription>
-      </Alert>
+      </Alert></SubPage>
     )
   }
 
@@ -67,7 +67,7 @@ export function IngressPage() {
   const change = (c: IngressChange) => applier.submit(c)
 
   return (
-    <SubPage section="/advanced" slug="ingress">
+    <SubPage section="/access" slug="ingress">
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />

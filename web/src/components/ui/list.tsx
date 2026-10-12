@@ -39,6 +39,7 @@ function ListRow({
   trailing,
   onSelect,
   to,
+  wrap = false,
   className,
   ...props
 }: Omit<React.ComponentProps<'li'>, 'title' | 'onSelect'> & {
@@ -60,13 +61,15 @@ function ListRow({
    * settings group is a link and a pool is a dialog.
    */
   to?: string
+  /** Allow descriptions and mobile status values to occupy multiple lines. */
+  wrap?: boolean
 }) {
   const body = (
     <>
       {leading}
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{title}</div>
-        {subtitle && <div className="truncate text-[0.8rem] text-muted-foreground">{subtitle}</div>}
+        <div className={cn('text-sm font-medium', wrap ? 'break-words' : 'truncate')}>{title}</div>
+        {subtitle && <div className={cn('text-[0.8rem] text-muted-foreground', wrap ? 'break-words' : 'truncate')}>{subtitle}</div>}
       </div>
       {trailing && (
         <div className="hidden shrink-0 text-[0.8rem] text-muted-foreground sm:block">

@@ -1,121 +1,115 @@
-import { ArrowDownLeft, ArrowUpRight, Cable, ChevronRight, LockKeyhole, Network, Route, Server, Waypoints } from 'lucide-react'
-import { Link } from 'react-router'
+import { ArrowDownLeft, ArrowUpRight, LockKeyhole, Route, Server, Waypoints } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import connections from '@/assets/access-connections.webp'
+import { groupOf } from '@/components/layout/sections'
+import { List, ListRow } from '@/components/ui/list'
+import { forwardsSummary, gatewaySummary, ingressSummary, remoteSummary, socksOutSummary } from '@/features/access/summary'
+import type { Summary } from '@/features/access/summary'
+import { useGatewayConfig, useGatewayStatus } from '@/features/gateway/queries'
+import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
+import { useForwardsStatus } from '@/features/nat/queries'
+import { useRemoteConfig, useRemoteStatus, useShadowsocksStatus, useSocksStatus } from '@/features/remote/queries'
+import { useSocksOutConfig, useSocksOutStatus } from '@/features/socksout/queries'
 import { cn } from '@/lib/utils'
 
-type Choice = {
-  title: string
-  detail: string
-  icon: typeof Network
-  to?: string
-  note?: string
-}
-
-const outward: Choice[] = [
-  {
-    title: 'Use another gateway',
-    detail: 'Send selected networks or devices through another router on your LAN.',
-    icon: Route,
-    to: '/gateway/exits',
-  },
-  {
-    title: 'Use a VPN connection',
-    detail: 'Route through an existing tunnel interface, such as WireGuard or Tailscale. OLR does not set up the outbound tunnel yet.',
-    icon: Network,
-    to: '/gateway/exits',
-  },
-  {
-    title: 'Use a SOCKS5 proxy',
-    detail: 'OLR creates a TUN connection to an external SOCKS5 server. Choose which devices use it in Ways out.',
-    icon: Waypoints,
-    to: '/access/socks5',
-  },
-]
-
-const inward: Choice[] = [
-  {
-    title: 'Connect my phone or laptop',
-    detail: 'Create a WireGuard device configuration to reach your home network from outside.',
-    icon: LockKeyhole,
-    to: '/advanced/remote',
-  },
-  {
-    title: 'Publish a service',
-    detail: 'Give a web service at home a public HTTPS address. Anyone who can reach it still needs the service\'s own access controls.',
-    icon: Server,
-    to: '/advanced/ingress',
-  },
-]
-
 export function AccessPage() {
+  const gateway = useGatewayConfig()
+  const gatewayStatus = useGatewayStatus()
+  const socksOut = useSocksOutConfig()
+  const socksOutStatus = useSocksOutStatus()
+  const remote = useRemoteConfig()
+  const wireguard = useRemoteStatus()
+  const shadowsocks = useShadowsocksStatus()
+  const socks = useSocksStatus()
+  const ingress = useIngressConfig()
+  const ingressStatus = useIngressStatus()
+  const forwards = useForwardsStatus()
+
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border bg-gradient-to-br from-primary/10 via-background to-muted/70 px-5 py-6 sm:px-7">
-        <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">Choose a direction</p>
-        <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight sm:text-3xl">Where do you want to go?</h2>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Start with what you want to reach. OLR keeps the routing, tunnel, and publishing settings in their own pages.
+      <div className="flex items-center justify-between gap-4 px-1">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold tracking-tight">Connections, in both directions</h2>
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+            Reach another network from home, connect back to yours, or publish a service.
+          </p>
+        </div>
+        <img src={connections} alt="" width={96} height={96} decoding="async" className="size-16 shrink-0 object-contain sm:size-24" />
+      </div>
+
+      <section className="space-y-2" aria-labelledby="access-from-home">
+        <h2 id="access-from-home" className="flex items-center gap-2 px-1 text-sm font-medium text-muted-foreground">
+          <ArrowUpRight className="size-4" aria-hidden /> From home
+        </h2>
+        <List>
+          <AccessRow
+            title="Another gateway or VPN"
+            description="Route selected devices through another gateway or an existing VPN tunnel."
+            icon={Route}
+            to="/gateway/exits"
+            summary={gatewaySummary(gateway, gatewayStatus)}
+          />
+          <AccessRow
+            slug="socks5"
+            description="Connect home devices through an external SOCKS5 proxy."
+            icon={Waypoints}
+            summary={socksOutSummary(socksOut, socksOutStatus)}
+          />
+        </List>
+        <p className="px-1 text-xs leading-relaxed text-muted-foreground">
+          Routing is managed in Gateway → Ways out. VPN tunnels must already be set up outside OLR.
         </p>
-      </div>
+      </section>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Direction icon={ArrowUpRight} label="Inside → outside" title="From home to another network" description="Choose how devices at home reach something elsewhere." choices={outward} />
-        <Direction icon={ArrowDownLeft} label="Outside → inside" title="From outside back home" description="Connect your own device, or make one service publicly reachable." choices={inward} />
-      </div>
-
-      <Card className="bg-muted/40">
-        <CardHeader>
-          <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            <Cable className="size-4" aria-hidden /> Both directions · later
-          </div>
-          <CardTitle>Connect two homes</CardTitle>
-          <CardDescription>
-            Two OLR routers could share selected networks in both directions. Automatic pairing, routes, and access rules are not supported yet; this is not a phone-style WireGuard peer.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <section className="space-y-2" aria-labelledby="access-from-outside">
+        <h2 id="access-from-outside" className="flex items-center gap-2 px-1 text-sm font-medium text-muted-foreground">
+          <ArrowDownLeft className="size-4" aria-hidden /> From outside
+        </h2>
+        <List>
+          <AccessRow
+            slug="remote"
+            description="Connect to home with WireGuard, or use its internet connection through a proxy."
+            icon={LockKeyhole}
+            summary={remoteSummary(remote, wireguard, shadowsocks, socks)}
+          />
+          <AccessRow
+            slug="ingress"
+            description="Make selected web services reachable by name over HTTPS."
+            icon={Server}
+            summary={ingressSummary(ingress, ingressStatus)}
+          />
+          <AccessRow
+            slug="forwards"
+            description="Let an incoming connection reach a device directly by port."
+            icon={Route}
+            summary={forwardsSummary(gateway, forwards)}
+          />
+        </List>
+      </section>
     </div>
   )
 }
 
-function Direction({ icon: Icon, label, title, description, choices }: {
-  icon: typeof Network
-  label: string
-  title: string
+function AccessRow({ slug, title, description, icon: Icon, to, summary }: {
+  slug?: string
+  title?: string
   description: string
-  choices: Choice[]
+  icon: LucideIcon
+  to?: string
+  summary: Summary
 }) {
-  return (
-    <section className="space-y-3" aria-label={label}>
-      <div className="flex items-start gap-3 px-1">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Icon className="size-5" aria-hidden /></span>
-        <div>
-          <p className="text-xs font-semibold tracking-wide text-primary uppercase">{label}</p>
-          <h2 className="font-heading text-lg font-semibold">{title}</h2>
-          <p className="text-sm text-muted-foreground">{description}</p>
-        </div>
-      </div>
-      <div className="space-y-2">
-        {choices.map((choice) => <ChoiceCard key={choice.title} {...choice} />)}
-      </div>
-    </section>
-  )
-}
+  const label = slug ? groupOf('/access', slug).group.label : title
+  const state = <span className={cn('block max-w-sm whitespace-normal', summary.attention && 'text-warning-foreground')}>{summary.text}</span>
 
-function ChoiceCard({ title, detail, icon: Icon, to, note }: Choice) {
-  const content = (
-    <Card className={cn('h-full transition-colors', to && 'hover:bg-accent/50')}>
-      <CardContent className="flex items-start gap-3">
-        <Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-        <div className="min-w-0 flex-1 space-y-1">
-          <h3 className="text-sm font-semibold">{title}</h3>
-          <p className="text-sm text-muted-foreground">{detail}</p>
-          {note && <p className="text-xs font-medium text-muted-foreground">{note}</p>}
-        </div>
-        {to && <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />}
-      </CardContent>
-    </Card>
+  return (
+    <ListRow
+      title={label}
+      subtitle={<><span>{description}</span><span className="mt-1 block sm:hidden">{state}</span></>}
+      leading={<Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
+      trailing={state}
+      to={to ?? `/access/${slug}`}
+      wrap
+    />
   )
-  return to ? <Link to={to} className="block rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{content}</Link> : content
 }
