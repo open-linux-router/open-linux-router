@@ -31,6 +31,7 @@ export function useNetworkEditor() {
   const config = useQuery({
     queryKey: linkKeys.config,
     queryFn: () => api.get<LinkConfig>('/api/link/config'),
+    structuralSharing: false,
   })
   const interfaces = useQuery({
     queryKey: linkKeys.interfaces,
@@ -43,7 +44,8 @@ export function useNetworkEditor() {
   const [failure, setFailure] = useState<LinkApplyResult | null>(null)
 
   const apply = useMutation({
-    mutationFn: (next: LinkConfig) => api.put<LinkApplyResult>('/api/link/config', next),
+    mutationFn: ({ next, confirm }: { next: LinkConfig; confirm: boolean }) =>
+      api.put<LinkApplyResult>(`/api/link/config?confirm=${confirm}`, next),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['link'] })
       // dhcp too: a network is what its ranges are validated against, so
@@ -73,10 +75,10 @@ export function useNetworkEditor() {
    * that is not reported here is not reported at all: a refused change used to
    * look exactly like a click that did nothing.
    */
-  async function commit(next: LinkConfig) {
+  async function commit(next: LinkConfig, confirm = false) {
     setFailure(null)
     try {
-      const result = await apply.mutateAsync(next)
+      const result = await apply.mutateAsync({ next, confirm })
       // A partial apply is reported, never swallowed. There is no rollback
       // (§5.2), so "which steps ran" is the only way back to a known state.
       if (result.error || result.steps?.some((s) => s.error)) {
@@ -109,7 +111,7 @@ export function useNetworkEditor() {
     confirm: async () => {
       if (!pending) return
       setPending(null)
-      await commit(pending.config)
+      await commit(pending.config, true)
     },
     cancel: () => setPending(null),
 

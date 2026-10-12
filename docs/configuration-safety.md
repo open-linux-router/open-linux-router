@@ -22,3 +22,15 @@ Firewall native rules retain their existing combined runtime/intent revision
 from `/ruleset`; `/config` also accepts the intent ETag for ordinary config
 edits. Native rule editors should continue using the combined revision to
 detect changes made outside olr.
+
+Link, dial/WAN, DHCP and DNS config writes accept `dry_run` and `confirm`.
+Their execution plan is checked under the lock before saving intent or changing
+runtime state. A disruptive request without `confirm=true` returns 409 with
+the plan and no completed steps. A dry run returns 200 and writes nothing.
+Malformed flags return 400. The browser sends confirmation only after its
+confirmation dialog; the local CLI sends it explicitly, matching the existing
+gateway CLI contract. Use `--dry-run` to review CLI changes first.
+
+`POST /apply` repairs previously stored intent without another confirmation.
+This confirmation gate does not provide automatic rollback after losing
+connectivity; console access is still needed for deliberate address changes.

@@ -69,7 +69,8 @@ export function useApplyDhcpConfig() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (config: DhcpConfig) => api.put<ApplyResult>('/api/dhcp/config', config),
+    mutationFn: ({ config, confirm }: { config: DhcpConfig; confirm: boolean }) =>
+      api.put<ApplyResult>(`/api/dhcp/config?confirm=${confirm}`, config),
     onSettled: () => {
       // Invalidated on failure too. A partial apply changed the system, so
       // every observed answer is stale whether or not the call succeeded.

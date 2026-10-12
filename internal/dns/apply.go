@@ -261,6 +261,12 @@ func (a Applier) Drift(ctx context.Context) (Plan, error) {
 // It applies immediately and is in effect on return (design.md §5.1) — there is
 // no staged commit to follow up with.
 func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error) {
+	return a.ApplyChecked(ctx, desired, nil)
+}
+
+// ApplyChecked checks the execution plan before storing or programming anything.
+// The caller holds the global apply lock.
+func (a Applier) ApplyChecked(ctx context.Context, desired Config, check func(Plan) error) (ApplyResult, error) {
 	obs, err := a.Observe(ctx)
 	if err != nil {
 		return ApplyResult{}, err
@@ -268,6 +274,12 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 	plan, err := BuildPlan(a.Backend, desired, a.Links, a.Reservations, a.Published, obs, time.Now())
 	if err != nil {
 		return ApplyResult{Plan: plan}, err
+	}
+
+	if check != nil {
+		if err := check(plan); err != nil {
+			return ApplyResult{Plan: plan}, err
+		}
 	}
 
 	result := ApplyResult{Plan: plan}

@@ -786,7 +786,7 @@ func planAndPrint(c *cobra.Command, desired Config) error {
 
 func applyAndPrint(c *cobra.Command, method, path string, body any) error {
 	var result applyResponse
-	if err := cli.ClientFor(c).Do(ctxOf(c), method, path, body, &result); err != nil {
+	if err := cli.ClientFor(c).Do(ctxOf(c), method, path+"?confirm=true", body, &result); err != nil {
 		return err
 	}
 	if cli.IsJSON(c) {

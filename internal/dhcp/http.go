@@ -53,6 +53,7 @@ func (h HTTP) Routes() []core.Route {
 			Summary:  "Replace the whole DHCP configuration.",
 			Body:     core.BodyFull,
 			Mutating: true,
+			Query:    core.ApplyQuery(),
 			Handler:  h.putConfig,
 		},
 		{
@@ -60,6 +61,7 @@ func (h HTTP) Routes() []core.Route {
 			Summary:  "Change named DHCP fields and leave the rest alone.",
 			Body:     core.BodyRelaxed,
 			Mutating: true,
+			Query:    core.ApplyQuery(),
 			Handler:  h.patchConfig,
 		},
 
@@ -90,6 +92,7 @@ func (h HTTP) Routes() []core.Route {
 				"This is the repair path for a half-applied change, a hand-edited backend config, " +
 				"or a backend that is enabled but not running.",
 			Mutating: true,
+			Query:    core.ApplyQuery(),
 			Handler:  h.postApply,
 		},
 
@@ -106,6 +109,7 @@ func (h HTTP) Routes() []core.Route {
 				`{"ids": ["..."]} clears only the named ones, using the ids from /status.`,
 			Body:     core.BodyNone,
 			Mutating: true,
+			Query:    core.ApplyQuery(),
 			Handler:  h.postFixBlockers,
 		},
 
@@ -197,6 +201,12 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(Config) (
 
 // apply is called with the global apply lock held.
 func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
+	gate, err := core.ParseApplyGate(r)
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	// Cross-module inputs stay stable until the change is stored.
 	if res := Validate(cfg, h.Applier.Networks); !res.OK() {
 		core.WriteError(w, http.StatusUnprocessableEntity,
@@ -208,7 +218,9 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 		result   ApplyResult
 		applyErr error
 	)
-	result, applyErr = h.Applier.Apply(r.Context(), cfg)
+	result, applyErr = h.Applier.ApplyChecked(r.Context(), cfg, func(plan Plan) error {
+		return gate.Check(plan.Impact == ImpactDisruptive, r.URL.Path == "/apply")
+	})
 
 	// Published whenever anything was attempted, including a partial failure —
 	// especially then. Something on the box changed and every client's idea of
@@ -218,6 +230,18 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 	}
 
 	resp := applyResponse{Plan: viewPlan(result.Plan), Steps: result.Steps}
+	if errors.Is(applyErr, core.ErrApplyHeld) {
+		status := http.StatusConflict
+		var failure *core.ErrorBody
+		if gate.DryRun {
+			status = http.StatusOK
+		} else {
+			failure = &core.ErrorBody{Message: core.ErrApplyHeld.Error()}
+		}
+		core.WriteJSON(w, status, applyResponse{Plan: viewPlan(result.Plan), Error: failure})
+		return
+	}
+
 	if applyErr != nil {
 		resp.Error = &core.ErrorBody{Message: applyErr.Error()}
 		core.WriteJSON(w, http.StatusInternalServerError, resp)

@@ -80,6 +80,7 @@ func (h HTTP) Routes() []core.Route {
 			Summary:  "Replace the adopted interfaces and the networks on them.",
 			Body:     core.BodyFull,
 			Mutating: true,
+			Query:    core.ApplyQuery(),
 			Handler:  h.putConfig,
 		},
 		{
@@ -87,6 +88,7 @@ func (h HTTP) Routes() []core.Route {
 			Summary:  "Change the adopted interfaces or networks and leave the rest alone.",
 			Body:     core.BodyRelaxed,
 			Mutating: true,
+			Query:    core.ApplyQuery(),
 			Handler:  h.patchConfig,
 		},
 
@@ -109,6 +111,7 @@ func (h HTTP) Routes() []core.Route {
 			Summary: "Take one IPv4 address off an adopted interface that no network owns — " +
 				"typically one a removed network left behind.",
 			Mutating: true,
+			Query:    core.ApplyQuery(),
 			Handler:  h.deleteAddress,
 		},
 
@@ -223,6 +226,12 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(Config) (
 
 // apply is called with the global apply lock held.
 func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config, opts Options) {
+	gate, err := core.ParseApplyGate(r)
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	// Cross-module inputs stay stable until the change is stored.
 	observed := h.Applier.observeQuietly()
 	if res := Validate(cfg, observed); !res.OK() {
@@ -235,7 +244,9 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config, opts Opt
 		result   ApplyResult
 		applyErr error
 	)
-	result, applyErr = h.Applier.ApplyWith(r.Context(), cfg, opts)
+	result, applyErr = h.Applier.ApplyChecked(r.Context(), cfg, opts, func(plan planView) error {
+		return gate.Check(plan.Impact == impactDisruptive, r.URL.Path == "/apply")
+	})
 	if applyErr == nil && !result.Plan.Empty && h.Dependents != nil {
 		for _, s := range h.Dependents(r.Context()) {
 			result.Steps = append(result.Steps, Step(s))
@@ -244,6 +255,19 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config, opts Opt
 
 	plan := withLockoutWarning(result.Plan, r, observed)
 	stored := cfg
+	if errors.Is(applyErr, core.ErrApplyHeld) {
+		status := http.StatusConflict
+		var failure *core.ErrorBody
+		if gate.DryRun {
+			status = http.StatusOK
+		} else {
+			failure = &core.ErrorBody{Message: core.ErrApplyHeld.Error()}
+		}
+		current, _ := h.Applier.Load()
+		core.WriteJSON(w, status, applyResponse{Plan: plan, Config: current, Error: failure})
+		return
+	}
+
 	if applyErr != nil {
 		core.WriteJSON(w, http.StatusInternalServerError, applyResponse{
 			Plan:   plan,

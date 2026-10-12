@@ -55,8 +55,8 @@ export function useDhcpApply() {
     }
   }
 
-  async function commit(config: DhcpConfig) {
-    return run(() => apply.mutateAsync(config))
+  async function commit(config: DhcpConfig, confirm = false) {
+    return run(() => apply.mutateAsync({ config, confirm }))
   }
 
   /**
@@ -100,7 +100,7 @@ export function useDhcpApply() {
     if (!confirming) return
     const { config } = confirming
     setConfirming(null)
-    await commit(config)
+    await commit(config, true)
   }
 
   return {

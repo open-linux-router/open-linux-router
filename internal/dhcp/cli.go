@@ -722,7 +722,7 @@ func mutate(c *cobra.Command, edit func(*Config) error) error {
 	}
 
 	var result applyResponse
-	if err := client.Put(ctx, configEndpoint, cfg, &result); err != nil {
+	if err := client.Put(ctx, configEndpoint+"?confirm=true", cfg, &result); err != nil {
 		// Report what landed before returning the failure: there is no
 		// rollback, so which steps completed is the operator's starting point
 		// (design.md §5.3.2). The body carries them even on a 500, which is why

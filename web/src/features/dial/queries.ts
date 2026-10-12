@@ -137,10 +137,10 @@ export function useUplinkEditor() {
   const [failure, setFailure] = useState<DialApplyResult | null>(null)
 
   const apply = useMutation({
-    mutationFn: (next: Uplink | null) =>
+    mutationFn: ({ next, confirm }: { next: Uplink | null; confirm: boolean }) =>
       next === null
-        ? api.delete<DialApplyResult>('/api/dial/uplink')
-        : api.put<DialApplyResult>('/api/dial/uplink', next),
+        ? api.delete<DialApplyResult>(`/api/dial/uplink?confirm=${confirm}`)
+        : api.put<DialApplyResult>(`/api/dial/uplink?confirm=${confirm}`, next),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['dial'] })
       // link too: the interfaces list says which NIC is the uplink, and it
@@ -161,7 +161,15 @@ export function useUplinkEditor() {
    */
   async function submit(next: Uplink | null, replacing?: string) {
     try {
-      if (replacing) await handOver(replacing)
+      if (replacing) {
+        const link = await api.get<LinkConfig>('/api/link/config')
+        const plan = await api.post<Plan>('/api/link/plan?keep_addresses=true', {
+          ...link,
+          networks: (link.networks ?? []).filter((n) => n.name !== replacing),
+        })
+        setPending({ uplink: next, plan, replaced: replacing })
+        return
+      }
       const current = await api.get<{ records?: unknown[] }>('/api/dial/config')
       const plan = await api.post<Plan>('/api/dial/plan', {
         ...current,
@@ -196,7 +204,7 @@ export function useUplinkEditor() {
    */
   async function handOver(network: string) {
     const link = await api.get<LinkConfig>('/api/link/config')
-    await api.put<LinkApplyResult>('/api/link/config?keep_addresses=true', {
+    await api.put<LinkApplyResult>('/api/link/config?keep_addresses=true&confirm=true', {
       ...link,
       networks: (link.networks ?? []).filter((n) => n.name !== network),
     })
@@ -212,10 +220,11 @@ export function useUplinkEditor() {
    * that is not reported here is not reported at all: a refused PUT used to look
    * exactly like a click that did nothing.
    */
-  async function commit(next: Uplink | null, replaced?: string) {
+  async function commit(next: Uplink | null, replaced?: string, confirm = false) {
     setFailure(null)
     try {
-      const result = await apply.mutateAsync(next)
+      if (replaced) await handOver(replaced)
+      const result = await apply.mutateAsync({ next, confirm })
       // A partial apply is reported, never swallowed. There is no rollback
       // (§5.2), so "which steps ran" is the only way back to a known state —
       // and here a half-applied change can mean an address that landed and a
@@ -250,7 +259,7 @@ export function useUplinkEditor() {
     confirm: async () => {
       if (!pending) return
       setPending(null)
-      await commit(pending.uplink, pending.replaced)
+      await commit(pending.uplink, pending.replaced, true)
     },
     cancel: () => setPending(null),
 

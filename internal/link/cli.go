@@ -228,7 +228,7 @@ func mutate(c *cobra.Command, iface string, edit func(*Config) (bool, string), h
 	}
 
 	var result applyResponse
-	if err := client.Put(ctx, configEndpoint, cfg, &result); err != nil {
+	if err := client.Put(ctx, configEndpoint+"?confirm=true", cfg, &result); err != nil {
 		return err
 	}
 	if cli.IsJSON(c) {

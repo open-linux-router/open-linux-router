@@ -166,6 +166,12 @@ type ApplyResult struct {
 // rollback (§5.2) — see the Writer interface for why a revert here is worse
 // than the failure it would be recovering from.
 func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error) {
+	return a.ApplyChecked(ctx, desired, nil)
+}
+
+// ApplyChecked checks the execution plan before storing or programming anything.
+// The caller holds the global apply lock.
+func (a Applier) ApplyChecked(ctx context.Context, desired Config, check func(planView) error) (ApplyResult, error) {
 	previous, err := a.Load()
 	if err != nil {
 		return ApplyResult{}, err
@@ -173,6 +179,12 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 	plan, err := a.Plan(ctx, desired)
 	if err != nil {
 		return ApplyResult{}, err
+	}
+
+	if check != nil {
+		if err := check(plan); err != nil {
+			return ApplyResult{Plan: plan}, err
+		}
 	}
 
 	stored, err := a.Save(desired)

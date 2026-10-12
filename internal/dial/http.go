@@ -106,6 +106,7 @@ func (h HTTP) Routes() []core.Route {
 			Summary:  "Replace the whole set of dynamic DNS records.",
 			Body:     core.BodyFull,
 			Mutating: true,
+			Query:    core.ApplyQuery(),
 			Handler:  h.putConfig,
 		},
 		{
@@ -113,6 +114,7 @@ func (h HTTP) Routes() []core.Route {
 			Summary:  "Change the dynamic DNS configuration, leaving unmentioned fields alone.",
 			Body:     core.BodyRelaxed,
 			Mutating: true,
+			Query:    core.ApplyQuery(),
 			Handler:  h.patchConfig,
 		},
 
@@ -135,6 +137,7 @@ func (h HTTP) Routes() []core.Route {
 			Summary: "Set how this router itself reaches the internet. olr writes the address, brings " +
 				"the interface up and owns the default route from then on.",
 			Mutating: true,
+			Query:    core.ApplyQuery(),
 			Handler:  h.putUplink,
 		},
 		{
@@ -142,6 +145,7 @@ func (h HTTP) Routes() []core.Route {
 			Summary: "Stop owning the way out. The address and the default route stay exactly as they " +
 				"are; olr simply no longer maintains them or restores them after a reboot.",
 			Mutating: true,
+			Query:    core.ApplyQuery(),
 			Handler:  h.deleteUplink,
 		},
 
@@ -156,6 +160,7 @@ func (h HTTP) Routes() []core.Route {
 			Method: "PUT", Path: "/records/{name}",
 			Summary:  "Add one name to keep current, or replace it, leaving every other one alone.",
 			Mutating: true,
+			Query:    core.ApplyQuery(),
 			Handler:  h.putRecord,
 		},
 		{
@@ -163,6 +168,7 @@ func (h HTTP) Routes() []core.Route {
 			Summary: "Stop keeping one name current. The record is left at the provider pointing at " +
 				"the address last published; this only stops olr updating it.",
 			Mutating: true,
+			Query:    core.ApplyQuery(),
 			Handler:  h.deleteRecord,
 		},
 
@@ -402,14 +408,14 @@ type applyResponse struct {
 // two clients adding a record at once would otherwise each splice their own copy
 // of the list, and two programming the uplink would race on the route table.
 //
-// There is no disruptive gate here, matching `link` and unlike `ingress`. The
-// server applies what it is given; it is the client that plans first and stops
-// when the plan comes back disruptive, which is the instant-apply-unless-
-// disruptive rule every module follows. What the server owes that client is an
-// honest impact and a warning naming what is about to be lost, and
-// withLockoutWarning is the sharpest of those — §5.5's guard is still not
-// built, so the plan is the entire safety net.
+// The execution plan is checked on the server before intent or runtime writes.
 func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) error) {
+	gate, err := core.ParseApplyGate(r)
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	stale := false
 	var (
 		editErr  error
@@ -446,7 +452,9 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 		}
 
 		stored = next
-		result, applyErr = h.Applier.Apply(r.Context(), next)
+		result, applyErr = h.Applier.ApplyChecked(r.Context(), next, func(plan planView) error {
+			return gate.Check(plan.Impact == impactDisruptive, r.URL.Path == "/apply")
+		})
 		if applyErr == nil && !result.Plan.Empty && h.Dependents != nil {
 			for _, s := range h.Dependents(r.Context()) {
 				result.Steps = append(result.Steps, Step(s))
@@ -480,6 +488,18 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 	}
 
 	plan := withLockoutWarning(result.Plan, r, previous, stored)
+	if errors.Is(applyErr, core.ErrApplyHeld) {
+		status := http.StatusConflict
+		var failure *core.ErrorBody
+		if gate.DryRun {
+			status = http.StatusOK
+		} else {
+			failure = &core.ErrorBody{Message: core.ErrApplyHeld.Error()}
+		}
+		core.WriteJSON(w, status, applyResponse{Plan: plan, Config: previous.Redacted(), Error: failure})
+		return
+	}
+
 	if applyErr != nil {
 		core.WriteJSON(w, http.StatusInternalServerError, applyResponse{
 			Plan:   plan,

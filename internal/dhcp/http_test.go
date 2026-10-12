@@ -198,7 +198,7 @@ func TestPatchChangesOneFieldAndLeavesTheRest(t *testing.T) {
 	if w := do(t, h, http.MethodPut, "/config", validPUT); w.Code != http.StatusOK {
 		t.Fatalf("PUT status = %d, body %s", w.Code, w.Body)
 	}
-	if w := do(t, h, http.MethodPatch, "/config", `{"enabled":false}`); w.Code != http.StatusOK {
+	if w := do(t, h, http.MethodPatch, "/config?confirm=true", `{"enabled":false}`); w.Code != http.StatusOK {
 		t.Fatalf("PATCH status = %d, body %s", w.Code, w.Body)
 	}
 

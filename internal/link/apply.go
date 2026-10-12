@@ -200,6 +200,12 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 
 // ApplyWith is Apply, with Options.
 func (a Applier) ApplyWith(ctx context.Context, desired Config, opts Options) (ApplyResult, error) {
+	return a.ApplyChecked(ctx, desired, opts, nil)
+}
+
+// ApplyChecked checks the execution plan before storing or programming anything.
+// The caller holds the global apply lock.
+func (a Applier) ApplyChecked(ctx context.Context, desired Config, opts Options, check func(planView) error) (ApplyResult, error) {
 	previous, err := a.Load()
 	if err != nil {
 		return ApplyResult{}, err
@@ -207,6 +213,12 @@ func (a Applier) ApplyWith(ctx context.Context, desired Config, opts Options) (A
 	plan, err := a.PlanWith(desired, opts)
 	if err != nil {
 		return ApplyResult{}, err
+	}
+
+	if check != nil {
+		if err := check(plan); err != nil {
+			return ApplyResult{Plan: plan}, err
+		}
 	}
 
 	stored, err := a.Save(desired)

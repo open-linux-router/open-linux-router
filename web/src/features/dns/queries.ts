@@ -95,7 +95,8 @@ export function useApplyDnsConfig() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (config: DnsConfig) => api.put<DnsApplyResult>('/api/dns/config', config),
+    mutationFn: ({ config, confirm }: { config: DnsConfig; confirm: boolean }) =>
+      api.put<DnsApplyResult>(`/api/dns/config?confirm=${confirm}`, config),
     onSettled: () => {
       // Invalidated on failure too. A partial apply changed the system, so
       // every observed answer is stale whether or not the call succeeded.

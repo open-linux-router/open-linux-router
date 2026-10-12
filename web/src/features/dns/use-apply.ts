@@ -53,8 +53,8 @@ export function useDnsApply() {
     }
   }
 
-  async function commit(config: DnsConfig) {
-    return run(() => apply.mutateAsync(config))
+  async function commit(config: DnsConfig, confirm = false) {
+    return run(() => apply.mutateAsync({ config, confirm }))
   }
 
   /**
@@ -102,7 +102,7 @@ export function useDnsApply() {
     if (!confirming) return
     const { config } = confirming
     setConfirming(null)
-    await commit(config)
+    await commit(config, true)
   }
 
   return {
