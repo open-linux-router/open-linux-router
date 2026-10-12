@@ -23,7 +23,6 @@ through an SSH tunnel. The daemon accepts:
 ```
 --listen 192.168.1.1:8443 --tls-cert /path/router.crt --tls-key /path/router.key
 --admin-networks 192.168.1.0/24,fd00::/64
---allowed-hosts router.example
 ```
 
 Put these in `OLRD_ARGS` in `/etc/open-linux-router/olrd.env` and restart olrd.
@@ -31,12 +30,12 @@ Both certificate and key are required; invalid credentials fail startup.
 `admin-networks` is optional and filters the connection's client address, not
 X-Forwarded-For. The Unix socket is unaffected by these restrictions.
 
-Host validation accepts the TCP connection's local IP, localhost, the system
-hostname and explicitly allowed names. Custom DNS names need `allowed-hosts`.
-Requests from another browser origin, cross-site fetches and non-JSON API
-bodies are rejected. These checks also cover password-free boxes and claim.
-For a reverse proxy, preserve Host and use HTTPS to the daemon too; forwarding
-headers never substitute for TLS or widen permitted client addresses.
+Custom DNS names and HTTPS reverse proxies require no Host allowlist. The old
+`--allowed-hosts` flag is accepted and ignored for upgrade compatibility.
+Cross-site fetches and non-JSON API bodies are rejected, including on
+password-free boxes and claim. A reverse proxy may terminate HTTPS and forward
+HTTP to the daemon over a trusted local connection. Forwarding headers do not
+widen permitted client addresses.
 
 ## API tokens and local recovery
 
@@ -69,6 +68,6 @@ current TCP credential or the local control socket. Access status contains
 booleans only and is public so a browser can show the correct sign-in screen.
 
 A hostile device already on the LAN can still claim a fresh, unclaimed box
-first. Source restrictions and same-origin enforcement reduce exposure but
+first. Source restrictions and cross-site fetch checks reduce exposure but
 do not establish physical ownership; claim from the local control socket when
 the initial network is untrusted.

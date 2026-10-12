@@ -127,7 +127,8 @@ func parseOptions(args []string, onError flag.ErrorHandling) (options, error) {
 		"require the API token on the TCP listener (off by default)")
 	fs.StringVar(&opts.tlsCert, "tls-cert", "", "PEM certificate for HTTPS on the TCP listener (requires --tls-key)")
 	fs.StringVar(&opts.tlsKey, "tls-key", "", "PEM private key for HTTPS on the TCP listener (requires --tls-cert)")
-	fs.StringVar(&opts.allowedHosts, "allowed-hosts", "", "comma-separated custom Host names allowed on the TCP listener")
+	// Keep accepting old startup arguments so upgrades cannot stop the daemon.
+	fs.StringVar(&opts.allowedHosts, "allowed-hosts", "", "deprecated; accepted and ignored")
 	fs.StringVar(&opts.adminNetworks, "admin-networks", "", "comma-separated client CIDRs allowed to reach TCP management; empty allows all sources")
 	// Accepted and ignored. It named the default-on inverse of --auth, and a box
 	// upgrading with it still in OLRD_ARGS must not fail to start over a flag
@@ -1045,13 +1046,7 @@ func tcpListener(opts options, access system.Applier, handler http.Handler, logg
 		authed = "administrator password"
 	}
 	handler = system.Authenticate(access, sessions, token, handler)
-	var allowed []string
-	for _, host := range strings.Split(opts.allowedHosts, ",") {
-		if host = strings.TrimSpace(host); host != "" {
-			allowed = append(allowed, host)
-		}
-	}
-	handler = core.BrowserGuard(handler, allowed)
+	handler = core.BrowserGuard(handler)
 	if opts.adminNetworks != "" {
 		var prefixes []netip.Prefix
 		for _, value := range strings.Split(opts.adminNetworks, ",") {

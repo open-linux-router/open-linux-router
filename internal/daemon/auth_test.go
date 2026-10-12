@@ -149,6 +149,12 @@ func TestAuthIsOffUnlessAsked(t *testing.T) {
 	}
 }
 
+func TestDeprecatedAllowedHostsFlagIsStillAccepted(t *testing.T) {
+	if _, err := parseOptions([]string{"--allowed-hosts", "olr.home.iloahz.com"}, flag.ContinueOnError); err != nil {
+		t.Fatalf("legacy startup arguments must still work: %v", err)
+	}
+}
+
 // The QR link must be reachable from a phone without giving it the admin token.
 // Other API routes remain behind BearerAuth.
 func TestPublicCADownloadBypassesAPIAuth(t *testing.T) {
