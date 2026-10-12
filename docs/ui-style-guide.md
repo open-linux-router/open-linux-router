@@ -66,7 +66,9 @@ All page containers use the available shell width, centered in the viewport.
 Header, page headings, cards and footer share the same outer boundaries. Do not
 apply route-dependent page widths. Individual fields and explanatory paragraphs
 may constrain their own reading width without narrowing the entire page.
-Use `PageHeading` and `SubPage`: a visible
+Section landing pages omit the visible heading already named in navigation;
+retain an `sr-only` h1 for assistive technology, with no heading gap. Detail and
+operation pages use `PageHeading` and `SubPage`: a visible
 title, an explanation only when needed, optional back link or breadcrumb, and optional
 primary action. Nested DNS and DHCP breadcrumbs lead through Gateway. Preserve
 existing redirects and deep links when moving settings.
@@ -74,7 +76,10 @@ existing redirects and deep links when moving settings.
 The spacing vocabulary is 4, 8, 12, 16, 24 and 32px. Use 32px between major
 sections, 16–24px inside cards and 8px between label and control. Basic corner
 radii are 8px for controls/small inset surfaces, 12px for panels and 16px for
-larger enclosing surfaces. Avoid arbitrary one-off radii.
+larger enclosing surfaces. Avoid arbitrary one-off radii. Overview metric cards
+use 12px padding on phones and 16px on larger screens, an 8px heading gap,
+36px metric rows and 4px between rows. Interactive rows retain 44px targets on
+phones; site chips use 32px rows with 6px gaps.
 
 ## Typography and imagery
 

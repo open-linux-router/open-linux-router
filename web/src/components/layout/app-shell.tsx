@@ -1,7 +1,6 @@
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 
 import { Logo } from '@/components/layout/logo'
-import { PageHeading } from '@/components/layout/page-heading'
 import { SECTIONS, sectionOf } from '@/components/layout/sections'
 import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { TokenButton } from '@/components/layout/token-button'
@@ -37,8 +36,8 @@ export function AppShell() {
         </div>
       </header>
       <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[80rem] flex-1 px-4 py-6 outline-none sm:px-6 sm:py-8 xl:px-8">
-        <div className="min-w-0 space-y-8">
-          {landing && <PageHeading title={pathname === '/' ? 'Network overview' : section.label} />}
+        <div className="min-w-0">
+          {landing && <h1 className="sr-only">{pathname === '/' ? 'Network overview' : section.label}</h1>}
           <Outlet />
         </div>
       </main>

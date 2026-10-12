@@ -27,7 +27,10 @@ Apply these rules to existing pages as well as new features. The page-by-page
 Reducing clutter does not mean reducing every data display. First remove repeated
 introductions, obvious instructions and duplicated labels. Then clarify grouping,
 ordering and state. Do not shrink metric cards, value typography or chart space
-to make a page appear quieter.
+to make a page appear quieter. Overview cards may reduce padding and row height
+to improve density while preserving values, units and mobile interaction targets.
+Section landing pages omit titles duplicated by navigation, retaining a visually
+hidden page title. Detail and operation pages keep their identifying titles.
 
 - Keep the Overview's four metric cards, CPU, memory and uptime visible.
 - Keep download and upload limits beside their respective measurements; separate

@@ -362,8 +362,8 @@ function Meter({ label, current, maximum, percent, tone = 'blue', arrow, onClick
     </span>
     <span className="relative z-10 text-xs text-muted-foreground tabular-nums">{maximum ? `of ${maximum}` : onClick ? 'Set limit' : '—'}</span>
   </>
-  const classes = 'relative flex min-h-11 w-full flex-wrap items-center justify-between gap-2 overflow-hidden rounded-lg bg-muted/50 px-3 py-2'
-  return <div className={cn('min-w-0', onClick ? 'py-1' : 'py-1.5')}>
+  const classes = 'relative flex min-h-11 sm:min-h-9 w-full flex-wrap items-center justify-between gap-2 overflow-hidden rounded-lg bg-muted/50 px-3 py-1.5'
+  return <div className="min-w-0">
     {onClick ? <button type="button" onClick={onClick} aria-label={`${label}: ${current ?? 'unavailable'}. ${maximum ? `Limit ${maximum}` : 'Set limit'}`}
       className={cn(classes, 'cursor-pointer transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring')}>
       {content}
@@ -377,8 +377,8 @@ function Meter({ label, current, maximum, percent, tone = 'blue', arrow, onClick
 }
 
 function StatCard({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
-  return <section className="min-w-0 rounded-xl border bg-card p-4 shadow-xs sm:p-5">
-    <h2 className="mb-3 flex h-6 items-center text-sm font-semibold">{title}</h2>{children}
+  return <section className="min-w-0 rounded-xl border bg-card p-3 shadow-xs sm:p-4">
+    <h2 className="mb-2 flex h-6 items-center text-sm font-semibold">{title}</h2>{children}
   </section>
 }
 
@@ -391,10 +391,10 @@ function MetricPill({ label, value, detail, percent, tone = 'blue', health, valu
   health?: 'good' | 'bad' | 'unknown'
   valueRight?: boolean
 }) {
-  return <div className="min-w-0 py-1"><div role={percent == null ? undefined : 'progressbar'} aria-label={label}
+  return <div className="min-w-0"><div role={percent == null ? undefined : 'progressbar'} aria-label={label}
     aria-valuenow={percent == null ? undefined : Math.min(100, Math.max(0, Math.round(percent)))}
     aria-valuemin={0} aria-valuemax={100}
-    className="relative flex min-h-11 min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5 overflow-hidden rounded-lg bg-muted/50 px-3 py-2">
+    className="relative flex min-h-9 min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5 overflow-hidden rounded-lg bg-muted/50 px-3 py-1.5">
     {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r transition-[width] duration-150 ease-out', tone === 'neutral' ? 'border-border bg-muted' : 'border-receive/30 bg-receive-subtle')}
       style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />}
     <span className={cn('relative z-10 flex min-w-0 items-center gap-2 text-sm', health ? 'flex-1' : 'flex-wrap', valueRight && 'w-full justify-between')}>
@@ -445,9 +445,9 @@ function PublicAddressRow({ family, address }: { family: 'IPv4' | 'IPv6'; addres
   const location = [address?.city, address?.region, address?.country].filter(Boolean).join(', ')
   const network = [address?.isp, address?.organization && address.organization !== address.isp ? address.organization : undefined].filter(Boolean).join(' · ')
   const summary = [address?.city || address?.region || address?.country, address?.isp || address?.organization].filter(Boolean).join(', ')
-  return <div className="min-w-0 py-1">
+  return <div className="min-w-0">
     <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
-      className="flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+      className="flex min-h-11 sm:min-h-9 w-full min-w-0 flex-wrap items-center gap-2 rounded-lg bg-muted/50 px-3 py-1.5 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
       <span className="w-full shrink-0 text-xs text-muted-foreground sm:w-auto">{family}</span>
       <span className="min-w-0 flex-1 break-words text-[0.8125rem] font-semibold" title={summary || undefined}>{summary || (address?.ip ? 'Location unavailable' : '—')}</span>
       <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
@@ -648,18 +648,18 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
       <div className="space-y-1 pt-1">
         <MetricPill label="Internet" value={latencyValue} valueRight />
         <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} valueRight />
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           {latency?.custom?.map((site) => {
             const measuredSite = Boolean(site.checked_at && !site.checked_at.startsWith('0001-'))
             const ms = site.milliseconds
             const description = `${site.name} · HTTPS response from ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!measuredSite ? 'Waiting for first probe' : ms == null ? site.error || 'Failed' : `${ms.toFixed(0)} ms`}`
             return <span key={site.name} tabIndex={0} aria-label={description} title={description}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-muted/65 px-2.5 text-xs font-semibold tabular-nums text-foreground ring-1 ring-foreground/[0.06]">
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-xl bg-muted/65 px-2.5 text-xs font-semibold tabular-nums text-foreground ring-1 ring-foreground/[0.06]">
               <SiteIcon name={site.name} url={site.url} icon={site.icon} />
               <span>{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
             </span>
           })}
-          <button className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          <button className="inline-flex min-h-11 min-w-11 sm:min-h-8 sm:min-w-8 items-center justify-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
             onClick={() => setSitesOpen(true)} aria-label="Monitor sites" title="Monitor sites"><Plus className="size-4" /><span className="sr-only">Monitor sites</span></button>
         </div>
       </div>
