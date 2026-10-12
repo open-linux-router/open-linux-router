@@ -160,7 +160,7 @@ function Step({
 
       {!done &&
         (action.to ? (
-          <Button size="sm" variant={blocked ? 'ghost' : 'outline'} disabled={blocked} render={
+          <Button nativeButton={false} size="sm" variant={blocked ? 'ghost' : 'outline'} disabled={blocked} render={
             <Link to={action.to}>
               {action.label}
               <ChevronRight className="size-3.5" aria-hidden />
