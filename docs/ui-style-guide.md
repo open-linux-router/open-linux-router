@@ -6,6 +6,9 @@ comes first; polish comes from alignment, typography, restrained depth and
 consistent interaction. Keep the existing Geist typeface, router identity and
 device imagery.
 
+For information hierarchy, wording and progressive disclosure, follow the
+[content and presentation standards](ui-content-guide.md).
+
 ## Findings and decisions
 
 The audit found inconsistent content widths and headings, oversized tool
@@ -63,7 +66,7 @@ The shell has a 1440px maximum width, a 64px header and horizontal gutters of
 
 Keep content left aligned with the shell. Do not introduce another centered
 container within a detail page. Use `PageHeading` and `SubPage`: a visible
-title, one short explanation, optional back link or breadcrumb, and optional
+title, an explanation only when needed, optional back link or breadcrumb, and optional
 primary action. Nested DNS and DHCP breadcrumbs lead through Gateway. Preserve
 existing redirects and deep links when moving settings.
 
@@ -81,9 +84,9 @@ Use 12px only for compact auxiliary metadata. Mobile text inputs are 16px to
 avoid browser zoom. Use tabular numerals for live rates and counters, and
 monospace for addresses, commands and configuration.
 
-Device imagery identifies device categories. Tool illustrations are subordinate
-to the task: 112px imagery, a 16px title, a readable description and one
-directional chevron. No decorative glows or additional gradients are needed.
+Device imagery identifies device categories. Tool directory entries use 80px
+imagery (64px on phones), an 18px name and one directional chevron. Descriptions and instructions
+belong on the individual tool page. No decorative glows or additional gradients are needed.
 Use Lucide consistently for functional icons, normally 16–20px. The two-color
 brand mark retains its own colors in both themes.
 

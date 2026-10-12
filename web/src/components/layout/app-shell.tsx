@@ -12,7 +12,6 @@ const descriptions: Record<string, string> = {
   '/gateway': 'Interfaces, internet routes and the services on your network.',
   '/firewall': 'Review the network boundary and the rules in force.',
   '/access': 'Connect from home, reach your network remotely or publish a service.',
-  '/tools': 'Measure your connection, check reachability and explore a route.',
   '/advanced': 'Additional services for your network.',
 }
 
