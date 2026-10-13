@@ -30,6 +30,9 @@ func writeConfigText(w io.Writer, c Config) error {
 	fmt.Fprintf(w, "resolving by:  %s\n", describeUpstream(c.Upstream))
 	fmt.Fprintf(w, "redirect:      %s\n", describeHijack(c.Hijack))
 	fmt.Fprintf(w, "query log:     %s\n", describeQueryLog(c.QueryLog))
+	if c.FilterAAAA {
+		fmt.Fprintln(w, "IPv6 answers: filtered (AAAA returns no address)")
+	}
 	fmt.Fprintf(w, "local names:   %s\n", describeHosts(c))
 
 	fmt.Fprintln(w)

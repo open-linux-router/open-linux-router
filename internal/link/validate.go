@@ -111,6 +111,14 @@ func Validate(c Config, observed []Interface) Result {
 	}
 
 	validateNetworks(&r, c, byName, len(observed) > 0)
+	for name := range c.IPv6Auto {
+		path := "ipv6_auto[" + name + "]"
+		if problem := checkName(name); problem != "" {
+			r.errorf(path, "%s", problem)
+		} else if !c.IsAdopted(name) {
+			r.errorf(path, "%q is not adopted; hand this interface to olr first", name)
+		}
+	}
 
 	return r
 }

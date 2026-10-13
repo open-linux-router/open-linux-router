@@ -340,6 +340,12 @@ func hostDesired(store *core.Store) (host.Desired, error) {
 	if err != nil {
 		return d, err
 	}
+	d.IPv6Auto = lcfg.IPv6Auto
+	for iface, enabled := range lcfg.IPv6Auto {
+		if !enabled {
+			d.IPv6 = append(d.IPv6, iface)
+		}
+	}
 	for _, n := range lcfg.Networks {
 		if n.IPv4 != nil && n.IPv4.Subnet.IsValid() {
 			d.IPv4 = append(d.IPv4, n.Members...)

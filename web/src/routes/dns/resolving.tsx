@@ -39,6 +39,15 @@ export function DnsResolvingPage() {
     <SubPage section="/gateway/dns" slug="resolving">
       <ApplyOutcome applier={applier} />
 
+      <SwitchField
+        id="dns-aaaa"
+        label="Resolve IPv6 addresses (AAAA)"
+        hint="When off, AAAA queries return no address. IPv4 lookups continue normally."
+        checked={!config.filter_aaaa}
+        busy={busy}
+        onChange={(enabled) => change({ ...config, filter_aaaa: !enabled })}
+      />
+
       <div className="grid gap-2">
         <Label htmlFor="dns-mode">Method</Label>
         <Select

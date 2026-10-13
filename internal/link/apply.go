@@ -30,6 +30,9 @@ import (
 // against its own field, which is why the UI warns before a release rather than
 // after.
 type Applier struct {
+	// CheckConfig checks the host's ability to apply interface settings before
+	// storing intent. Nil for tests and standalone uses.
+	CheckConfig func(Config) error
 	// Store is core's configuration document, which owns this module's intent
 	// alongside every other module's.
 	Store *core.Store
@@ -109,6 +112,11 @@ func (a Applier) observeQuietly() []Interface {
 // caller takes it.
 func (a Applier) Save(cfg Config) (Config, error) {
 	cfg.Normalize()
+	if a.CheckConfig != nil {
+		if err := a.CheckConfig(cfg); err != nil {
+			return cfg, err
+		}
+	}
 	if res := Validate(cfg, a.observeQuietly()); !res.OK() {
 		return cfg, res.Err()
 	}
@@ -156,6 +164,11 @@ func (a Applier) Plan(desired Config) (planView, error) {
 
 // PlanWith is Plan, with Options.
 func (a Applier) PlanWith(desired Config, opts Options) (planView, error) {
+	if a.CheckConfig != nil {
+		if err := a.CheckConfig(desired); err != nil {
+			return planView{}, err
+		}
+	}
 	stored, err := a.Load()
 	if err != nil {
 		return planView{}, err

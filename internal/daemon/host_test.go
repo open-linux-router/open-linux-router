@@ -58,3 +58,14 @@ func TestAnUplinkWithoutAStaticAddressTakesNothing(t *testing.T) {
 		t.Errorf("took %+v from an uplink olr does not address", d)
 	}
 }
+
+func TestHostDesiredAutomaticIPv6IsIndependentOfStaticIPv4(t *testing.T) {
+	store := hostStore(t, `{"link":{"adopted":["ens18"],"ipv6_auto":{"ens18":false}},"dial":{"uplink":{"interface":"ens18","ipv4":{"address":"192.168.1.2/24","gateway":"192.168.1.1"}}}}`)
+	d, err := hostDesired(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(d.IPv4, "ens18") || !slices.Contains(d.IPv6, "ens18") || d.IPv6Auto["ens18"] {
+		t.Fatalf("host intent = %+v", d)
+	}
+}

@@ -281,6 +281,31 @@ func buildPlan(stored, desired Config, observed []Interface, opts Options, deleg
 	}
 
 	// --- networks: keyed objects, and these do reach the box ---
+	names := make([]string, 0, len(stored.IPv6Auto)+len(desired.IPv6Auto))
+	for name := range stored.IPv6Auto {
+		names = append(names, name)
+	}
+	for name := range desired.IPv6Auto {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range slices.Compact(names) {
+		before, was := stored.IPv6Auto[name]
+		after, now := desired.IPv6Auto[name]
+		if was == now && before == after {
+			continue
+		}
+		value := "host defaults"
+		if now {
+			value = fmt.Sprintf("%t", after)
+		}
+		plan.Changes = append(plan.Changes, changeView{
+			Path: "interfaces[" + name + "].ipv6_auto", Kind: kindUpdate,
+			Impact: impactDisruptive,
+			Diff:   "+ Automatic IPv6 addressing: " + value + "\n",
+		})
+	}
+
 	for _, n := range desired.Networks {
 		before, existed := stored.Network(n.Name)
 		switch {

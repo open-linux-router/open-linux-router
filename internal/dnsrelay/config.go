@@ -38,6 +38,7 @@ import (
 
 // Config is relay.json: everything that costs a restart to change.
 type Config struct {
+	FilterAAAA bool `json:"filter_aaaa,omitempty"`
 	// Listen is where queries are answered, on both UDP and TCP. Empty — the
 	// ordinary case — means the wildcard on DefaultPort, in both families.
 	//

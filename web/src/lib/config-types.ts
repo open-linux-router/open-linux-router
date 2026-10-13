@@ -302,6 +302,7 @@ export interface Record {
   ttl?: number
 }
 export interface DnsConfig {
+  filter_aaaa?: boolean
   enabled: boolean
   listen?: AddressAndPort[]
   upstream: Upstream
@@ -435,6 +436,7 @@ export interface RequestHeaderIngress {
   remove?: boolean
 }
 export interface LinkConfig {
+  ipv6_auto?: { [interfaceName: string]: boolean }
   adopted?: string[]
   networks?: Network[]
 }

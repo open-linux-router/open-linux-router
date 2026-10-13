@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 // TeeBuffer is how many observations may be in flight behind the fast path.
@@ -233,6 +235,11 @@ func (r *Relay) resolve(ctx context.Context, client netip.Addr, query []byte, ov
 	// here would be us inventing a stricter DNS than the one on the wire.
 	if q, _, err := ParseQuestion(query); err == nil {
 		res.question, res.haveQ = q, true
+		if r.cfg.FilterAAAA && q.Type == dnsmessage.TypeAAAA {
+			response, err := Answer(query, nil, 0)
+			res.response, res.local = response, true
+			return res, err
+		}
 		res.decision = r.Policies().Decide(client, q.Name)
 	}
 

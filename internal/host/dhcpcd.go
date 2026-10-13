@@ -51,13 +51,29 @@ func renderDhcpcd(conf string, d Desired) string {
 		b.WriteString(blockEnd + "\n\n")
 	}
 	b.WriteString(body)
-	if ifaces := sortedUnique(append(slices.Clone(d.IPv4), d.IPv6...)); len(ifaces) > 0 {
+	all := append(slices.Clone(d.IPv4), d.IPv6...)
+	for iface := range d.IPv6Auto {
+		all = append(all, iface)
+	}
+	if ifaces := sortedUnique(all); len(ifaces) > 0 {
 		if body != "" && !strings.HasSuffix(body, "\n") {
 			b.WriteString("\n")
 		}
 		b.WriteString("\n" + blockBegin + ": " + blockHeading(d) + "\n")
 		for _, iface := range ifaces {
 			v4, v6 := slices.Contains(d.IPv4, iface), slices.Contains(d.IPv6, iface)
+			if enabled, controlled := d.IPv6Auto[iface]; controlled && !v6 {
+				fmt.Fprintf(&b, "interface %s\n", iface)
+				if v4 {
+					b.WriteString("\tnoipv4\n")
+				}
+				if enabled {
+					b.WriteString("\tipv6\n")
+				} else {
+					b.WriteString("\tnoipv6\n")
+				}
+				continue
+			}
 			switch {
 			case v4 && v6:
 				fmt.Fprintf(&b, "interface %s\n\tnoipv4\n\tnoipv6\n", iface)

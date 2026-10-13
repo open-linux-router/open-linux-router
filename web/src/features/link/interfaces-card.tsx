@@ -111,6 +111,7 @@ export function InterfacesCard({
       await apply.mutateAsync({
         ...config.data,
         adopted: next.length ? next : undefined,
+        ipv6_auto: Object.fromEntries(Object.entries(config.data.ipv6_auto ?? {}).filter(([name]) => next.includes(name))),
       })
       toast.success(done)
     } catch (error) {

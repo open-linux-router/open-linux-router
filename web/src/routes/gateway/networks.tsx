@@ -170,14 +170,16 @@ function subtitleOf(n: NetworkRow): string {
  */
 export function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useNetworkEditor> }) {
   const pending = editor.pending
+  const ipv6Addressing = pending?.plan.changes.some((change) => change.path.endsWith('.ipv6_auto'))
   return (
     <Dialog open={pending !== null} onOpenChange={(o) => !o && editor.cancel()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>This drops devices from the network</DialogTitle>
+          <DialogTitle>{ipv6Addressing ? 'Change automatic IPv6 addressing?' : 'This drops devices from the network'}</DialogTitle>
           <DialogDescription>
-            Every device on this network loses the address it is holding and has to ask for a
-            new one. Devices that are already on keep the old address until they renew.
+            {ipv6Addressing
+              ? 'Changing how this interface obtains IPv6 addresses can interrupt IPv6 access to this router. Static addresses and IPv4 settings are kept.'
+              : 'Every device on this network loses the address it is holding and has to ask for a new one. Devices that are already on keep the old address until they renew.'}
           </DialogDescription>
         </DialogHeader>
 

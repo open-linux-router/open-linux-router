@@ -59,6 +59,8 @@ import (
 
 // Desired is what olr owns of the host's network configuration.
 type Desired struct {
+	// IPv6Auto is independent of static IPv6 addressing and LAN advertisements.
+	IPv6Auto map[string]bool
 	// IPv4 are the interfaces whose IPv4 addressing olr writes.
 	IPv4 []string
 
@@ -143,9 +145,21 @@ func (a Applier) restart(ctx context.Context, unit string) error {
 // same contract as every writer in this tree (design.md §5.2): no rollback,
 // and what did happen is reported.
 func (a Applier) Apply(ctx context.Context, d Desired) ([]core.Step, error) {
+	if err := a.CheckIPv6Auto(d.IPv6Auto); err != nil {
+		return nil, err
+	}
 	var steps []core.Step
+	// Capture the original RA settings before dhcpcd reloads: it can change
+	// accept_ra itself. Enforce again afterwards so its reload cannot undo us.
+	steps = append(steps, a.applyIPv6Auto(d.IPv6Auto, true)...)
+	for _, s := range steps {
+		if s.Error != "" {
+			return steps, fmt.Errorf("automatic IPv6 addressing: %s", s.Error)
+		}
+	}
 	steps = append(steps, a.applyDhcpcd(d)...)
 	steps = append(steps, a.applyResolvers(ctx, d)...)
+	steps = append(steps, a.applyIPv6Auto(d.IPv6Auto)...)
 
 	var failed int
 	for _, s := range steps {

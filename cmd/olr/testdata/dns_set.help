@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --block-dot                 drop DNS-over-TLS on 853, so clients cannot route around the redirect
+      --filter-aaaa               answer AAAA queries without IPv6 addresses
   -h, --help                      help for set
       --listen stringArray        pin DNS to specific addresses, repeatable, e.g. 192.168.1.1:53 (default: every address this router holds; pinned addresses are yours to keep correct)
       --local-domain string       suffix local names are published under, e.g. home.arpa

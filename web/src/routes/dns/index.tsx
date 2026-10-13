@@ -8,6 +8,7 @@ import { STUCK_SUMMARY } from '@/components/layout/stuck-summary'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Disclosure } from '@/components/ui/disclosure'
 import { Switch } from '@/components/ui/switch'
+import { SwitchField } from '@/components/ui/editable-field'
 import { ActivityCard } from '@/features/dns/activity'
 import { PlanDiff } from '@/features/dns/impact'
 import { ApplyOutcome, useDnsEditor } from '@/features/dns/editor'
@@ -54,6 +55,14 @@ export function DnsContent() {
           </label>
           <Link to="/gateway/dns/details" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">DNS activity and advanced settings <ChevronRight className="size-4" aria-hidden /></Link>
         </div>
+        <SwitchField
+          id="dns-summary-aaaa"
+          label="Resolve IPv6 addresses (AAAA)"
+          hint="When off, AAAA queries return no address. IPv4 lookups continue normally."
+          checked={!config.filter_aaaa}
+          busy={busy}
+          onChange={(enabled) => change({ ...config, filter_aaaa: !enabled })}
+        />
       </div>
       {config.enabled && status.data?.drifted && (
         <Alert><AlertTriangle /><AlertTitle>DNS settings differ from what is running</AlertTitle><AlertDescription><Link className="underline underline-offset-4" to="/gateway/dns/details">Review and repair DNS</Link></AlertDescription></Alert>
@@ -80,6 +89,15 @@ export function DnsDetailsContent() {
   return (
     <div className="space-y-6">
       <ApplyOutcome applier={applier} />
+
+      <SwitchField
+        id="dns-details-aaaa"
+        label="Resolve IPv6 addresses (AAAA)"
+        hint="When off, AAAA queries return no address. IPv4 lookups continue normally."
+        checked={!config.filter_aaaa}
+        busy={busy}
+        onChange={(enabled) => change({ ...config, filter_aaaa: !enabled })}
+      />
 
       {nothingAdopted && (
         <Alert>

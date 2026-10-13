@@ -298,6 +298,9 @@ func run(args []string) error {
 		return hostApplier.Apply(ctx, d)
 	}
 	linkApplier.Host = takeHost
+	linkApplier.CheckConfig = func(cfg link.Config) error {
+		return hostApplier.CheckIPv6Auto(cfg.IPv6Auto)
+	}
 
 	// What follows a change to a network, and to the uplink (dependents.go).
 	//

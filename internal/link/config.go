@@ -81,6 +81,11 @@ type Config struct {
 	// against its own field, rather than guarded here; see Validate.
 	Adopted []string `json:"adopted,omitempty"`
 
+	// IPv6Auto controls automatic IPv6 addressing per adopted interface.
+	// Absent leaves the host's setting alone. False stops SLAAC and the host
+	// DHCPv6 client; true enables them. Static addresses are not removed.
+	IPv6Auto map[string]bool `json:"ipv6_auto,omitempty"`
+
 	// Networks are the LANs this box serves (design.md §4.4).
 	//
 	// Unlike Adopted, a network *is* configuration: it says what the subnet is
@@ -402,6 +407,12 @@ func (c *Config) normalizeNetworks() {
 // one without either sharing a backing array.
 func (c Config) Clone() Config {
 	out := Config{Adopted: slices.Clone(c.Adopted)}
+	if c.IPv6Auto != nil {
+		out.IPv6Auto = make(map[string]bool, len(c.IPv6Auto))
+		for name, enabled := range c.IPv6Auto {
+			out.IPv6Auto[name] = enabled
+		}
+	}
 	if c.Networks != nil {
 		out.Networks = make([]Network, len(c.Networks))
 		for i, n := range c.Networks {
@@ -448,6 +459,7 @@ func (c *Config) Release(name string) bool {
 		return false
 	}
 	c.Adopted = slices.Delete(c.Adopted, i, i+1)
+	delete(c.IPv6Auto, name)
 	c.Normalize()
 	return true
 }

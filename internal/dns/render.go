@@ -657,6 +657,7 @@ func formatForwardAddr(srv netip.AddrPort, u Upstream) string {
 
 func (b Backend) renderRelay(c Config, links LinkView) ([]byte, error) {
 	cfg := dnsrelay.Config{
+		FilterAAAA: c.FilterAAAA,
 		// Passed through as the operator wrote it, empty included: an empty
 		// list means the wildcard to the relay (dnsrelay.Config.Listen), which
 		// is the default and the thing that cannot go stale. Filling it in here

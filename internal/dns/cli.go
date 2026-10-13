@@ -283,6 +283,7 @@ func setCommand() *cobra.Command {
 }
 
 type configFlags struct {
+	filterAAAA  bool
 	listen      []string
 	mode        string
 	servers     []string
@@ -297,6 +298,7 @@ type configFlags struct {
 }
 
 func (f *configFlags) register(c *cobra.Command) {
+	c.Flags().BoolVar(&f.filterAAAA, "filter-aaaa", false, "answer AAAA queries without IPv6 addresses")
 	c.Flags().StringArrayVar(&f.listen, "listen", nil,
 		"pin DNS to specific addresses, repeatable, e.g. 192.168.1.1:53 "+
 			"(default: every address this router holds; pinned addresses are yours to keep correct)")
@@ -324,6 +326,9 @@ func (f *configFlags) register(c *cobra.Command) {
 
 func (f *configFlags) apply(c *cobra.Command, cfg *Config) error {
 	changed := c.Flags().Changed
+	if changed("filter-aaaa") {
+		cfg.FilterAAAA = f.filterAAAA
+	}
 
 	if changed("listen") {
 		listen, err := parseAddrPorts("--listen", f.listen, DNSPort)

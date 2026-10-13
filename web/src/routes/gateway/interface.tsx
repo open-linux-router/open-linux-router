@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { SwitchField } from '@/components/ui/editable-field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDhcpConfig } from '@/features/dhcp/queries'
 import { useUplink } from '@/features/dial/queries'
@@ -66,6 +67,21 @@ export function GatewayInterfacePage() {
       <p className="text-sm text-muted-foreground">Allow OLR to configure this interface. Enabling management alone does not change its address.</p>
       <InterfacesCard dhcp={dhcp.data} only={row.name} />
     </section>
+
+    {!row.loopback && editor.config && <section className="space-y-3">
+      <h2 className="text-lg font-medium">IPv6 addressing</h2>
+        <SwitchField
+          id="interface-ipv6-auto"
+          label="Automatically obtain IPv6 addresses"
+          checked={editor.config.ipv6_auto?.[row.name] !== false}
+          busy={editor.busy || !row.adopted || !row.present}
+          hint={editor.config.ipv6_auto?.[row.name] === undefined
+            ? 'Not managed yet — uses this interface’s host settings. Switching on or off hands automatic IPv6 addressing to OLR.'
+            : 'Controls SLAAC and DHCPv6 address acquisition. Static addresses stay configured; existing dynamic addresses may remain until their leases expire.'}
+          onChange={(enabled) => editor.submit({ ...editor.config!, ipv6_auto: { ...editor.config!.ipv6_auto, [row.name]: enabled } })}
+        />
+        {!row.adopted && <p className="text-sm text-muted-foreground">Allow OLR to manage this interface first.</p>}
+    </section>}
 
     {isUplink ? <section className="space-y-2"><h2 className="text-lg font-medium">Internet uplink</h2><UplinkCard interfaces={editor.interfaces} networks={editor.networks} /></section> : (
       <Card>

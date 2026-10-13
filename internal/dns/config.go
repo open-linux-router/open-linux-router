@@ -47,6 +47,10 @@ type Config struct {
 	// thing to unpick then.
 	Enabled bool `json:"enabled"`
 
+	// FilterAAAA answers AAAA queries with NODATA, without consulting any
+	// upstream or publishing a local IPv6 address. Other query types are unchanged.
+	FilterAAAA bool `json:"filter_aaaa,omitempty"`
+
 	// Listen is where the relay answers queries. Empty means the wildcard on
 	// port 53; pinning an address is optional and may go stale on renumbering.
 	// The firewall controls which networks can reach the listener.
