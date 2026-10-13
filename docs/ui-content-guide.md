@@ -89,6 +89,9 @@ adding a generic next-step sentence. Use one short sentence when an explanation
 is necessary. Keep essential text readable; reducing font size is not a remedy
 for excessive content.
 
+Keep the footer to the product copyright, version, GitHub, Credits and an icon-only
+theme control. Describe the current and next theme in its accessible label and tooltip.
+
 ## Capability and richness
 
 Show the real capability set together with consistent visual weight. Keep entries
