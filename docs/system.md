@@ -240,6 +240,14 @@ A claimed-with-password box gets a session cookie, not a bearer token in
 its prompt becomes a login form; what changes underneath is where the credential
 comes from and how long it lives.
 
+Browser sessions last 90 days from sign-in and survive daemon and router
+restarts. Only token hashes and their expiry and password binding are stored in
+`/var/lib/open-linux-router/sessions.json` (mode 0600, relocated by `--root`).
+Signing out removes the session from disk before reporting success. Changing
+the administrator password invalidates all sessions through their password
+binding, including sessions stored before a restart. Existing sessions from
+older versions require one new sign-in to acquire this persistence.
+
 **The UI states the posture permanently, quietly.** A box claimed with no
 password shows it — a line in the header or the footer, not a nag — because
 "nobody has a password on this" is a fact an operator should be able to see six

@@ -228,7 +228,10 @@ func (h HTTP) postLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h HTTP) postLogout(w http.ResponseWriter, r *http.Request) {
-	h.Sessions.Logout(w, r)
+	if err := h.Sessions.Logout(w, r); err != nil {
+		core.WriteError(w, 503, err.Error())
+		return
+	}
 	core.WriteJSON(w, 200, map[string]bool{"authenticated": false})
 }
 
@@ -248,7 +251,9 @@ func (h HTTP) putPassword(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		h.Sessions.RevokeAll()
+		if err := h.Sessions.RevokeAll(); err != nil {
+			return err
+		}
 		core.WriteJSON(w, 200, AccessView{Claimed: cfg.Claimed(), PasswordSet: cfg.RequiresPassword(), Authenticated: !cfg.RequiresPassword()})
 		return nil
 	}); err != nil {

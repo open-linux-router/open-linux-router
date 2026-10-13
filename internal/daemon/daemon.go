@@ -253,7 +253,10 @@ func run(args []string) error {
 	}
 
 	srv := core.New()
-	sessions := system.NewSessions()
+	sessions, err := system.OpenSessions(filepath.Join(opts.root, "/var/lib/open-linux-router/sessions.json"))
+	if err != nil {
+		return fmt.Errorf("loading browser sessions: %w", err)
+	}
 
 	// `link` is mounted first, matching the store's order and the order a box
 	// is brought up in. It is the only module here that drives nothing: adopting

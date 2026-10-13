@@ -4,33 +4,83 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 const sessionCookie = "olr_session"
-const sessionLifetime = 12 * time.Hour
+const sessionLifetime = 90 * 24 * time.Hour
 
 type session struct {
-	credential string
-	expires    time.Time
+	Credential string
+	Expires    time.Time
 }
 type attempt struct {
 	count int
 	until time.Time
 }
 
-// Sessions owns only temporary authentication state. A restart logs browsers
-// out and leaves every packet-processing backend running independently.
+// Sessions stores token hashes, never the browser's bearer credentials.
 type Sessions struct {
 	mu       sync.Mutex
 	sessions map[[32]byte]session
 	attempts map[string]attempt
 	work     chan struct{}
 	Now      func() time.Time
+	path     string
+}
+
+// OpenSessions restores browser sessions across daemon and router restarts.
+func OpenSessions(path string) (*Sessions, error) {
+	s := NewSessions()
+	s.path = path
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return s, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var entries []storedSession
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		if entry.Session.Expires.After(s.now()) {
+			s.sessions[entry.Key] = entry.Session
+		}
+	}
+	return s, nil
+}
+
+type storedSession struct {
+	Key     [32]byte
+	Session session
+}
+
+// save runs under mu; atomic replacement prevents partially written state.
+func (s *Sessions) save() error {
+	if s.path == "" {
+		return nil
+	}
+	entries := make([]storedSession, 0, len(s.sessions))
+	for key, entry := range s.sessions {
+		if entry.Expires.After(s.now()) {
+			entries = append(entries, storedSession{key, entry})
+		}
+	}
+	data, err := json.Marshal(entries)
+	if err != nil {
+		return err
+	}
+	return core.WriteFileAtomic(s.path, data, 0o600)
 }
 
 func NewSessions() *Sessions {
@@ -93,7 +143,7 @@ func (s *Sessions) Valid(r *http.Request, password *Password) bool {
 	if !ok {
 		return false
 	}
-	if !entry.expires.After(s.now()) || entry.credential != password.Hash {
+	if !entry.Expires.After(s.now()) || entry.Credential != password.Hash {
 		delete(s.sessions, key)
 		return false
 	}
@@ -112,7 +162,7 @@ func (s *Sessions) Issue(w http.ResponseWriter, r *http.Request, password *Passw
 	s.mu.Lock()
 	now := s.now()
 	for key, entry := range s.sessions {
-		if !entry.expires.After(now) {
+		if !entry.Expires.After(now) {
 			delete(s.sessions, key)
 		}
 	}
@@ -124,7 +174,13 @@ func (s *Sessions) Issue(w http.ResponseWriter, r *http.Request, password *Passw
 	if old, err := r.Cookie(sessionCookie); err == nil {
 		delete(s.sessions, sha256.Sum256([]byte(old.Value)))
 	}
-	s.sessions[sha256.Sum256([]byte(value))] = session{credential: password.Hash, expires: now.Add(sessionLifetime)}
+	key := sha256.Sum256([]byte(value))
+	s.sessions[key] = session{Credential: password.Hash, Expires: now.Add(sessionLifetime)}
+	if err := s.save(); err != nil {
+		delete(s.sessions, key)
+		s.mu.Unlock()
+		return err
+	}
 	s.mu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: value, Path: "/api", HttpOnly: true,
 		Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode, MaxAge: int(sessionLifetime.Seconds())})
@@ -132,24 +188,31 @@ func (s *Sessions) Issue(w http.ResponseWriter, r *http.Request, password *Passw
 	return nil
 }
 
-func (s *Sessions) Logout(w http.ResponseWriter, r *http.Request) {
+func (s *Sessions) Logout(w http.ResponseWriter, r *http.Request) error {
 	if s != nil {
 		s.mu.Lock()
 		if cookie, err := r.Cookie(sessionCookie); err == nil {
 			delete(s.sessions, sha256.Sum256([]byte(cookie.Value)))
 		}
+		err := s.save()
 		s.mu.Unlock()
+		if err != nil {
+			return err
+		}
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Path: "/api", HttpOnly: true, Secure: r.TLS != nil,
 		SameSite: http.SameSiteStrictMode, MaxAge: -1})
 	w.Header().Set("Cache-Control", "no-store")
+	return nil
 }
 
-func (s *Sessions) RevokeAll() {
+func (s *Sessions) RevokeAll() error {
 	if s == nil {
-		return
+		return nil
 	}
 	s.mu.Lock()
 	clear(s.sessions)
+	err := s.save()
 	s.mu.Unlock()
+	return err
 }
