@@ -29,7 +29,7 @@ const NO_GROUP = ' none'
 const INHERIT_EXIT = ' inherit'
 const DIRECT_EXIT = ' direct'
 
-type Field = 'name' | 'icon' | 'reservation' | null
+type Field = 'name' | 'icon' | 'reservation' | 'group' | 'exit' | null
 
 export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; traffic: ReactNode }) {
   const identity = useDevicesConfig()
@@ -47,6 +47,8 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
   const [look, setLook] = useState<IconChoice>({ category: '', icon: '' })
   const [ip, setIp] = useState('')
   const [fixed, setFixed] = useState(false)
+  const [group, setGroup] = useState(NO_GROUP)
+  const [uplink, setUplink] = useState(INHERIT_EXIT)
   const identityBusy = !identity.data || saveIdentity.isPending
 
   function begin(field: Exclude<Field, null>) {
@@ -56,6 +58,8 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
     setLook({ category: device.category_origin === 'operator' ? device.category : '', icon: device.icon ?? '' })
     setIp(reservation?.ip ?? device.ips?.find((address) => !address.includes(':')) ?? '')
     setFixed(!!reservation)
+    setGroup(device.group || NO_GROUP)
+    setUplink(exit)
   }
 
   async function save(patch: Partial<Device>) {
@@ -122,14 +126,9 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
               {reservation && <Badge variant="secondary">Fixed</Badge>}
             </div>
           </DeviceSettingRow>
-          <Fact label="Last heard" value={device.last_seen ? formatAgo(device.last_seen) : 'Never'} />
-          <DeviceSettingRow label="Group"><Select value={device.group || NO_GROUP} disabled={identityBusy} onValueChange={(v) => { if (v) void save({ group: v === NO_GROUP ? undefined : v }) }}><SelectTrigger aria-label="Change device group" className="ml-auto h-auto min-h-11 sm:min-h-9 max-w-full rounded-md border-transparent bg-secondary px-2 text-xs font-medium shadow-none whitespace-normal"><SelectValue className="flex-none text-right break-words">{(v: string) => v === NO_GROUP || !v ? 'No group' : v}</SelectValue></SelectTrigger><SelectContent><SelectItem value={NO_GROUP}>No group</SelectItem>{groupOptions(identity.data?.groups ?? []).map((g) => <SelectItem key={g.name} value={g.name}><span style={{ paddingLeft: g.depth * 12 }}>{g.name}</span></SelectItem>)}</SelectContent></Select></DeviceSettingRow>
-          <DeviceSettingRow label="Internet via">
-            <Select value={exit} disabled={!gateway.data || gatewayApplier.busy} onValueChange={(v) => { if (v) void gatewayApplier.submit(v === INHERIT_EXIT ? gatewayChange.removeDevice(device.mac) : gatewayChange.device(device.mac, v)) }}>
-              <SelectTrigger aria-label="Change gateway route" className="ml-auto h-auto min-h-11 sm:min-h-9 max-w-full border-0 px-0 shadow-none whitespace-normal"><SelectValue className="flex-none text-right break-words">{(v: string) => v === INHERIT_EXIT ? 'Default' : v === DIRECT_EXIT ? 'This router’s connection' : v}</SelectValue></SelectTrigger>
-              <SelectContent><SelectItem value={INHERIT_EXIT}>Default</SelectItem>{(gateway.data?.exits ?? []).map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
-            </Select>
-          </DeviceSettingRow>
+          <Fact label="Last seen" value={device.last_seen ? formatAgo(device.last_seen) : 'Never'} />
+          <DeviceSettingRow label="Group"><button type="button" aria-label="Edit device group" disabled={identityBusy} onClick={() => begin('group')} className="min-h-11 rounded-md px-2 focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9"><Badge variant="secondary" className="whitespace-normal break-words">{device.group || 'No group'}</Badge></button></DeviceSettingRow>
+          <DeviceSettingRow label="Uplink"><button type="button" aria-label="Edit device uplink" disabled={!gateway.data || gatewayApplier.busy} onClick={() => begin('exit')} className="min-h-11 rounded-md px-2 focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9"><Badge variant="secondary" className="whitespace-normal break-words">{exit === INHERIT_EXIT ? 'Default' : exit === DIRECT_EXIT ? 'This router’s connection' : exit}</Badge></button></DeviceSettingRow>
         </dl>
       </div>
       <div className="min-w-0">{traffic}</div>
@@ -150,6 +149,13 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
           <div className="flex items-center justify-between gap-3"><label htmlFor="device-fixed" className="text-sm font-medium">Fixed IP address</label><Switch id="device-fixed" checked={fixed} disabled={dhcpApplier.busy} onCheckedChange={setFixed} /></div>
           <DialogFooter><Button type="button" variant="ghost" disabled={dhcpApplier.busy} onClick={() => setEditing(null)}>Cancel</Button><Button type="submit" disabled={(fixed && !ip.trim()) || !dhcp.data || dhcpApplier.busy}>Save</Button></DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+    <Dialog open={editing === 'group' || (editing === 'exit' && !gatewayApplier.confirming)} onOpenChange={(open) => { if (!open && !saveIdentity.isPending && !gatewayApplier.busy) setEditing(null) }}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>{editing === 'group' ? 'Group' : 'Uplink'}</DialogTitle><DialogDescription>{editing === 'group' ? 'Choose a group for this device.' : 'Choose the connection this device uses to reach the internet. Existing connections normally keep their path.'}</DialogDescription></DialogHeader>
+        {editing === 'group' ? <Select value={group} disabled={identityBusy} onValueChange={(v) => { if (v) setGroup(v) }}><SelectTrigger aria-label="Device group" className="w-full"><SelectValue>{(v: string) => v === NO_GROUP ? 'No group' : v}</SelectValue></SelectTrigger><SelectContent><SelectItem value={NO_GROUP}>No group</SelectItem>{groupOptions(identity.data?.groups ?? []).map((g) => <SelectItem key={g.name} value={g.name}><span style={{ paddingLeft: g.depth * 12 }}>{g.name}</span></SelectItem>)}</SelectContent></Select> : <Select value={uplink} disabled={!gateway.data || gatewayApplier.busy} onValueChange={(v) => { if (v) setUplink(v) }}><SelectTrigger aria-label="Device uplink" className="w-full"><SelectValue>{(v: string) => v === INHERIT_EXIT ? 'Default' : v === DIRECT_EXIT ? 'This router’s connection' : v}</SelectValue></SelectTrigger><SelectContent><SelectItem value={INHERIT_EXIT}>Default</SelectItem>{(gateway.data?.exits ?? []).map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent></Select>}
+        <DialogFooter><Button variant="ghost" disabled={saveIdentity.isPending || gatewayApplier.busy} onClick={() => setEditing(null)}>Cancel</Button><Button disabled={editing === 'group' ? identityBusy : !gateway.data || gatewayApplier.busy} onClick={async () => { if (editing === 'group') await save({ group: group === NO_GROUP ? undefined : group }); else if (await gatewayApplier.submit(uplink === INHERIT_EXIT ? gatewayChange.removeDevice(device.mac) : gatewayChange.device(device.mac, uplink))) setEditing(null) }}>Save</Button></DialogFooter>
       </DialogContent>
     </Dialog>
     <DhcpOutcome applier={dhcpApplier} />

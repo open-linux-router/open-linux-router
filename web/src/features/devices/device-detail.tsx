@@ -365,7 +365,7 @@ function Observed({ device }: { device: DeviceRow }) {
     rows.push(['Seen by', device.sources.map(sourceLabel).join(', ')])
   }
   if (device.last_seen) {
-    rows.push(['Last heard', `${formatAgo(device.last_seen)} · ${new Date(device.last_seen).toLocaleString()}`])
+    rows.push(['Last seen', `${formatAgo(device.last_seen)} · ${new Date(device.last_seen).toLocaleString()}`])
   }
   if (device.expires) {
     rows.push(['Lease expires', new Date(device.expires).toLocaleString()])

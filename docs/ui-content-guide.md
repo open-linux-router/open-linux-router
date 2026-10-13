@@ -63,9 +63,12 @@ an explicit error and a retry where useful. Name configuration counts as such.
 Show QoS as saved configuration until enforcement exists.
 Device details group stable identity and saved settings on the left, live
 observations and traffic on the right. Reuse Overview rate meters and plain Download and Upload totals, without a
-traffic title or attribution footnote. Group and Internet via are selectable
-tags. Omit Notes and the QoS heading; retain activation status.
-Device Internet via offers Default (inherit interface/system routing) and named
+traffic title or attribution footnote. Group and Uplink are tags that open edit dialogs.
+Use Last seen for observation freshness. Priority leads the right column with a
+segmented selector. Speed bars open download/upload limit dialogs; keep the
+configuration-only caveat in those dialogs and save feedback, without a status row.
+Omit Notes and the QoS heading.
+Device Uplink offers Default (inherit interface/system routing) and named
 exits only. Existing explicit router-connection overrides remain accurately
 displayed until the user selects Default or a named exit.
 Use label/value pairs within each device-detail half. Keep units with their inputs and chevrons beside selected values. Lead identity rows with Vendor. Edit addresses and their fixed toggle
