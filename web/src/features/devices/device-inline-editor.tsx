@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -81,7 +81,8 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
   }
 
   return <>
-    <header className="rounded-2xl border bg-card p-5 sm:p-7">
+    <Card className="gap-0 overflow-hidden py-0">
+    <header className="p-5 sm:p-6">
       <div className="flex items-start gap-5">
         <button type="button" disabled={identityBusy} onClick={() => begin('icon')} aria-label="Change device icon" className="group relative shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           <DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor} vendorKey={device.vendor_key} online={device.online} size="lg" />
@@ -107,8 +108,9 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
       {editing === 'icon' && <div className="mt-5 border-t pt-4"><div className="mb-3 flex items-center justify-between"><h2 className="font-medium">Choose icon</h2><Button variant="ghost" size="sm" onClick={() => setEditing(null)}>Cancel</Button></div><CategoryPicker value={look} detected={device.detected_category} onChange={(choice) => { setLook(choice); void save({ category: choice.category || undefined, icon: choice.icon || undefined }) }} /></div>}
     </header>
 
-    <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
-      <Card><CardHeader><CardTitle>Device information</CardTitle></CardHeader><CardContent>
+    <div className="grid border-t lg:grid-cols-2">
+      <section aria-labelledby="device-information-title" className="min-w-0 p-5 sm:p-6">
+        <h2 id="device-information-title" className="mb-4 text-base font-semibold">Device information</h2>
         <dl className="divide-y text-sm">
           <Fact label="Addresses" value={device.ips?.length ? device.ips.join(', ') : 'None observed'} mono />
           <Fact label="Calls itself" value={device.hostname || 'Not reported'} />
@@ -132,9 +134,10 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
         </dl>
         <div className="mt-4 text-sm">{editing === 'notes' ? <div className="space-y-2"><Textarea autoFocus aria-label="Device notes" value={notes} onChange={(e) => setNotes(e.target.value)} /><div className="flex gap-2"><Button size="sm" disabled={identityBusy} onClick={() => save({ notes: notes.trim() || undefined })}>Save notes</Button><Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button></div></div>
           : <button type="button" disabled={identityBusy} onClick={() => begin('notes')} className="group inline-flex items-center gap-2 rounded-lg bg-muted/60 p-3 text-left">{device.notes || 'Add notes'}<Pencil className="size-3.5 text-muted-foreground opacity-60 group-hover:opacity-100" aria-hidden /></button>}</div>
-      </CardContent></Card>
-      {traffic}
+      </section>
+      <div className="min-w-0 space-y-6 border-t p-5 sm:p-6 lg:border-t-0 lg:border-l">{traffic}</div>
     </div>
+    </Card>
     <DhcpOutcome applier={dhcpApplier} />
     <GatewayOutcome applier={gatewayApplier} />
   </>

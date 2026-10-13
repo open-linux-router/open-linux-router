@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -31,11 +30,10 @@ export function DevicePolicy({ mac }: { mac: string }) {
     }
   }
 
-  return <Card>
-    <CardHeader><CardTitle>Network priority and speed limit</CardTitle></CardHeader>
-    <CardContent className="space-y-4">
+  return <section aria-labelledby="device-policy-title" className="space-y-4 border-t pt-6">
+      <h2 id="device-policy-title" className="text-base font-semibold">Network priority and speed limit</h2>
       <p className="text-sm text-muted-foreground">Configuration only: this build does not enforce priorities or speed limits.</p>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 [&>div:first-child]:sm:col-span-2">
         <div className="grid gap-2"><Label htmlFor="device-qos-priority">Priority</Label><Select value={priority} disabled={!config.data || apply.isPending} onValueChange={(v) => { if (v) change({ priority: v as Priority }) }}><SelectTrigger id="device-qos-priority" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="high">High</SelectItem><SelectItem value="normal">Normal</SelectItem><SelectItem value="low">Low</SelectItem></SelectContent></Select></div>
         <div className="grid gap-2"><Label htmlFor="device-qos-down">Download limit (Mbps)</Label><Input id="device-qos-down" type="number" min="0.001" max="100000" step="any" value={down} placeholder="Unlimited" onChange={(e) => change({ down: e.target.value })} /></div>
         <div className="grid gap-2"><Label htmlFor="device-qos-up">Upload limit (Mbps)</Label><Input id="device-qos-up" type="number" min="0.001" max="100000" step="any" value={up} placeholder="Unlimited" onChange={(e) => change({ up: e.target.value })} /></div>
@@ -44,6 +42,5 @@ export function DevicePolicy({ mac }: { mac: string }) {
         <p className="text-xs text-muted-foreground">{config.isError || status.isError ? 'QoS status unavailable.' : !status.data ? 'Checking QoS status…' : !status.data.enabled ? 'Not active' : !status.data.active ? `Not active — ${status.data.reason || 'kernel state not verified'}` : pending ? 'Pending — no unambiguous address for this device.' : 'QoS active on this router.'}</p>
         <div className="flex gap-2"><Button size="sm" variant="ghost" disabled={!draft || apply.isPending} onClick={() => setDraft(null)}>Cancel</Button><Button size="sm" disabled={!draft || !valid(down) || !valid(up) || apply.isPending} onClick={() => void save()}>Save configuration</Button></div>
       </div>
-    </CardContent>
-  </Card>
+  </section>
 }

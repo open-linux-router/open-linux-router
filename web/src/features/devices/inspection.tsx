@@ -91,13 +91,10 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
     <div className="border-b bg-muted/40 px-5 py-5 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 id="inspection-title" className="text-xl font-semibold tracking-tight">Inspect network requests</h2>
+          <h2 id="inspection-title" className="text-base font-semibold">Connections</h2>
         </div>
         <Badge variant={mine ? 'warning' : 'outline'}>{status.isPending ? 'Checking…' : status.isError ? 'Unknown' : mine ? 'On' : active ? 'Another device' : 'Off'}</Badge>
       </div>
-      <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Inspect supported IPv4 HTTP/HTTPS requests for up to 15 minutes. Captured data may contain credentials; session data is cleared on stop.
-      </p>
     </div>
     <div className="space-y-5 p-5 sm:p-7">
       {status.isError ? <p role="alert" className="text-sm text-destructive">Inspection status is unavailable. Do not assume interception has stopped.</p> : null}

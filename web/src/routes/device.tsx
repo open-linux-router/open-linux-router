@@ -1,4 +1,4 @@
-import { Activity, ArrowDown, ArrowLeft, ArrowUp } from 'lucide-react'
+import { Activity, ArrowDown, ArrowUp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
@@ -35,14 +35,13 @@ export function DevicePage() {
 
   return (
     <div className="space-y-6 pb-12">
-      <Link to="/" className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
-        <ArrowLeft className="size-4" aria-hidden /> Network overview
-      </Link>
-
       <DeviceInlineEditor key={device.mac} device={device} traffic={
-        <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="size-4" aria-hidden /> Traffic through this router</CardTitle></CardHeader>
-          <CardContent className="space-y-5">
+        <>
+        <section aria-labelledby="device-traffic-title" className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="device-traffic-title" className="flex items-center gap-2 text-base font-semibold"><Activity className="size-4" aria-hidden /> Traffic through this router</h2>
+            <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/gateway/usage">Usage settings</Link>} />
+          </div>
             {flow.counting ? (
               <div className="grid grid-cols-2 gap-3">
                 <Meter icon={ArrowDown} label="Received" bytes={usage?.down} rate={usage?.downRate} />
@@ -54,18 +53,15 @@ export function DevicePage() {
             <p className="text-xs leading-relaxed text-muted-foreground">
               Forwarded traffic since counting started. Same-network traffic is excluded; shared or changing IPs may affect attribution.
             </p>
-            <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/gateway/usage">Usage settings</Link>} />
-          </CardContent>
-        </Card>
+        </section>
+        <DevicePolicy mac={device.mac} />
+        </>
       } />
 
       <Card>
-        <CardHeader><CardTitle>DNS queries from this device</CardTitle></CardHeader>
+        <CardHeader><CardTitle>DNS</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Queries matching current device IPs in the latest 200 network-wide entries. Private DNS and previous IPs may be missing; a query does not prove a visit.
-          </p>
-          <div className="grid gap-2 sm:max-w-sm"><label htmlFor="device-dns-filter" className="text-sm font-medium">Filter queries</label><Input id="device-dns-filter" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Name, answer, type or result" /></div>
+          <div className="flex items-center justify-between gap-4"><label htmlFor="device-dns-filter" className="shrink-0 text-sm font-medium">Filter queries</label><Input id="device-dns-filter" className="min-w-0 w-full max-w-sm" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Name, answer, type or result" /></div>
           {dnsQueries.isError ? (
             <p className="text-sm text-muted-foreground">The DNS query log is unavailable. The resolver may be stopped.</p>
           ) : dnsQueries.isPending ? (
@@ -85,8 +81,6 @@ export function DevicePage() {
           )}
         </CardContent>
       </Card>
-
-      <DevicePolicy mac={device.mac} />
 
       <DeviceInspection key={device.mac} mac={device.mac} addresses={device.ips ?? []} />
     </div>
