@@ -37,6 +37,7 @@ export function DevicePage() {
     <div className="space-y-6 pb-12">
       <DeviceInlineEditor key={device.mac} device={device} traffic={
         <>
+            <h2 className="mb-2 text-sm font-semibold">Traffic</h2>
             {flow.counting ? (
               <dl className="text-sm">
                 <Meter icon={ArrowDown} label="Download" bytes={usage?.down} rate={usage?.downRate} />
@@ -46,7 +47,7 @@ export function DevicePage() {
               <p className="text-sm text-muted-foreground">{traffic.isError ? 'Traffic counters are unavailable right now.' : 'Traffic counting is off or unavailable.'}</p>
             )}
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Forwarded traffic since counting started. Same-network traffic is excluded; shared or changing IPs may affect attribution.
+              Since counting started · Routed traffic only. Shared or changing IPs may affect totals.
             </p>
             <DevicePolicy mac={device.mac} />
         </>
@@ -90,7 +91,7 @@ function State({ title, detail }: { title: string; detail: string }) {
 }
 
 function Meter({ icon: Icon, label, bytes, rate }: { icon: typeof ArrowDown; label: string; bytes?: number; rate?: number }) {
-  return <div className="grid min-h-12 grid-cols-[minmax(6rem,1fr)_minmax(0,2fr)] items-center gap-3 py-1">
+  return <div className="grid min-h-9 grid-cols-[6rem_minmax(0,1fr)] items-center gap-3 py-1">
     <dt className="flex items-center gap-2 text-muted-foreground"><Icon className="size-4 shrink-0" aria-hidden />{label}</dt>
     <dd className="flex flex-wrap items-baseline justify-between gap-x-3 tabular-nums"><span>{bytes === undefined ? 'No address match' : formatBytes(bytes)}</span>{rate !== undefined && <span className="text-xs text-muted-foreground">{formatRate(rate)} now</span>}</dd>
   </div>
