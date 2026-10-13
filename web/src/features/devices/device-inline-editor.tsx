@@ -49,7 +49,7 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
   const [look, setLook] = useState<IconChoice>({ category: '', icon: '' })
   const [notes, setNotes] = useState('')
   const [ip, setIp] = useState('')
-  const [hostname, setHostname] = useState('')
+  const [fixed, setFixed] = useState(false)
   const identityBusy = !identity.data || saveIdentity.isPending
 
   function begin(field: Exclude<Field, null>) {
@@ -59,7 +59,7 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
     setLook({ category: device.category_origin === 'operator' ? device.category : '', icon: device.icon ?? '' })
     setNotes(device.notes ?? '')
     setIp(reservation?.ip ?? device.ips?.find((address) => !address.includes(':')) ?? '')
-    setHostname(reservation?.hostname ?? '')
+    setFixed(!!reservation)
   }
 
   async function save(patch: Partial<Device>) {
@@ -79,11 +79,11 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
     }
   }
 
-  async function saveReservation(remove = false) {
+  async function saveReservation() {
     if (!dhcp.data) return
     const rest = (dhcp.data.reservations ?? []).filter((r) => r.mac.toLowerCase() !== device.mac.toLowerCase())
-    const entry: Reservation = { ...reservation, mac: device.mac, ip: ip.trim(), hostname: hostname.trim() || undefined }
-    const applied = await dhcpApplier.submit({ ...dhcp.data, reservations: remove ? rest : [...rest, entry] })
+    const entry: Reservation = { ...reservation, mac: device.mac, ip: ip.trim() }
+    const applied = await dhcpApplier.submit({ ...dhcp.data, reservations: fixed ? [...rest, entry] : rest })
     if (applied) setEditing(null)
   }
 
@@ -107,10 +107,10 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="min-w-0 flex-1 basis-full text-2xl font-semibold tracking-tight sm:basis-auto sm:text-3xl">
-              {editing === 'name' ? <Input autoFocus aria-label="Device name" className="h-auto w-full py-1 text-2xl font-semibold sm:text-3xl" value={name} disabled={saveIdentity.isPending} onChange={(e) => { nameFinished.current = false; setName(e.target.value) }} onBlur={() => finishName()} onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); finishName(e.key === 'Escape') } }} />
+              {editing === 'name' ? <Input autoFocus aria-label="Device name" className="h-auto w-80 max-w-full py-1 text-2xl font-semibold sm:text-3xl" value={name} disabled={saveIdentity.isPending} onChange={(e) => { nameFinished.current = false; setName(e.target.value) }} onBlur={() => finishName()} onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); finishName(e.key === 'Escape') } }} />
                 : <button type="button" disabled={identityBusy} onClick={() => begin('name')} aria-label="Edit device name" className="w-full break-words rounded-md text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">{device.name || device.mac}</button>}
             </h1>
-            <Badge variant={device.online ? 'success' : device.seen ? 'secondary' : 'outline'}>{device.online ? 'Online' : device.seen ? 'Offline' : 'Never seen'}</Badge>
+            <Badge className="text-2xl sm:text-3xl" variant={device.online ? 'success' : device.seen ? 'secondary' : 'outline'}>{device.online ? 'Online' : device.seen ? 'Offline' : 'Never seen'}</Badge>
           </div>
         </div>
       </div>
@@ -118,15 +118,14 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
     <div className="mt-4 grid gap-y-8 lg:grid-cols-2 lg:gap-x-16">
       <div className="min-w-0">
         <dl className="text-sm">
+          <Fact label="Vendor" value={device.vendor || 'Unknown'} />
           <Fact label="MAC" value={device.mac} mono />
           <DeviceSettingRow label="IP">
-            <Tooltip><TooltipTrigger onClick={() => begin('reservation')} disabled={!dhcp.data || dhcpApplier.busy} aria-label="Edit IP reservation" className="min-h-11 min-w-0 rounded-sm text-right font-mono text-xs hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"><span className="break-all">{device.ips?.length ? device.ips.join(', ') : device.fixed_ip || 'None observed'}</span>{reservation && <Pencil className="ml-1.5 inline size-3 text-muted-foreground" aria-hidden />}</TooltipTrigger><TooltipContent>{device.expires ? `Lease ends ${new Date(device.expires).toLocaleString()}` : 'No expiring lease'}{reservation && <span> · Fixed address {reservation.ip}</span>}</TooltipContent></Tooltip>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Tooltip><TooltipTrigger onClick={() => begin('reservation')} disabled={!dhcp.data || dhcpApplier.busy} aria-label="Edit IP address" className="min-h-11 min-w-0 rounded-sm text-right font-mono text-xs hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"><span className="break-all">{device.ips?.length ? device.ips.join(', ') : device.fixed_ip || 'None observed'}</span></TooltipTrigger><TooltipContent>{device.expires ? `DHCP lease ends ${new Date(device.expires).toLocaleString()}` : 'No expiring DHCP lease'}</TooltipContent></Tooltip>
+              {reservation && <Badge variant="secondary">Fixed</Badge>}
+            </div>
           </DeviceSettingRow>
-          <DeviceSettingRow label="Fixed IP address">
-            <Switch aria-label="Fixed IP address" checked={!!reservation} disabled={!dhcp.data || dhcpApplier.busy} onCheckedChange={(checked) => { if (checked) begin('reservation'); else void saveReservation(true) }} />
-            {editing === 'reservation' && <div className="space-y-2 py-2 text-left"><Input autoFocus aria-label="Reserved IP address" value={ip} onChange={(e) => setIp(e.target.value)} placeholder="192.168.1.50" /><Input aria-label="Reservation hostname (optional)" value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="Hostname (optional)" /><div className="flex flex-wrap justify-end gap-2"><Button size="sm" disabled={!ip.trim() || !dhcp.data || dhcpApplier.busy} onClick={() => void saveReservation()}>Save</Button><Button size="sm" variant="ghost" disabled={dhcpApplier.busy} onClick={() => setEditing(null)}>Cancel</Button></div></div>}
-          </DeviceSettingRow>
-          <Fact label="Vendor" value={device.vendor || 'Unknown'} />
           <Fact label="Last heard" value={device.last_seen ? formatAgo(device.last_seen) : 'Never'} />
           <DeviceSettingRow label="Group"><Select value={device.group || NO_GROUP} disabled={identityBusy} onValueChange={(v) => { if (v) void save({ group: v === NO_GROUP ? undefined : v }) }}><SelectTrigger aria-label="Change device group" className="ml-auto h-auto min-h-11 max-w-full border-0 px-0 shadow-none whitespace-normal"><SelectValue className="flex-none text-right break-words">{(v: string) => v === NO_GROUP || !v ? 'No group' : v}</SelectValue></SelectTrigger><SelectContent><SelectItem value={NO_GROUP}>No group</SelectItem>{groupOptions(identity.data?.groups ?? []).map((g) => <SelectItem key={g.name} value={g.name}><span style={{ paddingLeft: g.depth * 12 }}>{g.name}</span></SelectItem>)}</SelectContent></Select></DeviceSettingRow>
           <DeviceSettingRow label="Internet via">
@@ -147,6 +146,16 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
         <DialogHeader><DialogTitle>Device icon</DialogTitle><DialogDescription>Choose an icon for {device.name || device.mac}.</DialogDescription></DialogHeader>
         <CategoryPicker value={look} detected={device.detected_category} onChange={setLook} />
         <DialogFooter><Button variant="ghost" disabled={saveIdentity.isPending} onClick={() => setEditing(null)}>Cancel</Button><Button disabled={identityBusy} onClick={() => void save({ category: look.category || undefined, icon: look.icon || undefined })}>Save icon</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <Dialog open={editing === 'reservation' && !dhcpApplier.confirming} onOpenChange={(open) => { if (!open && !dhcpApplier.busy) setEditing(null) }}>
+      <DialogContent className="max-h-[90svh] overflow-y-auto">
+        <DialogHeader><DialogTitle>IP address</DialogTitle><DialogDescription>Address settings for {device.name || device.mac}.</DialogDescription></DialogHeader>
+        <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (!dhcpApplier.busy && (!fixed || ip.trim())) void saveReservation() }}>
+          <div className="space-y-2"><label htmlFor="device-ip" className="text-sm font-medium">IP address</label><Input id="device-ip" autoFocus value={ip} disabled={dhcpApplier.busy} onChange={(e) => { setIp(e.target.value); setFixed(true) }} placeholder="192.168.1.50" /></div>
+          <div className="flex items-center justify-between gap-3"><label htmlFor="device-fixed" className="text-sm font-medium">Fixed IP address</label><Switch id="device-fixed" checked={fixed} disabled={dhcpApplier.busy} onCheckedChange={setFixed} /></div>
+          <DialogFooter><Button type="button" variant="ghost" disabled={dhcpApplier.busy} onClick={() => setEditing(null)}>Cancel</Button><Button type="submit" disabled={(fixed && !ip.trim()) || !dhcp.data || dhcpApplier.busy}>Save</Button></DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
     <DhcpOutcome applier={dhcpApplier} />

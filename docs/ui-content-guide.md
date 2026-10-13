@@ -67,7 +67,9 @@ each showing totals and current rate. Keep attribution scope and the QoS
 configuration-only state visible; show QoS save actions only while editing.
 Use label/value pairs within each device-detail half. Keep secondary traffic
 rates below their totals, units with their inputs, and chevrons beside selected
-values. Present fixed-address configuration as a separate switch row.
+values. Lead identity rows with Vendor. Edit addresses and their fixed toggle
+in a dialog opened by clicking the IP. Show a Fixed tag beside reserved addresses;
+keep the hover hint limited to DHCP lease information and omit the hostname field.
 Preserve diagnostic scope: router-originated tests do not measure a downstream device's path.
 Inspection requires explicit consent about credentials and certificate trust.
 Do not promise encrypted DNS blocking beyond the supported protocol and port.
