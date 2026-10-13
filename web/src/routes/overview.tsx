@@ -377,8 +377,8 @@ function Meter({ label, current, maximum, percent, tone = 'blue', arrow, onClick
 }
 
 function StatCard({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
-  return <section className="min-w-0 rounded-xl border bg-card p-3 shadow-xs sm:p-4">
-    <h2 className="mb-2 flex h-6 items-center text-sm font-semibold">{title}</h2>{children}
+  return <section className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:row-span-3 lg:grid lg:grid-rows-subgrid">
+    <h2 className="flex h-6 items-center text-sm font-semibold">{title}</h2>{children}
   </section>
 }
 
@@ -625,45 +625,46 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
   const dnsMeasured = !latencyFailed && latency?.dns_milliseconds != null
   const latencyValue = measured ? `${latency.milliseconds!.toFixed(0)} ms` : latency?.state === 'unreachable' ? 'No response' : '—'
   const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? 'Unavailable' : '—'
-  return <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+  // Share section boundaries, not individual rows: supplementary content keeps
+  // its own rhythm, and Status flows naturally across both content sections.
+  return <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-x-4 lg:gap-y-2">
     <StatCard title="Status">
-      <div className="space-y-1 pt-1">
+      <div className="space-y-1 lg:row-span-2 lg:self-start">
         <MetricPill value={title} health={faults.length || failed ? 'bad' : known && !idle ? 'good' : 'unknown'} />
         <PublicAddressRow family="IPv4" address={publicAddresses?.ipv4} />
         <PublicAddressRow family="IPv6" address={publicAddresses?.ipv6} />
       </div>
     </StatCard>
     <StatCard title="Traffic">
-      <div className="space-y-1 pt-1">
+      <div className="space-y-1">
         <Meter label="Download" arrow="↓" onClick={() => setEditing('down')} current={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.down ? (flows.total.downRate ?? 0) * 8 / (limits.down * 1_000_000) * 100 : undefined} />
         <Meter label="Upload" arrow="↑" onClick={() => setEditing('up')} current={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.up ? (flows.total.upRate ?? 0) * 8 / (limits.up * 1_000_000) * 100 : undefined} tone="amber" />
-        <div className="flex min-h-9 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1.5">
-          <span className="text-xs text-muted-foreground">Total</span>
-          {flows.counting ? <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm font-semibold tabular-nums">
-            <span aria-label={`Total downloaded: ${formatBytes(flows.total.down)}`} title="Total downloaded"><span aria-hidden className="mr-1 font-normal text-muted-foreground">↓</span>{formatBytes(flows.total.down)}</span>
-            <span aria-label={`Total uploaded: ${formatBytes(flows.total.up)}`} title="Total uploaded"><span aria-hidden className="mr-1 font-normal text-muted-foreground">↑</span>{formatBytes(flows.total.up)}</span>
-          </div> : <span className="text-sm font-semibold">{trafficFailed ? 'Unavailable' : '—'}</span>}
-        </div>
+      </div>
+      <div className="space-y-1 pt-1">
+        <MetricPill label="Total downloaded" value={flows.counting && !trafficFailed ? `↓ ${formatBytes(flows.total.down)}` : trafficFailed ? 'Unavailable' : '—'} valueRight />
+        <MetricPill label="Total uploaded" value={flows.counting && !trafficFailed ? `↑ ${formatBytes(flows.total.up)}` : trafficFailed ? 'Unavailable' : '—'} valueRight />
       </div>
     </StatCard>
     <StatCard title={<span className="inline-flex items-center gap-1.5">Latency
       <button type="button" className="relative inline-flex size-6 items-center justify-center rounded-md text-muted-foreground before:absolute before:size-11 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
         title="Time for this router to receive the full HTTPS response, including DNS, TLS and download. Even a login redirect or error page counts; this does not prove the app works. Images, scripts and browser rendering are not included."
         aria-label="About latency measurements"><Info className="size-3.5" /></button></span>}>
-      <div className="space-y-1 pt-1">
+      <div className="space-y-1">
         <MetricPill label="Internet" value={latencyValue} valueRight />
         <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} valueRight />
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-2">
+      </div>
+      <div className="pt-1">
+        <div className="grid grid-cols-2 items-center gap-x-2 gap-y-1.5 sm:grid-cols-3">
           {latency?.custom?.map((site) => {
             const measuredSite = Boolean(site.checked_at && !site.checked_at.startsWith('0001-'))
             const ms = site.milliseconds
             const description = `${site.name} · HTTPS response from ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!measuredSite ? 'Waiting for first probe' : ms == null ? site.error || 'Failed' : `${ms.toFixed(0)} ms`}`
             return <span key={site.name} tabIndex={0} aria-label={description} title={description}
-              className="inline-flex min-h-8 items-center gap-1.5 rounded-sm text-xs font-semibold tabular-nums text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+              className="inline-flex min-h-8 min-w-0 flex-col items-start justify-center gap-1 rounded-sm text-xs font-semibold tabular-nums text-foreground focus-visible:outline-2 focus-visible:outline-ring sm:flex-row sm:items-center sm:justify-start sm:gap-1.5">
               <SiteIcon name={site.name} url={site.url} icon={site.icon} />
-              <span>{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
+              <span className="min-w-0 break-words">{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
             </span>
           })}
           <button className="inline-flex min-h-11 min-w-11 sm:min-h-8 sm:min-w-8 items-center justify-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -672,11 +673,13 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
       </div>
     </StatCard>
     <StatCard title="System">
-      <div className="space-y-1 pt-1">
+      <div className="space-y-1">
         <MetricPill meter label="CPU" value={host?.cpu_used_cores == null ? '—' : `${host.cpu_used_cores.toFixed(1)} cores`}
           detail={host?.cpu_cores ? `${cpuPercent?.toFixed(0)}% of ${host.cpu_cores} cores` : undefined} percent={cpuPercent} />
         <MetricPill meter label="Memory" value={host ? formatBytes(host.memory_used_bytes) : '—'}
           detail={host ? `${memoryPercent?.toFixed(0)}% of ${formatBytes(host.memory_total_bytes)}` : undefined} percent={memoryPercent} tone="neutral" />
+      </div>
+      <div className="pt-1">
         <MetricPill label="Uptime" value={host ? uptime(host.uptime_seconds) : '—'} valueRight />
       </div>
     </StatCard>

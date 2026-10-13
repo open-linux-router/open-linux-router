@@ -38,6 +38,9 @@ hidden page title. Detail and operation pages keep their identifying titles.
 - Overview cumulative traffic shows download then upload separately, each with
   its directional arrow and byte unit. Preserve unavailable states rather than
   displaying zero when counting is disabled or a read fails.
+- Group Overview live traffic and utilization separately from cumulative traffic,
+  site probes and uptime. Align section starts across desktop cards while keeping
+  each group's internal spacing suited to its content; Status remains one list.
 - Keep common configuration fields, addresses, counters and useful evidence
   visible. Do not move them into disclosures solely to shorten a page.
 - Reuse existing headings, Card, ListRow, StatusStrip, fields and Dialog. Do not

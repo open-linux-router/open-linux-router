@@ -83,6 +83,11 @@ phones; site latency items use unfilled 32px rows with 6px vertical gaps.
 Only download/upload rates and CPU/memory utilization use inset meter surfaces
 in Overview cards. Status, public addresses, latency, totals and uptime use plain
 rows; monitored sites retain their icons without capsule backgrounds.
+On desktop, Overview cards share title, primary metric section and supplementary
+section boundaries, not individual metric rows. Totals, site probes and uptime
+start together without divider lines, then flow independently. Status spans the
+content sections naturally. Below desktop, cards use their own content height.
+Site probes use two columns on phones and three from 640px.
 
 ## Typography and imagery
 
