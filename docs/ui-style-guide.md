@@ -127,6 +127,12 @@ title from two columns of 48px minimum-height label/value rows: stable identity
 and settings on the left, observed state and traffic on the right. Priority and
 limits use the same row rhythm; long values and open editors may expand rows.
 Preserve existing confirmation and apply-preview behavior for network changes.
+Device detail rows use two zones: left-aligned labels and right-aligned values
+or controls, with 48px minimum row height. Keep disclosure chevrons beside their
+values rather than in a separate action column. Fixed IP address has its own
+switch row. Traffic rates sit below totals in the same value zone. Separate the
+desktop identity/settings and traffic halves with a 64px gutter; stack them with
+32px spacing below desktop.
 Never style a pending or failed read as a disabled service.
 
 List rows have a minimum height of 64px. On phones, trailing values reflow below

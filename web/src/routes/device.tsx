@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useDnsConfig, useDnsQueries } from '@/features/dns/queries'
 import { DeviceInspection } from '@/features/devices/inspection'
 import { DeviceInlineEditor } from '@/features/devices/device-inline-editor'
+import { DeviceSettingRow } from '@/features/devices/device-setting-row'
 import { useDeviceList } from '@/features/devices/queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
 import { DevicePolicy } from '@/features/qos/device-policy'
@@ -91,10 +92,9 @@ function State({ title, detail }: { title: string; detail: string }) {
 }
 
 function Meter({ icon: Icon, label, bytes, rate }: { icon: typeof ArrowDown; label: string; bytes?: number; rate?: number }) {
-  return <div className="grid min-h-9 grid-cols-[6rem_minmax(0,1fr)] items-center gap-3 py-1">
-    <dt className="flex items-center gap-2 text-muted-foreground"><Icon className="size-4 shrink-0" aria-hidden />{label}</dt>
-    <dd className="flex flex-wrap items-baseline justify-between gap-x-3 tabular-nums"><span>{bytes === undefined ? 'No address match' : formatBytes(bytes)}</span>{rate !== undefined && <span className="text-xs text-muted-foreground">{formatRate(rate)} now</span>}</dd>
-  </div>
+  return <DeviceSettingRow label={label}>
+    <div className="flex flex-col items-end tabular-nums"><span className="inline-flex items-center gap-2"><Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />{bytes === undefined ? 'No address match' : formatBytes(bytes)}</span>{rate !== undefined && <span className="text-xs text-muted-foreground">{formatRate(rate)} now</span>}</div>
+  </DeviceSettingRow>
 }
 
 function DnsAnswers({ answers }: { answers: string[] }) {
