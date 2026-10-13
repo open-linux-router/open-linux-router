@@ -75,6 +75,9 @@ addresses and provider errors readable rather than silently truncating them.
 
 ## Disclosure and hierarchy
 
+Open newly navigated pages at the top so their title and primary information are
+visible. Preserve section targeting for hash links and scroll for query-only changes.
+
 Default to two content levels: the main information and necessary context.
 A third level needs a specific reason, such as a consequential safety condition.
 An explanation is optional, including under a page title. Do not fill every

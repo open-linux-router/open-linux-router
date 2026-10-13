@@ -142,6 +142,9 @@ and a relevant next action where one exists.
 
 ## Responsive behavior and motion
 
+Page navigation resets document scroll to the top before paint. Hash links retain
+their section-target behavior; query-only changes preserve the current scroll.
+
 Desktop section navigation begins at 1024px. Below that, show all six sections
 in a six-column bottom navigation; do not require horizontal scrolling.
 Account for the device safe area and bottom navigation when laying out content

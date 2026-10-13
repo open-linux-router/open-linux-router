@@ -1,3 +1,4 @@
+import { useLayoutEffect } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 
 import { Logo } from '@/components/layout/logo'
@@ -7,9 +8,13 @@ import { TokenButton } from '@/components/layout/token-button'
 import { cn } from '@/lib/utils'
 
 export function AppShell() {
-  const { pathname } = useLocation()
+  const { pathname, hash } = useLocation()
   const section = sectionOf(pathname)
   const landing = section && pathname === section.to
+
+  useLayoutEffect(() => {
+    if (!hash) window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+  }, [pathname, hash])
 
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
