@@ -33,6 +33,9 @@ Section landing pages omit titles duplicated by navigation, retaining a visually
 hidden page title. Detail and operation pages keep their identifying titles.
 
 - Keep the Overview's four metric cards, CPU, memory and uptime visible.
+- Overview Status shows one public-network summary using IPv4's country flag,
+  city and ISP. Its disclosure shows IPv4, IPv6 when available, ASN and ASN
+  Organization from the IPv4 lookup, in that order.
 - Keep download and upload limits beside their respective measurements; separate
   controls serve separate decisions and are not automatically redundant.
 - Overview cumulative traffic shows download then upload separately, each with

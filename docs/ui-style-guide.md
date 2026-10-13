@@ -88,6 +88,8 @@ section boundaries, not individual metric rows. Totals, site probes and uptime
 start together without divider lines, then flow independently. Status spans the
 content sections naturally. Below desktop, cards use their own content height.
 Site probes use two columns on phones and three from 640px.
+The public-network summary uses a locally bundled flag-icons country flag and
+one chevron. Expanded addresses use monospace and wrap within the Status card.
 
 ## Typography and imagery
 

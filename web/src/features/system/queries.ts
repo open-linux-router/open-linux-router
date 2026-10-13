@@ -33,6 +33,7 @@ export interface PublicAddress {
   isp?: string
   organization?: string
   asn?: number
+  asn_organization?: string
 }
 
 export function usePublicAddresses() {

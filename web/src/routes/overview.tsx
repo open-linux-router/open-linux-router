@@ -16,7 +16,8 @@ import { useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
 import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
 import { servicesByDevice } from '@/features/topology/services'
-import { useHostMetrics, usePublicAddresses, type HostMetrics, type PublicAddress, type PublicAddresses } from '@/features/system/queries'
+import { useHostMetrics, usePublicAddresses, type HostMetrics, type PublicAddresses } from '@/features/system/queries'
+import 'flag-icons/css/flag-icons.min.css'
 import thesvgSlugs from '@/features/gateway/thesvg-slugs.json'
 import { useGatewayConfig, useGatewayLatency, useSaveLatencySites, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
@@ -407,57 +408,29 @@ function MetricPill({ label, value, detail, percent, tone = 'blue', health, valu
   </div></div>
 }
 
-const ispMarks: { pattern: RegExp; slug?: string; initials?: string; color?: string }[] = [
-  { pattern: /china unicom/i, initials: 'CU', color: 'text-red-600' },
-  { pattern: /china telecom/i, initials: 'CT', color: 'text-blue-600' },
-  { pattern: /china mobile/i, initials: 'CM', color: 'text-blue-500' },
-  { pattern: /verizon/i, slug: 'verizon' },
-  { pattern: /vodafone/i, slug: 'vodafone' },
-  { pattern: /deutsche telekom|t-mobile/i, slug: 'deutsche-telekom' },
-  { pattern: /orange/i, slug: 'orange' },
-  { pattern: /british telecom|\bbt\b/i, slug: 'bt' },
-  { pattern: /spectrum/i, slug: 'spectrum' },
-  { pattern: /telstra/i, slug: 'telstra' },
-  { pattern: /airtel/i, slug: 'airtel' },
-  { pattern: /\bjio\b/i, slug: 'jio' },
-  { pattern: /telefonica|telefónica/i, slug: 'telefonica' },
-  { pattern: /cloudflare/i, slug: 'cloudflare' },
-  { pattern: /google/i, slug: 'google' },
-  { pattern: /amazon|\baws\b/i, slug: 'amazon' },
-  { pattern: /digitalocean/i, slug: 'digitalocean' },
-]
-
 function CountryIcon({ code }: { code?: string }) {
   if (!code || !/^[a-z]{2}$/i.test(code)) return null
-  const flag = String.fromCodePoint(...[...code.toUpperCase()].map((letter) => 0x1f1e6 + letter.charCodeAt(0) - 65))
-  return <span aria-hidden className="shrink-0 text-base leading-none">{flag}</span>
+  return <span role="img" aria-label={code.toUpperCase()} className={`fi fi-${code.toLowerCase()} shrink-0 rounded-xs`} />
 }
 
-function IspIcon({ name }: { name?: string }) {
-  const mark = name && ispMarks.find(({ pattern }) => pattern.test(name))
-  if (!mark) return null
-  return mark.slug
-    ? <img src={`https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${mark.slug}/default.svg`} alt="" className="size-4 shrink-0 object-contain" loading="lazy" />
-    : <span aria-hidden className={cn('inline-flex size-4 shrink-0 items-center justify-center text-[8px] font-bold', mark.color)}>{mark.initials}</span>
-}
-
-function PublicAddressRow({ family, address }: { family: 'IPv4' | 'IPv6'; address?: PublicAddress }) {
+function PublicAddressRow({ addresses }: { addresses?: PublicAddresses }) {
   const [open, setOpen] = useState(false)
-  const location = [address?.city, address?.region, address?.country].filter(Boolean).join(', ')
-  const network = [address?.isp, address?.organization && address.organization !== address.isp ? address.organization : undefined].filter(Boolean).join(' · ')
+  const address = addresses?.ipv4
   const summary = [address?.city || address?.region || address?.country, address?.isp || address?.organization].filter(Boolean).join(', ')
   return <div className="min-w-0">
     <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
       className="flex min-h-11 sm:min-h-9 w-full min-w-0 flex-wrap items-center gap-2 rounded-lg py-1.5 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
-      <span className="w-full shrink-0 text-xs text-muted-foreground sm:w-auto">{family}</span>
+      <CountryIcon code={address?.country_code} />
       <span className="min-w-0 flex-1 break-words text-[0.8125rem] font-semibold" title={summary || undefined}>{summary || (address?.ip ? 'Location unavailable' : '—')}</span>
       <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
     </button>
     {open && <div className="space-y-1 px-3 pt-2 text-xs text-muted-foreground">
-      <p className="break-all font-medium text-foreground">{address?.ip || 'Address unavailable'}</p>
-      {location && <p className="flex items-center gap-1.5 break-words"><CountryIcon code={address?.country_code} />{location}</p>}
-      {network && <p className="flex items-center gap-1.5 break-words"><IspIcon name={address?.isp} />{network}</p>}
-      {address?.asn && <p>AS{address.asn}</p>}
+      <dl className="space-y-2">
+        <div><dt>IPv4</dt><dd className="break-all font-mono text-foreground">{address?.ip || 'Address unavailable'}</dd></div>
+        {addresses?.ipv6?.ip && <div><dt>IPv6</dt><dd className="break-all font-mono text-foreground">{addresses.ipv6.ip}</dd></div>}
+        {address?.asn != null && address.asn > 0 && <div><dt>ASN</dt><dd className="font-mono text-foreground">AS{address.asn}</dd></div>}
+        {address?.asn_organization && <div><dt>ASN Organization</dt><dd className="break-words text-foreground">{address.asn_organization}</dd></div>}
+      </dl>
     </div>}
   </div>
 }
@@ -631,8 +604,7 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
     <StatCard title="Status">
       <div className="space-y-1 lg:row-span-2 lg:self-start">
         <MetricPill value={title} health={faults.length || failed ? 'bad' : known && !idle ? 'good' : 'unknown'} />
-        <PublicAddressRow family="IPv4" address={publicAddresses?.ipv4} />
-        <PublicAddressRow family="IPv6" address={publicAddresses?.ipv6} />
+        <PublicAddressRow addresses={publicAddresses} />
       </div>
     </StatCard>
     <StatCard title="Traffic">
