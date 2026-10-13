@@ -1,4 +1,3 @@
-import { Pencil } from 'lucide-react'
 import { useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -8,7 +7,6 @@ import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { CategoryPicker, type IconChoice } from '@/features/devices/category-picker'
@@ -31,7 +29,7 @@ const NO_GROUP = ' none'
 const INHERIT_EXIT = ' inherit'
 const DIRECT_EXIT = ' direct'
 
-type Field = 'name' | 'icon' | 'notes' | 'reservation' | null
+type Field = 'name' | 'icon' | 'reservation' | null
 
 export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; traffic: ReactNode }) {
   const identity = useDevicesConfig()
@@ -47,7 +45,6 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
   const [name, setName] = useState('')
   const nameFinished = useRef(false)
   const [look, setLook] = useState<IconChoice>({ category: '', icon: '' })
-  const [notes, setNotes] = useState('')
   const [ip, setIp] = useState('')
   const [fixed, setFixed] = useState(false)
   const identityBusy = !identity.data || saveIdentity.isPending
@@ -57,7 +54,6 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
     nameFinished.current = false
     setName(device.name || device.mac)
     setLook({ category: device.category_origin === 'operator' ? device.category : '', icon: device.icon ?? '' })
-    setNotes(device.notes ?? '')
     setIp(reservation?.ip ?? device.ips?.find((address) => !address.includes(':')) ?? '')
     setFixed(!!reservation)
   }
@@ -127,15 +123,13 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
             </div>
           </DeviceSettingRow>
           <Fact label="Last heard" value={device.last_seen ? formatAgo(device.last_seen) : 'Never'} />
-          <DeviceSettingRow label="Group"><Select value={device.group || NO_GROUP} disabled={identityBusy} onValueChange={(v) => { if (v) void save({ group: v === NO_GROUP ? undefined : v }) }}><SelectTrigger aria-label="Change device group" className="ml-auto h-auto min-h-11 sm:min-h-9 max-w-full border-0 px-0 shadow-none whitespace-normal"><SelectValue className="flex-none text-right break-words">{(v: string) => v === NO_GROUP || !v ? 'No group' : v}</SelectValue></SelectTrigger><SelectContent><SelectItem value={NO_GROUP}>No group</SelectItem>{groupOptions(identity.data?.groups ?? []).map((g) => <SelectItem key={g.name} value={g.name}><span style={{ paddingLeft: g.depth * 12 }}>{g.name}</span></SelectItem>)}</SelectContent></Select></DeviceSettingRow>
+          <DeviceSettingRow label="Group"><Select value={device.group || NO_GROUP} disabled={identityBusy} onValueChange={(v) => { if (v) void save({ group: v === NO_GROUP ? undefined : v }) }}><SelectTrigger aria-label="Change device group" className="ml-auto h-auto min-h-11 sm:min-h-9 max-w-full rounded-md border-transparent bg-secondary px-2 text-xs font-medium shadow-none whitespace-normal"><SelectValue className="flex-none text-right break-words">{(v: string) => v === NO_GROUP || !v ? 'No group' : v}</SelectValue></SelectTrigger><SelectContent><SelectItem value={NO_GROUP}>No group</SelectItem>{groupOptions(identity.data?.groups ?? []).map((g) => <SelectItem key={g.name} value={g.name}><span style={{ paddingLeft: g.depth * 12 }}>{g.name}</span></SelectItem>)}</SelectContent></Select></DeviceSettingRow>
           <DeviceSettingRow label="Internet via">
             <Select value={exit} disabled={!gateway.data || gatewayApplier.busy} onValueChange={(v) => { if (v) void gatewayApplier.submit(v === INHERIT_EXIT ? gatewayChange.removeDevice(device.mac) : gatewayChange.device(device.mac, v === DIRECT_EXIT ? '' : v)) }}>
               <SelectTrigger aria-label="Change gateway route" className="ml-auto h-auto min-h-11 sm:min-h-9 max-w-full border-0 px-0 shadow-none whitespace-normal"><SelectValue className="flex-none text-right break-words">{(v: string) => v === INHERIT_EXIT ? 'Follow network setting' : v === DIRECT_EXIT ? 'This router’s connection' : v}</SelectValue></SelectTrigger>
               <SelectContent><SelectItem value={INHERIT_EXIT}>Follow network setting</SelectItem><SelectItem value={DIRECT_EXIT}>This router’s connection</SelectItem>{(gateway.data?.exits ?? []).map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
             </Select>
           </DeviceSettingRow>
-          <DeviceSettingRow label="Notes">{editing === 'notes' ? <div className="space-y-2 text-left"><Textarea autoFocus aria-label="Device notes" value={notes} onChange={(e) => setNotes(e.target.value)} /><div className="flex justify-end gap-2"><Button size="sm" disabled={identityBusy} onClick={() => save({ notes: notes.trim() || undefined })}>Save notes</Button><Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button></div></div>
-            : <button type="button" disabled={identityBusy} onClick={() => begin('notes')} className="group inline-flex min-h-11 sm:min-h-9 max-w-full items-center gap-2 rounded-md text-right hover:text-primary"><span className="min-w-0 break-words">{device.notes || 'Add notes'}</span><Pencil className="size-3.5 shrink-0 text-muted-foreground opacity-60 group-hover:opacity-100" aria-hidden /></button>}</DeviceSettingRow>
         </dl>
       </div>
       <div className="min-w-0">{traffic}</div>

@@ -125,14 +125,15 @@ Blur or Enter saves; Escape discards. No pencil or save/cancel controls accompan
 the title. The name input is 320px wide, capped by available space.
 Its status chip uses the title font size. A divider separates the
 title from two columns of 36px desktop / 44px mobile minimum-height label/value rows: stable identity
-and settings on the left, observed state and traffic on the right. Priority and
-limits use the same row rhythm; long values and open editors may expand rows.
+and settings on the left, observed state and traffic on the right. Group and Internet via values use selectable tags with muted surfaces.
+Device traffic reuses Overview meters and total rows without a heading.
+Priority and limits omit the visible section heading and use the same row rhythm; long values and open editors may expand rows.
 Preserve existing confirmation and apply-preview behavior for network changes.
 Device detail rows use two zones: left-aligned labels and right-aligned values
 or controls, with 36px desktop / 44px mobile minimum row height. Keep disclosure chevrons beside their
 values rather than in a separate action column. Clicking the IP opens a dialog
 with an address and fixed toggle, without a pencil. A Fixed badge follows reserved
-addresses. Traffic rates sit below totals in the same value zone. Separate the
+addresses. Traffic rates use inset meters followed by plain total rows. Separate the
 desktop identity/settings and traffic halves with a 64px gutter; stack them with
 32px spacing below desktop.
 Never style a pending or failed read as a disabled service.

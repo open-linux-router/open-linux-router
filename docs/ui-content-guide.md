@@ -62,12 +62,10 @@ an explicit error and a retry where useful. Name configuration counts as such.
 
 Show QoS as saved configuration until enforcement exists.
 Device details group stable identity and saved settings on the left, live
-observations and traffic on the right. Traffic uses Download and Upload rows,
-each showing totals and current rate. Keep attribution scope and the QoS
-configuration-only state visible; show QoS save actions only while editing.
-Use label/value pairs within each device-detail half. Keep secondary traffic
-rates below their totals, units with their inputs, and chevrons beside selected
-values. Lead identity rows with Vendor. Edit addresses and their fixed toggle
+observations and traffic on the right. Reuse Overview rate meters and plain Download and Upload totals, without a
+traffic title or attribution footnote. Group and Internet via are selectable
+tags. Omit Notes and the QoS heading; retain activation status.
+Use label/value pairs within each device-detail half. Keep units with their inputs and chevrons beside selected values. Lead identity rows with Vendor. Edit addresses and their fixed toggle
 in a dialog opened by clicking the IP. Show a Fixed tag beside reserved addresses;
 keep the hover hint limited to DHCP lease information and omit the hostname field.
 Preserve diagnostic scope: router-originated tests do not measure a downstream device's path.

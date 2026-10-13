@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp } from 'lucide-react'
+import { Meter, MetricPill } from '@/components/traffic-metrics'
 import { Input } from '@/components/ui/input'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useDnsConfig, useDnsQueries } from '@/features/dns/queries'
 import { DeviceInspection } from '@/features/devices/inspection'
 import { DeviceInlineEditor } from '@/features/devices/device-inline-editor'
-import { DeviceSettingRow } from '@/features/devices/device-setting-row'
 import { useDeviceList } from '@/features/devices/queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
 import { DevicePolicy } from '@/features/qos/device-policy'
@@ -38,18 +37,20 @@ export function DevicePage() {
     <div className="space-y-4 pb-12">
       <DeviceInlineEditor key={device.mac} device={device} traffic={
         <>
-            <h2 className="mb-2 text-sm font-semibold">Traffic</h2>
             {flow.counting ? (
-              <dl className="text-sm">
-                <Meter icon={ArrowDown} label="Download" bytes={usage?.down} rate={usage?.downRate} />
-                <Meter icon={ArrowUp} label="Upload" bytes={usage?.up} rate={usage?.upRate} />
-              </dl>
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <Meter label="Download" arrow="↓" current={usage?.downRate === undefined ? '—' : formatRate(usage.downRate)} />
+                  <Meter label="Upload" arrow="↑" current={usage?.upRate === undefined ? '—' : formatRate(usage.upRate)} tone="amber" />
+                </div>
+                <div className="space-y-1 pt-1">
+                  <MetricPill label="Download" value={usage?.down === undefined ? 'No address match' : formatBytes(usage.down)} valueRight />
+                  <MetricPill label="Upload" value={usage?.up === undefined ? 'No address match' : formatBytes(usage.up)} valueRight />
+                </div>
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground">{traffic.isError ? 'Traffic counters are unavailable right now.' : 'Traffic counting is off or unavailable.'}</p>
             )}
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Since counting started · Routed traffic only. Shared or changing IPs may affect totals.
-            </p>
             <DevicePolicy mac={device.mac} />
         </>
       } />
@@ -91,12 +92,6 @@ function State({ title, detail }: { title: string; detail: string }) {
     <p className="text-sm text-muted-foreground">{detail}</p>
     <Button variant="outline" nativeButton={false} render={<Link to="/">Back to overview</Link>} />
   </div>
-}
-
-function Meter({ icon: Icon, label, bytes, rate }: { icon: typeof ArrowDown; label: string; bytes?: number; rate?: number }) {
-  return <DeviceSettingRow label={label}>
-    <div className="flex flex-col items-end tabular-nums"><span className="inline-flex items-center gap-2"><Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />{bytes === undefined ? 'No address match' : formatBytes(bytes)}</span>{rate !== undefined && <span className="text-xs text-muted-foreground">{formatRate(rate)} now</span>}</div>
-  </DeviceSettingRow>
 }
 
 function DnsAnswers({ answers }: { answers: string[] }) {
