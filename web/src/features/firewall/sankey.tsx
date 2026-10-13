@@ -1,36 +1,88 @@
-import { useEffect, useRef } from 'react'
-import { ShieldCheck } from 'lucide-react'
+import { useEffect, useMemo, useRef } from 'react'
 import { init, use as registerCharts } from 'echarts/core'
 import { SankeyChart } from 'echarts/charts'
 import { SVGRenderer } from 'echarts/renderers'
+import { useDeviceList } from '@/features/devices/queries'
+import { useGatewayTraffic } from '@/features/gateway/queries'
 import type { FirewallStatus } from '@/lib/api-types'
 
 registerCharts([SankeyChart, SVGRenderer])
+type Node = { name: string; title: string; depth: number; token: string }
+type FlowLink = { source: string; target: string; value: number }
 
-type Arrival = { label: string; detail?: string; result: string; token: string }
-
-function ArrivalChart({ arrivals, upward = false }: { arrivals: Arrival[]; upward?: boolean }) {
+export function FirewallSankey({ status }: { status: FirewallStatus }) {
+  const devices = useDeviceList()
+  const traffic = useGatewayTraffic()
   const container = useRef<HTMLDivElement>(null)
+  const graph = useMemo(() => {
+    const nodes = new Map<string, Node>()
+    const links = new Map<string, FlowLink>()
+    const groups = new Map<string, Set<string>>()
+    for (const device of devices.data?.devices ?? []) {
+      for (const address of device.ips ?? []) {
+        const owners = groups.get(address) ?? new Set<string>()
+        owners.add(device.group ?? 'Ungrouped')
+        groups.set(address, owners)
+      }
+    }
+    function node(name: string, title: string, depth: number, token = '--primary') {
+      nodes.set(name, { name, title, depth, token })
+      return name
+    }
+    function link(source: string, target: string, value: number) {
+      const key = JSON.stringify([source, target])
+      links.set(key, { source, target, value: value + (links.get(key)?.value ?? 0) })
+    }
+    if (!devices.error && !traffic.error && traffic.data?.counting && devices.data && !devices.data.problems?.length) {
+      for (const row of traffic.data.usage) {
+        const packets = row.up_packets + row.down_packets
+        if (!(packets > 0)) continue
+        const owners = groups.get(row.address)
+        const group = owners?.size === 1 ? [...owners][0] : 'Unattributed'
+        const source = node(`group:${group}`, group, 0)
+        const exit = node(`exit:${row.unknown ? 'unknown:' : ''}${row.exit}`, row.unknown ? `Removed exit: ${row.exit || 'Unknown'}` : row.exit || 'Unassigned exit', 1, '--transmit')
+        const action = node('forwarded', 'Forwarded', 2, '--success-foreground')
+        link(source, exit, packets)
+        link(exit, action, packets)
+      }
+    }
+    if (status.enabled && status.known && !status.drifted && !status.problem && !status.native) {
+      for (const [name, packets] of [['To router', status.blocked_input], ['To inside devices', status.blocked_forward]] as const) {
+        if (!(packets > 0)) continue
+        const source = node('outside', 'Outside', 0, '--warning-foreground')
+        const destination = node(`blocked:${name}`, name, 1, '--warning-foreground')
+        const action = node('blocked', 'Blocked', 2, '--warning-foreground')
+        link(source, destination, packets)
+        link(destination, action, packets)
+      }
+    }
+    return { nodes: [...nodes.values()], links: [...links.values()] }
+  }, [devices.data, devices.error, traffic.data, traffic.error, status])
+
   useEffect(() => {
-    const element = container.current!
+    const element = container.current
+    if (!element || !graph.links.length) return
     const chart = init(element, undefined, { renderer: 'svg' })
     function draw() {
-      const styles = getComputedStyle(element)
+      const styles = getComputedStyle(element!)
       chart.setOption({
         animation: false,
         series: [{
-          type: 'sankey', orient: 'vertical', left: 0, right: 0, top: 0, bottom: 0,
-          nodeWidth: 5, nodeGap: 24, layoutIterations: 0, draggable: false, silent: true,
-          label: { show: false },
-          data: [
-            ...arrivals.map((arrival, index) => ({
-              name: String(index), depth: 0,
-              itemStyle: { color: styles.getPropertyValue(arrival.token).trim(), borderWidth: 0 },
-            })),
-            { name: 'Firewall', depth: 1, itemStyle: { color: 'transparent', borderWidth: 0 } },
-          ],
-          links: arrivals.map((_, index) => ({ source: String(index), target: 'Firewall', value: 1 })),
-          lineStyle: { color: 'source', opacity: 0.28, curveness: 0.5 },
+          type: 'sankey', left: 12, right: 160, top: 24, bottom: 24,
+          nodeWidth: 10, nodeGap: 24, draggable: false,
+          emphasis: { focus: 'adjacency' },
+          label: {
+            color: styles.getPropertyValue('--foreground').trim(), fontSize: 13,
+            fontFamily: styles.fontFamily, width: 140, overflow: 'break',
+            formatter: (params: { data: { title?: string; value?: number } }) => `${params.data.title}\n${(params.data.value ?? 0).toLocaleString()} packets`,
+          },
+          data: graph.nodes.map(node => ({
+            ...node,
+            value: graph.links.filter(link => node.depth === 2 ? link.target === node.name : link.source === node.name).reduce((total, link) => total + link.value, 0),
+            itemStyle: { color: styles.getPropertyValue(node.token).trim(), borderWidth: 0 },
+          })),
+          links: graph.links,
+          lineStyle: { color: 'source', opacity: 0.2, curveness: 0.5 },
         }],
       })
     }
@@ -40,74 +92,25 @@ function ArrivalChart({ arrivals, upward = false }: { arrivals: Arrival[]; upwar
     const theme = new MutationObserver(draw)
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] })
     return () => { resize.disconnect(); theme.disconnect(); chart.dispose() }
-  }, [arrivals])
+  }, [graph])
 
-  const labels = (
-    <div className="flex gap-2 py-4 text-center">
-      {arrivals.map(arrival => (
-        <div key={`${arrival.label}:${arrival.detail ?? ''}`} className="min-w-0 flex-1 text-xs sm:text-sm">
-          <div className="break-words font-medium">{arrival.label}</div>
-          {arrival.detail && <div className="mt-1 break-words text-xs text-muted-foreground">{arrival.detail}</div>}
-          <div className="mt-1 text-xs text-muted-foreground">{arrival.result}</div>
-        </div>
-      ))}
-    </div>
-  )
+  const unavailable = devices.error || traffic.error || devices.data?.problems?.length
   return (
-    <div className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="region" aria-label={upward ? 'Inside rule categories' : 'Outside rule categories'}>
-      <div style={{ minWidth: arrivals.length * 88 }}>
-        {!upward && labels}
-        <div ref={container} aria-hidden="true" className={`h-44 w-full sm:h-56 ${upward ? '-scale-y-100' : ''}`} />
-        {upward && labels}
-      </div>
-    </div>
-  )
-}
-
-export function FirewallSankey({ status }: { status: FirewallStatus }) {
-  const verified = status.known && !status.drifted && !status.problem
-  const uncertain = !verified || status.native
-  function arrival(label: string, blocked = false): Arrival {
-    if (uncertain) return { label, result: 'Review rules', token: '--muted-foreground' }
-    if (!status.enabled) return { label, result: 'Firewall off', token: '--muted-foreground' }
-    return { label, result: blocked ? 'Blocked' : 'Allowed', token: blocked ? '--warning-foreground' : '--success-foreground' }
-  }
-  const external = [
-    arrival('Unsolicited input', true),
-    arrival('Unsolicited forward', true),
-    arrival('Established / related'),
-    arrival('ICMP'),
-    arrival('ICMPv6'),
-    arrival('DHCP client'),
-    arrival('DHCPv6 client'),
-    ...status.openings.map(opening => ({
-      ...arrival(opening.for),
-      detail: opening.protocol === '6in4'
-        ? `6in4 from ${opening.from}`
-        : `${opening.protocol.toUpperCase()} ${opening.port}${opening.from ? ` from ${opening.from}` : ''}`,
-    })),
-    arrival('Port forwards (DNAT)'),
-    arrival('Forward to non-inside'),
-    ...(status.iptv?.upstream ? [arrival('IPTV IGMP'), arrival('IPTV multicast')] : []),
-  ]
-  const internal = status.inside.length
-    ? status.inside.map(name => arrival(name))
-    : [arrival('Inside networks')]
-
-  return (
-    <section className="rounded-2xl border bg-card p-4 shadow-xs sm:p-6" aria-label="Connections arriving at the firewall">
-      <div className="mb-2 text-sm font-medium">Outside ↓</div>
-      <ArrivalChart arrivals={status.native ? [arrival('Native rules')] : external} />
-      <div className="relative flex h-16 items-center justify-center rounded-xl border bg-muted">
-        <div className="flex items-center gap-3 rounded-xl border bg-card px-5 py-3">
-          <ShieldCheck className="size-9 text-primary" aria-hidden="true" />
-          <div><h2 className="font-semibold">Firewall</h2><p className="text-xs text-muted-foreground">{uncertain ? 'Rule decisions not summarized' : status.enabled ? 'Allow or block' : 'Off'}</p></div>
+    <section className="rounded-2xl border bg-card p-4 shadow-xs sm:p-6" aria-label="Measured traffic paths">
+      <h2 className="font-semibold">Traffic paths</h2>
+      <p className="mt-1 text-sm text-muted-foreground">Group → Exit / destination → Action</p>
+      {unavailable ? <p className="mt-4 text-sm text-muted-foreground">Group traffic is unavailable.</p>
+        : !traffic.data || !devices.data ? <p className="mt-4 text-sm text-muted-foreground">Loading traffic…</p>
+        : !traffic.data.counting ? <p className="mt-4 text-sm text-muted-foreground">Traffic accounting is not active.</p> : null}
+      {graph.links.length ? (
+        <div className="mt-4 overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="region" aria-label="Traffic Sankey diagram">
+          <div ref={container} style={{ height: Math.max(320, graph.nodes.filter(node => node.depth === 0).length * 56), minWidth: 640 }} />
+          <ul className="sr-only">{graph.links.map(link => <li key={JSON.stringify([link.source, link.target])}>{graph.nodes.find(node => node.name === link.source)?.title} → {graph.nodes.find(node => node.name === link.target)?.title}: {link.value.toLocaleString()} packets</li>)}</ul>
         </div>
-      </div>
-      <ArrivalChart arrivals={internal} upward />
-      <div className="mt-2 text-sm font-medium">Inside ↑</div>
-      <p className="mt-6 text-xs text-muted-foreground">Paths arrive at the firewall. Widths show categories, not traffic volume. Only connections through this router are shown.</p>
-      {status.enabled && verified && !status.native && <p className="mt-2 text-xs text-muted-foreground">{status.blocked_input.toLocaleString()} packets blocked to the router · {status.blocked_forward.toLocaleString()} to inside devices, since rules were applied.</p>}
+      ) : traffic.data?.counting && devices.data && !unavailable ? <p className="mt-6 text-sm text-muted-foreground">No measured traffic.</p> : null}
+      <p className="mt-4 text-xs text-muted-foreground">Widths show cumulative packets, including upload and download, not current rates. Forwarded and blocked traffic have separate counter lifetimes. Outside blocks cannot be attributed to a group or exit.</p>
+      {traffic.data?.limits?.map(limit => <p key={limit} className="mt-2 text-xs text-muted-foreground">{limit}</p>)}
+      {traffic.data && traffic.data.capacity > 0 && traffic.data.held >= traffic.data.capacity && <p className="mt-2 text-xs text-warning-foreground">Traffic accounting is full; some paths may be missing.</p>}
     </section>
   )
 }
