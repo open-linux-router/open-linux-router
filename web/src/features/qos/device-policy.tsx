@@ -30,7 +30,7 @@ export function DevicePolicy({ mac }: { mac: string }) {
     }
   }
 
-  return <section aria-labelledby="device-policy-title" className="space-y-3 border-t pt-4">
+  return <section aria-labelledby="device-policy-title" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><h2 id="device-policy-title" className="text-sm font-medium">Priority and limits</h2><span className="text-xs text-muted-foreground">Configuration only · not enforced</span></div>
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="grid gap-2"><Label htmlFor="device-qos-priority">Priority</Label><Select value={priority} disabled={!config.data || apply.isPending} onValueChange={(v) => { if (v) change({ priority: v as Priority }) }}><SelectTrigger id="device-qos-priority" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="high">High</SelectItem><SelectItem value="normal">Normal</SelectItem><SelectItem value="low">Low</SelectItem></SelectContent></Select></div>

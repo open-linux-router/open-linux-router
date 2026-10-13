@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -83,18 +84,23 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
   return <>
     <Card className="gap-0 overflow-hidden py-0">
     <header className="p-4 sm:px-6">
-      <div className="flex items-start gap-5">
+      <div className="flex items-center gap-4">
         <button type="button" disabled={identityBusy} onClick={() => begin('icon')} aria-label="Change device icon" className="group relative shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           <DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor} vendorKey={device.vendor_key} online={device.online} size="lg" />
-          <Pencil className="absolute -bottom-1 -right-1 size-4 rounded-full bg-card p-0.5 opacity-70 group-hover:opacity-100" aria-hidden />
         </button>
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             {editing === 'name' ? <div className="flex flex-wrap gap-2"><Input autoFocus aria-label="Device name" className="w-56" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void save({ name: name.trim() || undefined }); if (e.key === 'Escape') setEditing(null) }} /><Button size="sm" disabled={identityBusy} onClick={() => save({ name: name.trim() || undefined })}>Save</Button><Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button></div>
               : <button type="button" disabled={identityBusy} onClick={() => begin('name')} aria-label="Edit device name" className="group flex items-center gap-2 text-left"><h1 className="break-words text-2xl font-semibold tracking-tight sm:text-3xl">{device.name || device.mac}</h1><Pencil className="size-4 shrink-0 text-muted-foreground opacity-60 group-hover:opacity-100" aria-hidden /></button>}
-            <Badge variant={device.online ? 'success' : device.seen ? 'secondary' : 'outline'}>{device.online ? 'Online' : device.seen ? 'Offline' : 'Never seen'}</Badge>
           </div>
-          <div className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+        </div>
+        <Badge className="shrink-0 self-start sm:self-center" variant={device.online ? 'success' : device.seen ? 'secondary' : 'outline'}>{device.online ? 'Online' : device.seen ? 'Offline' : 'Never seen'}</Badge>
+      </div>
+    </header>
+
+    <div className="grid gap-y-4 lg:grid-cols-2">
+      <section aria-label="Device information and settings" className="min-w-0 p-4 pt-0 sm:px-6">
+          <div className="mb-3 flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
             <span>{device.network || 'Network unknown'} · </span>
             <Select value={device.group || NO_GROUP} disabled={identityBusy} onValueChange={(v) => { if (v) void save({ group: v === NO_GROUP ? undefined : v }) }}>
               <SelectTrigger aria-label="Change device group" className="h-auto w-auto min-w-20 border-0 px-1 py-0 shadow-none"><SelectValue>{(v: string) => v === NO_GROUP || !v ? 'No group' : v}</SelectValue></SelectTrigger>
@@ -102,13 +108,6 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
             </Select>
             {device.last_seen && <span>· Last heard {formatAgo(device.last_seen)}</span>}
           </div>
-        </div>
-      </div>
-      {editing === 'icon' && <div className="mt-5 border-t pt-4"><div className="mb-3 flex items-center justify-between"><h2 className="font-medium">Choose icon</h2><Button variant="ghost" size="sm" onClick={() => setEditing(null)}>Cancel</Button></div><CategoryPicker value={look} detected={device.detected_category} onChange={(choice) => { setLook(choice); void save({ category: choice.category || undefined, icon: choice.icon || undefined }) }} /></div>}
-    </header>
-
-    <div className="grid border-t lg:grid-cols-2">
-      <section aria-label="Device information and settings" className="min-w-0 p-4 sm:px-6">
         <dl className="space-y-1 text-sm">
           <Fact label="MAC" value={device.mac} mono />
           <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-start gap-3 py-2"><dt className="pt-1 text-muted-foreground">IP</dt><dd className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
@@ -129,12 +128,19 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
           <Fact label="Seen by" value={device.sources?.length ? device.sources.map((s) => s === 'dhcp-lease' ? 'DHCP lease' : s === 'arp' ? 'Network traffic' : s).join(' · ') : 'Not observed'} />
           {device.expires && <Fact label="Lease ends" value={new Date(device.expires).toLocaleString()} />}
         </dl>
-        <div className="mt-2 border-t pt-2 text-sm">{editing === 'notes' ? <div className="space-y-2"><Textarea autoFocus aria-label="Device notes" value={notes} onChange={(e) => setNotes(e.target.value)} /><div className="flex gap-2"><Button size="sm" disabled={identityBusy} onClick={() => save({ notes: notes.trim() || undefined })}>Save notes</Button><Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button></div></div>
+        <div className="mt-2 pt-2 text-sm">{editing === 'notes' ? <div className="space-y-2"><Textarea autoFocus aria-label="Device notes" value={notes} onChange={(e) => setNotes(e.target.value)} /><div className="flex gap-2"><Button size="sm" disabled={identityBusy} onClick={() => save({ notes: notes.trim() || undefined })}>Save notes</Button><Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button></div></div>
           : <button type="button" disabled={identityBusy} onClick={() => begin('notes')} className="group inline-flex min-h-9 items-center gap-2 rounded-md text-left text-muted-foreground hover:text-foreground max-sm:min-h-11">{device.notes || 'Add notes'}<Pencil className="size-3.5 opacity-60 group-hover:opacity-100" aria-hidden /></button>}</div>
       </section>
-      <div className="min-w-0 space-y-4 border-t p-4 sm:px-6 lg:border-t-0 lg:border-l">{traffic}</div>
+      <div className="min-w-0 space-y-6 p-4 pt-0 sm:px-6">{traffic}</div>
     </div>
     </Card>
+    <Dialog open={editing === 'icon'} onOpenChange={(open) => { if (!open) setEditing(null) }}>
+      <DialogContent className="max-h-[90svh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Device icon</DialogTitle><DialogDescription>Choose an icon for {device.name || device.mac}.</DialogDescription></DialogHeader>
+        <CategoryPicker value={look} detected={device.detected_category} onChange={setLook} />
+        <DialogFooter><Button variant="ghost" disabled={saveIdentity.isPending} onClick={() => setEditing(null)}>Cancel</Button><Button disabled={identityBusy} onClick={() => void save({ category: look.category || undefined, icon: look.icon || undefined })}>Save icon</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
     <DhcpOutcome applier={dhcpApplier} />
     <GatewayOutcome applier={gatewayApplier} />
   </>

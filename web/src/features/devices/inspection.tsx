@@ -88,7 +88,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
   }
 
   return <section className="overflow-hidden rounded-2xl border bg-card" aria-labelledby="inspection-title">
-    <div className="border-b bg-muted/40 px-5 py-5 sm:px-7">
+    <div className="px-5 pt-5 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="inspection-title" className="text-base font-semibold">Connections</h2>
@@ -152,7 +152,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
       {mine && <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-2">
           <h3 className="text-sm font-semibold">Inspected requests <Badge variant="secondary">{requests.length}</Badge></h3>
-          <ul className="max-h-80 divide-y overflow-y-auto rounded-xl border">
+          <ul className="max-h-80 space-y-1 overflow-y-auto">
             {requests.length === 0 && <li className="p-3 text-sm text-muted-foreground">No supported requests captured yet.</li>}
             {requests.map((event, i) => <li key={`${event.at}-${i}`}><button className="w-full p-3 text-left text-sm hover:bg-muted/50" onClick={() => setSelected(event)}>
               <span className="font-mono text-xs text-muted-foreground">{new Date(event.at * 1000).toLocaleTimeString()} · {event.method} · {event.status}</span>
@@ -162,7 +162,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         </div>
         <div className="space-y-2">
           <h3 className="text-sm font-semibold">Could not inspect <Badge variant="secondary">{failed.length}</Badge></h3>
-          <ul className="max-h-80 divide-y overflow-y-auto rounded-xl border">
+          <ul className="max-h-80 space-y-1 overflow-y-auto">
             {failed.length === 0 && <li className="p-3 text-sm text-muted-foreground">No proxy failures reported. Other connections are not tracked here.</li>}
             {failed.map((event, i) => <li key={`${event.at}-${i}`} className="p-3 text-sm">
               <span className="block break-all">{event.target}</span><span className="text-xs text-muted-foreground">{event.reason}</span>

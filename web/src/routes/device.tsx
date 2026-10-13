@@ -71,7 +71,7 @@ export function DevicePage() {
           ) : shownQueries.length === 0 ? (
             <p className="text-sm text-muted-foreground">{matchingQueries.length ? 'Nothing matches that filter.' : 'No matching queries in the recent sample.'}</p>
           ) : (
-            <ul className="max-h-80 divide-y overflow-y-auto rounded-xl border">
+            <ul className="max-h-80 space-y-1 overflow-y-auto">
               {shownQueries.map((q, i) => <li key={`${q.at}-${q.client}-${q.name}-${i}`} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
                 <time dateTime={q.at} className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{new Date(q.at).toLocaleTimeString()}</time>
                 <span className="min-w-0 flex-[1_1_10rem] break-all">{q.name}<span className="ml-2 text-xs text-muted-foreground">{q.type}</span></span>
