@@ -40,20 +40,20 @@ export function FirewallSankey({ status }: { status: FirewallStatus }) {
         const owners = groups.get(row.address)
         const group = owners?.size === 1 ? [...owners][0] : 'Unattributed'
         const source = node(`group:${group}`, group, 0)
-        const exit = node(`exit:${row.unknown ? 'unknown:' : ''}${row.exit}`, row.unknown ? `Removed exit: ${row.exit || 'Unknown'}` : row.exit || 'Unassigned exit', 1, '--transmit')
-        const action = node('forwarded', 'Forwarded', 2, '--success-foreground')
-        link(source, exit, packets)
-        link(exit, action, packets)
+        const router = node('olr', 'OLR', 1, '--transmit')
+        const exit = node(`exit:${row.unknown ? 'unknown:' : ''}${row.exit}`, row.unknown ? `Removed exit: ${row.exit || 'Unknown'}` : row.exit || 'Default routing', 2, '--success-foreground')
+        link(source, router, packets)
+        link(router, exit, packets)
       }
     }
     if (status.enabled && status.known && !status.drifted && !status.problem && !status.native) {
       for (const [name, packets] of [['To router', status.blocked_input], ['To inside devices', status.blocked_forward]] as const) {
         if (!(packets > 0)) continue
         const source = node('outside', 'Outside', 0, '--warning-foreground')
-        const destination = node(`blocked:${name}`, name, 1, '--warning-foreground')
-        const action = node('blocked', 'Blocked', 2, '--warning-foreground')
-        link(source, destination, packets)
-        link(destination, action, packets)
+        const router = node('olr', 'OLR', 1, '--transmit')
+        const destination = node(`blocked:${name}`, `Blocked: ${name.toLowerCase()}`, 2, '--warning-foreground')
+        link(source, router, packets)
+        link(router, destination, packets)
       }
     }
     return { nodes: [...nodes.values()], links: [...links.values()] }
@@ -98,13 +98,13 @@ export function FirewallSankey({ status }: { status: FirewallStatus }) {
   return (
     <section className="rounded-2xl border bg-card p-4 shadow-xs sm:p-6" aria-label="Measured traffic paths">
       <h2 className="font-semibold">Traffic paths</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Group → Exit / destination → Action</p>
+      <p className="mt-1 text-sm text-muted-foreground">Group / outside → OLR → Exit / blocked destination</p>
       {unavailable ? <p className="mt-4 text-sm text-muted-foreground">Group traffic is unavailable.</p>
         : !traffic.data || !devices.data ? <p className="mt-4 text-sm text-muted-foreground">Loading traffic…</p>
         : !traffic.data.counting ? <p className="mt-4 text-sm text-muted-foreground">Traffic accounting is not active.</p> : null}
       {graph.links.length ? (
         <div className="mt-4 overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="region" aria-label="Traffic Sankey diagram">
-          <div ref={container} style={{ height: Math.max(320, graph.nodes.filter(node => node.depth === 0).length * 56), minWidth: 640 }} />
+          <div ref={container} style={{ height: Math.max(320, Math.max(...[0, 2].map(depth => graph.nodes.filter(node => node.depth === depth).length)) * 56), minWidth: 640 }} />
           <ul className="sr-only">{graph.links.map(link => <li key={JSON.stringify([link.source, link.target])}>{graph.nodes.find(node => node.name === link.source)?.title} → {graph.nodes.find(node => node.name === link.target)?.title}: {link.value.toLocaleString()} packets</li>)}</ul>
         </div>
       ) : traffic.data?.counting && devices.data && !unavailable ? <p className="mt-6 text-sm text-muted-foreground">No measured traffic.</p> : null}
