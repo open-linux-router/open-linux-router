@@ -72,17 +72,19 @@ export function NetworkStatus() {
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{selected}</DialogTitle>
-            <DialogDescription>{interfaces.isError ? 'Interface readings unavailable.' : chosen ? `${connectionState(chosen)}${roleOf(chosen) ? ` · ${roleOf(chosen)}` : ''}` : 'This interface is no longer present.'}</DialogDescription>
+            <DialogDescription>{interfaces.isError ? 'Interface readings unavailable.' : chosen ? `${connectionState(chosen, roleOf(chosen))}${roleOf(chosen) ? ` · ${roleOf(chosen)}` : ''}` : 'This interface is no longer present.'}</DialogDescription>
           </DialogHeader>
           {interfaces.isError && <p className="text-sm text-destructive">Interface readings unavailable.</p>}
           {chosen && <dl className="divide-y text-sm">
             <Detail label="Network" value={chosen.network ?? interfaces.data?.networks.find(n => n.members.includes(chosen.name))?.name ?? 'Not assigned'} />
+            <Detail label="Physical link" value={interfaces.isError ? 'Unavailable' : !chosen.present ? 'Not found' : !chosen.up ? 'Down' : chosen.running ? 'Detected' : 'Disconnected'} />
             <Detail label="Link speed" value={interfaces.isError ? '—' : linkSpeed(chosen.speed_mbps)} />
             <Detail label="MAC" value={chosen.mac ?? '—'} />
             <Detail label="Addresses" value={chosen.prefixes?.join(', ') || 'Not assigned'} />
             <Detail label="Receive total" value={!interfaces.isError && chosen.rx_bytes !== undefined ? formatBytes(chosen.rx_bytes) : '—'} />
             <Detail label="Transmit total" value={!interfaces.isError && chosen.tx_bytes !== undefined ? formatBytes(chosen.tx_bytes) : '—'} />
           </dl>}
+          {chosen && !interfaces.isError && !chosen.speed_mbps && <p className="text-sm text-muted-foreground">Link speed is unavailable from the system. Some drivers, especially virtual network drivers, do not report it. Traffic rates are measured separately.</p>}
           <Link to={chosen ? `/gateway/interfaces/${encodeURIComponent(chosen.name)}` : '/gateway/interfaces'} className={detailLink}>Interface settings <ChevronRight className="size-3.5" aria-hidden /></Link>
           <Link to="/gateway/interfaces" className={detailLink}>All interfaces and routing <ChevronRight className="size-3.5" aria-hidden /></Link>
         </DialogContent>
@@ -94,35 +96,35 @@ export function NetworkStatus() {
 function InterfaceCard({ row, role, history, failed, onSelect }: {
   row: InterfaceRow; role?: string; history: RateSample[]; failed: boolean; onSelect: () => void
 }) {
-  const connected = row.present && row.up && row.running
+  const connected = connectionState(row, role) === 'Connected'
   const current = failed ? undefined : history.at(-1)
   return (
     <button type="button" onClick={onSelect} aria-label={`${row.name}${role ? ` ${role}` : ''} details`}
-      className={cn(card, 'flex min-h-[240px] w-full min-w-0 cursor-pointer flex-col overflow-hidden p-[18px] pb-0 text-left transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring')}>
-      <div className="grid min-h-[156px] grid-cols-[80px_minmax(0,1fr)] items-start gap-3 min-[1200px]:grid-cols-[89px_minmax(0,1fr)] min-[1200px]:gap-[15px]">
-        <span className="relative block aspect-square w-full" aria-hidden="true">
+      className={cn(card, 'flex min-h-[280px] w-full min-w-0 cursor-pointer flex-col overflow-hidden p-6 text-left transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring')}>
+      <div className="flex items-center gap-3">
+        <span className="relative block size-16 shrink-0" aria-hidden="true">
           <NetworkIcon kind="interface" className={cn('size-full', (!connected || failed) && 'opacity-50 grayscale')} />
           {role && <span className="absolute left-1/2 top-[56.25%] -translate-x-1/2 -translate-y-1/2 text-[9px] leading-none font-bold text-[#3e4a63]">{role}</span>}
           <span className={cn('absolute left-[24.22%] top-[72.66%] size-[7.03%] -translate-x-1/2 -translate-y-1/2 rounded-[1px]', connected && !failed ? 'bg-[#38975f]' : 'bg-muted-foreground/40')} />
           <span className={cn('absolute left-[75.78%] top-[72.66%] size-[7.03%] -translate-x-1/2 -translate-y-1/2 rounded-[1px]', connected && !failed ? 'bg-[#cba34a]' : 'bg-muted-foreground/40')} />
         </span>
         <div className="min-w-0">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><strong className="break-all text-base font-semibold">{row.name}</strong><span className={cn('text-xs', connected && !failed ? 'text-success-foreground' : 'text-muted-foreground')}>{failed ? 'Unavailable' : connectionState(row)}</span></div>
-          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
-            <Fact label="Link speed" value={failed ? '—' : linkSpeed(row.speed_mbps)} />
-            <Fact label="IP" value={failed ? '—' : row.address || row.prefixes?.[0]?.split('/')[0] || 'Not assigned'} mono />
-          </div>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium tabular-nums">
-            <span className="text-receive" aria-label={`Receive ${current ? formatRate(current.rx) : 'unavailable'}`}>↓ {current ? formatRate(current.rx) : '—'}</span>
-            <span className="text-transmit" aria-label={`Transmit ${current ? formatRate(current.tx) : 'unavailable'}`}>↑ {current ? formatRate(current.tx) : '—'}</span>
-          </div>
+          <strong className="block break-all text-base font-semibold">{row.name}</strong><span className={cn('text-sm', connected && !failed ? 'text-success-foreground' : 'text-muted-foreground')}>{failed ? 'Unavailable' : connectionState(row, role)}</span>
         </div>
+      </div>
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-4">
+        <Fact label="Link speed" value={failed ? '—' : linkSpeed(row.speed_mbps)} />
+        <Fact label="IP" value={failed ? '—' : row.address || row.prefixes?.[0]?.split('/')[0] || 'Not assigned'} mono />
+      </div>
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-4 text-sm font-medium tabular-nums">
+        <span className="text-receive" aria-label={`Receive ${current ? formatRate(current.rx) : 'unavailable'}`}>↓ {current ? formatRate(current.rx) : '—'}</span>
+        <span className="text-transmit" aria-label={`Transmit ${current ? formatRate(current.tx) : 'unavailable'}`}>↑ {current ? formatRate(current.tx) : '—'}</span>
       </div>
       <div className="mt-auto pt-3">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>Last 60 s</span><span className="flex gap-3"><span className="flex items-center gap-1"><i className="h-0.5 w-3 bg-receive" />Receive</span><span className="flex items-center gap-1"><i className="h-0.5 w-3 bg-transmit" />Transmit</span></span>
         </div>
-        <TrafficChart history={history} message={failed ? 'Traffic unavailable' : !connected ? 'No link' : row.rx_bytes === undefined || row.tx_bytes === undefined ? 'Traffic unavailable' : 'Measuring…'} />
+        <TrafficChart history={failed ? [] : history} message={failed ? 'Traffic unavailable' : !connected ? connectionState(row, role) : row.rx_bytes === undefined || row.tx_bytes === undefined ? 'Traffic unavailable' : 'Measuring…'} />
       </div>
     </button>
   )
@@ -165,10 +167,11 @@ function Detail({ label, value }: { label: string; value: string }) {
   return <div className="flex justify-between gap-4 py-3"><dt className="shrink-0 text-muted-foreground">{label}</dt><dd className="text-right [overflow-wrap:anywhere]">{value}</dd></div>
 }
 
-function connectionState(row: InterfaceRow) {
-  return !row.present ? 'Not found' : !row.up ? 'Down' : !row.running ? 'No link' : 'Connected'
+function connectionState(row: InterfaceRow, role?: string) {
+  return !row.present ? 'Not found' : !row.up ? 'Down' : !row.running ? 'Disconnected'
+    : !role && !row.network && !row.address && !row.prefixes?.length ? 'Inactive' : 'Connected'
 }
 
 function linkSpeed(mbps?: number) {
-  return !mbps ? '—' : mbps >= 1000 ? `${mbps / 1000} Gbps` : `${mbps} Mbps`
+  return !mbps ? 'Unknown' : mbps >= 1000 ? `${mbps / 1000} Gbps` : `${mbps} Mbps`
 }
