@@ -45,6 +45,7 @@ description: |
 # Every entry below is used by one module apiece too, and all of them stay,
 # because none costs a box that never uses them anything but disk.
 depends:
+  - iproute2
   # Ships the binary and no service, which is the entire reason olr depends on
   # dnsmasq-base rather than on the full dnsmasq package.
   - dnsmasq-base

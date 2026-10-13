@@ -21,7 +21,7 @@ func TestPolicyRoundTrip(t *testing.T) {
 }
 func TestInvalidPolicies(t *testing.T) {
 	for _, raw := range []string{
-		`{"enabled":true,"download_mbps":100,"upload_mbps":20}`, `{"enabled":false,"devices":[{"mac":"nope"}]}`,
+		`{"enabled":false,"devices":[{"mac":"nope"}]}`,
 		`{"devices":[{"mac":"aa:bb:cc:dd:ee:ff","priority":"urgent"}]}`,
 		`{"devices":[{"mac":"aa:bb:cc:dd:ee:ff","upload_mbps":-2}]}`,
 		`{"devices":[{"mac":"aa:bb:cc:dd:ee:ff"},{"mac":"AA-BB-CC-DD-EE-FF"}]}`,

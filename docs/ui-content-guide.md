@@ -6,6 +6,12 @@ supporting text. This guide complements [the visual guide](ui-style-guide.md).
 
 ## Start with the user's decision
 
+Device priority and speed limits apply automatically, without an enable switch.
+Use “applied” only after observing matching runtime state. Show pending device
+placement and apply failures explicitly. Blank means unlimited. Optional link
+rates help priority manage upstream congestion; explain that distinction beside
+the rate fields rather than implying a link rate is required for device limits.
+
 Before adding content, write down the page's primary task and what the user needs
 to decide next. Give each visible element a purpose in that decision. Remove
 repeated or unrelated information; move useful later-stage information to the

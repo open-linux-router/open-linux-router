@@ -398,7 +398,7 @@ func run(args []string) error {
 		Events:  srv.Events(),
 	}.Routes(), devices.Config{})
 
-	qosApplier := qos.Applier{Store: store}
+	qosApplier := qos.Applier{Store: store, Engine: &qos.Engine{Store: store, Devices: devicesApplier}}
 	srv.Mount(qos.ModuleName, qos.HTTP{Applier: qosApplier, Lock: srv.ApplyLock(), Events: srv.Events()}.Routes(), qos.Config{})
 
 	// `gateway` is the one module whose configuration lives in the kernel
@@ -809,6 +809,22 @@ func run(args []string) error {
 	startIPTV(ctx, iptvApplier, logger)
 	startRemote(ctx, remoteTunnel, remoteProxy, logger)
 	startDNS(ctx, dnsApplier, logger)
+	// MAC classification does not depend on DHCP or addresses. Reconcile the
+	// LAN placement after startup and as devices move between served networks.
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			if err := srv.ApplyLock().Do(ctx, func() error { return qosApplier.Reconcile(ctx) }); err != nil && ctx.Err() == nil {
+				logger.Warn("could not apply device QoS", "error", err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
 
 	// And then keep looking. The line above converges the service half once, at
 	// startup, which covers the box that comes back from a reboot or an upgrade

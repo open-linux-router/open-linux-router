@@ -38,8 +38,8 @@ func TestDevicePolicyRoutesStoreIntentButNeverClaimActive(t *testing.T) {
 	if err != nil || c.Device(mac).DownloadMbps != 20 {
 		t.Fatalf("policy not stored: %+v %v", c, err)
 	}
-	if w := request("PUT", "/config", `{"enabled":true,"download_mbps":100,"upload_mbps":20}`); w.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("enabled unsupported policy: %d %s", w.Code, w.Body)
+	if w := request("PUT", "/config", `{"enabled":true,"download_mbps":100,"upload_mbps":20}`); w.Code != http.StatusOK {
+		t.Fatalf("legacy enabled field: %d %s", w.Code, w.Body)
 	}
 	if w := request("DELETE", "/devices/"+mac, ""); w.Code != 200 {
 		t.Fatalf("reset: %d %s", w.Code, w.Body)

@@ -3,6 +3,7 @@ package qos
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -116,6 +117,9 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, edit func(*Config) e
 		problem = h.Applier.Save(c)
 		if problem != nil {
 			return nil
+		}
+		if err := h.Applier.Reconcile(r.Context()); err != nil {
+			problem = fmt.Errorf("configuration saved, but QoS could not be applied: %w", err)
 		}
 		return nil
 	})

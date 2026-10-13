@@ -29,13 +29,14 @@ type Device struct {
 }
 
 type Config struct {
-	Enabled      bool     `json:"enabled"`
+	Enabled      bool     `json:"enabled,omitempty"`
 	DownloadMbps float64  `json:"download_mbps,omitempty"`
 	UploadMbps   float64  `json:"upload_mbps,omitempty"`
 	Devices      []Device `json:"devices,omitempty"`
 }
 
 func (c *Config) Normalize() {
+	c.Enabled = false // Legacy compatibility only; policies activate themselves.
 	for i := range c.Devices {
 		if mac, err := core.NormalizeMAC(c.Devices[i].MAC); err == nil {
 			c.Devices[i].MAC = mac
@@ -54,14 +55,18 @@ func (c *Config) Normalize() {
 		return 0
 	})
 }
-func validRate(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= 100000 }
+func validRate(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0) && (v == 0 || v >= 0.001) && v <= 100000
+}
 func (c Config) Validate() error {
+	if len(c.Devices) > 4096 {
+		return fmt.Errorf("at most 4096 device policies are supported")
+	}
 	if !validRate(c.DownloadMbps) || !validRate(c.UploadMbps) {
 		return fmt.Errorf("link rates must be between 0 and 100000 Mbps")
 	}
-	if c.Enabled {
-		return fmt.Errorf("device QoS enforcement is not available yet; keep it disabled")
-	}
+	// Enabled is retained only for compatibility with older documents. Policies
+	// take effect whenever they exist; there is no separate enable switch.
 	seen := map[string]bool{}
 	for _, d := range c.Devices {
 		mac, err := core.NormalizeMAC(d.MAC)
@@ -80,6 +85,14 @@ func (c Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+func (c Config) Requested() bool {
+	return slices.ContainsFunc(c.Devices, func(d Device) bool { return d.Requested() })
+}
+
+func (d Device) Requested() bool {
+	return (d.Priority != "" && d.Priority != Normal) || d.DownloadMbps > 0 || d.UploadMbps > 0
 }
 func Parse(b []byte) (Config, error) {
 	dec := json.NewDecoder(bytes.NewReader(b))

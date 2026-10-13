@@ -21,11 +21,15 @@ export function DevicePolicy({ mac, downRate, upRate, children }: { mac: string;
   async function save(nextPriority = priority) {
     if (!config.data) return
     try {
-      await apply.mutateAsync({ mac, priority: nextPriority,
+      const result = await apply.mutateAsync({ mac, priority: nextPriority,
         download_mbps: editing === 'download' ? Number(limit) : current?.download_mbps ?? 0,
         upload_mbps: editing === 'upload' ? Number(limit) : current?.upload_mbps ?? 0 })
       setEditing(null)
-      toast.warning('Configuration saved', { description: 'Enforcement is not available yet.' })
+      const pending = result.status.pending?.includes(mac.toLowerCase())
+      if (pending) toast.warning('Policy saved', { description: 'Waiting for the device’s LAN interface to be identified.' })
+      else if (result.status.active) toast.success('Policy applied', { description: result.status.reason })
+      else if (!result.config.devices?.some((d) => d.mac === mac.toLowerCase())) toast.success('Priority and limits reset')
+      else toast.warning('Policy saved, but not active', { description: result.status.reason })
     } catch (error) {
       toast.error(String(error))
     }
@@ -51,7 +55,7 @@ export function DevicePolicy({ mac, downRate, upRate, children }: { mac: string;
     {children}
     <Dialog open={!!editing} onOpenChange={(open) => { if (!open && !apply.isPending) setEditing(null) }}>
       <DialogContent>
-        <DialogHeader><DialogTitle>{editing === 'download' ? 'Download limit' : 'Upload limit'}</DialogTitle><DialogDescription>Saved configuration only; enforcement is not available yet. Leave blank for unlimited.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>{editing === 'download' ? 'Download limit' : 'Upload limit'}</DialogTitle><DialogDescription>Applies immediately to traffic crossing this router. Leave blank for unlimited.</DialogDescription></DialogHeader>
         <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (valid && !busy) void save() }}>
           <div className="space-y-2"><Label htmlFor="device-speed-limit">Limit (Mbps)</Label><Input id="device-speed-limit" autoFocus type="number" min="0.001" max="100000" step="any" value={limit} placeholder="Unlimited" disabled={busy} onChange={(event) => setLimit(event.target.value)} /></div>
           <DialogFooter><Button type="button" variant="ghost" disabled={apply.isPending} onClick={() => setEditing(null)}>Cancel</Button><Button type="submit" disabled={busy || !valid}>Save</Button></DialogFooter>

@@ -49,6 +49,7 @@ export function GroupPage() {
     setConfirming(null)
     setWorking(true)
     let applied = 0
+    let active = 0
     try {
       for (const device of members) {
         if (action === 'exit') {
@@ -58,11 +59,15 @@ export function GroupPage() {
           if (!await gatewayApply.submit(change)) break
         } else {
           const current = qos.data?.devices?.find((d) => d.mac.toLowerCase() === device.mac.toLowerCase())
-          await qosApply.mutateAsync({ mac: device.mac, priority, download_mbps: current?.download_mbps || 0, upload_mbps: current?.upload_mbps || 0 })
+          const result = await qosApply.mutateAsync({ mac: device.mac, priority, download_mbps: current?.download_mbps || 0, upload_mbps: current?.upload_mbps || 0 })
+          if (result.status.active && !result.status.pending?.includes(device.mac)) active++
         }
         applied++
       }
-      if (action === 'priority' && applied) toast.warning(`Priority saved for ${applied} devices, but not active`, { description: 'QoS enforcement is not available yet.' })
+      if (action === 'priority' && applied) {
+        if (active === applied || priority === 'normal') toast.success(`Priority applied to ${applied} devices`)
+        else toast.warning(`Priority saved for ${applied} devices`, { description: `${active} active; remaining devices are waiting for their LAN interface.` })
+      }
       if (applied < members.length) toast.warning(`Stopped after ${applied} of ${members.length} devices`, { description: 'Review the remaining devices before trying again.' })
     } catch (error) {
       toast.error(`Stopped after ${applied} of ${members.length} devices`, { description: String(error) })
@@ -96,7 +101,7 @@ export function GroupPage() {
       {qos.isError && <p className="text-sm text-destructive">QoS settings are unavailable.</p>}
     </CardContent></Card>
     <GatewayOutcome applier={gatewayApply} />
-    <Dialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}><DialogContent><DialogHeader><DialogTitle>Change {members.length} current devices?</DialogTitle><DialogDescription>{confirming === 'exit' ? 'Their existing Internet via overrides will be changed. Traffic may take a different path; established connections normally keep theirs.' : 'Their saved priorities will change, but no packets will be prioritized until QoS enforcement is available.'} New members will not inherit this setting.</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setConfirming(null)}>Cancel</Button><Button onClick={() => void applyCurrentMembers()}>Continue</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}><DialogContent><DialogHeader><DialogTitle>Change {members.length} current devices?</DialogTitle><DialogDescription>{confirming === 'exit' ? 'Their existing Internet via overrides will be changed. Traffic may take a different path; established connections normally keep theirs.' : 'Their priorities will apply to traffic crossing this router. Queue updates may briefly interrupt queued packets.'} New members will not inherit this setting.</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setConfirming(null)}>Cancel</Button><Button onClick={() => void applyCurrentMembers()}>Continue</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }
 

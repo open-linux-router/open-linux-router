@@ -128,6 +128,9 @@ title from two columns of 36px desktop / 44px mobile minimum-height label/value 
 and settings on the left, observed state and traffic on the right. Group and Uplink values use clickable tags with muted surfaces that open edit dialogs.
 Device traffic reuses Overview meters and total rows without a heading.
 Priority leads the right column with a segmented selector. Clicking each speed bar opens its limit dialog; omit repeated rate headings, separate limit fields and the QoS divider/status row.
+Device policies apply automatically, without a switch. Gateway exposes optional
+measured link rates and observed status in one shared Card. Blank rates and
+limits mean unlimited; pending placement must remain distinct from active state.
 Preserve existing confirmation and apply-preview behavior for network changes.
 Device detail rows use two zones: left-aligned labels and right-aligned values
 or controls, with 36px desktop / 44px mobile minimum row height. Keep disclosure chevrons beside their

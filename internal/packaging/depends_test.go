@@ -13,6 +13,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/dhcp"
 	"github.com/open-linux-router/open-linux-router/internal/dns"
+	"github.com/open-linux-router/open-linux-router/internal/qos"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
 )
 
@@ -31,6 +32,7 @@ func allDependencies() []core.Dependency {
 	out = append(out, dhcp.Dependencies()...)
 	out = append(out, dns.Dependencies(cfg)...)
 	out = append(out, remote.Dependencies()...)
+	out = append(out, qos.Dependencies()...)
 	return out
 }
 
