@@ -13,6 +13,7 @@ applies retain queues. Editing rebuilds queues and may discard queued packets.
 Errors explicitly distinguish saved intent from successful kernel application.
 
 Foreign roots/ingress filters are refused; unconfigured zero-handle kernel roots
+(including default multi-queue NIC roots)
 may be replaced. Root handle `4f4c:`, ingress preference 20290, and IFBs with
 `olr:qos:<interface>` aliases identify ownership. Removing the last policy removes
 owned roots/redirect filters but retains empty ingress attachments and IFBs.

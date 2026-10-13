@@ -154,3 +154,18 @@ func TestTrafficCountersDoNotTriggerQueueRebuild(t *testing.T) {
 		t.Fatalf("traffic changed configuration hash: %s != %s", a, b)
 	}
 }
+
+func TestDefaultMultiqueueNICCanBeShaped(t *testing.T) {
+	e := &Engine{Run: func(context.Context, string, ...string) ([]byte, error) {
+		return []byte(`[{"root":true,"kind":"mq","handle":"0:"},{"kind":"fq_codel","handle":"0:","parent":"0:1"}]`), nil
+	}}
+	if err := e.checkRoot(context.Background(), "eth0"); err != nil {
+		t.Fatal(err)
+	}
+	e.Run = func(context.Context, string, ...string) ([]byte, error) {
+		return []byte(`[{"root":true,"kind":"mq","handle":"1:"}]`), nil
+	}
+	if err := e.checkRoot(context.Background(), "eth0"); err == nil {
+		t.Fatal("explicitly configured mq must remain foreign")
+	}
+}

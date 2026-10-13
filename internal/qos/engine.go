@@ -171,9 +171,9 @@ func (e *Engine) checkRoot(ctx context.Context, iface string) error {
 		if q["handle"] == rootHandle && q["kind"] == "htb" {
 			continue
 		}
-		// These are the kernel's unconfigured defaults. mq and any nonzero
-		// handle may belong to an operator, so they are never overwritten.
-		if q["handle"] == "0:" && (q["kind"] == "noqueue" || q["kind"] == "pfifo_fast" || q["kind"] == "fq_codel") {
+		// A zero root handle identifies an unconfigured kernel default, including
+		// mq on physical multiqueue NICs. Explicitly assigned handles are foreign.
+		if q["handle"] == "0:" && (q["kind"] == "noqueue" || q["kind"] == "pfifo_fast" || q["kind"] == "fq_codel" || q["kind"] == "fq" || q["kind"] == "mq") {
 			continue
 		}
 		return fmt.Errorf("%s has a foreign root queue (%v %v)", iface, q["kind"], q["handle"])
