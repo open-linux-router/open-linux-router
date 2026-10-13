@@ -79,7 +79,10 @@ radii are 8px for controls/small inset surfaces, 12px for panels and 16px for
 larger enclosing surfaces. Avoid arbitrary one-off radii. Overview metric cards
 use 12px padding on phones and 16px on larger screens, an 8px heading gap,
 36px metric rows and 4px between rows. Interactive rows retain 44px targets on
-phones; site chips use 32px rows with 6px gaps.
+phones; site latency items use unfilled 32px rows with 6px vertical gaps.
+Only download/upload rates and CPU/memory utilization use inset meter surfaces
+in Overview cards. Status, public addresses, latency, totals and uptime use plain
+rows; monitored sites retain their icons without capsule backgrounds.
 
 ## Typography and imagery
 

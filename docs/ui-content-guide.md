@@ -35,6 +35,9 @@ hidden page title. Detail and operation pages keep their identifying titles.
 - Keep the Overview's four metric cards, CPU, memory and uptime visible.
 - Keep download and upload limits beside their respective measurements; separate
   controls serve separate decisions and are not automatically redundant.
+- Overview cumulative traffic shows download then upload separately, each with
+  its directional arrow and byte unit. Preserve unavailable states rather than
+  displaying zero when counting is disabled or a read fails.
 - Keep common configuration fields, addresses, counters and useful evidence
   visible. Do not move them into disclosures solely to shorten a page.
 - Reuse existing headings, Card, ListRow, StatusStrip, fields and Dialog. Do not

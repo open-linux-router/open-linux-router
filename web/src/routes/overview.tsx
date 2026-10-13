@@ -382,7 +382,7 @@ function StatCard({ title, children }: { title: React.ReactNode; children: React
   </section>
 }
 
-function MetricPill({ label, value, detail, percent, tone = 'blue', health, valueRight = false }: {
+function MetricPill({ label, value, detail, percent, tone = 'blue', health, valueRight = false, meter = false }: {
   label?: string
   value: string
   detail?: string
@@ -390,11 +390,12 @@ function MetricPill({ label, value, detail, percent, tone = 'blue', health, valu
   tone?: 'blue' | 'neutral'
   health?: 'good' | 'bad' | 'unknown'
   valueRight?: boolean
+  meter?: boolean
 }) {
   return <div className="min-w-0"><div role={percent == null ? undefined : 'progressbar'} aria-label={label}
     aria-valuenow={percent == null ? undefined : Math.min(100, Math.max(0, Math.round(percent)))}
     aria-valuemin={0} aria-valuemax={100}
-    className="relative flex min-h-9 min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5 overflow-hidden rounded-lg bg-muted/50 px-3 py-1.5">
+    className={cn('relative flex min-h-9 min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5 py-1.5', meter && 'overflow-hidden rounded-lg bg-muted/50 px-3')}>
     {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r transition-[width] duration-150 ease-out', tone === 'neutral' ? 'border-border bg-muted' : 'border-receive/30 bg-receive-subtle')}
       style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />}
     <span className={cn('relative z-10 flex min-w-0 items-center gap-2 text-sm', health ? 'flex-1' : 'flex-wrap', valueRight && 'w-full justify-between')}>
@@ -447,7 +448,7 @@ function PublicAddressRow({ family, address }: { family: 'IPv4' | 'IPv6'; addres
   const summary = [address?.city || address?.region || address?.country, address?.isp || address?.organization].filter(Boolean).join(', ')
   return <div className="min-w-0">
     <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
-      className="flex min-h-11 sm:min-h-9 w-full min-w-0 flex-wrap items-center gap-2 rounded-lg bg-muted/50 px-3 py-1.5 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+      className="flex min-h-11 sm:min-h-9 w-full min-w-0 flex-wrap items-center gap-2 rounded-lg py-1.5 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
       <span className="w-full shrink-0 text-xs text-muted-foreground sm:w-auto">{family}</span>
       <span className="min-w-0 flex-1 break-words text-[0.8125rem] font-semibold" title={summary || undefined}>{summary || (address?.ip ? 'Location unavailable' : '—')}</span>
       <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
@@ -638,7 +639,13 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
           percent={flows.rated && !trafficFailed && limits.down ? (flows.total.downRate ?? 0) * 8 / (limits.down * 1_000_000) * 100 : undefined} />
         <Meter label="Upload" arrow="↑" onClick={() => setEditing('up')} current={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.up ? (flows.total.upRate ?? 0) * 8 / (limits.up * 1_000_000) * 100 : undefined} tone="amber" />
-        <MetricPill label="Total" value={flows.counting ? formatBytes(flows.total.down + flows.total.up) : trafficFailed ? 'Unavailable' : '—'} valueRight />
+        <div className="flex min-h-9 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1.5">
+          <span className="text-xs text-muted-foreground">Total</span>
+          {flows.counting ? <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm font-semibold tabular-nums">
+            <span aria-label={`Total downloaded: ${formatBytes(flows.total.down)}`} title="Total downloaded"><span aria-hidden className="mr-1 font-normal text-muted-foreground">↓</span>{formatBytes(flows.total.down)}</span>
+            <span aria-label={`Total uploaded: ${formatBytes(flows.total.up)}`} title="Total uploaded"><span aria-hidden className="mr-1 font-normal text-muted-foreground">↑</span>{formatBytes(flows.total.up)}</span>
+          </div> : <span className="text-sm font-semibold">{trafficFailed ? 'Unavailable' : '—'}</span>}
+        </div>
       </div>
     </StatCard>
     <StatCard title={<span className="inline-flex items-center gap-1.5">Latency
@@ -648,13 +655,13 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
       <div className="space-y-1 pt-1">
         <MetricPill label="Internet" value={latencyValue} valueRight />
         <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} valueRight />
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-2">
           {latency?.custom?.map((site) => {
             const measuredSite = Boolean(site.checked_at && !site.checked_at.startsWith('0001-'))
             const ms = site.milliseconds
             const description = `${site.name} · HTTPS response from ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!measuredSite ? 'Waiting for first probe' : ms == null ? site.error || 'Failed' : `${ms.toFixed(0)} ms`}`
             return <span key={site.name} tabIndex={0} aria-label={description} title={description}
-              className="inline-flex min-h-8 items-center gap-1.5 rounded-xl bg-muted/65 px-2.5 text-xs font-semibold tabular-nums text-foreground ring-1 ring-foreground/[0.06]">
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-sm text-xs font-semibold tabular-nums text-foreground focus-visible:outline-2 focus-visible:outline-ring">
               <SiteIcon name={site.name} url={site.url} icon={site.icon} />
               <span>{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
             </span>
@@ -666,9 +673,9 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
     </StatCard>
     <StatCard title="System">
       <div className="space-y-1 pt-1">
-        <MetricPill label="CPU" value={host?.cpu_used_cores == null ? '—' : `${host.cpu_used_cores.toFixed(1)} cores`}
+        <MetricPill meter label="CPU" value={host?.cpu_used_cores == null ? '—' : `${host.cpu_used_cores.toFixed(1)} cores`}
           detail={host?.cpu_cores ? `${cpuPercent?.toFixed(0)}% of ${host.cpu_cores} cores` : undefined} percent={cpuPercent} />
-        <MetricPill label="Memory" value={host ? formatBytes(host.memory_used_bytes) : '—'}
+        <MetricPill meter label="Memory" value={host ? formatBytes(host.memory_used_bytes) : '—'}
           detail={host ? `${memoryPercent?.toFixed(0)}% of ${formatBytes(host.memory_total_bytes)}` : undefined} percent={memoryPercent} tone="neutral" />
         <MetricPill label="Uptime" value={host ? uptime(host.uptime_seconds) : '—'} valueRight />
       </div>
