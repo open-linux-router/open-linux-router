@@ -65,6 +65,9 @@ Device details group stable identity and saved settings on the left, live
 observations and traffic on the right. Reuse Overview rate meters and plain Download and Upload totals, without a
 traffic title or attribution footnote. Group and Internet via are selectable
 tags. Omit Notes and the QoS heading; retain activation status.
+Device Internet via offers Default (inherit interface/system routing) and named
+exits only. Existing explicit router-connection overrides remain accurately
+displayed until the user selects Default or a named exit.
 Use label/value pairs within each device-detail half. Keep units with their inputs and chevrons beside selected values. Lead identity rows with Vendor. Edit addresses and their fixed toggle
 in a dialog opened by clicking the IP. Show a Fixed tag beside reserved addresses;
 keep the hover hint limited to DHCP lease information and omit the hostname field.
