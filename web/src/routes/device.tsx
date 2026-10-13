@@ -1,4 +1,4 @@
-import { Activity, ArrowDown, ArrowUp } from 'lucide-react'
+import { ArrowDown, ArrowUp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
@@ -37,24 +37,18 @@ export function DevicePage() {
     <div className="space-y-6 pb-12">
       <DeviceInlineEditor key={device.mac} device={device} traffic={
         <>
-        <section aria-labelledby="device-traffic-title" className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 id="device-traffic-title" className="flex items-center gap-2 text-sm font-medium"><Activity className="size-4" aria-hidden /> Traffic</h2>
-            <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/gateway/usage">Usage settings</Link>} />
-          </div>
             {flow.counting ? (
-              <div className="grid grid-cols-2 gap-3">
-                <Meter icon={ArrowDown} label="Received" bytes={usage?.down} rate={usage?.downRate} />
-                <Meter icon={ArrowUp} label="Sent" bytes={usage?.up} rate={usage?.upRate} />
-              </div>
+              <dl className="text-sm">
+                <Meter icon={ArrowDown} label="Download" bytes={usage?.down} rate={usage?.downRate} />
+                <Meter icon={ArrowUp} label="Upload" bytes={usage?.up} rate={usage?.upRate} />
+              </dl>
             ) : (
               <p className="text-sm text-muted-foreground">{traffic.isError ? 'Traffic counters are unavailable right now.' : 'Traffic counting is off or unavailable.'}</p>
             )}
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Through this router only · totals since counting started. Shared or changing IPs may affect attribution.
+              Forwarded traffic since counting started. Same-network traffic is excluded; shared or changing IPs may affect attribution.
             </p>
-        </section>
-        <DevicePolicy mac={device.mac} />
+            <DevicePolicy mac={device.mac} />
         </>
       } />
 
@@ -96,10 +90,9 @@ function State({ title, detail }: { title: string; detail: string }) {
 }
 
 function Meter({ icon: Icon, label, bytes, rate }: { icon: typeof ArrowDown; label: string; bytes?: number; rate?: number }) {
-  return <div className="rounded-lg bg-muted/40 p-3">
-    <div className="flex items-center gap-2 text-xs text-muted-foreground"><Icon className="size-4" aria-hidden />{label}</div>
-    <div className="mt-2 text-xl font-semibold tabular-nums">{bytes === undefined ? 'No address match' : formatBytes(bytes)}</div>
-    {rate !== undefined && <div className="mt-1 text-xs text-muted-foreground">{formatRate(rate)} now</div>}
+  return <div className="grid min-h-12 grid-cols-[minmax(6rem,1fr)_minmax(0,2fr)] items-center gap-3 py-1">
+    <dt className="flex items-center gap-2 text-muted-foreground"><Icon className="size-4 shrink-0" aria-hidden />{label}</dt>
+    <dd className="flex flex-wrap items-baseline justify-between gap-x-3 tabular-nums"><span>{bytes === undefined ? 'No address match' : formatBytes(bytes)}</span>{rate !== undefined && <span className="text-xs text-muted-foreground">{formatRate(rate)} now</span>}</dd>
   </div>
 }
 

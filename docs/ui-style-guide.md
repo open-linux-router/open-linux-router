@@ -120,6 +120,12 @@ changes use color; avoid positional movement.
 
 Inline editable fields keep the input, explanation and save action within the
 same 720px field area. Show saving, error and completion where the action occurs.
+Device titles are edited by clicking the name, with the displayed value prefilled.
+Blur or Enter saves; Escape discards. No pencil or save/cancel controls accompany
+the title. Its status chip uses the title font size. A divider separates the
+title from two columns of 48px minimum-height label/value rows: stable identity
+and settings on the left, observed state and traffic on the right. Priority and
+limits use the same row rhythm; long values and open editors may expand rows.
 Preserve existing confirmation and apply-preview behavior for network changes.
 Never style a pending or failed read as a disabled service.
 

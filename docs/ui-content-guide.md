@@ -60,8 +60,12 @@ No response is not an empty rule set; saved configuration is not proof of a
 running service or end-to-end connectivity. Use neutral pending/unknown styling,
 an explicit error and a retry where useful. Name configuration counts as such.
 
-Show QoS as saved configuration until enforcement exists. Preserve diagnostic
-scope: router-originated tests do not measure a downstream device's path.
+Show QoS as saved configuration until enforcement exists.
+Device details group stable identity and saved settings on the left, live
+observations and traffic on the right. Traffic uses Download and Upload rows,
+each showing totals and current rate. Keep attribution scope and the QoS
+configuration-only state visible; show QoS save actions only while editing.
+Preserve diagnostic scope: router-originated tests do not measure a downstream device's path.
 Inspection requires explicit consent about credentials and certificate trust.
 Do not promise encrypted DNS blocking beyond the supported protocol and port.
 
