@@ -72,6 +72,11 @@ in a dialog opened by clicking the IP. Show a Fixed tag beside reserved addresse
 keep the hover hint limited to DHCP lease information and omit the hostname field.
 Preserve diagnostic scope: router-originated tests do not measure a downstream device's path.
 Inspection requires explicit consent about credentials and certificate trust.
+Device Connections keeps Inspection and its switch in the title bar, with a
+setup QR icon while active. Certificate installation, trust and cleanup belong
+in the public five-step setup guide, with the certificate download at step two.
+The device DNS filter sits beside the title with an accessible label; both
+section titles have a divider beneath them.
 Do not promise encrypted DNS blocking beyond the supported protocol and port.
 
 Use download then upload consistently. Device names may supplement an address

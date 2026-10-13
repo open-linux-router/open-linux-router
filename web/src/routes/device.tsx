@@ -35,7 +35,7 @@ export function DevicePage() {
   if (!device) return <State title="Device not found" detail="It may have been forgotten or is no longer in the device list." />
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-4 pb-12">
       <DeviceInlineEditor key={device.mac} device={device} traffic={
         <>
             <h2 className="mb-2 text-sm font-semibold">Traffic</h2>
@@ -55,9 +55,11 @@ export function DevicePage() {
       } />
 
       <Card>
-        <CardHeader><CardTitle>DNS</CardTitle></CardHeader>
+        <CardHeader className="mx-4 flex flex-row items-center justify-between gap-3 border-b px-0 pb-3 sm:mx-6">
+          <CardTitle>DNS</CardTitle>
+          <Input id="device-dns-filter" aria-label="Filter DNS queries" className="min-w-0 w-full max-w-sm" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Name, answer, type or result" />
+        </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between gap-4"><label htmlFor="device-dns-filter" className="shrink-0 text-sm font-medium">Filter queries</label><Input id="device-dns-filter" className="min-w-0 w-full max-w-sm" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Name, answer, type or result" /></div>
           {dnsQueries.isError ? (
             <p className="text-sm text-muted-foreground">The DNS query log is unavailable. The resolver may be stopped.</p>
           ) : dnsQueries.isPending ? (
