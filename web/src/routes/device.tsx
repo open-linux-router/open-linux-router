@@ -37,9 +37,9 @@ export function DevicePage() {
     <div className="space-y-6 pb-12">
       <DeviceInlineEditor key={device.mac} device={device} traffic={
         <>
-        <section aria-labelledby="device-traffic-title" className="space-y-4">
+        <section aria-labelledby="device-traffic-title" className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 id="device-traffic-title" className="flex items-center gap-2 text-base font-semibold"><Activity className="size-4" aria-hidden /> Traffic through this router</h2>
+            <h2 id="device-traffic-title" className="flex items-center gap-2 text-sm font-medium"><Activity className="size-4" aria-hidden /> Traffic</h2>
             <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/gateway/usage">Usage settings</Link>} />
           </div>
             {flow.counting ? (
@@ -51,7 +51,7 @@ export function DevicePage() {
               <p className="text-sm text-muted-foreground">{traffic.isError ? 'Traffic counters are unavailable right now.' : 'Traffic counting is off or unavailable.'}</p>
             )}
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Forwarded traffic since counting started. Same-network traffic is excluded; shared or changing IPs may affect attribution.
+              Through this router only · totals since counting started. Shared or changing IPs may affect attribution.
             </p>
         </section>
         <DevicePolicy mac={device.mac} />
@@ -96,9 +96,9 @@ function State({ title, detail }: { title: string; detail: string }) {
 }
 
 function Meter({ icon: Icon, label, bytes, rate }: { icon: typeof ArrowDown; label: string; bytes?: number; rate?: number }) {
-  return <div className="rounded-xl border bg-muted/30 p-4">
+  return <div className="rounded-lg bg-muted/40 p-3">
     <div className="flex items-center gap-2 text-xs text-muted-foreground"><Icon className="size-4" aria-hidden />{label}</div>
-    <div className="mt-3 text-xl font-semibold tabular-nums">{bytes === undefined ? 'No address match' : formatBytes(bytes)}</div>
+    <div className="mt-2 text-xl font-semibold tabular-nums">{bytes === undefined ? 'No address match' : formatBytes(bytes)}</div>
     {rate !== undefined && <div className="mt-1 text-xs text-muted-foreground">{formatRate(rate)} now</div>}
   </div>
 }

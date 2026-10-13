@@ -82,7 +82,7 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
 
   return <>
     <Card className="gap-0 overflow-hidden py-0">
-    <header className="p-5 sm:p-6">
+    <header className="p-4 sm:px-6">
       <div className="flex items-start gap-5">
         <button type="button" disabled={identityBusy} onClick={() => begin('icon')} aria-label="Change device icon" className="group relative shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           <DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor} vendorKey={device.vendor_key} online={device.online} size="lg" />
@@ -94,7 +94,6 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
               : <button type="button" disabled={identityBusy} onClick={() => begin('name')} aria-label="Edit device name" className="group flex items-center gap-2 text-left"><h1 className="break-words text-2xl font-semibold tracking-tight sm:text-3xl">{device.name || device.mac}</h1><Pencil className="size-4 shrink-0 text-muted-foreground opacity-60 group-hover:opacity-100" aria-hidden /></button>}
             <Badge variant={device.online ? 'success' : device.seen ? 'secondary' : 'outline'}>{device.online ? 'Online' : device.seen ? 'Offline' : 'Never seen'}</Badge>
           </div>
-          <p className="font-mono text-xs text-muted-foreground">{device.mac}</p>
           <div className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
             <span>{device.network || 'Network unknown'} · </span>
             <Select value={device.group || NO_GROUP} disabled={identityBusy} onValueChange={(v) => { if (v) void save({ group: v === NO_GROUP ? undefined : v }) }}>
@@ -109,33 +108,31 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
     </header>
 
     <div className="grid border-t lg:grid-cols-2">
-      <section aria-labelledby="device-information-title" className="min-w-0 p-5 sm:p-6">
-        <h2 id="device-information-title" className="mb-4 text-base font-semibold">Device information</h2>
-        <dl className="divide-y text-sm">
-          <Fact label="Addresses" value={device.ips?.length ? device.ips.join(', ') : 'None observed'} mono />
-          <Fact label="Calls itself" value={device.hostname || 'Not reported'} />
-          <Fact label="Vendor" value={device.vendor || 'Unknown'} />
-          <Fact label="Network" value={device.network || 'Unknown'} />
-          <Fact label="Seen by" value={device.sources?.length ? device.sources.map((s) => s === 'dhcp-lease' ? 'DHCP lease' : s === 'arp' ? 'Network traffic' : s).join(', ') : 'Not observed'} />
-          <Fact label="Lease expires" value={device.expires ? new Date(device.expires).toLocaleString() : 'No expiring lease'} />
-        </dl>
-        <h2 className="mt-5 mb-2 text-base font-semibold">Device settings</h2>
-        <dl className="divide-y border-t text-sm">
-          <div className="grid gap-1 py-2.5 sm:grid-cols-[9rem_1fr]"><dt className="text-muted-foreground">Fixed address</dt><dd>
+      <section aria-label="Device information and settings" className="min-w-0 p-4 sm:px-6">
+        <dl className="space-y-1 text-sm">
+          <Fact label="MAC" value={device.mac} mono />
+          <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-start gap-3 py-2"><dt className="pt-1 text-muted-foreground">IP</dt><dd className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            {(device.ips ?? []).map((address) => <div key={address} className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="break-all font-mono text-xs">{address}</span>{address === device.fixed_ip && <span className="text-xs text-muted-foreground">Fixed</span>}</div>)}
+            {!device.ips?.length && <span className="text-muted-foreground">None observed</span>}
+            {device.fixed_ip && !device.ips?.includes(device.fixed_ip) && <div className="flex flex-wrap items-center gap-2"><span className="break-all font-mono text-xs">{device.fixed_ip}</span><span className="text-xs text-muted-foreground">Fixed · not observed</span></div>}
             {editing === 'reservation' ? <div className="space-y-2"><Input autoFocus aria-label="Reserved IP address" value={ip} onChange={(e) => setIp(e.target.value)} placeholder="192.168.1.50" /><Input aria-label="Reservation hostname (optional)" value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="Hostname (optional)" /><div className="flex flex-wrap gap-2"><Button size="sm" disabled={!ip.trim() || !dhcp.data || dhcpApplier.busy} onClick={() => void saveReservation()}>Save</Button>{reservation && <Button size="sm" variant="destructive" disabled={dhcpApplier.busy} onClick={() => void saveReservation(true)}>Remove</Button>}<Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button></div></div>
-              : <button type="button" disabled={!dhcp.data || dhcpApplier.busy} onClick={() => begin('reservation')} aria-label="Edit fixed address" className="group inline-flex items-center gap-2 text-left font-mono text-xs hover:text-primary">{device.fixed_ip || 'Reserve an address'}<Pencil className="size-3.5 opacity-60 group-hover:opacity-100" aria-hidden /></button>}
+              : <button type="button" disabled={!dhcp.data || dhcpApplier.busy} onClick={() => begin('reservation')} aria-label="Edit fixed address" title="Edit address reservation" className="group inline-flex min-h-9 items-center gap-2 rounded-md text-left text-xs text-muted-foreground hover:text-primary focus-visible:outline-2 focus-visible:outline-ring max-sm:min-h-11">{!dhcp.data ? 'Reservation unavailable' : !device.fixed_ip ? 'No reservation · Reserve' : null}<Pencil className="size-3.5 opacity-60 group-hover:opacity-100" aria-hidden /></button>}
           </dd></div>
-          <div className="grid gap-1 py-2.5 text-sm sm:grid-cols-[9rem_1fr]"><dt className="text-muted-foreground">Internet via</dt><dd>
+          {device.hostname && device.hostname !== device.name && <Fact label="Hostname" value={device.hostname} />}
+          <Fact label="Vendor" value={device.vendor || 'Unknown'} />
+          <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 py-2 text-sm"><dt className="text-muted-foreground">Internet via</dt><dd className="min-w-0">
             <Select value={exit} disabled={!gateway.data || gatewayApplier.busy} onValueChange={(v) => { if (v) void gatewayApplier.submit(v === INHERIT_EXIT ? gatewayChange.removeDevice(device.mac) : gatewayChange.device(device.mac, v === DIRECT_EXIT ? '' : v)) }}>
               <SelectTrigger aria-label="Change gateway route" className="h-auto w-full max-w-xs border-0 px-0 py-0 shadow-none"><SelectValue>{(v: string) => v === INHERIT_EXIT ? 'Follow network setting' : v === DIRECT_EXIT ? 'This router’s connection' : v}</SelectValue></SelectTrigger>
               <SelectContent><SelectItem value={INHERIT_EXIT}>Follow network setting</SelectItem><SelectItem value={DIRECT_EXIT}>This router’s connection</SelectItem>{(gateway.data?.exits ?? []).map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
             </Select>
           </dd></div>
+          <Fact label="Seen by" value={device.sources?.length ? device.sources.map((s) => s === 'dhcp-lease' ? 'DHCP lease' : s === 'arp' ? 'Network traffic' : s).join(' · ') : 'Not observed'} />
+          {device.expires && <Fact label="Lease ends" value={new Date(device.expires).toLocaleString()} />}
         </dl>
-        <div className="mt-4 text-sm">{editing === 'notes' ? <div className="space-y-2"><Textarea autoFocus aria-label="Device notes" value={notes} onChange={(e) => setNotes(e.target.value)} /><div className="flex gap-2"><Button size="sm" disabled={identityBusy} onClick={() => save({ notes: notes.trim() || undefined })}>Save notes</Button><Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button></div></div>
-          : <button type="button" disabled={identityBusy} onClick={() => begin('notes')} className="group inline-flex items-center gap-2 rounded-lg bg-muted/60 p-3 text-left">{device.notes || 'Add notes'}<Pencil className="size-3.5 text-muted-foreground opacity-60 group-hover:opacity-100" aria-hidden /></button>}</div>
+        <div className="mt-2 border-t pt-2 text-sm">{editing === 'notes' ? <div className="space-y-2"><Textarea autoFocus aria-label="Device notes" value={notes} onChange={(e) => setNotes(e.target.value)} /><div className="flex gap-2"><Button size="sm" disabled={identityBusy} onClick={() => save({ notes: notes.trim() || undefined })}>Save notes</Button><Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button></div></div>
+          : <button type="button" disabled={identityBusy} onClick={() => begin('notes')} className="group inline-flex min-h-9 items-center gap-2 rounded-md text-left text-muted-foreground hover:text-foreground max-sm:min-h-11">{device.notes || 'Add notes'}<Pencil className="size-3.5 opacity-60 group-hover:opacity-100" aria-hidden /></button>}</div>
       </section>
-      <div className="min-w-0 space-y-6 border-t p-5 sm:p-6 lg:border-t-0 lg:border-l">{traffic}</div>
+      <div className="min-w-0 space-y-4 border-t p-4 sm:px-6 lg:border-t-0 lg:border-l">{traffic}</div>
     </div>
     </Card>
     <DhcpOutcome applier={dhcpApplier} />
@@ -144,5 +141,5 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
 }
 
 function Fact({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return <div className="grid gap-1 py-2.5 sm:grid-cols-[9rem_1fr]"><dt className="text-muted-foreground">{label}</dt><dd className={`min-w-0 break-all ${mono ? 'font-mono text-xs' : ''}`}>{value}</dd></div>
+  return <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-3 py-2"><dt className="text-muted-foreground">{label}</dt><dd className={`min-w-0 break-words ${mono ? 'break-all font-mono text-xs' : ''}`}>{value}</dd></div>
 }
