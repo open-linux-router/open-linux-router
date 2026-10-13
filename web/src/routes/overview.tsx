@@ -425,11 +425,11 @@ function PublicAddressRow({ addresses }: { addresses?: PublicAddresses }) {
       <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
     </button>
     {open && <div className="space-y-1 px-3 pt-2 text-xs text-muted-foreground">
-      <dl className="space-y-2">
-        <div><dt>IPv4</dt><dd className="break-all font-mono text-foreground">{address?.ip || 'Address unavailable'}</dd></div>
-        {addresses?.ipv6?.ip && <div><dt>IPv6</dt><dd className="break-all font-mono text-foreground">{addresses.ipv6.ip}</dd></div>}
-        {address?.asn != null && address.asn > 0 && <div><dt>ASN</dt><dd className="font-mono text-foreground">AS{address.asn}</dd></div>}
-        {address?.asn_organization && <div><dt>ASN Organization</dt><dd className="break-words text-foreground">{address.asn_organization}</dd></div>}
+      <dl className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-2 gap-y-2">
+        <div className="contents"><dt>IPv4</dt><dd className="break-all font-mono text-foreground">{address?.ip || 'Address unavailable'}</dd></div>
+        {addresses?.ipv6?.ip && <div className="contents"><dt>IPv6</dt><dd className="break-all font-mono text-foreground">{addresses.ipv6.ip}</dd></div>}
+        {address?.asn != null && address.asn > 0 && <div className="contents"><dt>ASN</dt><dd className="break-all font-mono text-foreground">AS{address.asn}</dd></div>}
+        {address?.asn_organization && <div className="contents"><dt>ASN Organization</dt><dd className="break-words text-foreground">{address.asn_organization}</dd></div>}
       </dl>
     </div>}
   </div>
