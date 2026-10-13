@@ -42,11 +42,11 @@ export function AppShell() {
         </div>
       </main>
       <footer>
-        <div className="mx-auto flex max-w-[80rem] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground lg:pb-2">
+        <div className="mx-auto flex max-w-[80rem] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground lg:items-end lg:pb-3">
           <span>© {new Date().getFullYear()} Open Linux Router</span>
           <span>{__APP_VERSION__}</span>
-          <a href="https://github.com/open-linux-router/open-linux-router" target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center hover:text-foreground hover:underline underline-offset-4">GitHub</a>
-          <Link to="/credits" className="inline-flex min-h-11 items-center hover:text-foreground hover:underline underline-offset-4">Credits</Link>
+          <a href="https://github.com/open-linux-router/open-linux-router" target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center hover:text-foreground hover:underline underline-offset-4 lg:items-end">GitHub</a>
+          <Link to="/credits" className="inline-flex min-h-11 items-center hover:text-foreground hover:underline underline-offset-4 lg:items-end">Credits</Link>
           <ThemeToggle />
         </div>
       </footer>

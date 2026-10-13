@@ -142,7 +142,9 @@ Account for the device safe area and bottom navigation when laying out content
 and the footer. At 375px, keep labels, statuses, addresses and action buttons
 usable. Monitoring statistics use two columns on phones.
 
-The desktop footer has 8px bottom padding. The footer theme control is a single icon with a 44px hit target. Clicking cycles
+The desktop footer bottom-aligns its text and theme icon with 12px bottom padding,
+keeping the visible content close to the viewport edge while retaining 44px link
+and control hit targets. The footer theme control is a single icon. Clicking cycles
 auto, light and dark; its accessible label and tooltip name the current and next theme.
 
 Use 150–200ms color/opacity transitions. Motion should explain a state change;
