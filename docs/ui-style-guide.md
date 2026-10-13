@@ -137,8 +137,8 @@ desktop identity/settings and traffic halves with a 64px gutter; stack them with
 32px spacing below desktop.
 Never style a pending or failed read as a disabled service.
 Active device inspection displays the embedded mitmproxy viewer directly below
-the Connections divider. Keep its QR icon beside the title-bar switch; the setup
-guide link belongs in the QR dialog, not in the title bar.
+the Connections divider. Keep its setup gear icon beside the title-bar switch;
+the QR code and setup guide link belong in the setup dialog, not in the title bar.
 
 List rows have a minimum height of 64px. On phones, trailing values reflow below
 the title instead of disappearing. Technical values and important descriptions

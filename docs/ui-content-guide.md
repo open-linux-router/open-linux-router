@@ -74,8 +74,8 @@ Preserve diagnostic scope: router-originated tests do not measure a downstream d
 The Inspection switch starts and stops the session directly, without confirmation.
 Explain credentials, certificate trust and cleanup in the setup guide.
 Device Connections keeps Inspection and its switch in the title bar, with a
-QR icon while active; keep the setup guide link inside the QR dialog. Show the
-mitmproxy viewer directly, without duplicate request lists, diagnostics or a
+setup gear icon while active; keep the QR code and guide link inside the setup
+dialog. Show the mitmproxy viewer directly, without duplicate request lists, diagnostics or a
 disclosure. Certificate installation, trust and cleanup belong
 in the public five-step setup guide, with the certificate download at step two.
 The device DNS filter sits beside the title with an accessible label; both

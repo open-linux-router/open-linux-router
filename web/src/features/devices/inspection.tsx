@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import encodeQR from '@paulmillr/qr'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { QrCode } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 
 import { Button } from '@/components/ui/button'
@@ -39,7 +39,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
     onSuccess: () => client.invalidateQueries({ queryKey: ['inspection'] }),
     onError: (error) => toast.error(String(error)),
   })
-  const [showQR, setShowQR] = useState(false)
+  const [showSetup, setShowSetup] = useState(false)
   const [viewerReady, setViewerReady] = useState(false)
   const caURL = `${window.location.origin}/inspection-setup.html`
   const caQR = useMemo(() => {
@@ -68,7 +68,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <div className="flex flex-wrap items-center justify-end gap-3">
           <label htmlFor="device-inspection" className="text-sm">Inspection</label>
           <Switch id="device-inspection" checked={Boolean(mine)} disabled={start.isPending || stop.isPending || status.isPending || status.isError || Boolean(active && !mine) || (!mine && (ipv4.length === 0 || ipv4.length > 8))} onCheckedChange={(checked) => { if (checked) start.mutate(); else stop.mutate() }} />
-          {mine && <Button variant="ghost" size="icon" aria-label="Inspection setup QR code" onClick={() => setShowQR(true)}><QrCode className="size-5" /></Button>}
+          {mine && <Button variant="ghost" size="icon" aria-label="Inspection setup" title="Inspection setup" onClick={() => setShowSetup(true)}><Settings className="size-5" /></Button>}
           {status.isPending && <span className="text-xs text-muted-foreground">Checking…</span>}
         </div>
       </div>
@@ -78,7 +78,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
       {active && !mine ? <p className="text-sm text-muted-foreground">Another device is being inspected. Stop that session before starting this one.</p> : null}
       {ipv4.length === 0 && !active && <p className="text-sm text-muted-foreground">OLR has not observed an IPv4 address for this device yet. Connect it to the network and refresh this page to enable inspection.</p>}
       {ipv4.length > 8 && !active && <p className="text-sm text-muted-foreground">Too many addresses are associated with this device to start inspection safely.</p>}
-      <Dialog open={showQR} onOpenChange={setShowQR}>
+      <Dialog open={showSetup} onOpenChange={setShowSetup}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Inspection setup</DialogTitle>
