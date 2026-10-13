@@ -615,8 +615,8 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
           percent={flows.rated && !trafficFailed && limits.up ? (flows.total.upRate ?? 0) * 8 / (limits.up * 1_000_000) * 100 : undefined} tone="amber" />
       </div>
       <div className="space-y-1 pt-1">
-        <MetricPill label="Download" value={flows.counting && !trafficFailed ? `↓ ${formatBytes(flows.total.down)}` : trafficFailed ? 'Unavailable' : '—'} valueRight />
-        <MetricPill label="Upload" value={flows.counting && !trafficFailed ? `↑ ${formatBytes(flows.total.up)}` : trafficFailed ? 'Unavailable' : '—'} valueRight />
+        <MetricPill label="Download" value={flows.counting && !trafficFailed ? formatBytes(flows.total.down) : trafficFailed ? 'Unavailable' : '—'} valueRight />
+        <MetricPill label="Upload" value={flows.counting && !trafficFailed ? formatBytes(flows.total.up) : trafficFailed ? 'Unavailable' : '—'} valueRight />
       </div>
     </StatCard>
     <StatCard title={<span className="inline-flex items-center gap-1.5">Latency

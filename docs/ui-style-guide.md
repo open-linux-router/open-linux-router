@@ -83,6 +83,7 @@ phones; site latency items use unfilled 32px rows with 6px vertical gaps.
 Only download/upload rates and CPU/memory utilization use inset meter surfaces
 in Overview cards. Status, public addresses, latency, totals and uptime use plain
 rows; monitored sites retain their icons without capsule backgrounds.
+Cumulative traffic rows use Download and Upload labels with plain byte values.
 On desktop, Overview cards share title, primary metric section and supplementary
 section boundaries, not individual metric rows. Totals, site probes and uptime
 start together without divider lines, then flow independently. Status spans the
