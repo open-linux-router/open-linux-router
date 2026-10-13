@@ -18,7 +18,7 @@ OLR capabilities, and a calm, consistent interface. This record accompanies the
 | External routing rules | Distinguish loading, failure, unknown and empty; preserve readable raw evidence and provide retry. |
 | DHCP details, ranges, reservations, advanced | Put status/details first; preserve lists, range forms and address fields; concise headings and managed-configuration constraints. |
 | DNS details, blocking, names, upstream, listening, enforcement, advanced | Preserve filters, values and forms; group activity accounting metadata; shorten repeated explanations; retain binding, TLS verification and protocol limitations. |
-| Firewall | Preserve native rules, counters, remarks and controls; shared heading cleanup only; no new rule view. |
+| Firewall | ECharts Sankey arrivals from outside above and inside below; labels/colors show decisions, equal widths show categories. Preserve switch, warnings and counters; native rules and editing live at `/firewall/rules`. |
 | Access | Remove duplicate hero introduction; keep the established directional groups and capability links. |
 | SOCKS5 outbound | Keep status, authentication and address fields; concise support scope and routing next step. |
 | Remote access | Keep separate status/settings/peer cards; remove duplicate WireGuard labels and onboarding prose; retain exposure and password information. |

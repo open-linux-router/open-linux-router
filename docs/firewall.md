@@ -30,7 +30,14 @@ changes nothing until somebody says so (§7) — and an ordinary switch in both
 directions. `olr firewall enable|disable|show|status`, `/api/firewall/…`, and a
 Firewall section in the web UI.
 
-The page reads the real ruleset using `nft -j list ruleset`. Tables, chains,
+The Firewall landing page uses an ECharts Sankey diagram: outside connections
+arrive from above and inside interfaces from below at a single firewall boundary.
+Paths end at the decision point; allowed traffic is not depicted as blocked.
+Labels and colors distinguish allowed, blocked and unverified decisions. Equal
+category weights are not traffic measurements. Native or unverified rules are
+not inferred from automatic defaults. The switch and status warnings stay here.
+
+The `/firewall/rules` subpage reads the real ruleset using `nft -j list ruleset`. Tables, chains,
 hooks, priorities, policies, rule order, handles, expressions, sets and counters
 come from nftables itself. Other tables are visible but read-only.
 

@@ -1,5 +1,6 @@
 import { AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { toast } from 'sonner'
 
 import { StatusStrip } from '@/components/layout/status-strip'
@@ -7,19 +8,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useFirewallStatus, useReapplyFirewall, useSetFirewall } from '@/features/firewall/queries'
-import { NativeRules } from '@/features/firewall/native-rules'
+import { FirewallSankey } from '@/features/firewall/sankey'
 import { ApiError } from '@/lib/api'
 import type { FirewallApplyResult, FirewallStatus } from '@/lib/api-types'
 
-/**
- * The firewall: one switch, and a map of what can reach this router or its
- * inside networks.
- *
- * There is no rule editor, and that is the design rather than a gap
- * (docs/firewall.md). Every port listed below comes from something already
- * configured elsewhere, so the map is read-only — the way to close a port is
- * to switch off the thing that opened it.
- */
+/** Firewall arrivals and status; native inspection and editing live on Rules. */
 export function FirewallPage() {
   const status = useFirewallStatus()
   const set = useSetFirewall()
@@ -51,7 +44,7 @@ export function FirewallPage() {
     }
   }
 
-  if (!status.data) {
+  if (!status.data || status.error) {
     return (
       <div className="space-y-6">
         {status.error ? (
@@ -63,7 +56,7 @@ export function FirewallPage() {
         ) : (
           <Skeleton className="h-24 w-full" />
         )}
-        <NativeRules />
+        <Button variant="outline" nativeButton={false} render={<Link to="/firewall/rules" />}>Rules</Button>
       </div>
     )
   }
@@ -123,7 +116,8 @@ export function FirewallPage() {
         </Alert>
       )}
 
-      <NativeRules />
+      <FirewallSankey status={st} />
+      <Button variant="outline" nativeButton={false} render={<Link to="/firewall/rules" />}>Rules</Button>
     </div>
   )
 }
@@ -149,7 +143,7 @@ function summarize(st: FirewallStatus): {
     }
   }
   if (st.native) {
-    return { headline: st.problem ? 'Native rules not verified' : st.drifted ? 'Native rules changed' : 'On — native nftables rules', detail: st.problem ?? (st.drifted ? 'The kernel table differs from the saved native rules.' : 'The saved native table is in force. Review its chains and policies below.'), dot: st.problem || st.drifted ? 'bg-warning' : 'bg-success' }
+    return { headline: st.problem ? 'Native rules not verified' : st.drifted ? 'Native rules changed' : 'On — native nftables rules', detail: st.problem ?? (st.drifted ? 'The kernel table differs from the saved native rules.' : 'The saved native table is in force. Review its chains and policies on the Rules page.'), dot: st.problem || st.drifted ? 'bg-warning' : 'bg-success' }
   }
   if (st.drifted || st.problem) {
     return {

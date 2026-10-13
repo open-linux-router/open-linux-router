@@ -34,6 +34,7 @@ import { GatewayInterfacesPage } from '@/routes/gateway/interfaces'
 import { GatewayInterfacePage } from '@/routes/gateway/interface'
 import { GatewayExitsPage } from '@/routes/gateway/exits'
 import { FirewallPage } from '@/routes/firewall'
+import { FirewallRulesPage } from '@/routes/firewall-rules'
 import { GatewayUnmanagedPage } from '@/routes/gateway/unmanaged'
 import { GatewayUsagePage } from '@/routes/gateway/usage'
 import { CreditsPage } from '@/routes/credits'
@@ -76,6 +77,7 @@ export function App() {
             </Route>
           </Route>
           <Route path="firewall" element={<FirewallPage />} />
+          <Route path="firewall/rules" element={<FirewallRulesPage />} />
           <Route path="access" element={<AccessPage />} />
           <Route path="settings/access" element={<AdminAccessPage />} />
           <Route path="access/socks5" element={<SocksOutPage />} />
