@@ -127,8 +127,8 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
             </div>
           </DeviceSettingRow>
           <Fact label="Last seen" value={device.last_seen ? formatAgo(device.last_seen) : 'Never'} />
-          <DeviceSettingRow label="Group"><button type="button" aria-label="Edit device group" disabled={identityBusy} onClick={() => begin('group')} className="min-h-11 rounded-md px-2 focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9"><Badge variant="secondary" className="whitespace-normal break-words">{device.group || 'No group'}</Badge></button></DeviceSettingRow>
-          <DeviceSettingRow label="Uplink"><button type="button" aria-label="Edit device uplink" disabled={!gateway.data || gatewayApplier.busy} onClick={() => begin('exit')} className="min-h-11 rounded-md px-2 focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9"><Badge variant="secondary" className="whitespace-normal break-words">{exit === INHERIT_EXIT ? 'Default' : exit === DIRECT_EXIT ? 'This router’s connection' : exit}</Badge></button></DeviceSettingRow>
+          <DeviceSettingRow label="Group"><button type="button" aria-label="Edit device group" disabled={identityBusy} onClick={() => begin('group')} className="min-h-11 rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9"><Badge variant="secondary" className="whitespace-normal break-words">{device.group || 'No group'}</Badge></button></DeviceSettingRow>
+          <DeviceSettingRow label="Uplink"><button type="button" aria-label="Edit device uplink" disabled={!gateway.data || gatewayApplier.busy} onClick={() => begin('exit')} className="min-h-11 rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9"><Badge variant="secondary" className="whitespace-normal break-words">{exit === INHERIT_EXIT ? 'Default' : exit === DIRECT_EXIT ? 'This router’s connection' : exit}</Badge></button></DeviceSettingRow>
         </dl>
       </div>
       <div className="min-w-0">{traffic}</div>
