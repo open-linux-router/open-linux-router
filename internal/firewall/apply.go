@@ -106,6 +106,7 @@ type Status struct {
 	// answer is "these, and everything else".
 	Inside   []string  `json:"inside"`
 	Openings []Opening `json:"openings"`
+	IPTV     IPTV      `json:"iptv"`
 
 	// BlockedInput and BlockedForward count packets turned away since the
 	// table was last built, which every apply does.
@@ -148,12 +149,13 @@ func (a Applier) GetStatus(ctx context.Context) (Status, error) {
 	st.BlockedInput = obs.Blocked[InputCounter]
 	st.BlockedForward = obs.Blocked[ForwardCounter]
 
-	plan, _, err := BuildPlan(c, a.Boundary, obs, "")
+	plan, desired, err := BuildPlan(c, a.Boundary, obs, "")
 	if err != nil {
 		st.Problem = err.Error()
 		return st, nil
 	}
 	st.Plan = plan
+	st.IPTV = desired.IPTV
 	st.Drifted = obs.Known && !plan.Empty
 	return st, nil
 }

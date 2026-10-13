@@ -31,8 +31,8 @@ type Boundary interface {
 
 // IPTV is the selected IPv4 multicast path, empty when disabled.
 type IPTV struct {
-	Upstream   string
-	Downstream []string
+	Upstream   string   `json:"upstream"`
+	Downstream []string `json:"downstream"`
 }
 
 // Protocol is a transport.

@@ -2,6 +2,7 @@ package firewall
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -85,6 +86,33 @@ func TestStatusListsAreNeverNull(t *testing.T) {
 	// The UI maps over both; JSON null would crash the page.
 	if normalizeInside(nil) == nil || normalizeOpenings(nil) == nil {
 		t.Fatal("an empty list normalised to nil")
+	}
+}
+
+func TestStatusIncludesActiveIPTVPath(t *testing.T) {
+	a := Applier{
+		Store:    core.NewStore(filepath.Join(t.TempDir(), "olr.json"), ModuleName),
+		Kernel:   &StaticKernel{},
+		Boundary: StaticBoundary{Interfaces: []string{"lan0"}, Multicast: IPTV{Upstream: "iptv0", Downstream: []string{"lan0"}}},
+	}
+	for _, enabled := range []bool{true, false} {
+		if err := a.save(Config{Enabled: enabled}); err != nil {
+			t.Fatal(err)
+		}
+		st, err := a.GetStatus(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (st.IPTV.Upstream != "") != enabled {
+			t.Fatalf("enabled=%v: IPTV=%+v", enabled, st.IPTV)
+		}
+		raw, err := json.Marshal(st)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if enabled && !strings.Contains(string(raw), `"iptv":{"upstream":"iptv0","downstream":["lan0"]}`) {
+			t.Fatalf("IPTV API fields missing: %s", raw)
+		}
 	}
 }
 

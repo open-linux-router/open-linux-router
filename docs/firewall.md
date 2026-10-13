@@ -36,6 +36,11 @@ Paths end at the decision point; allowed traffic is not depicted as blocked.
 Labels and colors distinguish allowed, blocked and unverified decisions. Equal
 category weights are not traffic measurements. Native or unverified rules are
 not inferred from automatic defaults. The switch and status warnings stay here.
+Automatic categories distinguish input/forward drops, established/related,
+ICMP, ICMPv6, DHCP, DHCPv6, each configured service opening, DNAT and forwarding
+outside inside networks. IPTV adds IGMP and multicast when configured. Original
+protocol and service names remain visible. Wide category sets scroll horizontally
+instead of hiding labels; native mode shows a neutral Native rules path.
 
 The `/firewall/rules` subpage reads the real ruleset using `nft -j list ruleset`. Tables, chains,
 hooks, priorities, policies, rule order, handles, expressions, sets and counters

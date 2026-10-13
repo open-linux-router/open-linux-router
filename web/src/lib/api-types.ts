@@ -1553,6 +1553,7 @@ export interface FirewallStatus {
   plan: FirewallPlan
   inside: string[]
   openings: FirewallOpening[]
+  iptv?: { upstream: string; downstream: string[] | null }
   blocked_input: number
   blocked_forward: number
   /** Why no plan could be built — today only "there are no networks". */
