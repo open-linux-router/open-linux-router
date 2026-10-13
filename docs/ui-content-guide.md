@@ -71,9 +71,11 @@ values. Lead identity rows with Vendor. Edit addresses and their fixed toggle
 in a dialog opened by clicking the IP. Show a Fixed tag beside reserved addresses;
 keep the hover hint limited to DHCP lease information and omit the hostname field.
 Preserve diagnostic scope: router-originated tests do not measure a downstream device's path.
-Inspection requires explicit consent about credentials and certificate trust.
+The Inspection switch starts and stops the session directly, without confirmation.
+Explain credentials, certificate trust and cleanup in the setup guide.
 Device Connections keeps Inspection and its switch in the title bar, with a
-setup QR icon while active. Certificate installation, trust and cleanup belong
+setup link and QR icon while active. Show the mitmproxy viewer directly, without
+duplicate request lists, diagnostics or a disclosure. Certificate installation, trust and cleanup belong
 in the public five-step setup guide, with the certificate download at step two.
 The device DNS filter sits beside the title with an accessible label; both
 section titles have a divider beneath them.
