@@ -1,7 +1,9 @@
 package inspection
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +14,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 func TestStartRequiresIPv4Candidates(t *testing.T) {
@@ -226,7 +230,7 @@ func TestViewerWebSocketUpgrade(t *testing.T) {
 	}
 	defer listener.Close()
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/updates" || r.Header.Get("Authorization") != "Bearer secret" {
+		if r.URL.Path != "/updates" || r.Header.Get("Authorization") != "Bearer secret" || r.Header.Get("Cookie") != "" || r.Header.Get("Origin") != "http://127.0.0.1:18082" {
 			http.Error(w, "unexpected request", http.StatusBadRequest)
 			return
 		}
@@ -237,23 +241,43 @@ func TestViewerWebSocketUpgrade(t *testing.T) {
 		defer conn.Close()
 		fmt.Fprint(rw, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n")
 		rw.Flush()
-		time.Sleep(100 * time.Millisecond)
+		// Echo bytes after the upgrade to exercise both tunnel directions.
+		payload := make([]byte, 4)
+		conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		if _, err := io.ReadFull(rw, payload); err != nil {
+			return
+		}
+		rw.Write(payload)
+		rw.Flush()
 	})}
 	go server.Serve(listener)
 	defer server.Close()
 	s := &Service{session: &session{webToken: "secret", expires: time.Now().Add(time.Minute)}}
-	front := httptest.NewServer(http.HandlerFunc(s.WebUI))
+	mux := http.NewServeMux()
+	mux.Handle("/inspection-web/", http.StripPrefix("/inspection-web", http.HandlerFunc(s.WebUI)))
+	front := httptest.NewServer(core.WithLogging(core.WithRecovery(core.WithSharedUnits(mux))))
 	defer front.Close()
 	conn, err := net.Dial("tcp", strings.TrimPrefix(front.URL, "http://"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	fmt.Fprintf(conn, "GET /updates HTTP/1.1\r\nHost: %s\r\nOrigin: %s\r\nCookie: %s=secret\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", strings.TrimPrefix(front.URL, "http://"), front.URL, viewerCookie)
+	fmt.Fprintf(conn, "GET /inspection-web/updates HTTP/1.1\r\nHost: %s\r\nOrigin: %s\r\nCookie: %s=secret\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", strings.TrimPrefix(front.URL, "http://"), front.URL, viewerCookie)
 	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	buf := make([]byte, 512)
-	n, err := conn.Read(buf)
-	if err != nil || !strings.Contains(string(buf[:n]), "101 Switching Protocols") {
-		t.Fatalf("upgrade = %q, %v", buf[:n], err)
+	reader := bufio.NewReader(conn)
+	response, err := http.ReadResponse(reader, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("upgrade = %s", response.Status)
+	}
+	if _, err := conn.Write([]byte("ping")); err != nil {
+		t.Fatal(err)
+	}
+	payload := make([]byte, 4)
+	if _, err := io.ReadFull(reader, payload); err != nil || string(payload) != "ping" {
+		t.Fatalf("tunnel echo = %q, %v", payload, err)
 	}
 }

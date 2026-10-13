@@ -68,7 +68,6 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <div className="flex flex-wrap items-center justify-end gap-3">
           <label htmlFor="device-inspection" className="text-sm">Inspection</label>
           <Switch id="device-inspection" checked={Boolean(mine)} disabled={start.isPending || stop.isPending || status.isPending || status.isError || Boolean(active && !mine) || (!mine && (ipv4.length === 0 || ipv4.length > 8))} onCheckedChange={(checked) => { if (checked) start.mutate(); else stop.mutate() }} />
-          {mine && <a href={caURL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center text-sm text-primary underline sm:min-h-9">Setup guide</a>}
           {mine && <Button variant="ghost" size="icon" aria-label="Inspection setup QR code" onClick={() => setShowQR(true)}><QrCode className="size-5" /></Button>}
           {status.isPending && <span className="text-xs text-muted-foreground">Checking…</span>}
         </div>

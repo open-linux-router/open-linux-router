@@ -1,7 +1,9 @@
 package core
 
 import (
+	"bufio"
 	"log/slog"
+	"net"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -39,6 +41,17 @@ func (r *recorder) Flush() {
 	if f, ok := r.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// Hijack preserves WebSocket upgrades through logging and recovery wrappers.
+// Once ownership transfers, recovery must not write another HTTP response.
+func (r *recorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	conn, rw, err := http.NewResponseController(r.ResponseWriter).Hijack()
+	if err == nil {
+		r.status = http.StatusSwitchingProtocols
+		r.wrote = true
+	}
+	return conn, rw, err
 }
 
 // WithLogging logs one line per request to the journal (§3.4 — journald is the
