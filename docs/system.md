@@ -242,7 +242,8 @@ comes from and how long it lives.
 
 Browser sessions last 90 days from sign-in and survive daemon and router
 restarts. Only token hashes and their expiry and password binding are stored in
-`/var/lib/open-linux-router/sessions.json` (mode 0600, relocated by `--root`).
+the `sessions` table in `/var/lib/open-linux-router/runtime.db` (mode 0600,
+relocated by `--root`). The old `sessions.json` is imported once transactionally.
 Signing out removes the session from disk before reporting success. Changing
 the administrator password invalidates all sessions through their password
 binding, including sessions stored before a restart. Existing sessions from

@@ -116,6 +116,10 @@ func renderResolvedDropIn(servers []netip.Addr) string {
 func (a Applier) applyResolvFile(servers []netip.Addr) []core.Step {
 	path := a.path(resolvConf)
 	backup := filepath.Join(a.stateDir(), "resolv.conf.orig")
+	original, recoveryErr := a.readRecovery("host:resolv", backup)
+	if recoveryErr != nil && !os.IsNotExist(recoveryErr) {
+		return []core.Step{{Description: "read original DNS settings", Error: recoveryErr.Error()}}
+	}
 
 	current, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
@@ -127,8 +131,7 @@ func (a Applier) applyResolvFile(servers []netip.Addr) []core.Step {
 		if !ours {
 			return nil
 		}
-		original, err := os.ReadFile(backup)
-		if err != nil {
+		if original == nil {
 			// Nothing kept to put back — olr wrote the first one there was.
 			// Leaving olr's is the choice that keeps the box resolving; the
 			// distribution's client rewrites it the next time it has
@@ -139,7 +142,7 @@ func (a Applier) applyResolvFile(servers []netip.Addr) []core.Step {
 			if err := core.WriteFileAtomic(path, original, 0o644); err != nil {
 				return err
 			}
-			return os.Remove(backup)
+			return a.deleteRecovery("host:resolv", backup)
 		})}
 	}
 
@@ -152,9 +155,9 @@ func (a Applier) applyResolvFile(servers []netip.Addr) []core.Step {
 		// Kept once, the first time: the file as it was before olr, which is
 		// what giving the resolvers back has to restore. A second take would
 		// overwrite it with olr's own.
-		if _, statErr := os.Stat(backup); os.IsNotExist(statErr) {
+		if original == nil {
 			s := step("keep the current /etc/resolv.conf to put back later", func() error {
-				return core.WriteFileAtomic(backup, current, 0o644)
+				return a.saveRecovery("host:resolv", backup, current)
 			})
 			steps = append(steps, s)
 			if s.Error != "" {

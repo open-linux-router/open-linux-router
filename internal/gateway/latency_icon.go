@@ -23,6 +23,7 @@ type latencyIcon struct {
 // Icon discovers a monitored site's favicon through the same selected exit.
 // The result is cached independently of probe measurements.
 func (m *CustomLatencyMonitor) Icon(ctx context.Context, name string) ([]byte, string, error) {
+	m.refreshConfig()
 	m.mu.RLock()
 	var site CustomLatencySite
 	for _, candidate := range m.sites {

@@ -52,6 +52,7 @@ const ModuleName = "gateway"
 // Fields without `omitempty` are reflected as schema-required (design.md §10,
 // config format), so the tags are load-bearing.
 type Config struct {
+	LatencySites []CustomLatencySite `json:"latency_sites"`
 	// Enabled controls whether any of this is programmed into the kernel at
 	// all. Disabling tears down our tables, our rules and our route tables and
 	// leaves the box routing and translating exactly as it did before olr was
@@ -824,6 +825,11 @@ func (c *Config) Rename(from, to string) bool {
 	for i := range c.Devices {
 		if c.Devices[i].Exit == from {
 			c.Devices[i].Exit = to
+		}
+	}
+	for i := range c.LatencySites {
+		if c.LatencySites[i].Exit == from {
+			c.LatencySites[i].Exit = to
 		}
 	}
 	c.Normalize()

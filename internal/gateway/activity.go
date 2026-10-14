@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/runtimedb"
 )
 
 type activityBytes struct {
@@ -30,6 +32,70 @@ type Activity struct {
 	buckets  map[int64]map[netip.Addr]activityBytes
 	entries  int
 	path     string
+	db       *runtimedb.Store
+	saved    map[int64]map[netip.Addr]activityBytes
+}
+
+// OpenActivityDB imports the old checkpoint once and restores retained buckets.
+func OpenActivityDB(db *runtimedb.Store, legacy string) (*Activity, error) {
+	err := db.Import("activity", legacy, func(data []byte, tx *sql.Tx) error {
+		var stored struct {
+			Version int                                    `json:"version"`
+			Buckets map[int64]map[netip.Addr]activityBytes `json:"buckets"`
+		}
+		if err := json.Unmarshal(data, &stored); err != nil {
+			return err
+		}
+		if stored.Version != 1 {
+			return fmt.Errorf("unsupported activity history version %d", stored.Version)
+		}
+		rows := []runtimedb.Activity{}
+		now := time.Now()
+		for at, bucket := range stored.Buckets {
+			if at < now.Add(-14*24*time.Hour).Unix() || at > now.Unix() {
+				continue
+			}
+			for addr, value := range bucket {
+				if !addr.IsValid() {
+					return fmt.Errorf("invalid activity address")
+				}
+				rows = append(rows, runtimedb.Activity{Bucket: at, Address: addr.String(), Up: value.Up, Down: value.Down})
+			}
+		}
+		if len(rows) > 100000 {
+			return fmt.Errorf("activity history exceeds entry limit")
+		}
+		return runtimedb.PutActivity(tx, rows)
+	})
+	if err != nil {
+		return nil, err
+	}
+	a := NewActivity()
+	a.db = db
+	now := time.Now()
+	rows, err := db.Activity(now.Add(-14*24*time.Hour).Unix(), now.Unix())
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		addr, err := netip.ParseAddr(row.Address)
+		if err != nil {
+			return nil, err
+		}
+		if a.buckets[row.Bucket] == nil {
+			a.buckets[row.Bucket] = map[netip.Addr]activityBytes{}
+		}
+		a.buckets[row.Bucket][addr] = activityBytes{Up: row.Up, Down: row.Down}
+		a.entries++
+	}
+	a.saved = map[int64]map[netip.Addr]activityBytes{}
+	for at, bucket := range a.buckets {
+		a.saved[at] = map[netip.Addr]activityBytes{}
+		for addr, v := range bucket {
+			a.saved[at][addr] = v
+		}
+	}
+	return a, nil
 }
 
 func NewActivity() *Activity { return &Activity{buckets: make(map[int64]map[netip.Addr]activityBytes)} }
@@ -76,6 +142,38 @@ func OpenActivity(path string) (*Activity, error) {
 
 // Save checkpoints history atomically. Counter baselines are deliberately omitted.
 func (a *Activity) Save() error {
+	if a.db != nil {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		rows := []runtimedb.Activity{}
+		for at, bucket := range a.buckets {
+			for addr, value := range bucket {
+				old, ok := a.saved[at][addr]
+				if !ok || old != value {
+					rows = append(rows, runtimedb.Activity{Bucket: at, Address: addr.String(), Up: value.Up, Down: value.Down})
+				}
+			}
+		}
+		if err := a.db.SaveActivity(rows, time.Now().Add(-14*24*time.Hour).Unix()); err != nil {
+			return err
+		}
+		if a.saved == nil {
+			a.saved = map[int64]map[netip.Addr]activityBytes{}
+		}
+		for _, r := range rows {
+			addr := netip.MustParseAddr(r.Address)
+			if a.saved[r.Bucket] == nil {
+				a.saved[r.Bucket] = map[netip.Addr]activityBytes{}
+			}
+			a.saved[r.Bucket][addr] = activityBytes{Up: r.Up, Down: r.Down}
+		}
+		for at := range a.saved {
+			if a.buckets[at] == nil {
+				delete(a.saved, at)
+			}
+		}
+		return nil
+	}
 	if a.path == "" {
 		return nil
 	}

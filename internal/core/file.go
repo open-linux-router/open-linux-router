@@ -35,6 +35,10 @@ func WriteFileAtomic(path string, data []byte, mode fs.FileMode) error {
 		tmp.Close()
 		return err
 	}
+	if err := tmp.Chmod(mode); err != nil {
+		tmp.Close()
+		return err
+	}
 	// Durability before visibility: a rename that survives a crash pointing at
 	// unflushed content would leave an empty config where a valid one was.
 	if err := tmp.Sync(); err != nil {
@@ -44,8 +48,13 @@ func WriteFileAtomic(path string, data []byte, mode fs.FileMode) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmpName, mode); err != nil {
+	if err := os.Rename(tmpName, path); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, path)
+	directory, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
 }

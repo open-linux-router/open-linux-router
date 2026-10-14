@@ -29,6 +29,7 @@ type CustomLatencySite struct {
 type CustomLatencyMonitor struct {
 	mu           sync.RWMutex
 	path         string
+	store        *core.Store
 	sites        []CustomLatencySite
 	results      []LatencySite
 	icons        map[string]latencyIcon
@@ -38,6 +39,57 @@ type CustomLatencyMonitor struct {
 	// Resolve returns the current exit mark; a missing or disabled exit is an error.
 	Resolve      func(string) (uint32, error)
 	ValidateExit func(string) error
+}
+
+// OpenCustomLatencyConfig moves legacy targets into the operator document.
+// It runs before serving requests; subsequent writes hold the global apply lock.
+func OpenCustomLatencyConfig(store *core.Store) (*CustomLatencyMonitor, error) {
+	doc, err := store.Load()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := FromDocument(doc)
+	if err != nil {
+		return nil, err
+	}
+	legacy := store.Path() + ".latency-sites"
+	if cfg.LatencySites == nil {
+		data, err := os.ReadFile(legacy)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		if err == nil {
+			if err := json.Unmarshal(data, &cfg.LatencySites); err != nil {
+				return nil, err
+			}
+			if err := validateCustomSites(cfg.LatencySites); err != nil {
+				return nil, err
+			}
+			// A non-nil empty slice records migration, including cleared targets.
+			if cfg.LatencySites == nil {
+				cfg.LatencySites = []CustomLatencySite{}
+			}
+			raw, err := MarshalConfig(cfg)
+			if err != nil {
+				return nil, err
+			}
+			doc.Set(ModuleName, raw)
+			if err := store.Save(doc); err != nil {
+				return nil, err
+			}
+		}
+	}
+	// Only remove the legacy source after the new configuration is committed.
+	// An explicit empty list must never resurrect old targets on restart.
+	if cfg.LatencySites != nil {
+		if err := os.Rename(legacy, legacy+".migrated"); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+	}
+	m := &CustomLatencyMonitor{store: store, probe: probePage, probeThrough: probePageMarked, results: []LatencySite{}}
+	m.sites = cfg.LatencySites
+	m.resetResults()
+	return m, nil
 }
 
 func NewCustomLatencyMonitor(path string) (*CustomLatencyMonitor, error) {
@@ -100,12 +152,38 @@ func (m *CustomLatencyMonitor) resetResults() {
 }
 
 func (m *CustomLatencyMonitor) Snapshot() []LatencySite {
+	m.refreshConfig()
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return append([]LatencySite{}, m.results...)
 }
 
+func (m *CustomLatencyMonitor) refreshConfig() {
+	if m.store == nil {
+		return
+	}
+	sites := m.Config()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	old, _ := json.Marshal(m.sites)
+	next, _ := json.Marshal(sites)
+	if string(old) != string(next) {
+		m.sites = sites
+		m.resetResults()
+		m.icons = nil
+	}
+}
+
 func (m *CustomLatencyMonitor) Config() []CustomLatencySite {
+	if m.store != nil {
+		doc, err := m.store.Load()
+		if err == nil {
+			cfg, err := FromDocument(doc)
+			if err == nil {
+				return append([]CustomLatencySite{}, cfg.LatencySites...)
+			}
+		}
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return append([]CustomLatencySite{}, m.sites...)
@@ -127,6 +205,29 @@ func (m *CustomLatencyMonitor) Replace(sites []CustomLatencySite) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.store != nil {
+		doc, err := m.store.Load()
+		if err != nil {
+			return err
+		}
+		cfg, err := FromDocument(doc)
+		if err != nil {
+			return err
+		}
+		cfg.LatencySites = append([]CustomLatencySite{}, sites...)
+		data, err := MarshalConfig(cfg)
+		if err != nil {
+			return err
+		}
+		doc.Set(ModuleName, data)
+		if err := m.store.Save(doc); err != nil {
+			return err
+		}
+		m.sites = append([]CustomLatencySite{}, sites...)
+		m.resetResults()
+		m.icons = nil
+		return nil
+	}
 	data, err := json.MarshalIndent(sites, "", "  ")
 	if err != nil {
 		return err
@@ -141,6 +242,7 @@ func (m *CustomLatencyMonitor) Replace(sites []CustomLatencySite) error {
 }
 
 func (m *CustomLatencyMonitor) sample(ctx context.Context) {
+	m.refreshConfig()
 	sites := m.Config()
 	results := make([]LatencySite, len(sites))
 	var wg sync.WaitGroup

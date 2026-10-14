@@ -932,17 +932,12 @@ different class of gap, and it is why the topology rule exists.
 
 Counters are monotonic-since-load; everything anyone wants is deltas over time.
 
-This was the second workload voting in §10 open decision 5, alongside
-dns:§7.5's query log, and the vote is over: **there is no store.** The counters
-are read from nftables when somebody asks, `statTimeout` ages them out in the
-kernel, and olr keeps no copy. The decision and its price are recorded at §10
-#5 — the price being that "traffic today" is answerable and "traffic last
-month" does not exist.
-
-The privacy paragraph below is most of why. Bounded retention over a fixed set
-of devices is fixed-size data, and fixed-size data does not need a database; the
-feature that would have needed one is the feature this section already refuses
-to build.
+Live counters are read from nftables and aged out by `statTimeout`. The activity
+sampler retains bounded half-hour differences in SQLite for 14 days, rather
+than raw flows. Runtime persistence and future analysis use the shared store
+described in `docs/storage.md`; choosing SQLite does not enable raw query or
+flow logging. Custom HTTPS probe targets are operator intent and live under
+`gateway.latency_sites` in `olr.json`.
 
 A per-device domain history is a record of everyone in the building's browsing,
 on a box in the hallway. Default retention window, a visible off switch, and

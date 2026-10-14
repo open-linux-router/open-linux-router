@@ -71,6 +71,16 @@ func (r Result) Err() error {
 // Validate checks intent against itself and against link's facts.
 func Validate(c Config, links LinkView) Result {
 	var r Result
+	if err := validateCustomSites(c.LatencySites); err != nil {
+		r.errorf("latency_sites", "%s", err)
+	}
+	for _, site := range c.LatencySites {
+		if site.Exit != "" {
+			if _, ok := c.Find(site.Exit); !ok {
+				r.errorf("latency_sites", "%s: unknown exit %s", site.Name, site.Exit)
+			}
+		}
+	}
 
 	validateExits(&r, c, links)
 	validateDefault(&r, c)

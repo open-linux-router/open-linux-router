@@ -12,6 +12,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/dial"
 	"github.com/open-linux-router/open-linux-router/internal/link"
+	"github.com/open-linux-router/open-linux-router/internal/runtimedb"
 )
 
 // The walk of design.md §4.1's arrow from dial's delegated prefix to the
@@ -36,7 +37,9 @@ type delegationFollower struct {
 	// path is where the last applied prefix is kept. It has to outlive olrd:
 	// a prefix the ISP changed while olrd was down left addresses from the old
 	// one on the networks, and this is the only record of which to take off.
-	path string
+	path    string
+	db      *runtimedb.Store
+	dbError error
 }
 
 func newDelegationFollower(root string) *delegationFollower {
@@ -56,7 +59,10 @@ func (f *delegationFollower) reconcile() {
 
 	var now netip.Prefix
 	err := f.srv.ApplyLock().Do(ctx, func() error {
-		was := f.load()
+		was, err := f.loadChecked()
+		if err != nil {
+			return err
+		}
 		now = f.delegation.Prefix()
 
 		// Run even when was == now: after a reboot the prefix comes back the
@@ -91,18 +97,48 @@ func (f *delegationFollower) reconcile() {
 }
 
 func (f *delegationFollower) load() netip.Prefix {
-	data, err := os.ReadFile(f.path)
-	if err != nil {
-		return netip.Prefix{}
-	}
-	p, err := netip.ParsePrefix(strings.TrimSpace(string(data)))
-	if err != nil {
-		return netip.Prefix{}
-	}
+	p, _ := f.loadChecked()
 	return p
 }
 
+func (f *delegationFollower) loadChecked() (netip.Prefix, error) {
+	if f.dbError != nil {
+		return netip.Prefix{}, f.dbError
+	}
+	if f.db != nil {
+		if err := f.db.ImportRecovery("dial:prefix", f.path); err != nil {
+			return netip.Prefix{}, err
+		}
+		data, err := f.db.Recovery("dial:prefix")
+		if err != nil || len(data) == 0 {
+			return netip.Prefix{}, err
+		}
+		return netip.ParsePrefix(strings.TrimSpace(string(data)))
+	}
+	data, err := os.ReadFile(f.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return netip.Prefix{}, nil
+		}
+		return netip.Prefix{}, err
+	}
+	p, err := netip.ParsePrefix(strings.TrimSpace(string(data)))
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	return p, nil
+}
+
 func (f *delegationFollower) save(p netip.Prefix) error {
+	if f.dbError != nil {
+		return f.dbError
+	}
+	if f.db != nil {
+		if !p.IsValid() {
+			return f.db.DeleteRecovery("dial:prefix")
+		}
+		return f.db.SaveRecovery("dial:prefix", []byte(p.String()))
+	}
 	if !p.IsValid() {
 		err := os.Remove(f.path)
 		if os.IsNotExist(err) {

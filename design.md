@@ -1316,44 +1316,27 @@ belongs to the network, a second and deliberate act.
 4. **Wi-Fi on-box or bring-your-own AP?** On-box hostapd is a driver and
    regulatory rabbit hole. Assuming wired router + separate APs on a VLAN trunk
    is far cheaper and matches most homelab setups.
-5. ~~**Revision storage.**~~ **Closed — no database, and the question had two
-   workloads wrongly bundled into it.**
+5. **Storage boundary: JSON intent, SQLite runtime data.** Operator intent
+   remains in `/etc/open-linux-router/olr.json`. OLR-owned runtime state and
+   bounded observation history use `/var/lib/open-linux-router/runtime.db`.
+   See `docs/storage.md` for schema, migration, recovery and backup behavior.
+   The previous no-database decision is superseded: future analysis
+   needs queryable runtime data, while raw-event retention remains an explicit
+   feature decision rather than a consequence of choosing SQLite.
 
-   It asked which store should hold config revisions *and* the throughput
-   history §6.3 needs, on the assumption that one store should serve both.
-   They have nothing in common. Revisions are a few thousand small documents
-   whose whole value is diffing them; statistics are fixed-cardinality numeric
-   series whose whole value is downsampling them. Bundling the two is what made
-   a database look necessary, and separating them is most of the answer.
-
-   **Statistics are not stored. They are read from what the backends already
-   count.** nftables keeps per-device and per-exit byte counters and ages them
-   out in the kernel (gateway:§7.5, `statTimeout`); dnsmasq keeps the lease
-   file; the relay keeps a fixed-size in-memory ring of answered queries. olr
-   keeps no history of its own, and the numbers it reports are the ones the
-   software underneath it is already keeping.
-
-   **The deciding argument is flash wear, not size.** Size was measured and is
-   affordable: against a 2.0 MB empty binary, `modernc.org/sqlite` costs 6.7 MB
-   and 26 modules, `go.etcd.io/bbolt` 0.9 MB and 16. What is not affordable is
-   writing continuously — a line per DNS query appended to disk is a hardware
-   lifetime cost on the many olr boxes that boot from an SD card, and that
-   argument lives in `internal/dnsrelay/log.go` where it was found rather than
-   in any document until now.
-
-   **The privacy stance had already decided it.** gateway:§7.5 commits to a
-   default retention window, a visible off switch and per-device exclusion.
-   Bounded retention over fixed cardinality is fixed-size storage. The thing
-   that would genuinely require a query engine — unbounded raw events answering
-   ad-hoc questions — is the thing that section already refuses to build.
+   nftables remains the source for current byte counters, dnsmasq for leases,
+   and the DNS relay's current query ring remains in memory. SQLite stores
+   retained samples and OLR's own recovery/session records. Flash wear and
+   privacy still require bounded retention and batched writes; selecting a
+   database does not justify writing every DNS query or flow to disk.
 
    **Device activity exception:** a bounded sampler now retains up
    to 14 days of half-hour counter differences for the device-card dot matrix.
    It samples every ten seconds independently of browsers, respects traffic
    counting being off, caps retained address/bucket pairs at 100,000 and never
    stores raw flows. History is atomically checkpointed every minute and on
-   graceful shutdown to `/var/lib/open-linux-router/activity.json` (0600),
-   using the existing JSON file store primitives without a database dependency.
+   graceful shutdown to SQLite (0600). Only changed buckets are checkpointed;
+   the old `activity.json` is imported once.
    Missing intervals, resets and initial baselines are
    not counted as zero traffic. Samples crossing half-hour boundaries are
    omitted rather than attributed to the wrong interval. The display joins
@@ -1369,15 +1352,9 @@ belongs to the network, a second and deliberate act.
    throughput is a thing we are choosing not to have, and if that choice is
    wrong this is the entry to reopen.
 
-   If `history`/`rollback` is built, it is numbered JSON snapshots on disk —
-   the cheapest of the three original candidates and the only one that needs no
-   dependency. **Intent stays a JSON file** either way (§3.2 rule 1): "SSH in
-   and read the config" is the recovery path on a router, and a database is the
-   wrong thing to meet at that moment.
-
-   Reopen this if a feature needs to query raw events — "every DNS query from
-   that device last Tuesday" is a query engine's job and nothing here will fake
-   it.
+   Configuration revision history and rollback remain separate, unimplemented
+   features. **Intent stays a JSON file** (§3.2 rule 1): "SSH in and read the
+   config" remains the router's configuration recovery path.
 6. **Does creating a network default DHCP on?** Leaning yes — a LAN without
    DHCP is the unusual case, and §5.1 immediate-apply makes it cheap to undo.
 7. **What is a network, exactly?** (§4.4) Its field set is now the most

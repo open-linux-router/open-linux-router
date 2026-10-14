@@ -50,8 +50,8 @@ func (a Applier) applyIPv6Auto(settings map[string]bool, beforeHost ...bool) []c
 	}
 	statePath := filepath.Join(a.stateDir(), "ipv6-auto.json")
 	originals := map[string]ipv6Defaults{}
-	data, err := os.ReadFile(statePath)
-	if err == nil {
+	data, err := a.readRecovery("host:ipv6", statePath)
+	if err == nil && data != nil {
 		err = json.Unmarshal(data, &originals)
 	}
 	if err != nil && !os.IsNotExist(err) {
@@ -74,7 +74,7 @@ func (a Applier) applyIPv6Auto(settings map[string]bool, beforeHost ...bool) []c
 		if err != nil {
 			return err
 		}
-		return core.WriteFileAtomic(statePath, data, 0o600)
+		return a.saveRecovery("host:ipv6", statePath, data)
 	}
 	for _, iface := range slices.Compact(names) {
 		if _, controlled := settings[iface]; !controlled && len(beforeHost) > 0 && beforeHost[0] {

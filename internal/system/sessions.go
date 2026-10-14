@@ -3,9 +3,11 @@ package system
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/runtimedb"
 )
 
 const sessionCookie = "olr_session"
@@ -35,6 +38,41 @@ type Sessions struct {
 	work     chan struct{}
 	Now      func() time.Time
 	path     string
+	db       *runtimedb.Store
+}
+
+func OpenSessionsDB(db *runtimedb.Store, legacy string) (*Sessions, error) {
+	err := db.Import("sessions", legacy, func(data []byte, tx *sql.Tx) error {
+		var entries []storedSession
+		if err := json.Unmarshal(data, &entries); err != nil {
+			return err
+		}
+		rows := []runtimedb.Session{}
+		for _, e := range entries {
+			if e.Session.Expires.After(time.Now()) {
+				rows = append(rows, runtimedb.Session{Key: e.Key, Credential: e.Session.Credential, Expires: e.Session.Expires})
+			}
+		}
+		if len(rows) > 256 {
+			return errors.New("too many stored sessions")
+		}
+		return runtimedb.PutSessions(tx, rows)
+	})
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Sessions()
+	if err != nil {
+		return nil, err
+	}
+	s := NewSessions()
+	s.db = db
+	for _, r := range rows {
+		if r.Expires.After(s.now()) {
+			s.sessions[r.Key] = session{Credential: r.Credential, Expires: r.Expires}
+		}
+	}
+	return s, nil
 }
 
 // OpenSessions restores browser sessions across daemon and router restarts.
@@ -67,6 +105,15 @@ type storedSession struct {
 
 // save runs under mu; atomic replacement prevents partially written state.
 func (s *Sessions) save() error {
+	if s.db != nil {
+		rows := []runtimedb.Session{}
+		for key, e := range s.sessions {
+			if e.Expires.After(s.now()) {
+				rows = append(rows, runtimedb.Session{Key: key, Credential: e.Credential, Expires: e.Expires})
+			}
+		}
+		return s.db.SaveSessions(rows)
+	}
 	if s.path == "" {
 		return nil
 	}
@@ -160,6 +207,7 @@ func (s *Sessions) Issue(w http.ResponseWriter, r *http.Request, password *Passw
 	}
 	value := base64.RawURLEncoding.EncodeToString(raw[:])
 	s.mu.Lock()
+	previous := maps.Clone(s.sessions)
 	now := s.now()
 	for key, entry := range s.sessions {
 		if !entry.Expires.After(now) {
@@ -177,7 +225,7 @@ func (s *Sessions) Issue(w http.ResponseWriter, r *http.Request, password *Passw
 	key := sha256.Sum256([]byte(value))
 	s.sessions[key] = session{Credential: password.Hash, Expires: now.Add(sessionLifetime)}
 	if err := s.save(); err != nil {
-		delete(s.sessions, key)
+		s.sessions = previous
 		s.mu.Unlock()
 		return err
 	}

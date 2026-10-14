@@ -3,6 +3,7 @@ package qos
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/devices"
 	"github.com/open-linux-router/open-linux-router/internal/link"
+	"github.com/open-linux-router/open-linux-router/internal/runtimedb"
 )
 
 // Shape on the LAN side: Ethernet identities survive NAT, VPN routing and
@@ -30,11 +32,14 @@ type DeviceView interface {
 }
 
 type Engine struct {
-	Store     *core.Store
-	Devices   DeviceView
-	Run       func(context.Context, string, ...string) ([]byte, error)
-	StatePath string
-	mu        sync.Mutex
+	Store        *core.Store
+	Devices      DeviceView
+	Run          func(context.Context, string, ...string) ([]byte, error)
+	StatePath    string
+	Runtime      *runtimedb.Store
+	BootID       string
+	RuntimeError error
+	mu           sync.Mutex
 }
 
 type queue struct {
@@ -70,6 +75,26 @@ func (e *Engine) path() string {
 
 func (e *Engine) readState() (runtimeState, error) {
 	var s runtimeState
+	if e.RuntimeError != nil {
+		return s, e.RuntimeError
+	}
+	if e.Runtime != nil {
+		err := e.Runtime.Import("qos", e.path(), func(data []byte, tx *sql.Tx) error {
+			if err := json.Unmarshal(data, &s); err != nil {
+				return err
+			}
+			return runtimedb.PutQoS(tx, e.BootID, data)
+		})
+		if err != nil {
+			return s, err
+		}
+		data, err := e.Runtime.QoS(e.BootID)
+		if err != nil || data == nil {
+			return runtimeState{}, err
+		}
+		err = json.Unmarshal(data, &s)
+		return s, err
+	}
 	b, err := os.ReadFile(e.path())
 	if os.IsNotExist(err) {
 		return s, nil
@@ -413,6 +438,16 @@ func (e *Engine) checkIngress(ctx context.Context, q queue) error {
 }
 
 func (e *Engine) saveState(s runtimeState) error {
+	if e.RuntimeError != nil {
+		return e.RuntimeError
+	}
+	if e.Runtime != nil {
+		b, err := json.Marshal(s)
+		if err != nil {
+			return err
+		}
+		return e.Runtime.SaveQoS(e.BootID, b)
+	}
 	if err := os.MkdirAll(filepath.Dir(e.path()), 0700); err != nil {
 		return err
 	}

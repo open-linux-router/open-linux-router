@@ -454,7 +454,7 @@ func TestLatencySitesEndpoint(t *testing.T) {
 		return fmt.Errorf("unknown exit %q", name)
 	}
 	monitor.probe = func(context.Context, string) (float64, error) { t.Fatal("settings must not probe"); return 0, nil }
-	h := HTTP{Latency: monitor}.Handler()
+	h := HTTP{Latency: monitor, Lock: core.NewLock()}.Handler()
 	body := []CustomLatencySite{{Name: "YouTube", URL: "https://www.youtube.com/", Exit: "Proxy"}}
 	w := do(t, h, http.MethodPut, "/latency/sites", body)
 	if w.Code != http.StatusOK {

@@ -95,7 +95,8 @@ four-hour totals. History is joined to the device's currently observed addresses
 It begins accumulating after daemon startup. Sampling and UI
 refresh run every ten seconds; the first reading establishes a baseline.
 History retains at most 14 days and is restored from
-`/var/lib/open-linux-router/activity.json` after restarts/upgrades. Atomic
+SQLite's `activity` table in `/var/lib/open-linux-router/runtime.db` after
+restarts/upgrades. Transactional
 checkpoints run every minute and on normal shutdown; an abrupt power loss may
 lose the latest minute. It is not reconstructed from cumulative counters. Changing
 device addresses can hide samples associated with its previous addresses.

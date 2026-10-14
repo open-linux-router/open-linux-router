@@ -2,6 +2,7 @@ package devices
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/runtimedb"
 )
 
 // When each device was last heard from.
@@ -64,6 +66,7 @@ type Seen struct {
 	Source HeardSource
 
 	Log *slog.Logger
+	db  *runtimedb.Store
 
 	mu    sync.Mutex
 	last  map[string]time.Time
@@ -78,6 +81,40 @@ type Seen struct {
 // existed for one visit; a real device away this long is one nobody needs a
 // "seen" time for.
 const Forget = 90 * 24 * time.Hour
+
+func OpenSeenDB(db *runtimedb.Store, legacy string, source HeardSource, log *slog.Logger) (*Seen, error) {
+	err := db.Import("seen", legacy, func(data []byte, tx *sql.Tx) error {
+		var f seenFile
+		if err := json.Unmarshal(data, &f); err != nil {
+			return err
+		}
+		if f.Version != 1 {
+			return fmt.Errorf("unsupported seen version %d", f.Version)
+		}
+		rows := []runtimedb.Seen{}
+		for mac, at := range f.Seen {
+			canon, err := core.NormalizeMAC(mac)
+			if err != nil {
+				return err
+			}
+			rows = append(rows, runtimedb.Seen{MAC: canon, At: at})
+		}
+		return runtimedb.PutSeen(tx, rows)
+	})
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Seen()
+	if err != nil {
+		return nil, err
+	}
+	s := NewSeen("", source, log)
+	s.db = db
+	for _, row := range rows {
+		s.last[row.MAC] = row.At
+	}
+	return s, nil
+}
 
 // seenFile is the file's shape. Versioned because it outlives the release
 // that wrote it.
@@ -177,8 +214,20 @@ func (s *Seen) Flush(now time.Time) error {
 			s.dirty = true
 		}
 	}
-	if s.Path == "" || !s.dirty {
+	if (s.Path == "" && s.db == nil) || !s.dirty {
 		s.mu.Unlock()
+		return nil
+	}
+	if s.db != nil {
+		defer s.mu.Unlock()
+		rows := []runtimedb.Seen{}
+		for mac, at := range s.last {
+			rows = append(rows, runtimedb.Seen{MAC: mac, At: at})
+		}
+		if err := s.db.SaveSeen(rows); err != nil {
+			return err
+		}
+		s.dirty = false
 		return nil
 	}
 	data, err := json.Marshal(seenFile{Version: 1, Seen: s.last})

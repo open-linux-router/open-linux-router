@@ -816,11 +816,16 @@ func (h HTTP) putLatencySites(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusBadRequest, "expected a list of sites")
 		return
 	}
-	if err := h.Latency.Custom.Replace(sites); err != nil {
-		core.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	if err := h.Lock.Do(r.Context(), func() error {
+		if err := h.Latency.Custom.Replace(sites); err != nil {
+			core.WriteError(w, http.StatusBadRequest, err.Error())
+			return nil
+		}
+		core.WriteJSON(w, http.StatusOK, h.Latency.Custom.Config())
+		return nil
+	}); err != nil {
+		core.WriteError(w, http.StatusServiceUnavailable, err.Error())
 	}
-	core.WriteJSON(w, http.StatusOK, h.Latency.Custom.Config())
 }
 
 func (h HTTP) getLatencyIcon(w http.ResponseWriter, r *http.Request) {

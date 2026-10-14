@@ -55,6 +55,7 @@ import (
 	"strings"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/runtimedb"
 )
 
 // Desired is what olr owns of the host's network configuration.
@@ -86,6 +87,8 @@ type Finding struct {
 //
 // Every field is a seam for tests; the zero value is the real box.
 type Applier struct {
+	Runtime      *runtimedb.Store
+	RuntimeError error
 	// Root prefixes every path, so tests work in a temp directory. Empty is /.
 	Root string
 
@@ -145,6 +148,9 @@ func (a Applier) restart(ctx context.Context, unit string) error {
 // same contract as every writer in this tree (design.md §5.2): no rollback,
 // and what did happen is reported.
 func (a Applier) Apply(ctx context.Context, d Desired) ([]core.Step, error) {
+	if a.RuntimeError != nil {
+		return nil, a.RuntimeError
+	}
 	if err := a.CheckIPv6Auto(d.IPv6Auto); err != nil {
 		return nil, err
 	}

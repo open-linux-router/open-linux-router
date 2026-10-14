@@ -51,6 +51,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/mcp"
 	"github.com/open-linux-router/open-linux-router/internal/qos"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
+	"github.com/open-linux-router/open-linux-router/internal/runtimedb"
 	socksout "github.com/open-linux-router/open-linux-router/internal/socksout"
 	"github.com/open-linux-router/open-linux-router/internal/system"
 	"github.com/open-linux-router/open-linux-router/internal/tools"
@@ -253,9 +254,22 @@ func run(args []string) error {
 	}
 
 	srv := core.New()
-	sessions, err := system.OpenSessions(filepath.Join(opts.root, "/var/lib/open-linux-router/sessions.json"))
-	if err != nil {
-		return fmt.Errorf("loading browser sessions: %w", err)
+	runtimeDB, runtimeErr := runtimedb.Open(filepath.Join(opts.root, runtimedb.Path))
+	if runtimeErr != nil {
+		logger.Error("runtime database unavailable; history and sessions will be memory-only, QoS changes disabled", "error", runtimeErr)
+	} else {
+		defer runtimeDB.Close()
+	}
+	sessions := system.NewSessions()
+	if runtimeDB != nil {
+		restored, loadErr := restoreHistory(runtimeDB, logger, func() (*system.Sessions, error) {
+			return system.OpenSessionsDB(runtimeDB, filepath.Join(opts.root, "/var/lib/open-linux-router/sessions.json"))
+		})
+		if loadErr != nil {
+			logger.Error("could not restore sessions; existing logins invalidated", "error", loadErr)
+		} else {
+			sessions = restored
+		}
 	}
 
 	// `link` is mounted first, matching the store's order and the order a box
@@ -292,7 +306,7 @@ func run(args []string) error {
 	// against a scratch root edits the scratch root's files and signals
 	// nothing. Both modules run it after every apply, because what it owns is
 	// their two configs joined — hostDesired has the join.
-	hostApplier := host.Applier{Root: opts.root}
+	hostApplier := host.Applier{Root: opts.root, Runtime: runtimeDB, RuntimeError: runtimeErr}
 	takeHost := func(ctx context.Context) ([]core.Step, error) {
 		d, err := hostDesired(store)
 		if err != nil {
@@ -373,7 +387,17 @@ func run(args []string) error {
 
 	// When each device was last heard from: the one piece of presence the
 	// devices module keeps, sampled below for as long as olrd runs.
-	seen := devices.NewSeen(devices.SeenPath(opts.root), devices.Neighbours{}, logger)
+	seen := devices.NewSeen("", devices.Neighbours{}, logger)
+	if runtimeDB != nil {
+		restored, loadErr := restoreHistory(runtimeDB, logger, func() (*devices.Seen, error) {
+			return devices.OpenSeenDB(runtimeDB, devices.SeenPath(opts.root), devices.Neighbours{}, logger)
+		})
+		if loadErr != nil {
+			logger.Error("could not restore last-seen history", "error", loadErr)
+		} else {
+			seen = restored
+		}
+	}
 
 	// Hoisted out of the Mount call because `ingress` reads devices through it
 	// too. One Applier, so both surfaces answer from the same join rather than
@@ -398,7 +422,13 @@ func run(args []string) error {
 		Events:  srv.Events(),
 	}.Routes(), devices.Config{})
 
-	qosApplier := qos.Applier{Store: store, Engine: &qos.Engine{Store: store, Devices: devicesApplier}}
+	bootID, bootErr := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if bootErr != nil || strings.TrimSpace(string(bootID)) == "" {
+		runtimeErr = fmt.Errorf("cannot identify current boot: %v", bootErr)
+	}
+	qosApplier := qos.Applier{Store: store, Engine: &qos.Engine{Store: store, Devices: devicesApplier,
+		Runtime: runtimeDB, RuntimeError: runtimeErr, BootID: strings.TrimSpace(string(bootID)),
+		StatePath: filepath.Join(opts.root, "/run/olr/qos.json")}}
 	srv.Mount(qos.ModuleName, qos.HTTP{Applier: qosApplier, Lock: srv.ApplyLock(), Events: srv.Events()}.Routes(), qos.Config{})
 
 	// `gateway` is the one module whose configuration lives in the kernel
@@ -408,7 +438,7 @@ func run(args []string) error {
 	// touching anything.
 	prober := gateway.NewProber()
 	latency := gateway.NewLatencyMonitor()
-	customLatency, err := gateway.NewCustomLatencyMonitor(core.RootedConfigPath(opts.root) + ".latency-sites")
+	customLatency, err := gateway.OpenCustomLatencyConfig(store)
 	if err != nil {
 		return fmt.Errorf("loading custom latency sites: %w", err)
 	}
@@ -464,6 +494,7 @@ func run(args []string) error {
 	// network that moved to a new prefix is what everything built from the
 	// networks has to follow.
 	follower := newDelegationFollower(opts.root)
+	follower.db, follower.dbError = runtimeDB, runtimeErr
 	follower.delegation, follower.link, follower.writer = delegation, linkApplier, dial.NewWriter()
 	follower.srv, follower.logger, follower.dependents = srv, logger, follow(&followNetworks)
 	delegation.Changed = follower.changed
@@ -488,9 +519,16 @@ func run(args []string) error {
 	// to the routing ones under the same prefix (gateway.HTTP.NAT), so `olr
 	// routes` and the MCP tool list see one module rather than the two packages
 	// that implement it.
-	activity, err := gateway.OpenActivity(filepath.Join(opts.root, "/var/lib/open-linux-router/activity.json"))
-	if err != nil {
-		return fmt.Errorf("opening activity history: %w", err)
+	activity := gateway.NewActivity()
+	if runtimeDB != nil {
+		restored, loadErr := restoreHistory(runtimeDB, logger, func() (*gateway.Activity, error) {
+			return gateway.OpenActivityDB(runtimeDB, filepath.Join(opts.root, "/var/lib/open-linux-router/activity.json"))
+		})
+		if loadErr != nil {
+			logger.Error("could not restore activity history", "error", loadErr)
+		} else {
+			activity = restored
+		}
 	}
 	srv.Mount(gateway.ModuleName, gateway.HTTP{
 		Activity: activity,
@@ -841,7 +879,16 @@ func run(args []string) error {
 		dhcpBackend(applier),
 	}, srv.ApplyLock(), superviseEvery, logger)
 
-	go seen.Run(ctx, seenEvery, seenWrite)
+	seenDone := make(chan struct{})
+	seenCtx, stopSeen := context.WithCancel(ctx)
+	go func() { defer close(seenDone); seen.Run(seenCtx, seenEvery, seenWrite) }()
+	defer func() {
+		stopSeen()
+		<-seenDone
+		if err := seen.Flush(time.Now()); err != nil {
+			logger.Warn("could not save last-seen times", "error", err)
+		}
+	}()
 	go latency.Run(ctx)
 	activityDone := make(chan struct{})
 	activityCtx, stopActivity := context.WithCancel(ctx)
@@ -911,10 +958,6 @@ func run(args []string) error {
 	err = server.Shutdown(shutdownCtx)
 	for _, l := range listeners {
 		l.Close()
-	}
-	// After the server, so a request still being answered cannot race it.
-	if ferr := seen.Flush(time.Now()); ferr != nil {
-		logger.Warn("could not save last-seen times", "error", ferr)
 	}
 	return err
 }
