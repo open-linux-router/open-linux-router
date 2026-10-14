@@ -596,7 +596,7 @@ function ServiceLinks({ services, domain, className, compact = false }: { servic
 
 // The browser caches successful icons for a day; change the URL when the
 // published destination or its icon-discovery path changes.
-function serviceIconVersion(service: Service, domain?: string): string {
+export function serviceIconVersion(service: Service, domain?: string): string {
   const { device, host, port, scheme } = service.upstream
   const identity = JSON.stringify([service.name, domain, service.link_path, service.icon, device, host, port, scheme])
   let hash = 2166136261
@@ -606,7 +606,7 @@ function serviceIconVersion(service: Service, domain?: string): string {
   return (hash >>> 0).toString(36)
 }
 
-function ServiceIcon({ name, version, choice }: { name: string; version: string; choice?: string }) {
+export function ServiceIcon({ name, version, choice }: { name: string; version: string; choice?: string }) {
   const [icon, setIcon] = useState<string>()
   useEffect(() => {
     if (choice) return

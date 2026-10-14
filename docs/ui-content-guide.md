@@ -83,7 +83,8 @@ uplink, priority and live traffic on the right. Reuse Overview rate meters with
 Download and Upload labels beside narrower bars, without arrows.
 Total below Upload shows cumulative download then upload with the Overview arrows;
 unavailable counters show dashes. Services below Group lists matching configured
-services with an add action that opens Ingress and prefills the current device.
+services as icons that open their webpages, with an equally sized add action
+that opens Ingress and prefills the current device. Empty lists show only the add action.
 Devices without a reserved name/address prefill their observed host instead.
 Omit Last seen. Group is a tag that opens its edit dialog.
 Compact Uplink and Priority segmented selectors lead the right column, in that

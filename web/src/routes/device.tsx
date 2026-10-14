@@ -16,7 +16,8 @@ import { useDeviceList } from '@/features/devices/queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
 import { DevicePolicy } from '@/features/qos/device-policy'
 import { useTrafficView } from '@/features/topology/traffic'
-import { useIngressConfig } from '@/features/ingress/queries'
+import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
+import { ServiceIcon, serviceIconVersion } from '@/features/topology/nodes'
 import { formatBytes } from '@/lib/utils'
 
 export function DevicePage() {
@@ -24,6 +25,8 @@ export function DevicePage() {
   const devices = useDeviceList()
   const traffic = useGatewayTraffic()
   const ingress = useIngressConfig()
+  const ingressStatus = useIngressStatus()
+  const serviceDomain = ingressStatus.data?.domain
   const dnsConfig = useDnsConfig()
   const [dnsInspection, setDnsInspection] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -50,8 +53,15 @@ export function DevicePage() {
     <div className="space-y-4 pb-12">
       <DeviceInlineEditor key={device.mac} device={device} services={
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {ingress.isError ? <span className="text-destructive">Unavailable</span> : ingress.isPending ? <span className="text-muted-foreground">Loading…</span> : services.length ? services.map((service) => <Link key={service.name} to="/access/ingress" className="max-w-full rounded-md hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"><Badge variant="secondary" className="whitespace-normal break-all">{service.name}</Badge></Link>) : <span className="text-muted-foreground">None</span>}
-          <Button variant="outline" size="icon" aria-label="Add service for this device" nativeButton={false} render={<Link to={`/access/ingress?device=${encodeURIComponent(device.mac)}`} />}><Plus className="size-4" /></Button>
+          {ingress.isError ? <span className="text-destructive">Unavailable</span> : ingress.isPending ? <span className="text-muted-foreground">Loading…</span> : services.map((service) => {
+            const version = serviceIconVersion(service, serviceDomain)
+            const icon = <ServiceIcon key={version} name={service.name} version={version} choice={service.icon} />
+            const label = `${service.name}.${serviceDomain}${service.link_path ?? ''}`
+            const className = 'flex size-7 shrink-0 items-center justify-center rounded-md bg-muted transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring'
+            return serviceDomain ? <a key={service.name} href={`https://${label}`} target="_blank" rel="noopener noreferrer" title={`Open ${label}`} aria-label={`Open ${label}`} className={className}>{icon}</a>
+              : <span key={service.name} title={ingressStatus.isError ? `${service.name}: service address unavailable` : service.name} className={className}>{icon}</span>
+          })}
+          <Link to={`/access/ingress?device=${encodeURIComponent(device.mac)}`} aria-label="Add service for this device" title="Add service" className="flex size-7 shrink-0 items-center justify-center rounded-md border transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"><Plus className="size-4" /></Link>
         </div>
       } total={<span className="inline-flex flex-wrap justify-end gap-3 tabular-nums" title="Traffic through this router since counters were reset">
         <span className="inline-flex items-center gap-0.5"><ArrowDown className="size-3 text-receive" aria-label="Download" />{flow.counting ? formatBytes(usage?.down ?? 0) : '—'}</span>

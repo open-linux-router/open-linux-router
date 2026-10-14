@@ -139,8 +139,9 @@ a clickable tag with a muted surface that opens its edit dialog.
 Device traffic reuses Overview meters with visible direction labels.
 At desktop widths both halves share five grid rows: Vendor/Uplink, MAC/Priority,
 IP/Download, Group/Upload and Services/Total. Services shows matching configured
-services and a trailing outlined add button opening Ingress with the device
-prefilled. Total uses the Overview download/upload arrows and byte values.
+services as 28px icon tiles linking directly to their published webpages. A matching
+28px outlined add button opens Ingress with the device prefilled. An empty list
+shows only the add button. Total uses the Overview download/upload arrows and byte values.
 Match row padding and let wrapped content grow both sides together; feedback follows the aligned rows.
 Device speed bars use half their available value width from 640px, aligned right;
 on phones they retain the full width so rates and limit actions remain readable.
