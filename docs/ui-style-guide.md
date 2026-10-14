@@ -132,8 +132,9 @@ title from two columns of 36px desktop / 44px mobile minimum-height label/value 
 and settings on the left, observed state and traffic on the right. Group and Uplink values use clickable tags with muted surfaces that open edit dialogs.
 Device traffic reuses Overview meters and total rows without a heading.
 The device title contains a right-aligned 14-day traffic dot matrix: one column
-per day and six four-hour periods per column, using fixed 8px round dots and
-4px gaps in both directions. Never stretch columns across the title width.
+per day and six four-hour periods per column, using 3px rounded blocks and
+14px squares, 8px column gaps and 2px row gaps. The matrix spans 300px
+and fills more of the title height with 1px inner padding.
 Fade only the left edge toward overlapping identity content; keep the right
 side fully visible, including muted zero/unknown dots. Use the success
 token in four intensities for traffic magnitude. No axes,
@@ -187,7 +188,8 @@ and control hit targets. The footer theme control is a single icon. Clicking cyc
 auto, light and dark; its accessible label and tooltip name the current and next theme.
 
 Use 150–200ms color/opacity transitions. Motion should explain a state change;
-no ambient animation. Honor prefers-reduced-motion in the global stylesheet.
+no ambient animation except the current device-activity block's gentle four-second
+opacity breath. Honor prefers-reduced-motion in the global stylesheet.
 
 ## Page coverage and review checklist
 

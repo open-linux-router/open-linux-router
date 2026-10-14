@@ -178,6 +178,15 @@
     }
 }
 
+@keyframes device-activity-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.device-activity-current {
+  animation: device-activity-breathe 4s ease-in-out infinite;
+}
+
 /* Nothing here is load-bearing motion — every animation is decoration on a
    state change that also happens instantly. So honouring the preference is a
    flat opt-out rather than a set of reduced variants. */

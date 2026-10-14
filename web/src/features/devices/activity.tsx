@@ -36,14 +36,14 @@ export function DeviceActivity({ addresses }: { addresses: string[] }) {
     }
     const total = bytes ? bytes.up + bytes.down : 0
     const level = total === 0 ? 0 : total < 50 * 1024 ** 2 ? 1 : total < 250 * 1024 ** 2 ? 2 : total < 1024 ** 3 ? 3 : 4
-    const time = `${at.toLocaleDateString()} ${at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}–${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-    const detail = history.isPending ? 'Loading activity' : history.isError ? 'Activity unavailable' : !bytes ? 'No samples for these addresses' : `↓ ${formatBytes(bytes.down)} · ↑ ${formatBytes(bytes.up)} · Sampled traffic${end > now ? ' · In progress' : ''}`
+    const time = `${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')} ${hour}:00-${hour + 4}:00`
+    const detail = history.isPending ? 'Loading' : history.isError ? 'Unavailable' : !bytes ? 'No data' : `↓ ${formatBytes(bytes.down)} · ↑ ${formatBytes(bytes.up)}`
     return <Tooltip key={i}>
-      <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} className={`size-2 min-h-0 shrink-0 rounded-full p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]}`} />
+      <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} className={`h-full w-full min-h-0 min-w-0 rounded-[3px] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]} ${end > now ? 'device-activity-current' : ''}`} />
       <TooltipContent className="flex-col items-start animate-none!"><span>{time}</span><span>{detail}</span></TooltipContent>
     </Tooltip>
   })
-  return <div className="absolute right-0 top-0 w-max [mask-image:linear-gradient(to_right,transparent,black_40%)]" role="group" aria-label="Traffic activity, last 14 days, oldest to newest from left to right, six four-hour periods per day from top to bottom">
-    <div className="grid grid-flow-col grid-cols-[repeat(14,8px)] grid-rows-[repeat(6,8px)] gap-1 py-0.5">{cells}</div>
+  return <div className="absolute right-0 -top-2 w-max max-w-full [mask-image:linear-gradient(to_right,transparent,black_40%)]" role="group" aria-label="Traffic activity, last 14 days, oldest to newest from left to right, six four-hour periods per day from top to bottom">
+    <div className="grid grid-flow-col grid-cols-[repeat(14,14px)] grid-rows-[repeat(6,14px)] gap-x-2 gap-y-0.5 py-px">{cells}</div>
   </div>
 }
