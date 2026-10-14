@@ -7,17 +7,21 @@ import { formatBytes } from '@/lib/utils'
 
 interface Bucket { at: string; bytes: { up: number; down: number } }
 
-const fills = ['bg-muted', 'bg-success/45', 'bg-success/60', 'bg-success/80', 'bg-success']
+const fills = ['bg-[var(--activity-empty)]', 'bg-[var(--activity-low)]', 'bg-[var(--activity-medium)]', 'bg-[var(--activity-high)]', 'bg-[var(--activity-peak)]']
 
 export function DeviceActivity({ addresses }: { addresses: string[] }) {
   const container = useRef<HTMLDivElement>(null)
-  const [days, setDays] = useState(1)
+  const [{ days, gap }, setLayout] = useState({ days: 1, gap: 2 })
   useLayoutEffect(() => {
     const element = container.current
     if (!element) return
-    const update = (width: number) => setDays(Math.max(1, Math.floor((width + 8) / 22)))
-    update(element.getBoundingClientRect().width)
-    const observer = new ResizeObserver(([entry]) => update(entry.contentRect.width))
+    const update = (width: number, height: number) => {
+      const gap = Math.max(0, (height - 2 - 6 * 14) / 5)
+      setLayout({ days: Math.max(1, Math.floor((width + gap) / (14 + gap))), gap })
+    }
+    const bounds = element.getBoundingClientRect()
+    update(bounds.width, bounds.height)
+    const observer = new ResizeObserver(([entry]) => update(entry.contentRect.width, entry.contentRect.height))
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
@@ -51,11 +55,11 @@ export function DeviceActivity({ addresses }: { addresses: string[] }) {
     const time = `${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')} ${hour}:00-${hour + 4}:00`
     const detail = history.isPending ? 'Loading' : history.isError ? 'Unavailable' : !bytes ? 'No data' : `↓ ${formatBytes(bytes.down)} · ↑ ${formatBytes(bytes.up)}`
     return <Tooltip key={i}>
-      <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} className={`h-full w-full min-h-0 min-w-0 rounded-[3px] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]} ${end > now ? 'device-activity-current' : ''}`} />
+      <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} className={`h-full w-full min-h-0 min-w-0 rounded-[3px] p-0 ring-1 ring-inset ring-foreground/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]} ${end > now ? 'device-activity-current' : ''}`} />
       <TooltipContent className="flex-col items-start animate-none!"><span>{time}</span><span>{detail}</span></TooltipContent>
     </Tooltip>
   })
-  return <div ref={container} className="absolute right-0 -top-2 w-2/3 [mask-image:linear-gradient(to_right,transparent,black_40%)]" role="group" aria-label={`Traffic activity, last ${days} days, oldest to newest from left to right, six four-hour periods per day from top to bottom`}>
-    <div className="grid grid-flow-col auto-cols-[14px] grid-rows-[repeat(6,14px)] justify-end gap-x-2 gap-y-0.5 py-px">{cells}</div>
+  return <div ref={container} className="absolute right-0 -top-2 h-24 w-2/3 [mask-image:linear-gradient(to_right,transparent,black_8%)]" role="group" aria-label={`Traffic activity, last ${days} days, oldest to newest from left to right, six four-hour periods per day from top to bottom`}>
+    <div className="grid grid-flow-col auto-cols-[14px] grid-rows-[repeat(6,14px)] justify-end py-px" style={{ gap }}>{cells}</div>
   </div>
 }

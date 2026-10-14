@@ -87,6 +87,9 @@ or explicitly report missing/unavailable data. Partial samples are not exact
 four-hour totals. History is joined to the device's currently observed addresses.
 It is volatile and begins accumulating after daemon startup. Sampling and UI
 refresh run every ten seconds; the first reading establishes a baseline.
+History lives only in daemon memory, retains at most 14 days, and is cleared
+by restarts/upgrades. It is not reconstructed from cumulative counters. Changing
+device addresses can hide samples associated with its previous addresses.
 
 Device Uplink offers Default (inherit interface/system routing) and named
 exits only. Existing explicit router-connection overrides remain accurately

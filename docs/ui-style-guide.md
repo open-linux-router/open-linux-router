@@ -133,13 +133,14 @@ and settings on the left, observed state and traffic on the right. Group and Upl
 Device traffic reuses Overview meters and total rows without a heading.
 The device title contains a right-aligned traffic matrix occupying two thirds
 of the title width: one column per day and six four-hour periods per column.
-Cells stay 14px square with 3px corners, 8px column gaps and 2px row gaps.
+Cells stay 14px square with 3px corners. Derive the row gap from the 96px
+matrix height, six cells and 1px vertical padding; use that same gap horizontally.
 Fit as many complete date columns as the available width allows; wider layouts
 show more dates rather than stretching cells. Keep today at the right edge,
 the current-period hint and 1px inner padding.
-Fade only the left edge toward overlapping identity content; keep the right
-side fully visible, including muted zero/unknown dots. Use the success
-token in four intensities for traffic magnitude. No axes,
+Fade only the leftmost 8% toward overlapping identity content; keep the rest
+fully visible, including zero/unknown dots. Use the shared opaque activity
+palette in four green intensities and subtle inset cell boundaries. No axes,
 legend, heading or helper text; tooltips provide dates, units and sample state.
 Priority leads the right column with a segmented selector. Clicking each speed bar opens its limit dialog; omit repeated rate headings, separate limit fields and the QoS divider/status row.
 Device policies apply automatically, without a switch. Keep QoS controls on
