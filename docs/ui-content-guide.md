@@ -8,9 +8,9 @@ supporting text. This guide complements [the visual guide](ui-style-guide.md).
 
 Device priority and speed limits apply automatically, without an enable switch.
 Use “applied” only after observing matching runtime state. Show pending device
-placement and apply failures explicitly. Blank means unlimited. Optional link
-rates help priority manage upstream congestion; explain that distinction beside
-the rate fields rather than implying a link rate is required for device limits.
+placement and apply failures explicitly. Blank means unlimited. Keep the user
+workflow focused on per-device priority and speed limits; do not add aggregate
+QoS settings to Gateway or imply they are required for device limits.
 
 Before adding content, write down the page's primary task and what the user needs
 to decide next. Give each visible element a purpose in that decision. Remove

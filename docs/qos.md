@@ -55,7 +55,8 @@ QoS API, not the owner of the policy.
 The router needs configured upload and download *shaping rates*, based on
 measured throughput rather than the physical Ethernet port speed. Otherwise
 priority cannot reliably control the bottleneck in an ISP modem or upstream
-network. Provide one optional setup surface for these rates; blank is unlimited.
+network. Aggregate rates remain available through configuration/API for advanced
+use; the web UI exposes only per-device controls, with no Gateway rate form.
 The Overview page's browser-local utilization limits are display preferences;
 they must not silently become router configuration or imply that QoS is on.
 
@@ -73,7 +74,7 @@ existing root qdiscs before writing, refuse a foreign owner, and remove only
 objects it can identify as its own. The kernel state is observed fresh for
 plan/drift/status; a daemon restart restores stored intent without replacing a
 correct running queue. Adding, editing or clearing a policy may
-interrupt queued packets; link rate changes have UI confirmation. Report
+interrupt queued packets; aggregate rate changes also rebuild queues. Report
 partial failures rather than claiming a transaction.
 
 Use Linux `tc` for shaping and queueing. A classful hierarchy (for example HTB

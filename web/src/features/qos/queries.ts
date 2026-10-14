@@ -8,19 +8,8 @@ export interface QosConfig { enabled?: boolean; download_mbps?: number; upload_m
 export interface QosStatus { enabled: boolean; active: boolean; reason?: string; pending?: string[] }
 interface Result { config: QosConfig; status: QosStatus }
 
-export function useQosApply() {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: (config: QosConfig) => api.put<Result>('/api/qos/config', config),
-    onSettled: () => client.invalidateQueries({ queryKey: ['qos'] }),
-  })
-}
-
 export function useQosConfig() {
   return useQuery({ queryKey: ['qos', 'config'], queryFn: () => api.get<QosConfig>('/api/qos/config') })
-}
-export function useQosStatus() {
-  return useQuery({ queryKey: ['qos', 'status'], queryFn: () => api.get<QosStatus>('/api/qos/status'), refetchInterval: 10000 })
 }
 export function useQosDeviceApply(mac: string) {
   const client = useQueryClient()

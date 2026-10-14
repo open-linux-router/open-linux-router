@@ -5,7 +5,6 @@ import { Link, useLocation } from 'react-router'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { NetworkStatus } from '@/features/link/network-status'
 import { useGatewayConfig, useGatewayStatus } from '@/features/gateway/queries'
-import { QosLinkRates } from '@/features/qos/link-rates'
 
 /**
  * The gateway, on the page you land on.
@@ -39,7 +38,6 @@ export function GatewayPage() {
       )}
 
       <NetworkStatus />
-      <QosLinkRates />
     </div>
   )
 }
