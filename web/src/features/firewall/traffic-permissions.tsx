@@ -24,7 +24,7 @@ export function TrafficPermissions({ status }: { status: FirewallStatus }) {
       ) : (
         <>
           <VerticalSankey flows={flows} />
-          <p id="firewall-chart-scroll" className="mt-2 text-sm text-muted-foreground">Source → category → decision, from top to bottom. Scroll horizontally to see all categories.</p>
+          <p id="firewall-chart-scroll" className="mt-2 text-sm text-muted-foreground">Both sides show traffic arriving at OLR. Scroll horizontally to see all categories.</p>
           <details className="mt-4 text-sm">
             <summary className="cursor-pointer focus-visible:outline-2 focus-visible:outline-primary">Matching conditions and counts</summary>
             <ul className="mt-4 divide-y">

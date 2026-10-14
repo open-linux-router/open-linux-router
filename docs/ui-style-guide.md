@@ -199,9 +199,11 @@ and a relevant next action where one exists.
 
 ## Responsive behavior and motion
 
-Firewall uses one vertical Sankey with exactly three rows, all flowing down:
-sources → semantic categories by source → Allowed/Blocked. Source order is
-external, trusted/LAN, router-local. Keep source and semantic category labels visible. Use one measured
+Firewall uses one vertical Sankey with three visual rows: external semantic
+categories above, one virtual OLR / Firewall node in the middle, and trusted/LAN
+and router-local semantic categories below. Both sides flow toward OLR. These
+positions distinguish origins, not successive processing stages. Keep source,
+semantic category and explicit Allowed/Blocked labels on each outer node. Use one measured
 packet scale and semantic receive/transmit and success/warning colors. Reserve
 label space for small nonzero paths without inflating their widths. Provide an
 accessible counts disclosure; narrow screens scroll inside the diagram without

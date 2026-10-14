@@ -1,15 +1,14 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { sourceLabels, type TrafficFlow } from './traffic-model'
 
-type Node = { id: string; title: string; packets: number; x: number; y: number; width: number; color: string; detail: string }
-type Band = { id: string; from: Node; to: Node; fromX: number; toX: number; width: number; color: string; detail: string }
-
 const barHeight = 12
-const allowedColor = 'var(--success-foreground)'
-const blockedColor = 'var(--warning-foreground)'
-const decisionColor = (verdict: string) => verdict === 'allowed' ? allowedColor : blockedColor
+const centerY = 360
+const centerHeight = 48
+const topY = 200
+const bottomY = 568
+const height = 808
 
-function lines(title: string, limit = 25): string[] {
+function lines(title: string, limit: number): string[] {
   const result: string[] = []
   for (const word of title.split(' ')) {
     const last = result.length - 1
@@ -19,8 +18,8 @@ function lines(title: string, limit = 25): string[] {
   return result
 }
 
-/** Three rows on one packet scale: sources, sourced categories, decisions.
- * All ribbons travel down; horizontal scrolling starts at the first node. */
+/** Both outer rows are arrivals at one virtual OLR/firewall boundary.
+ * Vertical position distinguishes origins; it does not imply forwarding. */
 export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
   const container = useRef<HTMLDivElement>(null)
   const [availableWidth, setAvailableWidth] = useState(900)
@@ -31,108 +30,85 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
     resize.observe(element)
     return () => resize.disconnect()
   }, [])
-  const sourceOrder = ['outside', 'inside', 'local'] as const
-  const ordered = sourceOrder.flatMap(source => flows.filter(flow => flow.source === source))
-  const width = Math.max(availableWidth, 900, ordered.length * 96 + 48)
-  const labelWidth = Math.max(84, Math.min(176, (width - 48) / Math.max(1, ordered.length) - 12))
-  const total = flows.reduce((sum, flow) => sum + flow.packets, 0)
-  const nodes: Node[] = []
-  const bands: Band[] = []
-  const sourceY = 96
-  const categoryY = 340
-  const decisionY = 560
-  const height = 660
 
-  const sourceRows = (rows: TrafficFlow[]) => [...new Set(rows.map(flow => flow.source))].map(source => ({
-    id: `source:${source}`, title: sourceLabels[source],
-    packets: rows.filter(flow => flow.source === source).reduce((sum, flow) => sum + flow.packets, 0),
-    color: source === 'outside' ? 'var(--receive)' : 'var(--transmit)', detail: sourceLabels[source],
-  }))
-  const categories = (rows: TrafficFlow[]) => rows.map(flow => ({
-    id: flow.id, title: flow.category, packets: flow.packets, color: decisionColor(flow.verdict),
-    detail: `${sourceLabels[flow.source]} → ${flow.category} → ${flow.verdict === 'allowed' ? 'Allowed' : 'Blocked'}\n${flow.packets.toLocaleString()} packets · ${flow.bytes.toLocaleString()} bytes\n${flow.descriptions.join('\n')}`,
-  }))
-  const decisions = (['allowed', 'blocked'] as const).flatMap(verdict => {
-    const packets = flows.filter(flow => flow.verdict === verdict).reduce((sum, flow) => sum + flow.packets, 0)
-    return packets ? [{ id: verdict, title: verdict === 'allowed' ? 'Allowed' : 'Blocked', packets, color: decisionColor(verdict), detail: 'Total from all sources' }] : []
-  })
-  const rows = [sourceRows(ordered), categories(ordered), decisions]
-  // Reserve label space even for tiny but nonzero paths, while preserving the
-  // same pixels-per-packet for every bar and ribbon across the entire graph.
+  const outside = flows.filter(flow => flow.source === 'outside')
+  const inside = (['inside', 'local'] as const).flatMap(source => flows.filter(flow => flow.source === source))
+  const rows = [outside, inside]
+  const maxNodes = Math.max(1, ...rows.map(row => row.length))
+  const width = Math.max(availableWidth, 900, maxNodes * 120 + 48)
+  const labelWidth = Math.max(108, Math.min(176, (width - 48) / maxNodes - 12))
+  const total = flows.reduce((sum, flow) => sum + flow.packets, 0)
+
+  // Labels reserve space without enlarging tiny measured bars. All links and
+  // both sides of the virtual boundary share the same pixels-per-packet.
   let low = 0
   let high = (width - 48) / total
   for (let i = 0; i < 40; i++) {
     const candidate = (low + high) / 2
-    if (rows.every((row, index) => row.reduce((sum, node) => sum + Math.max(index === 1 ? labelWidth : 176, node.packets * candidate), 0) + Math.max(0, row.length - 1) * 12 <= width - 48)) low = candidate
+    if (rows.every(row => row.reduce((sum, flow) => sum + Math.max(labelWidth, flow.packets * candidate), 0) + Math.max(0, row.length - 1) * 12 <= width - 48)) low = candidate
     else high = candidate
   }
   const scale = low
-  const place = (row: Omit<Node, 'x' | 'y' | 'width'>[], y: number) => {
-    const space = y === categoryY ? labelWidth : 176
-    const span = row.reduce((sum, node) => sum + Math.max(space, node.packets * scale), 0) + Math.max(0, row.length - 1) * 12
+  const centerWidth = total * scale
+  const centerLeft = (width - centerWidth) / 2
+  let offset = 0
+  const nodes = rows.flatMap((row, rowIndex) => {
+    const span = row.reduce((sum, flow) => sum + Math.max(labelWidth, flow.packets * scale), 0) + Math.max(0, row.length - 1) * 12
     let cursor = (width - span) / 2
-    return row.map(node => {
-      const cell = Math.max(space, node.packets * scale)
-      const placed = { ...node, x: cursor + cell / 2, y, width: node.packets * scale }
+    return row.map(flow => {
+      const measuredWidth = flow.packets * scale
+      const cell = Math.max(labelWidth, measuredWidth)
+      const node = { flow, x: cursor + cell / 2, y: rowIndex === 0 ? topY : bottomY, width: measuredWidth, centerX: centerLeft + offset * scale, above: rowIndex === 0 }
       cursor += cell + 12
-      nodes.push(placed)
-      return placed
+      offset += flow.packets
+      return node
     })
-  }
-  const topSources = place(rows[0], sourceY)
-  const middleCategories = place(rows[1], categoryY)
-  const bottomDecisions = place(rows[2], decisionY)
-
-  const used = new Map<string, number>()
-  const connect = (items: TrafficFlow[], sources: Node[], categories: Node[]) => {
-    const offset = (node: Node, packets: number) => {
-      const prior = used.get(node.id) ?? 0
-      used.set(node.id, prior + packets)
-      return node.x - node.width / 2 + prior * scale
-    }
-    items.forEach((flow, i) => {
-      const source = sources.find(node => node.id === `source:${flow.source}`)!
-      const category = categories[i]
-      const decision = bottomDecisions.find(node => node.id === flow.verdict)!
-      const detail = category.detail
-      bands.push({ id: `${flow.id}:source`, from: source, to: category, fromX: offset(source, flow.packets), toX: category.x - category.width / 2, width: category.width, color: source.color, detail })
-      bands.push({ id: `${flow.id}:decision`, from: category, to: decision, fromX: category.x - category.width / 2, toX: offset(decision, flow.packets), width: category.width, color: category.color, detail })
-    })
-  }
-  connect(ordered, topSources, middleCategories)
+  })
+  const color = (flow: TrafficFlow) => flow.verdict === 'allowed' ? 'var(--success-foreground)' : 'var(--warning-foreground)'
+  const detail = (flow: TrafficFlow) => `${sourceLabels[flow.source]} → OLR / Firewall\n${flow.category} · ${flow.verdict === 'allowed' ? 'Allowed' : 'Blocked'}\n${flow.packets.toLocaleString()} packets · ${flow.bytes.toLocaleString()} bytes\n${flow.descriptions.join('\n')}`
 
   return (
-    <div ref={container} className="mt-4 overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="region" aria-label="Vertical firewall Sankey: source, semantic category and decision" aria-describedby="firewall-chart-scroll">
-      <svg width={width} height={height} role="img" aria-label="Three layers from top to bottom: sources, semantic categories by source, Allowed or Blocked" className="text-foreground">
-        {bands.map(band => {
-          const y1 = band.from.y + barHeight
-          const y2 = band.to.y
+    <div ref={container} className="mt-4 overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="region" aria-label="Firewall Sankey: external arrivals above OLR, LAN and local arrivals below OLR" aria-describedby="firewall-chart-scroll">
+      <svg width={width} height={height} role="img" aria-label="External traffic and LAN or local traffic both arrive at the central OLR firewall" className="text-foreground">
+        {outside.length > 0 && <text x={width / 2} y={24} fill="currentColor" fontSize={14} fontWeight={500} textAnchor="middle">From external networks</text>}
+        {inside.length > 0 && <text x={width / 2} y={height - 24} fill="currentColor" fontSize={14} fontWeight={500} textAnchor="middle">From LAN / trusted networks and this router</text>}
+        {nodes.map(node => {
+          const x1 = node.x - node.width / 2
+          const y1 = node.above ? node.y + barHeight : node.y
+          const x2 = node.centerX
+          const y2 = node.above ? centerY : centerY + centerHeight
           const mid = (y1 + y2) / 2
-          const x1 = band.fromX
-          const x2 = band.toX
-          const w = band.width
+          const w = node.width
           return (
-            <path key={band.id} d={`M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2} L ${x2 + w} ${y2} C ${x2 + w} ${mid}, ${x1 + w} ${mid}, ${x1 + w} ${y1} Z`} fill={band.color} fillOpacity={0.22}>
-              <title>{band.detail}</title>
+            <path key={`band:${node.flow.id}`} d={`M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2} L ${x2 + w} ${y2} C ${x2 + w} ${mid}, ${x1 + w} ${mid}, ${x1 + w} ${y1} Z`} fill={color(node.flow)} fillOpacity={0.22}>
+              <title>{detail(node.flow)}</title>
             </path>
           )
         })}
+        <g data-node="olr">
+          <rect x={centerLeft} y={centerY} width={centerWidth} height={centerHeight} rx={8} fill="var(--muted)" stroke="var(--transmit)">
+            <title>{`OLR / Firewall\n${total.toLocaleString()} arriving packets across all sources`}</title>
+          </rect>
+          <text x={width / 2} y={centerY + 29} fill="currentColor" fontSize={16} fontWeight={600} textAnchor="middle">OLR · Firewall</text>
+        </g>
         {nodes.map(node => {
-          const flow = ordered.find(flow => flow.id === node.id)
-          const label = lines(node.title, Math.floor((flow ? labelWidth : 176) / 7))
-          const below = node.y === decisionY
-          const origin = flow ? lines(sourceLabels[flow.source], Math.floor(labelWidth / 6)) : []
-          const labelY = below ? node.y + barHeight + 24 : node.y - 16 - (label.length + origin.length + (flow ? 1 : 0)) * 18
+          const title = lines(node.flow.category, Math.floor(labelWidth / 7))
+          const origin = lines(sourceLabels[node.flow.source], Math.floor(labelWidth / 6))
+          const labelY = node.above ? node.y - 16 - (title.length + origin.length + 2) * 18 : node.y + barHeight + 24
+          const arrowY = node.above ? node.y + 36 : node.y - 24
+          const arrowBack = node.above ? -5 : 5
           return (
-            <g key={node.id}>
-              <rect x={node.x - node.width / 2} y={node.y} width={node.width} height={barHeight} fill={node.color}>
-                <title>{`${node.detail}\n${node.packets.toLocaleString()} packets`}</title>
+            <g key={node.flow.id} data-source={node.flow.source}>
+              <rect x={node.x - node.width / 2} y={node.y} width={node.width} height={barHeight} fill={color(node.flow)}>
+                <title>{detail(node.flow)}</title>
               </rect>
-              <text x={node.x} y={labelY} fill="currentColor" fontSize={flow ? 13 : 14} textAnchor="middle">
-                {label.map((line, index) => <tspan key={index} x={node.x} dy={index ? 18 : 0}>{line}</tspan>)}
+              <path d={`M ${node.x - 5} ${arrowY + arrowBack} L ${node.x} ${arrowY} L ${node.x + 5} ${arrowY + arrowBack}`} fill="none" stroke={color(node.flow)} strokeWidth={2} aria-hidden="true" />
+              <text x={node.x} y={labelY} fill="currentColor" fontSize={13} textAnchor="middle">
+                {title.map((line, index) => <tspan key={index} x={node.x} dy={index ? 18 : 0}>{line}</tspan>)}
                 {origin.map((line, index) => <tspan key={`origin:${index}`} x={node.x} dy={18} fontSize={12}>{line}</tspan>)}
-                <tspan x={node.x} dy={18}>{node.packets.toLocaleString()}{flow ? '' : ' packets'}</tspan>
-                {flow && <tspan x={node.x} dy={18}>packets</tspan>}
+                <tspan x={node.x} dy={18} fill={color(node.flow)}>{node.flow.verdict === 'allowed' ? 'Allowed' : 'Blocked'}</tspan>
+                <tspan x={node.x} dy={18}>{node.flow.packets.toLocaleString()}</tspan>
+                <tspan x={node.x} dy={18}>packets</tspan>
               </text>
             </g>
           )
