@@ -13,18 +13,9 @@ import (
 // The SOCKS5 object: the third and smallest of the three, and the only one that
 // carries no encryption of its own.
 //
-// That last fact decides the whole shape of this file. SOCKS5 is a plaintext
-// protocol — the credentials cross the network in the clear and so does every
-// byte of what the client asked for. Beside it in this module sits a tunnel
-// whose entire job is to encrypt exactly that. So the two are not rivals here,
-// they compose: **the default is to listen only inside the WireGuard tunnel**,
-// where the outer layer has already done the encrypting and a plain SOCKS5 port
-// is a perfectly reasonable thing to run.
-//
-// The operator can still expose it to the internet, and olr does not refuse —
-// but that is the one configuration that earns a warning, and the warning names
-// what actually happens rather than saying "insecure". Listening on the tunnel
-// is not a degraded mode to apologise for; it is the good one.
+// SOCKS5 runs independently and listens on all interfaces by default. An
+// explicitly selected tunnel scope remains supported for existing configurations.
+// The plaintext transport warning does not prevent independent operation.
 //
 // Structurally this is Shadowsocks' twin rather than WireGuard's: a daemon with
 // a rendered config file and a unit. The two proxies therefore share this
@@ -63,7 +54,7 @@ type Socks5 struct {
 	PublicPort uint16 `json:"public_port,omitempty"`
 
 	// Listen is where the proxy accepts connections, and it is the field this
-	// object exists to get right. Empty means ListenTunnel.
+	// object exists to get right. Empty means ListenInternet; SOCKS5 runs independently.
 	Listen ListenScope `json:"listen,omitempty"`
 
 	// Username is the account clients authenticate as. Empty means
@@ -97,10 +88,7 @@ const (
 	// ListenTunnel binds the proxy to this box's address inside the WireGuard
 	// tunnel, so only a dialled-in peer can reach it.
 	//
-	// The default, and the one that makes a plaintext protocol a reasonable
-	// thing to run: WireGuard has already authenticated the peer and encrypted
-	// the path, so SOCKS5 is carrying cleartext inside a tunnel rather than
-	// across the internet.
+	// An explicit opt-in for operators who want a restricted listener.
 	//
 	// It depends on the tunnel being configured, which is a real coupling and
 	// is checked: ValidateSocks refuses this scope when WireGuard is disabled
@@ -111,8 +99,7 @@ const (
 	// ListenInternet binds the proxy to every interface, so anything that can
 	// route to this box can reach it.
 	//
-	// Available, never the default, and never silent — the same treatment
-	// gateway gives its `direct` failure mode. SocksExposureWarning is the text,
+	// The default, with a plaintext transport warning. SocksExposureWarning is the text,
 	// and it is attached to *this value* rather than to the object, because a
 	// tunnel-scoped proxy has nothing to warn about and an operator who sees a
 	// warning every time learns to scroll past it.
@@ -124,13 +111,13 @@ const (
 func ListenScopes() []ListenScope { return []ListenScope{ListenTunnel, ListenInternet} }
 
 // Valid reports whether s is a known scope. The empty string is valid and means
-// ListenTunnel.
+// ListenInternet.
 func (s ListenScope) Valid() bool { return s == "" || slices.Contains(ListenScopes(), s) }
 
 // OrDefault resolves the empty value.
 func (s ListenScope) OrDefault() ListenScope {
 	if s == "" {
-		return ListenTunnel
+		return ListenInternet
 	}
 	return s
 }
@@ -142,11 +129,6 @@ func (s ListenScope) Exposed() bool { return s.OrDefault() == ListenInternet }
 // SocksExposureWarning is what an operator is told when they expose a plaintext
 // proxy, and it is written to be acted on rather than dismissed.
 //
-// Three specific consequences and then the remedy, because "SOCKS5 is not
-// encrypted" is a fact an operator can read and still not connect to their own
-// situation. The remedy line is the point: this module already contains the
-// thing that fixes it, so the warning is one setting away from being moot.
-//
 // Deliberately a warning and not a refusal. design.md §5.6 draws that line at
 // whether olr can know the operator is wrong, and here it cannot: a proxy
 // exposed to a trusted private WAN, or reached only through someone else's VPN,
@@ -156,8 +138,7 @@ const SocksExposureWarning = "SOCKS5 sends credentials and traffic in the clear,
 	"so exposing it to the internet means: the username and password cross every " +
 	"network in between as plaintext; anyone on the path sees which sites are " +
 	"visited; and open proxy ports are found by scanners within hours and used by " +
-	"strangers. Setting `listen` to `tunnel` puts it inside WireGuard instead, " +
-	"which encrypts all three away."
+	"strangers. Restrict access with firewall rules or use an encrypted connection."
 
 // --- resolved defaults ------------------------------------------------------
 

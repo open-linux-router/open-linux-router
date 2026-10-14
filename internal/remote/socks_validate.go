@@ -10,8 +10,8 @@ import (
 // Two of these carry most of the object's weight, and neither exists for the
 // object beside it:
 //
-//   - **the listen scope's coupling to the tunnel.** Defaulting to "inside
-//     WireGuard" is only safe if that is checked, because a proxy told to bind an
+//   - **an explicitly selected tunnel listener.** This optional scope must be
+//     checked, because a proxy told to bind an
 //     address that does not exist starts, binds nothing, and reports itself as
 //     running.
 //   - **the escape hatch is an append, not a merge.** 3proxy's configuration is

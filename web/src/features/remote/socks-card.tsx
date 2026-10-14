@@ -102,7 +102,7 @@ export function SocksCard({
             </p>
           ) : (
             <p>
-              Starting generates a password. Listens inside WireGuard by default.
+              Starting generates a password. Listens on every interface; no VPN required.
             </p>
           )}
 

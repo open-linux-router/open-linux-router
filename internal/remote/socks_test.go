@@ -21,6 +21,7 @@ func socksConfig() Config {
 		},
 		Socks: Socks5{
 			Enabled:  true,
+			Listen:   ListenTunnel,
 			Password: "c29tZSBwYXNzd29yZA==",
 		},
 	}
@@ -30,8 +31,8 @@ func socksConfig() Config {
 
 func TestSocksDefaults(t *testing.T) {
 	var s Socks5
-	if got := s.ListenScopeOrDefault(); got != ListenTunnel {
-		t.Errorf("default listen scope = %q, want %q", got, ListenTunnel)
+	if got := s.ListenScopeOrDefault(); got != ListenInternet {
+		t.Errorf("default listen scope = %q, want %q", got, ListenInternet)
 	}
 	if got := s.PortOrDefault(); got != DefaultSocksPort {
 		t.Errorf("default port = %d, want %d", got, DefaultSocksPort)
@@ -39,12 +40,26 @@ func TestSocksDefaults(t *testing.T) {
 	if got := s.UserOrDefault(); got != DefaultSocksUser {
 		t.Errorf("default user = %q, want %q", got, DefaultSocksUser)
 	}
-	// The default has to be the safe one. This is the single most important
-	// assertion in the file: if the zero value ever came out as ListenInternet,
-	// every config that did not mention the field would expose a plaintext
-	// proxy to the internet.
-	if ListenScope("").Exposed() {
-		t.Error("the zero listen scope is exposed; it must default to the tunnel")
+	if !ListenScope("").Exposed() {
+		t.Error("the zero listen scope must listen independently of WireGuard")
+	}
+}
+
+func TestDefaultSocksRunsWithoutWireGuard(t *testing.T) {
+	c := Config{Endpoint: "home.example.net", Socks: Socks5{Enabled: true, Password: "secret"}}
+	if r := ValidateSocks(c); !r.OK() {
+		t.Fatalf("independent proxy refused: %v", r.Errors)
+	}
+	plan, rendered, err := BuildSocksPlan(c, Config{}, RootedPaths(t.TempDir()), ProxyObserved{Files: map[string][]byte{}})
+	if err != nil || !plan.Validation.OK() {
+		t.Fatalf("independent proxy plan failed: %v, %+v", err, plan)
+	}
+	if !strings.Contains(string(rendered.Files[0].Data), "socks -p1080 -i0.0.0.0") {
+		t.Fatal("default proxy does not listen on all interfaces")
+	}
+	link, err := SocksClientURL(c)
+	if err != nil || !strings.Contains(link, "@home.example.net:1080") {
+		t.Fatalf("independent proxy link = %q, error = %v", link, err)
 	}
 }
 
@@ -148,7 +163,7 @@ func TestValidateSocksInternetWarnsButDoesNotRefuse(t *testing.T) {
 	// The warning has to name consequences and the remedy, not just say
 	// "insecure" — an operator who cannot act on it will learn to scroll past.
 	warning := r.Warnings[0].Message
-	for _, want := range []string{"plaintext", "scanner", string(ListenTunnel)} {
+	for _, want := range []string{"plaintext", "scanner", "firewall"} {
 		if !strings.Contains(warning, want) {
 			t.Errorf("warning does not mention %q: %s", want, warning)
 		}

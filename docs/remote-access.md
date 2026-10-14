@@ -530,6 +530,11 @@ guess:
 
 ## 7.5 The proxy: Shadowsocks
 
+SOCKS5 is an independent proxy service. Its default listener binds all interfaces
+(`listen: internet`) and requires no WireGuard configuration. Existing explicitly
+configured `listen: tunnel` listeners retain their restricted binding. SOCKS5
+authentication and transport remain unencrypted; firewall rules control reachability.
+
 The second object, and the one that reaches nothing. A client gets this box's
 way out and no sight of the network at all — which is the whole point when the
 problem is a hostile network rather than a NAS you cannot reach.
