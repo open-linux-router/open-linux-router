@@ -243,6 +243,10 @@ Breathe faster as combined live download/upload increases, with a logarithmic
 cycle, rest dim for 10%, then return to full opacity over 35%. Each changing
 segment uses cubic-bezier(0.37, 0, 0.63, 1), with zero endpoint slopes for
 gentle reversals. Keep the cell size and palette; no glow or scale animation.
+Keep a fixed animation timeline and ease playback speed toward each new target
+with a 350ms exponential time constant (about one second to settle), preserving
+the current phase. When idle or unavailable, finish the current cycle and pause
+at full opacity; resume from that phase when traffic returns.
 Idle or unavailable rates stay steady;
 historical cells retain their traffic fills. Honor prefers-reduced-motion in the global stylesheet.
 

@@ -39,6 +39,49 @@ export function DeviceActivity({ addresses, downRate, upRate }: { addresses: str
   })
   const buckets = new Map(history.data?.map(bucket => [Date.parse(bucket.at), bucket.bytes]))
   const now = new Date()
+  const currentPeriod = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${Math.floor(now.getHours() / 4)}`
+  useLayoutEffect(() => {
+    const animation = container.current?.querySelector('.device-activity-current')?.getAnimations()[0]
+    if (!animation) return
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    let frame = 0
+    let previous = performance.now()
+    const active = breathDuration !== undefined
+    const targetSpeed = active ? 4000 / breathDuration : 1
+    // Keep one fixed timeline. Updating playback rate preserves its current phase.
+    const stopAt = (Math.floor(Number(animation.currentTime ?? 0) / 4000) + 1) * 4000
+    const tick = (time: number) => {
+      if (reducedMotion.matches) {
+        animation.pause()
+        animation.currentTime = 0
+        return
+      }
+      if (!active && (animation.playState === 'paused' || Number(animation.currentTime) >= stopAt)) {
+        animation.pause()
+        animation.currentTime = 0
+        return
+      }
+      const elapsed = Math.max(0, time - previous)
+      previous = time
+      const speed = animation.playbackRate + (targetSpeed - animation.playbackRate) * (1 - Math.exp(-elapsed / 350))
+      animation.updatePlaybackRate(speed)
+      animation.play()
+      frame = requestAnimationFrame(tick)
+    }
+    const restart = () => {
+      cancelAnimationFrame(frame)
+      previous = performance.now()
+      frame = requestAnimationFrame(tick)
+    }
+    // Initial idle state should stay fully visible rather than run a first breath.
+    if (!active && Number(animation.currentTime ?? 0) === 0) animation.pause()
+    restart()
+    reducedMotion.addEventListener('change', restart)
+    return () => {
+      cancelAnimationFrame(frame)
+      reducedMotion.removeEventListener('change', restart)
+    }
+  }, [breathDuration, days, currentPeriod])
   const cells = Array.from({ length: days * 6 }, (_, i) => {
     const day = now.getDate() - days + 1 + Math.floor(i / 6)
     const hour = (i % 6) * 4
@@ -60,7 +103,7 @@ export function DeviceActivity({ addresses, downRate, upRate }: { addresses: str
     const time = `${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')} ${hour}:00-${hour + 4}:00`
     const detail = history.isPending ? 'Loading' : history.isError ? 'Unavailable' : !bytes ? 'No data' : `↓ ${formatBytes(bytes.down)} · ↑ ${formatBytes(bytes.up)}`
     return <Tooltip key={i}>
-      <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} style={end > now && breathDuration ? { animationDuration: `${breathDuration}ms` } : undefined} className={`h-full w-full min-h-0 min-w-0 rounded-[3px] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]} ${end > now && breathDuration ? 'device-activity-current' : ''}`} />
+      <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} className={`h-full w-full min-h-0 min-w-0 rounded-[3px] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]} ${end > now ? 'device-activity-current' : ''}`} />
       <TooltipContent className="flex-col items-start animate-none!"><span>{time}</span><span>{detail}</span></TooltipContent>
     </Tooltip>
   })

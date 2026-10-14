@@ -105,6 +105,8 @@ Omit Notes and the QoS heading.
 Device activity sits at the right of the title bar, without visible
 explanatory text. Only the current period breathes with live combined download/upload
 speed: faster traffic means faster breathing; idle or unavailable rates stay steady.
+Rate updates smoothly change playback speed without resetting the breath.
+On becoming idle, complete the current breath before settling at full brightness.
 Historical colors continue to represent accumulated traffic.
 Immediate four-hour hover/focus hints show sampled download and upload
 or explicitly report missing/unavailable data. Partial samples are not exact

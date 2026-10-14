@@ -207,12 +207,19 @@ html {
 
 .device-activity-current {
   animation: device-activity-breathe 4s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+  animation-play-state: paused;
 }
 
 /* Nothing here is load-bearing motion — every animation is decoration on a
    state change that also happens instantly. So honouring the preference is a
    flat opt-out rather than a set of reduced variants. */
 @media (prefers-reduced-motion: reduce) {
+  /* The activity controller pauses at full opacity; keep its timeline stable
+     when the OS preference changes so it can resume without a phase jump. */
+  .device-activity-current {
+    animation-duration: 4s !important;
+    animation-iteration-count: infinite !important;
+  }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
