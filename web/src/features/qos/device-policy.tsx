@@ -40,23 +40,25 @@ export function DevicePolicy({ mac, downRate, upRate, children }: { mac: string;
     setEditing(direction)
   }
 
-  return <section aria-label="Priority and traffic" className="space-y-3">
-    <div className="flex min-h-11 flex-wrap items-center justify-between gap-3 text-sm sm:min-h-9">
+  return <section aria-label="Priority and traffic" className="space-y-3 lg:contents lg:space-y-0">
+    <div className="flex min-h-11 flex-wrap items-center justify-between gap-3 py-1 text-sm sm:min-h-9 lg:col-start-2 lg:row-start-2">
       <span className="text-muted-foreground">Priority</span>
       <div role="group" aria-label="Device priority" className="flex rounded-lg bg-muted p-0.5">
         {(['high', 'normal', 'low'] as Priority[]).map((value) => <Button key={value} size="sm" className="h-11 px-2 sm:h-7" variant={priority === value ? 'outline' : 'ghost'} aria-pressed={priority === value} disabled={busy} onClick={() => void save(value)}>{value[0].toUpperCase() + value.slice(1)}</Button>)}
       </div>
     </div>
-    {config.isError && <p className="text-sm text-destructive">Could not load priority and limits.</p>}
-    <div className="space-y-1">
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 text-sm sm:[&>div]:w-1/2 sm:[&>div]:justify-self-end">
+    {config.isError && <p className="text-sm text-destructive lg:col-start-2 lg:row-start-6">Could not load priority and limits.</p>}
+    <div className="space-y-1 lg:contents lg:space-y-0">
+      <div className="grid min-h-11 grid-cols-[6rem_minmax(0,1fr)] items-center gap-3 py-1 text-sm sm:min-h-9 sm:[&>div]:w-1/2 sm:[&>div]:justify-self-end lg:col-start-2 lg:row-start-3">
         <span className="text-muted-foreground">Download</span>
         <Meter label="Download" current={downRate === undefined ? '—' : formatRate(downRate)} maximum={current?.download_mbps ? String(current.download_mbps) + ' Mbps' : undefined} onClick={() => begin('download')} />
+      </div>
+      <div className="grid min-h-11 grid-cols-[6rem_minmax(0,1fr)] items-center gap-3 py-1 text-sm sm:min-h-9 sm:[&>div]:w-1/2 sm:[&>div]:justify-self-end lg:col-start-2 lg:row-start-4">
         <span className="text-muted-foreground">Upload</span>
         <Meter label="Upload" current={upRate === undefined ? '—' : formatRate(upRate)} maximum={current?.upload_mbps ? String(current.upload_mbps) + ' Mbps' : undefined} tone="amber" onClick={() => begin('upload')} />
       </div>
     </div>
-    {children}
+    {children && <div className="lg:col-start-2 lg:row-start-7">{children}</div>}
     <Dialog open={!!editing} onOpenChange={(open) => { if (!open && !apply.isPending) setEditing(null) }}>
       <DialogContent>
         <DialogHeader><DialogTitle>{editing === 'download' ? 'Download limit' : 'Upload limit'}</DialogTitle><DialogDescription>Applies immediately to traffic crossing this router. Leave blank for unlimited.</DialogDescription></DialogHeader>

@@ -82,6 +82,9 @@ Download and Upload labels beside narrower bars, without arrows or cumulative
 total rows. Omit Last seen. Group is a tag that opens its edit dialog.
 Compact Uplink and Priority segmented selectors lead the right column, in that
 order. Uplink selections retain network-change confirmation and apply feedback.
+On desktop, pair Vendor with Uplink, MAC with Priority, IP with Download and
+Group with Upload in shared rows. Place read errors and traffic availability
+messages after those rows so they do not shift the corresponding values.
 The title's activity matrix shows one day per column, newest
 on the right, and six four-hour periods from top to bottom. The displayed date
 range adapts to the available width, with fixed square cells; dates without

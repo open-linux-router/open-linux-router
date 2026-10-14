@@ -115,9 +115,9 @@ export function DeviceInlineEditor({ device, traffic, activity }: { device: Devi
         </div>
       </div>
     </header>
-    <div className="mt-4 grid gap-y-8 lg:grid-cols-2 lg:gap-x-16">
-      <div className="min-w-0">
-        <dl className="text-sm">
+    <div className="mt-4 grid gap-y-8 lg:grid-cols-2 lg:gap-x-16 lg:gap-y-0">
+      <div className="min-w-0 lg:row-span-4 lg:grid lg:grid-rows-subgrid">
+        <dl className="text-sm lg:row-span-4 lg:grid lg:grid-rows-subgrid">
           <Fact label="Vendor" value={device.vendor || 'Unknown'} />
           <Fact label="MAC" value={device.mac} mono />
           <DeviceSettingRow label="IP">
@@ -129,14 +129,14 @@ export function DeviceInlineEditor({ device, traffic, activity }: { device: Devi
           <DeviceSettingRow label="Group"><button type="button" aria-label="Edit device group" disabled={identityBusy} onClick={() => begin('group')} className="min-h-11 rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9"><Badge variant="secondary" className="whitespace-normal break-words">{device.group || 'No group'}</Badge></button></DeviceSettingRow>
         </dl>
       </div>
-      <div className="min-w-0 space-y-2">
-        <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 text-sm sm:min-h-9">
+      <div className="min-w-0 space-y-2 lg:contents lg:space-y-0">
+        <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 py-1 text-sm sm:min-h-9 lg:col-start-2 lg:row-start-1">
           <span className="text-muted-foreground">Uplink</span>
           <div role="group" aria-label="Device uplink" className="flex max-w-full flex-wrap justify-end rounded-lg bg-muted p-0.5">
             {[{ value: INHERIT_EXIT, label: 'Default' }, ...(exit === DIRECT_EXIT ? [{ value: DIRECT_EXIT, label: 'This router’s connection' }] : []), ...(gateway.data?.exits ?? []).map((e) => ({ value: e.name, label: e.name }))].map((option) => <Button key={option.value} size="sm" className="h-11 max-w-full whitespace-normal break-words px-2 sm:h-7" variant={exit === option.value ? 'outline' : 'ghost'} aria-pressed={exit === option.value} disabled={!gateway.data || gatewayApplier.busy} onClick={() => { if (exit !== option.value) void gatewayApplier.submit(option.value === INHERIT_EXIT ? gatewayChange.removeDevice(device.mac) : gatewayChange.device(device.mac, option.value === DIRECT_EXIT ? '' : option.value)) }}>{option.label}</Button>)}
           </div>
         </div>
-        {gateway.isError && <p className="text-sm text-destructive">Could not load uplinks.</p>}
+        {gateway.isError && <p className="text-sm text-destructive lg:col-start-2 lg:row-start-5">Could not load uplinks.</p>}
         {traffic}
       </div>
     </div>

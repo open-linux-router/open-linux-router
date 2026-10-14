@@ -136,6 +136,9 @@ title from two columns of 36px desktop / 44px mobile minimum-height label/value 
 and settings on the left, routing, priority and traffic on the right. Group uses
 a clickable tag with a muted surface that opens its edit dialog.
 Device traffic reuses Overview meters with visible direction labels.
+At desktop widths both halves share four grid rows: Vendor/Uplink, MAC/Priority,
+IP/Download and Group/Upload. Match row padding and let wrapped content grow
+both sides together; feedback follows the four aligned rows.
 Device speed bars use half their available value width from 640px, aligned right;
 on phones they retain the full width so rates and limit actions remain readable.
 The device title contains a right-aligned traffic matrix occupying two thirds
