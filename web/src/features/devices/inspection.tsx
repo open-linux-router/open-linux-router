@@ -61,7 +61,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
 
   return <section className="overflow-hidden rounded-2xl border bg-card" aria-labelledby="inspection-title">
     <div className="px-4 pt-4 sm:px-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+      <div className={`flex flex-wrap items-center justify-between gap-3 ${mine ? 'border-b pb-3' : ''}`}>
         <div>
           <h2 id="inspection-title" className="text-base font-semibold">Connections</h2>
         </div>

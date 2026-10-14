@@ -1,11 +1,14 @@
 import { MetricPill } from '@/components/traffic-metrics'
 import { Input } from '@/components/ui/input'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { Search, X } from 'lucide-react'
 import { Link, useParams } from 'react-router'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useDnsConfig, useDnsQueries } from '@/features/dns/queries'
 import { DeviceInspection } from '@/features/devices/inspection'
 import { DeviceActivity } from '@/features/devices/activity'
@@ -21,7 +24,11 @@ export function DevicePage() {
   const devices = useDeviceList()
   const traffic = useGatewayTraffic()
   const dnsConfig = useDnsConfig()
-  const dnsQueries = useDnsQueries()
+  const [dnsInspection, setDnsInspection] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchInput = useRef<HTMLInputElement>(null)
+  const searchButton = useRef<HTMLButtonElement>(null)
+  const dnsQueries = useDnsQueries(dnsInspection)
   const flow = useTrafficView(traffic.data, traffic.isError)
   const [filter, setFilter] = useState('')
   const device = devices.data?.devices.find((d) => d.mac.toLowerCase() === mac?.toLowerCase())
@@ -52,29 +59,46 @@ export function DevicePage() {
       } />
 
       <Card>
-        <CardHeader className="mx-4 flex flex-row items-center justify-between gap-3 border-b px-0 pb-3 sm:mx-6">
+        <CardHeader className={`mx-4 flex flex-row flex-wrap items-center justify-between gap-3 px-0 sm:mx-6 ${dnsInspection ? 'border-b pb-3' : ''}`}>
           <CardTitle>DNS</CardTitle>
-          <Input id="device-dns-filter" aria-label="Filter DNS queries" className="min-w-0 w-full max-w-sm" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Name, answer, type or result" />
+          <div className="flex items-center gap-3">
+            <label htmlFor="device-dns-inspection" className="text-sm">Inspection</label>
+            <Switch id="device-dns-inspection" checked={dnsInspection} onCheckedChange={(checked) => { setDnsInspection(checked); setSearchOpen(false); setFilter('') }} />
+            {dnsInspection && <Button ref={searchButton} variant="ghost" size="icon" aria-label={searchOpen ? 'Close DNS search' : 'Search DNS queries'} aria-expanded={searchOpen} aria-controls="device-dns-search" onClick={() => { setSearchOpen(!searchOpen); setFilter(''); if (!searchOpen) requestAnimationFrame(() => searchInput.current?.focus()) }}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>}
+          </div>
+          {dnsInspection && <div id="device-dns-search" className={`grid w-full transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${searchOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`} inert={!searchOpen}>
+            <div className="overflow-hidden">
+              <Input ref={searchInput} id="device-dns-filter" aria-label="Filter DNS queries" className="mt-1 w-full" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Name, answer, type or result" onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); setFilter(''); searchButton.current?.focus() } }} />
+            </div>
+          </div>}
         </CardHeader>
-        <CardContent className="space-y-4">
+        {dnsInspection && <CardContent className="space-y-4">
           {dnsQueries.isError ? (
             <p className="text-sm text-muted-foreground">The DNS query log is unavailable. The resolver may be stopped.</p>
           ) : dnsQueries.isPending ? (
             <p className="text-sm text-muted-foreground">Loading recent queries…</p>
+          ) : dnsConfig.isError ? (
+            <p role="alert" className="text-sm text-muted-foreground">The DNS query log configuration is unavailable.</p>
+          ) : dnsConfig.isPending ? (
+            <p className="text-sm text-muted-foreground">Loading DNS configuration…</p>
           ) : !dnsConfig.data?.query_log.enabled ? (
             <p className="text-sm text-muted-foreground">The DNS query log is off. Queries are answered but not kept.</p>
           ) : shownQueries.length === 0 ? (
             <p className="text-sm text-muted-foreground">{matchingQueries.length ? 'Nothing matches that filter.' : 'No matching queries in the recent sample.'}</p>
           ) : (
-            <ul className="max-h-80 space-y-1 overflow-y-auto">
-              {shownQueries.map((q, i) => <li key={`${q.at}-${q.client}-${q.name}-${i}`} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
-                <time dateTime={q.at} className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{new Date(q.at).toLocaleTimeString()}</time>
-                <span className="min-w-0 flex-[1_1_10rem] break-all">{q.name}<span className="ml-2 text-xs text-muted-foreground">{q.type}</span></span>
-                {q.blocked ? <Badge variant="secondary">Blocked{q.policy ? ` · ${q.policy}` : ''}</Badge> : q.rcode !== 'NOERROR' ? <Badge variant="warning">{q.rcode}</Badge> : q.answers?.length ? <DnsAnswers answers={q.answers} /> : <span className="text-xs text-muted-foreground">No answer</span>}
-              </li>)}
-            </ul>
+            <div className="max-h-80 overflow-y-auto">
+              <Table aria-label="Recent DNS queries">
+                <TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Record</TableHead><TableHead>Type</TableHead><TableHead>Answer</TableHead></TableRow></TableHeader>
+                <TableBody>{shownQueries.map((q, i) => <TableRow key={`${q.at}-${q.client}-${q.name}-${i}`}>
+                  <TableCell><time dateTime={q.at} className="font-mono text-xs text-muted-foreground">{new Date(q.at).toLocaleTimeString()}</time></TableCell>
+                  <TableCell className="min-w-32 whitespace-normal break-all">{q.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{q.type}</TableCell>
+                  <TableCell className="min-w-40 whitespace-normal break-all">{q.blocked ? <Badge variant="secondary">Blocked{q.policy ? ` · ${q.policy}` : ''}</Badge> : q.rcode !== 'NOERROR' ? <Badge variant="warning">{q.rcode}</Badge> : q.answers?.length ? <DnsAnswers answers={q.answers} /> : <span className="text-xs text-muted-foreground">No answer</span>}</TableCell>
+                </TableRow>)}</TableBody>
+              </Table>
+            </div>
           )}
-        </CardContent>
+        </CardContent>}
       </Card>
 
       <DeviceInspection key={device.mac} mac={device.mac} addresses={device.ips ?? []} />
@@ -91,9 +115,5 @@ function State({ title, detail }: { title: string; detail: string }) {
 }
 
 function DnsAnswers({ answers }: { answers: string[] }) {
-  const remaining = answers.length - 3
-  return <span className="flex w-full min-w-0 items-center font-mono text-xs text-muted-foreground sm:w-auto sm:max-w-[50%]" title={answers.join(', ')}>
-    <span className="truncate">{answers.slice(0, 3).join(', ')}</span>
-    {remaining > 0 && <span className="shrink-0">, {remaining} more</span>}
-  </span>
+  return <span className="font-mono text-xs text-muted-foreground">{answers.join(', ')}</span>
 }

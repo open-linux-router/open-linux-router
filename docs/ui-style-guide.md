@@ -154,6 +154,10 @@ Never style a pending or failed read as a disabled service.
 Active device inspection displays the embedded mitmproxy viewer directly below
 the Connections divider. Keep its setup gear icon beside the title-bar switch;
 the QR code and setup guide link belong in the setup dialog, not in the title bar.
+DNS and Connections omit title dividers when inspection is off. DNS inspection
+defaults off and uses the shared table with Time, Record, Type and Answer columns.
+Its search icon reveals and collapses a full-width filter with a 200ms height/opacity
+transition that honors reduced motion. Keep long records and answers readable.
 
 List rows have a minimum height of 64px. On phones, trailing values reflow below
 the title instead of disappearing. Technical values and important descriptions

@@ -98,8 +98,10 @@ setup gear icon while active; keep the QR code and guide link inside the setup
 dialog. Show the mitmproxy viewer directly, without duplicate request lists, diagnostics or a
 disclosure. Certificate installation, trust and cleanup belong
 in the public five-step setup guide, with the certificate download at step two.
-The device DNS filter sits beside the title with an accessible label; both
-section titles have a divider beneath them.
+Device DNS defaults to hidden records with an Inspection switch in its title bar.
+Enabling it polls and displays a Time, Record, Type and Answer table. An accessible
+search icon reveals and collapses the filter with motion; closing clears the filter.
+DNS and Connections title bars show dividers only while their inspection is active.
 Do not promise encrypted DNS blocking beyond the supported protocol and port.
 
 Use download then upload consistently. Device names may supplement an address
