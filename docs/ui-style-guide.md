@@ -58,9 +58,10 @@ border. Use muted fills for small metrics, not another elevated card.
 
 ## Layout and hierarchy
 
-Gateway's Interfaces panel contains the physical interface cards and a right-side
-routing summary from 1280px; below that, stack the summary beneath the cards.
-Keep interface charts and address wrapping inside their existing card surfaces.
+Gateway's Interfaces panel keeps physical interface cards in one horizontal row,
+with a right-side routing summary from 1024px. Scroll the interface row locally
+when needed; below desktop, stack the summary beneath it. Interface cards show
+current rates without traffic charts, with wrapping addresses and 16px padding.
 
 The shell has a 1280px maximum width, a 64px header and horizontal gutters of
 16px on phones, 24px from 640px, and 32px from 1280px. Content starts with

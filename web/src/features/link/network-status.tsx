@@ -58,19 +58,19 @@ export function NetworkStatus() {
       <ApplyOutcome applier={applier} />
       <Card id="interfaces" aria-labelledby="interfaces-heading" className="scroll-mt-20">
         <CardHeader><CardTitle id="interfaces-heading">Interfaces</CardTitle></CardHeader>
-        <CardContent className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_260px]">
+        <CardContent className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
         <div className="min-w-0">
-          {interfaces.isPending && <div className="grid gap-4 md:grid-cols-2">
-            {[0, 1, 2].map(i => <Skeleton key={i} className="h-[280px] rounded-2xl" />)}
+          {interfaces.isPending && <div className="grid grid-flow-col auto-cols-[220px] gap-4 overflow-x-auto">
+            {[0, 1, 2].map(i => <Skeleton key={i} className="h-56 rounded-xl" />)}
           </div>}
           {interfaces.isError && <Alert variant="destructive"><AlertTriangle /><AlertTitle>Could not load interfaces</AlertTitle><AlertDescription>{interfaces.error.message}</AlertDescription></Alert>}
           {interfaces.isSuccess && rows.length === 0 && <ListEmpty>No physical network interfaces found. <Link to="/gateway/interfaces" className="underline underline-offset-4">Open interface settings</Link></ListEmpty>}
-          {rows.length > 0 && <div className="grid gap-4 md:grid-cols-2">
+          {rows.length > 0 && <div className="grid grid-flow-col auto-cols-[minmax(220px,1fr)] gap-4 overflow-x-auto pb-1">
             {rows.map(row => <InterfaceCard key={row.name} row={row} role={roleOf(row)} history={traffic.get(row.name)?.history ?? []} failed={interfaces.isError} onSelect={() => setSelected(row.name)} />)}
           </div>}
           {!uplink.isPending && uplink.isError && <p className="mt-3 text-xs text-muted-foreground">WAN assignment unavailable. <Link to="/gateway/interfaces" className="underline underline-offset-4">Review settings</Link></p>}
         </div>
-        <aside aria-label="Routing summary" className="min-w-0 border-t pt-6 xl:border-t-0 xl:border-l xl:pl-6 xl:pt-0">
+        <aside aria-label="Routing summary" className="min-w-0 border-t pt-6 lg:border-t-0 lg:border-l lg:pl-6 lg:pt-0">
           <dl className="space-y-4 text-sm">
             <div><dt className="text-muted-foreground">Default gateway</dt><dd className="mt-1 space-y-1 font-mono text-xs [overflow-wrap:anywhere]">
               {dial.isError ? 'Unavailable' : dial.isPending ? 'Loading…' : dial.data.default_routes.length ? dial.data.default_routes.map((route, i) => <div key={i}>{route.via || 'Direct'} · {route.dev} · IPv{route.family}</div>) : 'Not assigned'}
@@ -79,14 +79,14 @@ export function NetworkStatus() {
               {dial.isError ? 'Unavailable' : dial.isPending ? 'Loading…' : dial.data.resolvers?.join(', ') || 'Unavailable'}
             </dd></div>
           </dl>
-          {config ? <div className="mt-6 space-y-4">
-            <div className="flex min-h-11 items-center justify-between gap-3"><label htmlFor="summary-forward-ipv4" className="text-sm">Forward IPv4</label><Switch id="summary-forward-ipv4" checked={config.enabled} disabled={busy} onCheckedChange={enabled => change(gatewayChange.settings({ enabled }))} /></div>
-            <p className="text-xs text-muted-foreground">Also applies Gateway routing rules. Turning off leaves system forwarding unchanged.</p>
+          {config ? <div className="mt-3 space-y-1">
+            <div className="flex min-h-11 items-center justify-between gap-3" title="Also applies Gateway routing rules. Turning off leaves system forwarding unchanged."><label htmlFor="summary-forward-ipv4" className="text-sm">Forward IPv4</label><Switch id="summary-forward-ipv4" checked={config.enabled} disabled={busy} onCheckedChange={enabled => change(gatewayChange.settings({ enabled }))} /></div>
+            <span className="sr-only">Also applies Gateway routing rules. Turning off leaves system forwarding unchanged.</span>
             <div className="flex min-h-11 items-center justify-between gap-3"><label htmlFor="summary-forward-ipv6" className="text-sm">Forward IPv6</label><Switch id="summary-forward-ipv6" checked={config.ipv6_forwarding === true} disabled={busy} onCheckedChange={ipv6_forwarding => change(gatewayChange.settings({ ipv6_forwarding }))} /></div>
             {config.ipv6_forwarding === undefined && <p className="text-xs text-muted-foreground">IPv6 forwarding is not managed yet.</p>}
             {!config.enabled && <p className="text-xs text-muted-foreground">IPv6 settings are saved but not applied while Gateway routing is off.</p>}
           </div> : gate}
-          <Button className="mt-6 w-full" variant="outline" nativeButton={false} render={<Link to="/gateway/interfaces" />}>Details <ChevronRight className="size-4" aria-hidden /></Button>
+          <Button className="mt-3 w-full" variant="outline" nativeButton={false} render={<Link to="/gateway/interfaces" />}>Details <ChevronRight className="size-4" aria-hidden /></Button>
         </aside>
         </CardContent>
       </Card>
@@ -128,9 +128,9 @@ function InterfaceCard({ row, role, history, failed, onSelect }: {
   const current = failed ? undefined : history.at(-1)
   return (
     <button type="button" onClick={onSelect} aria-label={`${row.name}${role ? ` ${role}` : ''} details`}
-      className={cn(card, 'flex min-h-[280px] w-full min-w-0 cursor-pointer flex-col overflow-hidden p-6 text-left transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring')}>
+      className={cn(card, 'flex w-full min-w-0 cursor-pointer flex-col overflow-hidden p-4 text-left transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring')}>
       <div className="flex items-center gap-3">
-        <span className="relative block size-16 shrink-0" aria-hidden="true">
+        <span className="relative block size-12 shrink-0" aria-hidden="true">
           <NetworkIcon kind="interface" className={cn('size-full', (!connected || failed) && 'opacity-50 grayscale')} />
           {role && <span className="absolute left-1/2 top-[56.25%] -translate-x-1/2 -translate-y-1/2 text-[9px] leading-none font-bold text-[#3e4a63]">{role}</span>}
           <span className={cn('absolute left-[24.22%] top-[72.66%] size-[7.03%] -translate-x-1/2 -translate-y-1/2 rounded-[1px]', connected && !failed ? 'bg-[#38975f]' : 'bg-muted-foreground/40')} />
@@ -140,33 +140,16 @@ function InterfaceCard({ row, role, history, failed, onSelect }: {
           <strong className="block break-all text-base font-semibold">{row.name}</strong><span className={cn('text-sm', connected && !failed ? 'text-success-foreground' : 'text-muted-foreground')}>{failed ? 'Unavailable' : connectionState(row, role)}</span>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-4">
+      <div className="mt-4 space-y-3">
         <Fact label="Link speed" value={failed ? '—' : linkSpeed(row.speed_mbps)} />
         <Fact label="IP" value={failed ? '—' : row.address || row.prefixes?.[0]?.split('/')[0] || 'Not assigned'} mono />
       </div>
-      <div className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-4 text-sm font-medium tabular-nums">
+      <div className="mt-4 flex flex-wrap justify-between gap-2 text-sm font-medium tabular-nums">
         <span className="text-receive" aria-label={`Receive ${current ? formatRate(current.rx) : 'unavailable'}`}>↓ {current ? formatRate(current.rx) : '—'}</span>
         <span className="text-transmit" aria-label={`Transmit ${current ? formatRate(current.tx) : 'unavailable'}`}>↑ {current ? formatRate(current.tx) : '—'}</span>
       </div>
-      <div className="mt-auto pt-3">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span>Last 60 s</span><span className="flex gap-3"><span className="flex items-center gap-1"><i className="h-0.5 w-3 bg-receive" />Receive</span><span className="flex items-center gap-1"><i className="h-0.5 w-3 bg-transmit" />Transmit</span></span>
-        </div>
-        <TrafficChart history={failed ? [] : history} message={failed ? 'Traffic unavailable' : !connected ? connectionState(row, role) : row.rx_bytes === undefined || row.tx_bytes === undefined ? 'Traffic unavailable' : 'Measuring…'} />
-      </div>
     </button>
   )
-}
-
-function TrafficChart({ history, message }: { history: RateSample[]; message: string }) {
-  if (history.length < 2) return <div className="flex h-[76px] items-center text-xs text-muted-foreground">{history.length === 1 ? 'Collecting traffic history…' : message}</div>
-  const newest = history.at(-1)!.at
-  const peak = Math.max(1, ...history.flatMap(sample => [sample.rx, sample.tx]))
-  const points = (key: 'rx' | 'tx') => history.map(sample => `${((sample.at - newest + 60_000) / 60_000 * 300).toFixed(1)},${(68 - sample[key] / peak * 56).toFixed(1)}`).join(' ')
-  return <svg className="mt-1 h-[76px] w-full" viewBox="0 0 300 76" preserveAspectRatio="none" role="img" aria-label="Receive and transmit rates observed over the last 60 seconds">
-    <polyline points={points('rx')} fill="none" stroke="var(--receive)" strokeWidth="1.8" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
-    <polyline points={points('tx')} fill="none" stroke="var(--transmit)" strokeWidth="1.8" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
 }
 
 function ServiceCard({ kind, title, value, pending, label, state }: {
