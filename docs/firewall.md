@@ -30,9 +30,12 @@ changes nothing until somebody says so (§7) — and an ordinary switch in both
 directions. `olr firewall enable|disable|show|status`, `/api/firewall/…`, and a
 Firewall section in the web UI.
 
-The Firewall landing page lists traffic permissions by connection state,
+The Firewall landing page uses a Sankey diagram of traffic permissions by connection state,
 purpose and permission source, rather than device group or routing exit.
-Each category states its matching conditions and Allowed or Blocked decision.
+Each category flows through one firewall boundary to an Allowed or Blocked decision.
+Equal-width category paths are not traffic measurements. Matching conditions are
+available on hover and in an accessible disclosure; narrow screens scroll the
+diagram horizontally without hiding category labels.
 Automatic categories distinguish input/forward drops, established/related,
 inside-initiated and loopback traffic, ICMP, ICMPv6, DHCP, DHCPv6, each configured
 service opening, DNAT and forwarding outside inside networks. IPTV adds IGMP
