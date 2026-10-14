@@ -55,7 +55,7 @@ export function DeviceActivity({ addresses }: { addresses: string[] }) {
     const time = `${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')} ${hour}:00-${hour + 4}:00`
     const detail = history.isPending ? 'Loading' : history.isError ? 'Unavailable' : !bytes ? 'No data' : `↓ ${formatBytes(bytes.down)} · ↑ ${formatBytes(bytes.up)}`
     return <Tooltip key={i}>
-      <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} className={`h-full w-full min-h-0 min-w-0 rounded-[3px] p-0 ring-1 ring-inset ring-foreground/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]} ${end > now ? 'device-activity-current' : ''}`} />
+      <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} className={`h-full w-full min-h-0 min-w-0 rounded-[3px] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]} ${end > now ? 'device-activity-current' : ''}`} />
       <TooltipContent className="flex-col items-start animate-none!"><span>{time}</span><span>{detail}</span></TooltipContent>
     </Tooltip>
   })

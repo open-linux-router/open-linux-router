@@ -140,7 +140,8 @@ show more dates rather than stretching cells. Keep today at the right edge,
 the current-period hint and 1px inner padding.
 Fade only the leftmost 20% toward overlapping identity content; keep the rest
 fully visible, including zero/unknown dots. Use the shared opaque activity
-palette in four green intensities and subtle inset cell boundaries. No axes,
+palette in four green intensities without decorative borders or inset rings;
+cell fills and spacing define the grid. Retain visible keyboard focus. No axes,
 legend, heading or helper text; tooltips provide dates, units and sample state.
 Priority leads the right column with a segmented selector. Clicking each speed bar opens its limit dialog; omit repeated rate headings, separate limit fields and the QoS divider/status row.
 Device policies apply automatically, without a switch. Keep QoS controls on
