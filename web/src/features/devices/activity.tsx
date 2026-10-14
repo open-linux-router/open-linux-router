@@ -39,11 +39,11 @@ export function DeviceActivity({ addresses }: { addresses: string[] }) {
     const time = `${at.toLocaleDateString()} ${at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}–${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
     const detail = history.isPending ? 'Loading activity' : history.isError ? 'Activity unavailable' : !bytes ? 'No samples for these addresses' : `↓ ${formatBytes(bytes.down)} · ↑ ${formatBytes(bytes.up)} · Sampled traffic${end > now ? ' · In progress' : ''}`
     return <Tooltip key={i}>
-      <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} className={`size-2 min-h-0 shrink-0 rounded-full p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]} ${!bytes ? 'opacity-40' : ''}`} />
+      <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} className={`size-2 min-h-0 shrink-0 rounded-full p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]}`} />
       <TooltipContent className="flex-col items-start animate-none!"><span>{time}</span><span>{detail}</span></TooltipContent>
     </Tooltip>
   })
-  return <div className="absolute inset-x-0 top-0 h-16 [mask-image:linear-gradient(to_right,transparent,rgba(0,0,0,0.15)_55%,black)]" role="group" aria-label="Traffic activity, last 14 days, oldest to newest from left to right, six four-hour periods per day from top to bottom">
-    <div className="grid h-full grid-flow-col grid-cols-[repeat(14,minmax(0,1fr))] grid-rows-6 justify-items-end gap-y-0.5 py-0.5">{cells}</div>
+  return <div className="absolute right-0 top-0 w-max [mask-image:linear-gradient(to_right,transparent,black_40%)]" role="group" aria-label="Traffic activity, last 14 days, oldest to newest from left to right, six four-hour periods per day from top to bottom">
+    <div className="grid grid-flow-col grid-cols-[repeat(14,8px)] grid-rows-[repeat(6,8px)] gap-1 py-0.5">{cells}</div>
   </div>
 }
