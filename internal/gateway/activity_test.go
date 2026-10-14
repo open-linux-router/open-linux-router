@@ -2,9 +2,95 @@ package gateway
 
 import (
 	"net/netip"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestActivityPersistenceAndRestartBaseline(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state", "activity.json")
+	a, err := OpenActivity(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now().Truncate(30 * time.Minute)
+	addr := netip.MustParseAddr("192.168.1.2")
+	sample := func(up uint64) []Usage { return []Usage{{Addr: addr, UpBytes: up}} }
+	a.observe(at, sample(100), true)
+	a.observe(at.Add(10*time.Second), sample(150), true)
+	if err := a.Save(); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("history permissions: %v, %v", info, err)
+	}
+	b, err := OpenActivity(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.observe(at.Add(20*time.Second), sample(1000), true)
+	if got := b.snapshot([]netip.Addr{addr}); len(got) != 1 || got[0].Bytes.Up != 50 {
+		t.Fatalf("restart counted downtime: %+v", got)
+	}
+	b.observe(at.Add(30*time.Second), sample(1010), true)
+	if err := b.Save(); err != nil {
+		t.Fatal(err)
+	}
+	c, err := OpenActivity(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.snapshot([]netip.Addr{addr}); len(got) != 1 || got[0].Bytes.Up != 60 {
+		t.Fatalf("new samples did not survive restart: %+v", got)
+	}
+}
+
+func TestActivityRestorePrunesAndRejectsInvalidHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "activity.json")
+	a, err := OpenActivity(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := netip.MustParseAddr("2001:db8::1")
+	a.buckets[time.Now().Add(-15*24*time.Hour).Unix()] = map[netip.Addr]activityBytes{addr: {Up: 10}}
+	if err := a.Save(); err != nil {
+		t.Fatal(err)
+	}
+	b, err := OpenActivity(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.snapshot([]netip.Addr{addr})) != 0 {
+		t.Fatal("expired history restored")
+	}
+	for _, data := range []string{`{"version":2}`, `{"version":1,"buckets":{"1":`, `{"version":1,"buckets":{"9999999999":{"not-an-ip":{"up":1}}}}`} {
+		if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := OpenActivity(path); err == nil {
+			t.Fatalf("invalid history accepted: %s", data)
+		}
+	}
+}
+
+func TestActivitySaveFailurePreservesMemory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "parent")
+	if err := os.WriteFile(path, []byte("blocked"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := NewActivity()
+	a.path = filepath.Join(path, "activity.json")
+	addr := netip.MustParseAddr("192.168.1.2")
+	a.buckets[time.Now().Unix()] = map[netip.Addr]activityBytes{addr: {Up: 10}}
+	if err := a.Save(); err == nil {
+		t.Fatal("write failure hidden")
+	}
+	if got := a.snapshot([]netip.Addr{addr}); len(got) != 1 || got[0].Bytes.Up != 10 {
+		t.Fatal("failed save lost history")
+	}
+}
 
 func TestActivityDifferencesAndGaps(t *testing.T) {
 	a := NewActivity()

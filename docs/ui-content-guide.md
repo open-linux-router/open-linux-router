@@ -85,10 +85,12 @@ Device activity sits at the right of the title bar, without visible
 explanatory text. Immediate four-hour hover/focus hints show sampled download and upload
 or explicitly report missing/unavailable data. Partial samples are not exact
 four-hour totals. History is joined to the device's currently observed addresses.
-It is volatile and begins accumulating after daemon startup. Sampling and UI
+It begins accumulating after daemon startup. Sampling and UI
 refresh run every ten seconds; the first reading establishes a baseline.
-History lives only in daemon memory, retains at most 14 days, and is cleared
-by restarts/upgrades. It is not reconstructed from cumulative counters. Changing
+History retains at most 14 days and is restored from
+`/var/lib/open-linux-router/activity.json` after restarts/upgrades. Atomic
+checkpoints run every minute and on normal shutdown; an abrupt power loss may
+lose the latest minute. It is not reconstructed from cumulative counters. Changing
 device addresses can hide samples associated with its previous addresses.
 
 Device Uplink offers Default (inherit interface/system routing) and named

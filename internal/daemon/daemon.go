@@ -488,7 +488,10 @@ func run(args []string) error {
 	// to the routing ones under the same prefix (gateway.HTTP.NAT), so `olr
 	// routes` and the MCP tool list see one module rather than the two packages
 	// that implement it.
-	activity := gateway.NewActivity()
+	activity, err := gateway.OpenActivity(filepath.Join(opts.root, "/var/lib/open-linux-router/activity.json"))
+	if err != nil {
+		return fmt.Errorf("opening activity history: %w", err)
+	}
 	srv.Mount(gateway.ModuleName, gateway.HTTP{
 		Activity: activity,
 		Latency:  latency,
@@ -840,7 +843,19 @@ func run(args []string) error {
 
 	go seen.Run(ctx, seenEvery, seenWrite)
 	go latency.Run(ctx)
-	go activity.Run(ctx, gatewayApplier)
+	activityDone := make(chan struct{})
+	activityCtx, stopActivity := context.WithCancel(ctx)
+	go func() {
+		defer close(activityDone)
+		activity.Run(activityCtx, gatewayApplier)
+	}()
+	defer func() {
+		stopActivity()
+		<-activityDone
+		if err := activity.Save(); err != nil {
+			logger.Error("could not save activity history on exit", "error", err)
+		}
+	}()
 
 	var listeners []net.Listener
 

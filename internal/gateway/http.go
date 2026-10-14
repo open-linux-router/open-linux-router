@@ -194,7 +194,7 @@ func (h HTTP) Routes() []core.Route {
 				"Reports counting:false rather than failing when the counters cannot be read.",
 			Handler: h.getTraffic,
 		},
-		{Method: "GET", Path: "/activity", Tool: "show activity", Summary: "Show volatile half-hour traffic samples for the requested addresses.", Handler: h.getActivity},
+		{Method: "GET", Path: "/activity", Tool: "show activity", Summary: "Show retained half-hour traffic samples for the requested addresses.", Handler: h.getActivity},
 	}
 
 	// The NAT half's routes, under the same prefix. Appended rather than
