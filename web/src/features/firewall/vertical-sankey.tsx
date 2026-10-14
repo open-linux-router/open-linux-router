@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { sourceLabels, type TrafficFlow } from './traffic-model'
 
 type Node = { id: string; title: string; packets: number; x: number; y: number; width: number; color: string; detail: string }
@@ -9,35 +9,39 @@ const allowedColor = 'var(--success-foreground)'
 const blockedColor = 'var(--warning-foreground)'
 const decisionColor = (verdict: string) => verdict === 'allowed' ? allowedColor : blockedColor
 
-function lines(title: string): string[] {
+function lines(title: string, limit = 25): string[] {
   const result: string[] = []
   for (const word of title.split(' ')) {
     const last = result.length - 1
-    if (last >= 0 && `${result[last]} ${word}`.length <= 25) result[last] += ` ${word}`
+    if (last >= 0 && `${result[last]} ${word}`.length <= limit) result[last] += ` ${word}`
     else result.push(word)
   }
   return result
 }
 
-/** One shared packet scale, with external arrivals above the decisions and
- * trusted/local arrivals below. All ribbons flow toward the central decisions. */
+/** Three rows on one packet scale: sources, sourced categories, decisions.
+ * All ribbons travel down; horizontal scrolling starts at the first node. */
 export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
   const container = useRef<HTMLDivElement>(null)
-  const outside = flows.filter(flow => flow.source === 'outside')
-  const inside = flows.filter(flow => flow.source !== 'outside')
-  const width = Math.max(900, Math.max(outside.length, inside.length) * 200 + 48)
+  const [availableWidth, setAvailableWidth] = useState(900)
   useLayoutEffect(() => {
     const element = container.current
-    if (element) element.scrollLeft = Math.max(0, (width - element.clientWidth) / 2)
-  }, [width])
+    if (!element) return
+    const resize = new ResizeObserver(() => setAvailableWidth(element.clientWidth))
+    resize.observe(element)
+    return () => resize.disconnect()
+  }, [])
+  const sourceOrder = ['outside', 'inside', 'local'] as const
+  const ordered = sourceOrder.flatMap(source => flows.filter(flow => flow.source === source))
+  const width = Math.max(availableWidth, 900, ordered.length * 96 + 48)
+  const labelWidth = Math.max(84, Math.min(176, (width - 48) / Math.max(1, ordered.length) - 12))
   const total = flows.reduce((sum, flow) => sum + flow.packets, 0)
   const nodes: Node[] = []
   const bands: Band[] = []
-  const outsideY = outside.length ? 96 : 0
-  const decisionY = outside.length ? 360 : 96
-  const insideCategoryY = decisionY + 200
-  const insideSourceY = decisionY + 370
-  const height = inside.length ? insideSourceY + 96 : decisionY + 112
+  const sourceY = 96
+  const categoryY = 340
+  const decisionY = 560
+  const height = 660
 
   const sourceRows = (rows: TrafficFlow[]) => [...new Set(rows.map(flow => flow.source))].map(source => ({
     id: `source:${source}`, title: sourceLabels[source],
@@ -52,33 +56,32 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
     const packets = flows.filter(flow => flow.verdict === verdict).reduce((sum, flow) => sum + flow.packets, 0)
     return packets ? [{ id: verdict, title: verdict === 'allowed' ? 'Allowed' : 'Blocked', packets, color: decisionColor(verdict), detail: 'Total from all sources' }] : []
   })
-  const rows = [sourceRows(outside), categories(outside), decisions, categories(inside), sourceRows(inside)]
+  const rows = [sourceRows(ordered), categories(ordered), decisions]
   // Reserve label space even for tiny but nonzero paths, while preserving the
   // same pixels-per-packet for every bar and ribbon across the entire graph.
   let low = 0
   let high = (width - 48) / total
   for (let i = 0; i < 40; i++) {
     const candidate = (low + high) / 2
-    if (rows.every(row => row.reduce((sum, node) => sum + Math.max(176, node.packets * candidate), 0) + Math.max(0, row.length - 1) * 24 <= width - 48)) low = candidate
+    if (rows.every((row, index) => row.reduce((sum, node) => sum + Math.max(index === 1 ? labelWidth : 176, node.packets * candidate), 0) + Math.max(0, row.length - 1) * 12 <= width - 48)) low = candidate
     else high = candidate
   }
   const scale = low
   const place = (row: Omit<Node, 'x' | 'y' | 'width'>[], y: number) => {
-    const span = row.reduce((sum, node) => sum + Math.max(176, node.packets * scale), 0) + Math.max(0, row.length - 1) * 24
+    const space = y === categoryY ? labelWidth : 176
+    const span = row.reduce((sum, node) => sum + Math.max(space, node.packets * scale), 0) + Math.max(0, row.length - 1) * 12
     let cursor = (width - span) / 2
     return row.map(node => {
-      const cell = Math.max(176, node.packets * scale)
+      const cell = Math.max(space, node.packets * scale)
       const placed = { ...node, x: cursor + cell / 2, y, width: node.packets * scale }
-      cursor += cell + 24
+      cursor += cell + 12
       nodes.push(placed)
       return placed
     })
   }
-  const topSources = place(rows[0], outsideY)
-  const topCategories = place(rows[1], outsideY + 140)
-  const middle = place(rows[2], decisionY)
-  const bottomCategories = place(rows[3], insideCategoryY)
-  const bottomSources = place(rows[4], insideSourceY)
+  const topSources = place(rows[0], sourceY)
+  const middleCategories = place(rows[1], categoryY)
+  const bottomDecisions = place(rows[2], decisionY)
 
   const used = new Map<string, number>()
   const connect = (items: TrafficFlow[], sources: Node[], categories: Node[]) => {
@@ -90,22 +93,20 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
     items.forEach((flow, i) => {
       const source = sources.find(node => node.id === `source:${flow.source}`)!
       const category = categories[i]
-      const decision = middle.find(node => node.id === flow.verdict)!
+      const decision = bottomDecisions.find(node => node.id === flow.verdict)!
       const detail = category.detail
       bands.push({ id: `${flow.id}:source`, from: source, to: category, fromX: offset(source, flow.packets), toX: category.x - category.width / 2, width: category.width, color: source.color, detail })
       bands.push({ id: `${flow.id}:decision`, from: category, to: decision, fromX: category.x - category.width / 2, toX: offset(decision, flow.packets), width: category.width, color: category.color, detail })
     })
   }
-  connect(outside, topSources, topCategories)
-  connect(inside, bottomSources, bottomCategories)
+  connect(ordered, topSources, middleCategories)
 
   return (
-    <div ref={container} className="mt-4 overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="region" aria-label="Vertical firewall Sankey: external sources above, LAN and router sources below">
-      <svg width={width} height={height} role="img" aria-label="Traffic flows toward Allowed or Blocked in the middle" className="text-foreground">
+    <div ref={container} className="mt-4 overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="region" aria-label="Vertical firewall Sankey: source, semantic category and decision" aria-describedby="firewall-chart-scroll">
+      <svg width={width} height={height} role="img" aria-label="Three layers from top to bottom: sources, semantic categories by source, Allowed or Blocked" className="text-foreground">
         {bands.map(band => {
-          const down = band.from.y < band.to.y
-          const y1 = band.from.y + (down ? barHeight : 0)
-          const y2 = band.to.y + (down ? 0 : barHeight)
+          const y1 = band.from.y + barHeight
+          const y2 = band.to.y
           const mid = (y1 + y2) / 2
           const x1 = band.fromX
           const x2 = band.toX
@@ -116,23 +117,22 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
             </path>
           )
         })}
-        {[...topSources, ...bottomSources].map(node => {
-          const down = node.y === outsideY
-          const y = node.y + (down ? 36 : -24)
-          return <path key={`direction:${node.id}`} d={`M ${node.x - 5} ${y + (down ? -5 : 5)} L ${node.x} ${y} L ${node.x + 5} ${y + (down ? -5 : 5)}`} fill="none" stroke={node.color} strokeWidth={2} aria-hidden="true" />
-        })}
         {nodes.map(node => {
-          const label = lines(node.title)
-          const below = node.y >= insideCategoryY
-          const labelY = below ? node.y + barHeight + 24 : node.y - 16 - label.length * 18
+          const flow = ordered.find(flow => flow.id === node.id)
+          const label = lines(node.title, Math.floor((flow ? labelWidth : 176) / 7))
+          const below = node.y === decisionY
+          const origin = flow ? lines(sourceLabels[flow.source], Math.floor(labelWidth / 6)) : []
+          const labelY = below ? node.y + barHeight + 24 : node.y - 16 - (label.length + origin.length + (flow ? 1 : 0)) * 18
           return (
             <g key={node.id}>
               <rect x={node.x - node.width / 2} y={node.y} width={node.width} height={barHeight} fill={node.color}>
                 <title>{`${node.detail}\n${node.packets.toLocaleString()} packets`}</title>
               </rect>
-              <text x={node.x} y={labelY} fill="currentColor" fontSize={14} textAnchor="middle">
+              <text x={node.x} y={labelY} fill="currentColor" fontSize={flow ? 13 : 14} textAnchor="middle">
                 {label.map((line, index) => <tspan key={index} x={node.x} dy={index ? 18 : 0}>{line}</tspan>)}
-                <tspan x={node.x} dy={18}>{node.packets.toLocaleString()} packets</tspan>
+                {origin.map((line, index) => <tspan key={`origin:${index}`} x={node.x} dy={18} fontSize={12}>{line}</tspan>)}
+                <tspan x={node.x} dy={18}>{node.packets.toLocaleString()}{flow ? '' : ' packets'}</tspan>
+                {flow && <tspan x={node.x} dy={18}>packets</tspan>}
               </text>
             </g>
           )
