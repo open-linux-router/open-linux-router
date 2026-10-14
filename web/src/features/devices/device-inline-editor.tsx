@@ -23,7 +23,6 @@ import { useGatewayApply } from '@/features/gateway/use-apply'
 import { ApiError } from '@/lib/api'
 import type { DeviceRow } from '@/lib/api-types'
 import type { Device, DevicesConfig, Reservation } from '@/lib/config-types'
-import { formatAgo } from '@/lib/utils'
 
 const NO_GROUP = ' none'
 const INHERIT_EXIT = ' inherit'
@@ -127,12 +126,19 @@ export function DeviceInlineEditor({ device, traffic, activity }: { device: Devi
               {reservation && <Badge variant="secondary">Fixed</Badge>}
             </div>
           </DeviceSettingRow>
-          <Fact label="Last seen" value={device.last_seen ? formatAgo(device.last_seen) : 'Never'} />
           <DeviceSettingRow label="Group"><button type="button" aria-label="Edit device group" disabled={identityBusy} onClick={() => begin('group')} className="min-h-11 rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9"><Badge variant="secondary" className="whitespace-normal break-words">{device.group || 'No group'}</Badge></button></DeviceSettingRow>
-          <DeviceSettingRow label="Uplink"><button type="button" aria-label="Edit device uplink" disabled={!gateway.data || gatewayApplier.busy} onClick={() => begin('exit')} className="min-h-11 rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9"><Badge variant="secondary" className="whitespace-normal break-words">{exit === INHERIT_EXIT ? 'Default' : exit === DIRECT_EXIT ? 'This router’s connection' : exit}</Badge></button></DeviceSettingRow>
         </dl>
       </div>
-      <div className="min-w-0">{traffic}</div>
+      <div className="min-w-0 space-y-2">
+        <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 text-sm sm:min-h-9">
+          <span className="text-muted-foreground">Uplink</span>
+          <div role="group" aria-label="Device uplink" className="flex max-w-full flex-wrap justify-end rounded-lg bg-muted p-0.5">
+            {[{ value: INHERIT_EXIT, label: 'Default' }, ...(exit === DIRECT_EXIT ? [{ value: DIRECT_EXIT, label: 'This router’s connection' }] : []), ...(gateway.data?.exits ?? []).map((e) => ({ value: e.name, label: e.name }))].map((option) => <Button key={option.value} size="sm" className="h-11 max-w-full whitespace-normal break-words px-2 sm:h-7" variant={exit === option.value ? 'outline' : 'ghost'} aria-pressed={exit === option.value} disabled={!gateway.data || gatewayApplier.busy} onClick={() => { if (exit !== option.value) void gatewayApplier.submit(option.value === INHERIT_EXIT ? gatewayChange.removeDevice(device.mac) : gatewayChange.device(device.mac, option.value === DIRECT_EXIT ? '' : option.value)) }}>{option.label}</Button>)}
+          </div>
+        </div>
+        {gateway.isError && <p className="text-sm text-destructive">Could not load uplinks.</p>}
+        {traffic}
+      </div>
     </div>
     </Card>
     <Dialog open={editing === 'icon'} onOpenChange={(open) => { if (!open) setEditing(null) }}>

@@ -129,8 +129,9 @@ retain its accessible status. Each day is one column, newest on the right, with
 six four-hour dots from midnight downward. Future periods stay blank, and dot
 tooltips appear immediately. A divider separates the
 title from two columns of 36px desktop / 44px mobile minimum-height label/value rows: stable identity
-and settings on the left, observed state and traffic on the right. Group and Uplink values use clickable tags with muted surfaces that open edit dialogs.
-Device traffic reuses Overview meters and total rows without a heading.
+and settings on the left, routing, priority and traffic on the right. Group uses
+a clickable tag with a muted surface that opens its edit dialog.
+Device traffic reuses Overview meters with visible direction labels.
 The device title contains a right-aligned traffic matrix occupying two thirds
 of the title width: one column per day and six four-hour periods per column.
 Cells stay 14px square with 3px corners. Derive the row gap from the 96px
@@ -143,7 +144,9 @@ fully visible, including zero/unknown dots. Use the shared opaque activity
 palette in four green intensities without decorative borders or inset rings;
 cell fills and spacing define the grid. Retain visible keyboard focus. No axes,
 legend, heading or helper text; tooltips provide dates, units and sample state.
-Priority leads the right column with a segmented selector. Clicking each speed bar opens its limit dialog; omit repeated rate headings, separate limit fields and the QoS divider/status row.
+Uplink and Priority lead the right column with compact segmented selectors.
+Clicking each labeled speed bar opens its limit dialog; omit separate limit
+fields and the QoS divider/status row.
 Device policies apply automatically, without a switch. Keep QoS controls on
 devices; Gateway does not expose aggregate link-rate settings. Blank device
 limits mean unlimited; pending placement must remain distinct from active state.
@@ -152,7 +155,11 @@ Device detail rows use two zones: left-aligned labels and right-aligned values
 or controls, with 36px desktop / 44px mobile minimum row height. Keep disclosure chevrons beside their
 values rather than in a separate action column. Clicking the IP opens a dialog
 with an address and fixed toggle, without a pencil. A Fixed badge follows reserved
-addresses. Traffic rates use inset meters followed by plain total rows. Separate the
+addresses. Device traffic rates have Download and Upload labels beside narrower,
+arrow-free inset meters; omit cumulative total rows and Last seen. Uplink sits
+above Priority in the right column. Both use segmented controls with 28px desktop
+buttons, 2px container padding and 44px mobile targets. Uplink applies through
+the existing network-change confirmation flow. Separate the
 desktop identity/settings and traffic halves with a 64px gutter; stack them with
 32px spacing below desktop.
 Never style a pending or failed read as a disabled service.

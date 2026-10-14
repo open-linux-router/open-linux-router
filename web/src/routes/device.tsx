@@ -1,4 +1,3 @@
-import { MetricPill } from '@/components/traffic-metrics'
 import { Input } from '@/components/ui/input'
 import { useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
@@ -17,7 +16,6 @@ import { useDeviceList } from '@/features/devices/queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
 import { DevicePolicy } from '@/features/qos/device-policy'
 import { useTrafficView } from '@/features/topology/traffic'
-import { formatBytes } from '@/lib/utils'
 
 export function DevicePage() {
   const { mac } = useParams()
@@ -45,14 +43,7 @@ export function DevicePage() {
     <div className="space-y-4 pb-12">
       <DeviceInlineEditor key={device.mac} device={device} activity={<DeviceActivity addresses={device.ips ?? []} />} traffic={
         <DevicePolicy mac={device.mac} downRate={usage?.downRate} upRate={usage?.upRate}>
-            {flow.counting ? (
-              <div className="space-y-2">
-                <div className="space-y-1 pt-1">
-                  <MetricPill label="Download" value={usage?.down === undefined ? 'No address match' : formatBytes(usage.down)} valueRight />
-                  <MetricPill label="Upload" value={usage?.up === undefined ? 'No address match' : formatBytes(usage.up)} valueRight />
-                </div>
-              </div>
-            ) : (
+            {!flow.counting && (
               <p className="text-sm text-muted-foreground">{traffic.isError ? 'Traffic counters are unavailable right now.' : 'Traffic counting is off or unavailable.'}</p>
             )}
         </DevicePolicy>

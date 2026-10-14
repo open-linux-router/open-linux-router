@@ -75,10 +75,12 @@ Keep unavailable counters distinct from a verified zero-traffic state.
 
 Show QoS as saved configuration until enforcement exists.
 Device details group stable identity and saved settings on the left, live
-observations and traffic on the right. Reuse Overview rate meters and plain Download and Upload totals, without a
-traffic title or attribution footnote. Group and Uplink are tags that open edit dialogs.
-Use Last seen for observation freshness. Priority leads the right column with a
-segmented selector. The title's activity matrix shows one day per column, newest
+uplink, priority and live traffic on the right. Reuse Overview rate meters with
+Download and Upload labels beside narrower bars, without arrows or cumulative
+total rows. Omit Last seen. Group is a tag that opens its edit dialog.
+Compact Uplink and Priority segmented selectors lead the right column, in that
+order. Uplink selections retain network-change confirmation and apply feedback.
+The title's activity matrix shows one day per column, newest
 on the right, and six four-hour periods from top to bottom. The displayed date
 range adapts to the available width, with fixed square cells; dates without
 retained history remain explicitly missing data. Leave future periods

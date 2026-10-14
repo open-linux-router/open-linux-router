@@ -43,14 +43,18 @@ export function DevicePolicy({ mac, downRate, upRate, children }: { mac: string;
   return <section aria-label="Priority and traffic" className="space-y-3">
     <div className="flex min-h-11 flex-wrap items-center justify-between gap-3 text-sm sm:min-h-9">
       <span className="text-muted-foreground">Priority</span>
-      <div role="group" aria-label="Device priority" className="flex rounded-lg bg-muted p-1">
-        {(['high', 'normal', 'low'] as Priority[]).map((value) => <Button key={value} size="sm" variant={priority === value ? 'outline' : 'ghost'} aria-pressed={priority === value} disabled={busy} onClick={() => void save(value)}>{value[0].toUpperCase() + value.slice(1)}</Button>)}
+      <div role="group" aria-label="Device priority" className="flex rounded-lg bg-muted p-0.5">
+        {(['high', 'normal', 'low'] as Priority[]).map((value) => <Button key={value} size="sm" className="h-11 px-2 sm:h-7" variant={priority === value ? 'outline' : 'ghost'} aria-pressed={priority === value} disabled={busy} onClick={() => void save(value)}>{value[0].toUpperCase() + value.slice(1)}</Button>)}
       </div>
     </div>
     {config.isError && <p className="text-sm text-destructive">Could not load priority and limits.</p>}
     <div className="space-y-1">
-      <Meter label="Download" arrow="↓" current={downRate === undefined ? '—' : formatRate(downRate)} maximum={current?.download_mbps ? String(current.download_mbps) + ' Mbps' : undefined} onClick={() => begin('download')} />
-      <Meter label="Upload" arrow="↑" current={upRate === undefined ? '—' : formatRate(upRate)} maximum={current?.upload_mbps ? String(current.upload_mbps) + ' Mbps' : undefined} tone="amber" onClick={() => begin('upload')} />
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 text-sm">
+        <span className="text-muted-foreground">Download</span>
+        <Meter label="Download" current={downRate === undefined ? '—' : formatRate(downRate)} maximum={current?.download_mbps ? String(current.download_mbps) + ' Mbps' : undefined} onClick={() => begin('download')} />
+        <span className="text-muted-foreground">Upload</span>
+        <Meter label="Upload" current={upRate === undefined ? '—' : formatRate(upRate)} maximum={current?.upload_mbps ? String(current.upload_mbps) + ' Mbps' : undefined} tone="amber" onClick={() => begin('upload')} />
+      </div>
     </div>
     {children}
     <Dialog open={!!editing} onOpenChange={(open) => { if (!open && !apply.isPending) setEditing(null) }}>
