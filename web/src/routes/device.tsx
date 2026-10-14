@@ -41,7 +41,7 @@ export function DevicePage() {
 
   return (
     <div className="space-y-4 pb-12">
-      <DeviceInlineEditor key={device.mac} device={device} activity={<DeviceActivity addresses={device.ips ?? []} />} traffic={
+      <DeviceInlineEditor key={device.mac} device={device} activity={<DeviceActivity addresses={device.ips ?? []} downRate={usage?.downRate} upRate={usage?.upRate} />} traffic={
         <DevicePolicy mac={device.mac} downRate={usage?.downRate} upRate={usage?.upRate}>
             {!flow.counting && (
               <p className="text-sm text-muted-foreground">{traffic.isError ? 'Traffic counters are unavailable right now.' : 'Traffic counting is off or unavailable.'}</p>

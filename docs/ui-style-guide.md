@@ -226,8 +226,10 @@ and control hit targets. The footer theme control is a single icon. Clicking cyc
 auto, light and dark; its accessible label and tooltip name the current and next theme.
 
 Use 150–200ms color/opacity transitions. Motion should explain a state change;
-no ambient animation except the current device-activity block's gentle four-second
-opacity breath. Honor prefers-reduced-motion in the global stylesheet.
+no ambient animation except the current device-activity block's traffic indicator.
+Blink faster as combined live download/upload increases, with a logarithmic
+2s–500ms cycle capped at 100 MiB/s. Idle or unavailable rates stay steady;
+historical cells retain their traffic fills. Honor prefers-reduced-motion in the global stylesheet.
 
 ## Page coverage and review checklist
 

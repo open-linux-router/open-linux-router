@@ -198,13 +198,13 @@ html {
     }
 }
 
-@keyframes device-activity-breathe {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+@keyframes device-activity-blink {
+  0%, 35%, 100% { opacity: 1; }
+  36%, 99% { opacity: 0.4; }
 }
 
 .device-activity-current {
-  animation: device-activity-breathe 4s ease-in-out infinite;
+  animation: device-activity-blink 2s steps(1, end) infinite;
 }
 
 /* Nothing here is load-bearing motion — every animation is decoration on a

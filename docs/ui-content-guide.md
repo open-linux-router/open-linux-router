@@ -98,7 +98,10 @@ Speed bars open download/upload limit dialogs; keep the
 configuration-only caveat in those dialogs and save feedback, without a status row.
 Omit Notes and the QoS heading.
 Device activity sits at the right of the title bar, without visible
-explanatory text. Immediate four-hour hover/focus hints show sampled download and upload
+explanatory text. Only the current period blinks with live combined download/upload
+speed: faster traffic means faster blinking; idle or unavailable rates stay steady.
+Historical colors continue to represent accumulated traffic.
+Immediate four-hour hover/focus hints show sampled download and upload
 or explicitly report missing/unavailable data. Partial samples are not exact
 four-hour totals. History is joined to the device's currently observed addresses.
 It begins accumulating after daemon startup. Sampling and UI
