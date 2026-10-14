@@ -53,6 +53,7 @@ export function ServiceDialog({
   open,
   onOpenChange,
   initial,
+  initialUpstream,
   domain,
   onSubmit,
   onRemove,
@@ -60,14 +61,16 @@ export function ServiceDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
   initial?: Service
+  initialUpstream?: Service['upstream']
   /** The suffix names live under, for the preview. Owned by the dns module. */
   domain?: string
   onSubmit: (service: Service) => Promise<boolean>
   /** Only supplied when editing. Removing is an edit to the thing you opened. */
   onRemove?: () => void
 }) {
-  const [draft, setDraft] = useState<Service>(initial ?? EMPTY)
-  const [target, setTarget] = useState<string>(initial?.upstream.device ?? MANUAL)
+  const empty = initialUpstream ? { ...EMPTY, upstream: initialUpstream } : EMPTY
+  const [draft, setDraft] = useState<Service>(initial ?? empty)
+  const [target, setTarget] = useState<string>(initial?.upstream.device ?? initialUpstream?.device ?? MANUAL)
   const [saving, setSaving] = useState(false)
   const editing = initial !== undefined
 
@@ -116,8 +119,8 @@ export function ServiceDialog({
       open={open}
       onOpenChange={(next) => {
         if (!next) {
-          setDraft(initial ?? EMPTY)
-          setTarget(initial?.upstream.device ?? MANUAL)
+          setDraft(initial ?? empty)
+          setTarget(initial?.upstream.device ?? initialUpstream?.device ?? MANUAL)
         }
         onOpenChange(next)
       }}

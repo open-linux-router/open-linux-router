@@ -80,12 +80,16 @@ Keep unavailable counters distinct from a verified zero-traffic state.
 Show QoS as saved configuration until enforcement exists.
 Device details group stable identity and saved settings on the left, live
 uplink, priority and live traffic on the right. Reuse Overview rate meters with
-Download and Upload labels beside narrower bars, without arrows or cumulative
-total rows. Omit Last seen. Group is a tag that opens its edit dialog.
+Download and Upload labels beside narrower bars, without arrows.
+Total below Upload shows cumulative download then upload with the Overview arrows;
+unavailable counters show dashes. Services below Group lists matching configured
+services with an add action that opens Ingress and prefills the current device.
+Devices without a reserved name/address prefill their observed host instead.
+Omit Last seen. Group is a tag that opens its edit dialog.
 Compact Uplink and Priority segmented selectors lead the right column, in that
 order. Uplink selections retain network-change confirmation and apply feedback.
 On desktop, pair Vendor with Uplink, MAC with Priority, IP with Download and
-Group with Upload in shared rows. Place read errors and traffic availability
+Group with Upload and Services with Total in shared rows. Place read errors and traffic availability
 messages after those rows so they do not shift the corresponding values.
 The title's activity matrix shows one day per column, newest
 on the right, and six four-hour periods from top to bottom. The displayed date

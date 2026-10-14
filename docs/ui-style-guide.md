@@ -137,9 +137,11 @@ title from two columns of 36px desktop / 44px mobile minimum-height label/value 
 and settings on the left, routing, priority and traffic on the right. Group uses
 a clickable tag with a muted surface that opens its edit dialog.
 Device traffic reuses Overview meters with visible direction labels.
-At desktop widths both halves share four grid rows: Vendor/Uplink, MAC/Priority,
-IP/Download and Group/Upload. Match row padding and let wrapped content grow
-both sides together; feedback follows the four aligned rows.
+At desktop widths both halves share five grid rows: Vendor/Uplink, MAC/Priority,
+IP/Download, Group/Upload and Services/Total. Services shows matching configured
+services and a trailing outlined add button opening Ingress with the device
+prefilled. Total uses the Overview download/upload arrows and byte values.
+Match row padding and let wrapped content grow both sides together; feedback follows the aligned rows.
 Device speed bars use half their available value width from 640px, aligned right;
 on phones they retain the full width so rates and limit actions remain readable.
 The device title contains a right-aligned traffic matrix occupying two thirds
@@ -166,7 +168,7 @@ or controls, with 36px desktop / 44px mobile minimum row height. Keep disclosure
 values rather than in a separate action column. Clicking the IP opens a dialog
 with an address and fixed toggle, without a pencil. A Fixed badge follows reserved
 addresses. Device traffic rates have Download and Upload labels beside narrower,
-arrow-free inset meters; omit cumulative total rows and Last seen. Uplink sits
+arrow-free inset meters; cumulative totals sit below Upload. Omit Last seen. Uplink sits
 above Priority in the right column. Both use segmented controls with 28px desktop
 buttons, 2px container padding and 44px mobile targets. Uplink applies through
 the existing network-change confirmation flow. Separate the

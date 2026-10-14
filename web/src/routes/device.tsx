@@ -1,6 +1,6 @@
 import { Input } from '@/components/ui/input'
 import { useRef, useState } from 'react'
-import { Search, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Plus, Search, X } from 'lucide-react'
 import { Link, useParams } from 'react-router'
 
 import { Badge } from '@/components/ui/badge'
@@ -16,11 +16,14 @@ import { useDeviceList } from '@/features/devices/queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
 import { DevicePolicy } from '@/features/qos/device-policy'
 import { useTrafficView } from '@/features/topology/traffic'
+import { useIngressConfig } from '@/features/ingress/queries'
+import { formatBytes } from '@/lib/utils'
 
 export function DevicePage() {
   const { mac } = useParams()
   const devices = useDeviceList()
   const traffic = useGatewayTraffic()
+  const ingress = useIngressConfig()
   const dnsConfig = useDnsConfig()
   const [dnsInspection, setDnsInspection] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -31,6 +34,10 @@ export function DevicePage() {
   const [filter, setFilter] = useState('')
   const device = devices.data?.devices.find((d) => d.mac.toLowerCase() === mac?.toLowerCase())
   const usage = device && flow.flowOf(device)
+  const services = (ingress.data?.services ?? []).filter((s) =>
+    (device?.name && s.upstream.device === device.name) ||
+    (s.upstream.host && [device?.fixed_ip, ...(device?.ips ?? [])].some((ip) => ip?.toLowerCase() === s.upstream.host?.toLowerCase())),
+  )
   const addresses = new Set(device?.ips?.map((ip) => ip.toLowerCase()) ?? [])
   const matchingQueries = dnsQueries.data?.queries.filter((q) => addresses.has(q.client.toLowerCase())) ?? []
   const shownQueries = matchingQueries.filter((q) => !filter.trim() || [q.name, q.type, q.rcode, q.policy ?? '', ...(q.answers ?? [])].some((value) => value.toLowerCase().includes(filter.trim().toLowerCase())))
@@ -41,7 +48,15 @@ export function DevicePage() {
 
   return (
     <div className="space-y-4 pb-12">
-      <DeviceInlineEditor key={device.mac} device={device} activity={<DeviceActivity addresses={device.ips ?? []} downRate={usage?.downRate} upRate={usage?.upRate} />} traffic={
+      <DeviceInlineEditor key={device.mac} device={device} services={
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {ingress.isError ? <span className="text-destructive">Unavailable</span> : ingress.isPending ? <span className="text-muted-foreground">Loading…</span> : services.length ? services.map((service) => <Link key={service.name} to="/access/ingress" className="max-w-full rounded-md hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"><Badge variant="secondary" className="whitespace-normal break-all">{service.name}</Badge></Link>) : <span className="text-muted-foreground">None</span>}
+          <Button variant="outline" size="icon" aria-label="Add service for this device" nativeButton={false} render={<Link to={`/access/ingress?device=${encodeURIComponent(device.mac)}`} />}><Plus className="size-4" /></Button>
+        </div>
+      } total={<span className="inline-flex flex-wrap justify-end gap-3 tabular-nums" title="Traffic through this router since counters were reset">
+        <span className="inline-flex items-center gap-0.5"><ArrowDown className="size-3 text-receive" aria-label="Download" />{flow.counting ? formatBytes(usage?.down ?? 0) : '—'}</span>
+        <span className="inline-flex items-center gap-0.5 text-muted-foreground"><ArrowUp className="size-3 text-transmit" aria-label="Upload" />{flow.counting ? formatBytes(usage?.up ?? 0) : '—'}</span>
+      </span>} activity={<DeviceActivity addresses={device.ips ?? []} downRate={usage?.downRate} upRate={usage?.upRate} />} traffic={
         <DevicePolicy mac={device.mac} downRate={usage?.downRate} upRate={usage?.upRate}>
             {!flow.counting && (
               <p className="text-sm text-muted-foreground">{traffic.isError ? 'Traffic counters are unavailable right now.' : 'Traffic counting is off or unavailable.'}</p>

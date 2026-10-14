@@ -1,5 +1,7 @@
 import { AlertTriangle, ExternalLink, Plus, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
+import { useSearchParams } from 'react-router'
+import { useDeviceList } from '@/features/devices/queries'
 
 import { StatusStrip } from '@/components/layout/status-strip'
 import { SubPage } from '@/components/layout/sub-page'
@@ -45,6 +47,14 @@ export function IngressPage() {
   const status = useIngressStatus()
   const applier = useIngressApply()
   const reapply = useReapplyIngress()
+  const [params, setParams] = useSearchParams()
+  const devices = useDeviceList()
+  const deviceMac = params.get('device')
+  const device = devices.data?.devices.find((d) => d.mac.toLowerCase() === deviceMac?.toLowerCase())
+  const initialUpstream = device ? device.fixed_ip && device.name
+    ? { device: device.name, port: 0 }
+    : { host: device.fixed_ip || device.ips?.find((ip) => !ip.includes(':')) || device.ips?.[0] || '', port: 0 }
+    : undefined
 
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Service | null>(null)
@@ -190,8 +200,17 @@ export function IngressPage() {
       </Card>
 
       <ServiceDialog
-        open={adding}
-        onOpenChange={setAdding}
+        key={deviceMac && device ? device.mac : 'new'}
+        open={adding || !!device}
+        initialUpstream={initialUpstream}
+        onOpenChange={(open) => {
+          setAdding(open)
+          if (!open && deviceMac) {
+            const next = new URLSearchParams(params)
+            next.delete('device')
+            setParams(next, { replace: true })
+          }
+        }}
         domain={domain}
         onSubmit={(service) => change(ingressChange.saveService(service.name, service))}
       />
