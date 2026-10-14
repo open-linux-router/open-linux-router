@@ -24,6 +24,7 @@ import (
 // HTTP serves the module. Its fields are what the module needs from core
 // (design.md §3.1 — modules call core, not the reverse).
 type HTTP struct {
+	World    *WorldTraffic
 	Activity *Activity
 	Latency  *LatencyMonitor
 
@@ -72,6 +73,7 @@ func (h HTTP) Routes() []core.Route {
 	}
 
 	routes := []core.Route{
+		{Method: "GET", Path: "/world-traffic", Tool: "show world traffic", Summary: "Top ten remote IPs by observed connection bytes over the last thirty seconds.", Handler: h.getWorldTraffic},
 		{Method: "GET", Path: "/latency", Tool: "show latency", Summary: "Latest router HTTPS response measurements and selected websites.", Handler: h.getLatency},
 		{Method: "GET", Path: "/latency/sites/{name}/icon", Summary: "Discover a monitored site icon.", Handler: h.getLatencyIcon},
 		{Method: "PUT", Path: "/latency/sites", Summary: "Replace custom HTTPS response targets.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencySites},

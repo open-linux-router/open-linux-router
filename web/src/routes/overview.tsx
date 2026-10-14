@@ -1,4 +1,5 @@
 import { Meter, MetricPill } from '@/components/traffic-metrics'
+import { WorldTraffic } from '@/features/world-traffic/world-traffic'
 import { AlertTriangle, ChevronRight, Info, Plus, Trash2, GripVertical } from 'lucide-react'
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -546,7 +547,7 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
   const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? 'Unavailable' : '—'
   // Share section boundaries, not individual rows: supplementary content keeps
   // its own rhythm, and Status flows naturally across both content sections.
-  return <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-x-4 lg:gap-y-2">
+  return <div className="grid grid-cols-2 gap-3 lg:grid-cols-5 lg:gap-x-4 lg:gap-y-2">
     <StatCard title="Status">
       <div className="space-y-1 lg:row-span-2 lg:self-start">
         <MetricPill value={title} health={faults.length || failed ? 'bad' : known && !idle ? 'good' : 'unknown'} />
@@ -601,6 +602,7 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
         <MetricPill label="Uptime" value={host ? uptime(host.uptime_seconds) : '—'} valueRight />
       </div>
     </StatCard>
+    <WorldTraffic origin={publicAddresses?.ipv4.country_code ?? publicAddresses?.ipv6.country_code} />
     {sitesOpen && <LatencySitesDialog sites={latency?.custom ?? []} exits={exits} onClose={() => setSitesOpen(false)} />}
     <BandwidthLimitDialog key={editing ?? 'closed'} direction={editing} limits={limits} onClose={() => setEditing(null)} onSave={saveLimits} />
   </div>

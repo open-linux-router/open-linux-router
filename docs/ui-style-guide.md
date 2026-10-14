@@ -203,6 +203,12 @@ and a relevant next action where one exists.
 
 ## Responsive behavior and motion
 
+Overview includes a fifth World traffic card in the desktop metric row; on
+phones it spans both columns. Its local MapLibre map uses receive/transmit
+colors and bounded logarithmic path widths. Moving particles indicate observed
+traffic direction and stop for reduced motion. Country points are approximate;
+the details dialog supplies rates and attribution without crowding the map.
+
 Network-map device ordering samples current traffic ranks every five seconds.
 Pause reordering while the pointer is over the map, keyboard focus is inside it,
 or a touch is active. Resume at the next scheduled update rather than immediately

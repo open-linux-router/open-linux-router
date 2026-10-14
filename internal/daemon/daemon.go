@@ -530,7 +530,10 @@ func run(args []string) error {
 			activity = restored
 		}
 	}
+	world := gateway.NewWorldTraffic(geoip.New(geoip.RootedDir(opts.root)))
+	world.Enabled = func() bool { cfg, err := gatewayApplier.Load(); return err == nil && cfg.StatsOrDefault() }
 	srv.Mount(gateway.ModuleName, gateway.HTTP{
+		World:    world,
 		Activity: activity,
 		Latency:  latency,
 		Applier:  gatewayApplier,
@@ -890,6 +893,7 @@ func run(args []string) error {
 		}
 	}()
 	go latency.Run(ctx)
+	go world.Run(ctx)
 	activityDone := make(chan struct{})
 	activityCtx, stopActivity := context.WithCancel(ctx)
 	go func() {

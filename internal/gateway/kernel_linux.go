@@ -902,7 +902,7 @@ func (k LinuxKernel) readSysctl(key string) (string, bool) {
 // because something else was installed, and this is the read that notices.
 func (k LinuxKernel) readSysctls() map[string]string {
 	out := map[string]string{}
-	for _, key := range []string{ForwardingSysctl, IPv6ForwardingSysctl} {
+	for _, key := range []string{ForwardingSysctl, IPv6ForwardingSysctl, "net.netfilter.nf_conntrack_acct"} {
 		if v, ok := k.readSysctl(key); ok {
 			out[key] = v
 		}

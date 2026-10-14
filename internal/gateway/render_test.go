@@ -363,7 +363,7 @@ func TestDisabledRendersNoRoutingPolicy(t *testing.T) {
 	c.Enabled = false
 	got := lines(t, c, nil)
 
-	for _, prefix := range []string{"rule ", "route ", "nft source", "nft snat", "sysctl "} {
+	for _, prefix := range []string{"rule ", "route ", "nft source", "nft snat", "sysctl net.ip"} {
 		if containsPrefix(got, prefix) {
 			t.Errorf("disabling should leave the box routing normally, but found %q: %s",
 				prefix, dump(got))
@@ -542,8 +542,8 @@ func TestADisabledModuleWritesNoSysctls(t *testing.T) {
 	c.Normalize()
 	got := Render(c, testLinks(), nil).Lines()
 
-	if containsPrefix(got, "sysctl ") {
-		t.Errorf("a disabled module writes nothing: %s", dump(got))
+	if containsPrefix(got, "sysctl net.ip") {
+		t.Errorf("disabled routing must not change IP sysctls: %s", dump(got))
 	}
 }
 

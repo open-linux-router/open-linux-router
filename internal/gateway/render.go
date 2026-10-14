@@ -416,6 +416,9 @@ func Render(c Config, links LinkView, health Health) Desired {
 	// just counts them all against mark 0.
 	if c.StatsOrDefault() {
 		d.Stat = StatTable{Enabled: true, Sets: StatSets()}
+		// Enables byte counters for new conntrack entries. Do not force this
+		// shared kernel facility off: remote access also consumes its counters.
+		d.Sysctls = append(d.Sysctls, SysctlSpec{Key: "net.netfilter.nf_conntrack_acct", Value: "1"})
 	}
 
 	if !c.Enabled {
