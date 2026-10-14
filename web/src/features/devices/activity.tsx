@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useLayoutEffect, useRef, useState } from 'react'
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { api } from '@/lib/api'
@@ -9,6 +10,17 @@ interface Bucket { at: string; bytes: { up: number; down: number } }
 const fills = ['bg-muted', 'bg-success/45', 'bg-success/60', 'bg-success/80', 'bg-success']
 
 export function DeviceActivity({ addresses }: { addresses: string[] }) {
+  const container = useRef<HTMLDivElement>(null)
+  const [days, setDays] = useState(1)
+  useLayoutEffect(() => {
+    const element = container.current
+    if (!element) return
+    const update = (width: number) => setDays(Math.max(1, Math.floor((width + 8) / 22)))
+    update(element.getBoundingClientRect().width)
+    const observer = new ResizeObserver(([entry]) => update(entry.contentRect.width))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
   const query = new URLSearchParams()
   addresses.slice(0, 32).forEach(address => query.append('address', address))
   const history = useQuery({
@@ -18,8 +30,8 @@ export function DeviceActivity({ addresses }: { addresses: string[] }) {
   })
   const buckets = new Map(history.data?.map(bucket => [Date.parse(bucket.at), bucket.bytes]))
   const now = new Date()
-  const cells = Array.from({ length: 14 * 6 }, (_, i) => {
-    const day = now.getDate() - 13 + Math.floor(i / 6)
+  const cells = Array.from({ length: days * 6 }, (_, i) => {
+    const day = now.getDate() - days + 1 + Math.floor(i / 6)
     const hour = (i % 6) * 4
     const at = new Date(now.getFullYear(), now.getMonth(), day, hour)
     const end = new Date(now.getFullYear(), now.getMonth(), day, hour + 4)
@@ -43,7 +55,7 @@ export function DeviceActivity({ addresses }: { addresses: string[] }) {
       <TooltipContent className="flex-col items-start animate-none!"><span>{time}</span><span>{detail}</span></TooltipContent>
     </Tooltip>
   })
-  return <div className="absolute right-0 -top-2 w-2/3 [mask-image:linear-gradient(to_right,transparent,black_40%)]" role="group" aria-label="Traffic activity, last 14 days, oldest to newest from left to right, six four-hour periods per day from top to bottom">
-    <div className="grid grid-flow-col grid-cols-[repeat(14,minmax(0,1fr))] grid-rows-[repeat(6,14px)] gap-x-2 gap-y-0.5 py-px">{cells}</div>
+  return <div ref={container} className="absolute right-0 -top-2 w-2/3 [mask-image:linear-gradient(to_right,transparent,black_40%)]" role="group" aria-label={`Traffic activity, last ${days} days, oldest to newest from left to right, six four-hour periods per day from top to bottom`}>
+    <div className="grid grid-flow-col auto-cols-[14px] grid-rows-[repeat(6,14px)] justify-end gap-x-2 gap-y-0.5 py-px">{cells}</div>
   </div>
 }

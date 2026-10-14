@@ -72,7 +72,9 @@ observations and traffic on the right. Reuse Overview rate meters and plain Down
 traffic title or attribution footnote. Group and Uplink are tags that open edit dialogs.
 Use Last seen for observation freshness. Priority leads the right column with a
 segmented selector. The title's activity matrix shows one day per column, newest
-on the right, and six four-hour periods from top to bottom. Leave future periods
+on the right, and six four-hour periods from top to bottom. The displayed date
+range adapts to the available width, with fixed square cells; dates without
+retained history remain explicitly missing data. Leave future periods
 blank and show download/upload totals immediately on hover or focus. Format the
 time as `10-14 4:00-8:00`, followed by traffic only; omit sampled/progress wording.
 Keep presence available to assistive technology without a visible title badge.

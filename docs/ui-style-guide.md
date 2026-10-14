@@ -131,10 +131,12 @@ tooltips appear immediately. A divider separates the
 title from two columns of 36px desktop / 44px mobile minimum-height label/value rows: stable identity
 and settings on the left, observed state and traffic on the right. Group and Uplink values use clickable tags with muted surfaces that open edit dialogs.
 Device traffic reuses Overview meters and total rows without a heading.
-The device title contains a right-aligned 14-day traffic matrix occupying two
-thirds of the title width: one column per day and six four-hour periods per
-column, using 14px-high cells with 3px corners, equal flexible widths, 8px column
-gaps and 2px row gaps. Keep the current-period hint and 1px inner padding.
+The device title contains a right-aligned traffic matrix occupying two thirds
+of the title width: one column per day and six four-hour periods per column.
+Cells stay 14px square with 3px corners, 8px column gaps and 2px row gaps.
+Fit as many complete date columns as the available width allows; wider layouts
+show more dates rather than stretching cells. Keep today at the right edge,
+the current-period hint and 1px inner padding.
 Fade only the left edge toward overlapping identity content; keep the right
 side fully visible, including muted zero/unknown dots. Use the success
 token in four intensities for traffic magnitude. No axes,
