@@ -94,11 +94,6 @@ export const SECTIONS: Section[] = [
           'Choose an interface, another gateway or a blocking route.',
       },
       {
-        slug: 'usage',
-        label: 'Usage',
-        blurb: 'Traffic forwarded through this router.',
-      },
-      {
         slug: 'unmanaged',
         label: 'External routing rules',
         // design.md §3.4: pretending we are the only actor is a bug. Somebody

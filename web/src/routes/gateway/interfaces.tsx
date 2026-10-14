@@ -222,6 +222,15 @@ export function GatewayInterfacesPage() {
           </div>
         </div>
 
+        <SwitchField
+          id="gateway-stats"
+          label="Count device traffic"
+          hint="Counts forwarded traffic by device. Turning off clears the current counters."
+          checked={config.stats ?? true}
+          busy={busy}
+          onChange={stats => change(gatewayChange.settings({ stats }))}
+        />
+
         <SettingsList
           section="/gateway"
           heading="Routing settings"
@@ -230,7 +239,6 @@ export function GatewayInterfacesPage() {
               slug: 'exits',
               value: exits.length ? exits.map((e) => e.name).join(', ') : 'None yet',
             },
-            { slug: 'usage', value: (config.stats ?? true) ? 'Counting' : 'Off' },
             // Another program's rules matter only when there is something to show.
             ...(foreign.length
               ? [{ slug: 'unmanaged', value: `${foreign.length} rule${foreign.length === 1 ? '' : 's'}` }]

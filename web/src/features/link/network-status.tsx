@@ -6,8 +6,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ListEmpty } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { useDhcpLeases, useDhcpStatus } from '@/features/dhcp/queries'
-import { useUplink } from '@/features/dial/queries'
+import { useDialStatus, useUplink } from '@/features/dial/queries'
+import { ApplyOutcome, useGatewayEditor } from '@/features/gateway/editor'
+import { gatewayChange } from '@/features/gateway/queries'
 import { useDnsStatus } from '@/features/dns/queries'
 import { useInterfaceTraffic, type RateSample } from '@/features/link/interface-traffic'
 import { NetworkIcon } from '@/features/link/network-icon'
@@ -21,6 +26,8 @@ const detailLink = 'inline-flex min-h-11 items-center gap-1 text-sm font-medium 
 export function NetworkStatus() {
   const interfaces = useInterfaces()
   const uplink = useUplink()
+  const dial = useDialStatus()
+  const { config, busy, change, applier, gate } = useGatewayEditor()
   const dhcp = useDhcpStatus()
   const leases = useDhcpLeases()
   const dns = useDnsStatus()
@@ -48,20 +55,41 @@ export function NetworkStatus() {
 
   return (
     <div className="space-y-8">
-      <section id="interfaces" aria-labelledby="interfaces-heading" className="scroll-mt-20">
-        <h2 id="interfaces-heading" className="sr-only">Interfaces</h2>
-        <div>
-          {interfaces.isPending && <div className="grid gap-4 min-[1000px]:grid-cols-3">
+      <ApplyOutcome applier={applier} />
+      <Card id="interfaces" aria-labelledby="interfaces-heading" className="scroll-mt-20">
+        <CardHeader><CardTitle id="interfaces-heading">Interfaces</CardTitle></CardHeader>
+        <CardContent className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="min-w-0">
+          {interfaces.isPending && <div className="grid gap-4 md:grid-cols-2">
             {[0, 1, 2].map(i => <Skeleton key={i} className="h-[280px] rounded-2xl" />)}
           </div>}
           {interfaces.isError && <Alert variant="destructive"><AlertTriangle /><AlertTitle>Could not load interfaces</AlertTitle><AlertDescription>{interfaces.error.message}</AlertDescription></Alert>}
           {interfaces.isSuccess && rows.length === 0 && <ListEmpty>No physical network interfaces found. <Link to="/gateway/interfaces" className="underline underline-offset-4">Open interface settings</Link></ListEmpty>}
-          {rows.length > 0 && <div className="grid gap-4 min-[1000px]:grid-cols-3">
+          {rows.length > 0 && <div className="grid gap-4 md:grid-cols-2">
             {rows.map(row => <InterfaceCard key={row.name} row={row} role={roleOf(row)} history={traffic.get(row.name)?.history ?? []} failed={interfaces.isError} onSelect={() => setSelected(row.name)} />)}
           </div>}
           {!uplink.isPending && uplink.isError && <p className="mt-3 text-xs text-muted-foreground">WAN assignment unavailable. <Link to="/gateway/interfaces" className="underline underline-offset-4">Review settings</Link></p>}
         </div>
-      </section>
+        <aside aria-label="Routing summary" className="min-w-0 border-t pt-6 xl:border-t-0 xl:border-l xl:pl-6 xl:pt-0">
+          <dl className="space-y-4 text-sm">
+            <div><dt className="text-muted-foreground">Default gateway</dt><dd className="mt-1 space-y-1 font-mono text-xs [overflow-wrap:anywhere]">
+              {dial.isError ? 'Unavailable' : dial.isPending ? 'Loading…' : dial.data.default_routes.length ? dial.data.default_routes.map((route, i) => <div key={i}>{route.via || 'Direct'} · {route.dev} · IPv{route.family}</div>) : 'Not assigned'}
+            </dd></div>
+            <div><dt className="text-muted-foreground">Default DNS</dt><dd className="mt-1 font-mono text-xs [overflow-wrap:anywhere]">
+              {dial.isError ? 'Unavailable' : dial.isPending ? 'Loading…' : dial.data.resolvers?.join(', ') || 'Unavailable'}
+            </dd></div>
+          </dl>
+          {config ? <div className="mt-6 space-y-4">
+            <div className="flex min-h-11 items-center justify-between gap-3"><label htmlFor="summary-forward-ipv4" className="text-sm">Forward IPv4</label><Switch id="summary-forward-ipv4" checked={config.enabled} disabled={busy} onCheckedChange={enabled => change(gatewayChange.settings({ enabled }))} /></div>
+            <p className="text-xs text-muted-foreground">Also applies Gateway routing rules. Turning off leaves system forwarding unchanged.</p>
+            <div className="flex min-h-11 items-center justify-between gap-3"><label htmlFor="summary-forward-ipv6" className="text-sm">Forward IPv6</label><Switch id="summary-forward-ipv6" checked={config.ipv6_forwarding === true} disabled={busy} onCheckedChange={ipv6_forwarding => change(gatewayChange.settings({ ipv6_forwarding }))} /></div>
+            {config.ipv6_forwarding === undefined && <p className="text-xs text-muted-foreground">IPv6 forwarding is not managed yet.</p>}
+            {!config.enabled && <p className="text-xs text-muted-foreground">IPv6 settings are saved but not applied while Gateway routing is off.</p>}
+          </div> : gate}
+          <Button className="mt-6 w-full" variant="outline" nativeButton={false} render={<Link to="/gateway/interfaces" />}>Details <ChevronRight className="size-4" aria-hidden /></Button>
+        </aside>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <ServiceCard kind="dhcp" title="DHCP" value={activeLeases} pending={leases.isPending} label="active leases" state={dhcpState} />

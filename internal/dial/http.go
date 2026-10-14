@@ -681,6 +681,11 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 		Records:       make([]recordView, 0, len(cfg.Records)),
 		AsOf:          time.Now(),
 	}
+	if h.Host != nil {
+		for _, resolver := range h.Host().Resolvers {
+			resp.Resolvers = append(resp.Resolvers, resolver.String())
+		}
+	}
 	for _, rec := range cfg.Records {
 		state, watched := states[rec.Name]
 		view := recordView{

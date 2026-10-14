@@ -36,7 +36,6 @@ import { GatewayExitsPage } from '@/routes/gateway/exits'
 import { FirewallPage } from '@/routes/firewall'
 import { FirewallRulesPage } from '@/routes/firewall-rules'
 import { GatewayUnmanagedPage } from '@/routes/gateway/unmanaged'
-import { GatewayUsagePage } from '@/routes/gateway/usage'
 import { CreditsPage } from '@/routes/credits'
 
 export function App() {
@@ -53,7 +52,7 @@ export function App() {
             <Route path="interfaces/:name" element={<GatewayInterfacePage />} />
             <Route path="networks" element={<Navigate to="/gateway/dhcp/details" replace />} />
             <Route path="exits" element={<GatewayExitsPage />} />
-            <Route path="usage" element={<GatewayUsagePage />} />
+            <Route path="usage" element={<Navigate to="/gateway" replace />} />
             <Route path="ipv6" element={<Navigate to="/gateway/interfaces#forwarding" replace />} />
             <Route path="unmanaged" element={<GatewayUnmanagedPage />} />
             <Route path="dhcp">

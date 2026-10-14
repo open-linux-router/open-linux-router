@@ -606,6 +606,8 @@ export interface RouteStatus {
 }
 
 export interface DialStatus {
+  /** Observed host resolvers, including when OLR does not manage the uplink. */
+  resolvers?: string[]
   uplink?: UplinkStatus
   /** Absent only when the box has no default route at all. */
   route?: RouteStatus

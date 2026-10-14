@@ -112,6 +112,9 @@ func TestAChangedUplinkTakesItsDependentsWithIt(t *testing.T) {
 // with nothing above it.
 func TestStatusReportsTheRouteWithoutAnUplink(t *testing.T) {
 	h := HTTP{
+		Host: func() HostStatus {
+			return HostStatus{Resolvers: []netip.Addr{netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("2606:4700:4700::1111")}}
+		},
 		Applier: Applier{
 			Store: testStore(t, ""),
 			Writer: fakeWriter{observed: Observed{
@@ -140,6 +143,9 @@ func TestStatusReportsTheRouteWithoutAnUplink(t *testing.T) {
 	}
 	if got.Uplink != nil {
 		t.Errorf("uplink = %+v; olr does not own this one", got.Uplink)
+	}
+	if !reflect.DeepEqual(got.Resolvers, []string{"1.1.1.1", "2606:4700:4700::1111"}) {
+		t.Errorf("host resolvers unavailable without a managed uplink: %v", got.Resolvers)
 	}
 	want := routeView{Dev: "wan0", Via: "192.168.1.1", Addresses: []string{"192.168.1.2/24"}, GatewayState: GatewayAnswers}
 	if got.Route == nil || !reflect.DeepEqual(*got.Route, want) {

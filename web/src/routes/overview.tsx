@@ -632,8 +632,8 @@ function TrafficNote({
         {failed
           ? 'Traffic counts could not be read, so the lines do not show how busy each group is.'
           : 'Traffic is not being counted, so the lines do not show how busy each group is.'}{' '}
-        <Link to="/gateway/usage" className="font-medium text-foreground underline-offset-4 hover:underline">
-          Usage settings
+        <Link to="/gateway/interfaces#gateway-stats" className="font-medium text-foreground underline-offset-4 hover:underline">
+          Traffic settings
         </Link>
       </span>
     </p>

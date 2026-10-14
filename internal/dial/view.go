@@ -230,6 +230,7 @@ type statusResponse struct {
 	// absent only when there is no default route.
 	Route         *routeView         `json:"route,omitempty"`
 	DefaultRoutes []defaultRouteView `json:"default_routes"`
+	Resolvers     []string           `json:"resolvers,omitempty"`
 
 	Records []recordView `json:"records"`
 

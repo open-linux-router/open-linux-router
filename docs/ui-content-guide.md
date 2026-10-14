@@ -133,6 +133,13 @@ addresses and provider errors readable rather than silently truncating them.
 
 ## Disclosure and hierarchy
 
+Gateway groups physical interface cards inside an Interfaces panel, with observed
+default gateways and host DNS on the right at desktop widths. Keep IPv4 and IPv6
+forwarding controls and the routing details link in that summary; stack it below
+interfaces on smaller screens. IPv4 also controls Gateway routing and leaves
+system forwarding unchanged when off; IPv6 intent is unapplied when routing is
+off. Usage has no separate page; traffic counting lives in routing details.
+
 Open newly navigated pages at the top so their title and primary information are
 visible. Preserve section targeting for hash links and scroll for query-only changes.
 
