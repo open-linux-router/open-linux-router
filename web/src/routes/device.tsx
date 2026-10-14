@@ -1,6 +1,6 @@
 import { Input } from '@/components/ui/input'
 import { useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Plus, Search, X } from 'lucide-react'
+import { Plus, Search, X } from 'lucide-react'
 import { Link, useParams } from 'react-router'
 
 import { Badge } from '@/components/ui/badge'
@@ -64,8 +64,8 @@ export function DevicePage() {
           <Link to={`/access/ingress?device=${encodeURIComponent(device.mac)}`} aria-label="Add service for this device" title="Add service" className="flex size-7 shrink-0 items-center justify-center rounded-md border transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"><Plus className="size-4" /></Link>
         </div>
       } total={<span className="inline-flex flex-wrap justify-end gap-3 tabular-nums" title="Traffic through this router since counters were reset">
-        <span className="inline-flex items-center gap-0.5"><ArrowDown className="size-3 text-receive" aria-label="Download" />{flow.counting ? formatBytes(usage?.down ?? 0) : '—'}</span>
-        <span className="inline-flex items-center gap-0.5 text-muted-foreground"><ArrowUp className="size-3 text-transmit" aria-label="Upload" />{flow.counting ? formatBytes(usage?.up ?? 0) : '—'}</span>
+        <span className="inline-flex items-center gap-0.5" aria-label="Download total"><span aria-hidden className="text-base font-normal text-muted-foreground">↓</span>{flow.counting ? formatBytes(usage?.down ?? 0) : '—'}</span>
+        <span className="inline-flex items-center gap-0.5 text-muted-foreground" aria-label="Upload total"><span aria-hidden className="text-base font-normal text-muted-foreground">↑</span>{flow.counting ? formatBytes(usage?.up ?? 0) : '—'}</span>
       </span>} activity={<DeviceActivity addresses={device.ips ?? []} downRate={usage?.downRate} upRate={usage?.upRate} />} traffic={
         <DevicePolicy mac={device.mac} downRate={usage?.downRate} upRate={usage?.upRate}>
             {!flow.counting && (
