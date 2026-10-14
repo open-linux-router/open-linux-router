@@ -11,9 +11,9 @@ const fills = ['bg-[var(--activity-empty)]', 'bg-[var(--activity-low)]', 'bg-[va
 
 export function DeviceActivity({ addresses, downRate, upRate }: { addresses: string[]; downRate?: number; upRate?: number }) {
   const rate = Math.max(0, downRate ?? 0) + Math.max(0, upRate ?? 0)
-  // Logarithmic scaling keeps low traffic visible and caps the fastest blink at 2 Hz.
-  const blinkDuration = Number.isFinite(rate) && rate > 0
-    ? 2000 - 1500 * Math.min(1, Math.log1p(rate / 1024) / Math.log1p(100 * 1024))
+  // Keep the breathing shape readable even at high rates (100 MiB/s and above).
+  const breathDuration = Number.isFinite(rate) && rate > 0
+    ? 4000 - 2600 * Math.min(1, Math.log1p(rate / 1024) / Math.log1p(100 * 1024))
     : undefined
   const container = useRef<HTMLDivElement>(null)
   const [{ days, gap }, setLayout] = useState({ days: 1, gap: 2 })
@@ -60,7 +60,7 @@ export function DeviceActivity({ addresses, downRate, upRate }: { addresses: str
     const time = `${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')} ${hour}:00-${hour + 4}:00`
     const detail = history.isPending ? 'Loading' : history.isError ? 'Unavailable' : !bytes ? 'No data' : `↓ ${formatBytes(bytes.down)} · ↑ ${formatBytes(bytes.up)}`
     return <Tooltip key={i}>
-      <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} style={end > now && blinkDuration ? { animationDuration: `${blinkDuration}ms` } : undefined} className={`h-full w-full min-h-0 min-w-0 rounded-[3px] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]} ${end > now && blinkDuration ? 'device-activity-current' : ''}`} />
+      <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} style={end > now && breathDuration ? { animationDuration: `${breathDuration}ms` } : undefined} className={`h-full w-full min-h-0 min-w-0 rounded-[3px] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]} ${end > now && breathDuration ? 'device-activity-current' : ''}`} />
       <TooltipContent className="flex-col items-start animate-none!"><span>{time}</span><span>{detail}</span></TooltipContent>
     </Tooltip>
   })

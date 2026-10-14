@@ -231,8 +231,12 @@ auto, light and dark; its accessible label and tooltip name the current and next
 
 Use 150–200ms color/opacity transitions. Motion should explain a state change;
 no ambient animation except the current device-activity block's traffic indicator.
-Blink faster as combined live download/upload increases, with a logarithmic
-2s–500ms cycle capped at 100 MiB/s. Idle or unavailable rates stay steady;
+Breathe faster as combined live download/upload increases, with a logarithmic
+4s–1.4s cycle capped at 100 MiB/s. Use opacity 1 → 0.45 over 55% of the
+cycle, rest dim for 10%, then return to full opacity over 35%. Each changing
+segment uses cubic-bezier(0.37, 0, 0.63, 1), with zero endpoint slopes for
+gentle reversals. Keep the cell size and palette; no glow or scale animation.
+Idle or unavailable rates stay steady;
 historical cells retain their traffic fills. Honor prefers-reduced-motion in the global stylesheet.
 
 ## Page coverage and review checklist

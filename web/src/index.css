@@ -198,13 +198,15 @@ html {
     }
 }
 
-@keyframes device-activity-blink {
-  0%, 35%, 100% { opacity: 1; }
-  36%, 99% { opacity: 0.4; }
+/* Longer exhale, a quiet trough, then a shorter inhale. Zero endpoint slopes
+   keep both reversals and the loop seamless without switching the dot off. */
+@keyframes device-activity-breathe {
+  0%, 100% { opacity: 1; }
+  55%, 65% { opacity: 0.45; }
 }
 
 .device-activity-current {
-  animation: device-activity-blink 2s steps(1, end) infinite;
+  animation: device-activity-breathe 4s cubic-bezier(0.37, 0, 0.63, 1) infinite;
 }
 
 /* Nothing here is load-bearing motion — every animation is decoration on a
