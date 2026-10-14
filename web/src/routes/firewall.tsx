@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useFirewallStatus, useReapplyFirewall, useSetFirewall } from '@/features/firewall/queries'
-import { FirewallSankey } from '@/features/firewall/sankey'
+import { TrafficPermissions } from '@/features/firewall/traffic-permissions'
 import { ApiError } from '@/lib/api'
 import type { FirewallApplyResult, FirewallStatus } from '@/lib/api-types'
 
@@ -116,7 +116,7 @@ export function FirewallPage() {
         </Alert>
       )}
 
-      <FirewallSankey status={st} />
+      <TrafficPermissions status={st} />
       <Button variant="outline" nativeButton={false} render={<Link to="/firewall/rules" />}>Rules</Button>
     </div>
   )

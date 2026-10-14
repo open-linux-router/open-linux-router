@@ -30,17 +30,16 @@ changes nothing until somebody says so (§7) — and an ordinary switch in both
 directions. `olr firewall enable|disable|show|status`, `/api/firewall/…`, and a
 Firewall section in the web UI.
 
-The Firewall landing page uses an ECharts Sankey diagram: outside connections
-arrive from above and inside interfaces from below at a single firewall boundary.
-Paths end at the decision point; allowed traffic is not depicted as blocked.
-Labels and colors distinguish allowed, blocked and unverified decisions. Equal
-category weights are not traffic measurements. Native or unverified rules are
-not inferred from automatic defaults. The switch and status warnings stay here.
+The Firewall landing page lists traffic permissions by connection state,
+purpose and permission source, rather than device group or routing exit.
+Each category states its matching conditions and Allowed or Blocked decision.
 Automatic categories distinguish input/forward drops, established/related,
-ICMP, ICMPv6, DHCP, DHCPv6, each configured service opening, DNAT and forwarding
-outside inside networks. IPTV adds IGMP and multicast when configured. Original
-protocol and service names remain visible. Wide category sets scroll horizontally
-instead of hiding labels; native mode shows a neutral Native rules path.
+inside-initiated and loopback traffic, ICMP, ICMPv6, DHCP, DHCPv6, each configured
+service opening, DNAT and forwarding outside inside networks. IPTV adds IGMP
+and multicast when configured. Only the two drop categories have measured packet
+counts, cumulative since the rules were last written. Allowed categories do not
+claim traffic measurements. Native, disabled or unverified rules are not inferred
+from automatic defaults. The switch and status warnings stay here.
 
 The `/firewall/rules` subpage reads the real ruleset using `nft -j list ruleset`. Tables, chains,
 hooks, priorities, policies, rule order, handles, expressions, sets and counters
