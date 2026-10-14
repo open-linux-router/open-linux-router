@@ -49,7 +49,7 @@ export function DevicePolicy({ mac, downRate, upRate, children }: { mac: string;
     </div>
     {config.isError && <p className="text-sm text-destructive">Could not load priority and limits.</p>}
     <div className="space-y-1">
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 text-sm">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 text-sm sm:[&>div]:w-1/2 sm:[&>div]:justify-self-end">
         <span className="text-muted-foreground">Download</span>
         <Meter label="Download" current={downRate === undefined ? '—' : formatRate(downRate)} maximum={current?.download_mbps ? String(current.download_mbps) + ' Mbps' : undefined} onClick={() => begin('download')} />
         <span className="text-muted-foreground">Upload</span>
