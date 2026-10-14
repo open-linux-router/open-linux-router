@@ -138,7 +138,7 @@ matrix height, six cells and 1px vertical padding; use that same gap horizontall
 Fit as many complete date columns as the available width allows; wider layouts
 show more dates rather than stretching cells. Keep today at the right edge,
 the current-period hint and 1px inner padding.
-Fade only the leftmost 8% toward overlapping identity content; keep the rest
+Fade only the leftmost 20% toward overlapping identity content; keep the rest
 fully visible, including zero/unknown dots. Use the shared opaque activity
 palette in four green intensities and subtle inset cell boundaries. No axes,
 legend, heading or helper text; tooltips provide dates, units and sample state.

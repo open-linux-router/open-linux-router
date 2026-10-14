@@ -59,7 +59,7 @@ export function DeviceActivity({ addresses }: { addresses: string[] }) {
       <TooltipContent className="flex-col items-start animate-none!"><span>{time}</span><span>{detail}</span></TooltipContent>
     </Tooltip>
   })
-  return <div ref={container} className="absolute right-0 -top-2 h-24 w-2/3 [mask-image:linear-gradient(to_right,transparent,black_8%)]" role="group" aria-label={`Traffic activity, last ${days} days, oldest to newest from left to right, six four-hour periods per day from top to bottom`}>
+  return <div ref={container} className="absolute right-0 -top-2 h-24 w-2/3 [mask-image:linear-gradient(to_right,transparent,black_20%)]" role="group" aria-label={`Traffic activity, last ${days} days, oldest to newest from left to right, six four-hour periods per day from top to bottom`}>
     <div className="grid grid-flow-col auto-cols-[14px] grid-rows-[repeat(6,14px)] justify-end py-px" style={{ gap }}>{cells}</div>
   </div>
 }
