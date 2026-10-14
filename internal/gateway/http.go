@@ -24,7 +24,8 @@ import (
 // HTTP serves the module. Its fields are what the module needs from core
 // (design.md §3.1 — modules call core, not the reverse).
 type HTTP struct {
-	Latency *LatencyMonitor
+	Activity *Activity
+	Latency  *LatencyMonitor
 
 	Applier Applier
 
@@ -193,6 +194,7 @@ func (h HTTP) Routes() []core.Route {
 				"Reports counting:false rather than failing when the counters cannot be read.",
 			Handler: h.getTraffic,
 		},
+		{Method: "GET", Path: "/activity", Tool: "show activity", Summary: "Show volatile half-hour traffic samples for the requested addresses.", Handler: h.getActivity},
 	}
 
 	// The NAT half's routes, under the same prefix. Appended rather than
@@ -684,6 +686,33 @@ func (h HTTP) getTraffic(w http.ResponseWriter, r *http.Request) {
 	}
 
 	core.WriteJSON(w, http.StatusOK, viewTraffic(cfg, usage, true, now))
+}
+
+func (h HTTP) getActivity(w http.ResponseWriter, r *http.Request) {
+	values := r.URL.Query()["address"]
+	if len(values) > 32 {
+		core.WriteError(w, http.StatusBadRequest, "Too many addresses")
+		return
+	}
+	addresses := make([]netip.Addr, 0, len(values))
+	seen := make(map[netip.Addr]bool)
+	for _, value := range values {
+		addr, err := netip.ParseAddr(value)
+		if err != nil {
+			core.WriteError(w, http.StatusBadRequest, "Invalid address")
+			return
+		}
+		addr = addr.Unmap()
+		if !seen[addr] {
+			addresses = append(addresses, addr)
+			seen[addr] = true
+		}
+	}
+	if h.Activity == nil {
+		core.WriteError(w, http.StatusServiceUnavailable, "Activity unavailable")
+		return
+	}
+	core.WriteJSON(w, http.StatusOK, h.Activity.snapshot(addresses))
 }
 
 // --- plumbing --------------------------------------------------------------

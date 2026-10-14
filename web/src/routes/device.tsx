@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useDnsConfig, useDnsQueries } from '@/features/dns/queries'
 import { DeviceInspection } from '@/features/devices/inspection'
+import { DeviceActivity } from '@/features/devices/activity'
 import { DeviceInlineEditor } from '@/features/devices/device-inline-editor'
 import { useDeviceList } from '@/features/devices/queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
@@ -35,7 +36,7 @@ export function DevicePage() {
 
   return (
     <div className="space-y-4 pb-12">
-      <DeviceInlineEditor key={device.mac} device={device} traffic={
+      <DeviceInlineEditor key={device.mac} device={device} activity={<DeviceActivity addresses={device.ips ?? []} />} traffic={
         <DevicePolicy mac={device.mac} downRate={usage?.downRate} upRate={usage?.upRate}>
             {flow.counting ? (
               <div className="space-y-2">

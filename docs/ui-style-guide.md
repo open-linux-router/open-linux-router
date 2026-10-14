@@ -127,6 +127,11 @@ Its status chip uses the title font size. A divider separates the
 title from two columns of 36px desktop / 44px mobile minimum-height label/value rows: stable identity
 and settings on the left, observed state and traffic on the right. Group and Uplink values use clickable tags with muted surfaces that open edit dialogs.
 Device traffic reuses Overview meters and total rows without a heading.
+The device information card ends with a 14-day traffic dot matrix: one row
+per day, 48 fixed 12px square cells per row with 4px gaps. Use the success
+token in four intensities for traffic magnitude and muted for zero/unknown.
+Keep horizontal scrolling inside the card on narrow screens. No axes,
+legend, heading or helper text; tooltips provide dates, units and sample state.
 Priority leads the right column with a segmented selector. Clicking each speed bar opens its limit dialog; omit repeated rate headings, separate limit fields and the QoS divider/status row.
 Device policies apply automatically, without a switch. Keep QoS controls on
 devices; Gateway does not expose aggregate link-rate settings. Blank device

@@ -1347,7 +1347,18 @@ belongs to the network, a second and deliberate act.
    that would genuinely require a query engine — unbounded raw events answering
    ad-hoc questions — is the thing that section already refuses to build.
 
-   **What this costs, stated: there are no historical graphs.** "Traffic today"
+   **Device activity exception:** a bounded in-memory sampler now retains up
+   to 14 days of half-hour counter differences for the device-card dot matrix.
+   It samples once per minute independently of browsers, respects traffic
+   counting being off, caps retained address/bucket pairs at 100,000 and never
+   writes history to disk. Missing intervals, resets and initial baselines are
+   not counted as zero traffic. Samples crossing half-hour boundaries are
+   omitted rather than attributed to the wrong interval. The display joins
+   current device addresses, so address changes can hide earlier samples and
+   reused addresses can include another device's activity. These are sampled
+   volumes, not exact accounting totals; restart clears them.
+
+   **What this costs, stated: there are no persistent historical graphs.** "Traffic today"
    is answerable and "traffic last month" is not. Kernel counters survive an
    `olrd` restart and not a reboot, so the window is really "since the box came
    up", bounded above by `statTimeout`. A router UI that shows a month of

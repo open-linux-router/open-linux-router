@@ -31,7 +31,7 @@ const DIRECT_EXIT = ' direct'
 
 type Field = 'name' | 'icon' | 'reservation' | 'group' | 'exit' | null
 
-export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; traffic: ReactNode }) {
+export function DeviceInlineEditor({ device, traffic, activity }: { device: DeviceRow; traffic: ReactNode; activity?: ReactNode }) {
   const identity = useDevicesConfig()
   const saveIdentity = useApplyDevicesConfig()
   const dhcp = useDhcpConfig()
@@ -133,6 +133,7 @@ export function DeviceInlineEditor({ device, traffic }: { device: DeviceRow; tra
       </div>
       <div className="min-w-0">{traffic}</div>
     </div>
+    {activity}
     </Card>
     <Dialog open={editing === 'icon'} onOpenChange={(open) => { if (!open) setEditing(null) }}>
       <DialogContent className="max-h-[90svh] overflow-y-auto">

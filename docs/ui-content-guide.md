@@ -74,6 +74,12 @@ Use Last seen for observation freshness. Priority leads the right column with a
 segmented selector. Speed bars open download/upload limit dialogs; keep the
 configuration-only caveat in those dialogs and save feedback, without a status row.
 Omit Notes and the QoS heading.
+Device activity sits at the bottom of the identity card, without visible
+explanatory text. Half-hour hover/focus hints show sampled download and upload
+or explicitly report missing/unavailable data. Partial samples are not exact
+half-hour totals. History is joined to the device's currently observed addresses.
+It is volatile and begins accumulating after daemon startup.
+
 Device Uplink offers Default (inherit interface/system routing) and named
 exits only. Existing explicit router-connection overrides remain accurately
 displayed until the user selects Default or a named exit.

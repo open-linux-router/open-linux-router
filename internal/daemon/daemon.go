@@ -488,11 +488,13 @@ func run(args []string) error {
 	// to the routing ones under the same prefix (gateway.HTTP.NAT), so `olr
 	// routes` and the MCP tool list see one module rather than the two packages
 	// that implement it.
+	activity := gateway.NewActivity()
 	srv.Mount(gateway.ModuleName, gateway.HTTP{
-		Latency: latency,
-		Applier: gatewayApplier,
-		Lock:    srv.ApplyLock(),
-		Events:  srv.Events(),
+		Activity: activity,
+		Latency:  latency,
+		Applier:  gatewayApplier,
+		Lock:     srv.ApplyLock(),
+		Events:   srv.Events(),
 		Watch: func(cfg gateway.Config) {
 			prober.Watch(context.Background(), cfg)
 			// Gateway and DNS share one document. Refresh the relay's routing
@@ -838,6 +840,7 @@ func run(args []string) error {
 
 	go seen.Run(ctx, seenEvery, seenWrite)
 	go latency.Run(ctx)
+	go activity.Run(ctx, gatewayApplier)
 
 	var listeners []net.Listener
 
