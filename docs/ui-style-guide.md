@@ -123,7 +123,11 @@ same 720px field area. Show saving, error and completion where the action occurs
 Device titles are edited by clicking the name, with the displayed value prefilled.
 Blur or Enter saves; Escape discards. No pencil or save/cancel controls accompany
 the title. The name input is 320px wide, capped by available space.
-Its status chip uses the title font size. A divider separates the
+Device traffic activity sits behind the title, aligned right and fading to
+transparent toward the overlapping name and icon. Omit the visible presence chip;
+retain its accessible status. Each day is one column, newest on the right, with
+six four-hour dots from midnight downward. Future periods stay blank, and dot
+tooltips appear immediately. A divider separates the
 title from two columns of 36px desktop / 44px mobile minimum-height label/value rows: stable identity
 and settings on the left, observed state and traffic on the right. Group and Uplink values use clickable tags with muted surfaces that open edit dialogs.
 Device traffic reuses Overview meters and total rows without a heading.

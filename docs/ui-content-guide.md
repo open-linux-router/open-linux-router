@@ -71,7 +71,11 @@ Device details group stable identity and saved settings on the left, live
 observations and traffic on the right. Reuse Overview rate meters and plain Download and Upload totals, without a
 traffic title or attribution footnote. Group and Uplink are tags that open edit dialogs.
 Use Last seen for observation freshness. Priority leads the right column with a
-segmented selector. Speed bars open download/upload limit dialogs; keep the
+segmented selector. The title's activity matrix shows one day per column, newest
+on the right, and six four-hour periods from top to bottom. Leave future periods
+blank and show sampled download/upload totals immediately on hover or focus.
+Keep presence available to assistive technology without a visible title badge.
+Speed bars open download/upload limit dialogs; keep the
 configuration-only caveat in those dialogs and save feedback, without a status row.
 Omit Notes and the QoS heading.
 Device activity sits at the bottom of the identity card, without visible

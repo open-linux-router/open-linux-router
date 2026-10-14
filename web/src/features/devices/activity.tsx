@@ -18,20 +18,32 @@ export function DeviceActivity({ addresses }: { addresses: string[] }) {
   })
   const buckets = new Map(history.data?.map(bucket => [Date.parse(bucket.at), bucket.bytes]))
   const now = new Date()
-  const cells = Array.from({ length: 14 * 48 }, (_, i) => {
-    const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13 + Math.floor(i / 48), 0, (i % 48) * 30)
-    const bytes = history.isError ? undefined : buckets.get(Math.floor(at.getTime() / 1800000) * 1800000)
+  const cells = Array.from({ length: 14 * 6 }, (_, i) => {
+    const day = now.getDate() - 13 + Math.floor(i / 6)
+    const hour = (i % 6) * 4
+    const at = new Date(now.getFullYear(), now.getMonth(), day, hour)
+    const end = new Date(now.getFullYear(), now.getMonth(), day, hour + 4)
+    if (at > now) return <span key={i} aria-hidden="true" />
+    let bytes: Bucket['bytes'] | undefined
+    if (!history.isError) {
+      for (const [timestamp, sample] of buckets) {
+        if (timestamp >= at.getTime() && timestamp < end.getTime() && timestamp <= now.getTime()) {
+          bytes ??= { up: 0, down: 0 }
+          bytes.up += sample.up
+          bytes.down += sample.down
+        }
+      }
+    }
     const total = bytes ? bytes.up + bytes.down : 0
     const level = total === 0 ? 0 : total < 50 * 1024 ** 2 ? 1 : total < 250 * 1024 ** 2 ? 2 : total < 1024 ** 3 ? 3 : 4
-    const end = new Date(at.getTime() + 1800000)
     const time = `${at.toLocaleDateString()} ${at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}–${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-    const detail = at > now ? 'Not yet observed' : history.isPending ? 'Loading activity' : history.isError ? 'Activity unavailable' : !bytes ? 'No samples for these addresses' : `↓ ${formatBytes(bytes.down)} · ↑ ${formatBytes(bytes.up)} · Sampled traffic${end > now ? ' · In progress' : ''}`
+    const detail = history.isPending ? 'Loading activity' : history.isError ? 'Activity unavailable' : !bytes ? 'No samples for these addresses' : `↓ ${formatBytes(bytes.down)} · ↑ ${formatBytes(bytes.up)} · Sampled traffic${end > now ? ' · In progress' : ''}`
     return <Tooltip key={i}>
-      <TooltipTrigger aria-label={`${time}: ${detail}`} className={`size-3 min-h-0 shrink-0 rounded-[3px] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]} ${!bytes ? 'opacity-40' : ''}`} />
-      <TooltipContent className="flex-col items-start"><span>{time}</span><span>{detail}</span></TooltipContent>
+      <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} className={`size-2 min-h-0 shrink-0 rounded-full p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]} ${!bytes ? 'opacity-40' : ''}`} />
+      <TooltipContent className="flex-col items-start animate-none!"><span>{time}</span><span>{detail}</span></TooltipContent>
     </Tooltip>
   })
-  return <div className="mt-6 overflow-x-auto border-t pt-6" role="group" aria-label="Traffic activity, last 14 days, one row per day, one cell per half hour">
-    <div className="mx-auto grid w-max grid-cols-[repeat(48,12px)] gap-1 p-1">{cells}</div>
+  return <div className="absolute inset-x-0 top-0 h-16 [mask-image:linear-gradient(to_right,transparent,rgba(0,0,0,0.15)_55%,black)]" role="group" aria-label="Traffic activity, last 14 days, oldest to newest from left to right, six four-hour periods per day from top to bottom">
+    <div className="grid h-full grid-flow-col grid-cols-[repeat(14,minmax(0,1fr))] grid-rows-6 justify-items-end gap-y-0.5 py-0.5">{cells}</div>
   </div>
 }

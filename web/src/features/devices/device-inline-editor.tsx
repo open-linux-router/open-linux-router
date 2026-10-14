@@ -100,17 +100,18 @@ export function DeviceInlineEditor({ device, traffic, activity }: { device: Devi
   return <>
     <Card className="gap-0 p-4 sm:p-6">
     <header>
-      <div className="flex items-center gap-4 border-b pb-4">
+      <div className="relative flex min-h-20 items-center gap-4 border-b pb-4">
+        {activity}
         <button type="button" disabled={identityBusy} onClick={() => begin('icon')} aria-label="Change device icon" className="group relative shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           <DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor} vendorKey={device.vendor_key} online={device.online} size="lg" />
         </button>
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="pointer-events-none relative min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="min-w-0 flex-1 basis-full text-2xl font-semibold tracking-tight sm:basis-auto sm:text-3xl">
+            <h1 className="pointer-events-auto min-w-0 max-w-full text-2xl font-semibold tracking-tight sm:text-3xl">
               {editing === 'name' ? <Input autoFocus aria-label="Device name" className="h-auto w-80 max-w-full py-1 text-2xl font-semibold sm:text-3xl" value={name} disabled={saveIdentity.isPending} onChange={(e) => { nameFinished.current = false; setName(e.target.value) }} onBlur={() => finishName()} onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); finishName(e.key === 'Escape') } }} />
                 : <button type="button" disabled={identityBusy} onClick={() => begin('name')} aria-label="Edit device name" className="w-full break-words rounded-md text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">{device.name || device.mac}</button>}
             </h1>
-            <Badge className="text-2xl sm:text-3xl" variant={device.online ? 'success' : device.seen ? 'secondary' : 'outline'}>{device.online ? 'Online' : device.seen ? 'Offline' : 'Never seen'}</Badge>
+            <span className="sr-only">{device.online ? 'Online' : device.seen ? 'Offline' : 'Never seen'}</span>
           </div>
         </div>
       </div>
@@ -133,7 +134,6 @@ export function DeviceInlineEditor({ device, traffic, activity }: { device: Devi
       </div>
       <div className="min-w-0">{traffic}</div>
     </div>
-    {activity}
     </Card>
     <Dialog open={editing === 'icon'} onOpenChange={(open) => { if (!open) setEditing(null) }}>
       <DialogContent className="max-h-[90svh] overflow-y-auto">
