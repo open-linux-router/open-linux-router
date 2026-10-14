@@ -66,6 +66,13 @@ No response is not an empty rule set; saved configuration is not proof of a
 running service or end-to-end connectivity. Use neutral pending/unknown styling,
 an explicit error and a retry where useful. Name configuration counts as such.
 
+Firewall monitoring retains semantic permission categories and adds incoming
+source as a separate dimension. Show external traffic above trusted/local traffic;
+hide zero-traffic categories and empty source sections. Sankey widths use measured
+packet counts, with byte totals in tooltips and matching conditions. State that
+counts reflect the first matching rule and reset when rules are rewritten.
+Keep unavailable counters distinct from a verified zero-traffic state.
+
 Show QoS as saved configuration until enforcement exists.
 Device details group stable identity and saved settings on the left, live
 observations and traffic on the right. Reuse Overview rate meters and plain Download and Upload totals, without a

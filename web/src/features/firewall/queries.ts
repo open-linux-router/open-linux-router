@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { FirewallApplyResult, FirewallStatus } from '@/lib/api-types'
 
-// Status is observed state — the blocked counters move on their own — so it
+// Status is observed state — the traffic counters move on their own — so it
 // polls like the other modules' status screens.
 const OBSERVED_REFETCH_MS = 10_000
 

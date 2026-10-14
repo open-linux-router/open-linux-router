@@ -110,8 +110,10 @@ type Status struct {
 
 	// BlockedInput and BlockedForward count packets turned away since the
 	// table was last built, which every apply does.
-	BlockedInput   uint64 `json:"blocked_input"`
-	BlockedForward uint64 `json:"blocked_forward"`
+	BlockedInput   uint64    `json:"blocked_input"`
+	BlockedForward uint64    `json:"blocked_forward"`
+	TrafficKnown   bool      `json:"traffic_known"`
+	Traffic        []Traffic `json:"traffic"`
 
 	// Problem is why a plan could not be built — today only "no networks".
 	Problem string `json:"problem,omitempty"`
@@ -123,7 +125,7 @@ func (a Applier) GetStatus(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	st := Status{Enabled: c.Enabled, Native: len(c.Ruleset) > 0, Inside: []string{}, Openings: []Opening{}}
+	st := Status{Enabled: c.Enabled, Native: len(c.Ruleset) > 0, Inside: []string{}, Openings: []Opening{}, Traffic: []Traffic{}}
 	if st.Native {
 		plan, _, err := a.planNative(ctx, c)
 		if err != nil {
@@ -157,5 +159,8 @@ func (a Applier) GetStatus(ctx context.Context) (Status, error) {
 	st.Plan = plan
 	st.IPTV = desired.IPTV
 	st.Drifted = obs.Known && !plan.Empty
+	if st.Enabled && obs.Known && !st.Drifted {
+		st.Traffic, st.TrafficKnown = trafficFor(desired, obs.Traffic)
+	}
 	return st, nil
 }

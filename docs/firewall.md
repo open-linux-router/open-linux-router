@@ -30,19 +30,31 @@ changes nothing until somebody says so (§7) — and an ordinary switch in both
 directions. `olr firewall enable|disable|show|status`, `/api/firewall/…`, and a
 Firewall section in the web UI.
 
-The Firewall landing page uses a Sankey diagram of traffic permissions by connection state,
-purpose and permission source, rather than device group or routing exit.
-Each category flows through one firewall boundary to an Allowed or Blocked decision.
-Equal-width category paths are not traffic measurements. Matching conditions are
-available on hover and in an accessible disclosure; narrow screens scroll the
-diagram horizontally without hiding category labels.
-Automatic categories distinguish input/forward drops, established/related,
-inside-initiated and loopback traffic, ICMP, ICMPv6, DHCP, DHCPv6, each configured
-service opening, DNAT and forwarding outside inside networks. IPTV adds IGMP
-and multicast when configured. Only the two drop categories have measured packet
-counts, cumulative since the rules were last written. Allowed categories do not
-claim traffic measurements. Native, disabled or unverified rules are not inferred
-from automatic defaults. The switch and status warnings stay here.
+The Firewall landing page shows measured traffic by semantic category **and
+incoming source**. Two vertically stacked Sankey diagrams put external arrivals
+above LAN/trusted and router-local arrivals. Each runs source → semantic category
+→ Allowed/Blocked. Only categories with nonzero packet counts appear, and path
+widths represent actual packets. The diagrams scale independently; widths are
+comparable within a diagram. Matching-condition disclosures include packet and
+byte totals and distinguish traffic to the router from forwarded traffic.
+
+Automatic categories retain established/related, inside-initiated, loopback,
+ICMP, ICMPv6, DHCP, DHCPv6, service openings, DNAT, other forwarding, IPTV and
+input/forward drops. Each decision rule is partitioned into disjoint sources
+(outside, inside excluding loopback, and loopback) and counts packets/bytes
+immediately before its original verdict. Filtering order and permissions are
+preserved. Attribution uses the **first matching rule**: for example, an inside
+ping is normally inside-initiated access, and later packets of an opened service
+are established traffic. These are decision counts, not per-service connection
+totals. Input and forward counters for the same source/category/verdict may be
+summed because a packet traverses only one of those hooks.
+
+`/api/firewall/status` supplies `traffic` rows and `traffic_known`, alongside the
+legacy aggregate `blocked_input`/`blocked_forward`. Counts are cumulative since
+the rules were last written and reset on table replacement. Old automatic tables
+are replaced on the next apply/startup to install counters; incomplete counters
+are unavailable, not known zero. Native, disabled or unverified rules are not
+inferred from automatic defaults. The switch and status warnings stay here.
 
 The `/firewall/rules` subpage reads the real ruleset using `nft -j list ruleset`. Tables, chains,
 hooks, priorities, policies, rule order, handles, expressions, sets and counters
@@ -137,7 +149,8 @@ The choices that are not obvious:
   protected from every non-inside interface, which includes a container bridge
   reaching a service on the host.
 - **Explicit counted drop under an `accept` policy**, not `policy drop`. The
-  verdict is identical; the counters are what the status screen reports.
+  verdict is identical; named counters retain aggregate blocked totals, while
+  every sourced rule has an anonymous packet/byte counter for traffic reporting.
 - **Other tables cannot loosen this.** In nftables a `drop` in any base chain is
   final and an `accept` is not, so rules added by hand, by wg-quick or by Docker
   can narrow what this table allows but never widen it.

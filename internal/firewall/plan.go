@@ -42,6 +42,9 @@ type Observed struct {
 
 	// Blocked is each drop counter's packet count since the table was built.
 	Blocked map[string]uint64
+
+	// Traffic is each sourced rule's anonymous packet/byte counter.
+	Traffic map[string]TrafficCount
 }
 
 // Change is one line that will be added or removed.

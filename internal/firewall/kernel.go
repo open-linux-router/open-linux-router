@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"slices"
 )
 
 // ErrUnsupported is returned by a kernel that cannot do this at all.
@@ -24,6 +25,7 @@ type Kernel interface {
 type StaticKernel struct {
 	State      []string
 	Blocked    map[string]uint64
+	Traffic    map[string]TrafficCount
 	Unknown    bool
 	ObserveErr error
 	ApplyErr   error
@@ -38,6 +40,7 @@ func (k *StaticKernel) Observe(context.Context) (Observed, error) {
 		Known:   !k.Unknown,
 		Lines:   append([]string(nil), k.State...),
 		Blocked: maps.Clone(k.Blocked),
+		Traffic: maps.Clone(k.Traffic),
 	}, nil
 }
 
@@ -48,5 +51,9 @@ func (k *StaticKernel) Apply(_ context.Context, d Desired) error {
 	}
 	k.State = d.Lines()
 	k.Blocked = nil
+	k.Traffic = map[string]TrafficCount{}
+	for _, r := range append(slices.Clone(d.Input), d.Forward...) {
+		k.Traffic[r.Line] = TrafficCount{}
+	}
 	return nil
 }

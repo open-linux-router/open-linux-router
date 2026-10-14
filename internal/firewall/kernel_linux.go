@@ -32,7 +32,7 @@ func NewKernel() Kernel { return LinuxKernel{} }
 // reported. Every apply replaces the table, so such an edit is corrected even
 // while it goes unseen.
 func (LinuxKernel) Observe(context.Context) (Observed, error) {
-	obs := Observed{Known: true, Blocked: map[string]uint64{}}
+	obs := Observed{Known: true, Blocked: map[string]uint64{}, Traffic: map[string]TrafficCount{}}
 
 	conn, err := nftables.New()
 	if err != nil {
@@ -81,6 +81,11 @@ func (LinuxKernel) Observe(context.Context) (Observed, error) {
 				line = "nft unrecognised rule in " + c.Name
 			}
 			obs.Lines = append(obs.Lines, line)
+			for _, e := range r.Exprs {
+				if count, ok := e.(*expr.Counter); ok {
+					obs.Traffic[line] = TrafficCount{Packets: count.Packets, Bytes: count.Bytes}
+				}
+			}
 		}
 	}
 	return obs, nil
@@ -182,6 +187,48 @@ var (
 const ipsDstNAT = 1 << 5
 
 func ruleExprs(conn *nftables.Conn, table *nftables.Table, d Desired, r Rule) ([]expr.Any, error) {
+	conditions, err := sourceExprs(conn, table, d.Inside, r.Source)
+	if err != nil {
+		return nil, err
+	}
+	expressions, err := baseRuleExprs(conn, table, d, r)
+	if err != nil {
+		return nil, err
+	}
+	// Every existing rule ends with its verdict. Count only after all of its
+	// conditions matched and before that terminal verdict, exactly once.
+	conditions = append(conditions, expressions[:len(expressions)-1]...)
+	conditions = append(conditions, &expr.Counter{}, expressions[len(expressions)-1])
+	return conditions, nil
+}
+
+func sourceExprs(conn *nftables.Conn, table *nftables.Table, inside []string, source TrafficSource) ([]expr.Any, error) {
+	if source == SourceLocal {
+		return []expr.Any{
+			&expr.Meta{Key: expr.MetaKeyIIFNAME, Register: 1},
+			&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: ifname("lo")},
+		}, nil
+	}
+	if source != SourceInside && source != SourceOutside {
+		return nil, fmt.Errorf("unknown traffic source %q", source)
+	}
+	conditions := []expr.Any{
+		&expr.Meta{Key: expr.MetaKeyIIFNAME, Register: 1},
+		&expr.Cmp{Op: expr.CmpOpNeq, Register: 1, Data: ifname("lo")},
+	}
+	if len(inside) > 0 {
+		set, err := addSet(conn, table, nftables.TypeIFName, ifnameKeys(inside))
+		if err != nil {
+			return nil, err
+		}
+		conditions = append(conditions, &expr.Lookup{SourceRegister: 1, SetID: set.ID, SetName: set.Name, Invert: source == SourceOutside})
+	} else if source == SourceInside {
+		return nil, fmt.Errorf("inside traffic needs a trusted interface")
+	}
+	return conditions, nil
+}
+
+func baseRuleExprs(conn *nftables.Conn, table *nftables.Table, d Desired, r Rule) ([]expr.Any, error) {
 	switch r.Kind {
 	case RuleEstablished:
 		return []expr.Any{

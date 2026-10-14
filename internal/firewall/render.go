@@ -21,9 +21,9 @@ import (
 //	  each opening          accept       drop
 //	  drop
 //
-// Both chains end in an explicit counted `drop` under an `accept` policy rather
-// than carrying `policy drop`. The verdict is the same; the counter is what
-// lets the status screen say how much was turned away, and a policy has none.
+// Each rule is partitioned by incoming source and counted without changing
+// its order or verdict. Both chains end in explicit counted drops under an
+// accept policy; named counters also retain the aggregate blocked totals.
 
 // TableName is the table this module owns, whole.
 const TableName = "olr_filter"
@@ -64,7 +64,8 @@ const (
 
 // Rule is one rule, in the order it is evaluated.
 type Rule struct {
-	Kind RuleKind
+	Kind   RuleKind
+	Source TrafficSource
 
 	// Opening is set for RuleOpening.
 	Opening Opening
@@ -72,7 +73,7 @@ type Rule struct {
 	Upstream   string
 	Downstream string
 
-	// Counter is set for RuleDrop.
+	// Counter is the legacy aggregate counter for RuleDrop.
 	Counter string
 
 	// Line is the canonical text: the diff basis, what the UI prints, and the
@@ -179,6 +180,8 @@ func RenderIPTV(c Config, inside []string, openings []Opening, iptv IPTV) Desire
 			d.Forward = append(d.Forward[:len(d.Forward)-1], rule, d.Forward[len(d.Forward)-1])
 		}
 	}
+	d.Input = splitSources(d.Input, d.Inside)
+	d.Forward = splitSources(d.Forward, d.Inside)
 	return d
 }
 

@@ -182,6 +182,12 @@ and a relevant next action where one exists.
 
 ## Responsive behavior and motion
 
+Firewall Sankeys stack external arrivals above trusted/local arrivals, keeping
+source, semantic category and decision labels visible. Use measured packet
+widths and semantic receive/transmit and success/warning colors. Each diagram
+has its own scale and accessible counts disclosure; narrow screens scroll
+inside the diagram without causing page-wide overflow.
+
 Page navigation resets document scroll to the top before paint. Hash links retain
 their section-target behavior; query-only changes preserve the current scroll.
 

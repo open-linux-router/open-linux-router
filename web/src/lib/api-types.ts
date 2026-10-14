@@ -1544,6 +1544,18 @@ export interface FirewallOpening {
   from?: string
 }
 
+/** One sourced first-match rule counter — internal/firewall Traffic. */
+export interface FirewallTraffic {
+  id: string
+  source: 'outside' | 'inside' | 'local'
+  category: string
+  description: string
+  destination: 'router' | 'forwarded'
+  verdict: 'allowed' | 'blocked'
+  packets: number
+  bytes: number
+}
+
 /** GET /api/firewall/status — internal/firewall Status. */
 export interface FirewallStatus {
   native?: boolean
@@ -1556,6 +1568,8 @@ export interface FirewallStatus {
   iptv?: { upstream: string; downstream: string[] | null }
   blocked_input: number
   blocked_forward: number
+  traffic_known?: boolean
+  traffic?: FirewallTraffic[]
   /** Why no plan could be built — today only "there are no networks". */
   problem?: string
 }

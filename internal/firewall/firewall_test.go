@@ -53,7 +53,16 @@ func TestRuleset(t *testing.T) {
 		"nft forward icmpv6 accept",
 		"nft forward drop counter blocked_forward",
 	}
-	if got := d.Lines(); !slices.Equal(got, want) {
+	// Collapse source partitions to check the original filtering order and
+	// permissions remain intact. Source coverage is tested separately.
+	var got []string
+	for _, line := range d.Lines() {
+		base, _, _ := strings.Cut(line, " source ")
+		if len(got) == 0 || got[len(got)-1] != base {
+			got = append(got, base)
+		}
+	}
+	if !slices.Equal(got, want) {
 		t.Fatalf("ruleset:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 
@@ -147,11 +156,16 @@ func TestPlanAgainstKernel(t *testing.T) {
 		t.Fatalf("re-planning applied state is not a no-op: %+v", plan.Changes)
 	}
 
-	// A new opening is a change, and only that line.
+	// A new opening adds one counted rule for each source partition.
 	b.Open = []Opening{wg}
 	plan, _, _ = BuildPlan(Config{Enabled: true}, b, mustObserve(t, k), "")
-	if len(plan.Changes) != 1 || plan.Changes[0].Line != wg.Line() {
+	if len(plan.Changes) != 3 {
 		t.Fatalf("adding an opening: %+v", plan.Changes)
+	}
+	for _, change := range plan.Changes {
+		if change.Kind != "add" || !strings.HasPrefix(change.Line, wg.Line()+" source ") {
+			t.Fatalf("unexpected opening change: %+v", change)
+		}
 	}
 
 	// Disabling removes everything.
