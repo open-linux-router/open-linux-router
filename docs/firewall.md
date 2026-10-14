@@ -31,12 +31,14 @@ directions. `olr firewall enable|disable|show|status`, `/api/firewall/…`, and 
 Firewall section in the web UI.
 
 The Firewall landing page shows measured traffic by semantic category **and
-incoming source**. Two vertically stacked Sankey diagrams put external arrivals
-above LAN/trusted and router-local arrivals. Each runs source → semantic category
-→ Allowed/Blocked. Only categories with nonzero packet counts appear, and path
-widths represent actual packets. The diagrams scale independently; widths are
-comparable within a diagram. Matching-condition disclosures include packet and
-byte totals and distinguish traffic to the router from forwarded traffic.
+incoming source**. One vertical Sankey puts external sources and their semantic
+categories at the top, LAN/trusted and router-local sources and their categories
+at the bottom, and shared Allowed/Blocked decisions in the middle. Ribbons from
+both ends flow through their categories toward these decisions. Only categories
+with nonzero packet counts appear. Every bar and ribbon shares one packet scale;
+totals from all sources reconcile at the central decisions. The matching-condition
+disclosure includes packet and byte totals and distinguishes traffic to the
+router from forwarded traffic.
 
 Automatic categories retain established/related, inside-initiated, loopback,
 ICMP, ICMPv6, DHCP, DHCPv6, service openings, DNAT, other forwarding, IPTV and

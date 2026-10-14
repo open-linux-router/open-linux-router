@@ -189,11 +189,13 @@ and a relevant next action where one exists.
 
 ## Responsive behavior and motion
 
-Firewall Sankeys stack external arrivals above trusted/local arrivals, keeping
-source, semantic category and decision labels visible. Use measured packet
-widths and semantic receive/transmit and success/warning colors. Each diagram
-has its own scale and accessible counts disclosure; narrow screens scroll
-inside the diagram without causing page-wide overflow.
+Firewall uses one vertical Sankey, with external sources at the top,
+trusted/local sources at the bottom, and shared Allowed/Blocked decisions in
+the middle. Keep source and semantic category labels visible. Use one measured
+packet scale and semantic receive/transmit and success/warning colors. Reserve
+label space for small nonzero paths without inflating their widths. Provide an
+accessible counts disclosure; narrow screens scroll inside the diagram without
+causing page-wide overflow.
 
 Page navigation resets document scroll to the top before paint. Hash links retain
 their section-target behavior; query-only changes preserve the current scroll.
