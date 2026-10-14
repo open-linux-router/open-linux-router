@@ -77,12 +77,10 @@ export interface MapTree {
  * when the router last heard it, never by historical byte totals. This also
  * decides what the map folds into "+N more".
  *
- * That order changes every time the counters are read, and a node that moves
- * under the pointer is a node nobody can click — the reason the first version
- * of this map sorted by name and gave up on traffic. `frozen` is the answer
- * to both: while the pointer is over the map, the caller passes the ranks as
- * they were when it arrived, so nothing re-sorts until it leaves. Rates on
- * screen keep updating; only the order holds still.
+ * The caller samples `frozen` ranks every five seconds and pauses sampling
+ * during pointer, touch or keyboard interaction. Rates on screen keep updating;
+ * only the order holds still. New devices follow the existing rows until the
+ * next sample, and removed devices disappear immediately.
  *
  * **Filtering hides, where it used to empty.** A search used to leave every
  * group drawn with "Nothing here matches" inside, which was fine for three

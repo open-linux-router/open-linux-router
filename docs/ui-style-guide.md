@@ -203,6 +203,13 @@ and a relevant next action where one exists.
 
 ## Responsive behavior and motion
 
+Network-map device ordering samples current traffic ranks every five seconds.
+Pause reordering while the pointer is over the map, keyboard focus is inside it,
+or a touch is active. Resume at the next scheduled update rather than immediately
+on leaving. Rates and counters keep their normal live refresh; do not smooth them.
+New devices appear after existing rows until the next reorder; removed devices
+disappear immediately. Groups retain their name order.
+
 Firewall uses one vertical Sankey with three visual rows: external semantic
 categories above, one virtual OLR / Firewall node in the middle, and trusted/LAN
 and router-local semantic categories below. Both sides flow toward OLR. These

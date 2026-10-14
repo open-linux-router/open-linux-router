@@ -185,12 +185,35 @@ function Canvas({
     return all.filter((d) => !upstreamMacs.has(d.mac))
   }, [all, outside])
 
-  // Hold the order still while the pointer is over the map: see buildTree.
-  const [frozen, setFrozen] = useState<Map<string, DeviceRank> | null>(null)
+  // Sample only sort keys. Live rates and device data keep refreshing normally.
+  const [frozen, setFrozen] = useState<Map<string, DeviceRank>>(() =>
+    buildTree({ devices: listed, groups, traffic, filter, network }).ranks,
+  )
+  const interacting = useRef({ pointer: false, focus: false, touch: false })
   const tree = useMemo(
     () => buildTree({ devices: listed, groups, traffic, filter, network, frozen }),
     [listed, groups, traffic, filter, network, frozen],
   )
+  const latestRanks = useRef(tree.ranks)
+  // Initialize when the first devices arrive after an empty/loading map.
+  if (!frozen.size && tree.ranks.size) setFrozen(tree.ranks)
+  useLayoutEffect(() => {
+    latestRanks.current = tree.ranks
+  }, [tree.ranks])
+  useEffect(() => {
+    const releaseTouch = () => { interacting.current.touch = false }
+    window.addEventListener('pointerup', releaseTouch)
+    window.addEventListener('pointercancel', releaseTouch)
+    const timer = window.setInterval(() => {
+      const { pointer, focus, touch } = interacting.current
+      if (!pointer && !focus && !touch) setFrozen(latestRanks.current)
+    }, 5000)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('pointerup', releaseTouch)
+      window.removeEventListener('pointercancel', releaseTouch)
+    }
+  }, [])
 
   // Bars are scaled against the busiest device on the whole map, not the busiest
   // in the group and not the busiest that survived the search box: a bar has to
@@ -357,8 +380,15 @@ function Canvas({
     <div
       ref={wrap}
       className="relative"
-      onPointerEnter={() => setFrozen(tree.ranks)}
-      onPointerLeave={() => setFrozen(null)}
+      onPointerEnter={(e) => { if (e.pointerType !== 'touch') interacting.current.pointer = true }}
+      onPointerLeave={() => { interacting.current.pointer = false }}
+      onPointerDown={(e) => {
+        if (e.pointerType === 'touch') interacting.current.touch = true
+      }}
+      onFocusCapture={() => { interacting.current.focus = true }}
+      onBlurCapture={(e) => {
+        interacting.current.focus = e.currentTarget.contains(e.relatedTarget)
+      }}
       onClick={(e) => {
         // Clicking empty space leaves focus. Anything that is a node is not
         // empty space, including the router.
