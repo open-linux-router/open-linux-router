@@ -71,7 +71,7 @@ func (a *Activity) observe(now time.Time, usage []Usage, valid bool) {
 }
 
 func (a *Activity) Run(ctx context.Context, applier Applier) {
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for {
 		cfg, err := applier.Load()

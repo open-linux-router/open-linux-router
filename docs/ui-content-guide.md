@@ -83,7 +83,8 @@ Device activity sits at the right of the title bar, without visible
 explanatory text. Immediate four-hour hover/focus hints show sampled download and upload
 or explicitly report missing/unavailable data. Partial samples are not exact
 four-hour totals. History is joined to the device's currently observed addresses.
-It is volatile and begins accumulating after daemon startup.
+It is volatile and begins accumulating after daemon startup. Sampling and UI
+refresh run every ten seconds; the first reading establishes a baseline.
 
 Device Uplink offers Default (inherit interface/system routing) and named
 exits only. Existing explicit router-connection overrides remain accurately
@@ -100,8 +101,10 @@ dialog. Show the mitmproxy viewer directly, without duplicate request lists, dia
 disclosure. Certificate installation, trust and cleanup belong
 in the public five-step setup guide, with the certificate download at step two.
 Device DNS defaults to hidden records with an Inspection switch in its title bar.
-Enabling it polls and displays a Time, Record, Type and Answer table. An accessible
-search icon reveals and collapses the filter with motion; closing clears the filter.
+Enabling it polls and displays Time, Record, Type and right-aligned Answer values
+without a visible header row. An accessible search icon reveals a compact filter
+beside the switch in the title row; closing clears the filter. Both inspection
+panels keep their title bars fixed and expand content downward.
 DNS and Connections title bars show dividers only while their inspection is active.
 Do not promise encrypted DNS blocking beyond the supported protocol and port.
 

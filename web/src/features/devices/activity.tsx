@@ -6,7 +6,7 @@ import { formatBytes } from '@/lib/utils'
 
 interface Bucket { at: string; bytes: { up: number; down: number } }
 
-const fills = ['bg-muted', 'bg-success/20', 'bg-success/40', 'bg-success/70', 'bg-success']
+const fills = ['bg-muted', 'bg-success/45', 'bg-success/60', 'bg-success/80', 'bg-success']
 
 export function DeviceActivity({ addresses }: { addresses: string[] }) {
   const query = new URLSearchParams()
@@ -14,7 +14,7 @@ export function DeviceActivity({ addresses }: { addresses: string[] }) {
   const history = useQuery({
     queryKey: ['gateway', 'activity', query.toString()],
     queryFn: () => api.get<Bucket[]>(`/api/gateway/activity?${query}`),
-    refetchInterval: 60000,
+    refetchInterval: 10000,
   })
   const buckets = new Map(history.data?.map(bucket => [Date.parse(bucket.at), bucket.bytes]))
   const now = new Date()
@@ -43,7 +43,7 @@ export function DeviceActivity({ addresses }: { addresses: string[] }) {
       <TooltipContent className="flex-col items-start animate-none!"><span>{time}</span><span>{detail}</span></TooltipContent>
     </Tooltip>
   })
-  return <div className="absolute right-0 -top-2 w-max max-w-full [mask-image:linear-gradient(to_right,transparent,black_40%)]" role="group" aria-label="Traffic activity, last 14 days, oldest to newest from left to right, six four-hour periods per day from top to bottom">
-    <div className="grid grid-flow-col grid-cols-[repeat(14,14px)] grid-rows-[repeat(6,14px)] gap-x-2 gap-y-0.5 py-px">{cells}</div>
+  return <div className="absolute right-0 -top-2 w-2/3 [mask-image:linear-gradient(to_right,transparent,black_40%)]" role="group" aria-label="Traffic activity, last 14 days, oldest to newest from left to right, six four-hour periods per day from top to bottom">
+    <div className="grid grid-flow-col grid-cols-[repeat(14,minmax(0,1fr))] grid-rows-[repeat(6,14px)] gap-x-2 gap-y-0.5 py-px">{cells}</div>
   </div>
 }

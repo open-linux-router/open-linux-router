@@ -59,9 +59,9 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
     return () => { cancelled = true; setViewerReady(false) }
   }, [mine, status.data?.expires])
 
-  return <section className="overflow-hidden rounded-2xl border bg-card" aria-labelledby="inspection-title">
-    <div className="px-4 pt-4 sm:px-6">
-      <div className={`flex flex-wrap items-center justify-between gap-3 ${mine ? 'border-b pb-3' : ''}`}>
+  return <section className="overflow-hidden rounded-xl border bg-card shadow-xs [overflow-anchor:none]" aria-labelledby="inspection-title">
+    <div className="px-4 sm:px-6">
+      <div className="flex h-18 items-center justify-between gap-3">
         <div>
           <h2 id="inspection-title" className="text-base font-semibold">Connections</h2>
         </div>
@@ -73,7 +73,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         </div>
       </div>
     </div>
-    <div className="space-y-3 p-4 sm:px-6">
+    <div className={mine || status.isError || (active && !mine) || (!active && (ipv4.length === 0 || ipv4.length > 8)) ? 'mx-4 space-y-3 border-t py-4 sm:mx-6 sm:py-6' : ''}>
       {status.isError ? <p role="alert" className="text-sm text-destructive">Inspection status is unavailable. Do not assume interception has stopped.</p> : null}
       {active && !mine ? <p className="text-sm text-muted-foreground">Another device is being inspected. Stop that session before starting this one.</p> : null}
       {ipv4.length === 0 && !active && <p className="text-sm text-muted-foreground">OLR has not observed an IPv4 address for this device yet. Connect it to the network and refresh this page to enable inspection.</p>}
@@ -90,7 +90,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
       </Dialog>
       {mine && (viewerReady
         ? <iframe title="Full request and response inspection" src="/inspection-web/" className="h-[75vh] min-h-[480px] w-full rounded border bg-white" />
-        : <p className="text-sm text-muted-foreground">Opening the inspection viewer…</p>)}
+        : <div className="h-[75vh] min-h-[480px] text-sm text-muted-foreground">Opening the inspection viewer…</div>)}
     </div>
   </section>
 }

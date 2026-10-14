@@ -37,6 +37,18 @@ func TestActivityDifferencesAndGaps(t *testing.T) {
 	}
 }
 
+func TestActivityShortSamplingInterval(t *testing.T) {
+	a := NewActivity()
+	at := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	addr := netip.MustParseAddr("192.168.1.2")
+	a.observe(at, []Usage{{Addr: addr, UpBytes: 100}}, true)
+	a.observe(at.Add(10*time.Second), []Usage{{Addr: addr, UpBytes: 150, DownBytes: 25}}, true)
+	result := a.snapshot([]netip.Addr{addr})
+	if len(result) != 1 || result[0].Bytes.Up != 50 || result[0].Bytes.Down != 25 {
+		t.Fatalf("short interval lost traffic: %+v", result)
+	}
+}
+
 func TestActivityBoundaryZeroAndExitAggregation(t *testing.T) {
 	a := NewActivity()
 	at := time.Date(2026, 10, 14, 12, 29, 0, 0, time.UTC)

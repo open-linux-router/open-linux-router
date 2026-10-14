@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table'
 import { useDnsConfig, useDnsQueries } from '@/features/dns/queries'
 import { DeviceInspection } from '@/features/devices/inspection'
 import { DeviceActivity } from '@/features/devices/activity'
@@ -58,21 +58,21 @@ export function DevicePage() {
         </DevicePolicy>
       } />
 
-      <Card>
-        <CardHeader className={`mx-4 flex flex-row flex-wrap items-center justify-between gap-3 px-0 sm:mx-6 ${dnsInspection ? 'border-b pb-3' : ''}`}>
+      <Card className="gap-0 py-0 [overflow-anchor:none]">
+        <CardHeader className="mx-4 flex h-18 flex-row items-center justify-between gap-3 rounded-none px-0 sm:mx-6">
           <CardTitle>DNS</CardTitle>
           <div className="flex items-center gap-3">
-            <label htmlFor="device-dns-inspection" className="text-sm">Inspection</label>
+            <label htmlFor="device-dns-inspection" className="sr-only text-sm sm:not-sr-only">Inspection</label>
             <Switch id="device-dns-inspection" checked={dnsInspection} onCheckedChange={(checked) => { setDnsInspection(checked); setSearchOpen(false); setFilter('') }} />
-            {dnsInspection && <Button ref={searchButton} variant="ghost" size="icon" aria-label={searchOpen ? 'Close DNS search' : 'Search DNS queries'} aria-expanded={searchOpen} aria-controls="device-dns-search" onClick={() => { setSearchOpen(!searchOpen); setFilter(''); if (!searchOpen) requestAnimationFrame(() => searchInput.current?.focus()) }}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>}
-          </div>
-          {dnsInspection && <div id="device-dns-search" className={`grid w-full transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${searchOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`} inert={!searchOpen}>
+            {dnsInspection && <Button ref={searchButton} className="order-last shrink-0" variant="ghost" size="icon" aria-label={searchOpen ? 'Close DNS search' : 'Search DNS queries'} aria-expanded={searchOpen} aria-controls="device-dns-search" onClick={() => { setSearchOpen(!searchOpen); setFilter(''); if (!searchOpen) requestAnimationFrame(() => searchInput.current?.focus()) }}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>}
+          {dnsInspection && <div id="device-dns-search" className={`overflow-hidden transition-[width,opacity] duration-200 motion-reduce:transition-none ${searchOpen ? 'w-28 opacity-100 sm:w-56' : 'w-0 opacity-0'}`} inert={!searchOpen}>
             <div className="overflow-hidden">
-              <Input ref={searchInput} id="device-dns-filter" aria-label="Filter DNS queries" className="mt-1 w-full" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Name, answer, type or result" onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); setFilter(''); searchButton.current?.focus() } }} />
+              <Input ref={searchInput} id="device-dns-filter" aria-label="Filter DNS queries" className="w-full" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search queries" onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); setFilter(''); searchButton.current?.focus() } }} />
             </div>
           </div>}
+          </div>
         </CardHeader>
-        {dnsInspection && <CardContent className="space-y-4">
+        {dnsInspection && <CardContent className="mx-4 space-y-4 border-t px-0 py-4 sm:mx-6 sm:py-6">
           {dnsQueries.isError ? (
             <p className="text-sm text-muted-foreground">The DNS query log is unavailable. The resolver may be stopped.</p>
           ) : dnsQueries.isPending ? (
@@ -87,8 +87,7 @@ export function DevicePage() {
             <p className="text-sm text-muted-foreground">{matchingQueries.length ? 'Nothing matches that filter.' : 'No matching queries in the recent sample.'}</p>
           ) : (
             <div className="max-h-80 overflow-y-auto">
-              <Table aria-label="Recent DNS queries">
-                <TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Record</TableHead><TableHead>Type</TableHead><TableHead>Answer</TableHead></TableRow></TableHeader>
+              <Table aria-label="Recent DNS queries: time, record, type, answer" className="[&_td:last-child]:text-right">
                 <TableBody>{shownQueries.map((q, i) => <TableRow key={`${q.at}-${q.client}-${q.name}-${i}`}>
                   <TableCell><time dateTime={q.at} className="font-mono text-xs text-muted-foreground">{new Date(q.at).toLocaleTimeString()}</time></TableCell>
                   <TableCell className="min-w-32 whitespace-normal break-all">{q.name}</TableCell>

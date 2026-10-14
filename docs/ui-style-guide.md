@@ -131,10 +131,10 @@ tooltips appear immediately. A divider separates the
 title from two columns of 36px desktop / 44px mobile minimum-height label/value rows: stable identity
 and settings on the left, observed state and traffic on the right. Group and Uplink values use clickable tags with muted surfaces that open edit dialogs.
 Device traffic reuses Overview meters and total rows without a heading.
-The device title contains a right-aligned 14-day traffic dot matrix: one column
-per day and six four-hour periods per column, using 3px rounded blocks and
-14px squares, 8px column gaps and 2px row gaps. The matrix spans 300px
-and fills more of the title height with 1px inner padding.
+The device title contains a right-aligned 14-day traffic matrix occupying two
+thirds of the title width: one column per day and six four-hour periods per
+column, using 14px-high cells with 3px corners, equal flexible widths, 8px column
+gaps and 2px row gaps. Keep the current-period hint and 1px inner padding.
 Fade only the left edge toward overlapping identity content; keep the right
 side fully visible, including muted zero/unknown dots. Use the success
 token in four intensities for traffic magnitude. No axes,
@@ -155,10 +155,15 @@ Never style a pending or failed read as a disabled service.
 Active device inspection displays the embedded mitmproxy viewer directly below
 the Connections divider. Keep its setup gear icon beside the title-bar switch;
 the QR code and setup guide link belong in the setup dialog, not in the title bar.
-DNS and Connections omit title dividers when inspection is off. DNS inspection
-defaults off and uses the shared table with Time, Record, Type and Answer columns.
-Its search icon reveals and collapses a full-width filter with a 200ms height/opacity
-transition that honors reduced motion. Keep long records and answers readable.
+DNS and Connections use matching, vertically centered 72px title bars whose
+height stays fixed during inspection. Content expands below the title bar,
+with a divider only while active; disable scroll anchoring on both panels.
+Reserve the document scrollbar gutter to prevent horizontal movement.
+DNS inspection defaults off and uses the shared table without a visible header,
+with Time, Record, Type and right-aligned Answer columns.
+Its search icon reveals a compact filter in the same title row, moving the
+inspection controls left with a 200ms width/opacity transition that honors
+reduced motion. Keep long records and answers readable.
 
 List rows have a minimum height of 64px. On phones, trailing values reflow below
 the title instead of disappearing. Technical values and important descriptions
