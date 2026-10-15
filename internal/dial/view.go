@@ -385,7 +385,10 @@ func buildPlan(stored, desired Config, links LinkView, obs Observed) planView {
 		Warnings: problems(res.Warnings),
 	}
 
-	planUplink(&plan, stored, desired, links, obs)
+	if !profileOnlyChange(stored, desired) {
+		planUplink(&plan, stored, desired, links, obs)
+	}
+	planTunnelBroker(&plan, stored, desired)
 
 	for _, want := range desired.Records {
 		have, existed := stored.Find(want.Name)
@@ -558,7 +561,7 @@ func planUplink(plan *planView, stored, desired Config, links LinkView, obs Obse
 			}
 		}
 	}
-	if RemovingTunnel(stored, desired) && obs.Tunnel.Present && obs.Tunnel.Sit {
+	if (RemovingTunnel(stored, desired) || (desired.TunnelBroker != nil && !desired.TunnelBroker.Enabled && !desired.Uplink.HasTunnel())) && obs.Tunnel.Present && obs.Tunnel.Sit {
 		plan.Changes = append(plan.Changes, changeView{
 			Path:   "interfaces[" + TunnelInterface + "]",
 			Kind:   kindDelete,

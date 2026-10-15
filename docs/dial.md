@@ -500,3 +500,35 @@ turn the box's own address into something netlink accepts and nothing can reach.
    the old answer cost.
 6. **NetworkManager, systemd-networkd and dhclient** on an interface olr has
    taken — detected and reported, not yet taken over (§4).
+# Tunnel Broker inventory and activation
+
+`dial.tunnelbroker` stores HE's tunnel ID, server/client IPv4 and IPv6
+addresses, routed /64 and optional /48, and MTU. `enabled` defaults to false.
+Saving or editing a disabled assignment is inventory only: no kernel, host
+networking, or dependent-service changes. Details survive deactivation and
+daemon restarts. The legacy `uplink.ipv6.via: "6in4"` form remains supported;
+the UI explicitly previews disabling it when moving it into inventory.
+
+Activation requires an uplink but does not replace its native IPv6/PD settings
+or the main IPv6 default route. OLR reserves IPv6 table **7900** and RPDB
+priorities **7900–7901**. For the client /128 and each saved routed allocation,
+priority 7900 looks up non-default main-table routes (preserving LAN access),
+then priority 7901 uses table 7900's default through `olr-6in4`. These rules
+precede Gateway exit rules: HE source addresses always use HE for internet
+traffic. An unreachable fallback in table 7900 prevents HE sources falling
+through to the ISP when the tunnel device disappears. No IPv6 NAT or automatic
+failover to the ISP is provided. The tunnel
+uses the uplink's local IPv4; HE's saved Client IPv4 is the public endpoint
+registered at HE, which can differ behind NAT.
+
+Disabling removes the tunnel and its source routes; LAN addresses and router
+advertisements remain separately configured. Stop or renumber HE LANs before
+disabling their connectivity. Re-enabling reconciles device and source routes;
+runtime status distinguishes saved, enabled, and matching kernel state.
+Router IPv6 tests bind the tunnel's source address. They do not prove LAN
+connectivity. Endpoint updates at HE remain manual.
+
+The UI is `/gateway/tunnelbroker`; `/gateway/he-setup` redirects there. The
+five sections share one page with sticky section navigation. Saving the HE
+assignment, activating it, and assigning a routed /64 to a LAN are separate
+actions. LAN changes retain per-module preview and confirmation.

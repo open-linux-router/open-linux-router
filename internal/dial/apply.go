@@ -3,6 +3,7 @@ package dial
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
@@ -191,6 +192,12 @@ func (a Applier) ApplyChecked(ctx context.Context, desired Config, check func(pl
 	if err != nil {
 		return ApplyResult{Plan: plan}, err
 	}
+	// A disabled assignment is inventory, not a request to reconcile the uplink.
+	// Saving its details must not repair drift, take over host networking, or
+	// restart unrelated services.
+	if profileOnlyChange(previous, stored) {
+		return ApplyResult{Plan: plan}, nil
+	}
 
 	// No uplink means nothing to program, and the writer is not called at all.
 	// This is what keeps §7's promise intact for the DDNS half: adding a record
@@ -200,6 +207,9 @@ func (a Applier) ApplyChecked(ctx context.Context, desired Config, check func(pl
 	want := DesiredFor(stored)
 	want.RetireFrom, want.Retire = Retiring(previous, stored)
 	want.RemoveTunnel = RemovingTunnel(previous, stored)
+	if stored.TunnelBroker != nil && !stored.TunnelBroker.Enabled && !stored.Uplink.HasTunnel() {
+		want.RemoveTunnel = true
+	}
 	result := ApplyResult{Plan: plan}
 	if !want.Empty() {
 		steps, err := a.writer().Apply(ctx, want)
@@ -223,6 +233,11 @@ func (a Applier) ApplyChecked(ctx context.Context, desired Config, check func(pl
 		}
 	}
 	return result, nil
+}
+
+func profileOnlyChange(a, b Config) bool {
+	return !reflect.DeepEqual(a.TunnelBroker, b.TunnelBroker) && a.Uplink.Equal(b.Uplink) &&
+		reflect.DeepEqual(a.Records, b.Records) && reflect.DeepEqual(DesiredFor(a), DesiredFor(b))
 }
 
 // Restore puts the uplink back on the box after a reboot.

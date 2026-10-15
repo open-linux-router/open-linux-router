@@ -36,6 +36,9 @@
 // generated names; until then this header is the record of what is hand-kept.
 // `Service.link_path` follows internal/ingress/config.go for the same reason.
 // `UpstreamIngress.request_headers` and `RequestHeaderIngress` follow it too.
+// `TunnelBroker` was extracted from a real schema generation; optional omitzero
+// fields are marked optional to match their JSON representation. Other modules
+// retain the compatibility names documented above.
 
 /**
  * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
@@ -286,7 +289,19 @@ export interface Reservation {
   lease_time?: Duration
 }
 export interface DialConfig {
+  tunnelbroker?: TunnelBroker
   records?: Record[]
+}
+export interface TunnelBroker {
+  enabled: boolean
+  tunnel_id?: string
+  server_ipv4: string
+  server_ipv6?: string
+  client_ipv4?: string
+  client_ipv6: string
+  routed_64?: string
+  routed_48?: string
+  mtu?: number
 }
 export interface Record {
   name: string

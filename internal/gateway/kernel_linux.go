@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/open-linux-router/open-linux-router/internal/dial"
+
 	"github.com/google/nftables"
 	"github.com/google/nftables/binaryutil"
 	"github.com/google/nftables/expr"
@@ -707,6 +709,9 @@ func (k LinuxKernel) observeRules() (lines []string, foreign []ForeignRule, err 
 			return nil, nil, err
 		}
 		for _, r := range rules {
+			if dial.OwnsBrokerRule(r) {
+				continue
+			}
 			if OwnsPriority(r.Priority) {
 				lines = append(lines, observedRuleLine(r, v6))
 				continue

@@ -3,6 +3,7 @@ package dial
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -94,6 +95,7 @@ func (h HTTP) withHost(v *uplinkView) *uplinkView {
 // stripped.
 func (h HTTP) Routes() []core.Route {
 	return []core.Route{
+		{Method: "GET", Path: "/tunnelbroker/status", Tool: "show tunnel broker", Summary: "Read tunnel device and HE source-routing state.", Handler: h.tunnelBrokerStatus},
 		{Method: "GET", Path: "/he/servers", Tool: "show HE servers", Summary: "Built-in HE tunnel servers.", Handler: h.heServers},
 		{Method: "POST", Path: "/he/check", Tool: "show HE endpoint check", Body: core.BodyRelaxed, Summary: "Probe an HE endpoint without changing configuration; target is required.", Handler: h.heCheck},
 		// Intent, whole section.
@@ -239,6 +241,10 @@ func (h HTTP) patchConfig(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusBadRequest, "empty patch body")
 		return
 	}
+	var keys map[string]json.RawMessage
+	_ = json.Unmarshal(patch, &keys)
+	_, hasBroker := keys["tunnelbroker"]
+	inventory := len(keys) == 1 && hasBroker
 
 	h.mutate(w, r, func(cfg *Config) error {
 		currentJSON, err := MarshalConfig(*cfg)
@@ -257,7 +263,7 @@ func (h HTTP) patchConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		*cfg = preserveSecrets(next, *cfg)
 		return nil
-	})
+	}, inventory)
 }
 
 func (h HTTP) putRecord(w http.ResponseWriter, r *http.Request) {
@@ -411,7 +417,7 @@ type applyResponse struct {
 // of the list, and two programming the uplink would race on the route table.
 //
 // The execution plan is checked on the server before intent or runtime writes.
-func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) error) {
+func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) error, inventory ...bool) {
 	gate, err := core.ParseApplyGate(r)
 	if err != nil {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
@@ -454,10 +460,23 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 		}
 
 		stored = next
-		result, applyErr = h.Applier.ApplyChecked(r.Context(), next, func(plan planView) error {
-			return gate.Check(plan.Impact == impactDisruptive, r.URL.Path == "/apply")
-		})
-		if applyErr == nil && !result.Plan.Empty && h.Dependents != nil {
+		inventorySave := len(inventory) > 0 && inventory[0] &&
+			(previous.TunnelBroker == nil || !previous.TunnelBroker.Enabled) && (next.TunnelBroker == nil || !next.TunnelBroker.Enabled)
+		if inventorySave {
+			// Even an idempotent inventory PATCH must not reconcile unrelated drift.
+			result.Plan = planView{Changes: []changeView{}, Impact: impactNone, Action: actionNone}
+			planTunnelBroker(&result.Plan, previous, next)
+			result.Plan.Empty = len(result.Plan.Changes) == 0
+			applyErr = gate.Check(false, false)
+			if applyErr == nil {
+				_, applyErr = h.Applier.Save(next)
+			}
+		} else {
+			result, applyErr = h.Applier.ApplyChecked(r.Context(), next, func(plan planView) error {
+				return gate.Check(plan.Impact == impactDisruptive, r.URL.Path == "/apply")
+			})
+		}
+		if applyErr == nil && !result.Plan.Empty && !inventorySave && !profileOnlyChange(previous, stored) && h.Dependents != nil {
 			for _, s := range h.Dependents(r.Context()) {
 				result.Steps = append(result.Steps, Step(s))
 			}

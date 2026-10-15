@@ -83,6 +83,10 @@ type Tunnel struct {
 
 	Address netip.Prefix
 	MTU     int
+	// SourceRouting keeps HE traffic separate from native IPv6. Legacy tunnels
+	// retain their original main-table default-route behavior.
+	SourceRouting bool
+	Sources       [3]netip.Prefix
 }
 
 // Empty reports whether there is nothing for a writer to do.
@@ -218,7 +222,9 @@ type Observed struct {
 
 	// AcceptRA is the uplink's net.ipv6.conf.<iface>.accept_ra, empty when
 	// it could not be read.
-	AcceptRA string
+	AcceptRA      string
+	BrokerRoute   bool
+	BrokerSources []netip.Prefix
 }
 
 type DefaultRoute struct {
@@ -267,9 +273,15 @@ func DesiredFor(c Config) Desired {
 		d.Gateway = c.Uplink.IPv4.Gateway
 	}
 	d.AcceptRA = c.Uplink.HasPD()
-	if c.Uplink.HasTunnel() {
-		v6 := c.Uplink.IPv6
+	if c.TunnelBroker != nil && c.TunnelBroker.Enabled {
+		d.AcceptRA = true
+	}
+	if v6 := c.ActiveTunnel(); v6 != nil {
 		t := &Tunnel{Remote: v6.Server, Address: v6.Address, MTU: v6.MTUOrDefault()}
+		if b := c.TunnelBroker; b != nil && b.Enabled {
+			t.SourceRouting = true
+			t.Sources = [3]netip.Prefix{netip.PrefixFrom(b.ClientIPv6.Addr(), 128), b.Routed64, b.Routed48}
+		}
 		if c.Uplink.HasIPv4() {
 			t.Local = c.Uplink.IPv4.Address.Addr()
 		}
@@ -281,7 +293,7 @@ func DesiredFor(c Config) Desired {
 // RemovingTunnel reports whether a change takes the tunnel away: the stored
 // uplink had one and the desired config has none, uplink removed included.
 func RemovingTunnel(stored, desired Config) bool {
-	return stored.Uplink.HasTunnel() && !desired.Uplink.HasTunnel()
+	return stored.ActiveTunnel() != nil && desired.ActiveTunnel() == nil
 }
 
 // UplinkPlan is the difference between what the kernel has and what the uplink
@@ -366,6 +378,20 @@ func PlanTunnel(want Tunnel, obs Observed) *TunnelPlan {
 	}
 	if p.Route && obs.V6DefaultDev != "" && obs.V6DefaultDev != TunnelInterface {
 		p.ReplacesRoute = obs.V6DefaultDev
+	}
+	if want.SourceRouting {
+		p.ReplacesRoute = ""
+		p.Route = !obs.BrokerRoute
+		for _, src := range want.Sources {
+			if src.IsValid() && !slices.Contains(obs.BrokerSources, src) {
+				p.Route = true
+			}
+		}
+		for _, src := range obs.BrokerSources {
+			if !slices.Contains(want.Sources[:], src) {
+				p.Route = true
+			}
+		}
 	}
 	if !p.Create && !p.Add && !p.BringUp && !p.Route {
 		return nil
@@ -466,7 +492,11 @@ func DescribeTunnelPlan(p *TunnelPlan) []string {
 		lines = append(lines, fmt.Sprintf("+ ip link set %s up", TunnelInterface))
 	}
 	if p.Route {
-		lines = append(lines, fmt.Sprintf("+ ip -6 route replace default dev %s", TunnelInterface))
+		if p.Want.SourceRouting {
+			lines = append(lines, fmt.Sprintf("+ route HE source prefixes through %s (table %d); preserve native IPv6 default", TunnelInterface, BrokerTable))
+		} else {
+			lines = append(lines, fmt.Sprintf("+ ip -6 route replace default dev %s", TunnelInterface))
+		}
 	}
 	return lines
 }

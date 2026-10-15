@@ -171,6 +171,12 @@ addresses and provider errors readable rather than silently truncating them.
 
 ## Disclosure and hierarchy
 
+Tunnel Broker keeps provider details together in one saved assignment, with
+activation and LAN assignment as separate decisions. Saving defaults to off.
+Show five sections on one page with sticky step navigation; omit the repeated
+page introduction and back-link heading. Keep endpoint requirements and change
+consequences visible; disclose server comparisons and technical explanations.
+
 Overview group headers open the group's detail page directly on desktop and
 mobile. The unnamed device bucket retains its in-place disclosure.
 Group details lead with parent, device counts and subgroup links beside bulk

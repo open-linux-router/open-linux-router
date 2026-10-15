@@ -72,6 +72,7 @@ func Validate(c Config, links LinkView) Result {
 	var r Result
 
 	validateUplink(&r, c.Uplink, links)
+	validateTunnelBroker(&r, c)
 
 	seen := map[string]int{}
 	for i, rec := range c.Records {

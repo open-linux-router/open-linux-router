@@ -31,7 +31,7 @@ import { DevicePage } from '@/routes/device'
 import { GroupPage } from '@/routes/group'
 import { GatewayPage } from '@/routes/gateway/index'
 import { GatewayInterfacesPage } from '@/routes/gateway/interfaces'
-import { HESetupPage } from '@/routes/gateway/he-setup'
+import { TunnelBrokerPage } from '@/routes/gateway/tunnelbroker'
 import { GatewayInterfacePage } from '@/routes/gateway/interface'
 import { GatewayExitsPage } from '@/routes/gateway/exits'
 import { FirewallPage } from '@/routes/firewall'
@@ -50,7 +50,8 @@ export function App() {
           <Route path="gateway">
             <Route index element={<GatewayPage />} />
             <Route path="interfaces" element={<GatewayInterfacesPage />} />
-            <Route path="he-setup" element={<HESetupPage />} />
+            <Route path="tunnelbroker" element={<TunnelBrokerPage />} />
+            <Route path="he-setup" element={<Navigate to="/gateway/tunnelbroker" replace />} />
             <Route path="interfaces/:name" element={<GatewayInterfacePage />} />
             <Route path="networks" element={<Navigate to="/gateway/dhcp/details" replace />} />
             <Route path="exits" element={<GatewayExitsPage />} />

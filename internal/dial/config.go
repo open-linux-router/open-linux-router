@@ -95,6 +95,7 @@ const MinInterval = 30 * time.Second
 // fields the day it is written, so a list of names would have to become a list
 // of structs immediately.
 type Config struct {
+	TunnelBroker *TunnelBroker `json:"tunnelbroker,omitempty"`
 	// Uplink is how this box itself reaches the internet. Nil means olr does
 	// not own that, which is what every box before this ran as.
 	Uplink *Uplink `json:"uplink,omitempty"`
@@ -724,7 +725,12 @@ func normalizeUplink(u *Uplink) {
 // Clone returns a deep copy, so a proposal can be edited without disturbing the
 // one held by the store.
 func (c Config) Clone() Config {
-	return Config{Uplink: c.Uplink.Clone(), Records: slices.Clone(c.Records)}
+	out := Config{Uplink: c.Uplink.Clone(), Records: slices.Clone(c.Records)}
+	if c.TunnelBroker != nil {
+		b := *c.TunnelBroker
+		out.TunnelBroker = &b
+	}
+	return out
 }
 
 // Redacted returns a copy safe to print, log, or return over the API.

@@ -271,6 +271,10 @@ func applyTunnel(t Tunnel, steps *[]Step, failed *int) {
 			return netlink.LinkSetUp(existing)
 		})
 	}
+	if t.SourceRouting {
+		run("route HE source addresses through the tunnel", func() error { return applyBrokerRouting(t, existing.Attrs().Index) })
+		return
+	}
 	run(fmt.Sprintf("route IPv6 out through %s", TunnelInterface), func() error {
 		return netlink.RouteReplace(&netlink.Route{
 			LinkIndex: existing.Attrs().Index,
@@ -323,6 +327,11 @@ func ipv4Of(ip net.IP) netip.Addr {
 // removeTunnel deletes TunnelInterface if it is there and is a sit device.
 // Its address and route go with it.
 func removeTunnel(steps *[]Step, failed *int) {
+	if err := clearBrokerRouting(); err != nil {
+		*steps = append(*steps, Step{Description: "remove HE source routing", Error: err.Error()})
+		*failed++
+		return
+	}
 	link, err := netlink.LinkByName(TunnelInterface)
 	if err != nil {
 		return
@@ -342,6 +351,7 @@ func removeTunnel(steps *[]Step, failed *int) {
 
 // observeTunnel reads TunnelInterface and the IPv6 default route.
 func observeTunnel(obs *Observed) {
+	observeBrokerRouting(obs)
 	if link, err := netlink.LinkByName(TunnelInterface); err == nil {
 		obs.Tunnel.Present = true
 		obs.Tunnel.Up = link.Attrs().Flags&net.FlagUp != 0

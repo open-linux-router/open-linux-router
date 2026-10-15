@@ -110,9 +110,9 @@ func (b firewallBoundary) Openings() ([]firewall.Opening, error) {
 	if err != nil {
 		return nil, err
 	}
-	if dc.Uplink.HasTunnel() {
+	if tunnel := dc.ActiveTunnel(); tunnel != nil {
 		out = append(out, firewall.Opening{For: "IPv6 tunnel",
-			Protocol: firewall.SixInFour, From: dc.Uplink.IPv6.Server})
+			Protocol: firewall.SixInFour, From: tunnel.Server})
 	}
 	return out, nil
 }

@@ -58,6 +58,12 @@ border. Use muted fills for small metrics, not another elevated card.
 
 ## Layout and hierarchy
 
+Tunnel Broker uses one scrollable page with five numbered sections and a sticky
+step navigation immediately below the 64px shell header. Keep section anchors
+clear of both bars and scroll the navigation locally on narrow screens. The
+page title is accessible but visually hidden; avoid a repeated introductory
+heading above the step navigation.
+
 Gateway's Interfaces panel keeps physical interface cards in one horizontal row,
 with a right-side routing summary from 1024px. Scroll the interface row locally
 when needed; below desktop, stack the summary beneath it. Interface cards show

@@ -62,6 +62,18 @@ func (h HTTP) heServers(w http.ResponseWriter, r *http.Request) {
 	core.WriteJSON(w, http.StatusOK, heCatalog)
 }
 
+func (h HTTP) tunnelBrokerStatus(w http.ResponseWriter, r *http.Request) {
+	cfg, err := h.Applier.Load()
+	if err != nil {
+		core.WriteError(w, 500, err.Error())
+		return
+	}
+	obs := h.Applier.Observe(r.Context(), cfg.uplinkInterface())
+	want := DesiredFor(cfg).Tunnel
+	ready := want != nil && PlanTunnel(*want, obs) == nil
+	core.WriteJSON(w, 200, map[string]any{"present": obs.Tunnel.Present, "up": obs.Tunnel.Up, "matches": ready, "native_default_dev": obs.V6DefaultDev, "as_of": time.Now()})
+}
+
 func (h HTTP) heCheck(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Target string `json:"target"`
@@ -98,10 +110,13 @@ func (h HTTP) heCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// IPv6 verification is restricted to the configured tunnel peer and public test targets.
-	if cfg.Uplink.HasTunnel() {
-		prefix := cfg.Uplink.IPv6.Address
+	if tunnel := cfg.ActiveTunnel(); tunnel != nil {
+		prefix := tunnel.Address
 		if prefix.IsValid() {
 			peer := prefix.Masked().Addr().Next().String()
+			if cfg.TunnelBroker != nil && cfg.TunnelBroker.ServerIPv6.IsValid() {
+				peer = cfg.TunnelBroker.ServerIPv6.Addr().String()
+			}
 			if req.Target == peer || req.Target == "2606:4700:4700::1111" || req.Target == "2001:4860:4860::8888" {
 				allowed = true
 				iface = TunnelInterface
@@ -114,6 +129,9 @@ func (h HTTP) heCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	p := probing.New(req.Target)
 	p.InterfaceName = iface
+	if iface == TunnelInterface {
+		p.Source = cfg.ActiveTunnel().Address.Addr().String()
+	}
 	p.Count = 8
 	p.Interval = 250 * time.Millisecond
 	p.Timeout = 4 * time.Second
