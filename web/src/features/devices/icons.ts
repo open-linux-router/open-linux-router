@@ -98,6 +98,7 @@ import huaweiPhone from '@/assets/device-icons/huawei-phone.webp'
 import huaweiTablet from '@/assets/device-icons/huawei-tablet.webp'
 import huaweiWatch from '@/assets/device-icons/huawei-watch.webp'
 import intelDesktop from '@/assets/device-icons/intel-desktop.webp'
+import intelDesktopNuc12Extreme from '@/assets/device-icons/intel-desktop-nuc12extreme.webp'
 import ikoolcoreR1 from '@/assets/device-icons/ikoolcore-desktop-r1.webp'
 import ikoolcoreR2 from '@/assets/device-icons/ikoolcore-desktop-r2.webp'
 import ikoolcoreR2Max from '@/assets/device-icons/ikoolcore-desktop-r2max.webp'
@@ -119,8 +120,10 @@ import sonyPhone from '@/assets/device-icons/sony-phone.webp'
 import sonyTv from '@/assets/device-icons/sony-tv.webp'
 import synologyNas from '@/assets/device-icons/synology-nas.webp'
 import tpLinkRouter from '@/assets/device-icons/tp-link-router.webp'
+import tpLinkRouterXdr6080 from '@/assets/device-icons/tp-link-router-xdr6080.webp'
 import ubiquitiAccesspoint from '@/assets/device-icons/ubiquiti-accesspoint.webp'
 import xiaomiPhone from '@/assets/device-icons/xiaomi-phone.webp'
+import xiaomiRouterBe7000 from '@/assets/device-icons/xiaomi-router-be7000.webp'
 import xiaomiSpeaker from '@/assets/device-icons/xiaomi-speaker.webp'
 import xiaomiVacuum from '@/assets/device-icons/xiaomi-vacuum.webp'
 
@@ -196,6 +199,9 @@ type VariantKey =
   | 'apple/desktop/studio'
   | 'server/tower'
   | 'desktop/mini'
+  | 'intel/desktop/nuc12extreme'
+  | 'xiaomi/router/be7000'
+  | 'tp-link/router/xdr6080'
   | 'desktop/ikoolcorer1'
   | 'desktop/ikoolcorer2'
   | 'desktop/ikoolcorer2max'
@@ -270,6 +276,7 @@ const IMAGES: Partial<Record<IconKey, string>> = {
   'huawei/watch': huaweiWatch,
 
   'xiaomi/phone': xiaomiPhone,
+  'xiaomi/router/be7000': xiaomiRouterBe7000,
   'xiaomi/speaker': xiaomiSpeaker,
   'xiaomi/vacuum': xiaomiVacuum,
 
@@ -286,6 +293,7 @@ const IMAGES: Partial<Record<IconKey, string>> = {
   // Beside the other box-makers, not with the phone vendors: the NUC is the
   // one thing Intel sells that anyone has in a house, and it is a desk.
   'intel/desktop': intelDesktop,
+  'intel/desktop/nuc12extreme': intelDesktopNuc12Extreme,
 
   'lenovo/laptop': lenovoLaptop,
   'lg/tv': lgTv,
@@ -296,6 +304,7 @@ const IMAGES: Partial<Record<IconKey, string>> = {
   'synology/nas': synologyNas,
   'raspberry-pi/sbc': raspberryPiSbc,
   'tp-link/router': tpLinkRouter,
+  'tp-link/router/xdr6080': tpLinkRouterXdr6080,
   'ubiquiti/accesspoint': ubiquitiAccesspoint,
   'hp/printer': hpPrinter,
   'epson/printer': epsonPrinter,
@@ -661,6 +670,9 @@ const BRAND_LABELS: Partial<Record<IconKey, string>> = {
   'microsoft/laptop': 'Surface',
   'microsoft/console': 'Xbox',
   'intel/desktop': 'Intel NUC',
+  'intel/desktop/nuc12extreme': 'Intel NUC 12 Extreme',
+  'xiaomi/router/be7000': 'Xiaomi BE7000',
+  'tp-link/router/xdr6080': 'TP-Link TL-XDR6080 Turbo',
 
   'lenovo/laptop': 'ThinkPad',
   'lg/tv': 'LG TV',

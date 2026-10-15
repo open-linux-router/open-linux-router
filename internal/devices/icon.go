@@ -55,8 +55,11 @@ var operatingSystems = []string{
 // and deliberately no wider than the artwork: a variant is a *shape*, so one
 // nobody has drawn would be a word with no picture behind it.
 var variants = map[string][]string{
-	"nas":           {"4bay", "5bay", "6bay", "8bay"},
-	"apple/desktop": {"mini", "studio"},
+	"nas":            {"4bay", "5bay", "6bay", "8bay"},
+	"apple/desktop":  {"mini", "studio"},
+	"intel/desktop":  {"nuc12extreme"},
+	"xiaomi/router":  {"be7000"},
+	"tp-link/router": {"xdr6080"},
 	// A tower server is not the rack unit `server` draws, and a mini PC is
 	// not the monitor-and-tower `desktop` draws. Each is the same *kind* of
 	// thing in a shape nothing else in the set shares, which is what a
