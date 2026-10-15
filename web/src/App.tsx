@@ -51,7 +51,6 @@ export function App() {
             <Route index element={<GatewayPage />} />
             <Route path="interfaces" element={<GatewayInterfacesPage />} />
             <Route path="tunnelbroker" element={<TunnelBrokerPage />} />
-            <Route path="he-setup" element={<Navigate to="/gateway/tunnelbroker" replace />} />
             <Route path="interfaces/:name" element={<GatewayInterfacePage />} />
             <Route path="networks" element={<Navigate to="/gateway/dhcp/details" replace />} />
             <Route path="exits" element={<GatewayExitsPage />} />
