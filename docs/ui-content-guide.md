@@ -155,6 +155,9 @@ addresses and provider errors readable rather than silently truncating them.
 
 ## Disclosure and hierarchy
 
+Overview group headers open the group's detail page directly on desktop and
+mobile. The unnamed device bucket retains its in-place disclosure.
+
 Gateway groups physical interface cards inside an Interfaces panel, with observed
 default gateways and host DNS on the right at desktop widths. Keep all physical
 interfaces in one row and show current rates without history charts. Keep IPv4 and IPv6

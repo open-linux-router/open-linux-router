@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion, type Transition } from 'motion/react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
 
 import { Skeleton } from '@/components/ui/skeleton'
 import { useInterfaces } from '@/features/link/queries'
@@ -41,11 +42,8 @@ import type { DevicesGroup, Pool, Service } from '@/lib/config-types'
  * more" that opens in place — and with every box sized by a scoring rule
  * rather than by whatever its content pushes it to. layout.ts has both.
  *
- * **Focus is an interaction, not a mode.** Clicking a group's header moves it
- * under the router and fans its children out beneath it, one line each; the
- * other groups step aside as chips. Clicking it again, clicking anywhere empty,
- * or Esc puts everything back. On a phone there is nowhere to step aside to, so
- * the header opens the group's fold instead.
+ * Clicking a named group's header opens its detail page. The unnamed device
+ * bucket keeps its in-place focus or fold because it has no group detail page.
  *
  * **Strictly top-down.** Every line leaves the bottom of one box and enters the
  * top of another. Nothing is drawn left to right, because a diagram that mixes
@@ -180,6 +178,7 @@ function Canvas({
   actions: MapActions
 }) {
   // A known next hop is already shown above the router, not again below.
+  const navigate = useNavigate()
   const listed = useMemo(() => {
     const upstreamMacs = new Set(outside?.hops.map((h) => h.device?.mac).filter(Boolean))
     return all.filter((d) => !upstreamMacs.has(d.mac))
@@ -322,6 +321,11 @@ function Canvas({
   }, [focused])
 
   const onGroup = (key: string) => {
+    const group = tree.byKey.get(key)
+    if (group?.name !== undefined) {
+      navigate(`/groups/${encodeURIComponent(group.name)}`)
+      return
+    }
     if (narrow) toggle(key)
     else setFocus((prev) => (prev === key ? undefined : key))
   }
@@ -365,7 +369,7 @@ function Canvas({
           />
         )
       case 'pick':
-        return <PickNode groups={item.groups} onFocus={setFocus} />
+        return <PickNode groups={item.groups} onFocus={onGroup} />
       case 'note':
         return <NoteNode note={item.note} filtering={tree.filtering} onCreateGroup={actions.onCreateGroup} />
       case 'hop': {

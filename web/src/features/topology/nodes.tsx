@@ -207,7 +207,7 @@ export function GroupNode({
   dashed: boolean
   groups: DevicesGroup[]
   actions: MapActions
-  /** Clicking the group: focus it, or leave focus when it is the focused one. */
+  /** Open a named group, or focus the unnamed device bucket. */
   onFocus: () => void
 }) {
   const bucket = group.name === undefined
@@ -217,7 +217,7 @@ export function GroupNode({
       <button
         type="button"
         onClick={onFocus}
-        title={`Focus ${group.title}`}
+        title={`${bucket ? 'Focus' : 'Open'} ${group.title}`}
         className={cn(
           'flex size-full items-center gap-2 rounded-lg border bg-card px-3 text-left shadow-xs transition-colors hover:bg-accent',
           dashed && 'border-dashed',
@@ -234,7 +234,7 @@ export function GroupNode({
       <button
         type="button"
         onClick={onFocus}
-        title={`Focus ${group.title}`}
+        title={`${bucket ? 'Focus' : 'Open'} ${group.title}`}
         className={cn(
           'flex size-full items-center gap-2.5 rounded-lg border bg-muted/40 px-3 text-left transition-colors hover:bg-accent',
           focusRing,
@@ -284,7 +284,7 @@ export function GroupNode({
         <button
           type="button"
           onClick={onFocus}
-          aria-label={focused ? `Back to every group` : `Focus ${group.title}`}
+          aria-label={!bucket ? `Open ${group.title}` : focused ? 'Back to every group' : `Focus ${group.title}`}
           className={cn(
             'absolute inset-0 transition-colors hover:bg-foreground/[0.03]',
             focused ? 'rounded-xl' : 'rounded-lg',
