@@ -372,11 +372,11 @@ function PublicAddressRow({ addresses }: { addresses?: PublicAddresses }) {
       <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
     </button>
     {open && <div className="space-y-1 px-3 pt-2 text-xs text-muted-foreground">
-      <dl className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-2 gap-y-2">
+      <dl className="grid grid-cols-[max-content_minmax(0,1fr)] items-start gap-x-2 gap-y-2 [&_dd]:text-right">
         <div className="contents"><dt>IPv4</dt><dd className="break-all font-mono text-foreground">{address?.ip || 'Address unavailable'}</dd></div>
         {addresses?.ipv6?.ip && <div className="contents"><dt>IPv6</dt><dd className="break-all font-mono text-foreground">{addresses.ipv6.ip}</dd></div>}
         {address?.asn != null && address.asn > 0 && <div className="contents"><dt>ASN</dt><dd className="break-all font-mono text-foreground">AS{address.asn}</dd></div>}
-        {address?.asn_organization && <div className="contents"><dt>ASN Organization</dt><dd className="break-words text-foreground">{address.asn_organization}</dd></div>}
+        {address?.asn_organization && <div className="contents"><dt>ASN Org</dt><dd className="break-words text-foreground">{address.asn_organization}</dd></div>}
       </dl>
     </div>}
   </div>
@@ -554,10 +554,17 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
             <span className="min-w-0 flex-1">{host ? `Up ${uptime(host.uptime_seconds)}` : 'Uptime unavailable'}</span>
             <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground transition-transform group-open/system:rotate-90" />
           </summary>
-          <dl className="space-y-2 py-2 pl-6 text-xs tabular-nums">
-            <div className="flex flex-wrap justify-between gap-1"><dt className="text-muted-foreground">CPU</dt><dd>{host?.cpu_used_cores == null ? '—' : `${host.cpu_used_cores.toFixed(1)} / ${host.cpu_cores} cores`}</dd></div>
-            <div className="flex flex-wrap justify-between gap-1"><dt className="text-muted-foreground">Memory</dt><dd>{host ? `${formatBytes(host.memory_used_bytes)} / ${formatBytes(host.memory_total_bytes)}` : '—'}</dd></div>
-            <div className="flex flex-wrap justify-between gap-1"><dt className="text-muted-foreground">Disk (/)</dt><dd>{host?.disk_total_bytes ? `${formatBytes(host.disk_used_bytes!)} / ${formatBytes(host.disk_total_bytes)}` : '—'}</dd></div>
+          <dl className="grid grid-cols-[max-content_minmax(0,1fr)_max-content_max-content] gap-x-1 gap-y-2 py-2 pl-6 text-xs tabular-nums">
+            {[
+              { label: 'CPU', used: host?.cpu_used_cores == null ? null : host.cpu_used_cores.toFixed(1), total: host ? `${host.cpu_cores} cores` : null },
+              { label: 'Memory', used: host ? formatBytes(host.memory_used_bytes) : null, total: host ? formatBytes(host.memory_total_bytes) : null },
+              { label: 'Disk', used: host?.disk_total_bytes ? formatBytes(host.disk_used_bytes!) : null, total: host?.disk_total_bytes ? formatBytes(host.disk_total_bytes) : null },
+            ].map(({ label, used, total }) => <div key={label} className="contents">
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="col-span-3 grid grid-cols-subgrid text-right whitespace-nowrap">
+                {used != null ? <><span>{used}</span><span>/</span><span>{total}</span></> : <span className="col-span-3">—</span>}
+              </dd>
+            </div>)}
           </dl>
         </details>
         <MetricPill value={title} health={faults.length || failed ? 'bad' : known && !idle ? 'good' : 'unknown'} />
