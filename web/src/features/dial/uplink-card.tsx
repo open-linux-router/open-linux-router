@@ -1,5 +1,6 @@
 import { AlertTriangle, Check, X } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -71,6 +72,7 @@ export function UplinkCard({
   return (
     <>
       <PartialApply editor={editor} />
+      <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/gateway/he-setup">Set up HE IPv6</Link>} />
 
       {compact ? (
         <Button size="sm" variant="outline" disabled={editor.busy} onClick={() => setOpen(true)}>

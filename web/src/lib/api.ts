@@ -24,6 +24,11 @@ const TOKEN_KEY = 'olr.token'
 // JSON.stringify. Each draft carries the revision it was actually based on.
 const CONFIG_REVISION = Symbol('config revision')
 
+/** Carry a read configuration's revision onto a narrowly scoped patch. */
+export function configPatch<T extends object>(current: object, patch: T): T {
+  return Object.assign(patch, { [CONFIG_REVISION]: (current as { [CONFIG_REVISION]?: string })[CONFIG_REVISION] })
+}
+
 export function getToken(): string | null {
   try {
     localStorage.removeItem(TOKEN_KEY)
