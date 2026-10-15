@@ -449,6 +449,7 @@ export function DeviceNode({
   const flow = traffic.flowOf(device)
   const share = busiest > 0 ? magnitude(flow, traffic.rated) / busiest : 0
   const open = onSelect ? () => onSelect(device) : undefined
+  const serviceWidth = Math.min(services?.length ?? 0, 3) * 28 - 4
 
   if (row) {
     return (
@@ -481,7 +482,7 @@ export function DeviceNode({
             </span>
             {density === 'detail' && <Address device={device} />}
           </span>
-          {services?.length ? <span aria-hidden className="w-12 shrink-0" /> : null}
+          {services?.length ? <span aria-hidden className="shrink-0" style={{ width: serviceWidth }} /> : null}
           <span className="w-[68px] shrink-0 text-right text-xs text-muted-foreground tabular-nums whitespace-nowrap">
             {/* Away is said beside the dimmed name, so presence is never
                 colour alone — and a green dot on every row that is fine was
@@ -490,7 +491,7 @@ export function DeviceNode({
           </span>
         </Shell>
         <ServiceLinks services={services} domain={serviceDomain}
-          className={cn('absolute inset-y-0 right-20', 'w-12')} compact />
+          className="absolute inset-y-0 right-20" width={serviceWidth} compact />
       </div>
     )
   }
@@ -567,10 +568,10 @@ export function DeviceNode({
 }
 
 /** Links sit beside, not inside, the device detail button. */
-function ServiceLinks({ services, domain, className, compact = false }: { services?: Service[]; domain?: string; className: string; compact?: boolean }) {
+function ServiceLinks({ services, domain, className, width, compact = false }: { services?: Service[]; domain?: string; className: string; width?: number; compact?: boolean }) {
   if (!services?.length) return null
   return (
-    <span className={cn('flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden', compact ? 'h-full' : 'h-8', className)}>
+    <span style={{ width }} className={cn('flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden', compact ? 'h-full' : 'h-8', className)}>
       {services.slice(0, 8).map((service) => {
         const label = domain ? `${service.name}.${domain}` : service.name
         const version = serviceIconVersion(service, domain)

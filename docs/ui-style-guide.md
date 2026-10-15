@@ -221,6 +221,8 @@ attribution without crowding the map.
 
 Overview group headers navigate directly to group details at every screen size;
 do not expand or focus named groups in place.
+Device list rows reserve space for up to three 24px service icons with 4px gaps.
+Use only the space needed by the device's services; additional icons scroll horizontally.
 
 Network-map device ordering samples current traffic ranks every five seconds.
 Pause reordering while the pointer is over the map, keyboard focus is inside it,
