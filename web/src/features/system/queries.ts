@@ -42,6 +42,8 @@ export function usePublicAddresses() {
   return useQuery({
     queryKey: ['system', 'public-addresses'],
     queryFn: () => api.get<PublicAddresses>('/api/system/public-addresses'),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
     retry: false,
   })

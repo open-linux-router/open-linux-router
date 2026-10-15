@@ -95,7 +95,7 @@ func (h HTTP) withHost(v *uplinkView) *uplinkView {
 func (h HTTP) Routes() []core.Route {
 	return []core.Route{
 		{Method: "GET", Path: "/he/servers", Tool: "show HE servers", Summary: "Built-in HE tunnel servers.", Handler: h.heServers},
-		{Method: "POST", Path: "/he/check", Tool: "show HE endpoint check", Body: core.BodyRelaxed, Summary: "Check the uplink public IPv4 or probe an HE endpoint without changing configuration.", Handler: h.heCheck},
+		{Method: "POST", Path: "/he/check", Tool: "show HE endpoint check", Body: core.BodyRelaxed, Summary: "Probe an HE endpoint without changing configuration; target is required.", Handler: h.heCheck},
 		// Intent, whole section.
 		{
 			Method: "GET", Path: "/config", Tool: "show config",

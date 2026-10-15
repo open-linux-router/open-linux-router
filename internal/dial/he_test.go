@@ -40,6 +40,7 @@ func TestHECheckRejectsUnconfiguredAndArbitraryTargets(t *testing.T) {
 		status         int
 	}{
 		{``, `{}`, 422},
+		{`{"dial":{"uplink":{"interface":"wan0"}}}`, `{}`, 400},
 		{`{"dial":{"uplink":{"interface":"wan0"}}}`, `{"target":"127.0.0.1"}`, 400},
 		{`{"dial":{"uplink":{"interface":"wan0"}}}`, `{"target":"2001:4860:4860::8888"}`, 400},
 		{`{"dial":{"uplink":{"interface":"wan0"}}}`, `{"target":"example.com"}`, 400},

@@ -5,15 +5,21 @@ The browser saves the current step and non-secret tunnel draft locally. Public
 address checks and verification results are deliberately not persisted as proof
 of current connectivity.
 
-The guide checks public IPv4 through the configured uplink, explains upstream
+The guide reuses Overview's ip.sb public-address query and five-minute cache
+(retained for thirty minutes when inactive), with a timestamp and manual refresh.
+The lookup follows the router's default route; a different observed uplink route
+is flagged before using the result as HE's endpoint. RFC 1918 private uplink
+addresses and CGNAT shared addresses are classified immediately, independently
+of the external lookup. Private addressing does not prove the upstream WAN is public.
+The guide explains upstream
 protocol 41 forwarding or DMZ, measures the built-in HE endpoints, links to HE
 creation, previews and applies the tunnel, then guides LAN setup and client tests.
 The 36-entry catalog is HE's creation-page list supplied on October 15, 2026;
 Warsaw has no endpoint because it was full. Capacity remains subject to HE's page.
 
-`GET /api/dial/he/servers` returns the catalog. `POST /api/dial/he/check` with an
-empty object reads public IPv4 from api4.ipify.org through the configured uplink.
-With `target`, it sends eight ICMP probes bound to that uplink for catalog IPv4
+`GET /api/dial/he/servers` returns the catalog. Public address discovery uses
+`GET /api/system/public-addresses`; no separate reflector service is needed.
+`POST /api/dial/he/check` requires `target` and sends eight ICMP probes bound to the uplink for catalog IPv4
 endpoints, or to `olr-6in4` for the configured HE IPv6 peer and two fixed public
 IPv6 targets. Requests have a ten-second deadline and one check runs at a time.
 Arbitrary targets are rejected. Checks do not change network configuration.

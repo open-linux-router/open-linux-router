@@ -14,6 +14,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useUplink } from '@/features/dial/queries'
+import { usePublicAddresses } from '@/features/system/queries'
+import { ipv4Scope } from '@/lib/ipv4-scope'
 import { ApiError, api, configPatch } from '@/lib/api'
 import type { DialApplyResult, Plan, Uplink } from '@/lib/api-types'
 import type { DialConfig, LinkConfig, DhcpConfig, GatewayConfig } from '@/lib/config-types'
@@ -84,7 +86,8 @@ export function HESetupPage() {
   const [draft, setDraft] = useState(restore)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [publicIP, setPublicIP] = useState('')
+  const publicAddresses = usePublicAddresses()
+  const publicIP = publicAddresses.data?.ipv4.ip ?? ''
   const [measurements, setMeasurements] = useState<Record<string, Measurement | string>>({})
   const [progress, setProgress] = useState('')
   const [preview, setPreview] = useState<{
@@ -129,7 +132,10 @@ export function HESetupPage() {
   }
   const u = uplink.data?.uplink
   const localAddresses = u?.addresses ?? []
-  const direct = publicIP && localAddresses.some((a) => a.split('/')[0] === publicIP)
+  const privateUplink = localAddresses.length > 0 && localAddresses.every(a => ipv4Scope(a) === 'private')
+  const sharedUplink = localAddresses.some(a => ipv4Scope(a) === 'cgnat')
+  const matchingRoute = u?.route_dev === u?.interface
+  const direct = matchingRoute && publicIP && localAddresses.some((a) => a.split('/')[0] === publicIP)
   const chosen = servers.data?.find((s) => s.address === draft.server && s.address)
   async function run(task: () => Promise<void>) {
     setBusy(true)
@@ -368,8 +374,7 @@ export function HESetupPage() {
           {draft.step === 0 && (
             <>
               <p>
-                Check the public IPv4 seen through the configured uplink. Use this address as HE’s
-                IPv4 endpoint.
+                Public IPv4 from ip.sb, shared with Overview. This lookup follows the router’s default route.
               </p>
               {uplink.isPending ? (
                 <p>Reading uplink…</p>
@@ -389,24 +394,30 @@ export function HESetupPage() {
                 </p>
               )}
               <Button
-                disabled={busy || !u}
+                disabled={busy || publicAddresses.isFetching || !u}
                 onClick={() =>
                   void run(async () => {
-                    setPublicIP('')
-                    const r = await api.post<{ public_ipv4: string }>('/api/dial/he/check', {})
-                    setPublicIP(r.public_ipv4)
+                    const response = await publicAddresses.refetch()
+                    if (response.error) throw response.error
+                    if (!response.data?.ipv4.ip) throw new Error('ip.sb did not return a public IPv4. Retry when the router can reach it.')
                   })
                 }
               >
-                Check public IPv4
+                {publicAddresses.isFetching ? 'Checking public IPv4…' : 'Refresh public IPv4'}
               </Button>
+              {privateUplink && <p>The uplink has a private IPv4 address. A public IPv4 endpoint must be on an upstream router; confirm that router’s WAN address and protocol 41 forwarding.</p>}
+              {sharedUplink && <p className="text-warning-foreground">The uplink uses CGNAT shared address space (100.64.0.0/10). HE needs a reachable public IPv4; ask your ISP or inspect the upstream router before continuing.</p>}
+              {publicAddresses.error && <p role="alert">Could not read public addresses: {publicAddresses.error.message}</p>}
+              {!publicAddresses.isFetching && !publicAddresses.error && !publicIP && <p>No public IPv4 was returned by ip.sb. Refresh to retry.</p>}
               {publicIP && (
                 <>
                   <p className="break-all font-mono">Public IPv4: {publicIP}</p>
+                  <p className="text-sm text-muted-foreground">Last checked {new Date(publicAddresses.dataUpdatedAt).toLocaleString()}. Cached for five minutes.</p>
+                  {!matchingRoute && <p className="text-warning-foreground">The observed default route does not use this uplink. Confirm that this public IPv4 belongs to the intended HE connection before using it.</p>}
                   <p>
                     {direct
                       ? 'The uplink holds this public address.'
-                      : 'The uplink and public address differ. An upstream router or NAT is present; inspect its WAN address to confirm you control the public endpoint.'}
+                      : 'This public IPv4 is not confirmed on the uplink. Inspect the upstream WAN address to confirm you control this endpoint.'}
                   </p>
                 </>
               )}
@@ -803,7 +814,6 @@ export function HESetupPage() {
                 variant="outline"
                 onClick={() => {
                   setDraft(initial)
-                  setPublicIP('')
                   setVerified(false)
                   setMeasurements({})
                   setNetworkReport([])

@@ -87,13 +87,7 @@ func (h HTTP) heCheck(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 	if req.Target == "" {
-		d := Discoverer{Links: h.Applier.Links}
-		a, err := d.Address(ctx, Record{Source: SourceReflector, Interface: cfg.Uplink.Interface, ReflectorURL: "https://api4.ipify.org"})
-		if err != nil {
-			core.WriteError(w, 503, err.Error())
-			return
-		}
-		core.WriteJSON(w, 200, map[string]string{"public_ipv4": a.String(), "interface": cfg.Uplink.Interface})
+		core.WriteError(w, http.StatusBadRequest, "Use /api/system/public-addresses for the shared ip.sb lookup; target is required for HE probes.")
 		return
 	}
 	iface := cfg.Uplink.Interface
