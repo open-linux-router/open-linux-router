@@ -156,7 +156,7 @@ the current-period hint and 1px inner padding.
 Fade only the leftmost 20% toward overlapping identity content; keep the rest
 fully visible, including zero/unknown dots. Use the shared opaque activity
 palette: zero/unknown uses the empty gray, low nonzero traffic uses a stronger
-neutral gray (#cfd4db light / #48515e dark), and the remaining three levels use
+neutral gray (#cfd4db light / #48515e dark), and the remaining four levels use
 green intensities, without decorative borders or inset rings;
 cell fills and spacing define the grid. Retain visible keyboard focus. No axes,
 legend, heading or helper text; tooltips provide dates, units and sample state.

@@ -12,6 +12,7 @@ html {
 :root {
     --activity-empty: #ebedf0;
     --activity-low: #cfd4db;
+    --activity-green-low: #9be9a8;
     --activity-medium: #40c463;
     --activity-high: #30a14e;
     --activity-peak: #216e39;
@@ -20,6 +21,7 @@ html {
 .dark {
     --activity-empty: #2d333b;
     --activity-low: #48515e;
+    --activity-green-low: #0e4429;
     --activity-medium: #006d32;
     --activity-high: #26a641;
     --activity-peak: #39d353;

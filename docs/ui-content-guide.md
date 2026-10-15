@@ -115,9 +115,14 @@ speed: faster traffic means faster breathing; idle or unavailable rates stay ste
 Rate updates smoothly change playback speed without resetting the breath.
 On becoming idle, complete the current breath before settling at full brightness.
 Historical colors continue to represent accumulated traffic.
-The lowest nonzero tier (below 50 MiB combined upload/download per four-hour
+The lowest nonzero tier (below 10 MiB combined upload/download per four-hour
 period) uses a stronger neutral gray than zero/missing data; green starts at
-50 MiB. This distinguishes low traffic without implying whether a person is
+10 MiB. Four green levels use the device's retained 14-day four-hour totals at or
+above 10 MiB, split at interpolated P25/P50/P75, independently of screen width.
+Values equal to a boundary use the lighter tier; identical totals share a color,
+and a flat or single-sample history uses the lightest green. Different devices'
+greens represent their own relative traffic, not comparable byte quantities.
+This distinguishes low traffic without implying whether a person is
 actively using the device.
 Immediate four-hour hover/focus hints show sampled download and upload
 or explicitly report missing/unavailable data. Partial samples are not exact

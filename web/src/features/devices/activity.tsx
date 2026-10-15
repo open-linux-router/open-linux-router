@@ -3,11 +3,12 @@ import { useLayoutEffect, useRef, useState } from 'react'
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { api } from '@/lib/api'
+import { activityLevel, activityThresholds } from '@/lib/activity-scale'
 import { formatBytes } from '@/lib/utils'
 
 interface Bucket { at: string; bytes: { up: number; down: number } }
 
-const fills = ['bg-[var(--activity-empty)]', 'bg-[var(--activity-low)]', 'bg-[var(--activity-medium)]', 'bg-[var(--activity-high)]', 'bg-[var(--activity-peak)]']
+const fills = ['bg-[var(--activity-empty)]', 'bg-[var(--activity-low)]', 'bg-[var(--activity-green-low)]', 'bg-[var(--activity-medium)]', 'bg-[var(--activity-high)]', 'bg-[var(--activity-peak)]']
 
 export function DeviceActivity({ addresses, downRate, upRate }: { addresses: string[]; downRate?: number; upRate?: number }) {
   const rate = Math.max(0, downRate ?? 0) + Math.max(0, upRate ?? 0)
@@ -39,6 +40,20 @@ export function DeviceActivity({ addresses, downRate, upRate }: { addresses: str
   })
   const buckets = new Map(history.data?.map(bucket => [Date.parse(bucket.at), bucket.bytes]))
   const now = new Date()
+  // Use retained history, independently of the number of columns fitting the screen.
+  const periods = new Map<number, Bucket['bytes']>()
+  if (!history.isError) {
+    for (const [timestamp, sample] of buckets) {
+      if (timestamp > now.getTime() || timestamp < now.getTime() - 14 * 86400000) continue
+      const at = new Date(timestamp)
+      at.setHours(Math.floor(at.getHours() / 4) * 4, 0, 0, 0)
+      const bytes = periods.get(at.getTime()) ?? { up: 0, down: 0 }
+      bytes.up += sample.up
+      bytes.down += sample.down
+      periods.set(at.getTime(), bytes)
+    }
+  }
+  const thresholds = activityThresholds([...periods.values()].map(bytes => bytes.up + bytes.down))
   const currentPeriod = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${Math.floor(now.getHours() / 4)}`
   useLayoutEffect(() => {
     const animation = container.current?.querySelector('.device-activity-current')?.getAnimations()[0]
@@ -88,18 +103,9 @@ export function DeviceActivity({ addresses, downRate, upRate }: { addresses: str
     const at = new Date(now.getFullYear(), now.getMonth(), day, hour)
     const end = new Date(now.getFullYear(), now.getMonth(), day, hour + 4)
     if (at > now) return <span key={i} aria-hidden="true" />
-    let bytes: Bucket['bytes'] | undefined
-    if (!history.isError) {
-      for (const [timestamp, sample] of buckets) {
-        if (timestamp >= at.getTime() && timestamp < end.getTime() && timestamp <= now.getTime()) {
-          bytes ??= { up: 0, down: 0 }
-          bytes.up += sample.up
-          bytes.down += sample.down
-        }
-      }
-    }
+    const bytes = periods.get(at.getTime())
     const total = bytes ? bytes.up + bytes.down : 0
-    const level = total === 0 ? 0 : total < 50 * 1024 ** 2 ? 1 : total < 250 * 1024 ** 2 ? 2 : total < 1024 ** 3 ? 3 : 4
+    const level = activityLevel(total, thresholds)
     const time = `${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')} ${hour}:00-${hour + 4}:00`
     const detail = history.isPending ? 'Loading' : history.isError ? 'Unavailable' : !bytes ? 'No data' : `↓ ${formatBytes(bytes.down)} · ↑ ${formatBytes(bytes.up)}`
     return <Tooltip key={i}>
