@@ -348,8 +348,8 @@ function BandwidthLimitDialog({ direction, limits, onClose, onSave }: {
 }
 
 
-function StatCard({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
-  return <section className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:row-span-3 lg:grid lg:grid-rows-subgrid">
+function StatCard({ title, children, className }: { title: React.ReactNode; children: React.ReactNode; className?: string }) {
+  return <section className={cn('flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:row-span-3 lg:grid lg:grid-rows-subgrid', className)}>
     <h2 className="flex h-6 items-center text-sm font-semibold">{title}</h2>{children}
   </section>
 }
@@ -540,16 +540,15 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
   }
   const title = failed ? 'Status unavailable' : !known ? 'Checking…' : faults.length ? 'Needs attention' : idle ? 'Not set up' : 'All systems OK'
   const measured = !latencyFailed && latency?.state === 'ok' && latency.milliseconds != null
-  const cpuPercent = host?.cpu_used_cores != null && host.cpu_cores > 0 ? host.cpu_used_cores / host.cpu_cores * 100 : undefined
-  const memoryPercent = host?.memory_total_bytes ? host.memory_used_bytes / host.memory_total_bytes * 100 : undefined
   const dnsMeasured = !latencyFailed && latency?.dns_milliseconds != null
   const latencyValue = measured ? `${latency.milliseconds!.toFixed(0)} ms` : latency?.state === 'unreachable' ? 'No response' : '—'
   const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? 'Unavailable' : '—'
   // Share section boundaries, not individual rows: supplementary content keeps
   // its own rhythm, and Status flows naturally across both content sections.
-  return <div className="grid grid-cols-2 gap-3 lg:grid-cols-5 lg:gap-x-4 lg:gap-y-2">
+  return <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-x-4 lg:gap-y-2">
     <StatCard title="Status">
       <div className="space-y-1 lg:row-span-2 lg:self-start">
+        <MetricPill label="Uptime" value={host ? uptime(host.uptime_seconds) : '—'} valueRight />
         <MetricPill value={title} health={faults.length || failed ? 'bad' : known && !idle ? 'good' : 'unknown'} />
         <PublicAddressRow addresses={publicAddresses} />
       </div>
@@ -566,10 +565,7 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
         <MetricPill label="Upload" value={flows.counting && !trafficFailed ? formatBytes(flows.total.up) : trafficFailed ? 'Unavailable' : '—'} valueRight />
       </div>
     </StatCard>
-    <StatCard title={<span className="inline-flex items-center gap-1.5">Latency
-      <button type="button" className="relative inline-flex size-6 items-center justify-center rounded-md text-muted-foreground before:absolute before:size-11 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-        title="Time for this router to receive the full HTTPS response, including DNS, TLS and download. Even a login redirect or error page counts; this does not prove the app works. Images, scripts and browser rendering are not included."
-        aria-label="About latency measurements"><Info className="size-3.5" /></button></span>}>
+    <StatCard title="Latency" className="col-span-2 lg:col-span-1">
       <div className="space-y-1">
         <MetricPill label="Internet" value={latencyValue} valueRight />
         <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} valueRight />
@@ -589,17 +585,6 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
           <button className="inline-flex min-h-11 min-w-11 sm:min-h-8 sm:min-w-8 items-center justify-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
             onClick={() => setSitesOpen(true)} aria-label="Monitor sites" title="Monitor sites"><Plus className="size-4" /><span className="sr-only">Monitor sites</span></button>
         </div>
-      </div>
-    </StatCard>
-    <StatCard title="System">
-      <div className="space-y-1">
-        <MetricPill meter label="CPU" value={host?.cpu_used_cores == null ? '—' : `${host.cpu_used_cores.toFixed(1)} cores`}
-          detail={host?.cpu_cores ? `${cpuPercent?.toFixed(0)}% of ${host.cpu_cores} cores` : undefined} percent={cpuPercent} />
-        <MetricPill meter label="Memory" value={host ? formatBytes(host.memory_used_bytes) : '—'}
-          detail={host ? `${memoryPercent?.toFixed(0)}% of ${formatBytes(host.memory_total_bytes)}` : undefined} percent={memoryPercent} tone="neutral" />
-      </div>
-      <div className="pt-1">
-        <MetricPill label="Uptime" value={host ? uptime(host.uptime_seconds) : '—'} valueRight />
       </div>
     </StatCard>
     <WorldTraffic origin={publicAddresses?.ipv4.ip ? publicAddresses.ipv4 : publicAddresses?.ipv6} />

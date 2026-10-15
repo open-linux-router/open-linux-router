@@ -38,7 +38,10 @@ to improve density while preserving values, units and mobile interaction targets
 Section landing pages omit titles duplicated by navigation, retaining a visually
 hidden page title. Detail and operation pages keep their identifying titles.
 
-- Keep the Overview's four metric cards, CPU, memory and uptime visible.
+- Overview shows Status, Traffic, Latency and Map cards. Uptime leads Status
+  above system health; omit the System card and CPU/memory metrics.
+  Latency and Map have no information icons. Map details open from its title;
+  omit the inline direction legend and top-ten summary.
 - Overview Status shows one public-network summary using IPv4's country flag,
   city and ISP. Its disclosure shows IPv4, IPv6 when available, ASN and ASN
   Organization from the IPv4 lookup, in that order.
@@ -48,7 +51,7 @@ hidden page title. Detail and operation pages keep their identifying titles.
   its byte unit. Preserve unavailable states rather than
   displaying zero when counting is disabled or a read fails.
 - Group Overview live traffic and utilization separately from cumulative traffic,
-  site probes and uptime. Align section starts across desktop cards while keeping
+  site probes. Align section starts across desktop cards while keeping
   each group's internal spacing suited to its content; Status remains one list.
 - Keep common configuration fields, addresses, counters and useful evidence
   visible. Do not move them into disclosures solely to shorten a page.
@@ -64,8 +67,8 @@ hidden page title. Detail and operation pages keep their identifying titles.
 World traffic ranks remote IPs over a rolling thirty-second observed window,
 then locates only the top ten using cached ip.sb city lookups. Details show
 city (or region) and country; points use returned coordinates with country
-centers as a fallback. Show their share of observed
-traffic and retain unknown locations in that denominator. Never imply
+centers as a fallback. Show their share of observed traffic in the details dialog,
+and retain unknown locations in that denominator. Never imply
 zero activity is a failed read, or sampled conntrack
 bytes equal whole-router totals. Details name short-connection and bypass
 limitations, warm-up, counting-disabled and unavailable states.

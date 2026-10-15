@@ -85,12 +85,12 @@ larger enclosing surfaces. Avoid arbitrary one-off radii. Overview metric cards
 use 12px padding on phones and 16px on larger screens, an 8px heading gap,
 36px metric rows and 4px between rows. Interactive rows retain 44px targets on
 phones; site latency items use unfilled 32px rows with 6px vertical gaps.
-Only download/upload rates and CPU/memory utilization use inset meter surfaces
+Only download/upload rates use inset meter surfaces
 in Overview cards. Status, public addresses, latency, totals and uptime use plain
 rows; monitored sites retain their icons without capsule backgrounds.
 Cumulative traffic rows use Download and Upload labels with plain byte values.
 On desktop, Overview cards share title, primary metric section and supplementary
-section boundaries, not individual metric rows. Totals, site probes and uptime
+section boundaries, not individual metric rows. Totals and site probes
 start together without divider lines, then flow independently. Status spans the
 content sections naturally. Below desktop, cards use their own content height.
 Site probes use two columns on phones and three from 640px.
@@ -211,8 +211,10 @@ and a relevant next action where one exists.
 
 ## Responsive behavior and motion
 
-Overview includes a fifth World traffic card in the desktop metric row; on
-phones it spans both columns. Its local MapLibre map uses receive/transmit
+Overview has four desktop cards: Status, Traffic, Latency and Map. Uptime is
+the first plain row in Status, above system health. Map has no information icon,
+direction legend or top-ten summary; its title opens the details dialog. On
+phones Latency and Map each span both columns. Its local MapLibre map uses receive/transmit
 colors and bounded logarithmic path widths. Moving particles indicate observed
 traffic direction and stop for reduced motion. IP points use city coordinates,
 falling back to country centers. Draw flows between different locations even

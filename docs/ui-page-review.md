@@ -6,7 +6,7 @@ OLR capabilities, and a calm, consistent interface. This record accompanies the
 
 | Pages | Review decision |
 | --- | --- |
-| Overview | Preserve four metric cards, CPU/memory/uptime, charts and separate direction limits; remove generic introductory copy through the shared shell. |
+| Overview | Show Status, Traffic, Latency and Map; uptime leads Status. Omit System, information icons and the map legend/top-ten hint; retain charts and separate direction limits. |
 | Device | Separate observed facts from editable settings within the existing card; keep all fields; place DNS activity before inspection and QoS. |
 | Group | Preserve member lists and batch controls; remove repeated MAC/direct-membership prose; keep overwrite and non-inheritance consequences. |
 | Device/group QoS | State that configuration is saved but not enforced; keep forms and shared group-cap semantics. |

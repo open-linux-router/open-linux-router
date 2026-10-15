@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
-import { Info } from 'lucide-react'
 import * as maplibregl from 'maplibre-gl'
 import type { GeoJSONSource } from 'maplibre-gl'
 import type * as GeoJSON from 'geojson'
@@ -129,10 +128,10 @@ export function WorldTraffic({ origin }: { origin?: Origin }) {
   const unknown = peers.filter(p => !position(p.place, p.place.country)).length
   const status = query.isError || stale ? 'Unavailable' : !data ? 'Loading…' : data.state === 'disabled' ? 'Counting off' : data.state === 'warming' ? 'Measuring…' : data.state !== 'ready' ? 'Unavailable' : peers.length ? `Top ${peers.length} · ${share}%` : 'No observed traffic'
   return <section className="col-span-2 flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:col-span-1 lg:row-span-3">
-    <h2 className="flex h-6 items-center justify-between text-sm font-semibold">World traffic<button onClick={() => setOpen(true)} className="flex min-h-11 min-w-11 items-center justify-end rounded-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring sm:min-h-6 sm:min-w-6" aria-label="World traffic details"><Info className="size-4" /></button></h2>
+    <h2 className="flex h-6 items-center text-sm font-semibold"><button onClick={() => setOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 focus-visible:outline-2 focus-visible:outline-ring" aria-label="Map details">Map</button></h2>
     <div className="min-h-36 flex-1"><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} /></div>
-    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs text-muted-foreground"><span><span className="text-receive">↓</span> Download <span className="ml-2 text-transmit">↑</span> Upload</span><button onClick={() => setOpen(true)} className="min-h-8 rounded-sm text-left hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">{status}{unknown ? ` · ${unknown} unknown` : ''}</button></div>
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>World traffic</DialogTitle><DialogDescription>Top 10 remote IPs by upload and download in the last 30 seconds.</DialogDescription></DialogHeader>
+    {(!ready || !peers.length) && <p className="text-xs text-muted-foreground">{status}</p>}
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription>Remote IPs by upload and download in the last 30 seconds.{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
       <p className="text-sm text-muted-foreground">{status}{data?.seconds ? ` · ${Math.round(data.seconds)}s sampled` : ''}. {data?.state === 'disabled' ? 'Connection byte accounting is off. Enable Gateway traffic counting and apply its configuration.' : 'Counts include router and forwarded connections observed in Linux conntrack. Connections ending between samples and traffic bypassing conntrack may be missed.'} {!origin && 'Router location is unknown; only remote points are shown.'}</p>
       {data?.error && <p className="break-words text-sm text-destructive">{data.error}</p>}
       {data?.locations?.error && <p className="break-words text-sm text-destructive">{data.locations.error}</p>}
