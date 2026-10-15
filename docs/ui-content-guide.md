@@ -166,6 +166,11 @@ addresses and provider errors readable rather than silently truncating them.
 
 Overview group headers open the group's detail page directly on desktop and
 mobile. The unnamed device bucket retains its in-place disclosure.
+Group details lead with parent, device counts and subgroup links beside bulk
+uplink and priority controls in the device summary layout. Keep current-member
+scope, replacement behavior and the priority enforcement caveat beside the
+explicit apply actions; selected values are batch choices, not observed shared
+settings. List member devices below the summary.
 
 Gateway groups physical interface cards inside an Interfaces panel, with observed
 default gateways and host DNS on the right at desktop widths. Keep all physical

@@ -1,4 +1,4 @@
-import { ArrowLeft, FolderTree, Network, ShieldAlert } from 'lucide-react'
+import { FolderTree, Network } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DeviceIcon } from '@/features/devices/device-icon'
+import { DeviceSettingRow } from '@/features/devices/device-setting-row'
 import { groupOptions, subtreeOf } from '@/features/devices/group-tree'
 import { useDeviceList, useDevicesConfig } from '@/features/devices/queries'
 import { ApplyOutcome as GatewayOutcome } from '@/features/gateway/editor'
@@ -76,31 +76,50 @@ export function GroupPage() {
     }
   }
 
-  return <div className="space-y-6 pb-12">
-    <Link to="/" className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"><ArrowLeft className="size-4" aria-hidden /> Network overview</Link>
-    <header className="rounded-2xl border bg-card p-5 sm:p-7">
-      <div className="flex items-start gap-4"><span className="rounded-xl bg-muted p-3"><FolderTree className="size-6" aria-hidden /></span><div className="min-w-0 space-y-1"><h1 className="break-words text-2xl font-semibold tracking-tight ">{group.name}</h1><p className="text-sm text-muted-foreground">{group.parent ? <>Inside <Link className="underline underline-offset-4" to={`/groups/${encodeURIComponent(group.parent)}`}>{group.parent}</Link> · </> : 'Top-level group · '}{members.length} devices, {direct} directly here</p></div></div>
-    </header>
+  return <div className="space-y-4 pb-12">
+    <Card className="gap-0 p-4 sm:p-6">
+      <header className="flex min-h-20 items-center gap-4 border-b pb-4">
+        <span className="flex size-16 shrink-0 items-center justify-center rounded-xl bg-muted"><FolderTree className="size-8" aria-hidden /></span>
+        <h1 className="min-w-0 break-words text-2xl font-semibold tracking-tight sm:text-3xl">{group.name}</h1>
+      </header>
+      <div className="mt-4 grid gap-y-8 lg:grid-cols-2 lg:gap-x-16">
+        <dl className="min-w-0">
+          <DeviceSettingRow label="Parent">{group.parent ? <Link className="inline-flex min-h-11 max-w-full items-center rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9" to={`/groups/${encodeURIComponent(group.parent)}`}><Badge variant="secondary" className="whitespace-normal break-words">{group.parent}</Badge></Link> : 'Top-level group'}</DeviceSettingRow>
+          <DeviceSettingRow label="Devices"><span className="tabular-nums">{members.length}</span></DeviceSettingRow>
+          <DeviceSettingRow label="Directly here"><span className="tabular-nums">{direct}</span></DeviceSettingRow>
+          <DeviceSettingRow label="Subgroups">{children.length ? <div className="flex flex-wrap justify-end gap-2">{children.map((child) => <Link key={child.name} className="inline-flex min-h-11 max-w-full items-center rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9" to={`/groups/${encodeURIComponent(child.name)}`}><Badge variant="secondary" className="whitespace-normal break-words">{child.name}</Badge></Link>)}</div> : 'None'}</DeviceSettingRow>
+        </dl>
+        <div className="min-w-0 space-y-4">
+          <dl>
+            <DeviceSettingRow label="Uplink">
+              <div role="group" aria-label="Uplink for current devices" className="inline-flex max-w-full flex-wrap justify-end rounded-lg bg-muted p-0.5">
+                {[{ value: FOLLOW, label: 'Default' }, { value: DIRECT, label: 'This router' }, ...(gateway.data?.exits ?? []).map((e) => ({ value: e.name, label: e.name }))].map((option) => <Button key={option.value} size="sm" className="h-11 max-w-full whitespace-normal break-words px-2 sm:h-7" variant={exit === option.value ? 'outline' : 'ghost'} aria-pressed={exit === option.value} disabled={!gateway.data || working} onClick={() => setExit(option.value)}>{option.label}</Button>)}
+              </div>
+            </DeviceSettingRow>
+            <DeviceSettingRow label="Priority">
+              <div role="group" aria-label="Priority for current devices" className="inline-flex max-w-full flex-wrap justify-end rounded-lg bg-muted p-0.5">
+                {(['high', 'normal', 'low'] as const).map((value) => <Button key={value} size="sm" className="h-11 px-2 capitalize sm:h-7" variant={priority === value ? 'outline' : 'ghost'} aria-pressed={priority === value} disabled={!qos.data || working} onClick={() => setPriority(value)}>{value}</Button>)}
+              </div>
+            </DeviceSettingRow>
+          </dl>
+          <p className="text-sm text-muted-foreground">Apply to {members.length} current devices, including subgroups. Existing choices are replaced; future members do not inherit these settings. Default follows each device’s network.</p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" disabled={!members.length || !gateway.data || working} onClick={() => setConfirming('exit')}>Apply uplink</Button>
+            <Button variant="outline" disabled={!members.length || !qos.data || working} onClick={() => setConfirming('priority')}>Save priority</Button>
+          </div>
+          <p className="text-sm text-muted-foreground">Priority is saved but not enforced in this build. Individual speed limits are preserved; edit them in device details.</p>
+          {gateway.isError && <p role="alert" className="text-sm text-destructive">Gateway settings are unavailable.</p>}
+          {qos.isError && <p role="alert" className="text-sm text-destructive">QoS settings are unavailable.</p>}
+          <GatewayOutcome applier={gatewayApply} />
+        </div>
+      </div>
+    </Card>
 
     <Card><CardHeader><CardTitle>Devices in this group</CardTitle></CardHeader><CardContent className="space-y-4">
       <p className="text-sm text-muted-foreground">Includes devices in subgroups.</p>
-      {children.length > 0 && <div className="flex flex-wrap gap-2">{children.map((child) => <Button key={child.name} size="sm" variant="outline" nativeButton={false} render={<Link to={`/groups/${encodeURIComponent(child.name)}`} />}>{child.name}</Button>)}</div>}
       {members.length ? <List>{members.map((device) => <ListRow key={device.mac} to={`/devices/${encodeURIComponent(device.mac)}`} title={device.name || device.mac} subtitle={`${device.group === name ? device.network || 'Network unknown' : `${device.group} · ${device.network || 'Network unknown'}`}`} leading={<DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor} vendorKey={device.vendor_key} online={device.online} />} trailing={<Badge variant={device.online ? 'success' : device.seen ? 'secondary' : 'outline'}>{device.online ? 'Online' : device.seen ? 'Offline' : 'Never seen'}</Badge>} />)}</List> : <ListEmpty>No devices in this group or its subgroups yet.</ListEmpty>}
     </CardContent></Card>
 
-    <Card><CardHeader><CardTitle>Internet via</CardTitle></CardHeader><CardContent className="space-y-4">
-      <p className="text-sm text-muted-foreground">Changes overrides for {members.length} current devices. Existing choices are replaced; future members do not inherit this route.</p>
-      <div className="flex flex-wrap gap-3"><Select value={exit} disabled={!gateway.data || working} onValueChange={(v) => { if (v) setExit(v) }}><SelectTrigger aria-label="Internet via for current devices" className="w-full sm:w-72"><SelectValue>{(v: string) => v === FOLLOW ? 'Follow each network' : v === DIRECT ? 'This router’s connection' : v}</SelectValue></SelectTrigger><SelectContent><SelectItem value={FOLLOW}>Follow each network</SelectItem><SelectItem value={DIRECT}>This router’s connection</SelectItem>{(gateway.data?.exits ?? []).map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent></Select><Button disabled={!members.length || !gateway.data || working} onClick={() => setConfirming('exit')}>Apply to current devices</Button></div>
-      {gateway.isError && <p className="text-sm text-destructive">Gateway settings are unavailable.</p>}
-    </CardContent></Card>
-
-    <Card><CardHeader><CardTitle>Network priority and speed limit</CardTitle></CardHeader><CardContent className="space-y-4">
-      <p className="text-sm text-muted-foreground">Priority configuration is saved but not enforced in this build. Applies to current members only; existing individual limits are preserved.</p>
-      <div className="flex flex-wrap gap-3"><Select value={priority} disabled={!qos.data || working} onValueChange={(v) => { if (v) setPriority(v as Priority) }}><SelectTrigger aria-label="Priority for current devices" className="w-full sm:w-48"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="high">High</SelectItem><SelectItem value="normal">Normal</SelectItem><SelectItem value="low">Low</SelectItem></SelectContent></Select><Button disabled={!members.length || !qos.data || working} onClick={() => setConfirming('priority')}>Save configuration</Button></div>
-      <div className="flex items-start gap-2 rounded-xl border border-dashed p-4 text-sm text-muted-foreground"><ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden /><p>No shared group speed limit. Individual limits can be configured in device details.</p></div>
-      {qos.isError && <p className="text-sm text-destructive">QoS settings are unavailable.</p>}
-    </CardContent></Card>
-    <GatewayOutcome applier={gatewayApply} />
     <Dialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}><DialogContent><DialogHeader><DialogTitle>Change {members.length} current devices?</DialogTitle><DialogDescription>{confirming === 'exit' ? 'Their existing Internet via overrides will be changed. Traffic may take a different path; established connections normally keep theirs.' : 'Their priorities will apply to traffic crossing this router. Queue updates may briefly interrupt queued packets.'} New members will not inherit this setting.</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setConfirming(null)}>Cancel</Button><Button onClick={() => void applyCurrentMembers()}>Continue</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }

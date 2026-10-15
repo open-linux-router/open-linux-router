@@ -167,6 +167,12 @@ Device policies apply automatically, without a switch. Keep QoS controls on
 devices; Gateway does not expose aggregate link-rate settings. Blank device
 limits mean unlimited; pending placement must remain distinct from active state.
 Preserve existing confirmation and apply-preview behavior for network changes.
+Group details reuse the device summary card: a 64px icon and title above a
+divider, then two columns with a 64px desktop gutter and 32px stacked spacing.
+Use the shared device label/value rows for parent, member counts and subgroup
+tags on the left, with matching Uplink and Priority segmented controls on the
+right. Keep batch apply actions and scope beside those controls, followed by
+the device list in its own panel. Use the device page's 16px panel spacing.
 Device detail rows use two zones: left-aligned labels and right-aligned values
 or controls, with 36px desktop / 44px mobile minimum row height. Keep disclosure chevrons beside their
 values rather than in a separate action column. Clicking the IP opens a dialog
