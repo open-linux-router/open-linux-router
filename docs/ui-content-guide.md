@@ -62,9 +62,11 @@ hidden page title. Detail and operation pages keep their identifying titles.
 ## State and data contracts
 
 World traffic ranks remote IPs over a rolling thirty-second observed window,
-then locates only the top ten using local GeoIP. Show their share of observed
-traffic and retain unknown locations in that denominator. Never imply country
-points are exact cities, zero activity is a failed read, or sampled conntrack
+then locates only the top ten using cached ip.sb city lookups. Details show
+city (or region) and country; points use returned coordinates with country
+centers as a fallback. Show their share of observed
+traffic and retain unknown locations in that denominator. Never imply
+zero activity is a failed read, or sampled conntrack
 bytes equal whole-router totals. Details name short-connection and bypass
 limitations, warm-up, counting-disabled and unavailable states.
 

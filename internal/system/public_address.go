@@ -20,15 +20,17 @@ const (
 // PublicAddress is what ip.sb sees from the router, plus optional location
 // and network ownership information. Empty IP means this family is unavailable.
 type PublicAddress struct {
-	IP              string `json:"ip"`
-	Country         string `json:"country,omitempty"`
-	CountryCode     string `json:"country_code,omitempty"`
-	Region          string `json:"region,omitempty"`
-	City            string `json:"city,omitempty"`
-	ISP             string `json:"isp,omitempty"`
-	Organization    string `json:"organization,omitempty"`
-	ASN             int    `json:"asn,omitempty"`
-	ASNOrganization string `json:"asn_organization,omitempty"`
+	Latitude        *float64 `json:"latitude,omitempty"`
+	Longitude       *float64 `json:"longitude,omitempty"`
+	IP              string   `json:"ip"`
+	Country         string   `json:"country,omitempty"`
+	CountryCode     string   `json:"country_code,omitempty"`
+	Region          string   `json:"region,omitempty"`
+	City            string   `json:"city,omitempty"`
+	ISP             string   `json:"isp,omitempty"`
+	Organization    string   `json:"organization,omitempty"`
+	ASN             int      `json:"asn,omitempty"`
+	ASNOrganization string   `json:"asn_organization,omitempty"`
 }
 
 type PublicAddresses struct {

@@ -76,7 +76,7 @@ design, and our job is to stay out of its way.
 | SOCKS5 | [3proxy](https://3proxy.org/) |
 | HTTPS ingress | [Caddy](https://caddyserver.com/) |
 | Request inspection | [mitmproxy](https://mitmproxy.org/), `nft` |
-| Remote peer location | [DB-IP Lite](https://db-ip.com/db/lite.php) (in-tree MaxMind DB reader) |
+| IP location | [ip.sb](https://ip.sb) (city lookup with a persistent SQLite LRU cache) |
 | CLI | [Cobra](https://github.com/spf13/cobra), [pflag](https://github.com/spf13/pflag) |
 | API and MCP | Go `net/http`, [jsonschema](https://github.com/invopop/jsonschema) (in-tree MCP server) |
 | Web UI | [React](https://react.dev/), [Vite](https://vite.dev/) |

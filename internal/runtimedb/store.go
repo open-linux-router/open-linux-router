@@ -76,11 +76,15 @@ func (s *Store) initialize() error {
 		if err := tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 			return err
 		}
-		if version > 1 {
+		if version > 2 {
 			return fmt.Errorf("unsupported runtime database version %d", version)
 		}
-		if version == 1 {
+		if version == 2 {
 			return nil
+		}
+		if version == 1 {
+			_, err := tx.Exec(`CREATE TABLE geoip_cache (ip TEXT PRIMARY KEY, data BLOB NOT NULL, fetched INTEGER NOT NULL, used INTEGER NOT NULL); CREATE INDEX geoip_cache_used ON geoip_cache(used); PRAGMA user_version=2;`)
+			return err
 		}
 		_, err := tx.Exec(`
 CREATE TABLE imports (name TEXT PRIMARY KEY);
@@ -90,7 +94,9 @@ CREATE TABLE device_seen (mac TEXT PRIMARY KEY, seen_at TEXT NOT NULL);
 CREATE TABLE sessions (token_hash BLOB PRIMARY KEY CHECK(length(token_hash)=32), credential TEXT NOT NULL, expires_at TEXT NOT NULL);
 CREATE TABLE qos_state (boot_id TEXT PRIMARY KEY, state BLOB NOT NULL);
 CREATE TABLE recovery_state (name TEXT PRIMARY KEY, state BLOB NOT NULL);
-PRAGMA user_version=1;`)
+CREATE TABLE geoip_cache (ip TEXT PRIMARY KEY, data BLOB NOT NULL, fetched INTEGER NOT NULL, used INTEGER NOT NULL);
+CREATE INDEX geoip_cache_used ON geoip_cache(used);
+PRAGMA user_version=2;`)
 		return err
 	})
 }

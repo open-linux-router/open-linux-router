@@ -16,7 +16,7 @@ const backends: Credit[] = [
   { name: 'igmpproxy', url: 'https://github.com/pali/igmpproxy', use: 'IPTV multicast routing' },
   { name: 'iperf3', url: 'https://software.es.net/iperf/', use: 'Optional LAN throughput test' },
   { name: 'NextTrace', url: 'https://github.com/nxtrace/NTrace-core', use: 'Traceroute and route maps' },
-  { name: 'DB-IP Lite', url: 'https://db-ip.com/db/lite.php', use: 'Remote peer geolocation' },
+  { name: 'ip.sb', url: 'https://ip.sb', use: 'IP city locations and network ownership' },
   { name: 'IEEE OUI registry', url: 'https://standards-oui.ieee.org/', use: 'Device vendor identification' },
   { name: 'ddns-go', url: 'https://github.com/jeessy2/ddns-go', use: 'Ported dynamic DNS provider code' },
 ]

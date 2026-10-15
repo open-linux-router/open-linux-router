@@ -530,7 +530,9 @@ func run(args []string) error {
 			activity = restored
 		}
 	}
-	world := gateway.NewWorldTraffic(geoip.New(geoip.RootedDir(opts.root)))
+	places := geoip.NewCity(runtimeDB)
+	defer places.Close()
+	world := gateway.NewWorldTraffic(places)
 	world.Enabled = func() bool { cfg, err := gatewayApplier.Load(); return err == nil && cfg.StatsOrDefault() }
 	srv.Mount(gateway.ModuleName, gateway.HTTP{
 		World:    world,
@@ -604,9 +606,7 @@ func run(args []string) error {
 		Socks:  remoteSocks,
 		Lock:   srv.ApplyLock(),
 		Events: srv.Events(),
-		// Rooted like everything else olrd keeps, so a development run fetches
-		// into its scratch root rather than the box's /var/lib.
-		Places: geoip.New(geoip.RootedDir(opts.root)),
+		Places: places,
 	}.Routes(), remote.Config{})
 
 	// `ingress` is mounted last, matching the store's order. Its two views are

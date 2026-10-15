@@ -214,8 +214,10 @@ and a relevant next action where one exists.
 Overview includes a fifth World traffic card in the desktop metric row; on
 phones it spans both columns. Its local MapLibre map uses receive/transmit
 colors and bounded logarithmic path widths. Moving particles indicate observed
-traffic direction and stop for reduced motion. Country points are approximate;
-the details dialog supplies rates and attribution without crowding the map.
+traffic direction and stop for reduced motion. IP points use city coordinates,
+falling back to country centers. Draw flows between different locations even
+within one country. The details dialog supplies city/country, rates and ip.sb
+attribution without crowding the map.
 
 Overview group headers navigate directly to group details at every screen size;
 do not expand or focus named groups in place.

@@ -38,20 +38,25 @@ type WorldSnapshot struct {
 	Locations geoip.Status `json:"locations"`
 }
 
+// WorldLocator provides cached locations without waiting for network lookups.
+type WorldLocator interface {
+	Locate([]netip.Addr) (map[string]geoip.Place, geoip.Status)
+}
+
 // WorldTraffic retains only a 30-second window in memory. Sampling is shared
 // by all viewers; GeoIP is consulted only after the IP ranking is complete.
 type WorldTraffic struct {
 	mu       sync.Mutex
 	read     func(context.Context) ([]worldFlow, bool, error)
 	Enabled  func() bool
-	places   *geoip.Locator
+	places   WorldLocator
 	previous map[string]worldFlow
 	buckets  []worldBucket
 	last     time.Time
 	snapshot WorldSnapshot
 }
 
-func NewWorldTraffic(places *geoip.Locator) *WorldTraffic {
+func NewWorldTraffic(places WorldLocator) *WorldTraffic {
 	return &WorldTraffic{read: readWorldFlows, places: places, snapshot: WorldSnapshot{State: "warming", Peers: []WorldPeer{}}}
 }
 

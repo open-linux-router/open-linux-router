@@ -28,6 +28,8 @@ export interface PublicAddress {
   ip: string
   country?: string
   country_code?: string
+  latitude?: number
+  longitude?: number
   region?: string
   city?: string
   isp?: string

@@ -10,15 +10,21 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { api } from '@/lib/api'
 import { formatRate } from '@/lib/utils'
+import type { GeoPlace } from '@/lib/api-types'
 import countries from './countries.json'
 import centers from './centers.json'
 
-interface Peer { ip: string; upload: number; download: number; place: { country?: string; country_name?: string } }
-interface Snapshot { state: string; error?: string; as_of: string; seconds: number; total: number; peers: Peer[]; locations: { state: string } }
+interface Peer { ip: string; upload: number; download: number; place: GeoPlace }
+interface Origin { country_code?: string; latitude?: number; longitude?: number }
+interface Snapshot { state: string; error?: string; as_of: string; seconds: number; total: number; peers: Peer[]; locations: { state: string; error?: string } }
 type Position = [number, number]
 // Small countries omitted by the 1:110m geometry still need honest points.
 const positions: Record<string, Position> = { ...(centers as unknown as Record<string, Position>), SG: [103.82, 1.35], HK: [114.17, 22.32], MO: [113.55, 22.2], MT: [14.38, 35.94], MV: [73.22, 3.2], BH: [50.55, 26.02], AD: [1.52, 42.51], LI: [9.55, 47.16], MC: [7.42, 43.74], SM: [12.46, 43.94], VA: [12.45, 41.9] }
 const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
+function position(place: { latitude?: number; longitude?: number }, country?: string): Position | undefined {
+  if (typeof place.latitude === 'number' && typeof place.longitude === 'number' && Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && Math.abs(place.latitude) <= 90 && Math.abs(place.longitude) <= 180) return [place.longitude, place.latitude]
+  return country ? positions[country.toUpperCase()] : undefined
+}
 maplibregl.setWorkerUrl(workerUrl)
 maplibregl.setWorkerCount(1)
 
@@ -33,7 +39,7 @@ function arc(from: Position, to: Position, offset: number): Position[] {
   })
 }
 
-function TrafficMap({ peers, origin, dark }: { peers: Peer[]; origin?: string; dark: boolean }) {
+function TrafficMap({ peers, origin, dark }: { peers: Peer[]; origin?: Origin; dark: boolean }) {
   const container = useRef<HTMLDivElement>(null)
   const map = useRef<maplibregl.Map | null>(null)
   const [ready, setReady] = useState(false)
@@ -71,15 +77,15 @@ function TrafficMap({ peers, origin, dark }: { peers: Peer[]; origin?: string; d
     instance.setPaintProperty('land', 'fill-color', dark ? '#424b5b' : '#e2e6ec')
     instance.setPaintProperty('borders', 'line-color', dark ? '#232731' : '#ffffff')
     const blue = dark ? '#8ab4ff' : '#1d4ed8', teal = dark ? '#6bd4c6' : '#0f766e'
-    const start = origin ? positions[origin.toUpperCase()] : undefined
+    const start = origin ? position(origin, origin.country_code) : undefined
     const lines: GeoJSON.Feature[] = [], points: GeoJSON.Feature[] = []
     const paths: { coordinates: Position[]; color: string; reverse: boolean }[] = []
     if (start) points.push({ type: 'Feature', properties: { color: dark ? '#f1f3f7' : '#171b22' }, geometry: { type: 'Point', coordinates: start } })
     for (const peer of peers) {
-      const end = peer.place.country ? positions[peer.place.country] : undefined
+      const end = position(peer.place, peer.place.country)
       if (!end) continue
       points.push({ type: 'Feature', properties: { color: blue }, geometry: { type: 'Point', coordinates: end } })
-      if (!start || peer.place.country === origin?.toUpperCase()) continue
+      if (!start || (start[0] === end[0] && start[1] === end[1])) continue
       for (const direction of ['download', 'upload'] as const) {
         if (peer[direction] <= 0) continue
         const color = direction === 'download' ? blue : teal
@@ -111,7 +117,7 @@ function TrafficMap({ peers, origin, dark }: { peers: Peer[]; origin?: string; d
   return <div className="relative h-36 overflow-hidden rounded-lg"><div ref={container} style={{ position: 'absolute', inset: 0 }} aria-hidden="true" />{failed && <p className="absolute inset-0 flex items-center justify-center bg-muted p-3 text-xs text-muted-foreground">Map unavailable. View traffic details.</p>}</div>
 }
 
-export function WorldTraffic({ origin }: { origin?: string }) {
+export function WorldTraffic({ origin }: { origin?: Origin }) {
   const [open, setOpen] = useState(false)
   const { resolvedTheme } = useTheme()
   const query = useQuery({ queryKey: ['gateway', 'world-traffic'], queryFn: () => api.get<Snapshot>('/api/gateway/world-traffic'), refetchInterval: 2000 })
@@ -120,17 +126,18 @@ export function WorldTraffic({ origin }: { origin?: string }) {
   const ready = !query.isError && !stale && data?.state === 'ready'
   const peers = ready ? data.peers : []
   const share = data?.total ? Math.round(peers.reduce((n, p) => n + p.download + p.upload, 0) / data.total * 100) : 0
-  const unknown = peers.filter(p => !p.place.country || !positions[p.place.country]).length
+  const unknown = peers.filter(p => !position(p.place, p.place.country)).length
   const status = query.isError || stale ? 'Unavailable' : !data ? 'Loading…' : data.state === 'disabled' ? 'Counting off' : data.state === 'warming' ? 'Measuring…' : data.state !== 'ready' ? 'Unavailable' : peers.length ? `Top ${peers.length} · ${share}%` : 'No observed traffic'
   return <section className="col-span-2 flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:col-span-1 lg:row-span-3">
     <h2 className="flex h-6 items-center justify-between text-sm font-semibold">World traffic<button onClick={() => setOpen(true)} className="flex min-h-11 min-w-11 items-center justify-end rounded-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring sm:min-h-6 sm:min-w-6" aria-label="World traffic details"><Info className="size-4" /></button></h2>
     <div className="min-h-36 flex-1"><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} /></div>
     <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs text-muted-foreground"><span><span className="text-receive">↓</span> Download <span className="ml-2 text-transmit">↑</span> Upload</span><button onClick={() => setOpen(true)} className="min-h-8 rounded-sm text-left hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">{status}{unknown ? ` · ${unknown} unknown` : ''}</button></div>
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>World traffic</DialogTitle><DialogDescription>Top 10 remote IPs by upload and download in the last 30 seconds. Locations indicate countries, not exact endpoints.</DialogDescription></DialogHeader>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>World traffic</DialogTitle><DialogDescription>Top 10 remote IPs by upload and download in the last 30 seconds.</DialogDescription></DialogHeader>
       <p className="text-sm text-muted-foreground">{status}{data?.seconds ? ` · ${Math.round(data.seconds)}s sampled` : ''}. {data?.state === 'disabled' ? 'Connection byte accounting is off. Enable Gateway traffic counting and apply its configuration.' : 'Counts include router and forwarded connections observed in Linux conntrack. Connections ending between samples and traffic bypassing conntrack may be missed.'} {!origin && 'Router location is unknown; only remote points are shown.'}</p>
       {data?.error && <p className="break-words text-sm text-destructive">{data.error}</p>}
-      <ul className="divide-y">{peers.map(peer => <li key={peer.ip} className="space-y-1 py-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><span className="break-all font-mono">{peer.ip}</span><span>{peer.place.country_name || 'Location unknown'}</span></div><div className="flex justify-between gap-2 text-xs tabular-nums"><span className="text-receive">↓ {formatRate(peer.download)}</span><span className="text-transmit">↑ {formatRate(peer.upload)}</span></div></li>)}</ul>
-      <p className="text-xs text-muted-foreground">Local GeoIP: {data?.locations?.state || 'Unavailable'} · <a href="https://db-ip.com" target="_blank" rel="noreferrer" className="underline">DB-IP</a>. Map: <a href="https://www.naturalearthdata.com" target="_blank" rel="noreferrer" className="underline">Natural Earth</a> (public domain), rendered with MapLibre.</p>
+      {data?.locations?.error && <p className="break-words text-sm text-destructive">{data.locations.error}</p>}
+      <ul className="divide-y">{peers.map(peer => <li key={peer.ip} className="space-y-1 py-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><span className="break-all font-mono">{peer.ip}</span><span>{[peer.place.city || peer.place.region, peer.place.country_name].filter(Boolean).join(', ') || 'Location unknown'}</span></div><div className="flex justify-between gap-2 text-xs tabular-nums"><span className="text-receive">↓ {formatRate(peer.download)}</span><span className="text-transmit">↑ {formatRate(peer.upload)}</span></div></li>)}</ul>
+      <p className="text-xs text-muted-foreground">IP locations: {data?.locations?.state || 'Unavailable'} · <a href="https://ip.sb" target="_blank" rel="noreferrer" className="underline">ip.sb</a>. Map: <a href="https://www.naturalearthdata.com" target="_blank" rel="noreferrer" className="underline">Natural Earth</a> (public domain), rendered with MapLibre.</p>
     </DialogContent></Dialog>
   </section>
 }

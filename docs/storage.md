@@ -3,7 +3,7 @@
 `/etc/open-linux-router/olr.json` is the source of operator intent. Custom
 latency targets now live in `gateway.latency_sites`, including an explicit
 empty list when cleared. Backends still receive generated files, certificates
-and keys; external GeoIP databases remain their native binary assets. Kernel
+and keys. IP city lookups use ip.sb with a persistent bounded cache. Kernel
 state and backend lease files remain owned by their respective systems.
 
 OLR-owned runtime persistence lives in `/var/lib/open-linux-router/runtime.db`.
@@ -22,6 +22,18 @@ by an older binary.
 | `qos_state` | Queue ownership and snapshot, scoped to Linux boot ID |
 | `recovery_state` | Original IPv6 settings, original resolv.conf, last applied delegated prefix |
 | `imports` | Completed legacy-import markers, preventing stale files from resurrecting data |
+| `geoip_cache` | ip.sb city/coordinates/ASN results; 30-day freshness, 2,000-entry LRU |
+
+World traffic and remote clients share one asynchronous ip.sb lookup queue,
+paced at one request per 600 ms (100/minute). Cache hits update memory recency;
+disk recency is touched at most once per minute per IP. Expired results remain
+visible during refresh. Failures retry after one minute, and HTTP 429 pauses
+the shared queue for at least one minute or the supplied Retry-After duration.
+Private/local addresses never reach the service. Public IP cache misses are
+sent to ip.sb; the map uses returned city coordinates, falling back to country
+centers when coordinates are missing. Existing DB-IP files are no longer used
+by the daemon and are left untouched on upgrade. Database failure falls back
+to the same bounded in-memory cache.
 
 Activity samples every ten seconds and checkpoints changed buckets every minute
 and on graceful shutdown. Baselines are never restored: the first post-restart

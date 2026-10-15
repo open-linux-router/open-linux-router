@@ -1,12 +1,8 @@
-// Package geoip says where an address on the internet is: which country, and
-// whose network.
+// Package geoip locates internet addresses. The daemon uses CityLocator for
+// ip.sb city coordinates and network ownership with a persistent bounded cache.
 //
-// It exists for one question an operator asks of remote access — "who is
-// that?" — and it answers from databases kept on the box rather than by asking
-// a service. A lookup service would be told the address of everybody who
-// connects, which is exactly what an operator would not want a router doing
-// behind their back; and it would stop answering the moment the box's way out
-// did, which is when an operator most wants to know who is still connected.
+// Locator and the MMDB reader retain the earlier DB-IP country/ASN implementation;
+// they are no longer wired into the daemon.
 //
 // The databases are DB-IP's free "lite" editions, country and ASN, published
 // monthly under CC BY 4.0 — the attribution is Source, and every surface that
@@ -42,6 +38,10 @@ const SourceURL = "https://db-ip.com"
 
 // Place is where one address is, as far as the databases know.
 type Place struct {
+	City      string   `json:"city,omitempty"`
+	Region    string   `json:"region,omitempty"`
+	Latitude  *float64 `json:"latitude,omitempty"`
+	Longitude *float64 `json:"longitude,omitempty"`
 	// Country is the ISO 3166 code, e.g. "CN".
 	Country string `json:"country,omitempty"`
 	// CountryName is its English name.

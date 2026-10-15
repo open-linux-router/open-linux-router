@@ -602,7 +602,7 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
         <MetricPill label="Uptime" value={host ? uptime(host.uptime_seconds) : '—'} valueRight />
       </div>
     </StatCard>
-    <WorldTraffic origin={publicAddresses?.ipv4.country_code ?? publicAddresses?.ipv6.country_code} />
+    <WorldTraffic origin={publicAddresses?.ipv4.ip ? publicAddresses.ipv4 : publicAddresses?.ipv6} />
     {sitesOpen && <LatencySitesDialog sites={latency?.custom ?? []} exits={exits} onClose={() => setSitesOpen(false)} />}
     <BandwidthLimitDialog key={editing ?? 'closed'} direction={editing} limits={limits} onClose={() => setEditing(null)} onSave={saveLimits} />
   </div>

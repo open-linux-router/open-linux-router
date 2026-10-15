@@ -1479,6 +1479,10 @@ export interface ProxyApplyResult {
 
 /** Where one address is — internal/geoip Place. */
 export interface GeoPlace {
+  city?: string
+  region?: string
+  latitude?: number
+  longitude?: number
   /** ISO 3166 code. */
   country?: string
   country_name?: string
