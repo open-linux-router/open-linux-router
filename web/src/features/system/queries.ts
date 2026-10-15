@@ -8,6 +8,8 @@ export interface HostMetrics {
   cpu_cores: number
   memory_used_bytes: number
   memory_total_bytes: number
+  disk_used_bytes: number | null
+  disk_total_bytes: number | null
 }
 
 export function useHostMetrics() {

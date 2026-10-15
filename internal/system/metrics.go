@@ -15,6 +15,8 @@ type Metrics struct {
 	CPUCores      int      `json:"cpu_cores"`
 	MemoryUsed    uint64   `json:"memory_used_bytes"`
 	MemoryTotal   uint64   `json:"memory_total_bytes"`
+	DiskUsed      *uint64  `json:"disk_used_bytes"`
+	DiskTotal     *uint64  `json:"disk_total_bytes"`
 }
 
 func readMetrics(proc string) (Metrics, error) {

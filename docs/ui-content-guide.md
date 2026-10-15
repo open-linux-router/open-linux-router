@@ -38,8 +38,9 @@ to improve density while preserving values, units and mobile interaction targets
 Section landing pages omit titles duplicated by navigation, retaining a visually
 hidden page title. Detail and operation pages keep their identifying titles.
 
-- Overview shows Status, Traffic, Latency and Map cards. Uptime leads Status
-  above system health; omit the System card and CPU/memory metrics.
+- Overview shows Status, Traffic, Latency and Map cards. `Up` and elapsed uptime
+  lead Status above system health. Expand uptime for CPU, memory and root disk
+  used/total values; omit the separate System card.
   Latency and Map have no information icons. Map details open from its title;
   omit the inline direction legend and top-ten summary.
 - Overview Status shows one public-network summary using IPv4's country flag,

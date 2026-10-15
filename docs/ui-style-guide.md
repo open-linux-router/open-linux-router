@@ -212,7 +212,9 @@ and a relevant next action where one exists.
 ## Responsive behavior and motion
 
 Overview has four desktop cards: Status, Traffic, Latency and Map. Uptime is
-the first plain row in Status, above system health. Map has no information icon,
+the first plain disclosure row in Status, above system health. Both rows use
+aligned 16px Lucide CircleCheck icons in success color when healthy. Uptime
+expands to CPU, memory and root disk used/total values. Map has no information icon,
 direction legend or top-ten summary; its title opens the details dialog. On
 phones Latency and Map each span both columns. Its local MapLibre map uses receive/transmit
 colors and bounded logarithmic path widths. Moving particles indicate observed

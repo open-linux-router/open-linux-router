@@ -300,6 +300,7 @@ func (h HTTP) getMetrics(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
+	metrics.DiskUsed, metrics.DiskTotal = readRootDisk()
 	// A pair of CPU readings measures a recent interval rather than lifetime load.
 	first, err := readCPU(proc + "/stat")
 	if err == nil {

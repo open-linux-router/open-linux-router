@@ -1,6 +1,6 @@
 import { Meter, MetricPill } from '@/components/traffic-metrics'
 import { WorldTraffic } from '@/features/world-traffic/world-traffic'
-import { AlertTriangle, ChevronRight, Info, Plus, Trash2, GripVertical } from 'lucide-react'
+import { AlertTriangle, CircleCheck, CircleHelp, ChevronRight, Info, Plus, Trash2, GripVertical } from 'lucide-react'
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 
@@ -98,7 +98,7 @@ export function OverviewPage() {
           renders nothing once the router is doing something. */}
       <FirstRun />
 
-      <Stats flows={flows} host={host.data} publicAddresses={publicAddresses.data}
+      <Stats flows={flows} host={host.isError ? undefined : host.data} publicAddresses={publicAddresses.data}
         faults={faults} known={known} idle={idle} failed={dhcp.isError || dns.isError || gateway.isError}
         latency={latency.data} exits={gatewayConfig.data?.enabled ? gatewayConfig.data.exits?.map((exit) => exit.name) ?? [] : []} latencyFailed={latency.isError} trafficFailed={traffic.isError} />
 
@@ -302,7 +302,7 @@ function uptime(seconds: number): string {
   const days = Math.floor(seconds / 86400)
   const hours = Math.floor((seconds % 86400) / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
-  return `${days}d ${hours}h ${minutes}m`
+  return `${days}d${hours}h${minutes}m`
 }
 
 // Limits are personal display settings; no router configuration is changed.
@@ -548,7 +548,18 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
   return <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-x-4 lg:gap-y-2">
     <StatCard title="Status">
       <div className="space-y-1 lg:row-span-2 lg:self-start">
-        <MetricPill label="Uptime" value={host ? uptime(host.uptime_seconds) : '—'} valueRight />
+        <details className="group/system">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-sm text-sm font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9 [&::-webkit-details-marker]:hidden">
+            {host ? <CircleCheck aria-hidden className="size-4 shrink-0 text-success-foreground" /> : <CircleHelp aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
+            <span className="min-w-0 flex-1">{host ? `Up ${uptime(host.uptime_seconds)}` : 'Uptime unavailable'}</span>
+            <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground transition-transform group-open/system:rotate-90" />
+          </summary>
+          <dl className="space-y-2 py-2 pl-6 text-xs tabular-nums">
+            <div className="flex flex-wrap justify-between gap-1"><dt className="text-muted-foreground">CPU</dt><dd>{host?.cpu_used_cores == null ? '—' : `${host.cpu_used_cores.toFixed(1)} / ${host.cpu_cores} cores`}</dd></div>
+            <div className="flex flex-wrap justify-between gap-1"><dt className="text-muted-foreground">Memory</dt><dd>{host ? `${formatBytes(host.memory_used_bytes)} / ${formatBytes(host.memory_total_bytes)}` : '—'}</dd></div>
+            <div className="flex flex-wrap justify-between gap-1"><dt className="text-muted-foreground">Disk (/)</dt><dd>{host?.disk_total_bytes ? `${formatBytes(host.disk_used_bytes!)} / ${formatBytes(host.disk_total_bytes)}` : '—'}</dd></div>
+          </dl>
+        </details>
         <MetricPill value={title} health={faults.length || failed ? 'bad' : known && !idle ? 'good' : 'unknown'} />
         <PublicAddressRow addresses={publicAddresses} />
       </div>

@@ -1,3 +1,4 @@
+import { CircleCheck, CircleAlert, CircleHelp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export function Meter({ label, current, maximum, percent, tone = 'blue', arrow, onClick }: {
@@ -49,7 +50,9 @@ export function MetricPill({ label, value, detail, percent, tone = 'blue', healt
     {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r transition-[width] duration-150 ease-out', tone === 'neutral' ? 'border-border bg-muted' : 'border-receive/30 bg-receive-subtle')}
       style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />}
     <span className={cn('relative z-10 flex min-w-0 items-center gap-2 text-sm', health ? 'flex-1' : 'flex-wrap', valueRight && 'w-full justify-between')}>
-      {health && <span aria-hidden className={cn('size-2 shrink-0 rounded-full', health === 'good' ? 'bg-success' : health === 'bad' ? 'bg-destructive' : 'bg-muted-foreground')} />}
+      {health === 'good' && <CircleCheck aria-hidden className="size-4 shrink-0 text-success-foreground" />}
+      {health === 'bad' && <CircleAlert aria-hidden className="size-4 shrink-0 text-destructive" />}
+      {health === 'unknown' && <CircleHelp aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
       {label && <span className="shrink-0 text-xs text-muted-foreground">{label}</span>}
       <span title={value} className={cn('min-w-0 break-words font-semibold tabular-nums', health === 'bad' && 'text-destructive')}>{value}</span>
     </span>
