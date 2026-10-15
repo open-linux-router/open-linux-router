@@ -102,6 +102,8 @@ content sections naturally. Below desktop, cards use their own content height.
 Site probes use two columns on phones and three from 640px.
 The public-network summary uses a locally bundled flag-icons country flag and
 one chevron. Expanded addresses use monospace and wrap within the Status card.
+System health uses the same chevron disclosure as uptime, with module names on
+the left and status values aligned right. Keep module details as plain rows.
 
 ## Typography and imagery
 

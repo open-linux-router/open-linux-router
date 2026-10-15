@@ -41,6 +41,9 @@ hidden page title. Detail and operation pages keep their identifying titles.
 - Overview shows Status, Traffic, Latency and Map cards. `Up` and elapsed uptime
   lead Status above system health. Expand uptime for CPU, memory and root disk
   used/total values; omit the separate System card.
+  Expand system health for DHCP, DNS and Gateway states, with links to their
+  pages. Distinguish checking, unavailable, disabled, needs attention and OK;
+  retain the visible fault alerts below the cards.
   Latency and Map have no information icons. Map details open from its title;
   clicking the enlarged grayscale map opens a viewport-filling color map,
   with a close control and Escape support. Country colors distinguish geography,

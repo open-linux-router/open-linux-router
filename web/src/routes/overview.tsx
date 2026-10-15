@@ -1,6 +1,6 @@
 import { Meter, MetricPill } from '@/components/traffic-metrics'
 import { WorldTraffic } from '@/features/world-traffic/world-traffic'
-import { AlertTriangle, CircleCheck, CircleHelp, ChevronRight, Info, Plus, Trash2, GripVertical } from 'lucide-react'
+import { AlertTriangle, CircleAlert, CircleCheck, CircleHelp, ChevronRight, Info, Plus, Trash2, GripVertical } from 'lucide-react'
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 
@@ -99,6 +99,11 @@ export function OverviewPage() {
       <FirstRun />
 
       <Stats flows={flows} host={host.isError ? undefined : host.data} publicAddresses={publicAddresses.data}
+        modules={[
+          { name: 'DHCP', to: '/gateway/dhcp', data: dhcp.data, failed: dhcp.isError, observed: Boolean(dhcp.data?.service) && !dhcp.data?.service_error },
+          { name: 'DNS', to: '/gateway/dns', data: dns.data, failed: dns.isError, observed: Boolean(serviceOf(dns.data, RELAY_UNIT)?.status) },
+          { name: 'Gateway', to: '/gateway', data: gateway.data, failed: gateway.isError, observed: Boolean(gateway.data?.known) },
+        ]}
         faults={faults} known={known} idle={idle} failed={dhcp.isError || dns.isError || gateway.isError}
         latency={latency.data} exits={gatewayConfig.data?.enabled ? gatewayConfig.data.exits?.map((exit) => exit.name) ?? [] : []} latencyFailed={latency.isError} trafficFailed={traffic.isError} />
 
@@ -518,10 +523,11 @@ function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[];
   </Dialog>
 }
 
-function Stats({ flows, host, publicAddresses, faults, known, idle, failed, latency, exits, latencyFailed, trafficFailed }: {
+function Stats({ flows, host, publicAddresses, modules, faults, known, idle, failed, latency, exits, latencyFailed, trafficFailed }: {
   flows: TrafficView
   host?: HostMetrics
   publicAddresses?: PublicAddresses
+  modules: { name: string; to: string; data?: { enabled: boolean }; failed: boolean; observed: boolean }[]
   faults: Fault[]
   known: boolean
   idle: boolean
@@ -567,7 +573,23 @@ function Stats({ flows, host, publicAddresses, faults, known, idle, failed, late
             </div>)}
           </dl>
         </details>
-        <MetricPill value={title} health={faults.length || failed ? 'bad' : known && !idle ? 'good' : 'unknown'} />
+        <details className="group/health">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-sm text-sm font-semibold focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9 [&::-webkit-details-marker]:hidden">
+            {faults.length || failed ? <CircleAlert aria-hidden className="size-4 shrink-0 text-destructive" /> : known && !idle ? <CircleCheck aria-hidden className="size-4 shrink-0 text-success-foreground" /> : <CircleHelp aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
+            <span className={cn('min-w-0 flex-1', (faults.length > 0 || failed) && 'text-destructive')}>{title}</span>
+            <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground transition-transform group-open/health:rotate-90" />
+          </summary>
+          <dl className="space-y-1 py-2 pl-6 text-xs">
+            {modules.map((module) => {
+              const issues = faults.filter((fault) => fault.to === module.to)
+              const status = module.failed ? 'Unavailable' : !module.data ? 'Checking…' : issues.length ? 'Needs attention' : !module.data.enabled ? 'Disabled' : !module.observed ? 'Unavailable' : 'OK'
+              return <div key={module.name} className="flex items-baseline justify-between gap-2 py-1">
+                <dt><Link to={module.to} className="text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring">{module.name}</Link></dt>
+                <dd className={cn('text-right', status === 'OK' ? 'text-success-foreground' : status === 'Needs attention' ? 'text-warning-foreground' : 'text-muted-foreground')}>{status}</dd>
+              </div>
+            })}
+          </dl>
+        </details>
         <PublicAddressRow addresses={publicAddresses} />
       </div>
     </StatCard>
