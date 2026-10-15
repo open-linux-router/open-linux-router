@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
 import * as maplibregl from 'maplibre-gl'
-import type { GeoJSONSource } from 'maplibre-gl'
+import type { ExpressionSpecification, GeoJSONSource } from 'maplibre-gl'
 import type * as GeoJSON from 'geojson'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -20,6 +20,7 @@ type Position = [number, number]
 // Small countries omitted by the 1:110m geometry still need honest points.
 const positions: Record<string, Position> = { ...(centers as unknown as Record<string, Position>), SG: [103.82, 1.35], HK: [114.17, 22.32], MO: [113.55, 22.2], MT: [14.38, 35.94], MV: [73.22, 3.2], BH: [50.55, 26.02], AD: [1.52, 42.51], LI: [9.55, 47.16], MC: [7.42, 43.74], SM: [12.46, 43.94], VA: [12.45, 41.9] }
 const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
+const countryCodes = [...new Set(countries.features.map(feature => feature.properties.country))]
 function position(place: { latitude?: number; longitude?: number }, country?: string): Position | undefined {
   if (typeof place.latitude === 'number' && typeof place.longitude === 'number' && Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && Math.abs(place.latitude) <= 90 && Math.abs(place.longitude) <= 180) return [place.longitude, place.latitude]
   return country ? positions[country.toUpperCase()] : undefined
@@ -38,7 +39,7 @@ function arc(from: Position, to: Position, offset: number): Position[] {
   })
 }
 
-function TrafficMap({ peers, origin, dark }: { peers: Peer[]; origin?: Origin; dark: boolean }) {
+function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; origin?: Origin; dark: boolean; expanded?: boolean }) {
   const container = useRef<HTMLDivElement>(null)
   const map = useRef<maplibregl.Map | null>(null)
   const [ready, setReady] = useState(false)
@@ -52,7 +53,9 @@ function TrafficMap({ peers, origin, dark }: { peers: Peer[]; origin?: Origin; d
           { id: 'ocean', type: 'background', paint: { 'background-color': '#f6f7f9' } },
           { id: 'land', type: 'fill', source: 'countries', paint: { 'fill-color': '#e2e6ec' } },
           { id: 'borders', type: 'line', source: 'countries', paint: { 'line-color': '#ffffff', 'line-width': 0.4 } },
-        ] }, center: [25, 16], zoom: 0, minZoom: -3, interactive: false, attributionControl: false })
+        ] }, center: [25, 16], zoom: 0, minZoom: -3, interactive: expanded, attributionControl: false,
+        // Keep the whole world visible even in a tall phone viewport.
+        transformConstrain: expanded ? (center, zoom) => ({ center, zoom }) : undefined })
     } catch { setFailed(true); return }
     map.current = instance
     const fit = () => { instance.resize(); instance.fitBounds([[-180, -58], [180, 80]], { padding: 3, duration: 0 }) }
@@ -68,12 +71,14 @@ function TrafficMap({ peers, origin, dark }: { peers: Peer[]; origin?: Origin; d
     })
     instance.on('error', () => setFailed(true))
     return () => { observer.disconnect(); instance.remove(); map.current = null }
-  }, [])
+  }, [expanded])
   useEffect(() => {
     const instance = map.current
     if (!instance || !ready) return
-    instance.setPaintProperty('ocean', 'background-color', dark ? '#232731' : '#f6f7f9')
-    instance.setPaintProperty('land', 'fill-color', dark ? '#424b5b' : '#e2e6ec')
+    const palette = dark ? ['#526c58', '#686083', '#80754f', '#815f52', '#496e7a', '#735c70'] : ['#c5e2b4', '#d8cdf0', '#f2e7ad', '#efd0b5', '#bfe1e4', '#e9cddd']
+    instance.setPaintProperty('ocean', 'background-color', expanded ? (dark ? '#1c3545' : '#d6effb') : (dark ? '#232731' : '#f6f7f9'))
+    const countryColors: ExpressionSpecification = ['match', ['get', 'country'], countryCodes[0], palette[0], ...countryCodes.slice(1).flatMap((code, index) => [code, palette[(index + 1) % palette.length]]), palette[0]]
+    instance.setPaintProperty('land', 'fill-color', expanded ? countryColors : (dark ? '#424b5b' : '#e2e6ec'))
     instance.setPaintProperty('borders', 'line-color', dark ? '#232731' : '#ffffff')
     const blue = dark ? '#8ab4ff' : '#1d4ed8', teal = dark ? '#6bd4c6' : '#0f766e'
     const start = origin ? position(origin, origin.country_code) : undefined
@@ -112,12 +117,14 @@ function TrafficMap({ peers, origin, dark }: { peers: Peer[]; origin?: Origin; d
     animate()
     const timer = window.setInterval(animate, 100)
     return () => clearInterval(timer)
-  }, [peers, origin, dark, ready])
-  return <div className="relative h-36 overflow-hidden rounded-lg"><div ref={container} style={{ position: 'absolute', inset: 0 }} aria-hidden="true" />{failed && <p className="absolute inset-0 flex items-center justify-center bg-muted p-3 text-xs text-muted-foreground">Map unavailable. View traffic details.</p>}</div>
+  }, [peers, origin, dark, ready, expanded])
+  return <div className="relative h-full min-h-44 w-full overflow-hidden rounded-lg" style={expanded ? { backgroundColor: dark ? '#1c3545' : '#d6effb' } : undefined}><div ref={container} style={{ position: 'absolute', inset: 0 }} aria-hidden={!expanded} />{failed && <p className="absolute inset-0 flex items-center justify-center bg-muted p-3 text-xs text-muted-foreground">Map unavailable. View traffic details.</p>}</div>
 }
 
 export function WorldTraffic({ origin }: { origin?: Origin }) {
   const [open, setOpen] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const preview = useRef<HTMLButtonElement>(null)
   const { resolvedTheme } = useTheme()
   const query = useQuery({ queryKey: ['gateway', 'world-traffic'], queryFn: () => api.get<Snapshot>('/api/gateway/world-traffic'), refetchInterval: 2000 })
   const data = query.data
@@ -129,8 +136,13 @@ export function WorldTraffic({ origin }: { origin?: Origin }) {
   const status = query.isError || stale ? 'Unavailable' : !data ? 'Loading…' : data.state === 'disabled' ? 'Counting off' : data.state === 'warming' ? 'Measuring…' : data.state !== 'ready' ? 'Unavailable' : peers.length ? `Top ${peers.length} · ${share}%` : 'No observed traffic'
   return <section className="col-span-2 flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:col-span-1 lg:row-span-3">
     <h2 className="flex h-6 items-center text-sm font-semibold"><button onClick={() => setOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 focus-visible:outline-2 focus-visible:outline-ring" aria-label="Map details">Map</button></h2>
-    <div className="min-h-36 flex-1"><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} /></div>
+    <button ref={preview} type="button" onClick={() => setExpanded(true)} aria-label="Open fullscreen map" aria-haspopup="dialog" className="-mx-1 -mb-1 flex min-h-44 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2"><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} /></button>
     {(!ready || !peers.length) && <p className="text-xs text-muted-foreground">{status}</p>}
+    <Dialog open={expanded} onOpenChange={setExpanded}><DialogContent finalFocus={preview} className="flex h-dvh max-h-dvh w-screen max-w-none flex-col rounded-none sm:max-w-none">
+      <DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription><span className="text-receive">↓ Download</span> · <span className="text-transmit">↑ Upload</span> · {status}</DialogDescription></DialogHeader>
+      <div className="min-h-0 flex-1" role="region" aria-label="World traffic map, drag to pan and scroll to zoom"><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} expanded /></div>
+      <p className="text-xs text-muted-foreground">Map: <a href="https://www.naturalearthdata.com" target="_blank" rel="noreferrer" className="underline">Natural Earth</a> (public domain) · IP locations: <a href="https://ip.sb" target="_blank" rel="noreferrer" className="underline">ip.sb</a></p>
+    </DialogContent></Dialog>
     <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription>Remote IPs by upload and download in the last 30 seconds.{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
       <p className="text-sm text-muted-foreground">{status}{data?.seconds ? ` · ${Math.round(data.seconds)}s sampled` : ''}. {data?.state === 'disabled' ? 'Connection byte accounting is off. Enable Gateway traffic counting and apply its configuration.' : 'Counts include router and forwarded connections observed in Linux conntrack. Connections ending between samples and traffic bypassing conntrack may be missed.'} {!origin && 'Router location is unknown; only remote points are shown.'}</p>
       {data?.error && <p className="break-words text-sm text-destructive">{data.error}</p>}

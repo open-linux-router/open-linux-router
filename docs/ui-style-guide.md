@@ -226,7 +226,12 @@ Overview has four desktop cards: Status, Traffic, Latency and Map. Uptime is
 the first plain disclosure row in Status, above system health. Both rows use
 aligned 16px Lucide CircleCheck icons in success color when healthy. Uptime
 expands to CPU, memory and root disk used/total values. Map has no information icon,
-direction legend or top-ten summary; its title opens the details dialog. On
+direction legend or top-ten summary; its title opens the details dialog. The
+grayscale preview fills the remaining card height with 8px side and bottom
+insets on desktop and a 176px minimum map height. Clicking it opens a
+viewport-filling dialog with a pastel country map (muted colors in dark mode),
+pan/zoom, direction labels, attribution and the shared close control. Escape
+closes it and restores focus to the preview. On
 phones Latency and Map each span both columns. Its local MapLibre map uses receive/transmit
 colors and bounded logarithmic path widths. Moving particles indicate observed
 traffic direction and stop for reduced motion. IP points use city coordinates,

@@ -42,6 +42,9 @@ hidden page title. Detail and operation pages keep their identifying titles.
   lead Status above system health. Expand uptime for CPU, memory and root disk
   used/total values; omit the separate System card.
   Latency and Map have no information icons. Map details open from its title;
+  clicking the enlarged grayscale map opens a viewport-filling color map,
+  with a close control and Escape support. Country colors distinguish geography,
+  while download/upload retain their semantic colors.
   omit the inline direction legend and top-ten summary.
 - Overview Status shows one public-network summary using IPv4's country flag,
   city and ISP. Its disclosure shows IPv4, IPv6 when available, ASN and ASN
