@@ -1,0 +1,34 @@
+{
+  "description": "Official iKOOLCORE wiki references restyled with the built-in image editing tool (gpt-image-2). Explicit picker variants; never inferred from an Intel NIC OUI. Masters are not committed.",
+  "references": {
+    "r1": "https://wiki.ikoolcore.com/#/v1.2/en/r1",
+    "r2": "https://wiki.ikoolcore.com/#/v1.2/en/r2_",
+    "r2max": "https://wiki.ikoolcore.com/#/v1.2/en/r2_max"
+  },
+  "edits": [
+    {
+      "filename": "ikoolcore-desktop-r1",
+      "prompt": "Use case: style-transfer. Asset type: OLR device picker thumbnail. Restyle the actual device in this official manufacturer reference; preserve its real silhouette, proportions, colors and port placement, but simplify rendering to match our device icon set. Clean device thumbnail illustration, like the device pictures in a phone's settings app. Shown straight-on from the front, perfectly symmetrical, upright, camera very slightly above. Clean simplified semi-realistic rendering, soft even lighting, crisp edges, designed to stay legible at 32 pixels. Single object centred, filling about 80% of the frame, plain pure white background, no shadow, no ground plane. No logos, no text, no UI, no brand marks. Reference is a collage: extract ONLY the upper central dark graphite-gray R1 enclosure, the face with one USB-C port and one thin TF card slot above two low copper-tinted cooling openings. Discard the lower second device view and ALL infographic panels. Render ONE complete compact cuboid, not a collage. Preserve dark gray metal, small rounded corners, thin top lid seam, tiny dark feet, width to body-height about 1.6:1, and show a small plain top surface. Simplify each cooling opening to one dark rounded rectangle with a subtle copper edge, no individual fins. Very minimal: a few large simple forms, no fine textures, no screws, no perforations, no cables, no small labels. This device has no screen.",
+      "background": "opaque",
+      "size": "1024x1024",
+      "quality": "medium",
+      "source": "https://s2.loli.net/2023/03/18/8kR6c5wLIAbF2ox.jpg"
+    },
+    {
+      "filename": "ikoolcore-desktop-r2",
+      "prompt": "Use case: style-transfer. Asset type: OLR device picker thumbnail. Restyle the actual device in this official manufacturer reference; preserve its real silhouette, proportions, colors and port placement, but simplify rendering to match our device icon set. Clean device thumbnail illustration, like the device pictures in a phone's settings app. Shown straight-on from the front, perfectly symmetrical, upright, camera very slightly above. Clean simplified semi-realistic rendering, soft even lighting, crisp edges, designed to stay legible at 32 pixels. Single object centred, filling about 80% of the frame, plain pure white background, no shadow, no ground plane. No logos, no text, no UI, no brand marks. Reference shows four faces: use ONLY the FIRST, leftmost front view of the silver R2 compact cuboid. Render ONE complete device with a slight view of its plain top. Preserve width to body-height about 1.5:1, silver aluminum body, softly rounded vertical corners, thin lid seam, small black feet; inset rounded rectangular panel near the top with two blue USB-A sockets, a tiny dark dot to the left, blue LED and rounded power button at the right. The lower half is plain silver. Do not include other faces or network ports. Very minimal: a few large simple forms, no fine textures, no screws, no perforations, no cables, no small parts. This device has no screen.",
+      "background": "opaque",
+      "size": "1024x1024",
+      "quality": "medium",
+      "source": "https://cdn.shopify.com/s/files/1/0696/1555/0751/files/Product_four-sided_view-Compressed.webp"
+    },
+    {
+      "filename": "ikoolcore-desktop-r2max",
+      "prompt": "Use case: style-transfer. Asset type: OLR device picker thumbnail. Restyle the actual device in this official manufacturer reference; preserve its real silhouette, proportions, colors and port placement, but simplify rendering to match our device icon set. Clean device thumbnail illustration, like the device pictures in a phone's settings app. Shown straight-on from the front, perfectly symmetrical, upright, camera very slightly above. Clean simplified semi-realistic rendering, soft even lighting, crisp edges, designed to stay legible at 32 pixels. Single object centred, filling about 80% of the frame, plain pure white background, no shadow, no ground plane. No logos, no text, no UI, no brand marks. Reference shows front and back: use ONLY the UPPER front view of the silver R2 Max wide low enclosure. Render ONE complete device, width to body-height about 3.9:1, with a small plain top surface visible from slightly above. Preserve silver aluminum and softly rounded vertical corners; a long inset rounded rectangular front panel with two blue USB-A ports grouped to the left and tiny blue indicator plus a rounded power button at the far right. Preserve the large blank space between the ports and power button, and tiny dark feet. Do not include the lower back view or network ports. Very minimal: a few large simple forms, no fine textures, no screws, no perforations, no cables, no small parts. This device has no screen.",
+      "background": "opaque",
+      "size": "1024x1024",
+      "quality": "medium",
+      "source": "https://cdn.shopify.com/s/files/1/0696/1555/0751/files/wiki_main_front_back.webp"
+    }
+  ]
+}

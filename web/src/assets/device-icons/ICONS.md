@@ -66,8 +66,15 @@ finish. True product colours are kept.
 The line between 1.5 and 2 is where the prompt stops being able to be right. A
 house style is a real thing a text-to-image model knows; a part number is not.
 
-None of tier 2 ships yet, and it is not wired in either: `Device.model` exists,
-but `deviceIcon()` has no rung for it. Adding one is one lookup at the top.
+The iKOOLCORE R1, R2 and R2 Max are photo-restyled model artwork, exposed as
+explicit `desktop/ikoolcorer1`, `desktop/ikoolcorer2` and
+`desktop/ikoolcorer2max` picker variants beside Mini PC. Their manufacturer
+references and exact edit prompts are in [ikoolcore-sources.json](ikoolcore-sources.json).
+R1 retains its graphite enclosure and paired copper-edged openings; R2 its
+silver compact enclosure; R2 Max its wide, low silver enclosure. All use the
+same front view, simplified materials and transparent framing as the set.
+They are manual choices: an Intel NIC does not identify the mini PC's maker.
+`Device.model` still does not automatically select artwork.
 
 ### Licensing gates tier 2
 

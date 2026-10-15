@@ -57,8 +57,10 @@ var variants = map[string][]string{
 	// not the monitor-and-tower `desktop` draws. Each is the same *kind* of
 	// thing in a shape nothing else in the set shares, which is what a
 	// variant is for — and both are what a home actually runs a server on.
-	"server":  {"tower"},
-	"desktop": {"mini"},
+	"server": {"tower"},
+	// iKOOLCORE models are explicit mini-PC choices; the NIC's vendor does
+	// not reliably identify the manufacturer of the enclosure.
+	"desktop": {"mini", "ikoolcorer1", "ikoolcorer2", "ikoolcorer2max"},
 }
 
 // OperatingSystems returns the OS vocabulary in display order.

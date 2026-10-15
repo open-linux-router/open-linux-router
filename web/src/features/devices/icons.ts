@@ -98,6 +98,9 @@ import huaweiPhone from '@/assets/device-icons/huawei-phone.webp'
 import huaweiTablet from '@/assets/device-icons/huawei-tablet.webp'
 import huaweiWatch from '@/assets/device-icons/huawei-watch.webp'
 import intelDesktop from '@/assets/device-icons/intel-desktop.webp'
+import ikoolcoreR1 from '@/assets/device-icons/ikoolcore-desktop-r1.webp'
+import ikoolcoreR2 from '@/assets/device-icons/ikoolcore-desktop-r2.webp'
+import ikoolcoreR2Max from '@/assets/device-icons/ikoolcore-desktop-r2max.webp'
 import lenovoLaptop from '@/assets/device-icons/lenovo-laptop.webp'
 import lgTv from '@/assets/device-icons/lg-tv.webp'
 import microsoftConsole from '@/assets/device-icons/microsoft-console.webp'
@@ -193,6 +196,9 @@ type VariantKey =
   | 'apple/desktop/studio'
   | 'server/tower'
   | 'desktop/mini'
+  | 'desktop/ikoolcorer1'
+  | 'desktop/ikoolcorer2'
+  | 'desktop/ikoolcorer2max'
 
 const IMAGES: Partial<Record<IconKey, string>> = {
   accesspoint: accessPoint,
@@ -235,6 +241,9 @@ const IMAGES: Partial<Record<IconKey, string>> = {
   'nas/8bay': nas8Bay,
   'server/tower': serverTower,
   'desktop/mini': desktopMini,
+  'desktop/ikoolcorer1': ikoolcoreR1,
+  'desktop/ikoolcorer2': ikoolcoreR2,
+  'desktop/ikoolcorer2max': ikoolcoreR2Max,
 
   // In the order the picker shows them: the makers most homes have several
   // things from first, then one-product vendors, then the cupboard.
@@ -693,11 +702,14 @@ const VARIANT_LABELS: Partial<Record<VariantKey, string>> = {
   'nas/8bay': '8-bay NAS',
   'server/tower': 'Tower server',
   'desktop/mini': 'Mini PC',
+  'desktop/ikoolcorer1': 'iKOOLCORE R1',
+  'desktop/ikoolcorer2': 'iKOOLCORE R2',
+  'desktop/ikoolcorer2max': 'iKOOLCORE R2 Max',
 }
 
 /**
- * The brandless variants of each category, shown in the picker right after
- * the category's own tile — a 4-bay NAS is found where the NAS is.
+ * Category variants, shown in the picker right after the category's own tile
+ * — a 4-bay NAS is found where the NAS is, and mini PCs beside Desktop.
  */
 export function variantChoices(category: DeviceCategory): IconChoiceTile[] {
   return (Object.keys(IMAGES) as IconKey[])
