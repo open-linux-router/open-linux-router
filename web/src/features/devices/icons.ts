@@ -607,6 +607,10 @@ export type ChosenIcon =
 
 export function chosenIcon(icon?: string): ChosenIcon | undefined {
   if (!icon) return undefined
+  if (/^thesvg:[a-z0-9][a-z0-9-]{0,95}$/.test(icon)) {
+    const slug = icon.slice(7)
+    return { kind: 'os', label: slug, src: `https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${slug}/default.svg` }
+  }
   if (icon.startsWith('os/')) {
     const mark = OS_MARKS[icon.slice(3) as OsKey]
     return mark && { kind: 'os', ...mark }

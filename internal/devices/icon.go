@@ -2,6 +2,7 @@ package devices
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -9,12 +10,13 @@ import (
 )
 
 // Icon is a picture an operator chose for a device, overriding the one its
-// category and vendor would pick. Four shapes are legal:
+// category and vendor would pick. Five shapes are legal:
 //
 //	<vendor>/<category>             a vendor's take on a kind of device: "apple/laptop"
 //	<category>/<variant>            one form of a kind of device: "nas/4bay"
 //	<vendor>/<category>/<variant>   one form of a vendor's take: "apple/desktop/mini"
 //	os/<system>                     an operating system's mark: "os/debian"
+//	thesvg:<slug>                   a logo from theSVG library
 //
 // The first is the answer to randomised MACs. A modern phone or laptop hides
 // its maker from the registry, so the Apple pictures a detected vendor would
@@ -35,6 +37,8 @@ type Icon string
 
 // iconOSPrefix marks an operating-system icon.
 const iconOSPrefix = "os/"
+
+var thesvgIconPattern = regexp.MustCompile(`^thesvg:[a-z0-9][a-z0-9-]{0,95}$`)
 
 // operatingSystems is the vocabulary of OS marks, in the order a picker shows
 // them: desktop and phone systems first, then the Linux family, then what a
@@ -75,6 +79,12 @@ func (i Icon) Validate() error {
 		return nil
 	}
 	s := string(i)
+	if strings.HasPrefix(s, "thesvg:") {
+		if !thesvgIconPattern.MatchString(s) {
+			return fmt.Errorf("icon %q needs a theSVG slug of 1–96 lowercase letters, digits or hyphens, starting with a letter or digit", s)
+		}
+		return nil
+	}
 	if os, ok := strings.CutPrefix(s, iconOSPrefix); ok {
 		if !slices.Contains(operatingSystems, os) {
 			return fmt.Errorf("unknown operating system %q in icon %q; valid values are %s",
@@ -137,9 +147,9 @@ func (Icon) JSONSchema() *jsonschema.Schema {
 			"category and vendor would pick: <vendor>/<category> such as " +
 			"\"apple/laptop\", optionally followed by /<variant> such as " +
 			"\"apple/desktop/mini\", <category>/<variant> such as \"nas/4bay\", " +
-			"or os/<system> such as \"os/debian\". Empty " +
+			"os/<system> such as \"os/debian\", or thesvg:<slug> such as \"thesvg:proxmox\". Empty " +
 			"means the picture follows category and vendor.",
-		Pattern: `^$|^[a-z0-9-]+/[a-z0-9]+(/[a-z0-9]+)?$`,
+		Pattern: `^$|^[a-z0-9-]+/[a-z0-9]+(/[a-z0-9]+)?$|^thesvg:[a-z0-9][a-z0-9-]{0,95}$`,
 		Default: "",
 	}
 }

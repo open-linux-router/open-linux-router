@@ -112,7 +112,12 @@ Use 12px only for compact auxiliary metadata. Mobile text inputs are 16px to
 avoid browser zoom. Use tabular numerals for live rates and counters, and
 monospace for addresses, commands and configuration.
 
-Device imagery identifies device categories. Tool directory entries use Lucide
+Device imagery identifies device categories. Device icon selection also offers
+theSVG search above the built-in categories,
+using the existing image tiles and selected state. Render chosen logos in the
+same muted tile as operating-system marks throughout device views.
+
+Tool directory entries use Lucide
 outline icons with a 1.75px stroke in a themed 56px surface (48px on phones),
 an 18px name and one directional chevron. Avoid raster illustrations with baked-in
 backgrounds. Overview metric headings have the same 24px line box; auxiliary

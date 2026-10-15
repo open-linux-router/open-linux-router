@@ -229,6 +229,10 @@ Describe the current and next theme in its accessible label and tooltip.
 
 ## Capability and richness
 
+Device icon selection supports the same theSVG library as site logos. Choosing
+a library logo changes only the picture, preserving the device category. Keep
+automatic detection available and show a clear empty result for unmatched searches.
+
 Show the real capability set together with consistent visual weight. Keep entries
 compact enough to scan across the set. Richness comes from recognizable, distinct
 capabilities, useful data and dependable interactions. Do not inflate it with

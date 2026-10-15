@@ -146,13 +146,16 @@ func TestValidateIcons(t *testing.T) {
 	for _, icon := range []Icon{"", "apple/laptop", "apple/phone", "os/debian", "os/proxmox", "huawei/laptop",
 		"nas/4bay", "nas/8bay", "apple/desktop/mini", "apple/desktop/studio",
 		"server/tower", "desktop/mini", "intel/desktop",
-		"desktop/ikoolcorer1", "desktop/ikoolcorer2", "desktop/ikoolcorer2max"} {
+		"desktop/ikoolcorer1", "desktop/ikoolcorer2", "desktop/ikoolcorer2max",
+		"thesvg:proxmox", "thesvg:home-assistant", "thesvg:1password"} {
 		cfg := Config{Devices: []Device{{MAC: "aa:bb:cc:dd:ee:ff", Icon: icon}}}
 		if res := Validate(cfg); !res.OK() {
 			t.Errorf("Validate rejected icon %q: %s", icon, problemStrings(res.Errors))
 		}
 	}
 	for _, icon := range []Icon{
+		"thesvg:", "thesvg:../proxmox", "thesvg:Proxmox", "thesvg:-proxmox",
+		"thesvg:proxmox?raw=1", Icon("thesvg:" + strings.Repeat("a", 97)),
 		"apple",                // a vendor with no kind of thing is what ICONS.md refuses to draw
 		"apple/unknown",        // the same, spelled out
 		"apple/toaster",        // not a category

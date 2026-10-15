@@ -1,5 +1,8 @@
 import { Check } from 'lucide-react'
+import { useState } from 'react'
 
+import { Input } from '@/components/ui/input'
+import thesvgSlugs from '@/features/gateway/thesvg-slugs.json'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import {
   BRAND_CHOICES,
@@ -26,7 +29,7 @@ export interface IconChoice {
  * is a guess-and-check loop. Showing the pictures makes the choice the same
  * shape as the result.
  *
- * Four kinds of tile, and what each one stores is the whole design:
+ * Built-in tiles and library logos preserve these distinctions:
  *
  *   - **A category** sets the category and clears any chosen icon, so the
  *     picture goes back to following category and vendor.
@@ -39,6 +42,7 @@ export interface IconChoice {
  *   - **An operating system** sets only the icon and leaves the category
  *     alone. A Debian VM is still a server; the mark is how it is drawn, not
  *     what it is.
+ *   - **A theSVG logo** also sets only the icon, preserving the category.
  *
  * Categories without artwork are shown too, wearing a line glyph instead (see
  * DeviceIcon). Hiding them would be worse: the category is real and the label is
@@ -57,6 +61,10 @@ export function CategoryPicker({
   onChange: (next: IconChoice) => void
 }) {
   const auto = value.category === '' && value.icon === ''
+  const [search, setSearch] = useState('')
+  const query = search.trim().toLowerCase()
+  const matches = query ? thesvgSlugs.filter((slug) => slug.includes(query)).slice(0, 32) : []
+  const selectedSlug = value.icon.startsWith('thesvg:') ? value.icon.slice(7) : ''
 
   return (
     <div className="space-y-4">
@@ -82,6 +90,20 @@ export function CategoryPicker({
           )}
         </span>
       </button>
+
+      <div className="space-y-2">
+        <Input aria-label="Search theSVG icons" placeholder="Search theSVG (e.g. proxmox)" value={search} onChange={(event) => setSearch(event.target.value)} />
+        {(query || selectedSlug) && <Section label="theSVG">
+          {(query ? matches : [selectedSlug]).map((slug) => (
+            <Tile key={slug} label={slug} selected={value.icon === `thesvg:${slug}`}
+              onClick={() => onChange({ category: value.category, icon: `thesvg:${slug}` })}>
+              <DeviceIcon icon={`thesvg:${slug}`} category={value.category} size="md" />
+            </Tile>
+          ))}
+        </Section>}
+        {query && matches.length === 0 && <p role="status" className="text-sm text-muted-foreground">No matching icons.</p>}
+        <p className="text-xs text-muted-foreground">Icons by theSVG (MIT). Only the selected ID is saved.</p>
+      </div>
 
       {CATEGORY_GROUPS.map((group) => (
         <Section key={group.label} label={group.label}>
@@ -161,6 +183,7 @@ function Tile({
     <button
       type="button"
       onClick={onClick}
+      aria-label={label}
       aria-pressed={selected}
       title={label}
       className={cn(
