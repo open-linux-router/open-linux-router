@@ -25,8 +25,8 @@ secondary information. See the [page review record](ui-page-review.md).
 ## Color and surfaces
 
 World traffic uses one neutral arc and one moving dot per remote location.
-The dot uses the color and direction of the larger receive/transmit rate;
-ties use receive.
+The same dot travels to the remote location and back along the arc, using
+transmit color outbound and receive color on return, four seconds each way.
 
 Use semantic Tailwind tokens from `web/src/index.css`, never page-local gray or
 blue approximations. Light and dark themes are designed as separate contrast

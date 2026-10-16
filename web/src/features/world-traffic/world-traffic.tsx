@@ -44,7 +44,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
   const map = useRef<maplibregl.Map | null>(null)
   const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(false)
-  const targets = useRef(new Map<string, { feature: GeoJSON.Feature; coordinates?: Position[]; reverse?: boolean }>())
+  const targets = useRef(new Map<string, { feature: GeoJSON.Feature; coordinates?: Position[] }>())
   useEffect(() => {
     if (!container.current) return
     let instance: maplibregl.Map
@@ -81,7 +81,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     const countryColors: ExpressionSpecification = ['match', ['get', 'country'], countryCodes[0], palette[0], ...countryCodes.slice(1).flatMap((code, index) => [code, palette[(index + 1) % palette.length]]), palette[0]]
     instance.setPaintProperty('land', 'fill-color', expanded ? countryColors : (dark ? '#424b5b' : '#e2e6ec'))
     instance.setPaintProperty('borders', 'line-color', dark ? '#232731' : '#ffffff')
-    const blue = dark ? '#8ab4ff' : '#1d4ed8', teal = dark ? '#6bd4c6' : '#0f766e'
+    const blue = dark ? '#8ab4ff' : '#1d4ed8'
     const start = origin ? position(origin, origin.country_code) : undefined
     const next: typeof targets.current = new Map()
     if (start) next.set(`place:${start}`, { feature: { type: 'Feature', properties: { color: dark ? '#f1f3f7' : '#171b22' }, geometry: { type: 'Point', coordinates: start } } })
@@ -100,11 +100,9 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       if (!start || (start[0] === end[0] && start[1] === end[1])) continue
       const total = peer.download + peer.upload
       if (total <= 0) continue
-      const reverse = peer.download >= peer.upload
-      const color = reverse ? blue : teal
       const coordinates = arc(start, end, 0)
       const width = Math.min(3.5, 0.6 + Math.log10(1 + total / 1024) * 0.7)
-      next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: { color, width }, geometry: { type: 'LineString', coordinates } }, coordinates, reverse })
+      next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: { width }, geometry: { type: 'LineString', coordinates } }, coordinates })
     }
     targets.current = next
   }, [peers, origin, dark, ready, expanded])
@@ -145,12 +143,14 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         if (!path.coordinates) { points.push(feature); continue }
         lines.push({ ...feature, properties: { ...properties, color: dark ? '#abb4c3' : '#5b6472' } })
         if (reduced.matches) continue
-        visual.phase = (visual.phase + elapsed / 4000) % 1
-        const progress = path.reverse ? 1 - visual.phase : visual.phase
+        // One dot travels out and back, taking four seconds in each direction.
+        visual.phase = (visual.phase + elapsed / 8000) % 1
+        const returning = visual.phase >= 0.5
+        const progress = returning ? (1 - visual.phase) * 2 : visual.phase * 2
+        const color = returning ? (dark ? '#8ab4ff' : '#1d4ed8') : (dark ? '#6bd4c6' : '#0f766e')
         const p = progress * 48
         const a = path.coordinates[Math.floor(p)], b = path.coordinates[Math.min(48, Math.floor(p) + 1)]
-        // Fade at each end instead of visibly teleporting on wraparound.
-        dots.push({ type: 'Feature', properties: { ...properties, opacity: visual.opacity * Math.min(1, progress * 12, (1 - progress) * 12) }, geometry: { type: 'Point', coordinates: [a[0] + (b[0] - a[0]) * (p % 1), a[1] + (b[1] - a[1]) * (p % 1)] } })
+        dots.push({ type: 'Feature', properties: { ...properties, color }, geometry: { type: 'Point', coordinates: [a[0] + (b[0] - a[0]) * (p % 1), a[1] + (b[1] - a[1]) * (p % 1)] } })
       }
       set('flows', lines)
       set('places', points)

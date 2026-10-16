@@ -73,8 +73,8 @@ hidden page title. Detail and operation pages keep their identifying titles.
 
 World traffic combines IPs at the same remote coordinates into one map connection.
 Line width represents combined upload and download; per-IP rates stay in details.
-Each connection has one directional dot, following the larger traffic direction
-(download when equal).
+Each connection has one dot that travels out and back, illustrating both directions
+without selecting a direction based on traffic volume.
 
 Ingress distinguishes saved repairs from applied settings. When other existing
 errors prevent application, say the repair was saved, list the remaining service
