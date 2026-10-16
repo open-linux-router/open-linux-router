@@ -71,6 +71,11 @@ hidden page title. Detail and operation pages keep their identifying titles.
 
 ## State and data contracts
 
+Ingress distinguishes saved repairs from applied settings. When other existing
+errors prevent application, say the repair was saved, list the remaining service
+names and problems, and explain that the running proxy stays unchanged until
+the final repair applies automatically. Retain this warning after refresh.
+
 World traffic uses two-second sampling and UI refresh. Smooth map transitions communicate
 continuity between samples, not individual packets or exact connection lifetimes;
 the details ranking and rates continue to show the latest observed snapshot.

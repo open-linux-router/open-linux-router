@@ -42,7 +42,13 @@ export function useIngressApply() {
     setFailure(null)
     try {
       const result = await apply.mutateAsync({ change, confirm })
-      toast.success(result.plan.empty ? 'Nothing to change' : change.label)
+      if (result.pending) {
+        toast.warning('Saved; more repairs needed', {
+          description: 'The proxy keeps its current configuration. Fix the remaining problems to apply all repairs.',
+        })
+      } else {
+        toast.success(result.plan.empty ? 'Nothing to change' : change.label)
+      }
       return true
     } catch (error) {
       if (!(error instanceof ApiError)) {

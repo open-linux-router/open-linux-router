@@ -341,9 +341,11 @@ func (h HTTP) domain() string {
 // (§5.3.2: there is no rollback, so a half-finished change stays half-finished
 // and the honest thing is to say which steps landed).
 type applyResponse struct {
-	Plan  planView        `json:"plan"`
-	Steps []Step          `json:"steps,omitempty"`
-	Error *core.ErrorBody `json:"error,omitempty"`
+	Pending  bool            `json:"pending,omitempty"`
+	Problems []core.Problem  `json:"problems,omitempty"`
+	Plan     planView        `json:"plan"`
+	Steps    []Step          `json:"steps,omitempty"`
+	Error    *core.ErrorBody `json:"error,omitempty"`
 
 	// Config is what is stored now, redacted. Returned on the refusal path
 	// especially: a client that has just been told "no" needs to know the
@@ -392,6 +394,7 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 		stored   Config
 		applyErr error
 		held     bool
+		pending  bool
 	)
 
 	if lockErr := h.Lock.Do(r.Context(), func() error {
@@ -404,6 +407,7 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 			stale = true
 			return nil
 		}
+		before := cfg.Clone()
 		if err := edit(&cfg); err != nil {
 			editErr = err
 			return nil
@@ -412,6 +416,27 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 
 		if res := Validate(cfg, h.Applier.DNS, h.Applier.Devices); !res.OK() {
 			invalid = res
+			if r.Method == http.MethodPut && r.PathValue("name") != "" &&
+				canSaveRepair(before, cfg, r.PathValue("name"), h.Applier.DNS, h.Applier.Devices) {
+				pending = true
+				stored = before
+				if !dryRun {
+					doc, err := h.Applier.Store.Load()
+					if err != nil {
+						failed = err
+						return nil
+					}
+					cfg.ResolveDeviceReferences(h.Applier.Devices)
+					data, err := MarshalConfig(cfg)
+					if err != nil {
+						failed = err
+						return nil
+					}
+					doc.Set(ModuleName, data)
+					failed = h.Applier.Store.Save(doc)
+					stored = cfg
+				}
+			}
 			return nil
 		}
 
@@ -470,13 +495,21 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 	case editErr != nil:
 		core.WriteError(w, statusFor(editErr), editErr.Error())
 		return
-	case !invalid.OK():
+	case !invalid.OK() && !pending:
 		core.WriteError(w, http.StatusUnprocessableEntity,
 			"invalid ingress configuration", problems(invalid.Errors)...)
 		return
 	}
 
 	view := viewPlan(plan)
+	if pending {
+		if !dryRun {
+			h.Events.Publish(core.Event{Type: core.EventApplied, Module: ModuleName})
+		}
+		redacted := stored.Redacted()
+		core.WriteJSON(w, http.StatusOK, applyResponse{Plan: view, Config: &redacted, Pending: true, Problems: problems(invalid.Errors)})
+		return
+	}
 
 	// A dry run answers with the plan alone, the same shape POST /plan gives, so
 	// a caller that asked "what would this do?" gets one answer regardless of
@@ -589,7 +622,8 @@ func (h HTTP) plan(r *http.Request, cfg Config) (Plan, error) {
 // --- observed -------------------------------------------------------------
 
 type statusResponse struct {
-	Enabled bool `json:"enabled"`
+	Problems []core.Problem `json:"problems,omitempty"`
+	Enabled  bool           `json:"enabled"`
 
 	// Domain is the suffix published names live under. Reported because it is
 	// not in this module's config — it belongs to `dns` (§4.1) — and an operator
@@ -633,6 +667,7 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp.Enabled = cfg.Enabled
+	resp.Problems = problems(Validate(cfg, h.Applier.DNS, h.Applier.Devices).Errors)
 	resp.Published = len(cfg.Services)
 	resp.Domain = h.domain()
 

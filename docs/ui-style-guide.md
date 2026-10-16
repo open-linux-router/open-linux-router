@@ -142,6 +142,10 @@ brand mark retains its own colors in both themes.
 
 ## Controls, lists and dialogs
 
+Ingress pending repairs reuse Alert above the settings and a warning status dot.
+List remaining errors with service names and wrapping text; keep the existing
+single-service edit dialog and save action.
+
 Use the shared Button, Input, Select, Textarea, Switch, Card and Dialog components.
 Regular controls are 36px high on desktop; mobile button/input/select targets
 are at least 44px high. Switch visuals are 44 × 24px with an expanded mobile hit

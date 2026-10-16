@@ -1210,6 +1210,7 @@ export interface IngressCertState {
 }
 
 export interface IngressStatus {
+  problems?: Problem[]
   enabled: boolean
   /** The suffix published names live under, owned by the dns module. */
   domain?: string
@@ -1233,6 +1234,8 @@ export interface IngressStatus {
 }
 
 export interface IngressApplyResult {
+  pending?: boolean
+  problems?: Problem[]
   plan: IngressPlan
   steps?: Step[]
   error?: { message: string; problems?: Problem[] }

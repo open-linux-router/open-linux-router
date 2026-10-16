@@ -78,6 +78,22 @@ export function IngressPage() {
 
   return (
     <SubPage section="/access" slug="ingress">
+      {!!status.data?.problems?.length && (
+        <Alert>
+          <AlertTriangle />
+          <AlertTitle>Fix the remaining problems to apply your settings</AlertTitle>
+          <AlertDescription>
+            <p>Repairs can be saved one at a time. The proxy keeps its current configuration until all problems are fixed.</p>
+            <ul className="list-disc pl-5">
+              {status.data.problems.map((problem, i) => {
+                const index = /^services\[(\d+)\]/.exec(problem.path ?? '')?.[1]
+                const service = index === undefined ? undefined : services[Number(index)]
+                return <li key={i}>{service?.name || problem.path}: {problem.message}</li>
+              })}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />
@@ -156,7 +172,9 @@ export function IngressPage() {
         dot={
           status.isError || status.isPending ? 'bg-muted-foreground/40' : !current.enabled
             ? 'bg-muted-foreground/40'
-            : status.data?.binary_error
+            : status.data?.problems?.length
+              ? 'bg-warning'
+              : status.data?.binary_error
               ? 'bg-destructive'
               : 'bg-success'
         }

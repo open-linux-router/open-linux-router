@@ -1,15 +1,80 @@
 package ingress
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
+
+func TestRepairMultipleInvalidServicesOneAtATime(t *testing.T) {
+	h, a := testHTTP(t)
+	publish(t, h)
+	files, err := os.ReadFile(a.Paths.Conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := good()
+	cfg.Services[0].Upstream.Device = "old-nuc"
+	cfg.Services = append(cfg.Services, Service{Name: "storage", Upstream: Upstream{Device: "old-storage", Port: 80}})
+	doc, _ := a.Store.Load()
+	data, _ := MarshalConfig(cfg)
+	doc.Set(ModuleName, data)
+	if err := a.Store.Save(doc); err != nil {
+		t.Fatal(err)
+	}
+	// An invalid replacement must not be accepted just because another error exists.
+	w := do(t, h, "PUT", "/services/grafana", `{"upstream":{"device":"nuc","port":0}}`)
+	if w.Code != 422 {
+		t.Fatalf("invalid repair = %d: %s", w.Code, w.Body)
+	}
+	w = do(t, h, "PUT", "/services/grafana?dry_run=true", `{"upstream":{"device":"nuc","port":3000}}`)
+	if w.Code != 200 {
+		t.Fatalf("dry run = %d: %s", w.Code, w.Body)
+	}
+	unchanged, _ := a.Load()
+	if unchanged.Services[0].Upstream.Device != "old-nuc" {
+		t.Fatal("dry run saved changes")
+	}
+	w = do(t, h, "PUT", "/services/grafana", `{"upstream":{"device":"nuc","port":3000}}`)
+	if w.Code != 200 {
+		t.Fatalf("first repair = %d: %s", w.Code, w.Body)
+	}
+	resp := decode[applyResponse](t, w)
+	if !resp.Pending || len(resp.Problems) != 1 || len(resp.Steps) != 0 {
+		t.Fatalf("repair response = %+v", resp)
+	}
+	stored, _ := a.Load()
+	if stored.Services[0].Upstream.Device != "nuc" {
+		t.Fatal("repair not saved")
+	}
+	after, _ := os.ReadFile(a.Paths.Conf)
+	if !bytes.Equal(after, files) {
+		t.Fatal("pending repair rewrote the running configuration")
+	}
+	status := decode[statusResponse](t, do(t, h, "GET", "/status", ""))
+	if len(status.Problems) != 1 {
+		t.Fatalf("remaining errors lost on refresh: %+v", status.Problems)
+	}
+	w = do(t, h, "PUT", "/services/storage", `{"upstream":{"device":"nuc","port":8080}}`)
+	if w.Code != 200 {
+		t.Fatalf("final repair = %d: %s", w.Code, w.Body)
+	}
+	resp = decode[applyResponse](t, w)
+	if resp.Pending || len(resp.Steps) == 0 {
+		t.Fatalf("final repair did not apply: %+v", resp)
+	}
+	after, _ = os.ReadFile(a.Paths.Conf)
+	if !bytes.Contains(after, []byte("8080")) {
+		t.Fatal("final repair missing from Caddy configuration")
+	}
+}
 
 // The two things on this surface that break silently, and so are the two worth
 // testing here rather than trusting:

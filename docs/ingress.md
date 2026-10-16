@@ -99,6 +99,13 @@ argument.
 
 ### 1.2 The upstream is a device, not an address
 
+When several stored services are invalid, repairing one can be saved without
+applying while the others still need repair. This requires fully fixing that
+service, reducing existing validation errors, and introducing no new errors.
+The response reports `pending` and remaining `problems`; status also reports
+problems after refreshing the page. Caddy files and runtime stay untouched.
+The final repair follows the normal validation and apply flow automatically.
+
 Per `design.md` §4.1 a module reads another module's facts through that
 module's API and never keeps a copy. The upstream should therefore reference a
 **device** (`devices` owns identity, `design.md` §4.4) plus a port — not an IP
