@@ -2,7 +2,7 @@ import { Meter, MetricPill } from '@/components/traffic-metrics'
 import { WorldTraffic } from '@/features/world-traffic/world-traffic'
 import { NetworkQuality } from '@/features/network-quality/network-quality'
 import { AlertTriangle, CircleAlert, CircleCheck, CircleHelp, ChevronRight, Info, Plus, Trash2, GripVertical, Map } from 'lucide-react'
-import { useEffect, useMemo, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useState, type DragEvent, type MouseEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -354,7 +354,17 @@ function BandwidthLimitDialog({ direction, limits, onClose, onSave }: {
 }
 
 
-function StatCard({ title, children, className, action }: { title: React.ReactNode; children: React.ReactNode; className?: string; action?: React.ReactNode }) {
+function StatCard({ title, children, className, action, back, flipped = false }: { title: React.ReactNode; children: React.ReactNode; className?: string; action?: React.ReactNode; back?: React.ReactNode; flipped?: boolean }) {
+  if (back) {
+    const heading = <div className="flex h-6 shrink-0 items-center justify-between"><h2 className="text-sm font-semibold">{title}</h2>{action}</div>
+    const face = 'col-start-1 row-start-1 flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 [backface-visibility:hidden] [-webkit-backface-visibility:hidden]'
+    return <section aria-label="Traffic" className="min-w-0 [perspective:1200px]">
+      <div className={cn('grid min-h-60 w-full transition-transform duration-600 ease-[cubic-bezier(0.22,1,0.36,1)] [transform-style:preserve-3d] lg:aspect-[4/3] motion-reduce:transition-none', flipped && '[transform:rotateY(180deg)]')}>
+        <div inert={flipped} aria-hidden={flipped} className={cn(face, flipped && 'pointer-events-none')}>{heading}<div className="flex-1 space-y-2 [&_button]:flex-nowrap [&_button]:whitespace-nowrap">{children}</div></div>
+        <div inert={!flipped} aria-hidden={!flipped} className={cn(face, '[transform:rotateY(180deg)]', !flipped && 'pointer-events-none')}>{heading}<div className="flex min-h-40 flex-1">{back}</div></div>
+      </div>
+    </section>
+  }
   return <section className={cn('flex w-full min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:min-h-60 lg:aspect-[4/3] lg:h-fit lg:has-[details[open]]:aspect-auto lg:has-[[aria-expanded=true]]:aspect-auto', className)}>
     <div className="flex h-6 shrink-0 items-center justify-between"><h2 className="text-sm font-semibold">{title}</h2>{action}</div>{children}
   </section>
@@ -373,7 +383,7 @@ function PublicAddressRow({ addresses }: { addresses?: PublicAddresses }) {
   return <div className="min-w-0">
     <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
       className="flex min-h-11 sm:min-h-9 w-full min-w-0 flex-wrap items-center gap-2 rounded-lg py-1.5 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
-      <CountryIcon code={address?.country_code} />
+      <span className="flex w-4 shrink-0 items-center justify-center"><CountryIcon code={address?.country_code} /></span>
       <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold" title={summary || undefined}>{summary || (address?.ip ? 'Location unavailable' : '—')}</span>
       <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
     </button>
@@ -542,6 +552,13 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
   const [editing, setEditing] = useState<Direction | null>(null)
   const [sitesOpen, setSitesOpen] = useState(false)
   const [showMap, setShowMap] = useState(false)
+  const flipTraffic = (event: MouseEvent<HTMLButtonElement>) => {
+    const card = event.currentTarget.closest('section')
+    setShowMap(value => !value)
+    requestAnimationFrame(() => {
+      card?.querySelector<HTMLButtonElement>('[aria-hidden="false"] button[aria-pressed]')?.focus({ preventScroll: true })
+    })
+  }
   const saveLimits = (next: typeof limits) => {
     setLimits(next)
     try { localStorage.setItem(LIMITS_KEY, JSON.stringify(next)) } catch { /* private mode can disable storage */ }
@@ -554,7 +571,7 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
   // Keep four columns for wide screens so values and units fit on one line.
   return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:gap-4">
     <StatCard title="Status">
-      <div className="space-y-1 lg:row-span-2 lg:self-start">
+      <div className="w-full space-y-1">
         <details className="group/system">
           <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-sm text-sm font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9 [&::-webkit-details-marker]:hidden">
             {host ? <CircleCheck aria-hidden className="size-4 shrink-0 text-success-foreground" /> : <CircleHelp aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
@@ -594,9 +611,7 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
         <PublicAddressRow addresses={publicAddresses} />
       </div>
     </StatCard>
-    <StatCard title="Traffic" action={<button type="button" onClick={() => setShowMap(value => !value)} aria-label={showMap ? 'Show traffic statistics' : 'Show traffic map'} aria-pressed={showMap} title={showMap ? 'Show traffic statistics' : 'Show traffic map'} className={cn('relative inline-flex size-6 items-center justify-center rounded-sm text-muted-foreground before:absolute before:-inset-2.5 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring', showMap && 'bg-primary/10 text-primary')}><Map aria-hidden className="size-4" /></button>}>
-      <div className="grid min-h-44 flex-1 [&>div]:col-start-1 [&>div]:row-start-1">
-      <div inert={showMap} aria-hidden={showMap} className={cn('space-y-2 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none [&_button]:flex-nowrap [&_button]:whitespace-nowrap', showMap ? 'pointer-events-none -translate-x-2 opacity-0' : 'translate-x-0 opacity-100')}>
+    <StatCard title="Traffic" flipped={showMap} back={<WorldTraffic embedded origin={publicAddresses?.ipv4.ip ? publicAddresses.ipv4 : publicAddresses?.ipv6} />} action={<button type="button" onClick={flipTraffic} aria-label={showMap ? 'Show traffic statistics' : 'Show traffic map'} aria-pressed={showMap} title={showMap ? 'Show traffic statistics' : 'Show traffic map'} className={cn('relative inline-flex size-6 items-center justify-center rounded-sm text-muted-foreground before:absolute before:-inset-2.5 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring', showMap && 'bg-primary/10 text-primary')}><Map aria-hidden className="size-4" /></button>}>
       <div className="space-y-1">
         <Meter label="Download" arrow="↓" onClick={() => setEditing('down')} current={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.down ? (flows.total.downRate ?? 0) * 8 / (limits.down * 1_000_000) * 100 : undefined} />
@@ -606,11 +621,6 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
       <div className="space-y-1 pt-1">
         <MetricPill label="Download" value={flows.counting && !trafficFailed ? formatBytes(flows.total.down) : trafficFailed ? 'Unavailable' : '—'} valueRight />
         <MetricPill label="Upload" value={flows.counting && !trafficFailed ? formatBytes(flows.total.up) : trafficFailed ? 'Unavailable' : '—'} valueRight />
-      </div>
-      </div>
-      <div inert={!showMap} aria-hidden={!showMap} className={cn('flex min-h-0 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none', showMap ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-2 opacity-0')}>
-        <WorldTraffic embedded origin={publicAddresses?.ipv4.ip ? publicAddresses.ipv4 : publicAddresses?.ipv6} />
-      </div>
       </div>
     </StatCard>
     <StatCard title="Latency" className={(latency?.custom?.length ?? 0) > 3 ? 'lg:aspect-auto' : undefined}>

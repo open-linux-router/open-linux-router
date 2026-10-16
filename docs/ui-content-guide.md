@@ -51,7 +51,8 @@ hidden page title. Detail and operation pages keep their identifying titles.
   Expand system health for DHCP, DNS and Gateway states, with links to their
   pages. Distinguish checking, unavailable, disabled, needs attention and OK;
   retain the visible fault alerts below the cards.
-  Latency and Map have no information icons. Map details open inside the map view;
+  Latency and Map have no information icons. Traffic flips to reveal its map
+  on the back, without a Map details row;
   clicking the enlarged grayscale map opens a viewport-filling color map,
   with a close control and Escape support. Country colors distinguish geography,
   while download/upload retain their semantic colors.

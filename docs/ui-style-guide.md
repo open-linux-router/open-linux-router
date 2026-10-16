@@ -118,6 +118,8 @@ Site probes use two columns on phones and three from 640px.
 The public-network summary uses a locally bundled flag-icons country flag and
 one chevron. Expanded addresses use monospace and wrap within the Status card.
 Public-network details share uptime and health's 24px left inset and right edge.
+Status rows fill the card width. Give flags and health icons the same 16px
+leading slot so text starts align, and align all disclosure chevrons at the right.
 System health uses the same chevron disclosure as uptime, with module names on
 the left and status values aligned right. Keep module details as plain rows.
 
@@ -251,9 +253,12 @@ Desktop cards target 4:3 proportions with a 240px minimum height and grow for
 disclosures or extra probes. Use one column on phones, two from 640px and
 four from 1280px so values and units remain on one line.
 Traffic's title-right map icon toggles its statistics and embedded map views.
-Keep both mounted in one grid cell to preserve height and map continuity;
-crossfade with an 8px horizontal offset over 300ms. Reduced motion disables
-transitions. Make the inactive view inert and hidden to assistive technology.
+Keep both mounted as the front and back of one card to preserve height and map
+continuity. Rotate the whole card 180 degrees around its vertical axis over
+600ms, with 1200px perspective and hidden backfaces. Each face has its own
+title and toggle so the map appears on the back of the card. Reduced motion
+switches faces immediately. Make the inactive face inert and hidden to assistive
+technology. Do not add a Map details row; clicking the map opens fullscreen.
 Network quality uses a five-axis radar with theme-aware primary fill and border
 grid lines. It occupies one card at every breakpoint. Keep its sample
 data visibly labeled Demo with simulated scores, all oriented higher-is-better.
@@ -261,7 +266,7 @@ Uptime is
 the first plain disclosure row in Status, above system health. Both rows use
 aligned 16px Lucide CircleCheck icons in success color when healthy. Uptime
 expands to CPU, memory and root disk used/total values. Map has no information icon,
-direction legend or top-ten summary; Map details opens its details dialog. The
+direction legend or top-ten summary. The
 grayscale preview fills Traffic's remaining content area. Clicking it opens a
 viewport-filling dialog with a pastel country map (muted colors in dark mode),
 pan/zoom, direction labels, attribution and the shared close control. Escape
