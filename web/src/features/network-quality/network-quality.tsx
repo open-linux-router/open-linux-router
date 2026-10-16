@@ -17,14 +17,15 @@ function polygon(score: number) {
 }
 
 export function NetworkQuality() {
-  return <section aria-label="Network quality" className="col-span-2 flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:col-span-1 lg:row-span-3 lg:grid lg:grid-rows-subgrid">
+  return <section aria-label="Network quality" className="flex w-full min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:min-h-60 lg:aspect-[4/3] lg:h-fit">
     <div className="flex h-6 items-center justify-between gap-2">
       <h2 className="text-sm font-semibold">Network quality</h2>
       <span className="text-xs text-muted-foreground">Demo</span>
     </div>
-    <div className="flex min-w-0 items-center justify-center lg:row-span-2">
-      <figure className="w-full max-w-80">
-        <svg viewBox="0 0 300 240" className="w-full" role="img" aria-label={`Simulated network quality scores out of 100: ${sample.map(({ label, score }) => `${label} ${score}`).join(', ')}. Higher is better.`}>
+    <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center">
+      <figure className="flex h-full w-full max-w-80 flex-col items-center">
+        <svg viewBox="0 0 340 240" className="min-h-0 w-full flex-1" role="img" aria-label={`Simulated network quality scores out of 100: ${sample.map(({ label, score }) => `${label} ${score}`).join(', ')}. Higher is better.`}>
+          <g transform="translate(20 0)">
           {[25, 50, 75, 100].map(score => <polygon key={score} points={polygon(score)} className="fill-none stroke-border" strokeWidth="1" />)}
           {sample.map((item, index) => {
             const [x, y] = point(index, 100)
@@ -36,10 +37,10 @@ export function NetworkQuality() {
             const [labelX, labelY] = point(index, 100, 101)
             return <g key={item.label}>
               <circle cx={x} cy={y} r="3" className="fill-primary stroke-card" strokeWidth="1.5" />
-              <text x={labelX} y={labelY - 4} textAnchor="middle" className="fill-muted-foreground text-[18px]">{item.label}</text>
-              <text x={labelX} y={labelY + 17} textAnchor="middle" className="fill-foreground text-[20px] font-semibold tabular-nums">{item.score}</text>
+              <text x={labelX} y={labelY} textAnchor="middle" className="fill-muted-foreground text-[15px]">{item.label} <tspan className="fill-foreground font-semibold tabular-nums">{item.score}</tspan></text>
             </g>
           })}
+          </g>
         </svg>
         <figcaption className="text-center text-xs text-muted-foreground">Simulated scores · Higher is better</figcaption>
       </figure>

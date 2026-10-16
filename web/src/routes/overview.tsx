@@ -1,7 +1,7 @@
 import { Meter, MetricPill } from '@/components/traffic-metrics'
 import { WorldTraffic } from '@/features/world-traffic/world-traffic'
 import { NetworkQuality } from '@/features/network-quality/network-quality'
-import { AlertTriangle, CircleAlert, CircleCheck, CircleHelp, ChevronRight, Info, Plus, Trash2, GripVertical } from 'lucide-react'
+import { AlertTriangle, CircleAlert, CircleCheck, CircleHelp, ChevronRight, Info, Plus, Trash2, GripVertical, Map } from 'lucide-react'
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 
@@ -354,9 +354,9 @@ function BandwidthLimitDialog({ direction, limits, onClose, onSave }: {
 }
 
 
-function StatCard({ title, children, className }: { title: React.ReactNode; children: React.ReactNode; className?: string }) {
-  return <section className={cn('flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:row-span-3 lg:grid lg:grid-rows-subgrid', className)}>
-    <h2 className="flex h-6 items-center text-sm font-semibold">{title}</h2>{children}
+function StatCard({ title, children, className, action }: { title: React.ReactNode; children: React.ReactNode; className?: string; action?: React.ReactNode }) {
+  return <section className={cn('flex w-full min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:min-h-60 lg:aspect-[4/3] lg:h-fit lg:has-[details[open]]:aspect-auto lg:has-[[aria-expanded=true]]:aspect-auto', className)}>
+    <div className="flex h-6 shrink-0 items-center justify-between"><h2 className="text-sm font-semibold">{title}</h2>{action}</div>{children}
   </section>
 }
 
@@ -374,7 +374,7 @@ function PublicAddressRow({ addresses }: { addresses?: PublicAddresses }) {
     <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
       className="flex min-h-11 sm:min-h-9 w-full min-w-0 flex-wrap items-center gap-2 rounded-lg py-1.5 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
       <CountryIcon code={address?.country_code} />
-      <span className="min-w-0 flex-1 break-words text-[0.8125rem] font-semibold" title={summary || undefined}>{summary || (address?.ip ? 'Location unavailable' : '—')}</span>
+      <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold" title={summary || undefined}>{summary || (address?.ip ? 'Location unavailable' : '—')}</span>
       <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
     </button>
     {open && <div className="space-y-1 py-2 pl-6 text-xs text-muted-foreground">
@@ -541,6 +541,7 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
   const [limits, setLimits] = useState(readLimits)
   const [editing, setEditing] = useState<Direction | null>(null)
   const [sitesOpen, setSitesOpen] = useState(false)
+  const [showMap, setShowMap] = useState(false)
   const saveLimits = (next: typeof limits) => {
     setLimits(next)
     try { localStorage.setItem(LIMITS_KEY, JSON.stringify(next)) } catch { /* private mode can disable storage */ }
@@ -550,9 +551,8 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
   const dnsMeasured = !latencyFailed && latency?.dns_milliseconds != null
   const latencyValue = measured ? `${latency.milliseconds!.toFixed(0)} ms` : latency?.state === 'unreachable' ? 'No response' : '—'
   const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? 'Unavailable' : '—'
-  // Share section boundaries, not individual rows: supplementary content keeps
-  // its own rhythm, and Status flows naturally across both content sections.
-  return <div className="grid grid-cols-2 gap-3 lg:grid-cols-5 lg:gap-x-4 lg:gap-y-2">
+  // Keep four columns for wide screens so values and units fit on one line.
+  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:gap-4">
     <StatCard title="Status">
       <div className="space-y-1 lg:row-span-2 lg:self-start">
         <details className="group/system">
@@ -594,7 +594,9 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
         <PublicAddressRow addresses={publicAddresses} />
       </div>
     </StatCard>
-    <StatCard title="Traffic">
+    <StatCard title="Traffic" action={<button type="button" onClick={() => setShowMap(value => !value)} aria-label={showMap ? 'Show traffic statistics' : 'Show traffic map'} aria-pressed={showMap} title={showMap ? 'Show traffic statistics' : 'Show traffic map'} className={cn('relative inline-flex size-6 items-center justify-center rounded-sm text-muted-foreground before:absolute before:-inset-2.5 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring', showMap && 'bg-primary/10 text-primary')}><Map aria-hidden className="size-4" /></button>}>
+      <div className="grid min-h-44 flex-1 [&>div]:col-start-1 [&>div]:row-start-1">
+      <div inert={showMap} aria-hidden={showMap} className={cn('space-y-2 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none [&_button]:flex-nowrap [&_button]:whitespace-nowrap', showMap ? 'pointer-events-none -translate-x-2 opacity-0' : 'translate-x-0 opacity-100')}>
       <div className="space-y-1">
         <Meter label="Download" arrow="↓" onClick={() => setEditing('down')} current={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.down ? (flows.total.downRate ?? 0) * 8 / (limits.down * 1_000_000) * 100 : undefined} />
@@ -605,8 +607,13 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
         <MetricPill label="Download" value={flows.counting && !trafficFailed ? formatBytes(flows.total.down) : trafficFailed ? 'Unavailable' : '—'} valueRight />
         <MetricPill label="Upload" value={flows.counting && !trafficFailed ? formatBytes(flows.total.up) : trafficFailed ? 'Unavailable' : '—'} valueRight />
       </div>
+      </div>
+      <div inert={!showMap} aria-hidden={!showMap} className={cn('flex min-h-0 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none', showMap ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-2 opacity-0')}>
+        <WorldTraffic embedded origin={publicAddresses?.ipv4.ip ? publicAddresses.ipv4 : publicAddresses?.ipv6} />
+      </div>
+      </div>
     </StatCard>
-    <StatCard title="Latency" className="col-span-2 lg:col-span-1">
+    <StatCard title="Latency" className={(latency?.custom?.length ?? 0) > 3 ? 'lg:aspect-auto' : undefined}>
       <div className="space-y-1">
         <MetricPill label="Internet" value={latencyValue} valueRight />
         <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} valueRight />
@@ -618,9 +625,9 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
             const ms = site.milliseconds
             const description = `${site.name} · HTTPS response from ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!measuredSite ? 'Waiting for first probe' : ms == null ? site.error || 'Failed' : `${ms.toFixed(0)} ms`}`
             return <span key={site.name} tabIndex={0} aria-label={description} title={description}
-              className="inline-flex min-h-8 min-w-0 flex-col items-start justify-center gap-1 rounded-sm text-xs font-semibold tabular-nums text-foreground focus-visible:outline-2 focus-visible:outline-ring sm:flex-row sm:items-center sm:justify-start sm:gap-1.5">
+              className="inline-flex min-h-8 min-w-0 items-center gap-1.5 rounded-sm text-xs font-semibold tabular-nums text-foreground focus-visible:outline-2 focus-visible:outline-ring">
               <SiteIcon name={site.name} url={site.url} icon={site.icon} />
-              <span className="min-w-0 break-words">{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
+              <span className="min-w-0 whitespace-nowrap">{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
             </span>
           })}
           <button className="inline-flex min-h-11 min-w-11 sm:min-h-8 sm:min-w-8 items-center justify-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -628,7 +635,6 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
         </div>
       </div>
     </StatCard>
-    <WorldTraffic origin={publicAddresses?.ipv4.ip ? publicAddresses.ipv4 : publicAddresses?.ipv6} />
     <NetworkQuality />
     {sitesOpen && <LatencySitesDialog sites={latency?.custom ?? []} exits={exits} onClose={() => setSitesOpen(false)} />}
     <BandwidthLimitDialog key={editing ?? 'closed'} direction={editing} limits={limits} onClose={() => setEditing(null)} onSave={saveLimits} />

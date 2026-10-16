@@ -111,10 +111,9 @@ Only download/upload rates use inset meter surfaces
 in Overview cards. Status, public addresses, latency, totals and uptime use plain
 rows; monitored sites retain their icons without capsule backgrounds.
 Cumulative traffic rows use Download and Upload labels with plain byte values.
-On desktop, Overview cards share title, primary metric section and supplementary
-section boundaries, not individual metric rows. Totals and site probes
-start together without divider lines, then flow independently. Status spans the
-content sections naturally. Below desktop, cards use their own content height.
+On desktop, Overview cards share title and primary metric boundaries. Totals
+and site probes follow their primary metrics without divider lines. Status
+flows naturally. Below desktop, cards use their own content height.
 Site probes use two columns on phones and three from 640px.
 The public-network summary uses a locally bundled flag-icons country flag and
 one chevron. Expanded addresses use monospace and wrap within the Status card.
@@ -247,21 +246,27 @@ and a relevant next action where one exists.
 
 ## Responsive behavior and motion
 
-Overview has five desktop cards: Status, Traffic, Latency, Map and Network quality.
+Overview has four desktop cards: Status, Traffic, Latency and Network quality.
+Desktop cards target 4:3 proportions with a 240px minimum height and grow for
+disclosures or extra probes. Use one column on phones, two from 640px and
+four from 1280px so values and units remain on one line.
+Traffic's title-right map icon toggles its statistics and embedded map views.
+Keep both mounted in one grid cell to preserve height and map continuity;
+crossfade with an 8px horizontal offset over 300ms. Reduced motion disables
+transitions. Make the inactive view inert and hidden to assistive technology.
 Network quality uses a five-axis radar with theme-aware primary fill and border
-grid lines. It spans both columns on phones and one on desktop. Keep its sample
+grid lines. It occupies one card at every breakpoint. Keep its sample
 data visibly labeled Demo with simulated scores, all oriented higher-is-better.
 Uptime is
 the first plain disclosure row in Status, above system health. Both rows use
 aligned 16px Lucide CircleCheck icons in success color when healthy. Uptime
 expands to CPU, memory and root disk used/total values. Map has no information icon,
-direction legend or top-ten summary; its title opens the details dialog. The
-grayscale preview fills the remaining card height with 8px side and bottom
-insets on desktop and a 176px minimum map height. Clicking it opens a
+direction legend or top-ten summary; Map details opens its details dialog. The
+grayscale preview fills Traffic's remaining content area. Clicking it opens a
 viewport-filling dialog with a pastel country map (muted colors in dark mode),
 pan/zoom, direction labels, attribution and the shared close control. Escape
 closes it and restores focus to the preview. On
-phones Latency and Map each span both columns. Its local MapLibre map uses receive/transmit
+phones each card uses the full column. Its local MapLibre map uses receive/transmit
 colors and bounded logarithmic path widths. Moving particles indicate observed
 traffic direction and stop for reduced motion. Use 1.4px endpoints merged at
 shared coordinates. Keep particle phases stable

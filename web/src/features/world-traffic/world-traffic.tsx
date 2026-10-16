@@ -162,7 +162,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
   return <div className="relative h-full min-h-44 w-full overflow-hidden rounded-lg" style={expanded ? { backgroundColor: dark ? '#1c3545' : '#d6effb' } : undefined}><div ref={container} style={{ position: 'absolute', inset: 0 }} aria-hidden={!expanded} />{failed && <p className="absolute inset-0 flex items-center justify-center bg-muted p-3 text-xs text-muted-foreground">Map unavailable. View traffic details.</p>}</div>
 }
 
-export function WorldTraffic({ origin }: { origin?: Origin }) {
+export function WorldTraffic({ origin, embedded = false }: { origin?: Origin; embedded?: boolean }) {
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const preview = useRef<HTMLButtonElement>(null)
@@ -175,9 +175,9 @@ export function WorldTraffic({ origin }: { origin?: Origin }) {
   const share = data?.total ? Math.round(peers.reduce((n, p) => n + p.download + p.upload, 0) / data.total * 100) : 0
   const unknown = peers.filter(p => !position(p.place, p.place.country)).length
   const status = query.isError || stale ? 'Unavailable' : !data ? 'Loading…' : data.state === 'disabled' ? 'Counting off' : data.state === 'warming' ? 'Measuring…' : data.state !== 'ready' ? 'Unavailable' : peers.length ? `Top ${peers.length} · ${share}%` : 'No observed traffic'
-  return <section className="col-span-2 flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:col-span-1 lg:row-span-3">
-    <h2 className="flex h-6 items-center text-sm font-semibold"><button onClick={() => setOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 focus-visible:outline-2 focus-visible:outline-ring" aria-label="Map details">Map</button></h2>
-    <button ref={preview} type="button" onClick={() => setExpanded(true)} aria-label="Open fullscreen map" aria-haspopup="dialog" className="-mx-1 -mb-1 flex min-h-44 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2"><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} /></button>
+  return <section aria-label="Traffic map" className={embedded ? 'flex min-h-0 w-full min-w-0 flex-col gap-1' : 'col-span-2 flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:col-span-1 lg:row-span-3'}>
+    <h2 className={embedded ? 'text-xs text-muted-foreground' : 'flex h-6 items-center text-sm font-semibold'}><button onClick={() => setOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 focus-visible:outline-2 focus-visible:outline-ring" aria-label="Map details">{embedded ? 'Map details' : 'Map'}</button></h2>
+    <button ref={preview} type="button" onClick={() => setExpanded(true)} aria-label="Open fullscreen map" aria-haspopup="dialog" className={embedded ? 'flex min-h-32 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring' : '-mx-1 -mb-1 flex min-h-44 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2'}><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} /></button>
     {(!ready || !peers.length) && <p className="text-xs text-muted-foreground">{status}</p>}
     <Dialog open={expanded} onOpenChange={setExpanded}><DialogContent finalFocus={preview} className="flex h-dvh max-h-dvh w-screen max-w-none flex-col rounded-none sm:max-w-none">
       <DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription><span className="text-receive">↓ Download</span> · <span className="text-transmit">↑ Upload</span> · {status}</DialogDescription></DialogHeader>

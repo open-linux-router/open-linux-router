@@ -38,7 +38,9 @@ to improve density while preserving values, units and mobile interaction targets
 Section landing pages omit titles duplicated by navigation, retaining a visually
 hidden page title. Detail and operation pages keep their identifying titles.
 
-- Overview shows Status, Traffic, Latency, Map and Network quality cards. The
+- Overview shows Status, Traffic, Latency and Network quality cards. Traffic's
+  title-right map icon toggles statistics and map views in place. Its pressed
+  state identifies the active map, and its accessible label names the next view. The
   quality radar shows Speed (download and upload), Latency, Stability,
   Reachability and Wi-Fi on a 0–100 higher-is-better scale. Until measurements
   are connected, label it Demo and explicitly call its scores simulated; do not
@@ -49,7 +51,7 @@ hidden page title. Detail and operation pages keep their identifying titles.
   Expand system health for DHCP, DNS and Gateway states, with links to their
   pages. Distinguish checking, unavailable, disabled, needs attention and OK;
   retain the visible fault alerts below the cards.
-  Latency and Map have no information icons. Map details open from its title;
+  Latency and Map have no information icons. Map details open inside the map view;
   clicking the enlarged grayscale map opens a viewport-filling color map,
   with a close control and Escape support. Country colors distinguish geography,
   while download/upload retain their semantic colors.
