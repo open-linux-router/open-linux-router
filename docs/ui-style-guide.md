@@ -182,7 +182,9 @@ Fade only the leftmost 20% toward overlapping identity content; keep the rest
 fully visible, including zero/unknown dots. Use the shared opaque activity
 palette: zero/unknown uses the empty gray, low nonzero traffic uses a stronger
 neutral gray (#cfd4db light / #48515e dark), and the remaining four levels use
-green intensities, without decorative borders or inset rings;
+green intensities, using 25%, 50% and 75% of the greater of the retained
+14-day four-hour peak and 1 GiB as boundaries. Green starts at 10 MiB;
+boundary values keep the lighter tier. Use no decorative borders or inset rings;
 cell fills and spacing define the grid. Retain visible keyboard focus. No axes,
 legend, heading or helper text; tooltips provide dates, units and sample state.
 Uplink and Priority lead the right column with compact segmented selectors.

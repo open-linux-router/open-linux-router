@@ -135,10 +135,11 @@ Historical colors continue to represent accumulated traffic.
 The lowest nonzero tier (below 10 MiB combined upload/download per four-hour
 period) uses a stronger neutral gray than zero/missing data; green starts at
 10 MiB. Four green levels use the device's retained 14-day four-hour totals at or
-above 10 MiB, split at 25%, 50% and 75% of the maximum total, independently of
+above 10 MiB, split at 25%, 50% and 75% of the greater of the maximum total
+and 1 GiB, independently of
 screen width. These divide the byte range, not the number of cells.
 Values equal to a boundary use the lighter tier; identical totals share a color,
-and a flat or single-sample history uses the darkest green. Different devices'
+and a flat or single-sample history below 1 GiB follows the same minimum reference. Different devices'
 greens represent their own relative traffic, not comparable byte quantities.
 This distinguishes low traffic without implying whether a person is
 actively using the device.
