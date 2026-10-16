@@ -104,6 +104,12 @@ module's API and never keeps a copy. The upstream should therefore reference a
 **device** (`devices` owns identity, `design.md` §4.4) plus a port — not an IP
 address copied into our config where it will rot.
 
+Device references are stored as MAC addresses; names are display labels and
+renaming a device does not change its published URLs or their targets. Legacy
+name references are resolved on read and converted when saving ingress or
+changing the device inventory. An already-unresolvable old name requires an
+explicit target selection; it is never guessed from an address or URL.
+
 This surfaces a constraint the operator has to be told about rather than
 discover:
 

@@ -160,7 +160,8 @@ type Service struct {
 // are not: a container on the router itself, or something behind another
 // router.
 type Upstream struct {
-	// Device names a device in the `devices` module (design.md §4.4). It is the
+	// Device identifies a device by MAC in the `devices` module (design.md §4.4).
+	// Legacy names and CLI names are resolved to MACs when stored. It is the
 	// preferred form and the reason is §4.1: a device's address belongs to
 	// `devices` and `dhcp`, so referencing the device reads it per request
 	// instead of copying it here where it would rot the next time the lease

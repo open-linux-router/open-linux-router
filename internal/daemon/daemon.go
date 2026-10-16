@@ -415,6 +415,9 @@ func run(args []string) error {
 		Networks: dhcpNetworks{applier: applier},
 		Seen:     seen,
 	}
+	devicesApplier.BeforeSave = func(doc *core.Document) error {
+		return preserveIngressDevices(doc, ingressDevices{applier: devicesApplier})
+	}
 
 	srv.Mount(devices.ModuleName, devices.HTTP{
 		Applier: devicesApplier,

@@ -9,6 +9,7 @@ export function servicesByDevice(config: IngressConfig | undefined, devices: Dev
   const byName = new Map<string, string | null>()
   const byAddress = new Map<string, string | null>()
   for (const device of devices) {
+    byName.set(device.mac.toLowerCase(), device.mac)
     for (const name of new Set([device.name, device.hostname].filter((name): name is string => Boolean(name)))) {
       const key = name.toLowerCase()
       if (!byName.has(key)) byName.set(key, device.mac)

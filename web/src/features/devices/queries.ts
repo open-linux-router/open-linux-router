@@ -56,6 +56,7 @@ export function useApplyDevicesConfig() {
       api.put<DevicesApplyResult>('/api/devices/config', config),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['devices'] })
+      queryClient.invalidateQueries({ queryKey: ['ingress'] })
     },
   })
 }
@@ -81,6 +82,7 @@ function useDevicesMutation<T>(fn: (vars: T) => Promise<DevicesApplyResult>) {
     mutationFn: fn,
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['devices'] })
+      queryClient.invalidateQueries({ queryKey: ['ingress'] })
     },
   })
 }

@@ -38,6 +38,7 @@ export function DevicePage() {
   const device = devices.data?.devices.find((d) => d.mac.toLowerCase() === mac?.toLowerCase())
   const usage = device && flow.flowOf(device)
   const services = (ingress.data?.services ?? []).filter((s) =>
+    (device && s.upstream.device?.toLowerCase() === device.mac.toLowerCase()) ||
     (device?.name && s.upstream.device === device.name) ||
     (s.upstream.host && [device?.fixed_ip, ...(device?.ips ?? [])].some((ip) => ip?.toLowerCase() === s.upstream.host?.toLowerCase())),
   )

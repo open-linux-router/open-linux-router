@@ -50,6 +50,8 @@ type DeviceView interface {
 
 // DeviceInfo is the subset of a device's state that publishing depends on.
 type DeviceInfo struct {
+	// MAC is the stable identity; Name is only a label.
+	MAC string `json:"mac,omitempty"`
 	// Name is the device's name in the `devices` module.
 	Name string `json:"name,omitempty"`
 
@@ -66,6 +68,23 @@ type DeviceInfo struct {
 	// behaviour is declared rather than inferred is why the answer is a refusal
 	// carrying a remedy instead of olr silently pinning the address itself.
 	Fixed bool `json:"fixed"`
+}
+
+// ResolveDeviceReferences upgrades legacy names when they still identify a
+// device. Unknown references stay visible so they can be repaired explicitly.
+func (c *Config) ResolveDeviceReferences(devices DeviceView) {
+	if devices == nil {
+		return
+	}
+	for i := range c.Services {
+		u := &c.Services[i].Upstream
+		if u.Device == "" {
+			continue
+		}
+		if info, err := devices.Device(u.Device); err == nil && info.MAC != "" {
+			u.Device = info.MAC
+		}
+	}
 }
 
 // ErrNoSuchDevice is returned by DeviceView.Device for an unknown name.

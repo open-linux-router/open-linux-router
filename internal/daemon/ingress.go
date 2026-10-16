@@ -56,12 +56,29 @@ func (d ingressDNS) Hosts() []string {
 
 // ingressDevices is ingress's window onto the devices module.
 //
-// Names, not MACs. `ingress` publishes a service by naming a device the way the
-// operator does, and the join from that name to an address is `devices`' own —
-// which is the whole reason this is an adapter and not a field in ingress's
-// config.
+// MACs identify devices across renames. Names remain accepted for legacy
+// configurations and CLI input.
 type ingressDevices struct {
 	applier devices.Applier
+}
+
+// Upgrade references against the old inventory before a rename or removal.
+// Both changes land in one store write, without reloading the proxy.
+func preserveIngressDevices(doc *core.Document, view ingress.DeviceView) error {
+	if _, ok := doc.Raw(ingress.ModuleName); !ok {
+		return nil
+	}
+	cfg, err := ingress.FromDocument(*doc)
+	if err != nil {
+		return err
+	}
+	cfg.ResolveDeviceReferences(view)
+	data, err := ingress.MarshalConfig(cfg)
+	if err != nil {
+		return err
+	}
+	doc.Set(ingress.ModuleName, data)
+	return nil
 }
 
 func (d ingressDevices) Device(name string) (ingress.DeviceInfo, error) {
@@ -71,11 +88,27 @@ func (d ingressDevices) Device(name string) (ingress.DeviceInfo, error) {
 	}
 
 	want := strings.ToLower(strings.TrimSpace(name))
+	if mac, err := core.NormalizeMAC(want); err == nil {
+		for _, r := range resolved {
+			if r.MAC == mac {
+				return deviceInfo(r), nil
+			}
+		}
+		return ingress.DeviceInfo{}, fmt.Errorf("%q: %w", name, ingress.ErrNoSuchDevice)
+	}
+	var match *ingress.DeviceInfo
 	for _, r := range resolved {
 		if !strings.EqualFold(r.DisplayName(), want) {
 			continue
 		}
-		return deviceInfo(r), nil
+		if match != nil {
+			return ingress.DeviceInfo{}, fmt.Errorf("device name %q is ambiguous; use its MAC address", name)
+		}
+		info := deviceInfo(r)
+		match = &info
+	}
+	if match != nil {
+		return *match, nil
 	}
 	return ingress.DeviceInfo{}, fmt.Errorf("%q: %w", name, ingress.ErrNoSuchDevice)
 }
@@ -90,7 +123,7 @@ func (d ingressDevices) Device(name string) (ingress.DeviceInfo, error) {
 // reads far better when it can say what the device *is* rather than only that
 // it has no fixed address.
 func deviceInfo(r devices.Resolved) ingress.DeviceInfo {
-	info := ingress.DeviceInfo{Name: r.DisplayName()}
+	info := ingress.DeviceInfo{MAC: r.MAC, Name: r.DisplayName()}
 
 	if r.FixedIP != "" {
 		if addr, err := netip.ParseAddr(r.FixedIP); err == nil {

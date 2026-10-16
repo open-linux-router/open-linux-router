@@ -218,7 +218,11 @@ func (a Applier) Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	return FromDocument(doc)
+	cfg, err := FromDocument(doc)
+	if err == nil {
+		cfg.ResolveDeviceReferences(a.Devices)
+	}
+	return cfg, err
 }
 
 // Observe reads the actual state of the system, every field fresh. Planning
@@ -310,6 +314,7 @@ func (a Applier) Apply(ctx context.Context, desired Config) (ApplyResult, error)
 // lands — and "a published name stops answering" is exactly the kind of thing
 // that must not change shape between being shown and being done.
 func (a Applier) ApplyPlanned(ctx context.Context, desired Config, plan Plan) (ApplyResult, error) {
+	desired.ResolveDeviceReferences(a.Devices)
 	result := ApplyResult{Plan: plan}
 	run := func(description string, fn func() error) error {
 		err := fn()

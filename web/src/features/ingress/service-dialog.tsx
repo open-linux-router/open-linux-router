@@ -173,12 +173,12 @@ export function ServiceDialog({
                     it is given, and the sentinel is a string nobody should ever
                     read. Without this the trigger says "manual". */}
                 <SelectValue placeholder="Choose a device">
-                  {(v: string) => (v === MANUAL ? 'Somewhere else…' : v)}
+                  {(v: string) => (v === MANUAL ? 'Somewhere else…' : all.find((d) => d.mac === v)?.name || v)}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {offerable.map((d) => (
-                  <SelectItem key={d.name} value={d.name}>
+                  <SelectItem key={d.mac} value={d.mac}>
                     {d.name} — {d.fixed_ip}
                   </SelectItem>
                 ))}

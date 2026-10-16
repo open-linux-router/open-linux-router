@@ -25,6 +25,10 @@ type Applier struct {
 	// alongside every other module's.
 	Store *core.Store
 
+	// BeforeSave lets the composition root preserve references to the old
+	// inventory in the same atomic document write as an identity change.
+	BeforeSave func(*core.Document) error
+
 	// Presence is where observed sightings come from. Empty is legal and means
 	// the list shows stored identity only.
 	Presence []PresenceSource
@@ -71,6 +75,11 @@ func (a Applier) Save(cfg Config) (Config, error) {
 	data, err := MarshalConfig(cfg)
 	if err != nil {
 		return cfg, err
+	}
+	if a.BeforeSave != nil {
+		if err := a.BeforeSave(&doc); err != nil {
+			return cfg, err
+		}
 	}
 	doc.Set(ModuleName, data)
 	if err := a.Store.Save(doc); err != nil {

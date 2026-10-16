@@ -1,0 +1,69 @@
+package daemon
+
+import (
+	"path/filepath"
+	"testing"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/devices"
+	"github.com/open-linux-router/open-linux-router/internal/ingress"
+)
+
+func TestIngressDeviceReferencesSurviveRename(t *testing.T) {
+	const mac = "aa:bb:cc:00:00:01"
+	store := core.NewStore(filepath.Join(t.TempDir(), "olr.json"), "devices", "ingress")
+	a := devices.Applier{Store: store}
+	cfg := devices.Config{Devices: []devices.Device{{MAC: mac, Name: "nas"}}}
+	if _, err := a.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := store.Load()
+	doc.Set("ingress", []byte(`{"services":[{"name":"files","upstream":{"device":"nas","port":80}},{"name":"missing","upstream":{"device":"unknown","port":80}}]}`))
+	if err := store.Save(doc); err != nil {
+		t.Fatal(err)
+	}
+	view := ingressDevices{applier: a}
+	loaded, err := (ingress.Applier{Store: store, Devices: view}).Load()
+	if err != nil || loaded.Services[0].Upstream.Device != mac {
+		t.Fatalf("legacy reference was not resolved on read: %+v, %v", loaded, err)
+	}
+	a.BeforeSave = func(doc *core.Document) error { return preserveIngressDevices(doc, view) }
+	cfg.Devices[0].Name = "storage"
+	if _, err := a.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+	doc, _ = store.Load()
+	published, err := ingress.FromDocument(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if published.Services[0].Upstream.Device != mac || published.Services[1].Upstream.Device != "unknown" {
+		t.Fatalf("references = %+v", published.Services)
+	}
+	info, err := view.Device(mac)
+	if err != nil || info.Name != "storage" || info.MAC != mac {
+		t.Fatalf("renamed device = %+v, %v", info, err)
+	}
+	if _, err := view.Device("nas"); err == nil {
+		t.Fatal("old name unexpectedly resolves")
+	}
+	// A later device adopting the old name must not inherit the service.
+	cfg.Devices = append(cfg.Devices, devices.Device{MAC: "aa:bb:cc:00:00:02", Name: "nas"})
+	if _, err := a.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+	info, err = view.Device(published.Services[0].Upstream.Device)
+	if err != nil || info.MAC != mac {
+		t.Fatalf("service moved to another device: %+v, %v", info, err)
+	}
+	cfg.Devices[1].Name = "storage"
+	if _, err := a.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := view.Device("storage"); err == nil {
+		t.Fatal("ambiguous name unexpectedly resolves")
+	}
+	if _, err := view.Device(mac); err != nil {
+		t.Fatal("MAC must still resolve when labels collide:", err)
+	}
+}

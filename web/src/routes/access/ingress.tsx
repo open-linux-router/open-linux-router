@@ -52,7 +52,7 @@ export function IngressPage() {
   const deviceMac = params.get('device')
   const device = devices.data?.devices.find((d) => d.mac.toLowerCase() === deviceMac?.toLowerCase())
   const initialUpstream = device ? device.fixed_ip && device.name
-    ? { device: device.name, port: 0 }
+    ? { device: device.mac, port: 0 }
     : { host: device.fixed_ip || device.ips?.find((ip) => !ip.includes(':')) || device.ips?.[0] || '', port: 0 }
     : undefined
 
@@ -318,6 +318,7 @@ function ServiceList({
   status?: IngressStatus
   onEdit: (service: Service) => void
 }) {
+  const devices = useDeviceList()
   if (services.length === 0) {
     return (
       <ListEmpty>
@@ -336,7 +337,7 @@ function ServiceList({
           <ListRow
             key={s.name}
             title={domain ? `${s.name}.${domain}${s.link_path ?? ''}` : s.name}
-            subtitle={describeService(s)}
+            subtitle={describeService(s, devices.data?.devices.find((d) => d.mac === s.upstream.device)?.name)}
             wrap
             action={
               url ? (
@@ -365,8 +366,8 @@ function ServiceList({
   )
 }
 
-function describeService(s: Service): string {
-  const where = s.upstream.device || s.upstream.host || '?'
+function describeService(s: Service, deviceName?: string): string {
+  const where = deviceName || s.upstream.device || s.upstream.host || '?'
   const scheme = s.upstream.scheme === 'https' ? ' over https' : ''
   return `→ ${where}:${s.upstream.port}${scheme}`
 }
