@@ -50,10 +50,10 @@ export function App() {
           <Route path="gateway">
             <Route index element={<GatewayPage />} />
             <Route path="interfaces" element={<GatewayInterfacesPage />} />
-            <Route path="tunnelbroker" element={<TunnelBrokerPage />} />
+            <Route path="tunnelbroker" element={<AccessRedirect slug="tunnelbroker" />} />
             <Route path="interfaces/:name" element={<GatewayInterfacePage />} />
             <Route path="networks" element={<Navigate to="/gateway/dhcp/details" replace />} />
-            <Route path="exits" element={<GatewayExitsPage />} />
+            <Route path="exits" element={<AccessRedirect slug="gateway" />} />
             <Route path="usage" element={<Navigate to="/gateway" replace />} />
             <Route path="ipv6" element={<Navigate to="/gateway/interfaces#forwarding" replace />} />
             <Route path="unmanaged" element={<GatewayUnmanagedPage />} />
@@ -82,6 +82,11 @@ export function App() {
           <Route path="access" element={<AccessPage />} />
           <Route path="settings/access" element={<AdminAccessPage />} />
           <Route path="access/socks5" element={<SocksOutPage />} />
+          <Route path="access/gateway" element={<GatewayExitsPage />} />
+          <Route path="access/tunnelbroker" element={<TunnelBrokerPage />} />
+          <Route path="access/wireguard" element={<RemotePage way="wireguard" />} />
+          <Route path="access/shadowsocks" element={<RemotePage way="shadowsocks" />} />
+          <Route path="access/socks-server" element={<RemotePage way="socks-server" />} />
           <Route path="access/remote" element={<RemotePage />} />
           <Route path="access/ingress" element={<IngressPage />} />
           <Route path="access/forwards" element={<ForwardsPage />} />

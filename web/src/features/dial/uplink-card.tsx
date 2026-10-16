@@ -72,7 +72,7 @@ export function UplinkCard({
   return (
     <>
       <PartialApply editor={editor} />
-      <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/gateway/tunnelbroker">Tunnel Broker</Link>} />
+      <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/access/tunnelbroker">Tunnel Broker</Link>} />
 
       {compact ? (
         <Button size="sm" variant="outline" disabled={editor.busy} onClick={() => setOpen(true)}>

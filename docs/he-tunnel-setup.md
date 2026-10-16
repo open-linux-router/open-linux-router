@@ -1,6 +1,6 @@
 # Guided HE IPv6 setup
 
-Gateway interfaces → **Tunnel Broker** opens `/gateway/tunnelbroker`.
+Access → **Add a way out** → **Tunnel Broker** opens `/access/tunnelbroker`.
 The browser saves the current step and non-secret tunnel draft locally. Public
 address checks and verification results are deliberately not persisted as proof
 of current connectivity.

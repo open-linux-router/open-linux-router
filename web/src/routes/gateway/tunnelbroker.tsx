@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useUplink } from '@/features/dial/queries'
+import { useTunnelBrokerStatus, useUplink } from '@/features/dial/queries'
 import { usePublicAddresses } from '@/features/system/queries'
 import { ApiError, api, configPatch } from '@/lib/api'
 import type { DialApplyResult, Plan, Uplink } from '@/lib/api-types'
@@ -32,12 +32,6 @@ type Measurement = {
   loss: number
   avg_ms: number
   variation_ms: number
-}
-type TunnelStatus = {
-  present: boolean
-  up: boolean
-  matches: boolean
-  native_default_dev: string
 }
 type Draft = {
   tunnel_id: string
@@ -96,11 +90,7 @@ export function TunnelBrokerPage() {
     queryKey: ['dial', 'config'],
     queryFn: () => api.get<Config>('/api/dial/config'),
   })
-  const status = useQuery({
-    queryKey: ['dial', 'tunnelbroker', 'status'],
-    queryFn: () => api.get<TunnelStatus>('/api/dial/tunnelbroker/status'),
-    refetchInterval: 5000,
-  })
+  const status = useTunnelBrokerStatus()
   const servers = useQuery({
     queryKey: ['dial', 'he', 'servers'],
     queryFn: () => api.get<Server[]>('/api/dial/he/servers'),

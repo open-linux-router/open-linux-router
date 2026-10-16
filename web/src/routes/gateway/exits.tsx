@@ -18,7 +18,7 @@ export function GatewayExitsPage() {
   if (!config) return gate
 
   return (
-    <SubPage section="/gateway" slug="exits" action={<Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+    <SubPage section="/access" slug="gateway" action={<Button size="sm" variant="outline" onClick={() => setAdding(true)}>
           <Plus />
           Add
         </Button>}>

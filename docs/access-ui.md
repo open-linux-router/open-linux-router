@@ -1,11 +1,52 @@
 # Access UI
 
-Access groups available connections by direction. Its landing page shows a short
-description and current state for each capability using the shared grouped list.
-Remote access, HTTPS publishing, port forwards and external SOCKS5 settings live
-under `/access`. Their former Advanced addresses redirect while preserving query
-parameters and fragments. Ways out remains in Gateway because it assigns routing
-policy to networks and devices; Access labels this cross-link explicitly.
+Access groups connections by the user's intent relative to this network.
+Its landing page has **Add a way out** and **Add a way in**, each with a responsive
+tile grid. Tiles open the existing configuration workflow and show its current
+state; adding a connection still uses that workflow's preview and confirmation.
+
+## Connection model
+
+`web/src/features/access/catalog.ts` defines direction, kind, name, purpose and
+canonical configuration URL. A way is a connection capability, not a promise
+that all connections can be selected in every context. Protocol does not decide
+direction: SOCKS5 appears in both directions with different configuration owners.
+
+| Direction | Kind | Configuration owner | Canonical URL |
+| --- | --- | --- | --- |
+| Out | Gateway or existing VPN interface | gateway exits | `/access/gateway` |
+| Out | External SOCKS5 | socksout | `/access/socks5` |
+| Out | Tunnel Broker / HE | dial.tunnelbroker | `/access/tunnelbroker` |
+| In | WireGuard | remote.wireguard and remote endpoint | `/access/wireguard` |
+| In | Shadowsocks | remote.shadowsocks and remote endpoint | `/access/shadowsocks` |
+| In | SOCKS5 server | remote SOCKS5 | `/access/socks-server` |
+| In | HTTPS service | ingress | `/access/ingress` |
+| In | Port forwarding | gateway forwards | `/access/forwards` |
+
+System default is a built-in way out, displayed separately with observed IPv4
+and IPv6 routes. It cannot be added or deleted. No default-for-networks setting
+is introduced. Networks, groups and devices retain their existing inheritance
+and route selection; Access owns discovery and connection configuration.
+Blocking is a routing policy rather than an addable connection.
+
+Each connection keeps one configuration owner and its current lifecycle. A proxy
+or HE tunnel's generated interface is not another connection to create. HE keeps
+its routed prefixes, activation and LAN assignment; its source routing still
+precedes gateway policy, and native IPv6 retains its route. No generic selector,
+automatic prefix migration, new failover or dependency chaining is introduced.
+Tunnel/proxy establishment depends on an underlying path; future configurable
+dependencies must reject cycles and keep transport traffic out of its own tunnel.
+
+Ways in express either joining the network, borrowing its internet access or
+publishing a service. Those intents share a directory, not permissions or a
+universal configuration form. Credentials and exposure remain in their own
+workflows. A future bidirectional connection should be referenced from both
+directions rather than duplicated.
+
+Former Gateway URLs and Advanced addresses redirect while preserving query
+parameters and fragments. `/access/remote` retains its combined view for existing
+bookmarks and shared endpoint settings. New inbound tiles open individual views
+of the same configuration, with independent status summaries.
 
 The landing page reads existing configuration and status endpoints. It never
 applies network changes. A failed observation is shown as unavailable rather than
@@ -16,13 +57,14 @@ their respective pages.
 
 ## Validation
 
-UI lint, production build and all UI tests pass with Node 24, including seven
+UI lint, production build and all UI tests pass with Node 24, including ten
 Access status regression tests. Linux Go vet and tests pass with Go 1.27 (the
 commands behind `make check` were run directly because make was unavailable).
-Browser checks use synthetic API responses: 375, 768, 1024 and 1440 pixel widths,
-phone landscape, light/dark themes, keyboard navigation, enlarged text, loading
-and failure states, all child-page back links and nine legacy redirects. No live
-router settings were changed.
+Browser checks for the tile refactor use synthetic API responses at 375, 768
+and 1440 pixel widths in light/dark themes, keyboard focus, overflow checks,
+individual configuration pages, the two Gateway redirects with query and hash
+preservation, and read-failure state. Screenshots are captured for review.
+No live router settings were changed.
 
 ## Illustration
 

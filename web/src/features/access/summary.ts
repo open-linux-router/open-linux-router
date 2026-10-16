@@ -1,5 +1,6 @@
-import type { ForwardsStatus, GatewayStatus, IngressStatus, ProxyStatus, RemoteStatus, SocksStatus } from '@/lib/api-types'
-import type { GatewayConfig, IngressConfig, RemoteConfig } from '@/lib/config-types'
+import type { DialStatus, ForwardsStatus, GatewayStatus, IngressStatus, ProxyStatus, RemoteStatus, SocksStatus } from '@/lib/api-types'
+import type { DialConfig, GatewayConfig, IngressConfig, RemoteConfig } from '@/lib/config-types'
+import type { TunnelBrokerStatus } from '@/features/dial/queries'
 import type { SocksOutConfig, SocksOutStatus } from '@/features/socksout/queries'
 
 type Snapshot<T> = { data?: T; isError: boolean }
@@ -15,6 +16,26 @@ const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? on
 function missing<T>(query: Snapshot<T>): Summary | undefined {
   if (query.isError) return unavailable
   if (!query.data) return loading
+}
+
+export function systemSummary(status: Snapshot<DialStatus>): Summary {
+  const pending = missing(status)
+  if (pending) return pending
+  const routes = status.data!.default_routes
+  if (!routes.length) return { text: 'No default route', attention: true }
+  return { text: routes.map(route => `IPv${route.family} via ${route.via ? `${route.via} · ` : ''}${route.dev}`).join(' · ') }
+}
+
+export function tunnelBrokerSummary(config: Snapshot<DialConfig>, status: Snapshot<TunnelBrokerStatus>): Summary {
+  const pending = missing(config)
+  if (pending) return pending
+  const broker = config.data!.tunnelbroker
+  if (!broker) return { text: 'Not configured' }
+  if (!broker.enabled) return { text: 'Saved · Off' }
+  const observed = missing(status)
+  if (observed) return observed
+  if (!status.data!.present || !status.data!.up || !status.data!.matches) return attention
+  return { text: 'Tunnel configured' }
 }
 
 export function gatewaySummary(config: Snapshot<GatewayConfig>, status: Snapshot<GatewayStatus>): Summary {
@@ -45,11 +66,12 @@ export function remoteSummary(
   wireguard: Snapshot<RemoteStatus>,
   shadowsocks: Snapshot<ProxyStatus>,
   socks: Snapshot<SocksStatus>,
+  only?: 'wireguard' | 'shadowsocks' | 'socks',
 ): Summary {
-  const pending = missing(config) ?? missing(socks)
+  const pending = (only === 'socks' ? missing(socks) : missing(config)) ?? (!only ? missing(socks) : undefined)
   if (pending) return pending
   const parts: string[] = []
-  if (config.data!.wireguard.enabled) {
+  if ((!only || only === 'wireguard') && config.data!.wireguard.enabled) {
     const observed = missing(wireguard)
     if (observed) return observed
     const wg = wireguard.data!
@@ -57,7 +79,7 @@ export function remoteSummary(
     if (!wg.enabled || !wg.interface_present || !wg.interface_up || wg.interface_foreign || wg.drifted || wg.blockers?.length) return attention
     parts.push(`${count(wg.peers.length, 'device')} · ${wg.peers.filter((p) => p.online).length} connected`)
   }
-  if (config.data!.shadowsocks.enabled) {
+  if ((!only || only === 'shadowsocks') && config.data!.shadowsocks.enabled) {
     const observed = missing(shadowsocks)
     if (observed) return observed
     const ss = shadowsocks.data!
@@ -65,7 +87,7 @@ export function remoteSummary(
     if (!ss.enabled || !ss.service.active || ss.binary_error || ss.drifted) return attention
     parts.push('Shadowsocks on')
   }
-  if (socks.data!.enabled) {
+  if ((!only || only === 'socks') && socks.data!.enabled) {
     const s = socks.data!
     if (s.service_error || !s.service) return unavailable
     if (!s.service.active || s.binary_error || s.drifted || s.warning) return attention

@@ -45,7 +45,8 @@ import { useRemoteApply } from '@/features/remote/use-apply'
 import { WayMark } from '@/features/remote/way-mark'
 import type { ProxyPlan, RemotePeer, RemoteStatus } from '@/lib/api-types'
 
-export function RemotePage() {
+export function RemotePage({ way }: { way?: 'wireguard' | 'shadowsocks' | 'socks-server' }) {
+  const slug = way ?? 'remote'
   const config = useRemoteConfig()
   const status = useRemoteStatus()
   const proxy = useShadowsocksStatus()
@@ -57,10 +58,10 @@ export function RemotePage() {
   const [editing, setEditing] = useState<RemotePeer | null>(null)
   const [settings, setSettings] = useState(false)
 
-  if (config.isPending) return <SubPage section="/access" slug="remote"><PageSkeleton /></SubPage>
+  if (config.isPending) return <SubPage section="/access" slug={slug}><PageSkeleton /></SubPage>
   if (config.isError) {
     return (
-      <SubPage section="/access" slug="remote"><Alert variant="destructive">
+      <SubPage section="/access" slug={slug}><Alert variant="destructive">
         <AlertTriangle />
         <AlertTitle>Could not load remote access</AlertTitle>
         <AlertDescription>{(config.error as Error).message}</AlertDescription>
@@ -71,9 +72,16 @@ export function RemotePage() {
   const wg = config.data.wireguard
   const peers = status.data?.peers ?? []
   const change = (c: RemoteChangeRequest) => applier.submit(c)
+  const selectedStatus = way === 'shadowsocks' ? proxy : way === 'socks-server' ? socks : status
 
   return (
-    <SubPage section="/access" slug="remote">
+    <SubPage section="/access" slug={slug}>
+      {way && selectedStatus.isError && <Alert variant="destructive"><AlertTriangle /><AlertTitle>Status unavailable</AlertTitle><AlertDescription>{selectedStatus.error?.message}</AlertDescription></Alert>}
+      {way && selectedStatus.isPending && <p className="text-sm text-muted-foreground">Loading status…</p>}
+      {way === 'shadowsocks' && <Card>
+        <CardHeader><CardTitle>Public address</CardTitle><CardAction><Button size="sm" variant="outline" onClick={() => setSettings(true)}>Settings</Button></CardAction></CardHeader>
+        <CardContent className="break-words text-sm text-muted-foreground">{config.data.endpoint || 'Set a public address before generating client links.'}</CardContent>
+      </Card>}
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />
@@ -100,6 +108,7 @@ export function RemotePage() {
         </Alert>
       )}
 
+      {(!way || way === 'wireguard') && <>
       {/* Ordered by what has to be true first. Without wireguard-tools nothing
           below it can work, so the blocker comes before the switch that would
           fail against it. */}
@@ -174,13 +183,9 @@ export function RemotePage() {
         </CardContent>
       </Card>
 
-      {/* Below WireGuard, deliberately. They are not alternatives and the
-          order says which one an operator usually wants: getting into your own
-          network is the reason this page exists, and the two proxies — internet
-          access through this router, nothing on the network — are the narrower
-          second thing. */}
-      <ProxyCard status={proxy.data} config={config.data.shadowsocks} applier={applier} />
-      <SocksCard status={socks.data} applier={applier} />
+      </>}
+      {(!way || (way === 'shadowsocks' && !proxy.isPending && !proxy.isError)) && <ProxyCard status={proxy.data} config={config.data.shadowsocks} applier={applier} />}
+      {(!way || (way === 'socks-server' && !socks.isPending && !socks.isError)) && <SocksCard status={socks.data} applier={applier} />}
 
       <PeerDialog
         open={adding}
@@ -209,6 +214,7 @@ export function RemotePage() {
         />
       )}
       <SettingsDialog
+        endpointOnly={way === 'shadowsocks'}
         open={settings}
         onOpenChange={setSettings}
         initial={config.data}

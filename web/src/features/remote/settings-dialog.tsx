@@ -34,11 +34,13 @@ export function SettingsDialog({
   onOpenChange,
   initial,
   onSubmit,
+  endpointOnly = false,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   initial?: RemoteConfig
   onSubmit: (endpoint: string, wireguard: Record<string, unknown>) => void
+  endpointOnly?: boolean
 }) {
   const [endpoint, setEndpoint] = useState(initial?.endpoint ?? '')
   const [subnet, setSubnet] = useState(initial?.wireguard.subnet ?? '')
@@ -62,9 +64,9 @@ export function SettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>WireGuard settings</DialogTitle>
+          <DialogTitle>{endpointOnly ? 'Public address' : 'WireGuard settings'}</DialogTitle>
           <DialogDescription>
-            Every device&rsquo;s configuration is generated from these.
+            {endpointOnly ? 'Shared by WireGuard and Shadowsocks client configurations.' : 'Every device’s configuration is generated from these.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -88,7 +90,7 @@ export function SettingsDialog({
             </p>
           </div>
 
-          <Disclosure summary="Advanced">
+          {!endpointOnly && <Disclosure summary="Advanced">
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="remote-port">Port</Label>
@@ -119,7 +121,7 @@ export function SettingsDialog({
                 </p>
               </div>
             </div>
-          </Disclosure>
+          </Disclosure>}
         </div>
 
         <DialogFooter>

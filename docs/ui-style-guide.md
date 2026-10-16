@@ -58,6 +58,11 @@ border. Use muted fills for small metrics, not another elevated card.
 
 ## Layout and hierarchy
 
+Access uses two responsive tile grids headed “Add a way out” and “Add a way in”.
+Use one column on phones, two from 640px and three from 1280px, with the Tools
+directory's surfaces, focus treatment and 48/56px icon tiles. Names, short intent
+descriptions and observed status wrap. System default is a separate built-in row.
+
 Tunnel Broker uses one scrollable page with five numbered sections and a sticky
 step navigation immediately below the 64px shell header. Keep section anchors
 clear of both bars and scroll the navigation locally on narrow screens. The

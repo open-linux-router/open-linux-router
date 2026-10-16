@@ -28,9 +28,9 @@ import type { LucideIcon } from 'lucide-react'
  * Firewall has its own section because its boundary and live openings deserve
  * a direct place in the bar; Access follows it.
  *
- * Access owns remote connections and publishing. Ways out remains under
- * Gateway, because assigning traffic to an exit is routing policy; Access
- * links there explicitly. Advanced keeps Dynamic DNS and IPTV.
+ * Access owns the directory of ways in and out. Configuration stays with its
+ * module; networks and devices retain their routing choices. Advanced keeps
+ * Dynamic DNS and IPTV.
  *
  * Devices is absent because it is not a section: the device list is the body of
  * the overview. Filing it under DHCP was considered and rejected — the
@@ -86,12 +86,6 @@ export const SECTIONS: Section[] = [
         slug: 'dns',
         label: 'DNS',
         blurb: 'Resolve names, manage local names and control what devices can look up.',
-      },
-      {
-        slug: 'exits',
-        label: 'Ways out',
-        blurb:
-          'Choose an interface, another gateway or a blocking route.',
       },
       {
         slug: 'unmanaged',
@@ -189,6 +183,11 @@ export const SECTIONS: Section[] = [
     icon: ArrowLeftRight,
     end: false,
     groups: [
+      { slug: 'gateway', label: 'Gateway', blurb: 'Use another gateway or an existing VPN interface.' },
+      { slug: 'tunnelbroker', label: 'Tunnel Broker', blurb: '' },
+      { slug: 'wireguard', label: 'WireGuard', blurb: '' },
+      { slug: 'shadowsocks', label: 'Shadowsocks', blurb: '' },
+      { slug: 'socks-server', label: 'SOCKS5 server', blurb: '' },
       {
         slug: 'socks5',
         label: 'External SOCKS5 proxy',

@@ -528,7 +528,7 @@ runtime status distinguishes saved, enabled, and matching kernel state.
 Router IPv6 tests bind the tunnel's source address. They do not prove LAN
 connectivity. Endpoint updates at HE remain manual.
 
-The UI is `/gateway/tunnelbroker`. The
+The UI is `/access/tunnelbroker` (the old `/gateway/tunnelbroker` redirects). The
 five sections share one page with sticky section navigation. Saving the HE
 assignment, activating it, and assigning a routed /64 to a LAN are separate
 actions. LAN changes retain per-module preview and confirmation.

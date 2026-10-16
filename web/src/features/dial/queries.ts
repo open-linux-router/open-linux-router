@@ -19,6 +19,21 @@ import type { DialConfig, LinkConfig, Record as DdnsRecord } from '@/lib/config-
 // default route actually in the main table — and both change without olr.
 const OBSERVED_REFETCH_MS = 5000
 
+export interface TunnelBrokerStatus {
+  present: boolean
+  up: boolean
+  matches: boolean
+  native_default_dev: string
+}
+
+export function useTunnelBrokerStatus() {
+  return useQuery({
+    queryKey: ['dial', 'tunnelbroker', 'status'],
+    queryFn: () => api.get<TunnelBrokerStatus>('/api/dial/tunnelbroker/status'),
+    refetchInterval: OBSERVED_REFETCH_MS,
+  })
+}
+
 export const dialKeys = {
   uplink: ['dial', 'uplink'] as const,
   config: ['dial', 'config'] as const,

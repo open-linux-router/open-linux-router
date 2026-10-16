@@ -232,19 +232,16 @@ export function GatewayInterfacesPage() {
         />
 
         <SettingsList
-          section="/gateway"
+          section="/access"
           heading="Routing settings"
           rows={[
             {
-              slug: 'exits',
+              slug: 'gateway',
               value: exits.length ? exits.map((e) => e.name).join(', ') : 'None yet',
             },
-            // Another program's rules matter only when there is something to show.
-            ...(foreign.length
-              ? [{ slug: 'unmanaged', value: `${foreign.length} rule${foreign.length === 1 ? '' : 's'}` }]
-              : []),
           ]}
         />
+        {foreign.length > 0 && <SettingsList section="/gateway" heading={null} rows={[{ slug: 'unmanaged', value: `${foreign.length} rule${foreign.length === 1 ? '' : 's'}` }]} />}
     </SubPage>
   )
 }

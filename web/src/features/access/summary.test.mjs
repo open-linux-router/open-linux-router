@@ -5,12 +5,36 @@ import ts from 'typescript'
 
 const source = readFileSync(new URL('./summary.ts', import.meta.url), 'utf8')
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText
-const { gatewaySummary, socksOutSummary, remoteSummary, ingressSummary, forwardsSummary } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`)
+const { gatewaySummary, socksOutSummary, remoteSummary, ingressSummary, forwardsSummary, systemSummary, tunnelBrokerSummary } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`)
 const snapshot = (data, isError = false) => ({ data, isError })
 const unavailable = { text: 'Status unavailable', attention: true }
 const attention = { text: 'Needs attention', attention: true }
 const noRemote = snapshot({ wireguard: { enabled: false }, shadowsocks: { enabled: false } })
 const noSocks = snapshot({ enabled: false })
+
+test('individual ways in do not inherit unrelated service failures', () => {
+  const failed = snapshot(undefined, true)
+  assert.deepEqual(remoteSummary(noRemote, failed, failed, failed, 'wireguard'), { text: 'Off' })
+  assert.deepEqual(remoteSummary(noRemote, failed, failed, failed, 'shadowsocks'), { text: 'Off' })
+  assert.deepEqual(remoteSummary(failed, failed, failed, noSocks, 'socks'), { text: 'Off' })
+  assert.deepEqual(remoteSummary(noRemote, failed, failed, failed, 'socks'), unavailable)
+})
+
+test('system default distinguishes no route from an unavailable observation', () => {
+  assert.deepEqual(systemSummary(snapshot()), { text: 'Loading…' })
+  assert.deepEqual(systemSummary(snapshot(undefined, true)), unavailable)
+  assert.deepEqual(systemSummary(snapshot({ default_routes: [] })), { text: 'No default route', attention: true })
+  assert.equal(systemSummary(snapshot({ default_routes: [{ family: 4, via: '192.0.2.1', dev: 'eth0' }, { family: 6, dev: 'ppp0' }] })).text, 'IPv4 via 192.0.2.1 · eth0 · IPv6 via ppp0')
+})
+
+test('HE inventory is distinct from activation and matching runtime state', () => {
+  assert.deepEqual(tunnelBrokerSummary(snapshot({}), snapshot()), { text: 'Not configured' })
+  assert.deepEqual(tunnelBrokerSummary(snapshot({ tunnelbroker: { enabled: false } }), snapshot(undefined, true)), { text: 'Saved · Off' })
+  const active = snapshot({ tunnelbroker: { enabled: true } })
+  assert.deepEqual(tunnelBrokerSummary(active, snapshot(undefined, true)), unavailable)
+  assert.deepEqual(tunnelBrokerSummary(active, snapshot({ present: true, up: true, matches: false })), attention)
+  assert.deepEqual(tunnelBrokerSummary(active, snapshot({ present: true, up: true, matches: true })), { text: 'Tunnel configured' })
+})
 
 test('loading and read failures never imply that a feature is off', () => {
   assert.deepEqual(socksOutSummary(snapshot(), snapshot()), { text: 'Loading…' })
