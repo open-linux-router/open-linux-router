@@ -24,6 +24,9 @@ secondary information. See the [page review record](ui-page-review.md).
 
 ## Color and surfaces
 
+World traffic uses one neutral arc per remote location. Receive and transmit dots
+move in opposite directions along that shared arc.
+
 Use semantic Tailwind tokens from `web/src/index.css`, never page-local gray or
 blue approximations. Light and dark themes are designed as separate contrast
 pairs.

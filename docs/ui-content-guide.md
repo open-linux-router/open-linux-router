@@ -71,6 +71,9 @@ hidden page title. Detail and operation pages keep their identifying titles.
 
 ## State and data contracts
 
+World traffic combines IPs at the same remote coordinates into one map connection.
+Line width represents combined upload and download; per-IP rates stay in details.
+
 Ingress distinguishes saved repairs from applied settings. When other existing
 errors prevent application, say the repair was saved, list the remaining service
 names and problems, and explain that the running proxy stays unchanged until

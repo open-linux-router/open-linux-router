@@ -85,7 +85,15 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     const start = origin ? position(origin, origin.country_code) : undefined
     const next: typeof targets.current = new Map()
     if (start) next.set(`place:${start}`, { feature: { type: 'Feature', properties: { color: dark ? '#f1f3f7' : '#171b22' }, geometry: { type: 'Point', coordinates: start } } })
+    const locations = new Map<string, Peer>()
     for (const peer of peers) {
+      const end = position(peer.place, peer.place.country)
+      if (!end) continue
+      const key = end.join(',')
+      const previous = locations.get(key)
+      locations.set(key, { ...peer, upload: (previous?.upload ?? 0) + peer.upload, download: (previous?.download ?? 0) + peer.download })
+    }
+    for (const [location, peer] of locations) {
       const end = position(peer.place, peer.place.country)
       if (!end) continue
       if (!start || start[0] !== end[0] || start[1] !== end[1]) next.set(`place:${end}`, { feature: { type: 'Feature', properties: { color: blue }, geometry: { type: 'Point', coordinates: end } } })
@@ -93,9 +101,10 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       for (const direction of ['download', 'upload'] as const) {
         if (peer[direction] <= 0) continue
         const color = direction === 'download' ? blue : teal
-        const coordinates = arc(start, end, direction === 'download' ? 1.5 : -1.5)
-        const width = Math.min(3.5, 0.6 + Math.log10(1 + peer[direction] / 1024) * 0.7)
-        next.set(`${peer.ip}:${direction}:${start}:${end}`, { feature: { type: 'Feature', properties: { color, width }, geometry: { type: 'LineString', coordinates } }, coordinates, reverse: direction === 'download' })
+        const coordinates = arc(start, end, 0)
+        const width = Math.min(3.5, 0.6 + Math.log10(1 + (peer.download + peer.upload) / 1024) * 0.7)
+        const line = direction === 'download' || peer.download <= 0
+        next.set(`${location}:${direction}:${start}`, { feature: { type: 'Feature', properties: { color, width, line }, geometry: { type: 'LineString', coordinates } }, coordinates, reverse: direction === 'download' })
       }
     }
     targets.current = next
@@ -135,7 +144,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         const properties = { ...path.feature.properties, opacity: visual.opacity, width: visual.width }
         const feature = { ...path.feature, properties }
         if (!path.coordinates) { points.push(feature); continue }
-        lines.push(feature)
+        if (path.feature.properties?.line) lines.push({ ...feature, properties: { ...properties, color: dark ? '#abb4c3' : '#5b6472' } })
         if (reduced.matches) continue
         visual.phase = (visual.phase + elapsed / 4000) % 1
         const progress = path.reverse ? 1 - visual.phase : visual.phase
@@ -150,7 +159,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     }
     frame = requestAnimationFrame(animate)
     return () => cancelAnimationFrame(frame)
-  }, [ready, expanded])
+  }, [ready, expanded, dark])
   return <div className="relative h-full min-h-44 w-full overflow-hidden rounded-lg" style={expanded ? { backgroundColor: dark ? '#1c3545' : '#d6effb' } : undefined}><div ref={container} style={{ position: 'absolute', inset: 0 }} aria-hidden={!expanded} />{failed && <p className="absolute inset-0 flex items-center justify-center bg-muted p-3 text-xs text-muted-foreground">Map unavailable. View traffic details.</p>}</div>
 }
 
