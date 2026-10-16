@@ -98,14 +98,13 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       if (!end) continue
       if (!start || start[0] !== end[0] || start[1] !== end[1]) next.set(`place:${end}`, { feature: { type: 'Feature', properties: { color: blue }, geometry: { type: 'Point', coordinates: end } } })
       if (!start || (start[0] === end[0] && start[1] === end[1])) continue
-      for (const direction of ['download', 'upload'] as const) {
-        if (peer[direction] <= 0) continue
-        const color = direction === 'download' ? blue : teal
-        const coordinates = arc(start, end, 0)
-        const width = Math.min(3.5, 0.6 + Math.log10(1 + (peer.download + peer.upload) / 1024) * 0.7)
-        const line = direction === 'download' || peer.download <= 0
-        next.set(`${location}:${direction}:${start}`, { feature: { type: 'Feature', properties: { color, width, line }, geometry: { type: 'LineString', coordinates } }, coordinates, reverse: direction === 'download' })
-      }
+      const total = peer.download + peer.upload
+      if (total <= 0) continue
+      const reverse = peer.download >= peer.upload
+      const color = reverse ? blue : teal
+      const coordinates = arc(start, end, 0)
+      const width = Math.min(3.5, 0.6 + Math.log10(1 + total / 1024) * 0.7)
+      next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: { color, width }, geometry: { type: 'LineString', coordinates } }, coordinates, reverse })
     }
     targets.current = next
   }, [peers, origin, dark, ready, expanded])
@@ -144,7 +143,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         const properties = { ...path.feature.properties, opacity: visual.opacity, width: visual.width }
         const feature = { ...path.feature, properties }
         if (!path.coordinates) { points.push(feature); continue }
-        if (path.feature.properties?.line) lines.push({ ...feature, properties: { ...properties, color: dark ? '#abb4c3' : '#5b6472' } })
+        lines.push({ ...feature, properties: { ...properties, color: dark ? '#abb4c3' : '#5b6472' } })
         if (reduced.matches) continue
         visual.phase = (visual.phase + elapsed / 4000) % 1
         const progress = path.reverse ? 1 - visual.phase : visual.phase
