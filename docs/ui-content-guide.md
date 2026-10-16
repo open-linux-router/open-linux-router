@@ -51,7 +51,7 @@ hidden page title. Detail and operation pages keep their identifying titles.
   omit the inline direction legend and top-ten summary.
 - Overview Status shows one public-network summary using IPv4's country flag,
   city and ISP. Its disclosure shows IPv4, IPv6 when available, ASN and ASN
-  Organization from the IPv4 lookup, in that order.
+  Organization from the IPv4 lookup, in that order; label the organization “Org”.
 - Keep download and upload limits beside their respective measurements; separate
   controls serve separate decisions and are not automatically redundant.
 - Overview cumulative traffic uses Download then Upload labels, each with

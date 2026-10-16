@@ -376,12 +376,12 @@ function PublicAddressRow({ addresses }: { addresses?: PublicAddresses }) {
       <span className="min-w-0 flex-1 break-words text-[0.8125rem] font-semibold" title={summary || undefined}>{summary || (address?.ip ? 'Location unavailable' : '—')}</span>
       <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
     </button>
-    {open && <div className="space-y-1 px-3 pt-2 text-xs text-muted-foreground">
+    {open && <div className="space-y-1 py-2 pl-6 text-xs text-muted-foreground">
       <dl className="grid grid-cols-[max-content_minmax(0,1fr)] items-start gap-x-2 gap-y-2 [&_dd]:text-right">
         <div className="contents"><dt>IPv4</dt><dd className="break-all font-mono text-foreground">{address?.ip || 'Address unavailable'}</dd></div>
         {addresses?.ipv6?.ip && <div className="contents"><dt>IPv6</dt><dd className="break-all font-mono text-foreground">{addresses.ipv6.ip}</dd></div>}
         {address?.asn != null && address.asn > 0 && <div className="contents"><dt>ASN</dt><dd className="break-all font-mono text-foreground">AS{address.asn}</dd></div>}
-        {address?.asn_organization && <div className="contents"><dt>ASN Org</dt><dd className="break-words text-foreground">{address.asn_organization}</dd></div>}
+        {address?.asn_organization && <div className="contents"><dt>Org</dt><dd className="break-words text-foreground">{address.asn_organization}</dd></div>}
       </dl>
     </div>}
   </div>
