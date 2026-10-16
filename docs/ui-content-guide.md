@@ -111,13 +111,13 @@ source as a separate dimension. Use one vertical diagram with three visual
 rows: external semantic categories at the top, one virtual OLR / Firewall node
 in the middle, and LAN/trusted and local categories at the bottom. Both outer
 rows show arrivals at OLR, not an external-to-LAN forwarding path. Each category
-states its source and Allowed/Blocked decision. Hide zero-traffic categories and
+shows its name and packet count; position conveys source and color conveys the
+Allowed/Blocked decision. Keep full source and decision text in tooltips, without
+repeating them on each node. Omit explanatory paragraphs and the matching-conditions
+disclosure below the diagram. Hide zero-traffic categories and
 sources. Path widths use log(1 + packet count) weights normalized separately
-for each side, with a 4px minimum so small categories remain visible. Explain
-beside the chart that widths are logarithmic and comparable only within the
-same side, not traffic proportions; retain exact packet labels and byte
-totals in tooltips and matching conditions. State that
-counts reflect the first matching rule and reset when rules are rewritten.
+for each side, with a 4px minimum so small categories remain visible. Retain exact
+packet labels and byte totals and matching conditions in tooltips.
 Keep unavailable counters distinct from a verified zero-traffic state.
 
 Show QoS as saved configuration until enforcement exists.

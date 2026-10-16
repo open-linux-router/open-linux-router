@@ -60,7 +60,7 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
   const detail = (flow: TrafficFlow) => `${sourceLabels[flow.source]} → OLR / Firewall\n${flow.category} · ${flow.verdict === 'allowed' ? 'Allowed' : 'Blocked'}\n${flow.packets.toLocaleString()} packets · ${flow.bytes.toLocaleString()} bytes\n${flow.descriptions.join('\n')}`
 
   return (
-    <div ref={container} className="mt-4 overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="region" aria-label="Firewall Sankey: external arrivals above OLR, LAN and local arrivals below OLR" aria-describedby="firewall-chart-scroll">
+    <div ref={container} className="mt-4 overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="region" aria-label="Firewall Sankey: external arrivals above OLR, LAN and local arrivals below OLR">
       <svg width={width} height={height} role="img" aria-label="External traffic and LAN or local traffic both arrive at the central OLR firewall" className="text-foreground">
         {outside.length > 0 && <text x={width / 2} y={24} fill="currentColor" fontSize={14} fontWeight={500} textAnchor="middle">From external networks</text>}
         {inside.length > 0 && <text x={width / 2} y={height - 24} fill="currentColor" fontSize={14} fontWeight={500} textAnchor="middle">From LAN / trusted networks and this router</text>}
@@ -85,8 +85,7 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
         </g>
         {nodes.map(node => {
           const title = lines(node.flow.category, Math.floor(labelWidth / 7))
-          const origin = lines(sourceLabels[node.flow.source], Math.floor(labelWidth / 6))
-          const labelY = node.above ? node.y - 16 - (title.length + origin.length + 1) * 18 : node.y + barHeight + 24
+          const labelY = node.above ? node.y - 16 - title.length * 18 : node.y + barHeight + 24
           const arrowY = node.above ? node.y + 36 : node.y - 24
           const arrowBack = node.above ? -5 : 5
           return (
@@ -97,8 +96,6 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
               <path d={`M ${node.x - 5} ${arrowY + arrowBack} L ${node.x} ${arrowY} L ${node.x + 5} ${arrowY + arrowBack}`} fill="none" stroke={color(node.flow)} strokeWidth={2} aria-hidden="true" />
               <text x={node.x} y={labelY} fill="currentColor" fontSize={13} textAnchor="middle">
                 {title.map((line, index) => <tspan key={index} x={node.x} dy={index ? 18 : 0}>{line}</tspan>)}
-                {origin.map((line, index) => <tspan key={`origin:${index}`} x={node.x} dy={18} fontSize={12}>{line}</tspan>)}
-                <tspan x={node.x} dy={18} fill={color(node.flow)}>{node.flow.verdict === 'allowed' ? 'Allowed' : 'Blocked'}</tspan>
                 <tspan x={node.x} dy={18}>{node.flow.packets.toLocaleString()} packets</tspan>
               </text>
             </g>
