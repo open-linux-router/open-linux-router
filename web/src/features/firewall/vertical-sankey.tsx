@@ -39,18 +39,21 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
   const labelWidth = Math.max(108, Math.min(176, (width - 48) / maxNodes - 12))
   const total = flows.reduce((sum, flow) => sum + flow.packets, 0)
 
-  // Share one logarithmic scale across origins. Exact counts remain in labels;
-  // the fixed firewall boundary is not a measure of total traffic.
+  // Normalize logarithmic weights within each row so both sides meet the
+  // boundary without gaps. Compare widths only within the same origin row.
   const cellWidth = (width - 48) / maxNodes
-  const maxWeight = Math.max(1, ...flows.map(flow => Math.log1p(flow.packets)))
-  const scale = (cellWidth - 12) * 0.7 / maxWeight
-  const centerWidth = width - 48
-  const centerLeft = 24
+  const centerWidth = (width - 48) * 0.4
+  const centerLeft = (width - centerWidth) / 2
   const nodes = rows.flatMap((row, rowIndex) => {
     const left = (width - row.length * cellWidth) / 2
+    const weights = row.map(flow => Math.log1p(flow.packets))
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
+    let offset = 0
     return row.map((flow, index) => {
-      const measuredWidth = Math.max(4, Math.log1p(flow.packets) * scale)
-      return { flow, x: left + (index + 0.5) * cellWidth, y: rowIndex === 0 ? topY : bottomY, width: measuredWidth, centerX: centerLeft + (index + 0.5) * centerWidth / row.length - measuredWidth / 2, above: rowIndex === 0 }
+      const measuredWidth = 4 + weights[index] / totalWeight * (centerWidth - row.length * 4)
+      const node = { flow, x: left + (index + 0.5) * cellWidth, y: rowIndex === 0 ? topY : bottomY, width: measuredWidth, centerX: centerLeft + offset, above: rowIndex === 0 }
+      offset += measuredWidth
+      return node
     })
   })
   const color = (flow: TrafficFlow) => flow.verdict === 'allowed' ? 'var(--success-foreground)' : 'var(--warning-foreground)'

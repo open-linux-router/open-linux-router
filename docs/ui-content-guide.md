@@ -104,9 +104,10 @@ rows: external semantic categories at the top, one virtual OLR / Firewall node
 in the middle, and LAN/trusted and local categories at the bottom. Both outer
 rows show arrivals at OLR, not an external-to-LAN forwarding path. Each category
 states its source and Allowed/Blocked decision. Hide zero-traffic categories and
-sources. Path widths use one shared log(1 + packet count) scale with a 4px
-minimum so small categories remain visible. Explain beside the chart that widths
-are logarithmic, not traffic proportions; retain exact packet labels and byte
+sources. Path widths use log(1 + packet count) weights normalized separately
+for each side, with a 4px minimum so small categories remain visible. Explain
+beside the chart that widths are logarithmic and comparable only within the
+same side, not traffic proportions; retain exact packet labels and byte
 totals in tooltips and matching conditions. State that
 counts reflect the first matching rule and reset when rules are rewritten.
 Keep unavailable counters distinct from a verified zero-traffic state.
