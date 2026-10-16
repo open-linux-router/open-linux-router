@@ -24,7 +24,7 @@ export function TrafficPermissions({ status }: { status: FirewallStatus }) {
       ) : (
         <>
           <VerticalSankey flows={flows} />
-          <p id="firewall-chart-scroll" className="mt-2 text-sm text-muted-foreground">Both sides show traffic arriving at OLR. Scroll horizontally to see all categories.</p>
+          <p id="firewall-chart-scroll" className="mt-2 text-sm text-muted-foreground">Both sides show traffic arriving at OLR. Path widths use a logarithmic scale, not traffic proportions. Scroll horizontally to see all categories.</p>
           <details className="mt-4 text-sm">
             <summary className="cursor-pointer focus-visible:outline-2 focus-visible:outline-primary">Matching conditions and counts</summary>
             <ul className="mt-4 divide-y">
@@ -43,7 +43,7 @@ export function TrafficPermissions({ status }: { status: FirewallStatus }) {
               ))}
             </ul>
           </details>
-          <p className="mt-4 text-sm text-muted-foreground">Packet counts since the last rule update, attributed to the first matching rule. All paths share one scale. Trusted networks include remote-access WireGuard; other interfaces are external. Other firewalls can further restrict allowed traffic.</p>
+          <p className="mt-4 text-sm text-muted-foreground">Packet counts since the last rule update, attributed to the first matching rule. Trusted networks include remote-access WireGuard; other interfaces are external. Other firewalls can further restrict allowed traffic.</p>
         </>
       )}
     </section>

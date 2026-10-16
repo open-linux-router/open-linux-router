@@ -2,11 +2,11 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { sourceLabels, type TrafficFlow } from './traffic-model'
 
 const barHeight = 12
-const centerY = 360
+const centerY = 256
 const centerHeight = 48
-const topY = 200
-const bottomY = 568
-const height = 808
+const topY = 168
+const bottomY = 392
+const height = 592
 
 function lines(title: string, limit: number): string[] {
   const result: string[] = []
@@ -39,29 +39,18 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
   const labelWidth = Math.max(108, Math.min(176, (width - 48) / maxNodes - 12))
   const total = flows.reduce((sum, flow) => sum + flow.packets, 0)
 
-  // Labels reserve space without enlarging tiny measured bars. All links and
-  // both sides of the virtual boundary share the same pixels-per-packet.
-  let low = 0
-  let high = (width - 48) / total
-  for (let i = 0; i < 40; i++) {
-    const candidate = (low + high) / 2
-    if (rows.every(row => row.reduce((sum, flow) => sum + Math.max(labelWidth, flow.packets * candidate), 0) + Math.max(0, row.length - 1) * 12 <= width - 48)) low = candidate
-    else high = candidate
-  }
-  const scale = low
-  const centerWidth = total * scale
-  const centerLeft = (width - centerWidth) / 2
-  let offset = 0
+  // Share one logarithmic scale across origins. Exact counts remain in labels;
+  // the fixed firewall boundary is not a measure of total traffic.
+  const cellWidth = (width - 48) / maxNodes
+  const maxWeight = Math.max(1, ...flows.map(flow => Math.log1p(flow.packets)))
+  const scale = (cellWidth - 12) * 0.7 / maxWeight
+  const centerWidth = width - 48
+  const centerLeft = 24
   const nodes = rows.flatMap((row, rowIndex) => {
-    const span = row.reduce((sum, flow) => sum + Math.max(labelWidth, flow.packets * scale), 0) + Math.max(0, row.length - 1) * 12
-    let cursor = (width - span) / 2
-    return row.map(flow => {
-      const measuredWidth = flow.packets * scale
-      const cell = Math.max(labelWidth, measuredWidth)
-      const node = { flow, x: cursor + cell / 2, y: rowIndex === 0 ? topY : bottomY, width: measuredWidth, centerX: centerLeft + offset * scale, above: rowIndex === 0 }
-      cursor += cell + 12
-      offset += flow.packets
-      return node
+    const left = (width - row.length * cellWidth) / 2
+    return row.map((flow, index) => {
+      const measuredWidth = Math.max(4, Math.log1p(flow.packets) * scale)
+      return { flow, x: left + (index + 0.5) * cellWidth, y: rowIndex === 0 ? topY : bottomY, width: measuredWidth, centerX: centerLeft + (index + 0.5) * centerWidth / row.length - measuredWidth / 2, above: rowIndex === 0 }
     })
   })
   const color = (flow: TrafficFlow) => flow.verdict === 'allowed' ? 'var(--success-foreground)' : 'var(--warning-foreground)'
@@ -94,7 +83,7 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
         {nodes.map(node => {
           const title = lines(node.flow.category, Math.floor(labelWidth / 7))
           const origin = lines(sourceLabels[node.flow.source], Math.floor(labelWidth / 6))
-          const labelY = node.above ? node.y - 16 - (title.length + origin.length + 2) * 18 : node.y + barHeight + 24
+          const labelY = node.above ? node.y - 16 - (title.length + origin.length + 1) * 18 : node.y + barHeight + 24
           const arrowY = node.above ? node.y + 36 : node.y - 24
           const arrowBack = node.above ? -5 : 5
           return (
@@ -107,8 +96,7 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
                 {title.map((line, index) => <tspan key={index} x={node.x} dy={index ? 18 : 0}>{line}</tspan>)}
                 {origin.map((line, index) => <tspan key={`origin:${index}`} x={node.x} dy={18} fontSize={12}>{line}</tspan>)}
                 <tspan x={node.x} dy={18} fill={color(node.flow)}>{node.flow.verdict === 'allowed' ? 'Allowed' : 'Blocked'}</tspan>
-                <tspan x={node.x} dy={18}>{node.flow.packets.toLocaleString()}</tspan>
-                <tspan x={node.x} dy={18}>packets</tspan>
+                <tspan x={node.x} dy={18}>{node.flow.packets.toLocaleString()} packets</tspan>
               </text>
             </g>
           )

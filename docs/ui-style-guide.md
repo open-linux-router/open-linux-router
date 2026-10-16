@@ -58,6 +58,12 @@ border. Use muted fills for small metrics, not another elevated card.
 
 ## Layout and hierarchy
 
+Firewall's arrival diagram uses a full-width central firewall boundary within
+24px chart gutters, independent of traffic totals. Keep each curved path region
+about 88px tall and packet values with their units on one line. Path widths share
+a logarithmic scale with a 4px minimum; reserve separate label space so small
+traffic categories remain readable.
+
 Access uses two responsive tile grids headed “Add a way out” and “Add a way in”.
 Use one column on phones, two from 640px and three from 1280px, with the Tools
 directory's surfaces, focus treatment and 48/56px icon tiles. Names, short intent
