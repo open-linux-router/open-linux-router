@@ -86,14 +86,11 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
         {nodes.map(node => {
           const title = lines(node.flow.category, Math.floor(labelWidth / 7))
           const labelY = node.above ? node.y - 16 - title.length * 18 : node.y + barHeight + 24
-          const arrowY = node.above ? node.y + 36 : node.y - 24
-          const arrowBack = node.above ? -5 : 5
           return (
             <g key={node.flow.id} data-source={node.flow.source}>
               <rect x={node.x - node.width / 2} y={node.y} width={node.width} height={barHeight} fill={color(node.flow)}>
                 <title>{detail(node.flow)}</title>
               </rect>
-              <path d={`M ${node.x - 5} ${arrowY + arrowBack} L ${node.x} ${arrowY} L ${node.x + 5} ${arrowY + arrowBack}`} fill="none" stroke={color(node.flow)} strokeWidth={2} aria-hidden="true" />
               <text x={node.x} y={labelY} fill="currentColor" fontSize={13} textAnchor="middle">
                 {title.map((line, index) => <tspan key={index} x={node.x} dy={index ? 18 : 0}>{line}</tspan>)}
                 <tspan x={node.x} dy={18}>{node.flow.packets.toLocaleString()} packets</tspan>
