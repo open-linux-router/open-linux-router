@@ -38,7 +38,12 @@ to improve density while preserving values, units and mobile interaction targets
 Section landing pages omit titles duplicated by navigation, retaining a visually
 hidden page title. Detail and operation pages keep their identifying titles.
 
-- Overview shows Status, Traffic, Latency and Map cards. `Up` and elapsed uptime
+- Overview shows Status, Traffic, Latency, Map and Network quality cards. The
+  quality radar shows Speed (download and upload), Latency, Stability,
+  Reachability and Wi-Fi on a 0–100 higher-is-better scale. Until measurements
+  are connected, label it Demo and explicitly call its scores simulated; do not
+  imply they describe the current network.
+  `Up` and elapsed uptime
   lead Status above system health. Expand uptime for CPU, memory and root disk
   used/total values; omit the separate System card.
   Expand system health for DHCP, DNS and Gateway states, with links to their

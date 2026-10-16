@@ -247,7 +247,11 @@ and a relevant next action where one exists.
 
 ## Responsive behavior and motion
 
-Overview has four desktop cards: Status, Traffic, Latency and Map. Uptime is
+Overview has five desktop cards: Status, Traffic, Latency, Map and Network quality.
+Network quality uses a five-axis radar with theme-aware primary fill and border
+grid lines. It spans both columns on phones and one on desktop. Keep its sample
+data visibly labeled Demo with simulated scores, all oriented higher-is-better.
+Uptime is
 the first plain disclosure row in Status, above system health. Both rows use
 aligned 16px Lucide CircleCheck icons in success color when healthy. Uptime
 expands to CPU, memory and root disk used/total values. Map has no information icon,
