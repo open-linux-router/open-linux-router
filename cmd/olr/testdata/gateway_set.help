@@ -5,6 +5,7 @@ Usage:
 
 Available Commands:
   default          Set the exit everything uses unless something more specific says otherwise
+  destination      Route a destination through an exit (overrides device and network choices)
   device           Give one Ethernet device its own way out
   forward          Change an existing port forward
   ipv6-forwarding  Let IPv6 pass through this router

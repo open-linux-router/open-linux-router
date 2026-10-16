@@ -103,6 +103,9 @@ func (h HTTP) Routes() []core.Route {
 			Handler:  h.patchConfig,
 		},
 
+		{Method: "PUT", Path: "/destinations/{address}/{bits}", Summary: "Route a destination IP prefix through an exit.", Query: gate, Mutating: true, Handler: h.putDestination},
+		{Method: "DELETE", Path: "/destinations/{address}/{bits}", Summary: "Remove a destination IP routing rule.", Query: gate, Mutating: true, Handler: h.deleteDestination},
+
 		// Intent, one item at a time.
 		//
 		// These exist because of RFC 7386's one surprising rule: a merge patch

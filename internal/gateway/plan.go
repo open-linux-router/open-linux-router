@@ -430,8 +430,12 @@ func movedPaths(changes []Change) []Change {
 // exit assignment is about to take effect or change.
 func activeUsers(c Config, obs Observed, desired Desired) []netip.Addr {
 	var out []netip.Addr
+	sources := append([]SourceRule(nil), desired.Table.Sources...)
+	for _, r := range desired.Table.Destinations {
+		sources = append(sources, r.SourceRule)
+	}
 	for _, addr := range obs.Active {
-		for _, s := range desired.Table.Sources {
+		for _, s := range sources {
 			if s.Prefix.Contains(addr) {
 				out = append(out, addr)
 				break

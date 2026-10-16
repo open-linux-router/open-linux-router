@@ -682,6 +682,13 @@ olr decides *which traffic reaches the proxy at all*: `Internet via` per network
 group or device (§2). The proxy decides *what to do with it*, by name, using its
 own configuration. Neither needs to know the other's rules.
 
+Gateway also supports explicit destination IP/CIDR overrides through
+`olr gateway set destination <ip-or-cidr> <exit>` and
+`olr gateway rm destination <ip-or-cidr>`. Longest destination prefix wins,
+before device and network assignments, for forwarded adopted-LAN traffic.
+This does not resolve or match domain names. See [socks-out.md](socks-out.md#select-destinations-by-ip)
+for selecting the managed SOCKS5 exit and its failure behavior.
+
 ### 4.1 What the operator does instead
 
 Assign the source to the proxy exit and let the proxy sort it out. If its domain

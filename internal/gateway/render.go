@@ -143,9 +143,10 @@ func (s StatSet) ruleLine(dnat bool) string {
 
 // NFTable is the `inet olr_route` table (§3.3).
 //
-// The classify chain has five kinds of rule and they run in this order:
+// The classify chain has six kinds of rule and they run in this order:
 //
 //	restore    an established flow gets back the exit it started on
+//	destination explicit destination prefixes, longest prefix first
 //	device     a MAC override takes precedence over its network
 //	source     a new flow is classified by where it came from
 //	account    every packet is counted against its exit, and the decision saved
@@ -164,6 +165,8 @@ func (s StatSet) ruleLine(dnat bool) string {
 // two rules per exit in use, which is nothing, and it keeps the mask discipline
 // §3.2 demands — we never write a bit outside 0x00ff0000.
 type NFTable struct {
+	// Destinations precede device and source assignments, longest prefix first.
+	Destinations []DestinationRule
 	// Exits are the in-use exits, for the restore and accounting rules.
 	Exits []ExitRule
 	// Devices precede network source rules; the explicit-direct mark prevents
@@ -483,6 +486,7 @@ func Render(c Config, links LinkView, health Health) Desired {
 	}
 
 	renderSources(&d, c, links)
+	renderDestinations(&d, c, links)
 
 	d.Table.Counters = sortedKeys(counters)
 	renderSysctls(&d, c, links)
@@ -853,6 +857,9 @@ func (d Desired) objectLines() []string {
 	// follow a packet down the list.
 	for _, e := range d.Table.Exits {
 		out = append(out, e.RestoreLine())
+	}
+	for _, r := range d.Table.Destinations {
+		out = append(out, r.Line())
 	}
 	for _, r := range d.Table.Devices {
 		out = append(out, r.Line())

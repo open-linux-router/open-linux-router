@@ -167,6 +167,9 @@ type Config struct {
 	// Devices override the network choice by source MAC. An empty exit
 	// explicitly takes the box's normal route; absence inherits the network.
 	Devices []DeviceAssignment `json:"devices,omitempty"`
+
+	// Destinations override source assignments; longest prefix wins.
+	Destinations []DestinationAssignment `json:"destinations,omitempty"`
 }
 
 // EgressSNAT is Config.SNAT's type.
@@ -554,6 +557,11 @@ const (
 // Used by the impact classifier: changing an exit nobody routes through cannot
 // disturb anybody, and saying so is what keeps `disruptive` from crying wolf.
 func (c Config) InUse(name string) bool {
+	for _, a := range c.Destinations {
+		if a.Exit == name && name != "" {
+			return true
+		}
+	}
 	if name == "" {
 		return false
 	}
@@ -579,6 +587,11 @@ func (c Config) UsedBy(name string) []string {
 		return nil
 	}
 	var out []string
+	for _, a := range c.Destinations {
+		if a.Exit == name {
+			out = append(out, "destination "+a.Prefix)
+		}
+	}
 	for _, a := range c.Interfaces {
 		if got, _ := c.Assigned(a.Interface); got == name {
 			out = append(out, a.Interface)
@@ -665,6 +678,15 @@ func FromDocument(d core.Document) (Config, error) {
 // It deliberately does not validate: a malformed exit is left as-is for
 // Validate to report against a proper path.
 func (c *Config) Normalize() {
+	for i := range c.Destinations {
+		a := &c.Destinations[i]
+		a.Prefix = strings.TrimSpace(a.Prefix)
+		a.Exit = strings.TrimSpace(a.Exit)
+		if p, err := destinationPrefix(a.Prefix); err == nil {
+			a.Prefix = p.String()
+		}
+	}
+	slices.SortStableFunc(c.Destinations, func(a, b DestinationAssignment) int { return strings.Compare(a.Prefix, b.Prefix) })
 	for i := range c.Exits {
 		c.Exits[i].Name = strings.TrimSpace(c.Exits[i].Name)
 		c.Exits[i].Via.Interface = strings.TrimSpace(c.Exits[i].Via.Interface)
@@ -812,6 +834,11 @@ func (c *Config) Rename(from, to string) bool {
 		return false
 	}
 	e.Name = to
+	for i := range c.Destinations {
+		if c.Destinations[i].Exit == from {
+			c.Destinations[i].Exit = to
+		}
+	}
 	c.Remove(from)
 	c.Exits = append(c.Exits, e)
 	if c.Default == from {
@@ -838,7 +865,7 @@ func (c *Config) Rename(from, to string) bool {
 
 // Empty reports whether anything has been configured at all.
 func (c Config) Empty() bool {
-	return len(c.Exits) == 0 && len(c.Interfaces) == 0 && len(c.Devices) == 0 && c.Default == "" &&
+	return len(c.Destinations) == 0 && len(c.Exits) == 0 && len(c.Interfaces) == 0 && len(c.Devices) == 0 && c.Default == "" &&
 		len(c.Forwards) == 0
 }
 

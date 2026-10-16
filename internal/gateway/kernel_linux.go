@@ -1313,6 +1313,10 @@ func (k LinuxKernel) applyNFT(d Desired) error {
 			UserData: comment(e.RestoreLine()),
 		})
 	}
+	for _, r := range d.Table.Destinations {
+		conn.AddRule(&nftables.Rule{Table: table, Chain: classify,
+			Exprs: destinationExprs(r), UserData: comment(r.Line())})
+	}
 	for _, r := range d.Table.Devices {
 		conn.AddRule(&nftables.Rule{
 			Table: table, Chain: classify,
@@ -1492,7 +1496,7 @@ const ctStatusDstNAT uint32 = 0x20
 //   - the family check is required because this is an `inet` table, where an
 //     IPv4 payload offset applied to an IPv6 packet reads whatever happens to be
 //     at byte 12 of the header.
-func sourceExprs(s SourceRule) []expr.Any {
+func sourceExprs(s SourceRule, matches ...expr.Any) []expr.Any {
 	v6 := s.Prefix.Addr().Is6()
 	proto := byte(unix.NFPROTO_IPV4)
 	offset, length := uint32(12), uint32(4)
@@ -1504,7 +1508,7 @@ func sourceExprs(s SourceRule) []expr.Any {
 	addr := s.Prefix.Masked().Addr().AsSlice()
 	mask := net.CIDRMask(s.Prefix.Bits(), len(addr)*8)
 
-	return []expr.Any{
+	out := []expr.Any{
 		&expr.Meta{Key: expr.MetaKeyMARK, Register: 1},
 		maskOurMarkBits(1),
 		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: markBytes(0)},
@@ -1540,11 +1544,13 @@ func sourceExprs(s SourceRule) []expr.Any {
 		&expr.Bitwise{SourceRegister: 1, DestRegister: 1, Len: length,
 			Mask: mask, Xor: make([]byte, length)},
 		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: addr},
-
+	}
+	out = append(out, matches...)
+	return append(out,
 		&expr.Meta{Key: expr.MetaKeyMARK, Register: 1},
 		setOurMarkBits(1, s.Mark),
 		&expr.Meta{Key: expr.MetaKeyMARK, SourceRegister: true, Register: 1},
-	}
+	)
 }
 
 // accountExprs counts a packet against its exit and records the decision on the

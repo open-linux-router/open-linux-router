@@ -198,7 +198,7 @@ func showConfigCommand() *cobra.Command {
 
 func setCommand() *cobra.Command {
 	c := verb("set", "Change an exit assignment or a port forward", func(*cobra.Command) {})
-	c.AddCommand(setDefaultCommand(), setViaCommand(), setDeviceCommand(), setStatsCommand(), setIPv6ForwardingCommand())
+	c.AddCommand(setDefaultCommand(), setViaCommand(), setDeviceCommand(), destinationCommand(false), setStatsCommand(), setIPv6ForwardingCommand())
 	return c
 }
 
@@ -358,7 +358,7 @@ func addCommand() *cobra.Command {
 
 func rmCommand() *cobra.Command {
 	c := verb("rm", "Remove an exit, a port forward, or a network's assignment", func(*cobra.Command) {})
-	c.AddCommand(rmExitCommand(), rmViaCommand(), rmDeviceCommand())
+	c.AddCommand(rmExitCommand(), rmViaCommand(), rmDeviceCommand(), destinationCommand(true))
 	return c
 }
 

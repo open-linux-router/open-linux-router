@@ -86,6 +86,7 @@ func Validate(c Config, links LinkView) Result {
 	validateDefault(&r, c)
 	validateAssignments(&r, c, links)
 	validateDevices(&r, c, links)
+	validateDestinations(&r, c)
 
 	return r
 }

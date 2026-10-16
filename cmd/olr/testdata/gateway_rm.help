@@ -4,6 +4,7 @@ Usage:
   olr gateway rm [command]
 
 Available Commands:
+  destination Remove a destination routing rule
   device      Return one device to its network's way out
   exit        Remove an exit
   forward     Stop forwarding a port
