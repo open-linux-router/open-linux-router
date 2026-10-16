@@ -44,6 +44,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
   const map = useRef<maplibregl.Map | null>(null)
   const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(false)
+  const targets = useRef(new Map<string, { feature: GeoJSON.Feature; coordinates?: Position[]; reverse?: boolean }>())
   useEffect(() => {
     if (!container.current) return
     let instance: maplibregl.Map
@@ -63,9 +64,9 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     observer.observe(container.current)
     instance.on('load', () => {
       for (const id of ['flows', 'dots', 'places']) instance.addSource(id, { type: 'geojson', data: empty })
-      instance.addLayer({ id: 'flows', type: 'line', source: 'flows', paint: { 'line-color': ['get', 'color'], 'line-width': ['get', 'width'], 'line-opacity': 0.7 } })
-      instance.addLayer({ id: 'places', type: 'circle', source: 'places', paint: { 'circle-radius': 2.4, 'circle-color': ['get', 'color'], 'circle-stroke-width': 1, 'circle-stroke-color': '#ffffff' } })
-      instance.addLayer({ id: 'dots', type: 'circle', source: 'dots', paint: { 'circle-radius': 1.8, 'circle-color': ['get', 'color'] } })
+      instance.addLayer({ id: 'flows', type: 'line', source: 'flows', paint: { 'line-color': ['get', 'color'], 'line-width': ['get', 'width'], 'line-opacity': ['*', 0.7, ['get', 'opacity']] } })
+      instance.addLayer({ id: 'places', type: 'circle', source: 'places', paint: { 'circle-radius': 1.4, 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'], 'circle-stroke-opacity': ['get', 'opacity'], 'circle-stroke-width': 0.5, 'circle-stroke-color': '#ffffff' } })
+      instance.addLayer({ id: 'dots', type: 'circle', source: 'dots', paint: { 'circle-radius': 1.2, 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'] } })
       fit()
       setReady(true)
     })
@@ -82,42 +83,74 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     instance.setPaintProperty('borders', 'line-color', dark ? '#232731' : '#ffffff')
     const blue = dark ? '#8ab4ff' : '#1d4ed8', teal = dark ? '#6bd4c6' : '#0f766e'
     const start = origin ? position(origin, origin.country_code) : undefined
-    const lines: GeoJSON.Feature[] = [], points: GeoJSON.Feature[] = []
-    const paths: { coordinates: Position[]; color: string; reverse: boolean }[] = []
-    if (start) points.push({ type: 'Feature', properties: { color: dark ? '#f1f3f7' : '#171b22' }, geometry: { type: 'Point', coordinates: start } })
+    const next: typeof targets.current = new Map()
+    if (start) next.set(`place:${start}`, { feature: { type: 'Feature', properties: { color: dark ? '#f1f3f7' : '#171b22' }, geometry: { type: 'Point', coordinates: start } } })
     for (const peer of peers) {
       const end = position(peer.place, peer.place.country)
       if (!end) continue
-      points.push({ type: 'Feature', properties: { color: blue }, geometry: { type: 'Point', coordinates: end } })
+      if (!start || start[0] !== end[0] || start[1] !== end[1]) next.set(`place:${end}`, { feature: { type: 'Feature', properties: { color: blue }, geometry: { type: 'Point', coordinates: end } } })
       if (!start || (start[0] === end[0] && start[1] === end[1])) continue
       for (const direction of ['download', 'upload'] as const) {
         if (peer[direction] <= 0) continue
         const color = direction === 'download' ? blue : teal
         const coordinates = arc(start, end, direction === 'download' ? 1.5 : -1.5)
         const width = Math.min(3.5, 0.6 + Math.log10(1 + peer[direction] / 1024) * 0.7)
-        lines.push({ type: 'Feature', properties: { color, width }, geometry: { type: 'LineString', coordinates } })
-        paths.push({ coordinates, color, reverse: direction === 'download' })
+        next.set(`${peer.ip}:${direction}:${start}:${end}`, { feature: { type: 'Feature', properties: { color, width }, geometry: { type: 'LineString', coordinates } }, coordinates, reverse: direction === 'download' })
       }
     }
+    targets.current = next
+  }, [peers, origin, dark, ready, expanded])
+  useEffect(() => {
+    const instance = map.current
+    if (!instance || !ready) return
     const set = (id: string, features: GeoJSON.Feature[]) => (instance.getSource(id) as GeoJSONSource).setData({ type: 'FeatureCollection', features })
-    set('flows', lines)
-    set('places', points)
+    // Keep identity and phase independent of snapshot order and rank changes.
+    const visible = new Map<string, { target: typeof targets.current extends Map<string, infer T> ? T : never; opacity: number; width: number; phase: number }>()
     const reduced = matchMedia('(prefers-reduced-motion: reduce)')
-    const animate = () => {
-      const t = (performance.now() % 4000) / 4000
-      const features: GeoJSON.Feature[] = reduced.matches || document.hidden ? [] : paths.map((path, index) => {
-        let progress = (t + index / Math.max(1, paths.length)) % 1
-        if (path.reverse) progress = 1 - progress
+    let previous = performance.now(), lastDraw = 0, frame = 0
+    const animate = (now: number) => {
+      frame = requestAnimationFrame(animate)
+      if (document.hidden) { previous = now; return }
+      if (now - lastDraw < 32) return
+      const elapsed = Math.min(64, now - previous)
+      previous = now
+      lastDraw = now
+      const blend = reduced.matches ? 1 : 1 - Math.exp(-elapsed / 450)
+      for (const [key, target] of targets.current) {
+        const existing = visible.get(key)
+        if (existing) existing.target = target
+        else {
+          let hash = 0
+          for (const char of key) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+          visible.set(key, { target, opacity: 0, width: Number(target.feature.properties?.width || 0), phase: hash / 4294967296 })
+        }
+      }
+      const lines: GeoJSON.Feature[] = [], points: GeoJSON.Feature[] = [], dots: GeoJSON.Feature[] = []
+      for (const [key, visual] of visible) {
+        const active = targets.current.has(key)
+        visual.opacity += ((active ? 1 : 0) - visual.opacity) * blend
+        if (!active && visual.opacity < 0.01) { visible.delete(key); continue }
+        const path = visual.target
+        visual.width += (Number(path.feature.properties?.width || 0) - visual.width) * blend
+        const properties = { ...path.feature.properties, opacity: visual.opacity, width: visual.width }
+        const feature = { ...path.feature, properties }
+        if (!path.coordinates) { points.push(feature); continue }
+        lines.push(feature)
+        if (reduced.matches) continue
+        visual.phase = (visual.phase + elapsed / 4000) % 1
+        const progress = path.reverse ? 1 - visual.phase : visual.phase
         const p = progress * 48
         const a = path.coordinates[Math.floor(p)], b = path.coordinates[Math.min(48, Math.floor(p) + 1)]
-        return { type: 'Feature', properties: { color: path.color }, geometry: { type: 'Point', coordinates: [a[0] + (b[0] - a[0]) * (p % 1), a[1] + (b[1] - a[1]) * (p % 1)] } }
-      })
-      set('dots', features)
+        // Fade at each end instead of visibly teleporting on wraparound.
+        dots.push({ type: 'Feature', properties: { ...properties, opacity: visual.opacity * Math.min(1, progress * 12, (1 - progress) * 12) }, geometry: { type: 'Point', coordinates: [a[0] + (b[0] - a[0]) * (p % 1), a[1] + (b[1] - a[1]) * (p % 1)] } })
+      }
+      set('flows', lines)
+      set('places', points)
+      set('dots', dots)
     }
-    animate()
-    const timer = window.setInterval(animate, 100)
-    return () => clearInterval(timer)
-  }, [peers, origin, dark, ready, expanded])
+    frame = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(frame)
+  }, [ready, expanded])
   return <div className="relative h-full min-h-44 w-full overflow-hidden rounded-lg" style={expanded ? { backgroundColor: dark ? '#1c3545' : '#d6effb' } : undefined}><div ref={container} style={{ position: 'absolute', inset: 0 }} aria-hidden={!expanded} />{failed && <p className="absolute inset-0 flex items-center justify-center bg-muted p-3 text-xs text-muted-foreground">Map unavailable. View traffic details.</p>}</div>
 }
 

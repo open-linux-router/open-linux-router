@@ -71,6 +71,9 @@ hidden page title. Detail and operation pages keep their identifying titles.
 
 ## State and data contracts
 
+World traffic uses two-second sampling and UI refresh. Smooth map transitions communicate
+continuity between samples, not individual packets or exact connection lifetimes;
+the details ranking and rates continue to show the latest observed snapshot.
 World traffic ranks remote IPs over a rolling thirty-second observed window,
 then locates only the top ten using cached ip.sb city lookups. Details show
 city (or region) and country; points use returned coordinates with country

@@ -248,7 +248,12 @@ pan/zoom, direction labels, attribution and the shared close control. Escape
 closes it and restores focus to the preview. On
 phones Latency and Map each span both columns. Its local MapLibre map uses receive/transmit
 colors and bounded logarithmic path widths. Moving particles indicate observed
-traffic direction and stop for reduced motion. IP points use city coordinates,
+traffic direction and stop for reduced motion. Use 1.4px endpoints merged at
+shared coordinates. Keep particle phases stable
+across ranking updates; ease line widths and fade arriving/departing paths and
+points with a 450ms exponential time constant. Fade particles at path ends.
+Reduced motion disables both particles and interpolation; hidden tabs pause updates.
+IP points use city coordinates,
 falling back to country centers. Draw flows between different locations even
 within one country. The details dialog supplies city/country, rates and ip.sb
 attribution without crowding the map.
@@ -292,7 +297,7 @@ and control hit targets. The footer theme control is a single icon. Clicking cyc
 auto, light and dark; its accessible label and tooltip name the current and next theme.
 
 Use 150–200ms color/opacity transitions. Motion should explain a state change;
-no ambient animation except the current device-activity block's traffic indicator.
+no ambient animation except observed world traffic and the current device-activity block's traffic indicator.
 Breathe faster as combined live download/upload increases, with a logarithmic
 4s–1.4s cycle capped at 100 MiB/s. Use opacity 1 → 0.45 over 55% of the
 cycle, rest dim for 10%, then return to full opacity over 35%. Each changing

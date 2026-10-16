@@ -16,7 +16,14 @@ the separate nftables interface/device totals.
 
 Blue indicates download, teal upload. Separate curved paths carry directional
 particles; logarithmic line widths cap visual extremes. Reduced motion
-disables particles. Remote countries matching the router country have a point
+disables particles and interpolation. The UI polls every two seconds, but keeps
+each IP/direction's particle phase independent of ranking. Paths and endpoints
+fade in and out with a 450ms exponential time constant (about two seconds to
+settle); widths ease toward new measured rates on the same timeline. Particles
+fade at path ends and render at up to 30fps. Hidden tabs pause visual updates.
+Endpoints use a 1.4px radius and shared coordinates render only one point.
+This interpolation visualizes sampled activity; it is not a packet trace.
+Remote countries matching the router country have a point
 rather than a fabricated inter-city arc. The details dialog exposes IPs and
 both rates, unavailable states, sample duration and GeoIP attribution.
 
