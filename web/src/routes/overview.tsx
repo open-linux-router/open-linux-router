@@ -1,7 +1,7 @@
 import { Meter, MetricPill } from '@/components/traffic-metrics'
 import { WorldTraffic } from '@/features/world-traffic/world-traffic'
 import { NetworkQuality } from '@/features/network-quality/network-quality'
-import { AlertTriangle, CircleAlert, CircleCheck, CircleHelp, ChevronRight, Info, Plus, Trash2, GripVertical, Map } from 'lucide-react'
+import { AlertTriangle, CircleAlert, CircleCheck, CircleHelp, ChevronRight, Info, Trash2, GripVertical, Map } from 'lucide-react'
 import { useEffect, useMemo, useState, type DragEvent, type MouseEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 
@@ -361,7 +361,7 @@ function StatCard({ title, children, className, action, back, flipped = false }:
     return <section aria-label="Traffic" className="min-w-0 [perspective:1200px]">
       <div className={cn('grid min-h-60 w-full transition-transform duration-600 ease-[cubic-bezier(0.22,1,0.36,1)] [transform-style:preserve-3d] lg:aspect-[4/3] motion-reduce:transition-none', flipped && '[transform:rotateY(180deg)]')}>
         <div inert={flipped} aria-hidden={flipped} className={cn(face, flipped && 'pointer-events-none')}>{heading}<div className="flex-1 space-y-2 [&_button]:flex-nowrap [&_button]:whitespace-nowrap">{children}</div></div>
-        <div inert={!flipped} aria-hidden={!flipped} className={cn(face, '[transform:rotateY(180deg)]', !flipped && 'pointer-events-none')}>{heading}<div className="flex min-h-40 flex-1">{back}</div></div>
+        <div inert={!flipped} aria-hidden={!flipped} className={cn(face, '[transform:rotateY(180deg)]', !flipped && 'pointer-events-none')}>{heading}<div className="-mx-1.5 -mb-1.5 flex min-h-40 flex-1 sm:-mx-2 sm:-mb-2">{back}</div></div>
       </div>
     </section>
   }
@@ -376,25 +376,35 @@ function CountryIcon({ code }: { code?: string }) {
   return <span role="img" aria-label={code.toUpperCase()} className={`fi fi-${code.toLowerCase()} shrink-0 rounded-xs`} />
 }
 
+function StatusDetail({ title, summary, children }: { title: string; summary: React.ReactNode; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return <>
+    <button type="button" aria-haspopup="dialog" onClick={() => setOpen(true)} className="flex min-h-11 w-full items-center gap-2 rounded-sm text-left text-sm font-semibold tabular-nums hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9">{summary}</button>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto">
+      <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+      {children}
+    </DialogContent></Dialog>
+  </>
+}
+
 function PublicAddressRow({ addresses }: { addresses?: PublicAddresses }) {
   const [open, setOpen] = useState(false)
   const address = addresses?.ipv4
   const summary = [address?.city || address?.region || address?.country, address?.isp || address?.organization].filter(Boolean).join(', ')
   return <div className="min-w-0">
-    <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
+    <button type="button" aria-haspopup="dialog" onClick={() => setOpen(true)}
       className="flex min-h-11 sm:min-h-9 w-full min-w-0 flex-wrap items-center gap-2 rounded-lg py-1.5 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
       <span className="flex w-4 shrink-0 items-center justify-center"><CountryIcon code={address?.country_code} /></span>
       <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold" title={summary || undefined}>{summary || (address?.ip ? 'Location unavailable' : '—')}</span>
-      <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
     </button>
-    {open && <div className="space-y-1 py-2 pl-6 text-xs text-muted-foreground">
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Public network</DialogTitle><DialogDescription>{summary || 'Location unavailable'}</DialogDescription></DialogHeader><div className="space-y-1 py-2 text-sm text-muted-foreground">
       <dl className="grid grid-cols-[max-content_minmax(0,1fr)] items-start gap-x-2 gap-y-2 [&_dd]:text-right">
         <div className="contents"><dt>IPv4</dt><dd className="break-all font-mono text-foreground">{address?.ip || 'Address unavailable'}</dd></div>
         {addresses?.ipv6?.ip && <div className="contents"><dt>IPv6</dt><dd className="break-all font-mono text-foreground">{addresses.ipv6.ip}</dd></div>}
         {address?.asn != null && address.asn > 0 && <div className="contents"><dt>ASN</dt><dd className="break-all font-mono text-foreground">AS{address.asn}</dd></div>}
         {address?.asn_organization && <div className="contents"><dt>Org</dt><dd className="break-words text-foreground">{address.asn_organization}</dd></div>}
       </dl>
-    </div>}
+    </div></DialogContent></Dialog>
   </div>
 }
 
@@ -572,12 +582,10 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
   return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:gap-4">
     <StatCard title="Status">
       <div className="w-full space-y-1">
-        <details className="group/system">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-sm text-sm font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9 [&::-webkit-details-marker]:hidden">
+        <StatusDetail title="System" summary={<>
             {host ? <CircleCheck aria-hidden className="size-4 shrink-0 text-success-foreground" /> : <CircleHelp aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
             <span className="min-w-0 flex-1">{host ? `Up ${uptime(host.uptime_seconds)}` : 'Uptime unavailable'}</span>
-            <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground transition-transform group-open/system:rotate-90" />
-          </summary>
+          </>}>
           <dl className="grid grid-cols-[max-content_minmax(0,1fr)_max-content_max-content] gap-x-1 gap-y-2 py-2 pl-6 text-xs tabular-nums">
             {[
               { label: 'CPU', used: host?.cpu_used_cores == null ? null : host.cpu_used_cores.toFixed(1), total: host ? `${host.cpu_cores} cores` : null },
@@ -590,13 +598,11 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
               </dd>
             </div>)}
           </dl>
-        </details>
-        <details className="group/health">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-sm text-sm font-semibold focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9 [&::-webkit-details-marker]:hidden">
+        </StatusDetail>
+        <StatusDetail title="System health" summary={<>
             {faults.length || failed ? <CircleAlert aria-hidden className="size-4 shrink-0 text-destructive" /> : known && !idle ? <CircleCheck aria-hidden className="size-4 shrink-0 text-success-foreground" /> : <CircleHelp aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
             <span className={cn('min-w-0 flex-1', (faults.length > 0 || failed) && 'text-destructive')}>{title}</span>
-            <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground transition-transform group-open/health:rotate-90" />
-          </summary>
+          </>}>
           <dl className="space-y-1 py-2 pl-6 text-xs">
             {modules.map((module) => {
               const issues = faults.filter((fault) => fault.to === module.to)
@@ -607,7 +613,7 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
               </div>
             })}
           </dl>
-        </details>
+        </StatusDetail>
         <PublicAddressRow addresses={publicAddresses} />
       </div>
     </StatCard>
@@ -623,7 +629,7 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
         <MetricPill label="Upload" value={flows.counting && !trafficFailed ? formatBytes(flows.total.up) : trafficFailed ? 'Unavailable' : '—'} valueRight />
       </div>
     </StatCard>
-    <StatCard title="Latency" className={(latency?.custom?.length ?? 0) > 3 ? 'lg:aspect-auto' : undefined}>
+    <StatCard title={<button type="button" aria-haspopup="dialog" aria-label="Edit latency configuration" onClick={() => setSitesOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">Latency</button>} className={(latency?.custom?.length ?? 0) > 3 ? 'lg:aspect-auto' : undefined}>
       <div className="space-y-1">
         <MetricPill label="Internet" value={latencyValue} valueRight />
         <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} valueRight />
@@ -640,8 +646,6 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
               <span className="min-w-0 whitespace-nowrap">{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
             </span>
           })}
-          <button className="inline-flex min-h-11 min-w-11 sm:min-h-8 sm:min-w-8 items-center justify-center gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={() => setSitesOpen(true)} aria-label="Monitor sites" title="Monitor sites"><Plus className="size-4" /><span className="sr-only">Monitor sites</span></button>
         </div>
       </div>
     </StatCard>

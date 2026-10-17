@@ -38,17 +38,18 @@ to improve density while preserving values, units and mobile interaction targets
 Section landing pages omit titles duplicated by navigation, retaining a visually
 hidden page title. Detail and operation pages keep their identifying titles.
 
-- Overview shows Status, Traffic, Latency and Network quality cards. Traffic's
+- Overview shows Status, Traffic, Latency and Quality cards. Traffic's
   title-right map icon toggles statistics and map views in place. Its pressed
   state identifies the active map, and its accessible label names the next view. The
   quality radar shows Speed (download and upload), Latency, Stability,
   Reachability and Wi-Fi on a 0–100 higher-is-better scale. Until measurements
-  are connected, label it Demo and explicitly call its scores simulated; do not
-  imply they describe the current network.
+  are connected, retain the simulated-score context in its accessible description.
+  Omit the visible Demo badge and chart caption. Clicking the Latency title opens
+  the site configuration dialog, without a separate plus button.
   `Up` and elapsed uptime
-  lead Status above system health. Expand uptime for CPU, memory and root disk
+  lead Status above system health. Click uptime for a dialog with CPU, memory and root disk
   used/total values; omit the separate System card.
-  Expand system health for DHCP, DNS and Gateway states, with links to their
+  Click system health for a dialog with DHCP, DNS and Gateway states, with links to their
   pages. Distinguish checking, unavailable, disabled, needs attention and OK;
   retain the visible fault alerts below the cards.
   Latency and Map have no information icons. Traffic flips to reveal its map
@@ -58,7 +59,7 @@ hidden page title. Detail and operation pages keep their identifying titles.
   while download/upload retain their semantic colors.
   omit the inline direction legend and top-ten summary.
 - Overview Status shows one public-network summary using IPv4's country flag,
-  city and ISP. Its disclosure shows IPv4, IPv6 when available, ASN and ASN
+  city and ISP. Its row opens a dialog showing IPv4, IPv6 when available, ASN and ASN
   Organization from the IPv4 lookup, in that order; label the organization “Org”.
 - Keep download and upload limits beside their respective measurements; separate
   controls serve separate decisions and are not automatically redundant.
