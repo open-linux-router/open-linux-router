@@ -440,7 +440,10 @@ func run(args []string) error {
 	// prober can change what the kernel should hold without the operator
 	// touching anything.
 	prober := gateway.NewProber()
-	latency := gateway.NewLatencyMonitor()
+	latency, err := gateway.OpenLatencyMonitor(store, srv.ApplyLock())
+	if err != nil {
+		return fmt.Errorf("loading Internet latency target: %w", err)
+	}
 	customLatency, err := gateway.OpenCustomLatencyConfig(store)
 	if err != nil {
 		return fmt.Errorf("loading custom latency sites: %w", err)

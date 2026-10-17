@@ -1592,6 +1592,7 @@ export interface FirewallApplyResult {
 
 /** Router-originated time to receive the HTTPS response, including DNS and redirects. */
 export interface GatewayLatency {
+  target_url: string
   state: 'measuring' | 'ok' | 'unreachable' | 'unavailable'
   milliseconds: number | null
   target: string

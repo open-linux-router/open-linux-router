@@ -440,6 +440,24 @@ func TestLatencyEndpointReadsWithoutProbing(t *testing.T) {
 	}
 }
 
+func TestLatencyTargetEndpoint(t *testing.T) {
+	m := NewLatencyMonitor()
+	m.probe = func(context.Context, string) (float64, error) { t.Error("settings must not probe"); return 0, nil }
+	h := HTTP{Latency: m, Lock: core.NewLock()}.Handler()
+	w := do(t, h, http.MethodPut, "/latency/target", map[string]string{"target": m.targets[2].URL})
+	if w.Code != http.StatusOK || m.Snapshot().Target != "Yandex" {
+		t.Fatalf("selection: %d %s", w.Code, w.Body.String())
+	}
+	w = do(t, h, http.MethodPut, "/latency/target", map[string]string{"target": "https://unlisted.example/"})
+	if w.Code != http.StatusBadRequest || m.Snapshot().Target != "Yandex" {
+		t.Fatal("invalid target changed selection")
+	}
+	w = do(t, h, http.MethodPut, "/latency/target", map[string]string{"target": ""})
+	if w.Code != http.StatusOK || m.Snapshot().TargetURL != "" {
+		t.Fatal("could not request automatic selection")
+	}
+}
+
 func TestLatencySitesEndpoint(t *testing.T) {
 	custom, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
 	if err != nil {

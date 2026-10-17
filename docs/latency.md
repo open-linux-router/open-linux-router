@@ -1,66 +1,62 @@
-# Overview response time
+# Overview latency
 
 `GET /api/gateway/latency` returns the latest background measurements without
-starting network traffic. Internet and custom sites use the same metric: time
-from a router-originated HTTPS GET to completion of the response body, including
-DNS, TCP, TLS, same-host HTTPS redirects, server response and document download.
-The router does **not** fetch images, scripts or styles, execute JavaScript or
-render a page. This is not ICMP ping or the time until a browser finishes showing
-the app. Page size and server behavior affect the number, so compare a site's
-trend rather than treating different sites as equivalent network benchmarks.
+starting network traffic. Internet and custom sites use the same metric: one
+HTTPS HEAD request, timed from acquiring the established connection to receiving
+the first response byte. DNS, TCP and TLS setup and document downloads are
+excluded. This is an application round trip, including server processing, not
+ICMP ping or a page-load measurement. There is no repeated sampling or aggregation.
 
-Each probe has a 15-second deadline and a 2 MiB response limit. It follows up
-to five same-host HTTPS redirects; cross-host and HTTP redirects are not
-followed. Any complete HTTP response counts as a latency measurement, including
-login redirects, challenges and HTTP 4xx/5xx responses. This means a measured
-time does not assert that the site or application is healthy. DNS, connection,
-TLS and body-read failures (including timeout or size limit) still fail.
-Connections are fresh, environment proxies are ignored and TLS certificates
-are verified.
+Each probe has a 15-second deadline. Connections are fresh, environment proxies
+are ignored and TLS certificates are verified. Redirects are not followed.
+Any HTTP response, including errors and redirects, establishes response latency;
+it does not assert that the application is healthy. A proxy accepting TCP or
+answering ICMP locally cannot complete this authenticated HTTPS exchange on
+behalf of an unreachable destination. Sites that reject HEAD can still return
+a measurable HTTP error response.
+
 Internet candidates use the router's default route. Custom sites can choose a
-gateway exit; the TCP sockets are marked with its current routing mark on Linux.
-DNS still uses the router's resolver and default route. If a chosen exit is
-removed, disabled or unsupported, no default-route fallback is attempted.
-The separate DNS row measures a lookup of `example.com`, not the lookup of each
-site; its time is already included in the page response measurement when that
-site requires a lookup.
+gateway exit; TCP sockets are marked with its current routing mark on Linux.
+DNS uses the router's resolver and default route. If a chosen exit is removed,
+disabled or unsupported, no default-route fallback is attempted.
+The DNS row independently times one lookup of `example.com`.
 
-The Internet candidates are Google, Baidu, Yandex and Cloudflare. Four initial
-rounds 15 seconds apart compare them; a site needs three successes and a
-successful latest response. The lowest median wins, with a second candidate
-retained when within 20% of the winner. The headline shows the lowest current
-successful measurement, not a historical minimum. Failure restarts discovery;
-all candidates are rediscovered daily. If none qualifies, another discovery
-begins after a one-minute backoff. Selection and samples reset on daemon
-restart. Custom sites are independent of selection and are measured on the same
-cadence: every 15 seconds during discovery, then every minute.
+The built-in Internet choices are Google, Baidu, Yandex and Cloudflare. With no
+saved target, one round probes each once and saves the fastest successful
+target to `gateway.latency_target` in `olr.json`. Subsequent rounds measure
+only that target, including after restart. Failure never changes the target.
+If all candidates fail, selection retries on the next one-minute round.
+Custom sites also run once per minute.
+
+Clicking Latency opens settings with an Internet target selector and the existing
+monitored sites. Choose a provider or “Choose fastest once”, then Save.
+`PUT /api/gateway/latency/target` accepts `{"target":"<listed URL>"}`; an empty
+target requests a fresh selection. Changes wake the background monitor and
+discard any in-flight Internet result from the old selection. GET stays passive.
 
 Up to 12 named HTTPS URLs can be stored with `PUT /api/gateway/latency/sites`
 using objects such as `{"name":"YouTube","url":"https://www.youtube.com/","exit":"Proxy"}`.
 `exit` is optional and must name a configured gateway exit. An empty array
-clears the list. Names are unique and 1-40 characters; URLs cannot contain
-credentials, custom ports or fragments. Settings live alongside the router
-configuration as `olr.json.latency-sites`; results are ephemeral. Site icons
-are discovered separately via the ingress same-origin favicon rules and do not
-affect the measurement.
+clears the list. Names are unique and 1–40 characters; URLs cannot contain
+credentials, custom ports or fragments. Sites live in `gateway.latency_sites`
+in `olr.json`; measurements are ephemeral.
 
 The response includes `state` (`measuring`, `ok`, `unreachable`, `unavailable`),
-nullable `milliseconds`, `dns_milliseconds`, `checked_at`, the winning `target`,
-the Internet `sites` candidates and `custom` sites. Each site carries its last
-attempt, nullable measurement and a short `error` on failure. Excluded Internet
-candidates retain old results but never contribute to the headline. Custom
-sites keep their last completed outcome while the next probe runs. A completed
-failure replaces a prior success with a failure, not a stale success or zero.
-Only sites that have never been measured show a dash. Within the same browser
-session, the last completed outcome appears immediately after a reload until
-the API returns; cached results are reused only for the same URL and exit.
-The response-time badges use Good below 1 second, Fair below 3 seconds,
-and Slow above that; those are experience hints, not network health verdicts.
+nullable `milliseconds`, `dns_milliseconds`, `checked_at`, the selected
+`target` name and `target_url`, built-in `sites` and `custom` sites.
+A failed fixed target retains its identity but clears its measurement.
+Each site carries its latest attempt, nullable measurement and short error.
+Custom sites keep their last completed outcome while the next probe runs;
+a completed failure replaces success. Unmeasured sites show a dash, and
+sub-millisecond results show `<1 ms`, never a rounded zero.
+Browser-session caching uses a new key for this metric so old page-download
+measurements cannot appear as new latency samples. It reuses custom results
+only for matching URLs and exits.
 
 The monitoring dialog preserves the order of the `custom` list. Rows can be
 reordered, edited, and given a custom icon. Clicking an icon offers automatic
 favicon discovery, a resized PNG/JPEG/WebP upload (at most 96 KiB in stored
 form), or a searchable theSVG icon ID. Uploaded images are stored as validated
-base64 in the latency-site settings file; theSVG IDs are fetched from the fixed
+base64 in the saved site configuration; theSVG IDs are fetched from the fixed
 library path and served as bounded SVG images after validation. This icon fetch
 is independent of the latency probe.

@@ -170,7 +170,7 @@ export function useReapplyGateway() {
   })
 }
 
-const LATENCY_SNAPSHOT_KEY = 'olr.gateway.latency-snapshot'
+const LATENCY_SNAPSHOT_KEY = 'olr.gateway.latency-snapshot-v2'
 
 function savedLatency(): GatewayLatency | undefined {
   try {
@@ -209,8 +209,10 @@ export function useGatewayLatency() {
 export function useSaveLatencySites() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (sites: { name: string; url: string; exit?: string; icon?: string }[]) =>
-      api.put('/api/gateway/latency/sites', sites),
+    mutationFn: async ({ sites, target }: { sites: { name: string; url: string; exit?: string; icon?: string }[]; target?: string }) => {
+      await api.put('/api/gateway/latency/sites', sites)
+      if (target !== undefined) await api.put('/api/gateway/latency/target', { target })
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['gateway', 'latency'] }),
   })
 }

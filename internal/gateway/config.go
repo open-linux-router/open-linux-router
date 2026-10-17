@@ -52,7 +52,8 @@ const ModuleName = "gateway"
 // Fields without `omitempty` are reflected as schema-required (design.md §10,
 // config format), so the tags are load-bearing.
 type Config struct {
-	LatencySites []CustomLatencySite `json:"latency_sites"`
+	LatencyTarget string              `json:"latency_target,omitempty"`
+	LatencySites  []CustomLatencySite `json:"latency_sites"`
 	// Enabled controls whether any of this is programmed into the kernel at
 	// all. Disabling tears down our tables, our rules and our route tables and
 	// leaves the box routing and translating exactly as it did before olr was

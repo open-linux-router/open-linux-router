@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -14,79 +15,68 @@ import (
 	"time"
 )
 
-func TestLatencySelectionAndRecovery(t *testing.T) {
+func TestLatencySelectsOnceAndKeepsFailedTarget(t *testing.T) {
 	m := NewLatencyMonitor()
-	m.dnsProbe = func(context.Context) (float64, error) { return 8, nil }
+	m.dnsProbe = nil
+	var mu sync.Mutex
+	calls := map[string]int{}
 	values := map[string]float64{m.targets[0].URL: 100, m.targets[1].URL: 20, m.targets[2].URL: 80, m.targets[3].URL: 90}
 	m.probe = func(_ context.Context, url string) (float64, error) {
-		v := values[url]
-		if v < 0 {
-			return 0, errors.New("blocked")
+		mu.Lock()
+		defer mu.Unlock()
+		calls[url]++
+		if values[url] < 0 {
+			return 0, errors.New("offline")
 		}
-		return v, nil
+		return values[url], nil
 	}
-	for range 4 {
-		m.sample(context.Background())
-	}
+	m.sample(context.Background())
 	s := m.Snapshot()
-	if len(m.selected) != 1 || s.Target != "Baidu" || *s.Milliseconds != 20 {
-		t.Fatalf("selection: %+v / %v", s, m.selected)
+	if s.Target != "Baidu" || *s.Milliseconds != 20 {
+		t.Fatalf("selection: %+v", s)
 	}
+	for _, n := range calls {
+		if n != 1 {
+			t.Fatal("selection must probe each candidate once")
+		}
+	}
+	values[m.targets[0].URL] = 1
 	values[m.targets[1].URL] = -1
 	m.sample(context.Background())
-	if len(m.selected) != 0 || m.Snapshot().Milliseconds != nil || m.Snapshot().State != "unreachable" {
-		t.Fatal("failed preferred site must clear stale measurement and restart discovery")
+	s = m.Snapshot()
+	if s.Target != "Baidu" || s.Milliseconds != nil || s.State != "unreachable" {
+		t.Fatalf("failure changed target: %+v", s)
+	}
+	if calls[m.targets[0].URL] != 1 || calls[m.targets[1].URL] != 2 {
+		t.Fatal("fixed target must be the only probe")
+	}
+	if err := m.SetTarget(""); err != nil {
+		t.Fatal(err)
 	}
 	m.sample(context.Background())
-	if m.Snapshot().Target != "Yandex" {
-		t.Fatal("discovery must recover using another site")
-	}
-	for range 3 {
-		m.sample(context.Background())
-	}
-	if len(m.selected) != 2 {
-		t.Fatalf("close alternatives should both be retained: %v", m.selected)
-	}
-	values[m.targets[0].URL] = 5
-	m.discoveryStarted = time.Now().Add(-latencyRediscoveryInterval)
-	m.sample(context.Background())
-	if m.Snapshot().Target != "Google" || len(m.selected) != 0 {
-		t.Fatal("periodic discovery must revisit excluded sites")
+	if m.Snapshot().Target != "Google" {
+		t.Fatal("explicit reselection did not choose new fastest")
 	}
 }
 
-func TestLatencyRejectsLuckyAndFailedSites(t *testing.T) {
+func TestLatencyAllFailedSelectionRetries(t *testing.T) {
 	m := NewLatencyMonitor()
-	m.dnsProbe = func(context.Context) (float64, error) { return 8, nil }
-	round := 0
-	m.probe = func(_ context.Context, url string) (float64, error) {
-		if url == m.targets[0].URL {
-			if round == 0 {
-				return 1, nil
-			}
-			return 0, errors.New("blocked")
-		}
-		return 50, nil
-	}
-	for round = 0; round < 4; round++ {
-		m.sample(context.Background())
-	}
-	for _, i := range m.selected {
-		if i == 0 {
-			t.Fatal("one lucky success must not win")
-		}
-	}
+	m.dnsProbe = nil
 	m.probe = func(context.Context, string) (float64, error) { return 0, errors.New("offline") }
 	m.sample(context.Background())
+	if s := m.Snapshot(); s.State != "unreachable" || s.Milliseconds != nil || s.TargetURL != "" {
+		t.Fatalf("%+v", s)
+	}
+	m.probe = func(context.Context, string) (float64, error) { return 2, nil }
 	m.sample(context.Background())
-	if m.Snapshot().State != "unreachable" || m.Snapshot().Milliseconds != nil {
-		t.Fatal("all failures must not report zero or an old latency")
+	if m.Snapshot().State != "ok" {
+		t.Fatal("initial selection never recovered")
 	}
 }
 
 func TestLatencySnapshotIsolationAndCancellation(t *testing.T) {
 	m := NewLatencyMonitor()
-	m.dnsProbe = func(context.Context) (float64, error) { return 8, nil }
+	m.dnsProbe = nil
 	m.probe = func(context.Context, string) (float64, error) { return 12, nil }
 	m.sample(context.Background())
 	s := m.Snapshot()
@@ -94,58 +84,72 @@ func TestLatencySnapshotIsolationAndCancellation(t *testing.T) {
 	if m.Snapshot().Sites[0].Name == "changed" {
 		t.Fatal("snapshot aliases internal state")
 	}
+	before := m.Snapshot()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	m.sample(ctx)
-	if m.rounds != 1 {
-		t.Fatal("cancelled rounds must not publish")
+	if !reflect.DeepEqual(before, m.Snapshot()) {
+		t.Fatal("cancelled round published")
 	}
 }
 
-func TestPageProbeDownloadsDocumentAndFollowsSameOrigin(t *testing.T) {
-	methods := []string{}
+func TestLatencyEditDiscardsInFlightSelection(t *testing.T) {
+	m := NewLatencyMonitor()
+	m.dnsProbe = nil
+	started, release := make(chan struct{}, 4), make(chan struct{})
+	m.probe = func(context.Context, string) (float64, error) { started <- struct{}{}; <-release; return 12, nil }
+	done := make(chan struct{})
+	go func() { defer close(done); m.sample(context.Background()) }()
+	<-started
+	if err := m.SetTarget(m.targets[1].URL); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	<-done
+	if s := m.Snapshot(); s.Target != "Baidu" || s.State != "measuring" {
+		t.Fatalf("old selection overwrote edit: %+v", s)
+	}
+}
+
+func TestLatencyProbeExcludesSetupAndDoesNotDownload(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		methods = append(methods, r.Method+" "+r.URL.Path)
-		if r.URL.Path == "/" {
-			http.Redirect(w, r, "/page", http.StatusFound)
-			return
+		if r.Method != http.MethodHead {
+			t.Errorf("method = %s", r.Method)
 		}
-		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte("<html>"))
-		time.Sleep(40 * time.Millisecond)
-		w.Write([]byte("done</html>"))
+		time.Sleep(30 * time.Millisecond)
+		w.Header().Set("Content-Length", "100000000")
+		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	value, err := probePageWithClient(context.Background(), server.URL, server.Client())
-	if err != nil || value < 40 {
-		t.Fatalf("page = %.1f ms, %v", value, err)
+	client := server.Client()
+	transport := client.Transport.(*http.Transport).Clone()
+	dial := transport.DialContext
+	if dial == nil {
+		dial = (&net.Dialer{}).DialContext
 	}
-	if !reflect.DeepEqual(methods, []string{"GET /", "GET /page"}) {
-		t.Fatalf("requests = %v", methods)
+	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		time.Sleep(150 * time.Millisecond)
+		return dial(ctx, network, addr)
+	}
+	client.Transport = transport
+	defer transport.CloseIdleConnections()
+	start := time.Now()
+	value, err := probePageWithClient(context.Background(), server.URL, client)
+	if err != nil || value < 25 || value >= float64(time.Since(start)/time.Millisecond)-100 {
+		t.Fatalf("latency = %.1f ms, elapsed = %v, err = %v", value, time.Since(start), err)
 	}
 }
 
-func TestLatencyProbeCadence(t *testing.T) {
-	m := NewLatencyMonitor()
-	m.dnsProbe = func(context.Context) (float64, error) { return 8, nil }
-	m.probe = func(context.Context, string) (float64, error) { return 10, nil }
-	m.sample(context.Background())
-	if m.nextInterval() != 15*time.Second {
-		t.Fatal("initial discovery should finish promptly")
+func TestLatencyProbeNeedsAuthenticatedRemoteResponse(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, err := probePageWithClient(ctx, server.URL, server.Client()); err == nil {
+		t.Fatal("connection without remote response counted as latency")
 	}
-	for range 3 {
-		m.sample(context.Background())
-	}
-	if m.nextInterval() != time.Minute {
-		t.Fatal("stable targets should be checked every minute")
-	}
-	m.probe = func(context.Context, string) (float64, error) { return 0, errors.New("offline") }
-	m.sample(context.Background())
-	for range 4 {
-		m.sample(context.Background())
-	}
-	if m.nextInterval() != time.Minute {
-		t.Fatal("failed discovery must back off")
+	if _, err := probePage(context.Background(), server.URL); err == nil {
+		t.Fatal("untrusted TLS certificate accepted")
 	}
 }
 
@@ -316,27 +320,6 @@ func TestPageProbeCountsAnyCompleteResponse(t *testing.T) {
 				t.Fatalf("HTTP %d was not measured: %v", status, err)
 			}
 		})
-	}
-}
-
-func TestPageProbeRejectsOversizedOrIncompleteResponse(t *testing.T) {
-	for _, incomplete := range []bool{false, true} {
-		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if incomplete {
-				w.Header().Set("Content-Length", "100")
-			}
-			w.WriteHeader(http.StatusForbidden)
-			if incomplete {
-				w.Write([]byte("short"))
-				return
-			}
-			w.Write([]byte(strings.Repeat("x", pageProbeLimit+1)))
-		}))
-		_, err := probePageWithClient(context.Background(), server.URL, server.Client())
-		server.Close()
-		if err == nil {
-			t.Fatalf("accepted incomplete response (truncated=%v)", incomplete)
-		}
 	}
 }
 

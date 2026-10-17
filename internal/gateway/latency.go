@@ -4,39 +4,35 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
-	"sort"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-const (
-	latencySampleInterval      = time.Minute
-	latencyDiscoveryInterval   = 15 * time.Second
-	latencyRediscoveryInterval = 24 * time.Hour
-)
+const latencySampleInterval = time.Minute
+const pageProbeTimeout = 15 * time.Second
 
-// LatencyMonitor measures the router's default route, not individual client
-// routes. Samples and selection are ephemeral and relearned after restart.
+// LatencyMonitor measures the router's default route, not client routes.
+// Only the chosen target is persisted; samples are ephemeral.
 type LatencyMonitor struct {
-	mu               sync.RWMutex
-	snapshot         LatencySnapshot
-	targets          []latencyTarget
-	selected         []int
-	discoveryStarted time.Time
-	rounds           int
-	probe            func(context.Context, string) (float64, error)
-	dnsProbe         func(context.Context) (float64, error)
-	Custom           *CustomLatencyMonitor
+	mu         sync.RWMutex
+	snapshot   LatencySnapshot
+	targets    []latencyTarget
+	configured string
+	revision   uint64
+	wake       chan struct{}
+	probe      func(context.Context, string) (float64, error)
+	dnsProbe   func(context.Context) (float64, error)
+	Custom     *CustomLatencyMonitor
+	Store      *core.Store
+	Lock       *core.Lock
 }
-type latencyTarget struct {
-	Name, URL string
-	samples   []float64
-}
+type latencyTarget struct{ Name, URL string }
 type LatencySite struct {
 	Name         string    `json:"name"`
 	URL          string    `json:"url"`
@@ -52,73 +48,162 @@ type LatencySnapshot struct {
 	DNSMilliseconds *float64      `json:"dns_milliseconds"`
 	Milliseconds    *float64      `json:"milliseconds"`
 	Target          string        `json:"target"`
+	TargetURL       string        `json:"target_url"`
 	CheckedAt       *time.Time    `json:"checked_at"`
 	Sites           []LatencySite `json:"sites"`
 	Custom          []LatencySite `json:"custom"`
 }
 
-func NewLatencyMonitor() *LatencyMonitor {
-	return &LatencyMonitor{targets: []latencyTarget{
-		{Name: "Google", URL: "https://www.google.com/"},
+func latencyTargets() []latencyTarget {
+	return []latencyTarget{
+		{Name: "Google", URL: "https://www.google.com/generate_204"},
 		{Name: "Baidu", URL: "https://www.baidu.com/"},
 		{Name: "Yandex", URL: "https://ya.ru/"},
-		{Name: "Cloudflare", URL: "https://www.cloudflare.com/"},
-	}, probe: probePage, dnsProbe: probeDNS, snapshot: LatencySnapshot{State: "measuring", Sites: []LatencySite{}, Custom: []LatencySite{}}}
+		{Name: "Cloudflare", URL: "https://speed.cloudflare.com/__down?bytes=0"},
+	}
 }
 
-const (
-	pageProbeTimeout = 15 * time.Second
-	pageProbeLimit   = 2 << 20
-)
+func NewLatencyMonitor() *LatencyMonitor {
+	m := &LatencyMonitor{targets: latencyTargets(), probe: probePage, dnsProbe: probeDNS, wake: make(chan struct{}, 1)}
+	m.snapshot = m.emptySnapshot("")
+	return m
+}
 
-// probePage measures the HTTPS response through the full body, regardless of
-// status or content type. Assets and JavaScript are not fetched.
+// OpenLatencyMonitor restores the selection before the first request is served.
+func OpenLatencyMonitor(store *core.Store, lock *core.Lock) (*LatencyMonitor, error) {
+	m := NewLatencyMonitor()
+	m.Store, m.Lock = store, lock
+	target, err := m.loadTarget()
+	if err != nil {
+		return nil, err
+	}
+	m.snapshot = m.emptySnapshot(target)
+	return m, nil
+}
+
+func (m *LatencyMonitor) emptySnapshot(target string) LatencySnapshot {
+	s := LatencySnapshot{State: "measuring", TargetURL: target, Sites: []LatencySite{}, Custom: []LatencySite{}}
+	for _, t := range m.targets {
+		selected := t.URL == target
+		s.Sites = append(s.Sites, LatencySite{Name: t.Name, URL: t.URL, Selected: selected})
+		if selected {
+			s.Target = t.Name
+		}
+	}
+	return s
+}
+
+func validLatencyTarget(target string) bool {
+	if target == "" {
+		return true
+	}
+	for _, t := range latencyTargets() {
+		if t.URL == target {
+			return true
+		}
+	}
+	return false
+}
+
+// After startup, call with mu held. Writes also hold the global apply lock.
+func (m *LatencyMonitor) loadTarget() (string, error) {
+	if m.Store == nil {
+		return m.configured, nil
+	}
+	doc, err := m.Store.Load()
+	if err != nil {
+		return "", err
+	}
+	cfg, err := FromDocument(doc)
+	if err == nil && !validLatencyTarget(cfg.LatencyTarget) {
+		err = fmt.Errorf("invalid Internet latency target")
+	}
+	return cfg.LatencyTarget, err
+}
+func (m *LatencyMonitor) saveTarget(target string) error {
+	if m.Store == nil {
+		m.configured = target
+		return nil
+	}
+	doc, err := m.Store.Load()
+	if err != nil {
+		return err
+	}
+	cfg, err := FromDocument(doc)
+	if err != nil {
+		return err
+	}
+	cfg.LatencyTarget = target
+	data, err := MarshalConfig(cfg)
+	if err != nil {
+		return err
+	}
+	doc.Set(ModuleName, data)
+	return m.Store.Save(doc)
+}
+
+// SetTarget runs under the global apply lock. Empty requests a new selection.
+func (m *LatencyMonitor) SetTarget(target string) error {
+	if !validLatencyTarget(target) {
+		return fmt.Errorf("choose a listed Internet target")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.saveTarget(target); err != nil {
+		return err
+	}
+	m.revision++
+	m.snapshot = m.emptySnapshot(target)
+	select {
+	case m.wake <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+// A single HEAD exchange needs no document download or warm-up request.
+// GotConn fires after DNS, TCP and TLS; the first byte must come from the
+// authenticated remote HTTPS endpoint, even when a proxy accepts TCP locally.
 func probePage(ctx context.Context, target string) (float64, error) {
 	return probePageWithDial(ctx, target, nil)
 }
-
 func probePageMarked(ctx context.Context, target string, mark uint32) (float64, error) {
 	return probePageWithDial(ctx, target, markedLatencyDial(mark))
 }
-
 func probePageWithDial(ctx context.Context, target string, dial func(context.Context, string, string) (net.Conn, error)) (float64, error) {
 	transport := &http.Transport{DisableKeepAlives: true, TLSHandshakeTimeout: 4 * time.Second, DialContext: dial}
 	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport}
-	return probePageWithClient(ctx, target, client)
+	return probePageWithClient(ctx, target, &http.Client{Transport: transport})
 }
-
 func probePageWithClient(ctx context.Context, target string, client *http.Client) (float64, error) {
 	origin, err := url.Parse(target)
 	if err != nil || origin.Scheme != "https" || origin.Hostname() == "" {
 		return 0, fmt.Errorf("invalid HTTPS target")
 	}
 	copyClient := *client
-	copyClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 5 || req.URL.Scheme != "https" || !strings.EqualFold(req.URL.Hostname(), origin.Hostname()) || req.URL.Port() != origin.Port() {
-			return http.ErrUseLastResponse
-		}
-		return nil
+	copyClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	var start, first time.Time
+	var traceMu sync.Mutex
+	trace := &httptrace.ClientTrace{
+		GotConn:              func(httptrace.GotConnInfo) { traceMu.Lock(); start = time.Now(); first = time.Time{}; traceMu.Unlock() },
+		GotFirstResponseByte: func() { traceMu.Lock(); first = time.Now(); traceMu.Unlock() },
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	request, err := http.NewRequestWithContext(httptrace.WithClientTrace(ctx, trace), http.MethodHead, target, nil)
 	if err != nil {
 		return 0, err
 	}
-	request.Header.Set("Accept", "text/html")
-	start := time.Now()
+	request.Header.Set("Cache-Control", "no-cache, no-store")
 	response, err := copyClient.Do(request)
 	if err != nil {
 		return 0, err
 	}
-	defer response.Body.Close()
-	count, err := io.Copy(io.Discard, io.LimitReader(response.Body, pageProbeLimit+1))
-	if err != nil {
-		return 0, err
+	response.Body.Close()
+	traceMu.Lock()
+	defer traceMu.Unlock()
+	if start.IsZero() || first.IsZero() || first.Before(start) {
+		return 0, fmt.Errorf("HTTPS timing unavailable")
 	}
-	if count > pageProbeLimit {
-		return 0, fmt.Errorf("page exceeds 2 MiB")
-	}
-	return float64(time.Since(start).Microseconds()) / 1000, nil
+	return float64(first.Sub(start)) / float64(time.Millisecond), nil
 }
 
 func latencyError(err error) string {
@@ -129,9 +214,6 @@ func latencyError(err error) string {
 	if errors.As(err, &dns) {
 		return "DNS lookup failed"
 	}
-	if err.Error() == "page exceeds 2 MiB" {
-		return err.Error()
-	}
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return "Timed out"
 	}
@@ -141,16 +223,14 @@ func latencyError(err error) string {
 	}
 	return "Connection failed"
 }
-
 func probeDNS(ctx context.Context) (float64, error) {
 	start := time.Now()
 	_, err := net.DefaultResolver.LookupHost(ctx, "example.com")
 	if err != nil {
 		return 0, err
 	}
-	return float64(time.Since(start).Microseconds()) / 1000, nil
+	return float64(time.Since(start)) / float64(time.Millisecond), nil
 }
-
 func (m *LatencyMonitor) Snapshot() LatencySnapshot {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -159,10 +239,7 @@ func (m *LatencyMonitor) Snapshot() LatencySnapshot {
 	return s
 }
 func (m *LatencyMonitor) Run(ctx context.Context) {
-	for {
-		if ctx.Err() != nil {
-			return
-		}
+	for ctx.Err() == nil {
 		var custom sync.WaitGroup
 		if m.Custom != nil {
 			custom.Add(1)
@@ -170,137 +247,107 @@ func (m *LatencyMonitor) Run(ctx context.Context) {
 		}
 		m.sample(ctx)
 		custom.Wait()
-		timer := time.NewTimer(m.nextInterval())
+		timer := time.NewTimer(latencySampleInterval)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return
+		case <-m.wake:
+			timer.Stop()
 		case <-timer.C:
 		}
 	}
 }
 
-// Only discovery bursts are frequent. If no site qualifies after four rounds,
-// back off too, so an outage never becomes continuous probing.
-func (m *LatencyMonitor) nextInterval() time.Duration {
-	if len(m.selected) == 0 && m.rounds > 0 {
-		return latencyDiscoveryInterval
-	}
-	return latencySampleInterval
-}
-
-// sample has one writer (Run). Readers only see complete rounds through Snapshot.
+// Only initial selection probes all candidates. Failure never changes a target.
 func (m *LatencyMonitor) sample(ctx context.Context) {
-	// Relearn every day; an outage immediately restarts discovery.
-	if m.discoveryStarted.IsZero() || time.Since(m.discoveryStarted) >= latencyRediscoveryInterval {
-		m.discoveryStarted = time.Now()
-		m.rounds = 0
-		m.selected = nil
-		for i := range m.targets {
-			m.targets[i].samples = nil
-		}
+	m.mu.Lock()
+	target, err := m.loadTarget()
+	revision := m.revision
+	if err != nil {
+		m.snapshot.State = "unavailable"
+		m.snapshot.Milliseconds = nil
+		m.snapshot.DNSMilliseconds = nil
 	}
-	indices := append([]int(nil), m.selected...)
-	if len(indices) == 0 {
-		for i := range m.targets {
-			indices = append(indices, i)
-		}
+	m.mu.Unlock()
+	if err != nil {
+		return
 	}
-	sites := m.Snapshot().Sites
-	if len(sites) == 0 {
-		for _, t := range m.targets {
-			sites = append(sites, LatencySite{Name: t.Name, URL: t.URL})
-		}
-	}
+	s := m.emptySnapshot(target)
 	var wg sync.WaitGroup
-	for _, i := range indices {
+	for i, t := range m.targets {
+		if target != "" && t.URL != target {
+			continue
+		}
 		wg.Add(1)
-		go func(i int) {
+		go func(i int, t latencyTarget) {
 			defer wg.Done()
 			bounded, cancel := context.WithTimeout(ctx, pageProbeTimeout)
 			defer cancel()
-			value, err := m.probe(bounded, m.targets[i].URL)
-			sites[i].Milliseconds = nil
-			sites[i].CheckedAt = time.Now().UTC()
+			value, err := m.probe(bounded, t.URL)
+			s.Sites[i].CheckedAt = time.Now().UTC()
 			if err == nil {
-				sites[i].Milliseconds = &value
+				s.Sites[i].Milliseconds = &value
+			} else {
+				s.Sites[i].Error = latencyError(err)
 			}
-		}(i)
+		}(i, t)
 	}
 	wg.Wait()
 	if ctx.Err() != nil {
 		return
 	}
-	dnsCtx, dnsCancel := context.WithTimeout(ctx, 4*time.Second)
-	defer dnsCancel()
-	var dnsMilliseconds *float64
+	dnsCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
 	if m.dnsProbe != nil {
-		value, err := m.dnsProbe(dnsCtx)
-		if err == nil {
-			dnsMilliseconds = &value
+		if value, err := m.dnsProbe(dnsCtx); err == nil {
+			s.DNSMilliseconds = &value
 		}
 	}
 	now := time.Now().UTC()
-	s := LatencySnapshot{State: "unreachable", CheckedAt: &now, Sites: sites, DNSMilliseconds: dnsMilliseconds}
-	failed := false
-	for _, i := range indices {
-		v := sites[i].Milliseconds
-		if v == nil {
-			failed = true
-			continue
-		}
-		m.targets[i].samples = append(m.targets[i].samples, *v)
-		if s.Milliseconds == nil || *v < *s.Milliseconds {
-			s.Milliseconds = v
-			s.Target = sites[i].Name
+	s.CheckedAt = &now
+	s.State = "unreachable"
+	for _, site := range s.Sites {
+		if site.Milliseconds != nil && (s.Milliseconds == nil || *site.Milliseconds < *s.Milliseconds) {
+			s.Milliseconds = site.Milliseconds
+			s.Target = site.Name
+			s.TargetURL = site.URL
 			s.State = "ok"
 		}
 	}
-	m.rounds++
-	if len(m.selected) > 0 && failed {
-		m.selected = nil
-		m.rounds = 0
-		for i := range m.targets {
-			m.targets[i].samples = nil
+	publish := func() error {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		current, err := m.loadTarget()
+		if err != nil {
+			return err
 		}
-	} else if len(m.selected) == 0 && m.rounds >= 4 {
-		// Require three successes in the four discovery rounds. Median selection
-		// avoids choosing a site on one lucky response; the displayed value remains
-		// the minimum successful measurement in the current round.
-		candidates := []int{}
-		median := func(i int) float64 {
-			v := append([]float64(nil), m.targets[i].samples...)
-			sort.Float64s(v)
-			return v[len(v)/2]
+		if current != target || revision != m.revision || ctx.Err() != nil {
+			return nil
 		}
-		for i := range m.targets {
-			if len(m.targets[i].samples) >= 3 && sites[i].Milliseconds != nil {
-				candidates = append(candidates, i)
+		if target == "" && s.TargetURL != "" {
+			if err := m.saveTarget(s.TargetURL); err != nil {
+				return err
 			}
 		}
-		sort.SliceStable(candidates, func(i, j int) bool { return median(candidates[i]) < median(candidates[j]) })
-		if len(candidates) > 0 {
-			m.selected = append(m.selected, candidates[0])
-			if len(candidates) > 1 && median(candidates[1]) <= median(candidates[0])*1.2 {
-				m.selected = append(m.selected, candidates[1])
-			}
+		for i := range s.Sites {
+			s.Sites[i].Selected = s.Sites[i].URL == s.TargetURL
 		}
-		if len(m.selected) == 0 {
-			m.rounds = 0
-			for i := range m.targets {
-				m.targets[i].samples = nil
-			}
-		}
+		m.snapshot = s
+		return nil
 	}
-	for i := range s.Sites {
-		s.Sites[i].Selected = false
-		for _, j := range m.selected {
-			if i == j {
-				s.Sites[i].Selected = true
-			}
-		}
+	if m.Lock != nil {
+		err = m.Lock.Do(ctx, publish)
+	} else {
+		err = publish()
 	}
-	m.mu.Lock()
-	m.snapshot = s
-	m.mu.Unlock()
+	if err != nil && ctx.Err() == nil {
+		m.mu.Lock()
+		if revision == m.revision {
+			m.snapshot.State = "unavailable"
+			m.snapshot.Milliseconds = nil
+			m.snapshot.DNSMilliseconds = nil
+		}
+		m.mu.Unlock()
+	}
 }

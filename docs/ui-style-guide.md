@@ -120,6 +120,10 @@ On desktop, Overview cards share title and primary metric boundaries. Totals
 and site probes follow their primary metrics without divider lines. Status
 flows naturally. Below desktop, cards use their own content height.
 Site probes use two columns on phones and three from 640px.
+Latency settings place a full-width labeled Internet target Select above the
+monitored-site list, sharing the dialog's Save and Cancel actions. Keep the
+selected provider and automatic selection in this control, without extra
+badges or explanatory content on the card.
 The public-network summary uses a locally bundled flag-icons country flag.
 Clicking any Status row opens its details in a shared dialog, without chevrons.
 Public addresses use monospace and wrap within the dialog.

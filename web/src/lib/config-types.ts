@@ -364,6 +364,7 @@ export interface Forward {
   slot: number
 }
 export interface GatewayConfig {
+  latency_target?: string
   enabled: boolean
   exits?: Exit[]
   forwards?: Forward[]

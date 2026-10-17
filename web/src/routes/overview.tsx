@@ -434,11 +434,17 @@ function SiteIcon({ name, url, icon: iconChoice }: { name: string; url: string; 
     : <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground/10 text-[10px] font-bold uppercase">{name.slice(0, 2)}</span>
 }
 
+function formatLatency(ms: number) {
+  return ms < 1 ? '<1 ms' : `${ms.toFixed(0)} ms`
+}
+
 type MonitoredSite = { name: string; url: string; exit?: string; icon?: string }
 type DraftSite = MonitoredSite & { id: string }
 const DEFAULT_ROUTE = ' default'
 
-function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[]; exits: string[]; onClose: () => void }) {
+function LatencySitesDialog({ sites, exits, latency, onClose }: { sites: MonitoredSite[]; exits: string[]; latency?: GatewayLatency; onClose: () => void }) {
+  const [target, setTarget] = useState(latency?.target_url || 'auto')
+  const [targetChanged, setTargetChanged] = useState(false)
   const [draft, setDraft] = useState<DraftSite[]>(() => sites.map(({ name, url, exit, icon }) => ({ id: crypto.randomUUID(), name, url, exit, icon })))
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
@@ -491,9 +497,21 @@ function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[];
   const matches = search.trim() ? thesvgSlugs.filter((slug) => slug.includes(search.trim().toLowerCase())).slice(0, 32) : []
   return <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
     <DialogContent className="sm:max-w-2xl">
-      <DialogHeader><DialogTitle>Sites to monitor</DialogTitle><DialogDescription>
-        HTTPS response time from this router. Any completed HTTP response counts, even a login redirect or error page. Drag to reorder, select a site to edit, or select its icon to customize it.
+      <DialogHeader><DialogTitle>Latency settings</DialogTitle><DialogDescription>
+        Measure HTTPS latency from this router.
       </DialogDescription></DialogHeader>
+      <div className="space-y-2">
+        <Label htmlFor="internet-latency-target">Internet target</Label>
+        <Select value={target} onValueChange={(value) => { setTarget(value ?? 'auto'); setTargetChanged(true) }}>
+          <SelectTrigger id="internet-latency-target" className="w-full"><SelectValue>{target === 'auto' ? 'Choose fastest once' : latency?.sites.find((site) => site.url === target)?.name}</SelectValue></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">Choose fastest once</SelectItem>
+            {latency?.sites.map((site) => <SelectItem key={site.url} value={site.url}>{site.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <p className="text-sm text-muted-foreground">The chosen target stays fixed until you change it.</p>
+      </div>
+      <Label>Monitored sites</Label>
       <div className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
         {draft.map((site, i) => <div key={site.id} className="rounded-xl bg-muted/60 p-2 text-sm"
           onDragOver={(event: DragEvent<HTMLDivElement>) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); drop(i) }}>
@@ -526,7 +544,7 @@ function LatencySitesDialog({ sites, exits, onClose }: { sites: MonitoredSite[];
         <Button variant="outline" onClick={add} disabled={!name.trim() || !url.startsWith('https://') || draft.length >= 12}>Add</Button>
       </div>
       {save.isError && <p role="alert" className="text-sm text-destructive">{save.error.message}</p>}
-      <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={save.isPending} onClick={() => save.mutate(draft.map(({ name, url, exit, icon }) => ({ name, url, exit, icon })), { onSuccess: onClose })}>Save sites</Button></DialogFooter>
+      <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={save.isPending} onClick={() => save.mutate({ sites: draft.map(({ name, url, exit, icon }) => ({ name, url, exit, icon })), target: targetChanged ? (target === 'auto' ? '' : target) : undefined }, { onSuccess: onClose })}>Save</Button></DialogFooter>
     </DialogContent>
     {iconFor != null && <Dialog open onOpenChange={(open) => { if (!open) setIconFor(null) }}>
       <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Icon for {draft[iconFor]?.name}</DialogTitle><DialogDescription>Upload an image or search theSVG library. Auto uses the site favicon.</DialogDescription></DialogHeader>
@@ -576,7 +594,7 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
   const title = failed ? 'Status unavailable' : !known ? 'Checking…' : faults.length ? 'Needs attention' : idle ? 'Not set up' : 'All systems OK'
   const measured = !latencyFailed && latency?.state === 'ok' && latency.milliseconds != null
   const dnsMeasured = !latencyFailed && latency?.dns_milliseconds != null
-  const latencyValue = measured ? `${latency.milliseconds!.toFixed(0)} ms` : latency?.state === 'unreachable' ? 'No response' : '—'
+  const latencyValue = measured ? formatLatency(latency.milliseconds!) : latency?.state === 'unreachable' ? 'No response' : '—'
   const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? 'Unavailable' : '—'
   // Keep four columns for wide screens so values and units fit on one line.
   return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:gap-4">
@@ -631,26 +649,26 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
     </StatCard>
     <StatCard title={<button type="button" aria-haspopup="dialog" aria-label="Edit latency configuration" onClick={() => setSitesOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">Latency</button>} className={(latency?.custom?.length ?? 0) > 3 ? 'lg:aspect-auto' : undefined}>
       <div className="space-y-1">
-        <MetricPill label="Internet" value={latencyValue} valueRight />
-        <MetricPill label="DNS lookup" value={dnsMeasured ? `${latency.dns_milliseconds!.toFixed(0)} ms` : '—'} valueRight />
+        <div title={latency?.target ? `Internet latency to ${latency.target}` : undefined}><MetricPill label="Internet" value={latencyValue} valueRight /></div>
+        <MetricPill label="DNS lookup" value={dnsMeasured ? formatLatency(latency.dns_milliseconds!) : '—'} valueRight />
       </div>
       <div className="pt-1">
         <div className="grid grid-cols-2 items-center gap-x-2 gap-y-1.5 sm:grid-cols-3">
           {latency?.custom?.map((site) => {
             const measuredSite = Boolean(site.checked_at && !site.checked_at.startsWith('0001-'))
             const ms = site.milliseconds
-            const description = `${site.name} · HTTPS response from ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!measuredSite ? 'Waiting for first probe' : ms == null ? site.error || 'Failed' : `${ms.toFixed(0)} ms`}`
+            const description = `${site.name} · HTTPS latency to ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!measuredSite ? 'Waiting for first probe' : ms == null ? site.error || 'Failed' : formatLatency(ms)}`
             return <span key={site.name} tabIndex={0} aria-label={description} title={description}
               className="inline-flex min-h-8 min-w-0 items-center gap-1.5 rounded-sm text-xs font-semibold tabular-nums text-foreground focus-visible:outline-2 focus-visible:outline-ring">
               <SiteIcon name={site.name} url={site.url} icon={site.icon} />
-              <span className="min-w-0 whitespace-nowrap">{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : `${ms.toFixed(0)} ms`}</span>
+              <span className="min-w-0 whitespace-nowrap">{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : formatLatency(ms)}</span>
             </span>
           })}
         </div>
       </div>
     </StatCard>
     <NetworkQuality />
-    {sitesOpen && <LatencySitesDialog sites={latency?.custom ?? []} exits={exits} onClose={() => setSitesOpen(false)} />}
+    {sitesOpen && <LatencySitesDialog sites={latency?.custom ?? []} exits={exits} latency={latency} onClose={() => setSitesOpen(false)} />}
     <BandwidthLimitDialog key={editing ?? 'closed'} direction={editing} limits={limits} onClose={() => setEditing(null)} onSave={saveLimits} />
   </div>
 }

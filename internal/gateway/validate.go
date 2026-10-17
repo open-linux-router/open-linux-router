@@ -71,6 +71,9 @@ func (r Result) Err() error {
 // Validate checks intent against itself and against link's facts.
 func Validate(c Config, links LinkView) Result {
 	var r Result
+	if !validLatencyTarget(c.LatencyTarget) {
+		r.errorf("latency_target", "choose a listed Internet target")
+	}
 	if err := validateCustomSites(c.LatencySites); err != nil {
 		r.errorf("latency_sites", "%s", err)
 	}

@@ -75,6 +75,7 @@ func (h HTTP) Routes() []core.Route {
 	routes := []core.Route{
 		{Method: "GET", Path: "/world-traffic", Tool: "show world traffic", Summary: "Top ten remote IPs by observed connection bytes over the last thirty seconds.", Handler: h.getWorldTraffic},
 		{Method: "GET", Path: "/latency", Tool: "show latency", Summary: "Latest router HTTPS response measurements and selected websites.", Handler: h.getLatency},
+		{Method: "PUT", Path: "/latency/target", Summary: "Choose an Internet latency target; empty selects the fastest once.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencyTarget},
 		{Method: "GET", Path: "/latency/sites/{name}/icon", Summary: "Discover a monitored site icon.", Handler: h.getLatencyIcon},
 		{Method: "PUT", Path: "/latency/sites", Summary: "Replace custom HTTPS response targets.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencySites},
 		// Intent, whole document. Still the way to restore a backup or make
@@ -805,6 +806,29 @@ func (h HTTP) getLatency(w http.ResponseWriter, r *http.Request) {
 		snapshot.Custom = h.Latency.Custom.Snapshot()
 	}
 	core.WriteJSON(w, http.StatusOK, snapshot)
+}
+
+func (h HTTP) putLatencyTarget(w http.ResponseWriter, r *http.Request) {
+	if h.Latency == nil {
+		core.WriteError(w, http.StatusServiceUnavailable, "latency monitor unavailable")
+		return
+	}
+	var body struct {
+		Target *string `json:"target"`
+	}
+	if err := core.DecodeJSON(w, r, &body); err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if body.Target == nil || !validLatencyTarget(*body.Target) {
+		core.WriteError(w, http.StatusBadRequest, "choose a listed Internet target")
+		return
+	}
+	if err := h.Lock.Do(r.Context(), func() error { return h.Latency.SetTarget(*body.Target) }); err != nil {
+		core.WriteError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	core.WriteJSON(w, http.StatusOK, h.Latency.Snapshot())
 }
 
 func (h HTTP) putLatencySites(w http.ResponseWriter, r *http.Request) {

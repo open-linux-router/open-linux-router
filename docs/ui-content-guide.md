@@ -45,7 +45,11 @@ hidden page title. Detail and operation pages keep their identifying titles.
   Reachability and Wi-Fi on a 0–100 higher-is-better scale. Until measurements
   are connected, retain the simulated-score context in its accessible description.
   Omit the visible Demo badge and chart caption. Clicking the Latency title opens
-  the site configuration dialog, without a separate plus button.
+  latency settings, without a separate plus button. The dialog starts with an
+  Internet target selector: a named provider or “Choose fastest once”. The
+  selected target stays fixed across failures and restarts. Show the latest
+  single HTTPS latency sample, with `<1 ms` for sub-millisecond values; keep
+  DNS lookup simple and omit bandwidth tests. Monitored sites follow the target.
   `Up` and elapsed uptime
   lead Status above system health. Click uptime for a dialog with CPU, memory and root disk
   used/total values; omit the separate System card.
