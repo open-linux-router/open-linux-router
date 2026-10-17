@@ -73,8 +73,10 @@ Access has two square-tile grids headed “Add a way out” and “Add a way in�
 Do not show System default or purpose filters. Each tile shows a locally bundled
 project logo above a short name. Preserve brand colors on a white logo backing
 in both themes. Protocols without a recognized logo use a text identifier rather
-than an invented glyph. Use two columns on phones, four from 640px, five from
-1024px and six from 1280px. Hover/focus explains function and state; click opens
+than an invented glyph. Use three columns on phones, five from 640px, seven from
+1024px and eight from 1280px, with 12px gaps and 40px logo areas. Keep names
+below logos with an 8px gap. Group headings use 24px/32px semibold text.
+Hover/focus explains function and state; click opens
 details and configuration actions for touch users. External setup stays explicit.
 
 Tunnel Broker uses one scrollable page with five numbered sections and a sticky

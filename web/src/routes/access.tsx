@@ -49,8 +49,8 @@ export function AccessPage() {
     <div className="space-y-8">
       {(['out', 'in'] as const).map(direction => (
       <section key={direction} className="space-y-4" aria-labelledby={`access-${direction}`}>
-        <h2 id={`access-${direction}`} className="text-base font-semibold">Add a way {direction}</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 lg:grid-cols-5 xl:grid-cols-6">
+        <h2 id={`access-${direction}`} className="text-2xl leading-8 font-semibold">Add a way {direction}</h2>
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8">
           {ACCESS_TECHNOLOGIES.filter(entry => entry.directions.includes(direction)).map(entry => {
             const directional = { ...entry, connections: entry.connections.filter(kind => ACCESS_DEFINITIONS.find(definition => definition.kind === kind)?.direction === direction) }
             return <TechnologyTile key={entry.id} entry={directional} onSelect={() => setSelected(directional)} summaries={summaries} />
@@ -96,8 +96,8 @@ function TechnologyTile({ entry, onSelect, summaries }: { entry: AccessTechnolog
   const integrated = entry.connections.length > 0
   return (
     <Tooltip>
-      <TooltipTrigger render={<button type="button" />} onClick={onSelect} aria-label={`${entry.name}${integrated ? '' : ' · Not integrated'}`} className="relative flex aspect-square min-w-0 flex-col items-center justify-center gap-4 rounded-xl border bg-card p-3 text-card-foreground shadow-xs transition-colors duration-150 hover:border-primary/50 hover:bg-accent/30 active:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
-        <span className="flex h-14 w-20 items-center justify-center rounded-lg bg-white p-1.5">
+      <TooltipTrigger render={<button type="button" />} onClick={onSelect} aria-label={`${entry.name}${integrated ? '' : ' · Not integrated'}`} className="relative flex aspect-square min-w-0 flex-col items-center justify-center gap-2 rounded-xl border bg-card p-2 text-card-foreground shadow-xs transition-colors duration-150 hover:border-primary/50 hover:bg-accent/30 active:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+        <span className="flex h-10 w-14 shrink-0 items-center justify-center rounded-lg bg-white p-1">
           {logo ? <img src={logo} alt="" className="max-h-full max-w-full object-contain" /> : <span className="text-lg font-semibold tracking-tight text-slate-700" aria-hidden>{entry.name}</span>}
         </span>
         <span className="max-w-full break-words text-center text-sm font-medium">{entry.name}</span>
