@@ -202,15 +202,13 @@ addresses and provider errors readable rather than silently truncating them.
 
 ## Disclosure and hierarchy
 
-Access lists each technology once, with an icon and short name in a square tile.
-Purpose filters overlap: remote access, networking, internet exit and publishing.
-Functions and observed state appear on hover/focus and in a click-open dialog,
-which offers the existing configuration actions. SOCKS5 has separate client and
-server actions within one entry. Broader ecosystem capabilities must distinguish
-the subset OLR actually configures. External technologies explicitly say “Not
-integrated” and link to official documentation; never invent running states or
-configuration routes for them. System default is observed, not addable. Existing
-configuration owners and independent service states remain authoritative.
+Access groups technology tiles under “Add a way out” and “Add a way in”.
+A technology can appear in both directions; each dialog offers only configuration
+owners for that direction. Remove System default and purpose filters from this
+page. Use project logos, with text identifiers for unbranded protocols. Functions
+and state appear on hover/focus and in click-open details. External technologies
+remain explicitly “Not integrated”; broader ecosystem uses are not promises of
+OLR configuration support. Existing service states remain authoritative.
 
 Tunnel Broker keeps provider details together in one saved assignment, with
 activation and LAN assignment as separate decisions. Saving defaults to off.

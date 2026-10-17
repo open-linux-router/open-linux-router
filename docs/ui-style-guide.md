@@ -69,15 +69,13 @@ each edge, with logarithmic widths normalized separately for each side and a
 with their units on one line. Reserve separate label space so small traffic
 categories remain readable.
 
-Access uses a technology directory with square tiles: one outline icon above
-one short name, without descriptions or chevrons in the tile. Use two columns
-on phones, four from 640px, five from 1024px and six from 1280px. Reuse card
-surfaces and visible focus rings. Hover/focus reveals function and observed
-status; clicking opens the same explanation and configuration actions for touch
-users. External-only entries use muted icons and a small external marker;
-tooltips and dialogs explicitly say “Not integrated”. Optional purpose filters
-allow overlapping uses without duplicating technologies. System default stays
-a separate observed row.
+Access has two square-tile grids headed “Add a way out” and “Add a way in”.
+Do not show System default or purpose filters. Each tile shows a locally bundled
+project logo above a short name. Preserve brand colors on a white logo backing
+in both themes. Protocols without a recognized logo use a text identifier rather
+than an invented glyph. Use two columns on phones, four from 640px, five from
+1024px and six from 1280px. Hover/focus explains function and state; click opens
+details and configuration actions for touch users. External setup stays explicit.
 
 Tunnel Broker uses one scrollable page with five numbered sections and a sticky
 step navigation immediately below the 64px shell header. Keep section anchors

@@ -1,18 +1,14 @@
 # Access UI
 
-Access lists technologies in one responsive square-tile directory. Each tile
-contains an outline icon and short name. Hover and keyboard focus reveal its
-functions and observed state. Clicking opens a dialog with the same information
-and configuration actions, including on touch devices. Purpose filters overlap;
-one technology can serve several uses without appearing more than once.
+Access shows two square-tile grids: **Add a way out** and **Add a way in**.
+There is no System default row or purpose filter. A technology can appear in both
+grids; dialogs only expose configuration actions owned by that direction.
+Hover/focus explains functions and observed state; click exposes the same details
+on touch devices. Unintegrated directions link to external documentation.
 
-`web/src/features/access/technologies.ts` owns directory content. Technologies
-without an OLR configuration owner are explicitly labeled “Not integrated” in
-their accessible names, tooltips and dialogs, with official documentation links.
-Muted icons and an external marker distinguish them visually. No new protocol
-backend is implemented. WireGuard's description distinguishes its broader uses
-from OLR's incoming-device configuration. SOCKS5 combines client and server
-actions in one dialog. Existing preview/confirmation flows remain authoritative.
+Tiles use bundled project artwork from `web/public/access-logos` and the existing
+Shadowsocks mark. Protocols without an established logo use text rather than
+invented symbols. See the logo directory README for provenance.
 
 ## Connection model
 
@@ -65,6 +61,14 @@ the external proxy. Protocol settings and configuration apply paths remain on
 their respective pages.
 
 ## Validation
+
+Direction/logo revision: Node 24 lint, production build, all UI tests and Linux
+Go 1.27 vet/tests pass. Browser checks at 375, 768 and 1440 pixels in both themes
+verify the two headings, removed default/filter controls, square tiles, loaded
+local logos, hover/focus explanations, keyboard dialogs and configuration links.
+Screenshots: `/tmp/olr-access-logos-review`. No live router settings changed.
+
+Previous directory revision:
 
 Technology-directory checks cover all 24 tiles at 375, 768 and 1440 pixels in
 light and dark themes, square proportions, horizontal overflow, hover, keyboard
