@@ -69,10 +69,15 @@ each edge, with logarithmic widths normalized separately for each side and a
 with their units on one line. Reserve separate label space so small traffic
 categories remain readable.
 
-Access uses two responsive tile grids headed “Add a way out” and “Add a way in”.
-Use one column on phones, two from 640px and three from 1280px, with the Tools
-directory's surfaces, focus treatment and 48/56px icon tiles. Names, short intent
-descriptions and observed status wrap. System default is a separate built-in row.
+Access uses a technology directory with square tiles: one outline icon above
+one short name, without descriptions or chevrons in the tile. Use two columns
+on phones, four from 640px, five from 1024px and six from 1280px. Reuse card
+surfaces and visible focus rings. Hover/focus reveals function and observed
+status; clicking opens the same explanation and configuration actions for touch
+users. External-only entries use muted icons and a small external marker;
+tooltips and dialogs explicitly say “Not integrated”. Optional purpose filters
+allow overlapping uses without duplicating technologies. System default stays
+a separate observed row.
 
 Tunnel Broker uses one scrollable page with five numbered sections and a sticky
 step navigation immediately below the 64px shell header. Keep section anchors

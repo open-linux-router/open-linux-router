@@ -202,13 +202,15 @@ addresses and provider errors readable rather than silently truncating them.
 
 ## Disclosure and hierarchy
 
-Access groups connections by user intent into ways out and ways in. Outbound
-Gateway, SOCKS5 and Tunnel Broker tiles precede inbound WireGuard, Shadowsocks,
-SOCKS5, HTTPS service and Port forwarding. Distinguish the two SOCKS5 purposes in
-their descriptions. Tiles lead to configuration; do not imply that every way is
-interchangeable in every network's route selector. System default is observed,
-not addable; do not introduce a default-for-networks setting. Connection state
-is independent per tile, including when configurations share a backend module.
+Access lists each technology once, with an icon and short name in a square tile.
+Purpose filters overlap: remote access, networking, internet exit and publishing.
+Functions and observed state appear on hover/focus and in a click-open dialog,
+which offers the existing configuration actions. SOCKS5 has separate client and
+server actions within one entry. Broader ecosystem capabilities must distinguish
+the subset OLR actually configures. External technologies explicitly say “Not
+integrated” and link to official documentation; never invent running states or
+configuration routes for them. System default is observed, not addable. Existing
+configuration owners and independent service states remain authoritative.
 
 Tunnel Broker keeps provider details together in one saved assignment, with
 activation and LAN assignment as separate decisions. Saving defaults to off.

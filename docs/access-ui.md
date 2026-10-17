@@ -1,9 +1,18 @@
 # Access UI
 
-Access groups connections by the user's intent relative to this network.
-Its landing page has **Add a way out** and **Add a way in**, each with a responsive
-tile grid. Tiles open the existing configuration workflow and show its current
-state; adding a connection still uses that workflow's preview and confirmation.
+Access lists technologies in one responsive square-tile directory. Each tile
+contains an outline icon and short name. Hover and keyboard focus reveal its
+functions and observed state. Clicking opens a dialog with the same information
+and configuration actions, including on touch devices. Purpose filters overlap;
+one technology can serve several uses without appearing more than once.
+
+`web/src/features/access/technologies.ts` owns directory content. Technologies
+without an OLR configuration owner are explicitly labeled “Not integrated” in
+their accessible names, tooltips and dialogs, with official documentation links.
+Muted icons and an external marker distinguish them visually. No new protocol
+backend is implemented. WireGuard's description distinguishes its broader uses
+from OLR's incoming-device configuration. SOCKS5 combines client and server
+actions in one dialog. Existing preview/confirmation flows remain authoritative.
 
 ## Connection model
 
@@ -40,13 +49,13 @@ dependencies must reject cycles and keep transport traffic out of its own tunnel
 Ways in express either joining the network, borrowing its internet access or
 publishing a service. Those intents share a directory, not permissions or a
 universal configuration form. Credentials and exposure remain in their own
-workflows. A future bidirectional connection should be referenced from both
-directions rather than duplicated.
+workflows. The directory references each technology once, with separate actions
+where it has multiple configuration owners.
 
 Former Gateway URLs and Advanced addresses redirect while preserving query
 parameters and fragments. `/access/remote` retains its combined view for existing
-bookmarks and shared endpoint settings. New inbound tiles open individual views
-of the same configuration, with independent status summaries.
+bookmarks and shared endpoint settings. Directory dialogs link to individual
+views of the same configuration, with independent status summaries.
 
 The landing page reads existing configuration and status endpoints. It never
 applies network changes. A failed observation is shown as unavailable rather than
@@ -56,6 +65,17 @@ the external proxy. Protocol settings and configuration apply paths remain on
 their respective pages.
 
 ## Validation
+
+Technology-directory checks cover all 24 tiles at 375, 768 and 1440 pixels in
+light and dark themes, square proportions, horizontal overflow, hover, keyboard
+activation, detail dialogs, purpose filtering, both SOCKS5 actions and external
+documentation links. Screenshots are retained in
+`/tmp/olr-access-directory-review`. Node 24 lint, production build and all 25 UI
+tests plus interface-rate checks pass; lint retains existing unrelated warnings.
+Linux Go vet and tests pass with Go 1.27. These checks use synthetic responses
+and do not change live router settings.
+
+Earlier connection/status refactor validation:
 
 UI lint, production build and all UI tests pass with Node 24, including ten
 Access status regression tests. Linux Go vet and tests pass with Go 1.27 (the
