@@ -6,6 +6,9 @@ Router software for personal, homelab, and small-org networks. Installed as
 Status: architecture settled. `dhcp` is the first module under construction; its
 design is §11. Open decisions at the bottom.
 
+The [network quality design](docs/network-quality.md) describes the proposed
+five-category assessment, measurement catalog, data model and staged delivery.
+
 ---
 
 ## 1. Goals
