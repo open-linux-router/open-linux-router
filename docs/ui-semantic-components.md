@@ -2,10 +2,9 @@
 
 This is the cross-page component inventory and target visual contract for OLR.
 Read it with the [visual guide](ui-style-guide.md) and
-[content guide](ui-content-guide.md). It specifies shared roles before a UI
-implementation pass; proposed component names below are not existing exports.
-Existing route-specific interactions remain in place. This audit is based on
-source inspection, not a rendered visual or accessibility test.
+[content guide](ui-content-guide.md). Heading, MetricValue, PropertyRow,
+TechnicalValue, the Card family and shared surface utilities implement the
+core roles. The inventory distinguishes these from future extractions.
 
 ## Audit scope and findings
 
@@ -17,9 +16,9 @@ placeholder; it needs the same empty-state contract when developed.
 
 The project already has good foundations: Geist, semantic theme colors, shared
 controls, PageHeading/SubPage, Card, ListRow, Dialog and tabular traffic values.
-The remaining inconsistencies are mostly role definitions and local overrides:
+The original audit found differences in role definitions and local overrides:
 
-| Evidence | Current difference | Target decision |
+| Evidence | Original difference | Shared decision |
 | --- | --- | --- |
 | `components/ui/card.tsx`, `index.css` | Card uses `rounded-xl` (16px), although the guide says panels are 12px | Standard panels are 12px; fix the shared radius mapping/use in an implementation pass |
 | `routes/overview.tsx`, `features/network-quality/network-quality.tsx`, `components/ui/card.tsx` | Monitoring headings are 14px, normal CardTitle is 16px | Explicit compact monitoring heading and normal panel heading roles |
@@ -30,9 +29,9 @@ The remaining inconsistencies are mostly role definitions and local overrides:
 | `components/layout/settings-list.tsx`, `components/ui/list.tsx` | Settings answers inherit subdued trailing-text styling | Distinguish an answer value from secondary metadata |
 | `routes/tools.tsx`, `routes/access.tsx`, interface cards | Several locally composed interactive surfaces | Shared surface interaction rules while preserving directory-specific layouts |
 
-The table records migration targets, not completed fixes. The main worktree's
-untracked preview directories and `network-settings.tsx` are local experiments,
-not the baseline for this contract.
+The table records the original audit. Its radius, heading, measurement,
+property-value and interaction differences are addressed by the shared contracts
+below. Specialized chart layouts retain their documented exceptions.
 
 ## Component inventory
 
@@ -44,20 +43,46 @@ can be shared variants/tokens within those components.
 | --- | --- | --- |
 | Page frame | Width, gutters, navigation, page spacing | Reuse AppShell and SubPage |
 | Page heading | h1, optional context, back/breadcrumb, action | Reuse PageHeading; converge local entity headings visually |
-| Section heading | Heading plus optional action/context | Proposed SectionHeading; use the correct h2/h3 independently of visual size |
+| Section heading | Heading plus optional action/context | Heading; choose `as` independently of `size` |
 | Panel | Static information group with header/content/footer | Reuse Card family; unify radius and heading variants |
-| Navigation tile | A capability/entity with one primary destination | Proposed NavigationTile for repeated link surfaces; retain Tools and Access layouts |
-| Property list / row | Label and current answer, optionally an edit trigger | Generalize DeviceSettingRow as PropertyRow inside a `dl` |
-| Metric value | Measurement, unit, optional supporting detail | Proposed MetricValue; replace the local Tools Metric typography and share with traffic primitives |
+| Navigation tile | A capability/entity with one primary destination | Shared `panel-surface interactive-surface` utilities; retain directory layouts |
+| Property list / row | Label and current answer, optionally an edit trigger | PropertyRow inside a `dl`; DeviceSettingRow re-exports the same component |
+| Metric value | Measurement and optional unit | MetricValue, used by Tools, traffic primitives, Gateway and DNS summaries |
 | Traffic meter | Current rate, optional limit and utilization | Reuse Meter; keep data/direction semantics in traffic code |
 | Status indicator | State label plus optional icon | Proposed StatusIndicator, composed into existing StatusStrip/rows; Badge remains a tag primitive |
-| Technical value | IP, MAC, hostname, interface identifier, command | Proposed TechnicalValue text role with wrapping/copy behavior where needed |
+| Technical value | IP, MAC, hostname, interface identifier, command | TechnicalValue for wrapping identifiers; literal output retains pre/code |
 | List / table | Repeated entities or comparable records | Reuse List/ListRow and Table; right-align numeric columns |
 | Form field | Label, control, hint, validation and feedback | Compose existing Label/Input/Select/Switch/EditableField; share repeated field structure |
 | Disclosure | Optional detail without changing the main answer | Reuse Disclosure; dialog-based Overview details retain their existing behavior |
 | Dialog / menu / tooltip | Modal editing, contextual actions, short supplemental help | Reuse current primitives; never make tooltip-only information necessary for touch users |
 | Feedback / empty state | Loading, error, no data, completion and retry | Reuse Skeleton, Alert, ListEmpty and Sonner; generalize empty-state layout only when needed |
 | Chart frame | Title/actions, plot space, legend, data availability | Share frame conventions; keep radar, map, activity matrix and Sankey domain-specific |
+
+## Size variants
+
+Size is explicit and independent of semantic HTML, state and elevation. Choose
+by information role; avoid local font-size overrides or making every component
+support every size.
+
+| Component | Small | Medium / default | Large |
+| --- | --- | --- | --- |
+| Heading / CardTitle | `sm`: 14/24px, compact monitoring/list group | `md`: 16/24px, section/panel (default) | `lg`: 24/32px, page/entity title |
+| MetricValue | `sm`: 14/20px, inline (default) | `md`: 20/28px, summary | `lg`: 30/36px, diagnostic result |
+| Card | `sm`: 12px phone / 16px desktop spacing | `default`: 16px / 24px spacing | No extra large-card density; layout controls width |
+| PropertyRow | `sm`: 32px desktop minimum | `md`: 36px desktop minimum (default) | Wrapped content grows naturally |
+
+Pass these through `size`. Every PropertyRow size retains 44px on phones. Card
+density does not resize its title. Heading defaults to h2; `as` chooses document
+hierarchy independently. DialogTitle retains its accessible primitive and uses
+the medium heading scale.
+
+`<MetricValue size="lg" value="23.4" unit="ms" />` displays a test result;
+`<MetricValue value={formatRate(rate)} />` displays an inline rate. A null or
+undefined value displays an accessible unavailable dash without a unit. Keep
+observed zero as zero. PropertyRow children supply any actual editing controls.
+
+ListRow's `trailingTone="value"` emphasizes a setting's answer and subdues its
+label. The default `muted` variant remains for auxiliary metadata.
 
 ## Surface and interaction contract
 
@@ -106,8 +131,8 @@ theme foreground unless stated otherwise; do not make ordinary values primary bl
 | Summary metric | 20 / 28px | 600 | Tabular numerals |
 | Diagnostic result metric | 30 / 36px | 600 | Tabular numerals, tracking -0.015em |
 
-Visual size does not choose HTML heading level. CardTitle currently renders a
-div; consumers must supply a real heading (or a future polymorphic heading API).
+Visual size does not choose HTML heading level. CardTitle renders Heading and
+accepts its `as` and `size`; do not nest another heading inside it.
 PropertyRow uses `dt`/`dd` under `dl`; form labels are not property labels.
 Mobile input text remains 16px to avoid browser zoom.
 
@@ -172,19 +197,19 @@ Check focus, wrapping, units, busy/error states and touch access in both themes.
 
 ## Implementation sequence and acceptance
 
-1. Align radius tokens and shared Card/heading styles with this contract. Name
-   surface and text roles explicitly; audit all users of a changed radius token.
-2. Extract MetricValue and PropertyRow, then converge Tools, Overview, device/group,
-   Gateway and DNS statistics. Keep data fetching, formatting and apply behavior
-   in their feature owners.
-3. Converge repeated section headings, navigation surfaces, technical values and
-   status presentations. Preserve the documented Access/Tools layout differences.
-4. Apply the same roles to forms, dialogs, empty states, authentication/setup and
-   diagnostic feedback. Keep specialized chart renderers and interactions local.
+The initial implementation covers radius tokens, headings/surfaces,
+Tools/Overview/Gateway/DNS measurements, device/group properties, setting answers,
+authentication headings and dialog depth. Ping without replies renders unavailable
+latency. Phone input typography takes precedence over compact text utilities;
+latency configuration actions use shared buttons and retain touch targets.
+
+Reuse these owners before extracting more components. StatusIndicator, a general
+form-field wrapper and a chart frame remain possible extractions when repeated
+behavior warrants them. Keep data fetching, formatting and apply behavior local.
 
 For implementation, review 375px, 768px and 1440px, both themes, keyboard-only
 navigation, long IPv6/device names, missing data and live updates. Capture
 representative before/after screenshots of Overview, a device, Gateway, a tool
 result, a form/dialog and Access. Run UI lint/build and relevant behavior tests;
-follow repository checks for shipped code changes. This documentation pass does
-not claim those rendered checks or component migrations have been performed.
+follow repository checks for shipped code changes. Mocked browser checks verify
+presentation and interaction, not a live router's network behavior.

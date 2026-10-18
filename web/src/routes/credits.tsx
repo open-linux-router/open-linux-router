@@ -1,3 +1,4 @@
+import { Heading } from '@/components/ui/heading'
 import { Link } from 'react-router'
 
 type Credit = { name: string; url: string; use: string }
@@ -60,7 +61,7 @@ function CreditSection({ title, items }: { title: string; items: Credit[] }) {
   return (
     <section className="space-y-4" aria-label={title}>
       <div>
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+        <Heading>{title}</Heading>
       </div>
       <ul className="grid gap-x-8 sm:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => (
@@ -79,7 +80,7 @@ export function CreditsPage() {
     <div className="space-y-12 pb-12">
       <div className="space-y-3">
         <Link to="/" className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">Back to Overview</Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Built on open work</h1>
+        <Heading as="h1" size="lg">Built on open work</Heading>
         <p className="max-w-2xl text-muted-foreground">Thank you to the maintainers of the projects that make Open Linux Router possible.</p>
         <p className="text-sm text-muted-foreground">Some backends are optional. Manifests contain full dependency and license information.</p>
       </div>

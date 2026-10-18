@@ -76,9 +76,9 @@ html {
     --color-background: var(--background);
     --radius-sm: 0.5rem;
     --radius-md: 0.5rem;
-    --radius-lg: var(--radius);
-    --radius-xl: 1rem;
-    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-lg: 0.5rem;
+    --radius-xl: var(--radius);
+    --radius-2xl: 1rem;
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
 }
@@ -246,8 +246,21 @@ html {
     [data-slot='button']:has(> svg:only-child), [data-slot='dialog-close'] {
       min-width: 44px;
     }
-    [data-slot='input'], [data-slot='textarea'], [data-slot='select-trigger'] {
-      font-size: 16px;
-    }
   }
+}
+
+/* These are interaction/readability minimums, including compact local variants.
+   Unlayered rules beat utility overrides without changing desktop typography. */
+@media (max-width: 639px) {
+  [data-slot='input'], [data-slot='textarea'], [data-slot='select-trigger'] {
+    font-size: max(16px, 1em);
+  }
+}
+
+@utility panel-surface {
+  @apply rounded-xl border border-border bg-card text-card-foreground shadow-xs;
+}
+
+@utility interactive-surface {
+  @apply transition-colors duration-150 hover:bg-accent/60 active:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring;
 }

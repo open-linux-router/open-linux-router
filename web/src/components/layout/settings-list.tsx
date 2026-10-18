@@ -1,4 +1,5 @@
 import { List, ListRow } from '@/components/ui/list'
+import { Heading } from '@/components/ui/heading'
 import { groupOf } from '@/components/layout/sections'
 
 /**
@@ -38,7 +39,7 @@ export function SettingsList({
 }) {
   return (
     <section className="space-y-2">
-      {heading && <h2 className="px-1 text-sm font-medium text-muted-foreground">{heading}</h2>}
+      {heading && <Heading size="sm" className="px-1">{heading}</Heading>}
       <List>
         {rows.map(({ slug, value }) => {
           const { group } = groupOf(section, slug)
@@ -46,14 +47,9 @@ export function SettingsList({
             <ListRow
               key={slug}
               title={group.label}
-              // The same value twice, and only ever one of them on screen.
-              // ListRow's trailing slot is `hidden sm:block`, which is right for
-              // a row whose title already identifies the thing and wrong here:
-              // on a phone it would leave six labels and no answers, which is
-              // the long page again with the useful half removed. Below the
-              // label it wraps instead of truncating.
               wrap
               trailing={value}
+              trailingTone={value != null && value !== false ? 'value' : 'muted'}
               to={group.to ?? `${section}/${slug}`}
             />
           )

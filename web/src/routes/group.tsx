@@ -1,3 +1,5 @@
+import { Heading } from '@/components/ui/heading'
+import { MetricValue } from '@/components/ui/metric-value'
 import { FolderTree, Network } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
@@ -80,13 +82,13 @@ export function GroupPage() {
     <Card className="gap-0 p-4 sm:p-6">
       <header className="flex min-h-20 items-center gap-4 border-b pb-4">
         <span className="flex size-16 shrink-0 items-center justify-center rounded-xl bg-muted"><FolderTree className="size-8" aria-hidden /></span>
-        <h1 className="min-w-0 break-words text-2xl font-semibold tracking-tight sm:text-3xl">{group.name}</h1>
+        <Heading as="h1" size="lg" className="min-w-0 break-words">{group.name}</Heading>
       </header>
       <div className="mt-4 grid gap-y-8 lg:grid-cols-2 lg:gap-x-16">
         <dl className="min-w-0">
           <DeviceSettingRow label="Parent">{group.parent ? <Link className="inline-flex min-h-11 max-w-full items-center rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9" to={`/groups/${encodeURIComponent(group.parent)}`}><Badge variant="secondary" className="whitespace-normal break-words">{group.parent}</Badge></Link> : 'Top-level group'}</DeviceSettingRow>
-          <DeviceSettingRow label="Devices"><span className="tabular-nums">{members.length}</span></DeviceSettingRow>
-          <DeviceSettingRow label="Directly here"><span className="tabular-nums">{direct}</span></DeviceSettingRow>
+          <DeviceSettingRow label="Devices"><MetricValue value={members.length} /></DeviceSettingRow>
+          <DeviceSettingRow label="Directly here"><MetricValue value={direct} /></DeviceSettingRow>
           <DeviceSettingRow label="Subgroups">{children.length ? <div className="flex flex-wrap justify-end gap-2">{children.map((child) => <Link key={child.name} className="inline-flex min-h-11 max-w-full items-center rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9" to={`/groups/${encodeURIComponent(child.name)}`}><Badge variant="secondary" className="whitespace-normal break-words">{child.name}</Badge></Link>)}</div> : 'None'}</DeviceSettingRow>
         </dl>
         <div className="min-w-0 space-y-4">
@@ -125,5 +127,5 @@ export function GroupPage() {
 }
 
 function State({ title }: { title: string }) {
-  return <div className="space-y-3 py-16 text-center"><Network className="mx-auto size-8 text-muted-foreground" aria-hidden /><h1 className="text-xl font-semibold">{title}</h1><Button variant="outline" nativeButton={false} render={<Link to="/">Back to overview</Link>} /></div>
+  return <div className="space-y-3 py-16 text-center"><Network className="mx-auto size-8 text-muted-foreground" aria-hidden /><Heading as="h1" size="lg">{title}</Heading><Button variant="outline" nativeButton={false} render={<Link to="/">Back to overview</Link>} /></div>
 }

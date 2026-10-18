@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
+import { Heading } from '@/components/ui/heading'
 
 export function PageHeading({ title, description, back, breadcrumbs, action, id }: {
   id?: string
@@ -27,7 +28,7 @@ export function PageHeading({ title, description, back, breadcrumbs, action, id 
       )}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-2">
-          <h1 id={id} className="text-2xl leading-8 font-semibold tracking-tight">{title}</h1>
+          <Heading as="h1" size="lg" id={id}>{title}</Heading>
           {description && <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{description}</p>}
         </div>
         {action}

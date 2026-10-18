@@ -1,3 +1,5 @@
+import { Heading } from '@/components/ui/heading'
+import { TechnicalValue } from '@/components/ui/property-row'
 import { useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -106,10 +108,10 @@ export function DeviceInlineEditor({ device, traffic, activity, services, total 
         </button>
         <div className="pointer-events-none relative min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="pointer-events-auto min-w-0 max-w-full text-2xl font-semibold tracking-tight sm:text-3xl">
-              {editing === 'name' ? <Input autoFocus aria-label="Device name" className="h-auto w-80 max-w-full py-1 text-2xl font-semibold sm:text-3xl" value={name} disabled={saveIdentity.isPending} onChange={(e) => { nameFinished.current = false; setName(e.target.value) }} onBlur={() => finishName()} onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); finishName(e.key === 'Escape') } }} />
+            <Heading as="h1" size="lg" className="pointer-events-auto min-w-0 max-w-full">
+              {editing === 'name' ? <Input autoFocus aria-label="Device name" className="h-auto w-80 max-w-full py-1 text-2xl font-semibold" value={name} disabled={saveIdentity.isPending} onChange={(e) => { nameFinished.current = false; setName(e.target.value) }} onBlur={() => finishName()} onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); finishName(e.key === 'Escape') } }} />
                 : <button type="button" disabled={identityBusy} onClick={() => begin('name')} aria-label="Edit device name" className="w-full break-words rounded-md text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">{device.name || device.mac}</button>}
-            </h1>
+            </Heading>
             <span className="sr-only">{device.online ? 'Online' : device.seen ? 'Offline' : 'Never seen'}</span>
           </div>
         </div>
@@ -122,7 +124,7 @@ export function DeviceInlineEditor({ device, traffic, activity, services, total 
           <Fact label="MAC" value={device.mac} mono />
           <DeviceSettingRow label="IP">
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <Tooltip><TooltipTrigger onClick={() => begin('reservation')} disabled={!dhcp.data || dhcpApplier.busy} aria-label="Edit IP address" className="min-h-11 sm:min-h-9 min-w-0 rounded-sm text-right font-mono text-xs hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"><span className="break-all">{device.ips?.length ? device.ips.join(', ') : device.fixed_ip || 'None observed'}</span></TooltipTrigger><TooltipContent>{device.expires ? `DHCP lease ends ${new Date(device.expires).toLocaleString()}` : 'No expiring DHCP lease'}</TooltipContent></Tooltip>
+              <Tooltip><TooltipTrigger onClick={() => begin('reservation')} disabled={!dhcp.data || dhcpApplier.busy} aria-label="Edit IP address" className="min-h-11 sm:min-h-9 min-w-0 rounded-sm text-right font-mono text-[0.8125rem] leading-5 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"><span className="break-all">{device.ips?.length ? device.ips.join(', ') : device.fixed_ip || 'None observed'}</span></TooltipTrigger><TooltipContent>{device.expires ? `DHCP lease ends ${new Date(device.expires).toLocaleString()}` : 'No expiring DHCP lease'}</TooltipContent></Tooltip>
               {reservation && <Badge variant="secondary">Fixed</Badge>}
             </div>
           </DeviceSettingRow>
@@ -173,5 +175,5 @@ export function DeviceInlineEditor({ device, traffic, activity, services, total 
 }
 
 function Fact({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return <DeviceSettingRow label={label}><span className={`break-words ${mono ? 'font-mono text-xs break-all' : ''}`}>{value}</span></DeviceSettingRow>
+  return <DeviceSettingRow label={label}><>{mono ? <TechnicalValue>{value}</TechnicalValue> : <span className="break-words">{value}</span>}</></DeviceSettingRow>
 }

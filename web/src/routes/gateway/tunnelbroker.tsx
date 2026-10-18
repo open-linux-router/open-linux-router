@@ -917,9 +917,7 @@ function Section({
     <section id={id} className="scroll-mt-36">
       <Card>
         <CardHeader>
-          <CardTitle>
-            <h2>{title}</h2>
-          </CardTitle>
+          <CardTitle>{title}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">{children}</CardContent>
       </Card>

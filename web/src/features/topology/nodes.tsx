@@ -149,7 +149,7 @@ export function NextHopNode({ hop, onSelect }: { hop: Outside['hops'][number]; o
       title={title}
       className={cn(
         'flex size-full min-w-0 items-center gap-3 rounded-2xl border bg-card pr-4 pl-2.5 text-left shadow-xs',
-        open && 'transition-[border-color,box-shadow] hover:border-foreground/20 hover:shadow-sm',
+        open && 'interactive-surface',
         hop.down && 'border-destructive/50',
         focusRing,
       )}
@@ -497,8 +497,8 @@ export function DeviceNode({
   }
 
   const shell = cn(
-    'flex size-full min-w-0 items-center rounded-lg border bg-card text-left shadow-xs transition-[border-color,box-shadow]',
-    onSelect && 'hover:border-foreground/20 hover:shadow-sm',
+    'flex size-full min-w-0 items-center rounded-lg border bg-card text-left shadow-xs transition-colors duration-150',
+    onSelect && 'hover:bg-accent/60 active:bg-accent',
     focusRing,
     services?.length && 'pb-8',
   )

@@ -1,6 +1,7 @@
 import { Activity, ArrowDown, ArrowUp, Copy, LoaderCircle, Radio, Route } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { PageHeading } from '@/components/layout/page-heading'
+import { MetricValue } from '@/components/ui/metric-value'
 import { TOOL_DEFINITIONS, type ToolSlug } from '@/features/tools/catalog'
 import { useQuery } from '@tanstack/react-query'
 
@@ -189,7 +190,7 @@ function SpeedTest() {
 
 
   return <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-xl border bg-card p-4 sm:p-6">
+      <div className="panel-surface relative p-4 sm:p-6">
         <div className="relative space-y-5">
           <div className="space-y-2">
             <p className="max-w-xl text-sm text-muted-foreground">
@@ -309,7 +310,7 @@ function LinkTest() {
 
 
   return <div className="space-y-6">
-      <section className="rounded-xl border bg-card p-4 sm:p-6" aria-labelledby="tool-title">
+      <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
         <div className="flex items-start gap-4">
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">Run iperf3 on another device to measure its connection to this router. This tests the link and router's own receive/send capacity, not LAN-to-WAN forwarding or NAT.</p>
@@ -371,7 +372,7 @@ function NATTest() {
 
 
   return <div className="space-y-6">
-      <section className="rounded-xl border bg-card p-4 sm:p-6" aria-labelledby="tool-title">
+      <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
         <div className="flex items-start gap-4">
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">Send UDP probes from this router over its default route to public STUN servers. This does not test a device behind the router or whether a game port is open.</p>
@@ -428,7 +429,7 @@ function PingTest() {
 
 
   return <div className="space-y-6">
-      <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="tool-title">
+      <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
         <div className="flex items-start gap-4">
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">Send four ICMP probes from the router, not your browser, to check reachability and latency.</p>
@@ -450,9 +451,9 @@ function PingTest() {
           <div className="mt-6 space-y-4" aria-live="polite">
             <p className="text-sm text-muted-foreground">{pingResult.target} resolved to <span className="font-mono text-foreground">{pingResult.address}</span></p>
             <div className="grid gap-3 sm:grid-cols-3">
-              <Metric icon={Radio} label="Packet loss" value={pingResult.loss_percent} unit="%" detail={`${pingResult.received} of ${pingResult.sent} replies`} />
-              <Metric icon={Activity} label="Average RTT" value={pingResult.avg_ms} unit="ms" detail={pingResult.received ? `Min ${pingResult.min_ms.toFixed(1)} · Max ${pingResult.max_ms.toFixed(1)} ms` : 'No replies received'} />
-              <div className="flex items-center rounded-xl border bg-card p-5 text-sm text-muted-foreground">
+              <Metric surface="inset" icon={Radio} label="Packet loss" value={pingResult.loss_percent} unit="%" detail={`${pingResult.received} of ${pingResult.sent} replies`} />
+              <Metric surface="inset" icon={Activity} label="Average RTT" value={pingResult.received ? pingResult.avg_ms : null} unit="ms" detail={pingResult.received ? `Min ${pingResult.min_ms.toFixed(1)} · Max ${pingResult.max_ms.toFixed(1)} ms` : 'No replies received'} />
+              <div className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
                 {pingResult.received === 0 ? 'No replies. The destination may be unreachable or block ICMP.' : 'Replies received from the destination.'}
               </div>
             </div>
@@ -484,7 +485,7 @@ function TracerouteTest() {
 
 
   return <div className="space-y-6">
-      <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="tool-title">
+      <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
         <div className="flex items-start gap-4">
           <div>
             <p className="mt-1 text-sm text-muted-foreground">Follow the path from this router to a domain or IP address. Powered by NextTrace; sends network probes and may query its IP location service.</p>
@@ -506,20 +507,18 @@ function TracerouteTest() {
       </section>
   </div>
 }
-function Metric({ icon: Icon, label, value, unit, detail }: {
+function Metric({ icon: Icon, label, value, unit, detail, surface = 'panel' }: {
   icon: typeof Activity
   label: string
-  value: number
+  value: number | null
   unit: string
   detail?: string
+  surface?: 'panel' | 'inset'
 }) {
   return (
-    <div className="rounded-xl border bg-card p-5">
+    <div className={surface === 'inset' ? 'rounded-lg bg-muted/50 p-4' : 'panel-surface p-4 sm:p-6'}>
       <div className="flex items-center gap-2 text-sm text-muted-foreground"><Icon className="size-4" aria-hidden />{label}</div>
-      <div className="mt-4 flex items-baseline gap-2 font-mono tabular-nums">
-        <span className="text-3xl font-semibold tracking-tight">{value.toFixed(1)}</span>
-        <span className="text-sm text-muted-foreground">{unit}</span>
-      </div>
+      <MetricValue size="lg" value={value?.toFixed(1)} unit={unit} className="mt-4" />
       {detail && <p className="mt-2 text-xs text-muted-foreground">{detail}</p>}
     </div>
   )

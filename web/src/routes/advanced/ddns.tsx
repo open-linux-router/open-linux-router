@@ -1,5 +1,6 @@
 import { AlertTriangle, Plus } from 'lucide-react'
 import { useState } from 'react'
+import { Heading } from '@/components/ui/heading'
 
 import { StatusStrip } from '@/components/layout/status-strip'
 import { SubPage } from '@/components/layout/sub-page'
@@ -92,7 +93,7 @@ export function DdnsPage() {
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="px-1 text-sm font-medium text-muted-foreground">Names</h2>
+          <Heading size="sm" className="px-1">Names</Heading>
           <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
             <Plus />
             Add

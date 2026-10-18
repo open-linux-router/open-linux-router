@@ -1,3 +1,4 @@
+import { Heading } from '@/components/ui/heading'
 import { Meter, MetricPill } from '@/components/traffic-metrics'
 import { WorldTraffic } from '@/features/world-traffic/world-traffic'
 import { NetworkQuality } from '@/features/network-quality/network-quality'
@@ -356,8 +357,8 @@ function BandwidthLimitDialog({ direction, limits, onClose, onSave }: {
 
 function StatCard({ title, children, className, action, back, flipped = false }: { title: React.ReactNode; children: React.ReactNode; className?: string; action?: React.ReactNode; back?: React.ReactNode; flipped?: boolean }) {
   if (back) {
-    const heading = <div className="flex h-6 shrink-0 items-center justify-between"><h2 className="text-sm font-semibold">{title}</h2>{action}</div>
-    const face = 'col-start-1 row-start-1 flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 [backface-visibility:hidden] [-webkit-backface-visibility:hidden]'
+    const heading = <div className="flex h-6 shrink-0 items-center justify-between"><Heading size="sm">{title}</Heading>{action}</div>
+    const face = 'col-start-1 row-start-1 flex min-w-0 flex-col gap-2 panel-surface p-3 sm:p-4 [backface-visibility:hidden] [-webkit-backface-visibility:hidden]'
     return <section aria-label="Traffic" className="min-w-0 [perspective:1200px]">
       <div className={cn('grid min-h-60 w-full transition-transform duration-600 ease-[cubic-bezier(0.22,1,0.36,1)] [transform-style:preserve-3d] lg:aspect-[4/3] motion-reduce:transition-none', flipped && '[transform:rotateY(180deg)]')}>
         <div inert={flipped} aria-hidden={flipped} className={cn(face, flipped && 'pointer-events-none')}>{heading}<div className="flex-1 space-y-2 [&_button]:flex-nowrap [&_button]:whitespace-nowrap">{children}</div></div>
@@ -365,8 +366,8 @@ function StatCard({ title, children, className, action, back, flipped = false }:
       </div>
     </section>
   }
-  return <section className={cn('flex w-full min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:min-h-60 lg:aspect-[4/3] lg:h-fit lg:has-[details[open]]:aspect-auto lg:has-[[aria-expanded=true]]:aspect-auto', className)}>
-    <div className="flex h-6 shrink-0 items-center justify-between"><h2 className="text-sm font-semibold">{title}</h2>{action}</div>{children}
+  return <section className={cn('flex w-full min-w-0 flex-col gap-2 panel-surface p-3 sm:p-4 lg:min-h-60 lg:aspect-[4/3] lg:h-fit lg:has-[details[open]]:aspect-auto lg:has-[[aria-expanded=true]]:aspect-auto', className)}>
+    <div className="flex h-6 shrink-0 items-center justify-between"><Heading size="sm">{title}</Heading>{action}</div>{children}
   </section>
 }
 
@@ -515,13 +516,13 @@ function LatencySitesDialog({ sites, exits, latency, onClose }: { sites: Monitor
       <div className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
         {draft.map((site, i) => <div key={site.id} className="rounded-xl bg-muted/60 p-2 text-sm"
           onDragOver={(event: DragEvent<HTMLDivElement>) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); drop(i) }}>
-          <div className="flex items-center gap-2">
-            <span draggable onDragStart={() => setDragging(i)} onDragEnd={() => setDragging(null)} aria-label={`Drag ${site.name} to reorder`} className="cursor-grab touch-none text-muted-foreground" title="Drag to reorder"><GripVertical className="size-4" /></span>
-            <button type="button" onClick={() => { setIconFor(i); setSearch(''); setIconError('') }} aria-label={`Change ${site.name} icon`} className="rounded-md p-1 hover:bg-background"><SiteIcon name={site.name} url={site.url} icon={site.icon} /></button>
-            <div className="flex flex-col sm:hidden"><button type="button" aria-label={`Move ${site.name} up`} disabled={i === 0} onClick={() => { const next = [...draft]; [next[i - 1], next[i]] = [next[i], next[i - 1]]; setDraft(next) }}>↑</button><button type="button" aria-label={`Move ${site.name} down`} disabled={i === draft.length - 1} onClick={() => { const next = [...draft]; [next[i], next[i + 1]] = [next[i + 1], next[i]]; setDraft(next) }}>↓</button></div>
-            <button type="button" onClick={() => setEditing(editing === i ? null : i)} className="min-w-0 flex-1 truncate text-left font-medium" title={site.url}>{site.name}</button>
+          <div className="grid grid-cols-[44px_minmax(0,1fr)_44px_44px] items-center gap-2 sm:flex sm:flex-nowrap">
+            <span draggable onDragStart={() => setDragging(i)} onDragEnd={() => setDragging(null)} aria-label={`Drag ${site.name} to reorder`} className="hidden cursor-grab touch-none text-muted-foreground sm:block" title="Drag to reorder"><GripVertical className="size-4" /></span>
+            <Button variant="ghost" size="icon-sm" onClick={() => { setIconFor(i); setSearch(''); setIconError('') }} aria-label={`Change ${site.name} icon`}><SiteIcon name={site.name} url={site.url} icon={site.icon} /></Button>
+            <div className="col-span-2 col-start-3 row-start-2 flex justify-end gap-2 sm:hidden"><Button variant="ghost" size="icon-sm" aria-label={`Move ${site.name} up`} disabled={i === 0} onClick={() => { const next = [...draft]; [next[i - 1], next[i]] = [next[i], next[i - 1]]; setDraft(next) }}>↑</Button><Button variant="ghost" size="icon-sm" aria-label={`Move ${site.name} down`} disabled={i === draft.length - 1} onClick={() => { const next = [...draft]; [next[i], next[i + 1]] = [next[i + 1], next[i]]; setDraft(next) }}>↓</Button></div>
+            <Button variant="ghost" onClick={() => setEditing(editing === i ? null : i)} className="col-span-2 h-auto min-h-11 min-w-0 flex-1 justify-start px-0 whitespace-normal break-words text-left sm:min-h-9" title={site.url}>{site.name}</Button>
             <Select value={site.exit || DEFAULT_ROUTE} onValueChange={(value) => update(i, { exit: !value || value === DEFAULT_ROUTE ? undefined : value })}>
-              <SelectTrigger size="sm" className="max-w-32" aria-label={`Internet via, for ${site.name}`}><SelectValue /></SelectTrigger>
+              <SelectTrigger size="sm" className="col-span-2 col-start-1 row-start-2 w-full min-w-0 sm:w-auto sm:max-w-32" aria-label={`Internet via, for ${site.name}`}><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value={DEFAULT_ROUTE}>Default</SelectItem>{exits.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
                 {site.exit && !exits.includes(site.exit) && <SelectItem value={site.exit}>{site.exit} (unavailable)</SelectItem>}
               </SelectContent>
@@ -549,7 +550,7 @@ function LatencySitesDialog({ sites, exits, latency, onClose }: { sites: Monitor
     {iconFor != null && <Dialog open onOpenChange={(open) => { if (!open) setIconFor(null) }}>
       <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Icon for {draft[iconFor]?.name}</DialogTitle><DialogDescription>Upload an image or search theSVG library. Auto uses the site favicon.</DialogDescription></DialogHeader>
         <div className="flex gap-2"><Button variant="outline" onClick={() => { update(iconFor, { icon: undefined }); setIconFor(null) }}>Auto</Button>
-          <label className="inline-flex h-8 cursor-pointer items-center rounded-lg border px-3 text-sm">Upload image<input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => upload(event.target.files?.[0])} /></label></div>
+          <label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-sm focus-within:outline-2 focus-within:outline-ring sm:min-h-9">Upload image<input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => upload(event.target.files?.[0])} /></label></div>
         <Input aria-label="Search theSVG icons" placeholder="Search theSVG (e.g. wechat)" value={search} onChange={(event) => setSearch(event.target.value)} />
         <div className="grid max-h-52 grid-cols-4 gap-2 overflow-y-auto">{matches.map((slug) => <button key={slug} type="button" className="flex min-w-0 flex-col items-center gap-1 rounded-lg border p-2 text-xs hover:bg-muted" title={slug}
           onClick={() => { update(iconFor, { icon: `thesvg:${slug}` }); setIconFor(null) }}>

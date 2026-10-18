@@ -1,3 +1,5 @@
+import { Heading } from '@/components/ui/heading'
+import { MetricValue } from '@/components/ui/metric-value'
 import { Input } from '@/components/ui/input'
 import { useRef, useState } from 'react'
 import { Plus, Search, X } from 'lucide-react'
@@ -65,8 +67,8 @@ export function DevicePage() {
           <Link to={`/access/ingress?device=${encodeURIComponent(device.mac)}`} aria-label="Add service for this device" title="Add service" className="flex size-7 shrink-0 items-center justify-center rounded-md border transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"><Plus className="size-4" /></Link>
         </div>
       } total={<span className="inline-flex flex-wrap justify-end gap-3 tabular-nums" title="Traffic through this router since counters were reset">
-        <span className="inline-flex items-center gap-0.5" aria-label="Download total"><span aria-hidden className="text-base font-normal text-muted-foreground">↓</span>{flow.counting ? formatBytes(usage?.down ?? 0) : '—'}</span>
-        <span className="inline-flex items-center gap-0.5 text-muted-foreground" aria-label="Upload total"><span aria-hidden className="text-base font-normal text-muted-foreground">↑</span>{flow.counting ? formatBytes(usage?.up ?? 0) : '—'}</span>
+        <span className="inline-flex items-center gap-0.5" aria-label="Download total"><span aria-hidden className="text-base font-normal text-muted-foreground">↓</span><MetricValue value={flow.counting ? formatBytes(usage?.down ?? 0) : null} /></span>
+        <span className="inline-flex items-center gap-0.5" aria-label="Upload total"><span aria-hidden className="text-base font-normal text-muted-foreground">↑</span><MetricValue value={flow.counting ? formatBytes(usage?.up ?? 0) : null} /></span>
       </span>} activity={<DeviceActivity addresses={device.ips ?? []} downRate={usage?.downRate} upRate={usage?.upRate} />} traffic={
         <DevicePolicy mac={device.mac} downRate={usage?.downRate} upRate={usage?.upRate}>
             {!flow.counting && (
@@ -124,7 +126,7 @@ export function DevicePage() {
 
 function State({ title, detail }: { title: string; detail: string }) {
   return <div className="space-y-3 py-16 text-center">
-    <h1 className="text-xl font-semibold">{title}</h1>
+    <Heading as="h1" size="lg">{title}</Heading>
     <p className="text-sm text-muted-foreground">{detail}</p>
     <Button variant="outline" nativeButton={false} render={<Link to="/">Back to overview</Link>} />
   </div>

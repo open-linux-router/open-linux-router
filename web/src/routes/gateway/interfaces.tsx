@@ -1,3 +1,4 @@
+import { Heading } from '@/components/ui/heading'
 import { AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
 
@@ -169,7 +170,7 @@ export function GatewayInterfacesPage() {
       </Dialog>
 
       <div className="space-y-3">
-        <h2 className="text-lg font-medium">All interfaces</h2>
+        <Heading>All interfaces</Heading>
         {links.problems.length > 0 && (
           <Alert>
             <AlertTriangle />
@@ -182,7 +183,7 @@ export function GatewayInterfacesPage() {
           </Alert>
         )}
         <InterfacesCard dhcp={dhcp.data} />
-        <h2 className="text-lg font-medium">Internet uplink</h2>
+        <Heading>Internet uplink</Heading>
         <UplinkCard interfaces={links.interfaces} networks={links.networks} />
       </div>
         <div id="forwarding" className="grid gap-4 scroll-mt-20 lg:grid-cols-2">

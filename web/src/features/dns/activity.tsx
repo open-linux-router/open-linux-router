@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { MetricValue } from '@/components/ui/metric-value'
 import { Label } from '@/components/ui/label'
 import { ListEmpty } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -221,9 +222,7 @@ function Counters({ stats, pending }: { stats?: DnsStats; pending: boolean }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {cells.map((c) => (
           <div key={c.label} className="rounded-lg border px-3 py-2">
-            <div className={cn('text-xl font-semibold tabular-nums', c.tone)}>
-              {c.value.toLocaleString()}
-            </div>
+            <MetricValue size="md" value={c.value.toLocaleString()} className={c.tone} />
             <div className="text-xs text-muted-foreground">{c.label}</div>
           </div>
         ))}

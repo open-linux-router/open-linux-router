@@ -1,3 +1,4 @@
+import { Heading } from '@/components/ui/heading'
 import { AlertTriangle, Check, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 
@@ -94,7 +95,7 @@ export function ServedNetworksContent() {
       <section id="networks" className="space-y-3 scroll-mt-20">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
-            <h3 className="text-lg font-medium tracking-tight">Served networks</h3>
+            <Heading as="h3">Served networks</Heading>
             <p className="max-w-prose text-sm text-muted-foreground">
               Interface and subnet for each served network. Router addresses remain active when DHCP is off.
             </p>

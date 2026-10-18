@@ -1,5 +1,6 @@
 import { CircleCheck, CircleAlert, CircleHelp } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MetricValue } from '@/components/ui/metric-value'
 
 export function Meter({ label, current, maximum, percent, tone = 'blue', arrow, onClick }: {
   label: string
@@ -14,8 +15,8 @@ export function Meter({ label, current, maximum, percent, tone = 'blue', arrow, 
     {percent != null && <span aria-hidden className={cn('absolute inset-y-0 left-0 border-r transition-[width] duration-150 ease-out',
       tone === 'amber' ? 'border-transmit/30 bg-transmit-subtle' : tone === 'neutral' ? 'border-border bg-muted' : 'border-receive/30 bg-receive-subtle')}
       style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />}
-    <span className="relative z-10 flex min-w-0 items-center gap-2 truncate text-sm font-semibold tabular-nums">
-      {arrow && <span aria-hidden className="text-base font-normal text-muted-foreground">{arrow}</span>}{current ?? '—'}
+    <span className="relative z-10 flex min-w-0 items-center gap-2">
+      {arrow && <span aria-hidden className="text-base font-normal text-muted-foreground">{arrow}</span>}<MetricValue value={current} />
     </span>
     <span className="relative z-10 text-xs text-muted-foreground tabular-nums">{maximum ? `of ${maximum}` : onClick ? 'Set limit' : '—'}</span>
   </>
@@ -54,7 +55,7 @@ export function MetricPill({ label, value, detail, percent, tone = 'blue', healt
       {health === 'bad' && <CircleAlert aria-hidden className="size-4 shrink-0 text-destructive" />}
       {health === 'unknown' && <CircleHelp aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
       {label && <span className="shrink-0 text-xs text-muted-foreground">{label}</span>}
-      <span title={value} className={cn('min-w-0 break-words font-semibold tabular-nums', health === 'bad' && 'text-destructive')}>{value}</span>
+      <MetricValue value={value} className={cn('min-w-0', health === 'bad' && 'text-destructive')} />
     </span>
     {detail && <span className="relative z-10 shrink-0 text-xs text-muted-foreground tabular-nums">{detail}</span>}
   </div></div>

@@ -91,7 +91,7 @@ function PasswordPrompt() {
   return <AuthFrame>
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle>Sign in to this router</CardTitle>
+        <CardTitle as="h1" size="lg">Sign in to this router</CardTitle>
         <CardDescription>Enter the administrator password.</CardDescription>
       </CardHeader>
       <CardContent>
@@ -122,7 +122,7 @@ function TokenPrompt() {
     <AuthFrame>
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle as="h1" size="lg" className="flex items-center gap-2">
             <KeyRound className="size-4" aria-hidden />
             API token required
           </CardTitle>

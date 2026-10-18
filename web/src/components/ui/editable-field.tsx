@@ -113,7 +113,7 @@ export function SwitchField({
   onChange: (on: boolean) => void
 }) {
   return (
-    <div className="flex items-center gap-6 rounded-xl border bg-card p-4 sm:p-5">
+    <div className="panel-surface flex items-center gap-6 p-4 sm:p-6">
       <div className="min-w-0 flex-1">
         <Label htmlFor={id} className="text-sm font-medium">{label}</Label>
         <p className="max-w-prose text-xs text-muted-foreground">{hint}</p>

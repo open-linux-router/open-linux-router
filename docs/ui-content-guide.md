@@ -77,6 +77,9 @@ hidden page title. Detail and operation pages keep their identifying titles.
   visible. Do not move them into disclosures solely to shorten a page.
 - Reuse existing headings, Card, ListRow, StatusStrip, fields and Dialog. Do not
   invent a compact card, new density tier or special layout for each feature.
+  Choose shared size variants: MetricValue sm for inline measurements, md for
+  summaries and lg for diagnostic results; Card's sm/default spacing is separate
+  from Heading's sm/md/lg emphasis. Unavailable latency is never a zero result.
 - Disclose lengthy technical explanations and infrequently used advanced options.
   Keep prerequisites and consequences beside the action they affect.
 - A page can pass review without a visible redesign. Preserve a coherent existing

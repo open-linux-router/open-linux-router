@@ -8,6 +8,9 @@ import { ListEmpty } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Heading } from '@/components/ui/heading'
+import { MetricValue } from '@/components/ui/metric-value'
+import { PropertyRow, TechnicalValue } from '@/components/ui/property-row'
 import { Switch } from '@/components/ui/switch'
 import { useDhcpLeases, useDhcpStatus } from '@/features/dhcp/queries'
 import { useDialStatus, useUplink } from '@/features/dial/queries'
@@ -20,7 +23,7 @@ import { useInterfaces } from '@/features/link/queries'
 import type { InterfaceRow } from '@/lib/api-types'
 import { cn, formatBytes, formatRate } from '@/lib/utils'
 
-const card = 'rounded-xl border bg-card text-card-foreground shadow-xs'
+const card = 'panel-surface'
 const detailLink = 'inline-flex min-h-11 items-center gap-1 text-sm font-medium text-primary hover:underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4'
 
 export function NetworkStatus() {
@@ -72,10 +75,10 @@ export function NetworkStatus() {
         </div>
         <aside aria-label="Routing summary" className="min-w-0 border-t pt-6 lg:border-t-0 lg:border-l lg:pl-6 lg:pt-0">
           <dl className="space-y-4 text-sm">
-            <div><dt className="text-muted-foreground">Default gateway</dt><dd className="mt-1 space-y-1 font-mono text-xs [overflow-wrap:anywhere]">
+            <div><dt className="text-muted-foreground">Default gateway</dt><dd className="mt-1 space-y-1 font-mono text-[0.8125rem] leading-5 [overflow-wrap:anywhere]">
               {dial.isError ? 'Unavailable' : dial.isPending ? 'Loading…' : dial.data.default_routes.length ? dial.data.default_routes.map((route, i) => <div key={i}>{route.via || 'Direct'} · {route.dev} · IPv{route.family}</div>) : 'Not assigned'}
             </dd></div>
-            <div><dt className="text-muted-foreground">Default DNS</dt><dd className="mt-1 font-mono text-xs [overflow-wrap:anywhere]">
+            <div><dt className="text-muted-foreground">Default DNS</dt><dd className="mt-1 font-mono text-[0.8125rem] leading-5 [overflow-wrap:anywhere]">
               {dial.isError ? 'Unavailable' : dial.isPending ? 'Loading…' : dial.data.resolvers?.join(', ') || 'Unavailable'}
             </dd></div>
           </dl>
@@ -128,7 +131,7 @@ function InterfaceCard({ row, role, history, failed, onSelect }: {
   const current = failed ? undefined : history.at(-1)
   return (
     <button type="button" onClick={onSelect} aria-label={`${row.name}${role ? ` ${role}` : ''} details`}
-      className={cn(card, 'flex w-full min-w-0 cursor-pointer flex-col overflow-hidden p-4 text-left transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring')}>
+      className={cn(card, 'interactive-surface flex w-full min-w-0 cursor-pointer flex-col p-4 text-left')}>
       <div className="flex items-center gap-3">
         <span className="relative block size-12 shrink-0" aria-hidden="true">
           <NetworkIcon kind="interface" className={cn('size-full', (!connected || failed) && 'opacity-50 grayscale')} />
@@ -145,8 +148,8 @@ function InterfaceCard({ row, role, history, failed, onSelect }: {
         <Fact label="IP" value={failed ? '—' : row.address || row.prefixes?.[0]?.split('/')[0] || 'Not assigned'} mono />
       </div>
       <div className="mt-4 flex flex-wrap justify-between gap-2 text-sm font-medium tabular-nums">
-        <span className="text-receive" aria-label={`Receive ${current ? formatRate(current.rx) : 'unavailable'}`}>↓ {current ? formatRate(current.rx) : '—'}</span>
-        <span className="text-transmit" aria-label={`Transmit ${current ? formatRate(current.tx) : 'unavailable'}`}>↑ {current ? formatRate(current.tx) : '—'}</span>
+        <span className="text-receive" aria-label={`Receive ${current ? formatRate(current.rx) : 'unavailable'}`}>↓ <MetricValue value={current ? formatRate(current.rx) : null} /></span>
+        <span className="text-transmit" aria-label={`Transmit ${current ? formatRate(current.tx) : 'unavailable'}`}>↑ <MetricValue value={current ? formatRate(current.tx) : null} /></span>
       </div>
     </button>
   )
@@ -157,10 +160,10 @@ function ServiceCard({ kind, title, value, pending, label, state }: {
 }) {
   const healthy = state === 'Running'
   const problem = ['Unavailable', 'Not running', 'Needs attention'].includes(state)
-  return <section id={kind} className={cn(card, 'scroll-mt-20 flex min-h-[186px] flex-col px-6 py-5')} aria-label={title}>
-    <div className="flex items-center gap-3"><NetworkIcon kind={kind} className="size-12 shrink-0" /><h2 className="text-base font-semibold">{title}</h2></div>
+  return <section id={kind} className={cn(card, 'scroll-mt-20 flex min-h-[186px] flex-col p-4 sm:p-6')} aria-label={title}>
+    <div className="flex items-center gap-3"><NetworkIcon kind={kind} className="size-12 shrink-0" /><Heading>{title}</Heading></div>
     <div className="mt-3 flex flex-wrap items-baseline gap-2">
-      {pending ? <Skeleton className="h-7 w-20" /> : <strong className="text-2xl font-semibold tabular-nums">{value?.toLocaleString() ?? '—'}</strong>}
+      {pending ? <Skeleton className="h-7 w-20" /> : <MetricValue size="md" value={value?.toLocaleString()} />}
       <span className="text-xs text-muted-foreground">{label}</span>
     </div>
     <div className="mt-auto flex items-center justify-between gap-3 pt-2">
@@ -171,11 +174,11 @@ function ServiceCard({ kind, title, value, pending, label, state }: {
 }
 
 function Fact({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return <div className="min-w-0"><span className="block text-xs text-muted-foreground">{label}</span><strong className={cn('mt-1 block text-xs font-medium [overflow-wrap:anywhere]', mono && 'font-mono')}>{value}</strong></div>
+  return <div className="min-w-0"><span className="block text-sm text-muted-foreground">{label}</span>{mono ? <TechnicalValue className="mt-1 block">{value}</TechnicalValue> : <span className="mt-1 block text-sm font-medium [overflow-wrap:anywhere]">{value}</span>}</div>
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
-  return <div className="flex justify-between gap-4 py-3"><dt className="shrink-0 text-muted-foreground">{label}</dt><dd className="text-right [overflow-wrap:anywhere]">{value}</dd></div>
+  return <PropertyRow label={label} className="py-3">{label === 'MAC' || label === 'Addresses' ? <TechnicalValue>{value}</TechnicalValue> : value}</PropertyRow>
 }
 
 function connectionState(row: InterfaceRow, role?: string) {

@@ -8,11 +8,12 @@ function List({ className, ...props }: React.ComponentProps<'ul'>) {
 }
 
 /** Values reflow below the title on phones. Actions stay outside the row link/button. */
-function ListRow({ title, subtitle, leading, trailing, action, onSelect, to, wrap = false, className, ...props }: Omit<React.ComponentProps<'li'>, 'title' | 'onSelect'> & {
+function ListRow({ title, subtitle, leading, trailing, trailingTone = 'muted', action, onSelect, to, wrap = false, className, ...props }: Omit<React.ComponentProps<'li'>, 'title' | 'onSelect'> & {
   title: React.ReactNode
   subtitle?: React.ReactNode
   leading?: React.ReactNode
   trailing?: React.ReactNode
+  trailingTone?: 'muted' | 'value'
   action?: React.ReactNode
   onSelect?: () => void
   to?: string
@@ -22,10 +23,10 @@ function ListRow({ title, subtitle, leading, trailing, action, onSelect, to, wra
     {leading}
     <div className="min-w-0 flex-1 sm:flex sm:items-center sm:justify-between sm:gap-6">
       <div className="min-w-0 flex-1">
-        <div className={cn('text-sm font-medium', wrap ? 'break-words' : 'truncate')}>{title}</div>
+        <div className={cn('text-sm', trailingTone === 'value' ? 'text-muted-foreground' : 'font-medium', wrap ? 'break-words' : 'truncate')}>{title}</div>
         {subtitle && <div className={cn('mt-0.5 text-[0.8125rem] leading-relaxed text-muted-foreground', wrap ? 'break-words' : 'truncate')}>{subtitle}</div>}
       </div>
-      {trailing && <div className="mt-1 min-w-0 break-words text-[0.8125rem] leading-relaxed text-muted-foreground sm:mt-0 sm:max-w-[45%] sm:text-right">{trailing}</div>}
+      {trailing != null && <div className={cn('mt-1 min-w-0 text-sm leading-5 [overflow-wrap:anywhere] sm:mt-0 sm:max-w-[45%] sm:text-right', trailingTone === 'value' ? 'font-medium text-foreground' : 'text-muted-foreground')}>{trailing}</div>}
     </div>
   </>
   const interactive = 'flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-accent/60 active:bg-accent focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring sm:px-5'

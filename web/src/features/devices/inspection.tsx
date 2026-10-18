@@ -1,3 +1,4 @@
+import { Heading } from '@/components/ui/heading'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import encodeQR from '@paulmillr/qr'
 import { useEffect, useMemo, useState } from 'react'
@@ -63,7 +64,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
     <div className="px-4 sm:px-6">
       <div className="flex h-18 items-center justify-between gap-3">
         <div>
-          <h2 id="inspection-title" className="text-base font-semibold">Connections</h2>
+          <Heading id="inspection-title">Connections</Heading>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
           <label htmlFor="device-inspection" className="text-sm">Inspection</label>

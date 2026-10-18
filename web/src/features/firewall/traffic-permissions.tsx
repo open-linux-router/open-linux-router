@@ -1,3 +1,4 @@
+import { Heading } from '@/components/ui/heading'
 import { useMemo } from 'react'
 import { Link } from 'react-router'
 import type { FirewallStatus } from '@/lib/api-types'
@@ -9,8 +10,8 @@ export function TrafficPermissions({ status }: { status: FirewallStatus }) {
   const flows = useMemo(() => trafficFlows(status.traffic ?? []), [status.traffic])
 
   return (
-    <section className="rounded-2xl border bg-card p-4 shadow-xs sm:p-6" aria-label="Traffic permissions">
-      <h2 className="font-semibold">Traffic permissions</h2>
+    <section className="panel-surface p-4 sm:p-6" aria-label="Traffic permissions">
+      <Heading>Traffic permissions</Heading>
       {!status.enabled ? (
         <p className="mt-4 text-sm text-muted-foreground">The firewall is off. OLR is not enforcing traffic permissions.</p>
       ) : status.native ? (

@@ -280,7 +280,7 @@ function InterfaceItem({
           {role && <Badge variant="secondary">{role}</Badge>}
           {state.badge && <Badge variant={state.badgeVariant}>{state.badge}</Badge>}
         </div>
-        <div className="truncate text-[0.8rem] text-muted-foreground">
+        <div className="font-mono text-[0.8125rem] leading-5 text-foreground [overflow-wrap:anywhere]">
           {row.prefixes?.length ? row.prefixes.join(' · ') : state.detail}
         </div>
         {removable.length > 0 && (

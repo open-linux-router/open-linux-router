@@ -1,3 +1,4 @@
+import { Heading } from '@/components/ui/heading'
 import { AlertTriangle, ArrowRight, Tv } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
@@ -100,8 +101,8 @@ export function IptvPage() {
       </AlertDescription></Alert>
       <Disclosure summary="IPTV scope"><p className="text-sm text-muted-foreground">Routes IPv4 multicast only. Configure VLANs and provider DHCP or authentication outside this page; it does not bridge the modem to a set-top box.</p></Disclosure>
 
-      <section className="space-y-5 rounded-xl border bg-card p-5 sm:p-6">
-        <div className="space-y-1"><h2 className="font-semibold">Signal path</h2><p className="text-sm text-muted-foreground">Choose the upstream interface and subscribing LANs.</p></div>
+      <section className="panel-surface space-y-5 p-4 sm:p-6">
+        <div className="space-y-1"><Heading>Signal path</Heading><p className="text-sm text-muted-foreground">Choose the upstream interface and subscribing LANs.</p></div>
         <div className="grid gap-5 sm:grid-cols-2">
           <label className="space-y-2 text-sm font-medium" htmlFor="iptv-upstream">IPTV upstream interface
             <select data-slot="select-trigger" id="iptv-upstream" value={draft.upstream ?? ''} onChange={(event) => edit({ ...draft, upstream: event.target.value })} className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -133,7 +134,7 @@ export function IptvPage() {
         {!ready && !links.isPending && <p className="text-sm text-muted-foreground">Select an adopted IPTV interface with IPv4 and at least one present IPv4 LAN to continue.</p>}
       </section>
       {preview && <section className="space-y-4 rounded-xl border border-primary/30 bg-primary/5 p-5 sm:p-6">
-        <div><h2 className="font-semibold">Review before applying</h2><p className="text-sm text-muted-foreground">{preview.plan.empty ? 'No service changes; the selected settings will still be saved.' : `Impact: ${preview.plan.impact}`}</p></div>
+        <div><Heading>Review before applying</Heading><p className="text-sm text-muted-foreground">{preview.plan.empty ? 'No service changes; the selected settings will still be saved.' : `Impact: ${preview.plan.impact}`}</p></div>
         <ul className="list-inside list-disc space-y-1 text-sm">{(preview.plan.changes ?? []).map((change) => <li key={change}>{change}</li>)}</ul>
         <div className="flex gap-2"><Button disabled={apply.isPending} onClick={() => void save(preview.config)}>{preview.config.enabled ? 'Enable IPTV' : 'Turn off IPTV'}</Button><Button variant="outline" onClick={() => setPreview(null)}>Cancel</Button></div>
       </section>}

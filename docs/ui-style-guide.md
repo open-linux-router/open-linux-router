@@ -11,8 +11,8 @@ For information hierarchy, wording and progressive disclosure, follow the
 
 For the cross-page component inventory, typography roles, surface interactions
 and migration targets, follow the [semantic component contracts](ui-semantic-components.md).
-That document distinguishes the target shared system from existing implementation
-differences; route-specific behavior below remains applicable.
+That document defines shared size variants and records the implementation audit;
+route-specific behavior below remains applicable.
 
 ## Findings and decisions
 
@@ -64,6 +64,10 @@ not an incident. Reserve destructive emphasis for errors and destructive actions
 Cards use a one-pixel border and shadow-xs. Shadows clarify elevation rather
 than decorate every nested row. A list inside CardContent does not need a second
 border. Use muted fills for small metrics, not another elevated card.
+Use `panel-surface` for custom panels and `interactive-surface` for actual
+link/button surfaces. Hover changes color, never shadow depth. Radius tokens
+are 8px (`rounded-lg`), 12px (`rounded-xl`) and 16px (`rounded-2xl`). Dialogs
+use 16px and shadow-md. Card spacing and title size are independent variants.
 
 ## Layout and hierarchy
 
@@ -333,8 +337,8 @@ automatically center it and hide the first category.
 Page navigation resets document scroll to the top before paint. Hash links retain
 their section-target behavior; query-only changes preserve the current scroll.
 
-Desktop section navigation begins at 1024px. Below that, show all six sections
-in a six-column bottom navigation; do not require horizontal scrolling.
+Desktop section navigation begins at 1024px. Below that, show all five sections
+in a five-column bottom navigation; do not require horizontal scrolling.
 Account for the device safe area and bottom navigation when laying out content
 and the footer. At 375px, keep labels, statuses, addresses and action buttons
 usable. Monitoring statistics use two columns on phones.

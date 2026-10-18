@@ -1,3 +1,4 @@
+import { Heading } from '@/components/ui/heading'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -68,7 +69,7 @@ export function NativeRules() {
   if (!query.data)
     return (
       <section className="rounded-xl border p-4">
-        <h2 className="font-medium">nftables rules</h2>
+        <Heading>nftables rules</Heading>
         <p className="mt-2 text-sm text-muted-foreground">
           {query.error ? query.error.message : 'Reading the kernel ruleset…'}
         </p>
@@ -196,7 +197,7 @@ export function NativeRules() {
     <section className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-medium">nftables rules</h2>
+          <Heading>nftables rules</Heading>
           <p className="mt-1 text-sm text-muted-foreground">
             {view.native
               ? 'Native rules saved by you. Service changes do not regenerate this table.'

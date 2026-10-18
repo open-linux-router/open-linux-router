@@ -1,3 +1,4 @@
+import { Heading } from '@/components/ui/heading'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
@@ -175,8 +176,8 @@ export function WorldTraffic({ origin, embedded = false }: { origin?: Origin; em
   const share = data?.total ? Math.round(peers.reduce((n, p) => n + p.download + p.upload, 0) / data.total * 100) : 0
   const unknown = peers.filter(p => !position(p.place, p.place.country)).length
   const status = query.isError || stale ? 'Unavailable' : !data ? 'Loading…' : data.state === 'disabled' ? 'Counting off' : data.state === 'warming' ? 'Measuring…' : data.state !== 'ready' ? 'Unavailable' : peers.length ? `Top ${peers.length} · ${share}%` : 'No observed traffic'
-  return <section aria-label="Traffic map" className={embedded ? 'flex min-h-0 w-full min-w-0 flex-col gap-1' : 'col-span-2 flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:col-span-1 lg:row-span-3'}>
-    {!embedded && <h2 className="flex h-6 items-center text-sm font-semibold"><button onClick={() => setOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 focus-visible:outline-2 focus-visible:outline-ring" aria-label="Map details">Map</button></h2>}
+  return <section aria-label="Traffic map" className={embedded ? 'flex min-h-0 w-full min-w-0 flex-col gap-1' : 'col-span-2 flex min-w-0 flex-col gap-2 panel-surface p-3 sm:p-4 lg:col-span-1 lg:row-span-3'}>
+    {!embedded && <Heading size="sm" className="flex h-6 items-center"><button onClick={() => setOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 focus-visible:outline-2 focus-visible:outline-ring" aria-label="Map details">Map</button></Heading>}
     <button ref={preview} type="button" onClick={() => setExpanded(true)} aria-label="Open fullscreen map" aria-haspopup="dialog" className={embedded ? 'flex min-h-32 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring' : '-mx-1 -mb-1 flex min-h-44 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2'}><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} /></button>
     {(!ready || !peers.length) && <p className="text-xs text-muted-foreground">{status}</p>}
     <Dialog open={expanded} onOpenChange={setExpanded}><DialogContent finalFocus={preview} className="flex h-dvh max-h-dvh w-screen max-w-none flex-col rounded-none sm:max-w-none">

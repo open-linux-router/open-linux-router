@@ -1,5 +1,6 @@
 import { AlertTriangle, Plus } from 'lucide-react'
 import { useState } from 'react'
+import { Heading } from '@/components/ui/heading'
 
 import { SettingsList } from '@/components/layout/settings-list'
 import { StatusStrip } from '@/components/layout/status-strip'
@@ -76,7 +77,7 @@ export function ForwardsPage() {
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="px-1 text-sm font-medium text-muted-foreground">Forwards</h2>
+          <Heading size="sm" className="px-1">Forwards</Heading>
           <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
             <Plus />
             Add

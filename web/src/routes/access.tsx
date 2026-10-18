@@ -96,7 +96,7 @@ function TechnologyTile({ entry, onSelect, summaries }: { entry: AccessTechnolog
   const integrated = entry.connections.length > 0
   return (
     <Tooltip>
-      <TooltipTrigger render={<button type="button" />} onClick={onSelect} aria-label={`${entry.name}${integrated ? '' : ' · Not integrated'}`} className="relative flex aspect-square min-w-0 flex-col items-center justify-center gap-2 rounded-xl border bg-card p-2 text-card-foreground shadow-xs transition-colors duration-150 hover:border-primary/50 hover:bg-accent/30 active:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+      <TooltipTrigger render={<button type="button" />} onClick={onSelect} aria-label={`${entry.name}${integrated ? '' : ' · Not integrated'}`} className="relative flex aspect-square min-w-0 flex-col items-center justify-center gap-2 panel-surface interactive-surface p-2">
         <span className="flex h-10 w-14 shrink-0 items-center justify-center rounded-lg bg-white p-1">
           {logo ? <img src={logo} alt="" className="max-h-full max-w-full object-contain" /> : <span className="text-lg font-semibold tracking-tight text-slate-700" aria-hidden>{entry.name}</span>}
         </span>

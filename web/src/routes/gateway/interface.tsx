@@ -1,3 +1,5 @@
+import { Heading } from '@/components/ui/heading'
+import { TechnicalValue } from '@/components/ui/property-row'
 import { ArrowLeft, ArrowUpRight, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
@@ -50,7 +52,7 @@ export function GatewayInterfacePage() {
     <header className="flex flex-wrap items-start gap-4">
       <InterfaceVisual row={row} uplink={isUplink} />
       <div className="min-w-0 flex-1">
-        <h1 className="font-mono text-2xl font-semibold tracking-tight">{row.name}</h1>
+        <Heading as="h1" size="lg" className="font-mono">{row.name}</Heading>
         <p className="text-sm text-muted-foreground">{isUplink ? 'Internet uplink' : network ? `${network.name} network` : row.loopback ? 'Local interface' : 'Network interface'}</p>
       </div>
       <span className={`text-sm font-medium ${state.tone}`}>{state.label}</span>
@@ -63,13 +65,13 @@ export function GatewayInterfacePage() {
     </div>
 
     <section className="space-y-2">
-      <h2 className="text-lg font-medium">Management</h2>
+      <Heading>Management</Heading>
       <p className="text-sm text-muted-foreground">Allow OLR to configure this interface. Enabling management alone does not change its address.</p>
       <InterfacesCard dhcp={dhcp.data} only={row.name} />
     </section>
 
     {!row.loopback && editor.config && <section className="space-y-3">
-      <h2 className="text-lg font-medium">IPv6 addressing</h2>
+      <Heading>IPv6 addressing</Heading>
         <SwitchField
           id="interface-ipv6-auto"
           label="Automatically obtain IPv6 addresses"
@@ -83,7 +85,7 @@ export function GatewayInterfacePage() {
         {!row.adopted && <p className="text-sm text-muted-foreground">Allow OLR to manage this interface first.</p>}
     </section>}
 
-    {isUplink ? <section className="space-y-2"><h2 className="text-lg font-medium">Internet uplink</h2><UplinkCard interfaces={editor.interfaces} networks={editor.networks} /></section> : (
+    {isUplink ? <section className="space-y-2"><Heading>Internet uplink</Heading><UplinkCard interfaces={editor.interfaces} networks={editor.networks} /></section> : (
       <Card>
         <CardHeader><CardTitle>Network</CardTitle></CardHeader>
         <CardContent className="space-y-4">
@@ -119,9 +121,9 @@ export function GatewayInterfacePage() {
 }
 
 function Fact({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return <div className="min-w-0 rounded-xl border bg-card px-4 py-3"><p className="text-xs text-muted-foreground">{label}</p><p className={`mt-1 break-all text-sm font-medium ${mono ? 'font-mono' : ''}`}>{value}</p></div>
+  return <div className="panel-surface min-w-0 p-4 sm:p-6"><p className="text-sm text-muted-foreground">{label}</p><div className="mt-1 text-sm">{mono ? <TechnicalValue>{value}</TechnicalValue> : value}</div></div>
 }
 
 function State({ title, detail }: { title: string; detail: string }) {
-  return <div className="space-y-3 py-16 text-center"><h1 className="text-xl font-semibold">{title}</h1><p className="text-sm text-muted-foreground">{detail}</p><Button variant="outline" nativeButton={false} render={<Link to="/gateway">Back to Gateway</Link>} /></div>
+  return <div className="space-y-3 py-16 text-center"><Heading as="h1" size="lg">{title}</Heading><p className="text-sm text-muted-foreground">{detail}</p><Button variant="outline" nativeButton={false} render={<Link to="/gateway">Back to Gateway</Link>} /></div>
 }

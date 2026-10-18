@@ -1,3 +1,4 @@
+import { Heading } from '@/components/ui/heading'
 // Fixed sample scores keep the UI preview stable while live measurements are pending.
 const sample = [
   { label: 'Speed', score: 86 },
@@ -17,9 +18,9 @@ function polygon(score: number) {
 }
 
 export function NetworkQuality() {
-  return <section aria-label="Quality" className="flex w-full min-w-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:min-h-60 lg:aspect-[4/3] lg:h-fit">
+  return <section aria-label="Quality" className="flex w-full min-w-0 flex-col gap-2 panel-surface p-3 sm:p-4 lg:min-h-60 lg:aspect-[4/3] lg:h-fit">
     <div className="flex h-6 items-center justify-between gap-2">
-      <h2 className="text-sm font-semibold">Quality</h2>
+      <Heading size="sm">Quality</Heading>
     </div>
     <div className="-mx-1.5 -mb-1.5 flex min-h-0 min-w-0 flex-1 items-center justify-center sm:-mx-2 sm:-mb-2">
       <figure className="flex h-full w-full flex-col items-center">

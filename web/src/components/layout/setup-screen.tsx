@@ -36,7 +36,7 @@ export function SetupScreen() {
     <AuthFrame>
       <Card className="w-full max-w-lg">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle as="h1" size="lg" className="flex items-center gap-2">
             <Router className="size-4" aria-hidden />
             Set up this router
           </CardTitle>
@@ -60,8 +60,8 @@ export function SetupScreen() {
               {claim.isPending ? 'Setting up…' : 'Set password and continue'}
             </Button>
           </form>
-          <div className="flex gap-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
-            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
+          <div className="flex gap-3 rounded-md border border-warning/40 bg-warning/5 p-3">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning-foreground" aria-hidden />
             <p className="text-sm text-muted-foreground">
               If you continue without a password, anyone who can reach this router can configure it.
             </p>
