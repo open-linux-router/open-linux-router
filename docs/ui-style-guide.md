@@ -303,7 +303,12 @@ opens a dialog with CPU, memory and root disk used/total values. Map has no info
 direction legend or top-ten summary. The
 grayscale preview fills Traffic's remaining content area. Clicking it opens a
 viewport-filling dialog with a pastel country map (muted colors in dark mode),
-pan/zoom, direction labels, attribution and the shared close control. Escape
+pan/zoom, direction labels, attribution and the shared close control. The local
+fullscreen map reveals province/state boundaries and names on zoom, stopping
+at regional detail (zoom 6). Keep administrative labels neutral and secondary
+to traffic; traffic point labels use primary text color and local system fonts.
+Place zoom and whole-world reset buttons at bottom right, with 44px phone
+targets. Resizing must preserve the current fullscreen view. Escape
 closes it and restores focus to the preview. On
 phones each card uses the full column. Its local MapLibre map uses receive/transmit
 colors and bounded logarithmic path widths. Moving particles indicate observed

@@ -2,26 +2,31 @@ import { Heading } from '@/components/ui/heading'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
+import { Minus, Plus, RotateCcw } from 'lucide-react'
 import * as maplibregl from 'maplibre-gl'
 import type { ExpressionSpecification, GeoJSONSource } from 'maplibre-gl'
 import type * as GeoJSON from 'geojson'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import { formatRate } from '@/lib/utils'
 import type { GeoPlace } from '@/lib/api-types'
 import countries from './countries.json'
 import centers from './centers.json'
+import regionsUrl from './regions.geojson?url'
 
 interface Peer { ip: string; upload: number; download: number; place: GeoPlace }
-interface Origin { country_code?: string; latitude?: number; longitude?: number }
+interface Origin { country_code?: string; country_name?: string; city?: string; region?: string; latitude?: number; longitude?: number }
 interface Snapshot { state: string; error?: string; as_of: string; seconds: number; total: number; peers: Peer[]; locations: { state: string; error?: string } }
 type Position = [number, number]
 // Small countries omitted by the 1:110m geometry still need honest points.
 const positions: Record<string, Position> = { ...(centers as unknown as Record<string, Position>), SG: [103.82, 1.35], HK: [114.17, 22.32], MO: [113.55, 22.2], MT: [14.38, 35.94], MV: [73.22, 3.2], BH: [50.55, 26.02], AD: [1.52, 42.51], LI: [9.55, 47.16], MC: [7.42, 43.74], SM: [12.46, 43.94], VA: [12.45, 41.9] }
 const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
 const countryCodes = [...new Set(countries.features.map(feature => feature.properties.country))]
+// Zoom may only appear as the input of a top-level step/interpolate expression.
+const labelText = ['step', ['zoom'], '', ...[1, 2, 3, 4, 5, 5.5, 6].flatMap(zoom => [zoom, ['case', ['<=', ['get', 'minzoom'], zoom], ['get', 'name'], '']])] as ExpressionSpecification
 function position(place: { latitude?: number; longitude?: number }, country?: string): Position | undefined {
   if (typeof place.latitude === 'number' && typeof place.longitude === 'number' && Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && Math.abs(place.latitude) <= 90 && Math.abs(place.longitude) <= 180) return [place.longitude, place.latitude]
   return country ? positions[country.toUpperCase()] : undefined
@@ -51,23 +56,39 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     let instance: maplibregl.Map
     try {
       instance = new maplibregl.Map({ container: container.current,
-        style: { version: 8, sources: { countries: { type: 'geojson', data: countries as GeoJSON.FeatureCollection } }, layers: [
+        // The detailed administrative map is a fingerprinted local asset. Only
+        // fullscreen maps fetch it; the small preview keeps the 110m outline.
+        // Omitting glyphs uses local fonts, without a third-party glyph server.
+        style: { version: 8, sources: { countries: { type: 'geojson', data: expanded ? regionsUrl : countries as GeoJSON.FeatureCollection, maxzoom: 6 } }, layers: [
           { id: 'ocean', type: 'background', paint: { 'background-color': '#f6f7f9' } },
-          { id: 'land', type: 'fill', source: 'countries', paint: { 'fill-color': '#e2e6ec' } },
-          { id: 'borders', type: 'line', source: 'countries', paint: { 'line-color': '#ffffff', 'line-width': 0.4 } },
-        ] }, center: [25, 16], zoom: 0, minZoom: -3, interactive: expanded, attributionControl: false,
+          { id: 'land', type: 'fill', source: 'countries', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': '#e2e6ec' } },
+          { id: 'borders', type: 'line', source: 'countries', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'line-color': '#ffffff', 'line-width': 0.4 } },
+        ] }, center: [25, 16], zoom: 0, minZoom: -3, maxZoom: 6, interactive: expanded, attributionControl: false,
+        dragRotate: false, pitchWithRotate: false, touchZoomRotate: expanded ? { around: 'center' } : false,
         // Keep the whole world visible even in a tall phone viewport.
-        transformConstrain: expanded ? (center, zoom) => ({ center, zoom }) : undefined })
+        transformConstrain: expanded ? (center, zoom) => ({ center, zoom: Math.max(-3, Math.min(6, zoom)) }) : undefined })
     } catch { setFailed(true); return }
     map.current = instance
-    const fit = () => { instance.resize(); instance.fitBounds([[-180, -58], [180, 80]], { padding: 3, duration: 0 }) }
-    const observer = new ResizeObserver(fit)
+    const fit = () => instance.fitBounds([[-180, -58], [180, 80]], { padding: 3, duration: 0 })
+    // Resizing an already-open map must preserve the region the user chose.
+    const observer = new ResizeObserver(() => { instance.resize(); if (!expanded) fit() })
     observer.observe(container.current)
     instance.on('load', () => {
-      for (const id of ['flows', 'dots', 'places']) instance.addSource(id, { type: 'geojson', data: empty })
+      if (expanded) {
+        instance.touchZoomRotate.disableRotation()
+        instance.addLayer({ id: 'regions', type: 'line', source: 'countries', minzoom: 2, filter: ['==', ['get', 'kind'], 'boundary'], paint: { 'line-color': '#5b6472', 'line-width': ['interpolate', ['linear'], ['zoom'], 2, 0.3, 6, 0.8], 'line-opacity': 0.55 } })
+        for (const kind of ['country', 'region']) {
+          instance.addLayer({ id: `${kind}-labels`, type: 'symbol', source: 'countries', minzoom: kind === 'country' ? 1 : 3, filter: ['==', ['get', 'kind'], `${kind}-label`], layout: {
+            'text-field': labelText,
+            'text-font': ['sans-serif'], 'text-size': kind === 'country' ? 13 : 12, 'text-max-width': 9, 'text-padding': 6, 'symbol-sort-key': ['get', 'rank'],
+          }, paint: { 'text-color': '#171b22', 'text-halo-color': '#ffffff', 'text-halo-width': 1 } })
+        }
+      }
+      for (const id of ['flows', 'dots', 'places', 'labels']) instance.addSource(id, { type: 'geojson', data: empty })
       instance.addLayer({ id: 'flows', type: 'line', source: 'flows', paint: { 'line-color': ['get', 'color'], 'line-width': ['get', 'width'], 'line-opacity': ['*', 0.7, ['get', 'opacity']] } })
       instance.addLayer({ id: 'places', type: 'circle', source: 'places', paint: { 'circle-radius': 1.4, 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'], 'circle-stroke-opacity': ['get', 'opacity'], 'circle-stroke-width': 0.5, 'circle-stroke-color': '#ffffff' } })
       instance.addLayer({ id: 'dots', type: 'circle', source: 'dots', paint: { 'circle-radius': 1.2, 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'] } })
+      if (expanded) instance.addLayer({ id: 'peer-labels', type: 'symbol', source: 'labels', minzoom: 2, layout: { 'text-field': ['get', 'name'], 'text-font': ['sans-serif'], 'text-size': 12, 'text-anchor': 'left', 'text-offset': [0.6, 0], 'text-max-width': 12, 'text-padding': 6 }, paint: { 'text-color': '#1d4ed8', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 } })
       fit()
       setReady(true)
     })
@@ -82,12 +103,28 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     const countryColors: ExpressionSpecification = ['match', ['get', 'country'], countryCodes[0], palette[0], ...countryCodes.slice(1).flatMap((code, index) => [code, palette[(index + 1) % palette.length]]), palette[0]]
     instance.setPaintProperty('land', 'fill-color', expanded ? countryColors : (dark ? '#424b5b' : '#e2e6ec'))
     instance.setPaintProperty('borders', 'line-color', dark ? '#232731' : '#ffffff')
+    if (expanded) {
+      instance.setPaintProperty('regions', 'line-color', dark ? '#232731' : '#5b6472')
+      for (const id of ['country-labels', 'region-labels', 'peer-labels']) {
+        instance.setPaintProperty(id, 'text-color', id === 'peer-labels' ? (dark ? '#8ab4ff' : '#1d4ed8') : (dark ? '#f1f3f7' : '#171b22'))
+        instance.setPaintProperty(id, 'text-halo-color', dark ? '#232731' : '#ffffff')
+      }
+    }
     const blue = dark ? '#8ab4ff' : '#1d4ed8'
     const start = origin ? position(origin, origin.country_code) : undefined
     const next: typeof targets.current = new Map()
+    const labels = new Map<string, GeoJSON.Feature>()
+    const label = (place: GeoPlace, country?: string) => {
+      const coordinates = position(place, country)
+      // A country fallback must never acquire a fabricated city label.
+      const name = [position(place) ? place.city || place.region : '', place.country_name || country].filter(Boolean).join(', ')
+      if (coordinates && name) labels.set(coordinates.join(','), { type: 'Feature', properties: { name }, geometry: { type: 'Point', coordinates } })
+    }
+    if (origin) label(origin, origin.country_code)
     if (start) next.set(`place:${start}`, { feature: { type: 'Feature', properties: { color: dark ? '#f1f3f7' : '#171b22' }, geometry: { type: 'Point', coordinates: start } } })
     const locations = new Map<string, Peer>()
     for (const peer of peers) {
+      label(peer.place, peer.place.country)
       const end = position(peer.place, peer.place.country)
       if (!end) continue
       const key = end.join(',')
@@ -106,6 +143,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: { width }, geometry: { type: 'LineString', coordinates } }, coordinates })
     }
     targets.current = next
+    if (expanded) (instance.getSource('labels') as GeoJSONSource).setData({ type: 'FeatureCollection', features: [...labels.values()] })
   }, [peers, origin, dark, ready, expanded])
   useEffect(() => {
     const instance = map.current
@@ -160,7 +198,11 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     frame = requestAnimationFrame(animate)
     return () => cancelAnimationFrame(frame)
   }, [ready, expanded, dark])
-  return <div className="relative h-full min-h-32 w-full overflow-hidden rounded-lg" style={expanded ? { backgroundColor: dark ? '#1c3545' : '#d6effb' } : undefined}><div ref={container} style={{ position: 'absolute', inset: 0 }} aria-hidden={!expanded} />{failed && <p className="absolute inset-0 flex items-center justify-center bg-muted p-3 text-xs text-muted-foreground">Map unavailable.</p>}</div>
+  return <div className="relative h-full min-h-32 w-full overflow-hidden rounded-lg" style={expanded ? { backgroundColor: dark ? '#1c3545' : '#d6effb' } : undefined}><div ref={container} style={{ position: 'absolute', inset: 0 }} aria-hidden={!expanded} />{expanded && ready && !failed && <div className="absolute right-3 bottom-3 flex flex-col overflow-hidden rounded-lg border bg-card shadow-xs">
+    <Button variant="ghost" size="icon" className="size-11 rounded-none sm:size-9" aria-label="Zoom in" title="Zoom in" onClick={() => map.current?.zoomIn({ duration: 200 })}><Plus /></Button>
+    <Button variant="ghost" size="icon" className="size-11 rounded-none sm:size-9" aria-label="Zoom out" title="Zoom out" onClick={() => map.current?.zoomOut({ duration: 200 })}><Minus /></Button>
+    <Button variant="ghost" size="icon" className="size-11 rounded-none sm:size-9" aria-label="Show whole world" title="Show whole world" onClick={() => map.current?.fitBounds([[-180, -58], [180, 80]], { padding: 3, duration: 0 })}><RotateCcw /></Button>
+  </div>}{failed && <p className="absolute inset-0 flex items-center justify-center bg-muted p-3 text-xs text-muted-foreground">Map unavailable.</p>}</div>
 }
 
 export function WorldTraffic({ origin, embedded = false }: { origin?: Origin; embedded?: boolean }) {
@@ -183,7 +225,7 @@ export function WorldTraffic({ origin, embedded = false }: { origin?: Origin; em
     <Dialog open={expanded} onOpenChange={setExpanded}><DialogContent finalFocus={preview} className="flex h-dvh max-h-dvh w-screen max-w-none flex-col rounded-none sm:max-w-none">
       <DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription><span className="text-receive">↓ Download</span> · <span className="text-transmit">↑ Upload</span> · {status}</DialogDescription></DialogHeader>
       <div className="min-h-0 flex-1" role="region" aria-label="World traffic map, drag to pan and scroll to zoom"><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} expanded /></div>
-      <p className="text-xs text-muted-foreground">Top remote IPs over the last 30 seconds · {share}% of observed traffic. Connections ending between samples and traffic bypassing conntrack may be missed.{unknown ? ` ${unknown} locations unknown.` : ''}</p>
+      <p className="text-xs text-muted-foreground">Top remote IPs over the last 30 seconds · {share}% of observed traffic. IP locations are approximate. Connections ending between samples and traffic bypassing conntrack may be missed.{unknown ? ` ${unknown} locations unknown.` : ''}</p>
       {data?.error && <p role="alert" className="text-xs text-destructive">{data.error}</p>}
       {data?.locations?.error && <p role="alert" className="text-xs text-destructive">{data.locations.error}</p>}
       <p className="text-xs text-muted-foreground">Map: <a href="https://www.naturalearthdata.com" target="_blank" rel="noreferrer" className="underline">Natural Earth</a> (public domain) · IP locations: <a href="https://ip.sb" target="_blank" rel="noreferrer" className="underline">ip.sb</a></p>

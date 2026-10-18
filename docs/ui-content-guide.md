@@ -112,7 +112,12 @@ the details ranking and rates continue to show the latest observed snapshot.
 World traffic ranks remote IPs over a rolling thirty-second observed window,
 then locates only the top ten using cached ip.sb city lookups. Details show
 city (or region) and country; points use returned coordinates with country
-centers as a fallback. Show their share of observed traffic in the details dialog,
+centers as a fallback. State that IP locations are approximate. The fullscreen
+administrative map adds country and province/state names progressively on zoom.
+Traffic labels use returned city or region names only when valid coordinates were returned;
+country-center fallbacks carry only country names. Map labels use bundled
+geography and local fonts, without fetching an external basemap.
+Show their share of observed traffic in the details dialog,
 and retain unknown locations in that denominator. Never imply
 zero activity is a failed read, or sampled conntrack
 bytes equal whole-router totals. Details name short-connection and bypass
