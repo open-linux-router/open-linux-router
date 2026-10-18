@@ -10,7 +10,9 @@ import { Switch } from '@/components/ui/switch'
 import { useNetworkQuality, useQualityAction } from './queries'
 import type { QualityCategory, QualitySample, QualitySnapshot } from './types'
 
-const axes = ['Speed', 'Latency', 'Stability', 'Wi-Fi', 'Functionality']
+const axes = ['Speed', 'Latency', 'Stability', 'Wireless', 'Functionality']
+
+const categoryLabel = (label: string) => label === 'Wi-Fi' ? 'Wireless' : label
 
 function point(index: number, score: number, radius = 86) {
   const angle = -Math.PI / 2 + index * Math.PI * 2 / axes.length
@@ -40,27 +42,28 @@ export function NetworkQuality() {
   const [open, setOpen] = useState(false)
   // A failed read must not keep a cached healthy result looking current.
   const data = query.isError ? undefined : query.data
-  const categories = axes.map(label => data?.categories.find(category => category.label === label))
+  const categories = axes.map(label => data?.categories.find(category => categoryLabel(category.label) === label))
   const freshScore = (category: QualityCategory | undefined) => category?.state === 'stale' ? null : category?.score ?? null
-  const complete = categories.every(category => freshScore(category) != null)
+  // Wireless has a display-only default until client/AP measurements exist.
+  const scores = categories.map((category, index) => freshScore(category) ?? (axes[index] === 'Wireless' ? 80 : null))
+  const complete = scores.every(score => score != null)
 
   return <>
     <section aria-label="Quality" className="flex w-full min-w-0 flex-col gap-2 panel-surface p-3 sm:p-4 lg:min-h-60 lg:aspect-[4/3] lg:h-fit">
       <div className="flex h-6 items-center justify-between gap-2">
         <Heading size="sm"><button type="button" className="relative z-10 -my-2.5 min-h-11 py-2 text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring" onClick={() => setOpen(true)} aria-label="Network quality details">Quality</button></Heading>
-        <span className="text-xs text-muted-foreground">{query.isError ? 'Unavailable' : stateLabel(data)}</span>
       </div>
       <button type="button" onClick={() => setOpen(true)} aria-label="Open network quality assessment" className="-mx-1.5 -mb-1.5 flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2">
-        <svg viewBox="0 -12 340 245" className="min-h-0 w-full flex-1" role="img" aria-label={`Network quality scores out of 100. ${axes.map((label, i) => `${label}: ${freshScore(categories[i]) == null ? 'not measured or stale' : Math.round(freshScore(categories[i])!)}${categories[i]?.state === 'partial' ? ' (partial)' : ''}`).join('. ')}. Higher is better.`}>
+        <svg viewBox="0 -12 340 245" className="min-h-0 w-full flex-1" role="img" aria-label={`Network quality scores out of 100. ${axes.map((label, i) => `${label}: ${scores[i] == null ? 'not measured or stale' : Math.round(scores[i]!)}${label === 'Wireless' && freshScore(categories[i]) == null ? ' (default)' : categories[i]?.state === 'partial' ? ' (partial)' : ''}`).join('. ')}. Higher is better.`}>
           <g transform="translate(20 0)">
             {[25, 50, 75, 100].map(score => <polygon key={score} points={polygon(score)} className="fill-none stroke-border" strokeWidth="1" />)}
             {axes.map((label, index) => {
               const [x, y] = point(index, 100)
               return <line key={label} x1="150" y1="116" x2={x} y2={y} className="stroke-border" />
             })}
-            {complete && <polygon points={categories.map((category, index) => point(index, freshScore(category)!).join(',')).join(' ')} className="fill-primary/15 stroke-primary" strokeWidth="2" strokeLinejoin="round" />}
+            {complete && <polygon points={scores.map((score, index) => point(index, score!).join(',')).join(' ')} className="fill-primary/15 stroke-primary" strokeWidth="2" strokeLinejoin="round" />}
             {axes.map((label, index) => {
-              const score = freshScore(categories[index])
+              const score = scores[index]
               const [labelX, labelY] = point(index, 100, 108)
               const [x, y] = point(index, score ?? 0)
               return <g key={label}>
@@ -71,8 +74,7 @@ export function NetworkQuality() {
           </g>
         </svg>
       </button>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>{data?.overall.state === 'ready' ? `Based on ${data.categories.filter(category => category.score != null).length} measured categories` : 'Router default route'}</span>
+      <div className="flex justify-end">
         <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>Test</Button>
       </div>
     </section>
@@ -111,11 +113,11 @@ function QualityDetails({ data, readError, retry }: { data?: QualitySnapshot; re
       {data?.overall.score != null && <MetricValue size="md" value={points(data.overall.score)} unit="/ 100" />}
     </div>
     {data && <>
-      <p className="text-sm text-muted-foreground">Measured components and categories share the full 100 points. Unimplemented or unmeasured tests are excluded; confirmed failures still count. Wi-Fi requires client or AP measurements.</p>
+      <p className="text-sm text-muted-foreground">Measured components and categories share the full 100 points. Unimplemented or unmeasured tests are excluded; confirmed failures still count. Wireless requires client or AP measurements; the chart defaults to 80 until a current score is available. This default is excluded from the overall score.</p>
       {data.started_at && <p className="text-xs text-muted-foreground">{data.completed_at ? 'Completed' : 'Started'} {new Date(data.completed_at ?? data.started_at).toLocaleString()} · {data.scoring_version}</p>}
       <div className="space-y-2">
         {data.categories.map(category => <Disclosure key={category.id} className="border-b last:border-0" summary={<span className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 py-2 text-foreground">
-            <span className="font-medium">{category.label} <span className="font-normal text-muted-foreground">· {categoryState[category.state]}</span></span>
+            <span className="font-medium">{categoryLabel(category.label)} <span className="font-normal text-muted-foreground">· {categoryState[category.state]}</span></span>
             <span className="tabular-nums">{category.score == null ? '—' : `${Math.round(category.score)} / 100`} <span className="text-muted-foreground">· {category.available_points > 0 ? `${points(category.earned_points)} points · ${points(category.available_points)}% weight` : 'Excluded from total'}</span></span>
           </span>}>
           <ul className="pb-3">
@@ -154,7 +156,7 @@ function QualityDetails({ data, readError, retry }: { data?: QualitySnapshot; re
         </>}
         {data.nat_error && <p className="break-words text-sm text-muted-foreground">{data.nat_error}</p>}
       </Disclosure>}
-      <p className="text-xs text-muted-foreground">Total = sum of measured category scores × base weights ÷ sum of their base weights. Base weights: Speed 25, Latency 25, Stability 25, Wi-Fi 15, Functionality 10. Weights within each category are normalized in the same way. New tests may change the score in future scoring versions.</p>
+      <p className="text-xs text-muted-foreground">Total = sum of measured category scores × base weights ÷ sum of their base weights. Base weights: Speed 25, Latency 25, Stability 25, Wireless 15, Functionality 10. Weights within each category are normalized in the same way. New tests may change the score in future scoring versions.</p>
     </>}
   </div>
 }

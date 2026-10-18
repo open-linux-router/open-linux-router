@@ -41,10 +41,12 @@ hidden page title. Detail and operation pages keep their identifying titles.
 - Overview shows Status, Traffic, Latency and Quality cards. Traffic's
   title-right map icon toggles statistics and map views in place. Its pressed
   state identifies the active map, and its accessible label names the next view. The
-  quality radar shows measured Speed, Latency, Stability, Wi-Fi and Functionality
-  on a 0–100 higher-is-better scale. Missing or stale axes show a dash, never a
-  zero or simulated value. Draw a polygon only when all five axes have current
-  scores. Show the total out of 100 using normalized weights of current scored
+  quality radar shows Speed, Latency, Stability, Wireless and Functionality
+  on a 0–100 higher-is-better scale. Wireless defaults to 80 when unmeasured or
+  stale; explain this display-only default in details and the accessible chart
+  description. Other missing or stale axes show a dash. Draw a polygon when all
+  five axes have display scores. Omit the card total and measured-category caption.
+  Details show the total out of 100 using normalized weights of current scored
   categories and components. Missing tests never reduce the score; measured
   failures still count. Show the measured scope, effective weights and earned
   contributions in details. Clicking Quality, its chart or
