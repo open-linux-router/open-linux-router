@@ -31,7 +31,7 @@ export function AppShell() {
                 <li key={to}>
                   <NavLink to={to} end={end} className={({ isActive }) => cn(
                     'relative flex h-full items-center px-3 text-sm transition-colors duration-150 after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring',
-                    isActive ? 'font-medium text-primary after:bg-primary' : 'text-muted-foreground hover:text-foreground',
+                    (isActive || section?.navTo === to) ? 'font-medium text-primary after:bg-primary' : 'text-muted-foreground hover:text-foreground',
                   )}>{label}</NavLink>
                 </li>
               ))}
@@ -42,7 +42,7 @@ export function AppShell() {
       </header>
       <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[80rem] flex-1 px-4 py-6 outline-none sm:px-6 sm:py-8 xl:px-8">
         <div className="min-w-0">
-          {landing && <h1 className="sr-only">{pathname === '/' ? 'Network overview' : section.label}</h1>}
+          {landing && !section.nested && <h1 className="sr-only">{pathname === '/' ? 'Network overview' : section.label}</h1>}
           <Outlet />
         </div>
       </main>
@@ -56,12 +56,12 @@ export function AppShell() {
         </div>
       </footer>
       <nav aria-label="Sections" className="fixed inset-x-0 bottom-0 z-20 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-        <ul className="grid grid-cols-6">
+        <ul className="grid grid-cols-5">
           {SECTIONS.filter(s => !s.nested).map(({ to, label, icon: Icon, end }) => (
             <li key={to} className="min-w-0">
               <NavLink to={to} end={end} className={({ isActive }) => cn(
                 'flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 text-[0.625rem] font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring',
-                isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+                (isActive || section?.navTo === to) ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
               )}><Icon className="size-5" aria-hidden />{label}</NavLink>
             </li>
           ))}

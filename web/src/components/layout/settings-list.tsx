@@ -54,7 +54,7 @@ export function SettingsList({
               // label it wraps instead of truncating.
               wrap
               trailing={value}
-              to={`${section}/${slug}`}
+              to={group.to ?? `${section}/${slug}`}
             />
           )
         })}

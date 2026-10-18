@@ -6,7 +6,7 @@ import { useIptvConfig } from '@/features/iptv/queries'
  * Advanced, on the page you land on: a row per feature, each saying what it is
  * doing now.
  *
- * Remote connections and publishing live under Access. These remaining
+ * Remote connections and publishing live under Access. These advanced
  * features keep their own status; there is no shared health to summarise.
  */
 export function AdvancedPage() {
@@ -20,6 +20,8 @@ export function AdvancedPage() {
       section="/advanced"
       heading={null}
       rows={[
+        { slug: 'firewall' },
+        { slug: 'tools' },
         {
           slug: 'ddns',
           value: dial.data && (records.length ? records.map((r) => r.name).join(', ') : 'None'),

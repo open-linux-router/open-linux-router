@@ -62,6 +62,11 @@ border. Use muted fills for small metrics, not another elevated card.
 
 ## Layout and hierarchy
 
+Desktop and mobile navigation use Overview, Gateway, Wireless, Access and
+Advanced, in that order. Wireless currently shows an under-construction placeholder.
+Firewall and Tools are reached through Advanced, retain their existing URLs,
+and highlight Advanced in navigation, including on their detail pages.
+
 Firewall's arrival diagram uses a centered firewall boundary spanning 40% of
 the chart width inside its 24px gutters. Pack incoming bands contiguously along
 each edge, with logarithmic widths normalized separately for each side and a

@@ -1,6 +1,8 @@
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router'
 
 import { AppShell } from '@/components/layout/app-shell'
+import { SubPage } from '@/components/layout/sub-page'
+import { WirelessPage } from '@/routes/wireless'
 import { Button } from '@/components/ui/button'
 import { AuthGate } from '@/components/layout/auth-gate'
 import { DhcpAdvancedPage } from '@/routes/dhcp/advanced'
@@ -77,7 +79,8 @@ export function App() {
               <Route path="advanced" element={<DnsAdvancedPage />} />
             </Route>
           </Route>
-          <Route path="firewall" element={<FirewallPage />} />
+          <Route path="wireless" element={<WirelessPage />} />
+          <Route path="firewall" element={<SubPage section="/advanced" slug="firewall"><FirewallPage /></SubPage>} />
           <Route path="firewall/rules" element={<FirewallRulesPage />} />
           <Route path="access" element={<AccessPage />} />
           <Route path="settings/access" element={<AdminAccessPage />} />
@@ -91,7 +94,7 @@ export function App() {
           <Route path="access/ingress" element={<IngressPage />} />
           <Route path="access/forwards" element={<ForwardsPage />} />
           <Route path="access/filtering" element={<FilteringPage />} />
-          <Route path="tools" element={<ToolsPage />} />
+          <Route path="tools" element={<SubPage section="/advanced" slug="tools"><ToolsPage /></SubPage>} />
           <Route path="tools/speedtest" element={<ToolPage tool="speedtest" />} />
           <Route path="tools/link-test" element={<ToolPage tool="link-test" />} />
           <Route path="tools/nat" element={<ToolPage tool="nat" />} />

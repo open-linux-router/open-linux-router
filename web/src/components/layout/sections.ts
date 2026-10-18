@@ -1,4 +1,4 @@
-import { Activity, ArrowLeftRight, Shield, SlidersHorizontal, Waypoints, Wrench } from 'lucide-react'
+import { Activity, ArrowLeftRight, Shield, SlidersHorizontal, Waypoints, Wifi, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /**
@@ -25,12 +25,11 @@ import type { LucideIcon } from 'lucide-react'
  *
  * Networks, DHCP and DNS live under Gateway: the interfaces and subnets it
  * serves, the addresses it hands out, and the names it resolves belong together.
- * Firewall has its own section because its boundary and live openings deserve
- * a direct place in the bar; Access follows it.
+ * Wireless has its own placeholder section; Access follows it.
  *
  * Access owns the directory of ways in and out. Configuration stays with its
  * module; networks and devices retain their routing choices. Advanced keeps
- * Dynamic DNS and IPTV.
+ * Firewall, Tools, Dynamic DNS and IPTV. Firewall and Tools retain their URLs.
  *
  * Devices is absent because it is not a section: the device list is the body of
  * the overview. Filing it under DHCP was considered and rejected — the
@@ -46,6 +45,8 @@ export interface SettingGroup {
   label: string
   /** Shown on the sub-page itself, never in the list that links to it. */
   blurb: string
+  /** Override for destinations that retain an existing URL. */
+  to?: string
 }
 
 export interface Section {
@@ -55,6 +56,8 @@ export interface Section {
   end: boolean
   /** A destination within a section, not a top-level navigation item. */
   nested?: boolean
+  /** Top-level navigation owner for a destination with a separate URL. */
+  navTo?: string
   groups: SettingGroup[]
 }
 
@@ -171,9 +174,18 @@ export const SECTIONS: Section[] = [
     ],
   },
   {
+    to: '/wireless',
+    label: 'Wireless',
+    icon: Wifi,
+    end: false,
+    groups: [],
+  },
+  {
     to: '/firewall',
     label: 'Firewall',
     icon: Shield,
+    nested: true,
+    navTo: '/advanced',
     end: false,
     groups: [],
   },
@@ -220,6 +232,8 @@ export const SECTIONS: Section[] = [
     to: '/tools',
     label: 'Tools',
     icon: Wrench,
+    nested: true,
+    navTo: '/advanced',
     end: false,
     groups: [],
   },
@@ -229,6 +243,8 @@ export const SECTIONS: Section[] = [
     icon: SlidersHorizontal,
     end: false,
     groups: [
+      { slug: 'firewall', label: 'Firewall', blurb: '', to: '/firewall' },
+      { slug: 'tools', label: 'Tools', blurb: '', to: '/tools' },
       {
         slug: 'ddns',
         label: 'Dynamic DNS',
