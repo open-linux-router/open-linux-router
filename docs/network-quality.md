@@ -1,9 +1,11 @@
 # Network quality: measurement and scoring design
 
-Status: design proposal. The five top-level categories are agreed; individual
-tests, endpoint choices, scoring curves and release boundaries still need
-review. This document is a capability roadmap, not a claim that these tests
-already exist. The Overview radar currently displays explicitly simulated data.
+Status: design proposal. The five top-level categories, simple aggregation rules
+and overall point budgets are agreed. Individual tests, endpoint choices,
+per-metric scoring curves, internal category weights and release boundaries
+still need review. This document is a capability roadmap, not a claim that these
+tests already exist. The Overview radar currently displays explicitly simulated
+data.
 
 ## 1. Product goal and scope
 
@@ -273,6 +275,11 @@ categories contains:
 - Coverage: expected, implemented, attempted and usable scored components,
   their effective weights, and omitted components with reasons.
 
+The snapshot also contains a nullable overall 0–100 score, its state and
+coverage, and each category's point budget and earned contribution. Preserve
+unrounded scores for calculation; round only for display. Expose the formula
+and contributions so the overall result can be explained as a sum of points.
+
 Collection outcome, freshness and score are distinct. No test means no score;
 confirmed failure is usable evidence and may yield a low score. All RTT probes
 timing out can establish probe failure but cannot supply a measured RTT of zero
@@ -286,9 +293,83 @@ gaps, and expired history remains historical rather than current evidence.
 
 ## 9. Scoring and presentation rules
 
-The current review defines what to measure, not final scoring curves. Before
-enabling real scores, review thresholds, minimum samples, freshness rules,
-weights, coverage requirements and aggregation behavior with worked examples.
+Scores are approximate references, not precise predictions of every user's
+experience. Keep aggregation understandable: normalize measurements to 0–100,
+then use the following three rules. Final normalization curves, internal weights,
+minimum samples, freshness and coverage requirements still need review before
+enabling real scores.
+
+### 9.1 Three aggregation rules
+
+| Relationship | Rule | Example |
+| --- | --- | --- |
+| Alternative ways to satisfy the same use | Maximum score | Either IPv4 or IPv6 can complete the same service transaction |
+| Different aspects contributing to experience | Weighted addition using fixed point budgets | Speed, latency and stability contribute separate points |
+| Repeated or representative comparable observations | Arithmetic mean, with explicit weights where needed | Repeated runs or independent services in the same group |
+
+Define the question before choosing the rule. For basic service access,
+`max(IPv4 access score, IPv6 access score)` represents either family working.
+For dual-stack completeness, both families contribute separately. One family
+working perfectly and the other failing must not reduce the basic access result
+to 50 merely because two alternatives were tested.
+
+Different CDN/service results contribute to breadth of experience: average them
+within reviewed groups instead of taking only the fastest service. Balance
+service/provider weights so extra URLs or repeated samples do not increase a
+provider's importance. Publish which observations and weights form each mean.
+
+Do not use addition to turn prerequisite stages into partial service success.
+DNS, connection and TLS may all succeed while the required application response
+fails; that transaction still failed. Keep stage results as diagnostic evidence.
+Similarly, alternative paths cannot bypass the prerequisites of the use being
+tested: record which path actually completed that use.
+
+Each scored component needs a stable ID, a normalization rule, an aggregation
+relationship, fixed weights/budget where applicable, required evidence and its
+coverage policy. Not every diagnostic measurement needs to earn points.
+
+### 9.2 Overall score: a 100-point budget
+
+Keep each radar category on a 0–100 scale. Its contribution to the overall
+score is its category score multiplied by its point budget divided by 100.
+
+| Category | Maximum overall contribution |
+| --- | ---: |
+| Speed | 25 points |
+| Latency | 25 points |
+| Stability | 25 points |
+| Wi-Fi | 15 points |
+| Functionality | 10 points |
+| Total | 100 points |
+
+```text
+overall = speed * 0.25
+        + latency * 0.25
+        + stability * 0.25
+        + wifi * 0.15
+        + functionality * 0.10
+```
+
+For example, scores of 80, 90, 70, 80 and 60 respectively contribute
+20 + 22.5 + 17.5 + 12 + 6 = 78 overall points. Show this breakdown in details.
+Use the same budget-and-addition approach within categories once their internal
+weights are reviewed. No geometric means, squared penalties or hidden
+shortfall multipliers are needed for the overall score.
+
+### 9.3 Coverage and presentation
+
+Coverage is separate from quality. Do not multiply a quality score by coverage:
+an unimplemented test is not evidence of a poor network. Do not silently remove
+missing categories and redistribute their points either. Required evidence
+missing means no complete overall score; sufficiently supported partial results
+must be labeled partial, with their measured scope and available point budget.
+
+A configuration explicitly excluding Wi-Fi would need a separately defined,
+versioned scope and budget before producing its own complete overall score.
+Missing Wi-Fi telemetry does not automatically select such a configuration.
+For an alternative-path maximum, a verified 100 already establishes the maximum;
+otherwise missing alternatives may leave the result partial. Never treat an
+unknown alternative as a confirmed failure.
 
 - Preserve raw results even when no defensible score formula exists yet.
 - Review absolute versus expected-bandwidth speed scoring. Do not silently use
@@ -304,7 +385,6 @@ weights, coverage requirements and aggregation behavior with worked examples.
   it partial with the scoring basis.
 - Avoid scoring the same outage, NAT restriction or access failure repeatedly
   just because several derived checks describe it.
-- Do not create an overall score across the five categories in this design.
 
 The radar retains five axes but cannot turn absent axes into zero or draw an
 apparently complete measured polygon from missing values. Provide an accessible
@@ -374,6 +454,7 @@ Next reviews should settle:
 1. The smallest verified target/resource set and per-method traffic budgets.
 2. Absolute versus expected-bandwidth speed scoring and use-case profiles.
 3. Sampling cadence/windows, minimum evidence, expiry and history retention.
-4. Per-metric curves, category weights, minimum coverage and partial-score UI.
+4. Per-metric curves, internal category weights, minimum coverage and
+   partial-score UI; overall category budgets are fixed in §9.2.
 5. Coordinator/API ownership and reuse of current Tools implementations.
 6. External-peer operation and the first supported Wi-Fi/client data source.
