@@ -213,7 +213,9 @@ addresses and provider errors readable rather than silently truncating them.
 Access groups technology tiles under “Add a way out” and “Add a way in”.
 A technology can appear in both directions; each dialog offers only configuration
 owners for that direction. Remove System default and purpose filters from this
-page. Use project logos, with text identifiers for unbranded protocols. Functions
+page. Use app-style icons above names without enclosing cards. Use project logos
+and existing Lucide SVG icons for unbranded protocols, never generated or hand-drawn
+artwork. Functions
 and state appear on hover/focus and in click-open details. External technologies
 remain explicitly “Not integrated”; broader ecosystem uses are not promises of
 OLR configuration support. Existing service states remain authoritative.

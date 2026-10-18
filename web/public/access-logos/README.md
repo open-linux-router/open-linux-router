@@ -14,4 +14,6 @@ Brand marks identify their respective projects; they do not imply endorsement.
 - SSH uses OpenSSH's artwork: `https://www.openssh.com/images/openssh.gif`.
 - Shadowsocks reuses `src/assets/way-marks/shadowsocks.svg`.
 
-Other entries use their written names, not surrogate functional icons.
+Other entries use existing Lucide SVG icons with their protocol names below.
+Lucide is ISC licensed and supplied by the existing `lucide-react` dependency;
+no launcher artwork is generated or drawn locally.

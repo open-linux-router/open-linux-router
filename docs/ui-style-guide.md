@@ -83,13 +83,15 @@ each edge, with logarithmic widths normalized separately for each side and a
 with their units on one line. Reserve separate label space so small traffic
 categories remain readable.
 
-Access has two square-tile grids headed “Add a way out” and “Add a way in”.
+Access has two app-launcher grids headed “Add a way out” and “Add a way in”.
 Do not show System default or purpose filters. Each tile shows a locally bundled
-project logo above a short name. Preserve brand colors on a white logo backing
-in both themes. Protocols without a recognized logo use a text identifier rather
-than an invented glyph. Use three columns on phones, five from 640px, seven from
-1024px and eight from 1280px, with 12px gaps and 40px logo areas. Keep names
-below logos with an 8px gap. Group headings use 24px/32px semibold text.
+project logo above a short name, without an enclosing card, border, shadow or
+corner arrow. Preserve brand colors on a white 64px rounded icon backing in
+both themes. Protocols without a recognized logo use existing Lucide SVG icons;
+never generate or draw replacement artwork. Use three columns on phones, five
+from 640px, seven from 1024px and eight from 1280px, with 12px horizontal and
+24px vertical gaps. Keep names below icons with an 8px gap and visible keyboard
+focus around the whole button. Group headings use 24px/32px semibold text.
 Hover/focus explains function and state; click opens
 details and configuration actions for touch users. External setup stays explicit.
 

@@ -1,7 +1,7 @@
 import shadowsocks from '@/assets/way-marks/shadowsocks.svg'
 
 // Local copies of project artwork; provenance is in public/access-logos/README.md.
-// Protocols without an established logo intentionally use their written name.
+// Protocols without an established logo use existing Lucide SVGs in the launcher.
 export const ACCESS_LOGOS: Record<string, string> = {
   wireguard: '/access-logos/wireguard.svg',
   tailscale: '/access-logos/tailscale.svg',

@@ -1,4 +1,4 @@
-import { ExternalLink } from 'lucide-react'
+import { ArrowLeftRight, Cable, ExternalLink, Globe, LockKeyhole, Network, Route, Server, Shield, Terminal, Waypoints } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 
@@ -19,6 +19,20 @@ import { useForwardsStatus } from '@/features/nat/queries'
 import { useRemoteConfig, useRemoteStatus, useShadowsocksStatus, useSocksStatus } from '@/features/remote/queries'
 import { useSocksOutConfig, useSocksOutStatus } from '@/features/socksout/queries'
 import { cn } from '@/lib/utils'
+
+// Established SVG library icons for protocols without a project mark.
+const PROTOCOL_ICONS = {
+  socks: Waypoints,
+  http: Globe,
+  trojan: Shield,
+  tuic: Cable,
+  gateway: Route,
+  tunnelbroker: Network,
+  https: LockKeyhole,
+  nat: ArrowLeftRight,
+  frp: Server,
+  rathole: Terminal,
+}
 
 export function AccessPage() {
   const [selected, setSelected] = useState<AccessTechnology | null>(null)
@@ -50,7 +64,7 @@ export function AccessPage() {
       {(['out', 'in'] as const).map(direction => (
       <section key={direction} className="space-y-4" aria-labelledby={`access-${direction}`}>
         <h2 id={`access-${direction}`} className="text-2xl leading-8 font-semibold">Add a way {direction}</h2>
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8">
+        <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8">
           {ACCESS_TECHNOLOGIES.filter(entry => entry.directions.includes(direction)).map(entry => {
             const directional = { ...entry, connections: entry.connections.filter(kind => ACCESS_DEFINITIONS.find(definition => definition.kind === kind)?.direction === direction) }
             return <TechnologyTile key={entry.id} entry={directional} onSelect={() => setSelected(directional)} summaries={summaries} />
@@ -93,15 +107,15 @@ export function AccessPage() {
 
 function TechnologyTile({ entry, onSelect, summaries }: { entry: AccessTechnology; onSelect: () => void; summaries: Record<AccessKind, Summary> }) {
   const logo = ACCESS_LOGOS[entry.id]
+  const Icon = PROTOCOL_ICONS[entry.id as keyof typeof PROTOCOL_ICONS] ?? Network
   const integrated = entry.connections.length > 0
   return (
     <Tooltip>
-      <TooltipTrigger render={<button type="button" />} onClick={onSelect} aria-label={`${entry.name}${integrated ? '' : ' · Not integrated'}`} className="relative flex aspect-square min-w-0 flex-col items-center justify-center gap-2 panel-surface interactive-surface p-2">
-        <span className="flex h-10 w-14 shrink-0 items-center justify-center rounded-lg bg-white p-1">
-          {logo ? <img src={logo} alt="" className="max-h-full max-w-full object-contain" /> : <span className="text-lg font-semibold tracking-tight text-slate-700" aria-hidden>{entry.name}</span>}
+      <TooltipTrigger render={<button type="button" />} onClick={onSelect} aria-label={`${entry.name}${integrated ? '' : ' · Not integrated'}`} className="group flex min-w-0 flex-col items-center gap-2 rounded-xl px-1 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background">
+        <span className={cn('flex size-16 shrink-0 items-center justify-center rounded-2xl p-3 transition-colors duration-150 group-hover:bg-accent group-active:bg-accent', logo ? 'bg-white' : 'bg-accent/60 text-primary')}>
+          {logo ? <img src={logo} alt="" className="max-h-full max-w-full object-contain" /> : <Icon className="size-9" strokeWidth={1.75} aria-hidden />}
         </span>
-        <span className="max-w-full break-words text-center text-sm font-medium">{entry.name}</span>
-        {!integrated && <span className="absolute right-2 top-2 text-xs text-muted-foreground" aria-hidden>↗</span>}
+        <span className="max-w-full break-words text-center text-[13px] font-medium sm:text-sm">{entry.name}</span>
       </TooltipTrigger>
       <TooltipContent className="block space-y-2 text-sm leading-relaxed">
         <p>{entry.description}</p>
