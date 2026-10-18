@@ -5,7 +5,7 @@ proposal. The five top-level categories, simple aggregation rules
 and overall point budgets are agreed. Individual tests, endpoint choices,
 per-metric scoring curves, internal category weights and release boundaries
 still need review. This document is a capability roadmap, not a claim that these
-tests already exist. The Overview radar now displays measured partial results;
+tests already exist. The Overview radar now displays measured results;
 the implementation scope and initial curves are listed in §13.
 
 ## 1. Product goal and scope
@@ -296,9 +296,8 @@ gaps, and expired history remains historical rather than current evidence.
 
 Scores are approximate references, not precise predictions of every user's
 experience. Keep aggregation understandable: normalize measurements to 0–100,
-then use the following three rules. Final normalization curves, internal weights,
-minimum samples, freshness and coverage requirements still need review before
-enabling real scores.
+then use the following three rules. The reference assessment's initial curves,
+weights and evidence requirements are defined in §13 and can evolve by version.
 
 ### 9.1 Three aggregation rules
 
@@ -331,10 +330,11 @@ coverage policy. Not every diagnostic measurement needs to earn points.
 
 ### 9.2 Overall score: a 100-point budget
 
-Keep each radar category on a 0–100 scale. Its contribution to the overall
-score is its category score multiplied by its point budget divided by 100.
+Keep each radar category on a 0–100 scale. These base weights express the
+relative importance of categories with usable current results. Normalize their
+weights to fill 100 points, including when some tests are not implemented yet.
 
-| Category | Maximum overall contribution |
+| Category | Base weight |
 | --- | ---: |
 | Speed | 25 points |
 | Latency | 25 points |
@@ -351,26 +351,45 @@ overall = speed * 0.25
         + functionality * 0.10
 ```
 
+The formula above applies when all five categories are scored. In general:
+
+```text
+category = sum(scored component score * component weight)
+         / sum(weights of scored components)
+overall = sum(scored category score * category base weight)
+        / sum(base weights of scored categories)
+category effective points = 100 * category base weight
+                          / sum(base weights of scored categories)
+category earned points = category score * category effective points / 100
+```
+
+Only usable, fresh results enter either denominator. A confirmed zero is a
+scored result and stays in the denominator. If no category can be scored, the
+total is null. Every supported assessment can reach 100, regardless of how many
+future tests remain unimplemented.
+
 For example, scores of 80, 90, 70, 80 and 60 respectively contribute
 20 + 22.5 + 17.5 + 12 + 6 = 78 overall points. Show this breakdown in details.
 Use the same budget-and-addition approach within categories once their internal
-weights are reviewed. No geometric means, squared penalties or hidden
-shortfall multipliers are needed for the overall score.
+weights are reviewed. With Wi-Fi unmeasured, scores of 80, 90, 70 and 60 use
+base weights 25, 25, 25 and 10, giving 77.6 overall out of 100. No geometric
+means, squared penalties or hidden shortfall multipliers are needed for the
+overall score.
 
 ### 9.3 Coverage and presentation
 
-Coverage is separate from quality. Do not multiply a quality score by coverage:
-an unimplemented test is not evidence of a poor network. Do not silently remove
-missing categories and redistribute their points either. Required evidence
-missing means no complete overall score; sufficiently supported partial results
-must be labeled partial, with their measured scope and available point budget.
+Coverage is separate from quality. An unimplemented test is not evidence of a
+poor network. Exclude unimplemented, unselected, insufficient, invalid and stale
+results, then explicitly normalize the remaining weights within categories and
+across categories. Show effective weights and point contributions in details.
+An unmeasured Wi-Fi category remains a dash while the measured categories share
+100 points. A ready total means the current assessment is scored, not that the
+entire planned test catalog has been implemented or measured.
 
-A configuration explicitly excluding Wi-Fi would need a separately defined,
-versioned scope and budget before producing its own complete overall score.
-Missing Wi-Fi telemetry does not automatically select such a configuration.
-For an alternative-path maximum, a verified 100 already establishes the maximum;
-otherwise missing alternatives may leave the result partial. Never treat an
-unknown alternative as a confirmed failure.
+For an alternative-path maximum, choose the higher normalized measured score
+and retain its path evidence. Never treat an unknown alternative as a confirmed
+failure. Cancelled or timed-out assessments retain partial evidence but do not
+publish a finished total; running and expired assessments also withhold it.
 
 - Preserve raw results even when no defensible score formula exists yet.
 - Review absolute versus expected-bandwidth speed scoring. Do not silently use
@@ -380,10 +399,10 @@ unknown alternative as a confirmed failure.
 - Profiles express chosen services/use cases, with versioned weights. They do
   not define regional expectations. Scores from different profiles, coverage
   or formula versions are not automatically comparable.
-- Missing tests never become zero. Conversely, silently renormalizing a small
-  successful subset to a perfect comprehensive score is misleading. Require
-  reviewed minimum coverage; otherwise withhold the score or explicitly label
-  it partial with the scoring basis.
+- Missing tests never become zero. Show which categories/components supplied
+  the result and which were excluded. Enforce each metric's minimum evidence
+  before scoring, without reserving points for future implementations. Adding
+  scored tests or changing their weights updates the scoring version.
 - Avoid scoring the same outage, NAT restriction or access failure repeatedly
   just because several derived checks describe it.
 
@@ -391,7 +410,8 @@ The radar retains five axes but cannot turn absent axes into zero or draw an
 apparently complete measured polygon from missing values. Provide an accessible
 text/detail view with scores, raw values, freshness, scope and coverage. Do not
 mix simulated and live scores into a single apparently measured result. This
-implementation replaces the simulated preview with measured partial results.
+implementation replaces the simulated preview with measured results and a
+normalized total for the available scope.
 UI changes update the
 [content guide](ui-content-guide.md) and [style guide](ui-style-guide.md).
 
@@ -460,7 +480,7 @@ Next reviews should settle:
 5. Coordinator/API ownership and reuse of current Tools implementations.
 6. External-peer operation and the first supported Wi-Fi/client data source.
 
-## 13. First implementation: reference-v1 / quality-v1
+## 13. Reference implementation: reference-v1 / quality-v2
 
 This is an initial reference assessment, not the complete service catalog.
 Snapshots identify the fixed `reference` profile at version `1` separately
@@ -512,9 +532,9 @@ diagnostic only and do not prove public IPv4 assignment, inbound or P2P access.
 The entire assessment has a 150-second deadline. No configuration changes,
 temporary inbound listeners or port mappings are made.
 
-### Initial component budgets
+### Component base weights
 
-| Category | Implemented components | Reserved/unmeasured components |
+| Category | Implemented components | Future/unmeasured components |
 | --- | --- | --- |
 | Speed (25 points) | Reference transfer: 40% of category; within this, download 70%, upload 30% | Service-specific transfers: 60% |
 | Latency (25 points) | TCP connect 60%, DNS 15%, HTTPS response 25%, each averaged equally across the three targets | Unsupported/missing timings remain unscored |
@@ -525,7 +545,7 @@ temporary inbound listeners or port mappings are made.
 For access, either family returning the expected status earns that service's
 100; both families failing all attempts yields 0. Inconclusive or incomplete
 evidence with no success remains unscored. For timing and stability, select the
-family with the higher weighted measured contribution per target/category;
+family with the higher normalized measured score per target/category;
 keep that family's fields together rather than mixing paths. This is a best
 measured family reference, not a prediction of a particular client's family
 selection or fallback. Missing alternatives are not known failures.
@@ -554,11 +574,30 @@ rules. They are not statistical confidence estimates.
 | HTTPS response ms | 0→100, 30→100, 100→90, 200→75, 500→50, 1000→20, 2000→0 |
 | TCP variation ms | 0→100, 2→95, 5→85, 10→70, 20→50, 50→20, 100→0 |
 
-Per category, the displayed partial 0–100 score describes its measured
-components only. Earned overall points are
-`category budget * sum(component weight * score / 100)`; available points are
-`category budget * sum(weight of scored components)`. Both are exposed, along
-with missing-component reasons. Sum earned and available points separately;
-never rescale the subtotal into a complete 100-point result. Version 1 can cover
-at most 57.5 overall points with bandwidth enabled (47.5 without). The official
-overall `score` remains null until a defined complete assessment is supported.
+Per category, normalize scored component weights to sum to 1. Reference
+transfer therefore supplies 100% of the current speed score; stability uses
+connection success and timing variation in the ratio 4:3 when both are usable;
+functionality uses the equal mean of scored service-access results.
+
+Normalize the base weights of scored categories to a 100-point total. With
+bandwidth enabled and all implemented metrics usable, Speed, Latency, Stability
+and Functionality have effective point budgets of 29.41, 29.41, 29.41 and 11.76.
+Without bandwidth testing they become 41.67, 41.67 and 16.67 for Latency,
+Stability and Functionality. Either assessment can score 100. Wi-Fi remains
+unmeasured and excluded until supported measurements exist.
+
+The API exposes component `weight` (base) and `effective_weight` (normalized
+within the category). Category `budget` retains its base weight;
+`available_points` is its effective share of the normalized total and
+`earned_points` is its score times that share divided by 100. Overall
+`available_points` is 100 when any fresh category is scored; `earned_points`
+is the sum of category contributions. `coverage_percent` retains the weighted
+fraction of the planned catalog with usable evidence as separate metadata;
+it neither reduces the quality score nor gates it. Category `partial` denotes
+limited measured scope, while overall `ready` denotes a scored assessment.
+Running, cancelled, timed-out and stale snapshots withhold the overall score.
+
+Scoring version `quality-v2` introduces this normalization; `quality-v1`
+withheld totals pending the full planned catalog. The reference profile and
+catalog remain version 1 because their targets and base weights are unchanged.
+Future tests and weights can evolve by version without reserving points now.

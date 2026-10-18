@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	qualityVersion = "quality-v1"
+	qualityVersion = "quality-v2"
 	qualityCatalog = "reference-v1"
 	qualityTTL     = 30 * time.Minute
 	qualitySamples = 6

@@ -44,8 +44,10 @@ hidden page title. Detail and operation pages keep their identifying titles.
   quality radar shows measured Speed, Latency, Stability, Wi-Fi and Functionality
   on a 0–100 higher-is-better scale. Missing or stale axes show a dash, never a
   zero or simulated value. Draw a polygon only when all five axes have current
-  scores. Label partial assessments and show earned/available measured points;
-  do not normalize them into a complete total. Clicking Quality, its chart or
+  scores. Show the total out of 100 using normalized weights of current scored
+  categories and components. Missing tests never reduce the score; measured
+  failures still count. Show the measured scope, effective weights and earned
+  contributions in details. Clicking Quality, its chart or
   Test opens a dialog with run/cancel, an optional bandwidth test, freshness,
   category contributions and raw service/NAT evidence. Keep bandwidth cost and
   router-default-route scope beside the run action. Snapshot reads never start

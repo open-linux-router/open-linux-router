@@ -7,11 +7,12 @@ import (
 )
 
 type QualityComponent struct {
-	ID     string   `json:"id"`
-	Label  string   `json:"label"`
-	Weight float64  `json:"weight"`
-	Score  *float64 `json:"score"`
-	Reason string   `json:"reason,omitempty"`
+	ID              string   `json:"id"`
+	Label           string   `json:"label"`
+	Weight          float64  `json:"weight"`
+	EffectiveWeight float64  `json:"effective_weight"`
+	Score           *float64 `json:"score"`
+	Reason          string   `json:"reason,omitempty"`
 }
 
 type QualityCategory struct {
@@ -121,7 +122,7 @@ func stabilityScores(samples []QualitySample) [2]*float64 {
 }
 
 // Alternatives choose one whole family result, not independently selected
-// timing fields from incompatible paths. Missing alternatives remain partial.
+// timing fields from incompatible paths. Compare normalized measured scores.
 func bestFamily(results []QualityTargetResult, id string, stability bool) []QualitySample {
 	var best []QualitySample
 	bestScore := -1.0
@@ -148,6 +149,11 @@ func bestFamily(results []QualityTargetResult, id string, stability bool) []Qual
 				total += *s * weights[i]
 				weight += weights[i]
 			}
+		}
+		if weight > 0 {
+			total /= weight
+		} else {
+			total = -1
 		}
 		if total > bestScore || (total == bestScore && weight > bestWeight) {
 			bestScore = total
@@ -199,8 +205,11 @@ func category(id, label string, budget float64, components ...QualityComponent) 
 	}
 	if weight > 0 {
 		c.Score = valuePointer(weighted / weight)
-		c.Earned = budget * weighted / 100
-		c.Available = budget * weight
+		for i := range c.Components {
+			if c.Components[i].Score != nil {
+				c.Components[i].EffectiveWeight = c.Components[i].Weight / weight
+			}
+		}
 		c.State = "partial"
 		if weight >= 1-1e-9 {
 			c.State = "ready"
@@ -246,20 +255,35 @@ func scoreQuality(s QualitySnapshot, now time.Time) ([]QualityCategory, QualityO
 func aggregateQuality(categories []QualityCategory, s QualitySnapshot, now time.Time) ([]QualityCategory, QualityOverall) {
 	o := QualityOverall{State: "unavailable"}
 	stale := s.ExpiresAt != nil && !now.Before(*s.ExpiresAt)
+	budget := 0.0
 	for i := range categories {
 		c := &categories[i]
+		c.Earned, c.Available = 0, 0
 		if stale && c.Score != nil {
 			c.State = "stale"
 			continue
 		}
-		o.Earned += c.Earned
-		o.Available += c.Available
+		if c.Score == nil {
+			continue
+		}
+		budget += c.Budget
+		for _, component := range c.Components {
+			if component.Score != nil {
+				o.Coverage += c.Budget * component.Weight
+			}
+		}
 	}
-	o.Coverage = o.Available // Overall budget is exactly 100 points.
-	if o.Available > 0 {
-		o.State = "partial"
-	}
-	if o.Available >= 100-1e-9 {
+	if budget > 0 {
+		for i := range categories {
+			c := &categories[i]
+			if c.Score == nil || c.State == "stale" {
+				continue
+			}
+			c.Available = 100 * c.Budget / budget
+			c.Earned = *c.Score * c.Available / 100
+			o.Earned += c.Earned
+		}
+		o.Available = 100
 		o.State = "ready"
 		o.Score = valuePointer(o.Earned)
 	}

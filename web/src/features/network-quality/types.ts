@@ -15,6 +15,7 @@ export interface QualityComponent {
   id: string
   label: string
   weight: number
+  effective_weight: number
   score: number | null
   reason?: string
 }

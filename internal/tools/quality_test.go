@@ -25,7 +25,7 @@ func qualityFixture(state string, tcp float64) []QualitySample {
 	return samples
 }
 
-func TestQualityOverallBudgetAndPartialCoverage(t *testing.T) {
+func TestQualityOverallNormalizesMeasuredWeights(t *testing.T) {
 	budgets := []float64{25, 25, 25, 15, 10}
 	scores := []float64{80, 90, 70, 80, 60}
 	var categories []QualityCategory
@@ -39,9 +39,28 @@ func TestQualityOverallBudgetAndPartialCoverage(t *testing.T) {
 	partial := category("speed", "Speed", 25,
 		QualityComponent{Weight: .4, Score: valuePointer(80)},
 		QualityComponent{Weight: .6})
-	_, total = aggregateQuality([]QualityCategory{partial}, QualitySnapshot{}, time.Now())
-	if total.Score != nil || total.Earned != 8 || total.Available != 10 || total.Coverage != 10 || partial.Score == nil || *partial.Score != 80 {
-		t.Fatalf("partial must not become 80/100 overall: category=%+v total=%+v", partial, total)
+	actual, total := aggregateQuality([]QualityCategory{partial, category("wifi", "Wi-Fi", 15, QualityComponent{Weight: 1})}, QualitySnapshot{}, time.Now())
+	if total.Score == nil || *total.Score != 80 || total.Earned != 80 || total.Available != 100 || total.Coverage != 10 || total.State != "ready" {
+		t.Fatalf("unmeasured components must not reduce the score: %+v", total)
+	}
+	if actual[0].Available != 100 || actual[0].Earned != 80 || actual[0].Components[0].EffectiveWeight != 1 || actual[0].Components[1].EffectiveWeight != 0 || actual[1].Available != 0 {
+		t.Fatalf("effective weights: %+v", actual)
+	}
+	// A measured failure stays in both denominators; it is never omitted.
+	zero := category("latency", "Latency", 25, QualityComponent{Weight: .6, Score: valuePointer(0)}, QualityComponent{Weight: .4, Score: valuePointer(100)})
+	actual, total = aggregateQuality([]QualityCategory{partial, zero}, QualitySnapshot{}, time.Now())
+	if total.Score == nil || *total.Score != 60 || actual[0].Available != 50 || actual[1].Available != 50 {
+		t.Fatalf("weighted measured categories: %+v", total)
+	}
+	_, total = aggregateQuality([]QualityCategory{category("failure", "Failure", 25, QualityComponent{Weight: .4, Score: valuePointer(0)})}, QualitySnapshot{}, time.Now())
+	if total.Score == nil || *total.Score != 0 || total.Available != 100 || total.State != "ready" {
+		t.Fatalf("measured zero must remain a real total: %+v", total)
+	}
+	for _, state := range []string{"running", "cancelled", "timed_out"} {
+		_, total = aggregateQuality([]QualityCategory{partial}, QualitySnapshot{State: state}, time.Now())
+		if total.Score != nil {
+			t.Fatalf("%s published a finished total: %+v", state, total)
+		}
 	}
 }
 
@@ -67,8 +86,8 @@ func TestQualityAlternativesAndServiceBreadth(t *testing.T) {
 	if functionality.Score == nil || math.Abs(*functionality.Score-100.0/3) > 1e-9 {
 		t.Fatalf("one working service must not hide two failing services: %+v", functionality)
 	}
-	if total.Score != nil || total.Available >= 100 {
-		t.Fatalf("missing capabilities must not create full total: %+v", total)
+	if total.Score == nil || total.Available != 100 || total.State != "ready" {
+		t.Fatalf("missing capabilities must not prevent a normalized total: %+v", total)
 	}
 	unknown := []QualityTargetResult{{ID: "test", Samples: qualityFixture("inconclusive", 10)}}
 	if accessScore(unknown, "test") != nil {
@@ -119,6 +138,21 @@ func TestQualityMeasuredZeroWinsOverMissingAlternative(t *testing.T) {
 	}
 	if accessScore(results[:1], "test") != nil {
 		t.Fatal("an unmeasured alternative became a failure")
+	}
+}
+
+func TestQualityAlternativesCompareNormalizedScores(t *testing.T) {
+	partial := qualityFixture("ok", 10)
+	for i := range partial {
+		partial[i].DNS, partial[i].Response = nil, nil
+	}
+	results := []QualityTargetResult{
+		{ID: "test", Family: "ipv4", Samples: qualityFixture("ok", 60)},
+		{ID: "test", Family: "ipv6", Samples: partial},
+	}
+	scores := timingScores(bestFamily(results, "test", false))
+	if scores[0] == nil || *scores[0] != 100 || scores[1] != nil || scores[2] != nil {
+		t.Fatal("alternatives must compare measured scores and keep the selected family's evidence together")
 	}
 }
 
@@ -225,7 +259,7 @@ func TestQualityRoutesArePassiveAndPublishEvidence(t *testing.T) {
 		t.Fatalf("start: %d %s", w.Code, w.Body.String())
 	}
 	result := waitQuality(t, h)
-	if probes.Load() != 36 || transfers.Load() != 1 || result.Speed == nil || result.NAT == nil || result.Overall.Score != nil || math.Abs(result.Overall.Available-57.5) > 1e-9 {
+	if probes.Load() != 36 || transfers.Load() != 1 || result.Speed == nil || result.NAT == nil || result.Overall.Score == nil || math.Abs(*result.Overall.Score-8000.0/85) > 1e-9 || result.Overall.Available != 100 {
 		t.Fatalf("result=%+v probes=%d transfers=%d", result, probes.Load(), transfers.Load())
 	}
 	// A new light run must not reuse a previous bandwidth result.
@@ -234,6 +268,9 @@ func TestQualityRoutesArePassiveAndPublishEvidence(t *testing.T) {
 	result = waitQuality(t, h)
 	if result.Speed != nil || transfers.Load() != 1 {
 		t.Fatal("light run reused or started a bandwidth test")
+	}
+	if result.Overall.Score == nil || math.Abs(*result.Overall.Score-100) > 1e-9 || result.Categories[0].Available != 0 || result.Categories[3].Available != 0 {
+		t.Fatalf("light assessment must use the full 100 points without speed or Wi-Fi: %+v", result.Overall)
 	}
 }
 

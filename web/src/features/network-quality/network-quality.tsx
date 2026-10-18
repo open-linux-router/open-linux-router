@@ -22,6 +22,7 @@ function polygon(score: number) {
 }
 
 const points = (value: number) => Number(value.toFixed(1)).toString()
+const categoryState = { ready: 'Measured', partial: 'Limited measurements', stale: 'Stale', unavailable: 'Not measured' }
 
 function stateLabel(data: QualitySnapshot | undefined) {
   if (!data) return 'Loading…'
@@ -71,7 +72,7 @@ export function NetworkQuality() {
         </svg>
       </button>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>{data && data.overall.available_points > 0 ? `${points(data.overall.earned_points)} / ${points(data.overall.available_points)} measured points` : 'Router default route'}</span>
+        <span>{data?.overall.state === 'ready' ? `Based on ${data.categories.filter(category => category.score != null).length} measured categories` : 'Router default route'}</span>
         <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>Test</Button>
       </div>
     </section>
@@ -79,7 +80,7 @@ export function NetworkQuality() {
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Network quality</DialogTitle>
-          <DialogDescription>Tests run from this router over its default route. Wi-Fi and full service coverage need additional measurements.</DialogDescription>
+          <DialogDescription>Tests run from this router over its default route. The score reflects the measurements available in this assessment.</DialogDescription>
         </DialogHeader>
         <QualityDetails data={data} readError={query.isError} retry={() => query.refetch()} />
       </DialogContent>
@@ -105,22 +106,22 @@ function QualityDetails({ data, readError, retry }: { data?: QualitySnapshot; re
     <p className="text-sm text-muted-foreground">{bandwidth ? 'Download and upload testing can use substantial data and affect other traffic. Allow up to 150 seconds.' : 'Checks small HTTPS responses and STUN. No bulk download or upload. Allow up to 60 seconds.'} Results remain in memory for this daemon session and become stale after 30 minutes.</p>
     {action.isError && <p role="alert" className="text-sm text-destructive">{action.error.message}</p>}
     <div className="flex flex-wrap items-baseline justify-between gap-2" role="status">
-      <Heading as="h3" size="sm">{data ? stateLabel(data) : readError ? 'Unavailable' : 'Loading…'}</Heading>
+      <Heading as="h3" size="sm">{data?.overall.state === 'ready' ? 'Overall score' : data ? stateLabel(data) : readError ? 'Unavailable' : 'Loading…'}</Heading>
       {running && <span className="text-sm text-muted-foreground">{phase[data.phase]}</span>}
-      {data && data.overall.available_points > 0 && <MetricValue size="md" value={points(data.overall.earned_points)} unit={`/ ${points(data.overall.available_points)} measured points`} />}
+      {data?.overall.score != null && <MetricValue size="md" value={points(data.overall.score)} unit="/ 100" />}
     </div>
     {data && <>
-      <p className="text-sm text-muted-foreground">{data.overall.state === 'ready' ? 'Complete assessment.' : 'Partial assessment; a complete total is not available.'} Coverage {points(data.overall.coverage_percent)}%. Missing tests do not earn or lose points.</p>
+      <p className="text-sm text-muted-foreground">Measured components and categories share the full 100 points. Unimplemented or unmeasured tests are excluded; confirmed failures still count. Wi-Fi requires client or AP measurements.</p>
       {data.started_at && <p className="text-xs text-muted-foreground">{data.completed_at ? 'Completed' : 'Started'} {new Date(data.completed_at ?? data.started_at).toLocaleString()} · {data.scoring_version}</p>}
       <div className="space-y-2">
         {data.categories.map(category => <Disclosure key={category.id} className="border-b last:border-0" summary={<span className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 py-2 text-foreground">
-            <span className="font-medium">{category.label} <span className="font-normal text-muted-foreground">· {category.state}</span></span>
-            <span className="tabular-nums">{category.score == null ? '—' : `${Math.round(category.score)} / 100`} <span className="text-muted-foreground">· {points(category.earned_points)} / {points(category.available_points)} measured points · {category.budget} max</span></span>
+            <span className="font-medium">{category.label} <span className="font-normal text-muted-foreground">· {categoryState[category.state]}</span></span>
+            <span className="tabular-nums">{category.score == null ? '—' : `${Math.round(category.score)} / 100`} <span className="text-muted-foreground">· {category.available_points > 0 ? `${points(category.earned_points)} points · ${points(category.available_points)}% weight` : 'Excluded from total'}</span></span>
           </span>}>
           <ul className="pb-3">
             {category.components.map(component => <li key={component.id} className="py-2 text-sm">
               <div className="flex items-start justify-between gap-4"><span>{component.label}</span><span className="shrink-0 tabular-nums">{component.score == null ? 'Not measured' : `${Math.round(component.score)} / 100`}</span></div>
-              <p className="text-xs text-muted-foreground">{component.reason} · {points(component.weight * category.budget)} possible points</p>
+              <p className="text-xs text-muted-foreground">{component.reason} · {component.score == null ? 'Excluded from category score' : `${points(component.effective_weight * 100)}% of category score`}</p>
             </li>)}
           </ul>
         </Disclosure>)}
@@ -153,7 +154,7 @@ function QualityDetails({ data, readError, retry }: { data?: QualitySnapshot; re
         </>}
         {data.nat_error && <p className="break-words text-sm text-muted-foreground">{data.nat_error}</p>}
       </Disclosure>}
-      <p className="text-xs text-muted-foreground">Total = Speed × 25% + Latency × 25% + Stability × 25% + Wi-Fi × 15% + Functionality × 10%. Partial categories contribute only their measured components; points are not redistributed.</p>
+      <p className="text-xs text-muted-foreground">Total = sum of measured category scores × base weights ÷ sum of their base weights. Base weights: Speed 25, Latency 25, Stability 25, Wi-Fi 15, Functionality 10. Weights within each category are normalized in the same way. New tests may change the score in future scoring versions.</p>
     </>}
   </div>
 }
