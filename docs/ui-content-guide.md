@@ -41,10 +41,15 @@ hidden page title. Detail and operation pages keep their identifying titles.
 - Overview shows Status, Traffic, Latency and Quality cards. Traffic's
   title-right map icon toggles statistics and map views in place. Its pressed
   state identifies the active map, and its accessible label names the next view. The
-  quality radar shows Speed (download and upload), Latency, Stability,
-  Reachability and Wi-Fi on a 0–100 higher-is-better scale. Until measurements
-  are connected, retain the simulated-score context in its accessible description.
-  Omit the visible Demo badge and chart caption. Clicking the Latency title opens
+  quality radar shows measured Speed, Latency, Stability, Wi-Fi and Functionality
+  on a 0–100 higher-is-better scale. Missing or stale axes show a dash, never a
+  zero or simulated value. Draw a polygon only when all five axes have current
+  scores. Label partial assessments and show earned/available measured points;
+  do not normalize them into a complete total. Clicking Quality, its chart or
+  Test opens a dialog with run/cancel, an optional bandwidth test, freshness,
+  category contributions and raw service/NAT evidence. Keep bandwidth cost and
+  router-default-route scope beside the run action. Snapshot reads never start
+  tests. Clicking the Latency title opens
   latency settings, without a separate plus button. The dialog starts with an
   Internet target selector: a named provider or “Choose fastest once”. The
   selected target stays fixed across failures and restarts. Show the latest

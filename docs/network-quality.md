@@ -1,11 +1,12 @@
 # Network quality: measurement and scoring design
 
-Status: design proposal. The five top-level categories, simple aggregation rules
+Status: stage 1 reference assessment implemented; broader coverage is a design
+proposal. The five top-level categories, simple aggregation rules
 and overall point budgets are agreed. Individual tests, endpoint choices,
 per-metric scoring curves, internal category weights and release boundaries
 still need review. This document is a capability roadmap, not a claim that these
-tests already exist. The Overview radar currently displays explicitly simulated
-data.
+tests already exist. The Overview radar now displays measured partial results;
+the implementation scope and initial curves are listed in §13.
 
 ## 1. Product goal and scope
 
@@ -388,10 +389,10 @@ unknown alternative as a confirmed failure.
 
 The radar retains five axes but cannot turn absent axes into zero or draw an
 apparently complete measured polygon from missing values. Provide an accessible
-text/detail view with scores, raw values, freshness, scope and coverage. Keep
-the simulated-data context required by the current content guide; do not mix
-simulated and live scores into a single apparently measured result. This design
-does not change the current preview UI. Future UI changes must update the
+text/detail view with scores, raw values, freshness, scope and coverage. Do not
+mix simulated and live scores into a single apparently measured result. This
+implementation replaces the simulated preview with measured partial results.
+UI changes update the
 [content guide](ui-content-guide.md) and [style guide](ui-style-guide.md).
 
 ## 10. Execution and existing building blocks
@@ -411,7 +412,7 @@ Existing code provides useful starting points, not complete catalog coverage:
 
 | Building block | Current capability and gap |
 | --- | --- |
-| Overview radar | Simulated fixed values; no live quality scoring |
+| Overview radar | Measured partial reference assessment with raw evidence; complete coverage remains future work |
 | Gateway latency monitor | Single HTTPS HEAD application-round-trip sample against a saved target, plus separate DNS timing; not network RTT or a quality history store |
 | Tools speed test | Router-originated speedtest-go download/upload/latency/jitter, selectable server/exit; not per-service/CDN adapters |
 | Tools ping | Finite ICMP RTT/loss test; not a continuous representative stability window |
@@ -458,3 +459,106 @@ Next reviews should settle:
    partial-score UI; overall category budgets are fixed in §9.2.
 5. Coordinator/API ownership and reuse of current Tools implementations.
 6. External-peer operation and the first supported Wi-Fi/client data source.
+
+## 13. First implementation: reference-v1 / quality-v1
+
+This is an initial reference assessment, not the complete service catalog.
+Snapshots identify the fixed `reference` profile at version `1` separately
+from the scoring and catalog versions.
+All measurements originate at the router over its default route, without
+environment proxies. The UI is reached through Overview's Quality card.
+It replaces the fixed sample scores and renames Reachability to Functionality.
+
+### API and lifecycle
+
+- `GET /api/tools/quality` passively returns the latest snapshot and calculated
+  category/overall results. It is also published as the `tools_show_quality`
+  read tool. The initial state is `idle`, with null scores.
+- `POST /api/tools/quality?speed=false` starts a finite asynchronous assessment
+  and returns 202. `speed=true` additionally runs the existing bandwidth test.
+  Another assessment, reference speed test or NAT test holds the shared runner
+  reservations and produces 409. Regular user traffic is not controlled.
+- `DELETE /api/tools/quality` requests cancellation. The runner releases its
+  reservations after stopping and retains completed evidence. Daemon shutdown
+  also cancels it. Closing the details dialog does not cancel a test.
+- A new assessment replaces the previous in-memory result, including its speed
+  data. Results reset on daemon restart and expire 30 minutes after completion.
+  Categories retain their historical values with a stale label after expiry;
+  stale results do not supply current overall points.
+
+The run first samples the following fixed resources with IPv4 and IPv6
+independently: Cloudflare `https://speed.cloudflare.com/__down?bytes=0` (200),
+Google `https://www.google.com/generate_204` (204), and GitHub
+`https://api.github.com/zen` (200). Each target/family makes six sequential fresh
+HTTPS HEAD requests; the six target/family workers run concurrently. Each
+request has a five-second deadline, a 32 KiB response-header limit and no
+redirect following or document-body transfer. There is no uncached-DNS claim.
+Only the first resolved address for each family is attempted in each sample.
+
+Evidence includes start/end time, actual address, HTTP status, failure stage,
+DNS lookup time, TCP connect time excluding DNS, and time from established TLS
+connection acquisition to the first HTTP response byte. TLS certificates are
+verified. Unexpected HTTP statuses, including challenges and rate limits, are
+inconclusive access evidence rather than a scored network failure. An expected
+status verifies only that HEAD resource transaction; it does not verify response
+body content or all functionality of the named service.
+
+The optional speedtest-go reference transfer runs after response sampling, with
+a 90-second deadline and its existing single-server selection/fallback. It
+uses four transfer threads and ten-second capture intervals. It has no fixed
+byte cap and can consume substantial data; bandwidth testing defaults to off.
+Finally, the existing IPv4 STUN test has up to 15 seconds. NAT results are
+diagnostic only and do not prove public IPv4 assignment, inbound or P2P access.
+The entire assessment has a 150-second deadline. No configuration changes,
+temporary inbound listeners or port mappings are made.
+
+### Initial component budgets
+
+| Category | Implemented components | Reserved/unmeasured components |
+| --- | --- | --- |
+| Speed (25 points) | Reference transfer: 40% of category; within this, download 70%, upload 30% | Service-specific transfers: 60% |
+| Latency (25 points) | TCP connect 60%, DNS 15%, HTTPS response 25%, each averaged equally across the three targets | Unsupported/missing timings remain unscored |
+| Stability (25 points) | Connection establishment success 40%; TCP timing variation 30%, averaged equally across the three targets | Behavior under load: 30% |
+| Wi-Fi (15 points) | None | Client/AP measurements: 100% |
+| Functionality (10 points) | Test-resource access: 50%, averaged equally across the three services | Protocol capabilities 25%; inbound/P2P 25% |
+
+For access, either family returning the expected status earns that service's
+100; both families failing all attempts yields 0. Inconclusive or incomplete
+evidence with no success remains unscored. For timing and stability, select the
+family with the higher weighted measured contribution per target/category;
+keep that family's fields together rather than mixing paths. This is a best
+measured family reference, not a prediction of a particular client's family
+selection or fallback. Missing alternatives are not known failures.
+
+Timing scores require at least four valid measurements and use their median.
+Connection continuity requires all six attempts with non-collector outcomes and
+is `100 * established TCP connections / attempts`; it is not packet loss or
+long-term availability. Timing variation uses the mean absolute difference of
+consecutive successful TCP connect durations, requires at least three adjacent
+pairs in a six-attempt run, and does not bridge failed attempts. These are short
+reference samples, not representative historical stability or loaded behavior.
+
+### Initial normalization curves
+
+Use linear interpolation between these anchors and clamp beyond the endpoints.
+Negative/nonfinite measurements are invalid. These initial experience hints
+are versioned and can be calibrated later without changing the aggregation
+rules. They are not statistical confidence estimates.
+
+| Metric | Measurement → score anchors |
+| --- | --- |
+| Download Mbps | 0→0, 3→20, 10→40, 25→60, 75→80, 150→90, 500→100 |
+| Upload Mbps | 0→0, 1→20, 3→40, 10→60, 30→80, 75→90, 200→100 |
+| TCP connect ms | 0→100, 10→100, 30→90, 60→75, 100→60, 200→35, 500→0 |
+| DNS lookup ms | 0→100, 10→100, 30→90, 60→75, 100→60, 200→35, 500→0 |
+| HTTPS response ms | 0→100, 30→100, 100→90, 200→75, 500→50, 1000→20, 2000→0 |
+| TCP variation ms | 0→100, 2→95, 5→85, 10→70, 20→50, 50→20, 100→0 |
+
+Per category, the displayed partial 0–100 score describes its measured
+components only. Earned overall points are
+`category budget * sum(component weight * score / 100)`; available points are
+`category budget * sum(weight of scored components)`. Both are exposed, along
+with missing-component reasons. Sum earned and available points separately;
+never rescale the subtotal into a complete 100-point result. Version 1 can cover
+at most 57.5 overall points with bandwidth enabled (47.5 without). The official
+overall `score` remains null until a defined complete assessment is supported.

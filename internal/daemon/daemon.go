@@ -798,6 +798,7 @@ func run(args []string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	toolHTTP.QualityContext = ctx
 
 	// Stored intent is put back in force here, for the modules that need it.
 	//

@@ -152,6 +152,12 @@ func (h *HTTP) stopLAN(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *HTTP) Close() {
+	h.quality.mu.Lock()
+	h.quality.closed = true
+	if h.quality.cancel != nil {
+		h.quality.cancel()
+	}
+	h.quality.mu.Unlock()
 	h.lanMu.Lock()
 	if h.lan != nil {
 		h.lan.stop()

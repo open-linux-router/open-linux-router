@@ -288,8 +288,13 @@ title and toggle so the map appears on the back of the card. Reduced motion
 switches faces immediately. Make the inactive face inert and hidden to assistive
 technology. Do not add a Map details row; clicking the map opens fullscreen.
 Network quality uses a five-axis radar with theme-aware primary fill and border
-grid lines. It occupies one card at every breakpoint, without a Demo badge or
-caption. Its accessible description identifies sample scores as simulated.
+grid lines. It occupies one card at every breakpoint. Only measured, current
+axes have points; missing/stale axes show dashes and prevent a filled polygon.
+Keep the state beside the title and measured-point subtotal beside Test below
+the plot. The heading, plot and Test action open the shared scrollable details
+dialog. Category disclosures show score, coverage and point contributions, with
+raw evidence below. Keep long errors and addresses wrapping inside the dialog.
+Accessible chart descriptions identify partial and missing measurements.
 Uptime is
 the first plain disclosure row in Status, above system health. Both rows use
 aligned 16px Lucide CircleCheck icons in success color when healthy. Uptime

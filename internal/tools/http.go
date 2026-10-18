@@ -40,6 +40,10 @@ type HTTP struct {
 	pingRunning atomic.Bool
 	tracing     atomic.Bool
 	natRunning  atomic.Bool
+	quality     qualityRun
+	// QualityContext follows daemon shutdown; nil is suitable for standalone use.
+	QualityContext context.Context
+	qualityProbe   func(context.Context, qualityTarget, string) QualitySample
 
 	Trace  func(context.Context, string) (TraceResult, error)
 	RunNAT func(context.Context) (NATResult, error)
@@ -59,6 +63,9 @@ type HTTP struct {
 func (h *HTTP) Routes() []core.Route {
 	exit := core.QueryParam{Name: "exit", Type: "string", Summary: "Configured way out; empty uses the router's own default route."}
 	return []core.Route{
+		{Method: "GET", Path: "/quality", Tool: "show quality", Summary: "Read the latest network quality assessment, evidence and score coverage without starting tests.", Handler: h.getQuality},
+		{Method: "POST", Path: "/quality", Mutating: true, Summary: "Start a bounded router default-route quality assessment; optional speed testing consumes bandwidth.", Query: []core.QueryParam{{Name: "speed", Type: "boolean", Summary: "Include a bandwidth-consuming reference download and upload test; defaults to false."}}, Handler: h.startQuality},
+		{Method: "DELETE", Path: "/quality", Mutating: true, Summary: "Cancel the active network quality assessment and retain its completed evidence.", Handler: h.cancelQuality},
 		{Method: "GET", Path: "/speedtest/servers", Tool: "show speedtest servers", Summary: "Find nearby speed test servers through the selected way out; makes network requests but transfers no test data.", Query: []core.QueryParam{exit}, Handler: h.servers},
 		{Method: "POST", Path: "/speedtest", Mutating: true, Summary: "Measure this router's internet latency, download and upload speed using speedtest-go; consumes bandwidth.", Query: []core.QueryParam{exit, {Name: "server_id", Type: "string", Summary: "Speed test server ID from the server list; empty picks a reachable server automatically."}}, Handler: h.speedtest},
 		{Method: "POST", Path: "/nat", Mutating: true, Summary: "Probe this router’s default-route UDP mapping and filtering through public STUN servers; sends UDP packets.", Handler: h.nat},
