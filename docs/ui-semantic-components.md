@@ -1,0 +1,190 @@
+# Semantic UI components and visual contracts
+
+This is the cross-page component inventory and target visual contract for OLR.
+Read it with the [visual guide](ui-style-guide.md) and
+[content guide](ui-content-guide.md). It specifies shared roles before a UI
+implementation pass; proposed component names below are not existing exports.
+Existing route-specific interactions remain in place. This audit is based on
+source inspection, not a rendered visual or accessibility test.
+
+## Audit scope and findings
+
+Reviewed the route registry, global theme, shared UI/layout components and
+presentation patterns across Overview, device/group details, Gateway/interfaces,
+DNS/DHCP, Firewall, Access services, Tools/results, Advanced settings,
+authentication/setup and system feedback. On current main, Wireless is a
+placeholder; it needs the same empty-state contract when developed.
+
+The project already has good foundations: Geist, semantic theme colors, shared
+controls, PageHeading/SubPage, Card, ListRow, Dialog and tabular traffic values.
+The remaining inconsistencies are mostly role definitions and local overrides:
+
+| Evidence | Current difference | Target decision |
+| --- | --- | --- |
+| `components/ui/card.tsx`, `index.css` | Card uses `rounded-xl` (16px), although the guide says panels are 12px | Standard panels are 12px; fix the shared radius mapping/use in an implementation pass |
+| `routes/overview.tsx`, `features/network-quality/network-quality.tsx`, `components/ui/card.tsx` | Monitoring headings are 14px, normal CardTitle is 16px | Explicit compact monitoring heading and normal panel heading roles |
+| `routes/gateway/interfaces.tsx`, `routes/gateway/interface.tsx` | Section headings use local 18px medium styles | Shared section heading defaults to 16px semibold |
+| `routes/tool-page.tsx`, `components/traffic-metrics.tsx` | Tool results use 30px monospace; rates use 14px sans semibold | One metric role with inline, summary and result emphasis; measurements use tabular sans |
+| `features/devices/device-inline-editor.tsx` | Entity title grows to 30px on desktop | Page/entity title defaults to 24px; identity comes from imagery and placement |
+| `features/devices/device-setting-row.tsx`, `features/link/network-status.tsx` | Label/value patterns exist as local components with different text sizes | Reusable property rows and technical-value role |
+| `components/layout/settings-list.tsx`, `components/ui/list.tsx` | Settings answers inherit subdued trailing-text styling | Distinguish an answer value from secondary metadata |
+| `routes/tools.tsx`, `routes/access.tsx`, interface cards | Several locally composed interactive surfaces | Shared surface interaction rules while preserving directory-specific layouts |
+
+The table records migration targets, not completed fixes. The main worktree's
+untracked preview directories and `network-settings.tsx` are local experiments,
+not the baseline for this contract.
+
+## Component inventory
+
+Do not make a separate React component for every text size. Extract components
+where structure, behavior or repeated semantics need a shared owner. Text roles
+can be shared variants/tokens within those components.
+
+| Semantic component | Responsibility | Existing owner / next step |
+| --- | --- | --- |
+| Page frame | Width, gutters, navigation, page spacing | Reuse AppShell and SubPage |
+| Page heading | h1, optional context, back/breadcrumb, action | Reuse PageHeading; converge local entity headings visually |
+| Section heading | Heading plus optional action/context | Proposed SectionHeading; use the correct h2/h3 independently of visual size |
+| Panel | Static information group with header/content/footer | Reuse Card family; unify radius and heading variants |
+| Navigation tile | A capability/entity with one primary destination | Proposed NavigationTile for repeated link surfaces; retain Tools and Access layouts |
+| Property list / row | Label and current answer, optionally an edit trigger | Generalize DeviceSettingRow as PropertyRow inside a `dl` |
+| Metric value | Measurement, unit, optional supporting detail | Proposed MetricValue; replace the local Tools Metric typography and share with traffic primitives |
+| Traffic meter | Current rate, optional limit and utilization | Reuse Meter; keep data/direction semantics in traffic code |
+| Status indicator | State label plus optional icon | Proposed StatusIndicator, composed into existing StatusStrip/rows; Badge remains a tag primitive |
+| Technical value | IP, MAC, hostname, interface identifier, command | Proposed TechnicalValue text role with wrapping/copy behavior where needed |
+| List / table | Repeated entities or comparable records | Reuse List/ListRow and Table; right-align numeric columns |
+| Form field | Label, control, hint, validation and feedback | Compose existing Label/Input/Select/Switch/EditableField; share repeated field structure |
+| Disclosure | Optional detail without changing the main answer | Reuse Disclosure; dialog-based Overview details retain their existing behavior |
+| Dialog / menu / tooltip | Modal editing, contextual actions, short supplemental help | Reuse current primitives; never make tooltip-only information necessary for touch users |
+| Feedback / empty state | Loading, error, no data, completion and retry | Reuse Skeleton, Alert, ListEmpty and Sonner; generalize empty-state layout only when needed |
+| Chart frame | Title/actions, plot space, legend, data availability | Share frame conventions; keep radar, map, activity matrix and Sankey domain-specific |
+
+## Surface and interaction contract
+
+| Surface | Shape and depth | Spacing | Interaction |
+| --- | --- | --- | --- |
+| Standard panel | 12px radius, 1px `border`, `bg-card`, `shadow-xs` | 16px phone / 24px larger-screen padding | Static; no hover treatment or pointer cursor |
+| Compact monitoring panel | Same border, radius and shadow | Existing Overview 12px / 16px padding | Only its actual controls react to hover |
+| Navigation tile | Same panel surface | Layout follows the directory contract | `bg-accent/60` hover, `bg-accent` pressed, visible focus ring |
+| Inset / meter | 8px radius, muted fill, no shadow | Usually 8–12px | Hover only when it is an actual control |
+| List | 12px outer radius, 1px border, no shadow | Rows own their padding | ListRow already defines hover/pressed/focus behavior |
+| Dialog | 16px radius, popover surface, `shadow-md` | 16px / 24px | Shared close behavior, focus management and scrim |
+| Control | 8px radius; border/fill belongs to the shared variant | 36px desktop height, at least 44px phone target | Shared hover, focus, disabled and invalid states |
+
+Use the existing shadow definitions: xs = `0 1px 2px rgb(23 27 34 / 4%)`,
+sm = `0 1px 3px rgb(23 27 34 / 6%)`, md =
+`0 8px 24px rgb(23 27 34 / 12%)`. Borders remain the primary surface boundary
+in dark mode. No hover lift, scale, animated shadow or nested elevated cards.
+Color/opacity transitions take 150–200ms and honor reduced motion.
+
+Whole-tile navigation uses a real link; an operation uses a button. A panel
+containing settings and multiple actions is not one large click target. Keep
+secondary actions outside a parent link/button. Keyboard focus uses a visible
+2px ring in `ring`; use an inset treatment where overflow would clip it.
+Hover never reveals the only path to an action. Selected, pressed, disabled,
+pending and read-only are different states; disabled controls do not react to hover.
+
+## Typography roles
+
+Use Geist Variable with the current system sans fallback throughout. Reserve
+monospace for machine-readable identifiers and literal output. All roles inherit
+theme foreground unless stated otherwise; do not make ordinary values primary blue.
+
+| Role | Size / line height | Weight | Color / other rules |
+| --- | --- | --- | --- |
+| Page / entity title | 24 / 32px | 600 | Foreground, tracking -0.015em |
+| Section / panel title | 16 / 24px | 600 | Foreground |
+| Compact monitoring title | 14 / 24px | 600 | Foreground; explicit monitoring variant |
+| Directory item name | 18 / 24px | 600 | Tools entry role; Access retains its short-name tile layout |
+| Body / ordinary value | 14 / 20px | 400 | Foreground |
+| Property label | 14 / 20px | 400 | Muted foreground |
+| Form label | 14 / 20px | 500 | Foreground; use Label with a control association |
+| Supporting description | 13 / 20px | 400 | Muted foreground |
+| Compact metadata | 12 / 16px | 400 | Muted foreground; not the default for important answers |
+| Technical value | 13 / 20px | 400 | Monospace, foreground, wrap long identifiers |
+| Inline metric | 14 / 20px | 600 | Tabular numerals |
+| Summary metric | 20 / 28px | 600 | Tabular numerals |
+| Diagnostic result metric | 30 / 36px | 600 | Tabular numerals, tracking -0.015em |
+
+Visual size does not choose HTML heading level. CardTitle currently renders a
+div; consumers must supply a real heading (or a future polymorphic heading API).
+PropertyRow uses `dt`/`dd` under `dl`; form labels are not property labels.
+Mobile input text remains 16px to avoid browser zoom.
+
+The scale is a default for shared chrome and information display. Chart labels
+may need domain-specific sizes; do not force SVG/map labels into body components.
+Existing Access group headings retain their documented 24px directory treatment.
+
+## Values, measurements and units
+
+An answer should be easier to find than its label. Use foreground for values,
+muted foreground for labels and semibold for measurements, selected answers or
+primary state. Ordinary prose values do not all need semibold.
+
+Use MetricValue emphasis by context, not by page name:
+
+- Inline: Overview rates and latency, device traffic, interface rates and table
+  measurements. Preserve the established dense Overview layout.
+- Summary: a primary count such as DNS requests or interface/device totals.
+- Result: the decisive speed, latency or jitter returned by an explicit test.
+  Supporting results use summary or inline emphasis.
+
+Keep value and unit on one line, aligned on their baseline, with a 4px visual
+gap. An inline unit shares the 14px size; summary/result units use 14px regular
+muted text. For example, result `23.4` uses 30px semibold and `ms` uses 14px
+regular. Do not use monospace just because a value is numeric. Apply tabular
+numerals to the entire comparable numeric run; right-align numeric table values.
+Allow the surrounding row/group to wrap without splitting the number from its unit.
+
+Keep existing API formatting and precision until separately reviewed. Display
+`Mbps` for bit rates and `MB/s` for byte rates accurately; do not restyle one
+into the other. Retain Download then Upload ordering and receive/transmit colors
+when direction needs distinction. A fast or large value is not automatically
+success-colored; warning/error requires a meaningful threshold or observed state.
+
+Loading reserves the eventual value space with a skeleton. Unknown/unavailable
+uses a dash with accessible context or explicit text; a failure has a nearby
+explanation/retry. Verified zero is `0` with its unit. Disabled, empty, stale and
+unavailable must not collapse into the same zero/dash state. Do not announce
+every live numeric refresh through a live region.
+
+Property rows align labels left and answers right on wide screens, have 36px
+desktop / 44px phone minimum height, and grow for wrapping text. Use `min-width: 0`
+on value containers. Long addresses wrap with `overflow-wrap: anywhere`; do not
+silently truncate an important value or depend on a hover title to recover it.
+On narrow layouts, reflow the answer below its label when needed. Editable
+answers use a real focusable control with an accessible action name.
+
+## Theme, state and accessibility
+
+Reuse the light/dark semantic colors in `index.css` and the visual guide.
+StatusIndicator uses neutral for pending/unknown/disabled, success for observed
+healthy, warning for attention/pending consequences, and destructive for failure.
+Always include a word or accessible icon label; a status dot alone is insufficient.
+Badge identifies a compact category/attribute such as Fixed, not every value.
+Alert explains an actionable condition; toast confirms a transient action and
+does not replace persistent validation or apply failure feedback.
+
+Check text contrast at least 4.5:1 for normal text and 3:1 for large text;
+essential control boundaries and focus indicators need 3:1 against adjacent
+colors. Muted is a semantic token, not permission to reduce opacity arbitrarily.
+Check focus, wrapping, units, busy/error states and touch access in both themes.
+
+## Implementation sequence and acceptance
+
+1. Align radius tokens and shared Card/heading styles with this contract. Name
+   surface and text roles explicitly; audit all users of a changed radius token.
+2. Extract MetricValue and PropertyRow, then converge Tools, Overview, device/group,
+   Gateway and DNS statistics. Keep data fetching, formatting and apply behavior
+   in their feature owners.
+3. Converge repeated section headings, navigation surfaces, technical values and
+   status presentations. Preserve the documented Access/Tools layout differences.
+4. Apply the same roles to forms, dialogs, empty states, authentication/setup and
+   diagnostic feedback. Keep specialized chart renderers and interactions local.
+
+For implementation, review 375px, 768px and 1440px, both themes, keyboard-only
+navigation, long IPv6/device names, missing data and live updates. Capture
+representative before/after screenshots of Overview, a device, Gateway, a tool
+result, a form/dialog and Access. Run UI lint/build and relevant behavior tests;
+follow repository checks for shipped code changes. This documentation pass does
+not claim those rendered checks or component migrations have been performed.

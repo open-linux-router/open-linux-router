@@ -9,6 +9,11 @@ device imagery.
 For information hierarchy, wording and progressive disclosure, follow the
 [content and presentation standards](ui-content-guide.md).
 
+For the cross-page component inventory, typography roles, surface interactions
+and migration targets, follow the [semantic component contracts](ui-semantic-components.md).
+That document distinguishes the target shared system from existing implementation
+differences; route-specific behavior below remains applicable.
+
 ## Findings and decisions
 
 The audit found inconsistent content widths and headings, oversized tool
