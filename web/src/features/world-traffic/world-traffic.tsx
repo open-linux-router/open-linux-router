@@ -14,23 +14,19 @@ import { api } from '@/lib/api'
 import { formatRate } from '@/lib/utils'
 import type { GeoPlace } from '@/lib/api-types'
 import countries from './countries.json'
-import centers from './centers.json'
 import regionsUrl from './regions.geojson?url'
 
 interface Peer { ip: string; upload: number; download: number; place: GeoPlace }
-interface Origin { country_code?: string; country_name?: string; city?: string; region?: string; latitude?: number; longitude?: number }
+interface Origin { latitude?: number; longitude?: number }
 interface Snapshot { state: string; error?: string; as_of: string; seconds: number; total: number; peers: Peer[]; locations: { state: string; error?: string } }
 type Position = [number, number]
-// Small countries omitted by the 1:110m geometry still need honest points.
-const positions: Record<string, Position> = { ...(centers as unknown as Record<string, Position>), SG: [103.82, 1.35], HK: [114.17, 22.32], MO: [113.55, 22.2], MT: [14.38, 35.94], MV: [73.22, 3.2], BH: [50.55, 26.02], AD: [1.52, 42.51], LI: [9.55, 47.16], MC: [7.42, 43.74], SM: [12.46, 43.94], VA: [12.45, 41.9] }
 const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
 // Zoom may only appear as the input of a top-level step/interpolate expression.
 // Layout expressions are evaluated at integer zooms; use integer thresholds
 // for regions and cities so names don't wait for the final zoom level.
 const labelText = ['step', ['zoom'], '', ...[1, 2, 3, 4, 5, 6].flatMap(zoom => [zoom, ['case', ['<=', ['get', 'minzoom'], zoom], ['get', 'name'], '']])] as ExpressionSpecification
-function position(place: { latitude?: number; longitude?: number }, country?: string): Position | undefined {
+function position(place: { latitude?: number; longitude?: number }): Position | undefined {
   if (typeof place.latitude === 'number' && typeof place.longitude === 'number' && Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && Math.abs(place.latitude) <= 90 && Math.abs(place.longitude) <= 180) return [place.longitude, place.latitude]
-  return country ? positions[country.toUpperCase()] : undefined
 }
 maplibregl.setWorkerUrl(workerUrl)
 maplibregl.setWorkerCount(1)
@@ -85,11 +81,10 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
           }, paint: { 'text-color': '#171b22', 'text-halo-color': '#ffffff', 'text-halo-width': 1 } })
         }
       }
-      for (const id of ['flows', 'dots', 'places', 'labels']) instance.addSource(id, { type: 'geojson', data: empty })
+      for (const id of ['flows', 'dots', 'places']) instance.addSource(id, { type: 'geojson', data: empty })
       instance.addLayer({ id: 'flows', type: 'line', source: 'flows', paint: { 'line-color': ['get', 'color'], 'line-width': ['get', 'width'], 'line-opacity': ['*', 0.7, ['get', 'opacity']] } })
       instance.addLayer({ id: 'places', type: 'circle', source: 'places', paint: { 'circle-radius': 1.4, 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'], 'circle-stroke-opacity': ['get', 'opacity'], 'circle-stroke-width': 0.5, 'circle-stroke-color': '#ffffff' } })
       instance.addLayer({ id: 'dots', type: 'circle', source: 'dots', paint: { 'circle-radius': 1.2, 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'] } })
-      if (expanded) instance.addLayer({ id: 'peer-labels', type: 'symbol', source: 'labels', minzoom: 2, layout: { 'text-field': ['get', 'name'], 'text-font': ['sans-serif'], 'text-size': 12, 'text-anchor': 'left', 'text-offset': [0.6, 0], 'text-max-width': 12, 'text-padding': 6 }, paint: { 'text-color': '#1d4ed8', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 } })
       fit()
       setReady(true)
     })
@@ -108,34 +103,25 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     instance.setPaintProperty('borders', 'line-color', dark ? '#232731' : '#ffffff')
     if (expanded) {
       instance.setPaintProperty('regions', 'line-color', dark ? '#232731' : '#5b6472')
-      for (const id of ['country-labels', 'region-labels', 'city-labels', 'peer-labels']) {
-        instance.setPaintProperty(id, 'text-color', id === 'peer-labels' ? (dark ? '#8ab4ff' : '#1d4ed8') : id === 'region-labels' ? (dark ? '#abb4c3' : '#5b6472') : (dark ? '#f1f3f7' : '#171b22'))
+      for (const id of ['country-labels', 'region-labels', 'city-labels']) {
+        instance.setPaintProperty(id, 'text-color', id === 'region-labels' ? (dark ? '#abb4c3' : '#5b6472') : (dark ? '#f1f3f7' : '#171b22'))
         instance.setPaintProperty(id, 'text-halo-color', dark ? '#232731' : '#ffffff')
       }
     }
     const blue = dark ? '#8ab4ff' : '#1d4ed8'
-    const start = origin ? position(origin, origin.country_code) : undefined
+    const start = origin ? position(origin) : undefined
     const next: typeof targets.current = new Map()
-    const labels = new Map<string, GeoJSON.Feature>()
-    const label = (place: GeoPlace, country?: string) => {
-      const coordinates = position(place, country)
-      // A country fallback must never acquire a fabricated city label.
-      const name = [position(place) ? place.city || place.region : '', place.country_name || country].filter(Boolean).join(', ')
-      if (coordinates && name) labels.set(coordinates.join(','), { type: 'Feature', properties: { name }, geometry: { type: 'Point', coordinates } })
-    }
-    if (origin) label(origin, origin.country_code)
     if (start) next.set(`place:${start}`, { feature: { type: 'Feature', properties: { color: dark ? '#f1f3f7' : '#171b22' }, geometry: { type: 'Point', coordinates: start } } })
     const locations = new Map<string, Peer>()
     for (const peer of peers) {
-      label(peer.place, peer.place.country)
-      const end = position(peer.place, peer.place.country)
+      const end = position(peer.place)
       if (!end) continue
       const key = end.join(',')
       const previous = locations.get(key)
       locations.set(key, { ...peer, upload: (previous?.upload ?? 0) + peer.upload, download: (previous?.download ?? 0) + peer.download })
     }
     for (const [location, peer] of locations) {
-      const end = position(peer.place, peer.place.country)
+      const end = position(peer.place)
       if (!end) continue
       if (!start || start[0] !== end[0] || start[1] !== end[1]) next.set(`place:${end}`, { feature: { type: 'Feature', properties: { color: blue }, geometry: { type: 'Point', coordinates: end } } })
       if (!start || (start[0] === end[0] && start[1] === end[1])) continue
@@ -146,7 +132,6 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: { width }, geometry: { type: 'LineString', coordinates } }, coordinates })
     }
     targets.current = next
-    if (expanded) (instance.getSource('labels') as GeoJSONSource).setData({ type: 'FeatureCollection', features: [...labels.values()] })
   }, [peers, origin, dark, ready, expanded])
   useEffect(() => {
     const instance = map.current
@@ -219,7 +204,7 @@ export function WorldTraffic({ origin, embedded = false }: { origin?: Origin; em
   const ready = !query.isError && !stale && data?.state === 'ready'
   const peers = ready ? data.peers : []
   const share = data?.total ? Math.round(peers.reduce((n, p) => n + p.download + p.upload, 0) / data.total * 100) : 0
-  const unknown = peers.filter(p => !position(p.place, p.place.country)).length
+  const unknown = peers.filter(p => !position(p.place)).length
   const status = query.isError || stale ? 'Unavailable' : !data ? 'Loading…' : data.state === 'disabled' ? 'Counting off' : data.state === 'warming' ? 'Measuring…' : data.state !== 'ready' ? 'Unavailable' : peers.length ? `Top ${peers.length} · ${share}%` : 'No observed traffic'
   return <section aria-label="Traffic map" className={embedded ? 'flex min-h-0 w-full min-w-0 flex-col gap-1' : 'col-span-2 flex min-w-0 flex-col gap-2 panel-surface p-3 sm:p-4 lg:col-span-1 lg:row-span-3'}>
     {!embedded && <Heading size="sm" className="flex h-6 items-center"><button onClick={() => setOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 focus-visible:outline-2 focus-visible:outline-ring" aria-label="Map details">Map</button></Heading>}
@@ -234,7 +219,7 @@ export function WorldTraffic({ origin, embedded = false }: { origin?: Origin; em
       <p className="text-xs text-muted-foreground">Map: <a href="https://www.naturalearthdata.com" target="_blank" rel="noreferrer" className="underline">Natural Earth</a> (public domain) · IP locations: <a href="https://ip.sb" target="_blank" rel="noreferrer" className="underline">ip.sb</a></p>
     </DialogContent></Dialog>
     <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription>Remote IPs by upload and download in the last 30 seconds.{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
-      <p className="text-sm text-muted-foreground">{status}{data?.seconds ? ` · ${Math.round(data.seconds)}s sampled` : ''}. {data?.state === 'disabled' ? 'Connection byte accounting is off. Enable Gateway traffic counting and apply its configuration.' : 'Counts include router and forwarded connections observed in Linux conntrack. Connections ending between samples and traffic bypassing conntrack may be missed.'} {!origin && 'Router location is unknown; only remote points are shown.'}</p>
+      <p className="text-sm text-muted-foreground">{status}{data?.seconds ? ` · ${Math.round(data.seconds)}s sampled` : ''}. {data?.state === 'disabled' ? 'Connection byte accounting is off. Enable Gateway traffic counting and apply its configuration.' : 'Counts include router and forwarded connections observed in Linux conntrack. Connections ending between samples and traffic bypassing conntrack may be missed.'} {(!origin || !position(origin)) && 'Router location is unknown; only remote points are shown.'}</p>
       {data?.error && <p className="break-words text-sm text-destructive">{data.error}</p>}
       {data?.locations?.error && <p className="break-words text-sm text-destructive">{data.locations.error}</p>}
       <ul className="divide-y">{peers.map(peer => <li key={peer.ip} className="space-y-1 py-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><span className="break-all font-mono">{peer.ip}</span><span>{[peer.place.city || peer.place.region, peer.place.country_name].filter(Boolean).join(', ') || 'Location unknown'}</span></div><div className="flex justify-between gap-2 text-xs tabular-nums"><span className="text-receive">↓ {formatRate(peer.download)}</span><span className="text-transmit">↑ {formatRate(peer.upload)}</span></div></li>)}</ul>

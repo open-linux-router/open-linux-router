@@ -314,7 +314,7 @@ on zoom, stopping at regional detail (zoom 6). State names and capital/world-cit
 names begin at zoom 3; other major cities appear at zooms 4–5. Country fill
 indices are stable and checked against neighboring countries, with separate
 light/dark palettes. Keep administrative labels neutral and secondary
-to traffic; traffic point labels use primary text color and local system fonts.
+to traffic; traffic points have no GeoIP text labels.
 Place zoom and whole-world reset buttons at bottom right, with 44px phone
 targets. Resizing must preserve the current fullscreen view. Escape
 closes it and restores focus to the preview. On
@@ -325,8 +325,8 @@ shared coordinates. Keep particle phases stable
 across ranking updates; ease line widths and fade arriving/departing paths and
 points with a 450ms exponential time constant. Fade particles at path ends.
 Reduced motion disables both particles and interpolation; hidden tabs pause updates.
-IP points use city coordinates,
-falling back to country centers. Draw flows between different locations even
+IP points use valid returned coordinates without country-center fallbacks;
+omit points without coordinates. Draw flows between different locations even
 within one country. The details dialog supplies city/country, rates and ip.sb
 attribution without crowding the map.
 
