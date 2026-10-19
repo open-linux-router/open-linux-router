@@ -8,10 +8,12 @@ on touch devices. Unintegrated directions link to external documentation.
 
 Tiles use bundled project artwork from `web/public/access-logos`, taken from
 [theSVG](https://thesvg.org) wherever the library carries the project, so the
-launcher matches the marks used elsewhere in the interface. Projects it does not
-carry — Headscale, SOCKS5, HTTP, HTTPS, Gateway, 6in4, NAT, frp, rathole — use
-their Lucide line icon rather than an invented symbol. See the logo directory
-README for provenance.
+launcher matches the marks used elsewhere in the interface. Headscale is the one
+mark outside the library, from its own repository. The rest are protocols rather
+than projects: SOCKS5, HTTP, HTTPS, Gateway, NAT, frp and SSH wear a capital
+initial on a tinted tile, which keeps two entries sharing an initial (SSH and
+SOCKS5, HTTP and HTTPS) apart by hue instead of by borrowed branding. See the
+logo directory README for provenance.
 
 ## Connection model
 

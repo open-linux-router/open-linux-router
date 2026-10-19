@@ -12,12 +12,13 @@ from the same library as the OS marks and selectable service icons.
   the Simple Icons artwork the launcher used before — theSVG republishes it.
 - Cloudflare: `cloudflare/color.svg` rather than `default.svg`. The default
   carries a white fill that disappears on the launcher's white tile.
+- Tunnel Broker: `hurricane-electric-badge/default.svg`, Hurricane Electric's
+  own badge, since the tunnel broker service is theirs.
 - Headscale: `https://raw.githubusercontent.com/juanfont/headscale/main/docs/assets/logo/headscale3-dots.svg`
   (BSD-3-Clause project). theSVG has no entry for it.
-- SSH keeps OpenSSH's own artwork: `https://www.openssh.com/images/openssh.gif`.
-  theSVG's `ssh` entry is a dotted ring, not a shell mark.
 
-Trademarks remain with their owners. Protocols without a mark — SOCKS5, HTTP,
-HTTPS, Gateway, 6in4, NAT, frp, rathole — use existing Lucide SVG icons with
-their protocol names below. Lucide is ISC licensed and supplied by the existing
-`lucide-react` dependency; no launcher artwork is generated or drawn locally.
+Trademarks remain with their owners. Protocols are named, not branded — SOCKS5,
+HTTP, HTTPS, Gateway, NAT, frp and SSH wear their initial on a tinted tile
+(`MONOGRAMS` in `web/src/routes/access.tsx`) instead of borrowing a third
+party's mark. theSVG's `ssh` entry is a dotted ring rather than a shell mark, so
+it is not used. No launcher artwork is generated or drawn locally.

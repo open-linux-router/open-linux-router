@@ -1,4 +1,4 @@
-import { ArrowLeftRight, ExternalLink, Globe, LockKeyhole, Network, Route, Server, Terminal, Waypoints } from 'lucide-react'
+import { ExternalLink, Network } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 
@@ -20,16 +20,17 @@ import { useRemoteConfig, useRemoteStatus, useSocksStatus } from '@/features/rem
 import { useSocksOutConfig, useSocksOutStatus } from '@/features/socksout/queries'
 import { cn } from '@/lib/utils'
 
-// Established SVG library icons for protocols without a project mark.
-const PROTOCOL_ICONS = {
-  socks: Waypoints,
-  http: Globe,
-  gateway: Route,
-  tunnelbroker: Network,
-  https: LockKeyhole,
-  nat: ArrowLeftRight,
-  frp: Server,
-  rathole: Terminal,
+// Protocols are named, not branded: theSVG carries no mark for them, so each
+// wears its initial on a tinted tile. Two entries can share an initial (SSH and
+// SOCKS5, HTTP and HTTPS); the hue keeps them apart at a glance.
+const MONOGRAMS: Record<string, { letter: string; tile: string }> = {
+  ssh: { letter: 'S', tile: 'bg-[oklch(0.52_0.12_220)]' },
+  socks: { letter: 'S', tile: 'bg-[oklch(0.52_0.12_290)]' },
+  http: { letter: 'H', tile: 'bg-[oklch(0.62_0.13_55)]' },
+  https: { letter: 'H', tile: 'bg-[oklch(0.55_0.12_150)]' },
+  gateway: { letter: 'G', tile: 'bg-[oklch(0.52_0.12_330)]' },
+  nat: { letter: 'N', tile: 'bg-[oklch(0.55_0.14_25)]' },
+  frp: { letter: 'F', tile: 'bg-[oklch(0.58_0.1_190)]' },
 }
 
 export function AccessPage() {
@@ -103,13 +104,22 @@ export function AccessPage() {
 
 function TechnologyTile({ entry, onSelect, summaries }: { entry: AccessTechnology; onSelect: () => void; summaries: Record<AccessKind, Summary> }) {
   const logo = ACCESS_LOGOS[entry.id]
-  const Icon = PROTOCOL_ICONS[entry.id as keyof typeof PROTOCOL_ICONS] ?? Network
+  const monogram = MONOGRAMS[entry.id]
   const integrated = entry.connections.length > 0
+  const tile = logo
+    ? 'bg-white group-hover:bg-accent group-active:bg-accent'
+    : monogram
+      ? `${monogram.tile} text-white group-hover:brightness-110 group-active:brightness-95`
+      : 'bg-accent/60 text-primary group-hover:bg-accent group-active:bg-accent'
   return (
     <Tooltip>
       <TooltipTrigger render={<button type="button" />} onClick={onSelect} aria-label={`${entry.name}${integrated ? '' : ' · Not integrated'}`} className="group flex min-w-0 flex-col items-center gap-2 rounded-xl px-1 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background">
-        <span className={cn('flex size-16 shrink-0 items-center justify-center rounded-2xl p-3 transition-colors duration-150 group-hover:bg-accent group-active:bg-accent', logo ? 'bg-white' : 'bg-accent/60 text-primary')}>
-          {logo ? <img src={logo} alt="" className="max-h-full max-w-full object-contain" /> : <Icon className="size-9" strokeWidth={1.75} aria-hidden />}
+        <span className={cn('flex size-16 shrink-0 items-center justify-center rounded-2xl p-3 transition duration-150', tile)}>
+          {logo
+            ? <img src={logo} alt="" className="max-h-full max-w-full object-contain" />
+            : monogram
+              ? <span aria-hidden className="text-[28px] leading-none font-semibold tracking-tight">{monogram.letter}</span>
+              : <Network className="size-9" strokeWidth={1.75} aria-hidden />}
         </span>
         <span className="max-w-full break-words text-center text-[13px] font-medium sm:text-sm">{entry.name}</span>
       </TooltipTrigger>

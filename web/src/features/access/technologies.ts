@@ -22,12 +22,11 @@ export const ACCESS_TECHNOLOGIES: AccessTechnology[] = [
   { id: 'nebula', name: 'Nebula', description: 'Certificate-based overlay networking for connecting devices and sites.', directions: ['network'], connections: [], website: 'https://nebula.defined.net/' },
   { id: 'frp', name: 'frp', description: 'Publish web and TCP/UDP services through a remote server, including private service access with visitor clients.', directions: ['in'], connections: [], website: 'https://gofrp.org/' },
   { id: 'cloudflare', name: 'Cloudflare', description: 'Cloudflare Tunnel publishes services through outbound tunnels; Access can restrict who reaches them.', directions: ['in'], connections: [], website: 'https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/' },
-  { id: 'rathole', name: 'rathole', description: 'Expose selected TCP/UDP services through a server using a reverse tunnel.', directions: ['in'], connections: [], website: 'https://github.com/rathole-org/rathole' },
   { id: 'ssh', name: 'SSH', description: 'Forward selected ports through encrypted local, reverse or SOCKS tunnels.', directions: ['out', 'in'], connections: [], website: 'https://www.openssh.com/' },
   { id: 'socks', name: 'SOCKS5', description: 'Use an external proxy as an exit, or let remote clients use this router as their proxy.', directions: ['out', 'in'], connections: ['socks-out', 'socks-in'] },
   { id: 'http', name: 'HTTP', description: 'Use an HTTP proxy, including CONNECT tunnels for HTTPS traffic. Proxy authentication and transport security depend on deployment.', directions: ['out'], connections: [], website: 'https://www.squid-cache.org/' },
   { id: 'gateway', name: 'Gateway', description: 'Route traffic through another gateway or an existing VPN interface.', directions: ['out'], connections: ['gateway'] },
-  { id: 'tunnelbroker', name: '6in4', description: 'Obtain routed IPv6 connectivity through Hurricane Electric Tunnel Broker.', directions: ['out'], connections: ['tunnelbroker'] },
+  { id: 'tunnelbroker', name: 'Tunnel Broker', description: 'Obtain routed IPv6 connectivity through Hurricane Electric Tunnel Broker.', directions: ['out'], connections: ['tunnelbroker'] },
   { id: 'https', name: 'HTTPS', description: 'Publish a web service by domain name using the router’s HTTPS reverse proxy.', directions: ['in'], connections: ['https'] },
   { id: 'nat', name: 'NAT', description: 'Forward an external TCP/UDP port to a service inside this network.', directions: ['in'], connections: ['port-forward'] },
 ]
