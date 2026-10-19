@@ -2,7 +2,11 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -78,6 +82,48 @@ type qualityRun struct {
 	cancel   context.CancelFunc
 	closed   bool
 	snapshot QualitySnapshot
+}
+
+// RestoreQuality loads saved evidence before serving requests. Starting a new
+// assessment leaves this checkpoint intact until that assessment finishes.
+func (h *HTTP) RestoreQuality() error {
+	if h.QualityPath == "" {
+		return nil
+	}
+	data, err := os.ReadFile(h.QualityPath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var snapshot QualitySnapshot
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		return err
+	}
+	switch snapshot.State {
+	case "completed", "cancelled", "timed_out":
+	default:
+		return fmt.Errorf("invalid saved quality state %q", snapshot.State)
+	}
+	h.quality.mu.Lock()
+	h.quality.snapshot = snapshot
+	h.quality.mu.Unlock()
+	return nil
+}
+
+// Called under quality.mu so another run cannot overtake this checkpoint.
+func (h *HTTP) saveQuality() {
+	if h.QualityPath == "" {
+		return
+	}
+	data, err := json.Marshal(h.quality.snapshot)
+	if err == nil {
+		err = core.WriteFileAtomic(h.QualityPath, data, 0o600)
+	}
+	if err != nil {
+		slog.Error("could not persist quality assessment", "error", err)
+	}
 }
 
 func (h *HTTP) qualitySnapshot() QualitySnapshot {
@@ -165,6 +211,7 @@ func (h *HTTP) measureQuality(ctx context.Context, includeSpeed bool) {
 			h.quality.snapshot.State = "timed_out"
 		}
 		h.quality.snapshot.Phase = ""
+		h.saveQuality()
 		h.quality.cancel()
 		h.quality.cancel = nil
 		h.running.Store(false)

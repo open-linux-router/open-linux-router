@@ -98,7 +98,7 @@ hidden page title. Detail and operation pages keep their identifying titles.
 
 Quality assessments run on demand from the dialog opened by the card heading or
 chart. Measured scores do not expire; results remain until another assessment
-or daemon restart.
+and survive daemon and router restarts.
 
 World traffic combines IPs at the same remote coordinates into one map connection.
 Line width represents combined upload and download; per-IP rates stay in details.

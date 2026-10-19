@@ -7,6 +7,9 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -236,6 +239,7 @@ func waitQuality(t *testing.T, h *HTTP) QualitySnapshot {
 func TestQualityRoutesArePassiveAndPublishEvidence(t *testing.T) {
 	var probes, transfers atomic.Int32
 	h := &HTTP{
+		QualityPath: filepath.Join(t.TempDir(), "quality.json"),
 		qualityProbe: func(_ context.Context, target qualityTarget, family string) QualitySample {
 			probes.Add(1)
 			return qualityFixture("ok", 10)[0]
@@ -267,6 +271,18 @@ func TestQualityRoutesArePassiveAndPublishEvidence(t *testing.T) {
 		t.Fatalf("result=%+v probes=%d transfers=%d", result, probes.Load(), transfers.Load())
 	}
 	// A new light run must not reuse a previous bandwidth result.
+	h2 := &HTTP{QualityPath: h.QualityPath}
+	if err := h2.RestoreQuality(); err != nil {
+		t.Fatal(err)
+	}
+	restored := h2.qualitySnapshot()
+	if !reflect.DeepEqual(result, restored) {
+		t.Fatalf("assessment changed after restart: before=%+v after=%+v", result, restored)
+	}
+	info, err := os.Stat(h.QualityPath)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("checkpoint permissions: info=%v err=%v", info, err)
+	}
 	w = httptest.NewRecorder()
 	routes.ServeHTTP(w, httptest.NewRequest("POST", "/quality", nil))
 	result = waitQuality(t, h)
@@ -275,6 +291,56 @@ func TestQualityRoutesArePassiveAndPublishEvidence(t *testing.T) {
 	}
 	if result.Overall.Score == nil || math.Abs(*result.Overall.Score-100) > 1e-9 || result.Categories[0].Available != 0 || result.Categories[3].Available != 0 {
 		t.Fatalf("light assessment must use the full 100 points without speed or Wi-Fi: %+v", result.Overall)
+	}
+}
+
+func TestRestoreQualityMissingAndCorruptCheckpoint(t *testing.T) {
+	h := &HTTP{QualityPath: filepath.Join(t.TempDir(), "quality.json")}
+	if err := h.RestoreQuality(); err != nil || h.qualitySnapshot().State != "idle" {
+		t.Fatalf("missing checkpoint: %v", err)
+	}
+	for _, data := range []string{"{", `{"state":"running"}`, `null`} {
+		if err := os.WriteFile(h.QualityPath, []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := h.RestoreQuality(); err == nil || h.qualitySnapshot().State != "idle" {
+			t.Fatalf("invalid checkpoint %q: %v", data, err)
+		}
+	}
+}
+
+func TestQualityCheckpointSurvivesInterruptedRun(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "quality.json")
+	h := &HTTP{QualityPath: path}
+	h.quality.snapshot = QualitySnapshot{State: "completed", RunID: "previous", Speed: &SpeedResult{Download: 75, Upload: 30}}
+	h.saveQuality()
+	started := make(chan struct{}, 6)
+	h.qualityProbe = func(ctx context.Context, _ qualityTarget, _ string) QualitySample {
+		started <- struct{}{}
+		<-ctx.Done()
+		return QualitySample{State: "cancelled"}
+	}
+	defer h.Close()
+	w := httptest.NewRecorder()
+	h.startQuality(w, httptest.NewRequest("POST", "/quality", nil))
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("start: %d", w.Code)
+	}
+	<-started
+	restored := &HTTP{QualityPath: path}
+	if err := restored.RestoreQuality(); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot := restored.qualitySnapshot(); snapshot.RunID != "previous" || snapshot.Overall.Score == nil {
+		t.Fatalf("running assessment replaced saved result: %+v", snapshot)
+	}
+	h.Close()
+	result := waitQuality(t, h)
+	if err := restored.RestoreQuality(); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot := restored.qualitySnapshot(); snapshot.State != "cancelled" || !reflect.DeepEqual(result, snapshot) {
+		t.Fatalf("shutdown evidence not restored: %+v", snapshot)
 	}
 }
 

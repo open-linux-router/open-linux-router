@@ -43,7 +43,9 @@ type HTTP struct {
 	quality     qualityRun
 	// QualityContext follows daemon shutdown; nil is suitable for standalone use.
 	QualityContext context.Context
-	qualityProbe   func(context.Context, qualityTarget, string) QualitySample
+	// QualityPath stores the latest finished assessment; empty disables persistence.
+	QualityPath  string
+	qualityProbe func(context.Context, qualityTarget, string) QualitySample
 
 	Trace  func(context.Context, string) (TraceResult, error)
 	RunNAT func(context.Context) (NATResult, error)

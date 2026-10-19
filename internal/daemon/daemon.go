@@ -785,6 +785,10 @@ func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	toolHTTP.QualityContext = ctx
+	toolHTTP.QualityPath = filepath.Join(opts.root, "/var/lib/open-linux-router/quality.json")
+	if err := toolHTTP.RestoreQuality(); err != nil {
+		logger.Error("could not restore quality assessment", "error", err)
+	}
 
 	// Stored intent is put back in force here, for the modules that need it.
 	//

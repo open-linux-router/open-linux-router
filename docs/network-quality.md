@@ -503,7 +503,11 @@ It replaces the fixed sample scores and renames Reachability to Functionality.
   also cancels it. Closing the details dialog does not cancel a test.
 - A new assessment replaces the previous in-memory result, including its speed
   data. Tests run only on demand. Scores do not expire and stay available until
-  the next assessment or daemon restart.
+  the next assessment. Finished assessments (including cancelled or timed-out
+  runs with partial evidence) are atomically saved to
+  `/var/lib/open-linux-router/quality.json` and restored after daemon or router
+  restart. An interrupted run leaves the previous checkpoint intact until it
+  finishes; an abrupt shutdown therefore restores the last finished run.
 
 The run first samples the following fixed resources with IPv4 and IPv6
 independently: Cloudflare `https://speed.cloudflare.com/__down?bytes=0` (200),
