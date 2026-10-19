@@ -10,8 +10,10 @@ major cities from zoom 5, with collision handling and population priority.
 Administrative label thresholds are brought forward for this regional view
 rather than copied from a street basemap; integer thresholds match MapLibre's
 symbol layout evaluation. Zoom stops at 6: this is an
-administrative traffic map, without roads or buildings. Zoom buttons and a
-whole-world reset supplement pan/pinch/scroll. Resizing preserves the chosen
+administrative traffic map, without roads or buildings. The fullscreen view is
+map only: no title, legend, status, credit or other text overlaps it, and the
+single floating close button at top right is its only control. Pan, pinch,
+scroll and double-click zoom stand alone. Resizing preserves the chosen
 fullscreen view. MapLibre renders labels with local system fonts; there are
 no external map, font, sprite or tile requests, including on first use.
 The asset ships inside OLR and uses the existing immutable asset cache.

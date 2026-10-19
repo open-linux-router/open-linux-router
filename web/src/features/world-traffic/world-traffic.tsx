@@ -2,16 +2,16 @@ import { Heading } from '@/components/ui/heading'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
-import { Minus, Plus, RotateCcw } from 'lucide-react'
+import { X } from 'lucide-react'
 import * as maplibregl from 'maplibre-gl'
 import type { ExpressionSpecification, GeoJSONSource } from 'maplibre-gl'
 import type * as GeoJSON from 'geojson'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
-import { formatRate } from '@/lib/utils'
+import { cn, formatRate } from '@/lib/utils'
 import type { GeoPlace } from '@/lib/api-types'
 import countries from './countries.json'
 import regionsUrl from './regions.geojson?url'
@@ -186,11 +186,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     frame = requestAnimationFrame(animate)
     return () => cancelAnimationFrame(frame)
   }, [ready, expanded, dark])
-  return <div className="relative h-full min-h-32 w-full overflow-hidden rounded-lg" style={expanded ? { backgroundColor: dark ? '#1c3545' : '#d6effb' } : undefined}><div ref={container} style={{ position: 'absolute', inset: 0 }} aria-hidden={!expanded} />{expanded && ready && !failed && <div className="absolute right-3 bottom-3 flex flex-col overflow-hidden rounded-lg border bg-card shadow-xs">
-    <Button variant="ghost" size="icon" className="size-11 rounded-none sm:size-9" aria-label="Zoom in" title="Zoom in" onClick={() => map.current?.zoomIn({ duration: 200 })}><Plus /></Button>
-    <Button variant="ghost" size="icon" className="size-11 rounded-none sm:size-9" aria-label="Zoom out" title="Zoom out" onClick={() => map.current?.zoomOut({ duration: 200 })}><Minus /></Button>
-    <Button variant="ghost" size="icon" className="size-11 rounded-none sm:size-9" aria-label="Show whole world" title="Show whole world" onClick={() => map.current?.fitBounds([[-180, -58], [180, 80]], { padding: 3, duration: 0 })}><RotateCcw /></Button>
-  </div>}{failed && <p className="absolute inset-0 flex items-center justify-center bg-muted p-3 text-xs text-muted-foreground">Map unavailable.</p>}</div>
+  return <div className={cn('relative h-full min-h-32 w-full overflow-hidden', !expanded && 'rounded-lg')} style={expanded ? { backgroundColor: dark ? '#1c3545' : '#d6effb' } : undefined}><div ref={container} style={{ position: 'absolute', inset: 0 }} aria-hidden={!expanded} />{failed && <p className="absolute inset-0 flex items-center justify-center bg-muted p-3 text-xs text-muted-foreground">Map unavailable.</p>}</div>
 }
 
 export function WorldTraffic({ origin, embedded = false }: { origin?: Origin; embedded?: boolean }) {
@@ -210,15 +206,12 @@ export function WorldTraffic({ origin, embedded = false }: { origin?: Origin; em
     {!embedded && <Heading size="sm" className="flex h-6 items-center"><button onClick={() => setOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 focus-visible:outline-2 focus-visible:outline-ring" aria-label="Map details">Map</button></Heading>}
     <button ref={preview} type="button" onClick={() => setExpanded(true)} aria-label="Open fullscreen map" aria-haspopup="dialog" className={embedded ? 'flex min-h-32 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring' : '-mx-1 -mb-1 flex min-h-44 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2'}><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} /></button>
     {(!ready || !peers.length) && <p className="text-xs text-muted-foreground">{status}</p>}
-    <Dialog open={expanded} onOpenChange={setExpanded}><DialogContent finalFocus={preview} className="flex h-dvh max-h-dvh w-screen max-w-none flex-col rounded-none sm:max-w-none">
-      <DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription><span className="text-receive">↓ Download</span> · <span className="text-transmit">↑ Upload</span> · {status}</DialogDescription></DialogHeader>
+    <Dialog open={expanded} onOpenChange={setExpanded}><DialogContent showCloseButton={false} finalFocus={preview} className="flex h-dvh max-h-dvh w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none p-0 sm:max-w-none sm:p-0">
+      <DialogTitle className="sr-only">Map</DialogTitle>
+      <DialogClose render={<Button variant="secondary" size="icon-lg" className="absolute top-3 right-3 z-10 rounded-full bg-card/95 shadow-md ring-1 ring-border backdrop-blur-sm sm:size-9" />}><X aria-hidden="true" /><span className="sr-only">Close</span></DialogClose>
       <div className="min-h-0 flex-1" role="region" aria-label="World traffic map, drag to pan and scroll to zoom"><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} expanded /></div>
-      <p className="text-xs text-muted-foreground">Top remote IPs over the last 30 seconds · {share}% of observed traffic. IP locations are approximate. Connections ending between samples and traffic bypassing conntrack may be missed.{unknown ? ` ${unknown} locations unknown.` : ''}</p>
-      {data?.error && <p role="alert" className="text-xs text-destructive">{data.error}</p>}
-      {data?.locations?.error && <p role="alert" className="text-xs text-destructive">{data.locations.error}</p>}
-      <p className="text-xs text-muted-foreground">Map: <a href="https://www.naturalearthdata.com" target="_blank" rel="noreferrer" className="underline">Natural Earth</a> (public domain) · IP locations: <a href="https://ip.sb" target="_blank" rel="noreferrer" className="underline">ip.sb</a></p>
     </DialogContent></Dialog>
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription>Remote IPs by upload and download in the last 30 seconds.{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription>Remote IPs by upload and download in the last 30 seconds. IP locations are approximate.{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
       <p className="text-sm text-muted-foreground">{status}{data?.seconds ? ` · ${Math.round(data.seconds)}s sampled` : ''}. {data?.state === 'disabled' ? 'Connection byte accounting is off. Enable Gateway traffic counting and apply its configuration.' : 'Counts include router and forwarded connections observed in Linux conntrack. Connections ending between samples and traffic bypassing conntrack may be missed.'} {(!origin || !position(origin)) && 'Router location is unknown; only remote points are shown.'}</p>
       {data?.error && <p className="break-words text-sm text-destructive">{data.error}</p>}
       {data?.locations?.error && <p className="break-words text-sm text-destructive">{data.locations.error}</p>}
