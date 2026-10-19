@@ -18,7 +18,7 @@ test('regional map includes global first-order boundaries and names', () => {
 })
 
 test('map geometry is valid at the dateline and contains no street detail', () => {
-  const allowed = new Set(['country', 'country-label', 'boundary', 'region-label'])
+  const allowed = new Set(['country', 'country-label', 'boundary', 'region-label', 'city-label'])
   const position = coordinates => {
     assert.equal(coordinates.length, 2)
     assert.ok(Number.isFinite(coordinates[0]) && Math.abs(coordinates[0]) <= 180, String(coordinates))
@@ -46,4 +46,50 @@ test('map geometry is valid at the dateline and contains no street detail', () =
     }
   }
   assert.ok(data.length < 4 * 1024 * 1024, 'regional data must remain a lightweight local asset')
+})
+
+test('province names and major cities are available before maximum zoom', () => {
+  const regions = features.filter(f => f.properties.kind === 'region-label')
+  for (const name of ['Henan', 'Hubei', 'Guangdong', 'California', 'Bavaria']) {
+    const region = regions.find(f => f.properties.name === name)
+    assert.ok(region, name)
+    assert.ok(region.properties.minzoom <= 4, `${name} should appear at regional zoom`)
+  }
+  const cities = features.filter(f => f.properties.kind === 'city-label')
+  for (const name of ['Beijing', 'Wuhan', 'Guangzhou', 'London', 'New York', 'Tokyo', 'San Francisco']) {
+    const city = cities.find(f => f.properties.name === name)
+    assert.ok(city, name)
+    assert.ok(city.properties.minzoom <= 5, `${name} should appear before maximum zoom`)
+  }
+  assert.ok(cities.length > 1000 && cities.length < 1500, 'limit the dataset to capitals and major cities')
+  for (const f of [...regions, ...cities]) {
+    assert.ok(Number.isInteger(f.properties.minzoom), 'symbol layout zooms are evaluated at integer levels')
+    assert.ok(f.properties.minzoom >= 3 && f.properties.minzoom <= 5)
+    assert.ok(Number.isFinite(f.properties.rank))
+  }
+})
+
+test('countries sharing a border have distinct palette indices', () => {
+  const countries = features.filter(f => f.properties.kind === 'country')
+  const colors = new Map(countries.map(f => [f.properties.country, f.properties.color]))
+  for (const color of colors.values()) assert.ok(Number.isInteger(color) && color >= 0 && color < 8)
+  // Explicit regressions also cover borders whose vertices may be simplified
+  // differently on the two sides (and so have no identical output segment).
+  for (const [a, b] of [['CN', 'RU'], ['CN', 'MN'], ['CN', 'IN'], ['CN', 'NP'], ['CN', 'VN'], ['CN', 'KP'], ['IN', 'PK'], ['DE', 'FR'], ['US', 'CA'], ['US', 'MX']]) {
+    assert.notEqual(colors.get(a), colors.get(b), `${a}/${b}`)
+  }
+  const edges = new Map()
+  let shared = 0
+  for (const { properties: p, geometry } of countries) for (const polygon of geometry.coordinates) for (const ring of polygon) {
+    for (let i = 1; i < ring.length; i++) {
+      const edge = [ring[i - 1].join(','), ring[i].join(',')].sort().join(':')
+      const other = edges.get(edge)
+      if (other && other !== p.country) {
+        shared++
+        assert.notEqual(colors.get(other), p.color, `${other}/${p.country} at ${edge}`)
+      }
+      edges.set(edge, p.country)
+    }
+  }
+  assert.ok(shared > 1000, 'check shared geometry across the global map')
 })

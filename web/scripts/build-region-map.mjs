@@ -37,11 +37,46 @@ function simplify(points, tolerance = 0.02) {
 const feature = (properties, geometry) => ({ type: 'Feature', properties, geometry })
 const point = (properties, coordinates) => feature(properties, { type: 'Point', coordinates: round(coordinates) })
 const features = []
+const neighbors = new Map(), vertices = new Map(), preferredColors = new Map()
+// Build adjacency before simplification: small shared borders can disappear
+// when either country is simplified independently. Count corner contacts too.
+function addVertices(country, polygons) {
+  for (const polygon of polygons) for (const ring of polygon) for (const [x, y] of ring) {
+    const key = `${Math.round(x * 1000)},${Math.round(y * 1000)}`
+    if (!vertices.has(key)) vertices.set(key, new Set())
+    vertices.get(key).add(country)
+  }
+}
 for (const { properties: p, geometry } of read('ne_50m_admin_0_countries')) {
   const country = p.ISO_A2_EH !== '-99' ? p.ISO_A2_EH : p.ADM0_A3
   const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
-  features.push(feature({ kind: 'country', country }, { type: 'MultiPolygon', coordinates: polygons.map(polygon => polygon.map(ring => simplify(ring))) }))
+  const coordinates = polygons.map(polygon => polygon.map(ring => simplify(ring)))
+  neighbors.set(country, new Set())
+  preferredColors.set(country, Math.max(0, p.MAPCOLOR8 - 1))
+  addVertices(country, polygons)
+  addVertices(country, coordinates)
+  features.push(feature({ kind: 'country', country }, { type: 'MultiPolygon', coordinates }))
   features.push(point({ kind: 'country-label', name: p.NAME, rank: p.LABELRANK, minzoom: p.MIN_LABEL }, [p.LABEL_X, p.LABEL_Y]))
+}
+for (const countries of vertices.values()) for (const country of countries) {
+  for (const other of countries) if (country !== other) neighbors.get(country).add(other)
+}
+// Deterministic saturation-degree coloring. Prefer Natural Earth's MAPCOLOR8,
+// but resolve conflicts for the actual country geometry we ship. No runtime
+// graph work, dataset-order dependence or modulo recycling of country colors.
+const colors = new Map()
+const codes = [...neighbors.keys()].sort()
+const saturation = code => new Set([...neighbors.get(code)].filter(n => colors.has(n)).map(n => colors.get(n)))
+while (colors.size < codes.length) {
+  const pending = codes.filter(code => !colors.has(code)).sort((a, b) => saturation(b).size - saturation(a).size || neighbors.get(b).size - neighbors.get(a).size || a.localeCompare(b))
+  const country = pending[0], used = saturation(country), preferred = preferredColors.get(country)
+  const color = [preferred, ...Array.from({ length: 8 }, (_, i) => i)].find(value => value < 8 && !used.has(value))
+  if (color === undefined) throw new Error(`No available color for ${country}`)
+  colors.set(country, color)
+}
+for (const f of features) if (f.properties.kind === 'country') f.properties.color = colors.get(f.properties.country)
+for (const [country, adjacent] of neighbors) for (const other of adjacent) {
+  if (colors.get(country) === colors.get(other)) throw new Error(`Adjacent countries share a color: ${country}, ${other}`)
 }
 const boundaries = new Map()
 for (const { properties: p, geometry } of read('ne_10m_admin_1_states_provinces_lines')) {
@@ -54,8 +89,17 @@ for (const [country, coordinates] of boundaries) features.push(feature({ kind: '
 for (const { properties: p } of read('ne_10m_admin_1_states_provinces')) {
   const name = p.name_en || p.name
   if (name && Number.isFinite(p.longitude) && Number.isFinite(p.latitude)) {
-    features.push(point({ kind: 'region-label', country: p.iso_a2, name, rank: p.labelrank, minzoom: Math.max(3, Math.min(5.5, p.min_label)) }, [p.longitude, p.latitude]))
+    // This regional map stops at z6. Bring admin names forward rather than
+    // inheriting thresholds intended for a basemap that zooms into streets.
+    const minzoom = p.scalerank <= 2 ? 3 : p.scalerank <= 4 ? 4 : 5
+    features.push(point({ kind: 'region-label', country: p.iso_a2, name, rank: p.labelrank, minzoom }, [p.longitude, p.latitude]))
   }
+}
+for (const { properties: p, geometry } of read('ne_10m_populated_places_simple')) {
+  if (p.scalerank > 5 && p.adm0cap !== 1) continue
+  if (!p.name || !geometry || !geometry.coordinates.every(Number.isFinite)) continue
+  const minzoom = p.adm0cap === 1 || p.worldcity === 1 ? 3 : p.pop_max >= 1000000 ? 4 : 5
+  features.push(point({ kind: 'city-label', country: p.iso_a2, name: p.name, rank: -p.pop_max - p.adm0cap * 1000000000, minzoom }, geometry.coordinates))
 }
 const output = resolve(import.meta.dirname, '../src/features/world-traffic/regions.geojson')
 const data = JSON.stringify({ type: 'FeatureCollection', features }) + '\n'

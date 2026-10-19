@@ -306,8 +306,11 @@ direction legend or top-ten summary. The
 grayscale preview fills Traffic's remaining content area. Clicking it opens a
 viewport-filling dialog with a pastel country map (muted colors in dark mode),
 pan/zoom, direction labels, attribution and the shared close control. The local
-fullscreen map reveals province/state boundaries and names on zoom, stopping
-at regional detail (zoom 6). Keep administrative labels neutral and secondary
+fullscreen map reveals province/state boundaries, their names and major cities
+on zoom, stopping at regional detail (zoom 6). State names and capital/world-city
+names begin at zoom 3; other major cities appear at zooms 4–5. Country fill
+indices are stable and checked against neighboring countries, with separate
+light/dark palettes. Keep administrative labels neutral and secondary
 to traffic; traffic point labels use primary text color and local system fonts.
 Place zoom and whole-world reset buttons at bottom right, with 44px phone
 targets. Resizing must preserve the current fullscreen view. Escape

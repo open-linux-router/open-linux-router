@@ -117,7 +117,9 @@ World traffic ranks remote IPs over a rolling thirty-second observed window,
 then locates only the top ten using cached ip.sb city lookups. Details show
 city (or region) and country; points use returned coordinates with country
 centers as a fallback. State that IP locations are approximate. The fullscreen
-administrative map adds country and province/state names progressively on zoom.
+administrative map adds country, province/state and major-city names progressively
+on zoom, stopping at regional detail because IP locations are approximate.
+Country fill colors distinguish geography and carry no traffic or status meaning.
 Traffic labels use returned city or region names only when valid coordinates were returned;
 country-center fallbacks carry only country names. Map labels use bundled
 geography and local fonts, without fetching an external basemap.

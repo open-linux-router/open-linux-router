@@ -24,9 +24,10 @@ type Position = [number, number]
 // Small countries omitted by the 1:110m geometry still need honest points.
 const positions: Record<string, Position> = { ...(centers as unknown as Record<string, Position>), SG: [103.82, 1.35], HK: [114.17, 22.32], MO: [113.55, 22.2], MT: [14.38, 35.94], MV: [73.22, 3.2], BH: [50.55, 26.02], AD: [1.52, 42.51], LI: [9.55, 47.16], MC: [7.42, 43.74], SM: [12.46, 43.94], VA: [12.45, 41.9] }
 const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
-const countryCodes = [...new Set(countries.features.map(feature => feature.properties.country))]
 // Zoom may only appear as the input of a top-level step/interpolate expression.
-const labelText = ['step', ['zoom'], '', ...[1, 2, 3, 4, 5, 5.5, 6].flatMap(zoom => [zoom, ['case', ['<=', ['get', 'minzoom'], zoom], ['get', 'name'], '']])] as ExpressionSpecification
+// Layout expressions are evaluated at integer zooms; use integer thresholds
+// for regions and cities so names don't wait for the final zoom level.
+const labelText = ['step', ['zoom'], '', ...[1, 2, 3, 4, 5, 6].flatMap(zoom => [zoom, ['case', ['<=', ['get', 'minzoom'], zoom], ['get', 'name'], '']])] as ExpressionSpecification
 function position(place: { latitude?: number; longitude?: number }, country?: string): Position | undefined {
   if (typeof place.latitude === 'number' && typeof place.longitude === 'number' && Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && Math.abs(place.latitude) <= 90 && Math.abs(place.longitude) <= 180) return [place.longitude, place.latitude]
   return country ? positions[country.toUpperCase()] : undefined
@@ -77,7 +78,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       if (expanded) {
         instance.touchZoomRotate.disableRotation()
         instance.addLayer({ id: 'regions', type: 'line', source: 'countries', minzoom: 2, filter: ['==', ['get', 'kind'], 'boundary'], paint: { 'line-color': '#5b6472', 'line-width': ['interpolate', ['linear'], ['zoom'], 2, 0.3, 6, 0.8], 'line-opacity': 0.55 } })
-        for (const kind of ['country', 'region']) {
+        for (const kind of ['country', 'region', 'city']) {
           instance.addLayer({ id: `${kind}-labels`, type: 'symbol', source: 'countries', minzoom: kind === 'country' ? 1 : 3, filter: ['==', ['get', 'kind'], `${kind}-label`], layout: {
             'text-field': labelText,
             'text-font': ['sans-serif'], 'text-size': kind === 'country' ? 13 : 12, 'text-max-width': 9, 'text-padding': 6, 'symbol-sort-key': ['get', 'rank'],
@@ -98,15 +99,17 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
   useEffect(() => {
     const instance = map.current
     if (!instance || !ready) return
-    const palette = dark ? ['#526c58', '#686083', '#80754f', '#815f52', '#496e7a', '#735c70'] : ['#c5e2b4', '#d8cdf0', '#f2e7ad', '#efd0b5', '#bfe1e4', '#e9cddd']
+    // MapLibre's demo palette, with a muted counterpart for dark mode. The
+    // generator assigns stable indices after checking country adjacency.
+    const palette = dark ? ['#686083', '#80754f', '#526c58', '#797748', '#416d50', '#496e7a', '#535f85', '#815f52'] : ['#d6c7ff', '#ebca8a', '#c1e599', '#e7e58f', '#98dda1', '#83d5f4', '#b1bbf9', '#eab38f']
     instance.setPaintProperty('ocean', 'background-color', expanded ? (dark ? '#1c3545' : '#d6effb') : (dark ? '#232731' : '#f6f7f9'))
-    const countryColors: ExpressionSpecification = ['match', ['get', 'country'], countryCodes[0], palette[0], ...countryCodes.slice(1).flatMap((code, index) => [code, palette[(index + 1) % palette.length]]), palette[0]]
+    const countryColors: ExpressionSpecification = ['match', ['get', 'color'], 0, palette[0], ...palette.slice(1).flatMap((color, index) => [index + 1, color]), dark ? '#424b5b' : '#e2e6ec']
     instance.setPaintProperty('land', 'fill-color', expanded ? countryColors : (dark ? '#424b5b' : '#e2e6ec'))
     instance.setPaintProperty('borders', 'line-color', dark ? '#232731' : '#ffffff')
     if (expanded) {
       instance.setPaintProperty('regions', 'line-color', dark ? '#232731' : '#5b6472')
-      for (const id of ['country-labels', 'region-labels', 'peer-labels']) {
-        instance.setPaintProperty(id, 'text-color', id === 'peer-labels' ? (dark ? '#8ab4ff' : '#1d4ed8') : (dark ? '#f1f3f7' : '#171b22'))
+      for (const id of ['country-labels', 'region-labels', 'city-labels', 'peer-labels']) {
+        instance.setPaintProperty(id, 'text-color', id === 'peer-labels' ? (dark ? '#8ab4ff' : '#1d4ed8') : id === 'region-labels' ? (dark ? '#abb4c3' : '#5b6472') : (dark ? '#f1f3f7' : '#171b22'))
         instance.setPaintProperty(id, 'text-halo-color', dark ? '#232731' : '#ffffff')
       }
     }
