@@ -37,7 +37,7 @@ export function ProxyLinkDialog({
   open,
   onOpenChange,
 }: {
-  /** Named in the title and the scan hint: "Shadowsocks", "SOCKS5". */
+  /** Named in the title and the scan hint: "SOCKS5". */
   protocol: string
   url: string
   label?: string
@@ -50,9 +50,6 @@ export function ProxyLinkDialog({
     try {
       return encodeQR(url, 'svg')
     } catch {
-      // An ss:// link is short — endpoint, cipher and a 16- or 32-byte key — so
-      // this is close to unreachable. Handled anyway, because the fallback is
-      // one line and the alternative is a blank dialog.
       return null
     }
   }, [url])

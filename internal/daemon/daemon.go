@@ -582,23 +582,10 @@ func run(args []string) error {
 		Kernel:   remote.NewKernel(),
 		Networks: remoteNetworks{facts: facts},
 	}
-	proxyUnit, err := core.NewUnit(remote.UnitName)
-	if err != nil {
-		// No service manager. Not fatal: the tunnel half needs none, and the
-		// proxy reports "we could not tell" rather than "it is off" (§3.4).
-		logger.Warn("no service manager for the remote-access proxy", "error", err)
-	}
-	remoteProxy := remote.ProxyApplier{
-		Store: remoteStore,
-		Paths: remote.RootedPaths(opts.root),
-		Unit:  proxyUnit,
-	}
 	socksUnit, err := core.NewUnit(remote.SocksUnitName)
 	if err != nil {
 		logger.Warn("no service manager for the SOCKS5 proxy", "error", err)
 	}
-	// The same applier type as the one above, differing only in Object — the two
-	// proxies share a mechanism and not a field (internal/remote/socks_apply.go).
 	remoteSocks := remote.ProxyApplier{
 		Store:  remoteStore,
 		Paths:  remote.RootedPaths(opts.root),
@@ -608,7 +595,6 @@ func run(args []string) error {
 
 	srv.Mount(remote.ModuleName, remote.HTTP{
 		Tunnel: remoteTunnel,
-		Proxy:  remoteProxy,
 		Socks:  remoteSocks,
 		Lock:   srv.ApplyLock(),
 		Events: srv.Events(),
@@ -860,7 +846,7 @@ func run(args []string) error {
 	startGateway(ctx, gatewayApplier, prober, logger)
 	startForwards(ctx, natApplier, logger)
 	startIPTV(ctx, iptvApplier, logger)
-	startRemote(ctx, remoteTunnel, remoteProxy, logger)
+	startRemote(ctx, remoteTunnel, logger)
 	startDNS(ctx, dnsApplier, logger)
 	// MAC classification does not depend on DHCP or addresses. Reconcile the
 	// LAN placement after startup and as devices move between served networks.
@@ -1423,7 +1409,7 @@ func startDNS(ctx context.Context, a dns.Applier, logger *slog.Logger) {
 // survive a reboot. What is different is the stake — this is the module whose
 // absence an operator discovers from outside the building, so a failure here is
 // logged with the interface named rather than folded into a generic line.
-func startRemote(ctx context.Context, tunnel remote.TunnelApplier, proxy remote.ProxyApplier, logger *slog.Logger) {
+func startRemote(ctx context.Context, tunnel remote.TunnelApplier, logger *slog.Logger) {
 	cfg, err := tunnel.Load()
 	if err != nil {
 		logger.Error("remote-access configuration could not be read; nothing was restored",

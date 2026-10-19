@@ -20,15 +20,7 @@ import { ProxyLinkDialog } from './proxy-link'
 import { socksChange, useSocksLink } from './queries'
 import type { useRemoteApply } from './use-apply'
 
-/**
- * The SOCKS5 proxy, under Shadowsocks.
- *
- * Same card, same write path, one difference that decides the copy: SOCKS5 is
- * plaintext, so *where it listens* is the whole story. By default only a
- * device already on WireGuard can reach it, and the card says so; when it is
- * exposed to the internet the daemon's own warning is shown verbatim rather
- * than a second wording that could drift from it.
- */
+
 export function SocksCard({
   status,
   applier,

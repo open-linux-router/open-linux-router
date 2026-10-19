@@ -36,7 +36,6 @@ import type {
   Protocol,
   GatewayConfig,
   RemoteConfig,
-  Shadowsocks,
 } from '@/lib/config-types'
 
 /** What applying a change will cost (design.md §5.3.3, internal/dhcp Impact). */
@@ -1414,26 +1413,6 @@ export interface ProxyPlan {
   warnings?: Problem[]
 }
 
-/** Whether a proxy is installed, running and undrifted — internal/remote proxyStatus. */
-export interface ProxyStatus {
-  enabled: boolean
-  listen_port: number
-  cipher: string
-  udp: boolean
-  /** What systemd knows. Absent, with service_error set, when the query itself
-   *  failed — normal on a box with no D-Bus, and it must not take the rest of
-   *  the answer down with it. */
-  service?: UnitStatus
-  service_error?: string
-  /** The server binary olr found, and why it found none. */
-  binary?: string
-  binary_error?: string
-  drifted: boolean
-  drift?: ProxyPlan
-  drift_error?: string
-  as_of: string
-}
-
 /**
  * Whether the SOCKS5 proxy is installed, running and undrifted —
  * internal/remote socksStatus. No cipher and no UDP flag; what it has instead
@@ -1475,7 +1454,7 @@ export interface ProxyApplyResult {
   steps?: Step[]
   error?: { message: string; problems?: Problem[] }
   /** What is stored now, redacted. Present on the refusal path especially. */
-  config?: Shadowsocks
+  config?: unknown
 }
 
 // --- remote: who is connected -------------------------------------------------
@@ -1515,7 +1494,7 @@ export interface ProxyClient {
 }
 
 export interface ProxyClients {
-  proxy: 'shadowsocks' | 'socks5'
+  proxy: 'socks5'
   port: number
   clients: ProxyClient[]
 }

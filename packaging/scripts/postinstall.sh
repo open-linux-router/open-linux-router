@@ -6,6 +6,14 @@ set -e
 # disk but no systemd running to talk to. This is the standard test for it.
 [ -d /run/systemd/system ] || exit 0
 
+# Retire only OLR's former backend. Do not touch independently installed servers.
+# Stop failures must abort the upgrade instead of leaving a removed feature running.
+if systemctl is-active --quiet olr-shadowsocks.service; then
+	systemctl stop olr-shadowsocks.service
+fi
+systemctl disable olr-shadowsocks.service >/dev/null 2>&1 || true
+systemctl mask olr-shadowsocks.service
+
 systemctl daemon-reload >/dev/null 2>&1 || true
 
 # olrd is enabled and started here. Installing a router's control plane and

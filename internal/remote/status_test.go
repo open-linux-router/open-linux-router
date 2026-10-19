@@ -2,8 +2,25 @@ package remote
 
 import (
 	"net/http"
+	"path/filepath"
 	"testing"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
+
+func testProxyHTTP(t *testing.T) (http.Handler, ProxyApplier) {
+	t.Helper()
+	tunnel, _ := testApplier(t)
+	proxy := ProxyApplier{
+		Store:  tunnel.Store,
+		Paths:  Paths{SocksConf: filepath.Join(t.TempDir(), "rendered", "3proxy.cfg")},
+		Locate: func() (string, error) { return "3proxy", nil },
+		Settle: -1,
+		Object: ObjectSocks,
+	}
+	h := HTTP{Tunnel: tunnel, Socks: proxy, Lock: core.NewLock(), Events: core.NewEvents()}
+	return h.Handler(), proxy
+}
 
 // This module answers the three generic questions at the top level of its
 // status, like every other module that can be switched on.
@@ -18,13 +35,6 @@ import (
 // off looks like, and `olr enable` skipped `remote` in silence: no blockers
 // cleared, no drift reported, and nothing anywhere saying it had been passed
 // over.
-//
-// Built on testProxyHTTP rather than testHTTP, and that is not incidental.
-// testHTTP leaves the proxy applier zero-valued, which leaves its Paths empty,
-// which makes its observer walk the process's working directory and plan a
-// delete for every file it finds there — this package's own source. A status
-// test on that handler sees `proxy.drifted` true on a box where nothing is
-// configured, and would have been written to expect it.
 type statusShape struct {
 	Enabled  bool `json:"enabled"`
 	Drifted  bool `json:"drifted"`
@@ -96,7 +106,7 @@ func TestModuleStatusIsOnWhenOnlyTheProxyIsOn(t *testing.T) {
 		`{"endpoint":"home.example.net"}`); w.Code != http.StatusOK {
 		t.Fatalf("setup endpoint PATCH = %d: %s", w.Code, w.Body)
 	}
-	if w := do(t, h, http.MethodPatch, "/shadowsocks/config?confirm=true",
+	if w := do(t, h, http.MethodPatch, "/socks5/config?confirm=true",
 		`{"enabled":true}`); w.Code != http.StatusOK {
 		t.Fatalf("setup proxy PATCH = %d: %s", w.Code, w.Body)
 	}

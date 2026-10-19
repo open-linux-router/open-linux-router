@@ -2,42 +2,15 @@ package remote
 
 import "github.com/open-linux-router/open-linux-router/internal/core"
 
-// What distinguishes the two file-backed proxies from each other, which turns
-// out to be seven facts and about 130 lines of nothing.
-//
-// ss_apply.go's ProxyApplier was written for one object and reads as general
-// code with five Shadowsocks-shaped holes in it: which binary to look for, which
-// unit to drive, where the file goes, which section says `enabled`, and which
-// plan builder to call. Everything else — store intent first, make the
-// directory, write the files, check the binary before the unit, move the unit,
-// watch it settle — is identical for both, because both are "render a file and
-// supervise a daemon".
-//
-// So this parameterises rather than copies. That is the same test the module
-// applies everywhere else: an abstraction is justified when the two instances
-// genuinely share a mechanism, and rejected when they only share a description.
-// The tunnel does *not* appear here for exactly that reason — it writes no file
-// and has no unit, so it keeps its own applier.
-
-// ProxyObject selects which file-backed proxy an applier drives.
-//
-// The zero value is Shadowsocks, deliberately: it means every existing
-// construction of ProxyApplier keeps its meaning without naming a field it
-// predates.
 type ProxyObject string
 
 const (
-	// ObjectShadowsocks is the zero value.
-	ObjectShadowsocks ProxyObject = ""
-
 	// ObjectSocks is the plain SOCKS5 proxy.
 	ObjectSocks ProxyObject = "socks5"
 )
 
 // proxyKind is the per-object half of an applier's behaviour.
 type proxyKind struct {
-	// Object is how the object is named in step descriptions and blockers —
-	// operator-facing, so "Shadowsocks" rather than a package identifier.
 	Object string
 
 	// Unit is the systemd unit this object's daemon runs under.
@@ -72,13 +45,13 @@ type proxyKind struct {
 }
 
 func (o ProxyObject) kind() proxyKind {
-	if o == ObjectSocks {
+	if o == ObjectSocks || o == "" {
 		return proxyKind{
-			Object:  "SOCKS5",
-			Unit:    SocksUnitName,
-			Conf:    func(p Paths) string { return p.SocksConf },
-			Enabled: func(c Config) bool { return c.Socks.Enabled },
-			Locate:  FindSocks,
+			Object:   "SOCKS5",
+			Unit:     SocksUnitName,
+			Conf:     func(p Paths) string { return p.SocksConf },
+			Enabled:  func(c Config) bool { return c.Socks.Enabled },
+			Locate:   FindSocks,
 			Missing:  ErrSocksMissing,
 			Build:    BuildSocksPlan,
 			Validate: ValidateSocks,
@@ -93,25 +66,7 @@ func (o ProxyObject) kind() proxyKind {
 			},
 		}
 	}
-	return proxyKind{
-		Object:  "Shadowsocks",
-		Unit:    UnitName,
-		Conf:    func(p Paths) string { return p.Conf },
-		Enabled: func(c Config) bool { return c.Shadowsocks.Enabled },
-		Locate:  FindShadowsocks,
-		Missing:  ErrShadowsocksMissing,
-		Build:    BuildProxyPlan,
-		Validate: ValidateShadowsocks,
-		Redacted: func(c Config) any { s := c.Shadowsocks; return &s },
-		Fill: func(c *Config) (bool, error) {
-			next, did, err := c.Shadowsocks.WithGeneratedPassword()
-			if err != nil {
-				return false, err
-			}
-			c.Shadowsocks = next
-			return did, nil
-		},
-	}
+	panic("unsupported proxy object")
 }
 
 // SocksBlockers reports what stands between this box and a working SOCKS5

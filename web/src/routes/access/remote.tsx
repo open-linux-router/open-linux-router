@@ -29,14 +29,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ClientConfigDialog } from '@/features/remote/client-config'
 import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/remote/impact'
 import { PeerDialog } from '@/features/remote/peer-dialog'
-import { ProxyCard } from '@/features/remote/proxy-card'
 import { SocksCard } from '@/features/remote/socks-card'
 import {
   remoteChange,
   useRemoteConfig,
   useRemoteStatus,
   useReapplyRemote,
-  useShadowsocksStatus,
   useSocksStatus,
   type RemoteChangeRequest,
 } from '@/features/remote/queries'
@@ -45,11 +43,10 @@ import { useRemoteApply } from '@/features/remote/use-apply'
 import { WayMark } from '@/features/remote/way-mark'
 import type { ProxyPlan, RemotePeer, RemoteStatus } from '@/lib/api-types'
 
-export function RemotePage({ way }: { way?: 'wireguard' | 'shadowsocks' | 'socks-server' }) {
+export function RemotePage({ way }: { way?: 'wireguard' | 'socks-server' }) {
   const slug = way ?? 'remote'
   const config = useRemoteConfig()
   const status = useRemoteStatus()
-  const proxy = useShadowsocksStatus()
   const socks = useSocksStatus()
   const applier = useRemoteApply()
   const reapply = useReapplyRemote()
@@ -72,16 +69,12 @@ export function RemotePage({ way }: { way?: 'wireguard' | 'shadowsocks' | 'socks
   const wg = config.data.wireguard
   const peers = status.data?.peers ?? []
   const change = (c: RemoteChangeRequest) => applier.submit(c)
-  const selectedStatus = way === 'shadowsocks' ? proxy : way === 'socks-server' ? socks : status
+  const selectedStatus = way === 'socks-server' ? socks : status
 
   return (
     <SubPage section="/access" slug={slug}>
       {way && selectedStatus.isError && <Alert variant="destructive"><AlertTriangle /><AlertTitle>Status unavailable</AlertTitle><AlertDescription>{selectedStatus.error?.message}</AlertDescription></Alert>}
       {way && selectedStatus.isPending && <p className="text-sm text-muted-foreground">Loading status…</p>}
-      {way === 'shadowsocks' && <Card>
-        <CardHeader><CardTitle>Public address</CardTitle><CardAction><Button size="sm" variant="outline" onClick={() => setSettings(true)}>Settings</Button></CardAction></CardHeader>
-        <CardContent className="break-words text-sm text-muted-foreground">{config.data.endpoint || 'Set a public address before generating client links.'}</CardContent>
-      </Card>}
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />
@@ -184,7 +177,6 @@ export function RemotePage({ way }: { way?: 'wireguard' | 'shadowsocks' | 'socks
       </Card>
 
       </>}
-      {(!way || (way === 'shadowsocks' && !proxy.isPending && !proxy.isError)) && <ProxyCard status={proxy.data} config={config.data.shadowsocks} applier={applier} />}
       {(!way || (way === 'socks-server' && !socks.isPending && !socks.isError)) && <SocksCard status={socks.data} applier={applier} />}
 
       <PeerDialog
@@ -214,7 +206,6 @@ export function RemotePage({ way }: { way?: 'wireguard' | 'shadowsocks' | 'socks
         />
       )}
       <SettingsDialog
-        endpointOnly={way === 'shadowsocks'}
         open={settings}
         onOpenChange={setSettings}
         initial={config.data}

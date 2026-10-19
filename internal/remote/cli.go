@@ -12,25 +12,6 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// Every command here is a client of olrd (design.md §6.1). None of them touches
-// the config document, the kernel or systemd directly: a CLI that programmed
-// the box on its own would be a second writer, holding a lock olrd cannot see,
-// running its own copy of the validation rules, and publishing none of the
-// change events the UI listens for.
-//
-// # Where the protocol goes in the command
-//
-// In the **object** position — `olr remote set wireguard …`, `olr remote enable
-// shadowsocks` — which keeps docs/cli.md's four positions intact rather than
-// adding a fifth. The first release of this module spelled no protocol at all,
-// because there was one object and naming it would have been inventing a
-// surface for something unbuilt. The second object is that something, so the
-// deferral recorded in docs/remote-access.md §11 #4 closes here.
-//
-// Two things stay unqualified, and both are unambiguous: `add peer` and `rm
-// peer`, because only the tunnel has devices; and `set --endpoint`, because the
-// address clients dial belongs to the box rather than to either way in.
-
 // Command returns the module's command tree. Mounted explicitly by cmd/olr.
 func Command() *cobra.Command {
 	return cli.NewModule("remote", "Get back into your network from outside it",
@@ -55,10 +36,6 @@ const (
 	wgConfigEndpoint = base + "/wireguard/config"
 	wgPlanEndpoint   = base + "/wireguard/plan"
 	wgPeersEndpoint  = base + "/wireguard/peers"
-
-	ssConfigEndpoint = base + "/shadowsocks/config"
-	ssPlanEndpoint   = base + "/shadowsocks/plan"
-	ssLinkEndpoint   = base + "/shadowsocks/link"
 )
 
 // peerEndpoint is the item route for one device.
@@ -87,7 +64,7 @@ func verb(name, short string, build func(*cobra.Command)) *cobra.Command {
 }
 
 // waysIn is the object vocabulary, for the commands that name one.
-var waysIn = []string{"wireguard", "shadowsocks"}
+var waysIn = []string{"wireguard"}
 
 // ---------------------------------------------------------------- show
 
@@ -111,10 +88,8 @@ func showCommand() *cobra.Command {
 
 	c.AddCommand(
 		showWireGuardCommand(),
-		showShadowsocksCommand(),
 		showPeersCommand(),
 		showPeerCommand(),
-		showLinkCommand(),
 	)
 	return c
 }
@@ -155,69 +130,6 @@ func showWireGuardCommand() *cobra.Command {
 				return cli.JSON(c.OutOrStdout(), cfg.WireGuard)
 			}
 			return writeWireGuardText(c.OutOrStdout(), cfg)
-		},
-	}
-}
-
-func showShadowsocksCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "shadowsocks",
-		Short: "Show the proxy in full",
-		Args:  cobra.NoArgs,
-		RunE: func(c *cobra.Command, _ []string) error {
-			if err := cli.ValidateOutput(c); err != nil {
-				return err
-			}
-			if cli.DryRun(c) {
-				var plan proxyPlanView
-				if err := cli.ClientFor(c).Post(ctxOf(c), ssPlanEndpoint, nil, &plan); err != nil {
-					return err
-				}
-				if cli.IsJSON(c) {
-					return cli.JSON(c.OutOrStdout(), plan)
-				}
-				return writeProxyPlanText(c.OutOrStdout(), plan, true)
-			}
-			cfg, err := loadConfig(c)
-			if err != nil {
-				return err
-			}
-			if cli.IsJSON(c) {
-				return cli.JSON(c.OutOrStdout(), cfg.Shadowsocks)
-			}
-			return writeShadowsocksText(c.OutOrStdout(), cfg)
-		},
-	}
-}
-
-// showLinkCommand is the one command in olr that prints a credential.
-//
-// It has to exist: a Shadowsocks client cannot be configured without the
-// password, and every other surface redacts it. Putting it behind a command of
-// its own means seeing it is something an operator typed rather than something
-// that fell out of reading configuration.
-func showLinkCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "link",
-		Short: "Print the proxy link to import on a device",
-		Args:  cobra.NoArgs,
-		Long: "Print the ss:// link a device imports.\n\n" +
-			"This contains the password, so unlike everything else `olr remote show`\n" +
-			"prints, it is not redacted. There is one password for every device —\n" +
-			"changing it means giving every device a new link.",
-		RunE: func(c *cobra.Command, _ []string) error {
-			if err := cli.ReadOnly(c); err != nil {
-				return err
-			}
-			var resp linkResponse
-			if err := cli.ClientFor(c).Get(ctxOf(c), ssLinkEndpoint, &resp); err != nil {
-				return err
-			}
-			if cli.IsJSON(c) {
-				return cli.JSON(c.OutOrStdout(), resp)
-			}
-			fmt.Fprintln(c.OutOrStdout(), resp.URL)
-			return nil
 		},
 	}
 }
@@ -310,7 +222,7 @@ func setCommand() *cobra.Command {
 		}
 	})
 
-	c.AddCommand(setWireGuardCommand(), setShadowsocksCommand())
+	c.AddCommand(setWireGuardCommand())
 	return c
 }
 
@@ -386,77 +298,6 @@ func setWireGuardCommand() *cobra.Command {
 
 	c.MarkFlagsMutuallyExclusive("address", "no-address")
 	c.MarkFlagsMutuallyExclusive("raw-wireguard-conf", "no-raw-wireguard-conf")
-	return c
-}
-
-func setShadowsocksCommand() *cobra.Command {
-	var (
-		cipher     string
-		port       uint16
-		publicPort uint16
-		noUDP      bool
-		udp        bool
-		raw        string
-		clearRaw   bool
-	)
-
-	c := &cobra.Command{
-		Use:   "shadowsocks",
-		Short: "Set the proxy's settings",
-		Args:  cobra.NoArgs,
-		Long: "Set the proxy's settings: which port to listen on, and how traffic is\n" +
-			"encrypted.\n\n" +
-			"Changing the cipher regenerates the password, because a 2022-blake3\n" +
-			"cipher's password is a key of a fixed length rather than a passphrase,\n" +
-			"so the old one stops being accepted. Every device has to be given a\n" +
-			"new link afterwards, which olr reports as a disruptive change.",
-		RunE: func(c *cobra.Command, _ []string) error {
-			if c.Flags().NFlag() == 0 {
-				return fmt.Errorf("nothing to set; see `olr remote set shadowsocks --help`")
-			}
-			patch := map[string]any{}
-			if c.Flags().Changed("cipher") {
-				patch["cipher"] = cipher
-			}
-			if c.Flags().Changed("port") {
-				patch["listen_port"] = port
-			}
-			if c.Flags().Changed("public-port") {
-				patch["public_port"] = publicPort
-			}
-			if c.Flags().Changed("udp") {
-				patch["udp"] = udp
-			}
-			if noUDP {
-				patch["udp"] = false
-			}
-			if c.Flags().Changed("raw-shadowsocks-conf") {
-				patch["raw_shadowsocks_conf"] = raw
-			}
-			if clearRaw {
-				patch["raw_shadowsocks_conf"] = ""
-			}
-			return sendProxy(c, "PATCH", ssConfigEndpoint, patch)
-		},
-	}
-
-	c.Flags().StringVar(&cipher, "cipher", "",
-		fmt.Sprintf("how traffic is encrypted: %s (default %s)", joinCiphers(), DefaultCipher))
-	c.Flags().Uint16Var(&port, "port", 0,
-		fmt.Sprintf("TCP and UDP port to listen on (default %d)", DefaultShadowsocksPort))
-	c.Flags().Uint16Var(&publicPort, "public-port", 0,
-		"port devices dial, if a router in front forwards a different one")
-	c.Flags().BoolVar(&udp, "udp", false, "carry UDP, which is the default")
-	c.Flags().BoolVar(&noUDP, "no-udp", false,
-		"do not carry UDP; name resolution and QUIC stop working through the proxy")
-	c.Flags().StringVar(&raw, "raw-shadowsocks-conf", "",
-		"extra configuration as a JSON object, merged into the rendered file")
-	c.Flags().BoolVar(&clearRaw, "no-raw-shadowsocks-conf", false,
-		"remove the extra configuration")
-
-	c.MarkFlagsMutuallyExclusive("udp", "no-udp")
-	c.MarkFlagsMutuallyExclusive("raw-shadowsocks-conf", "no-raw-shadowsocks-conf")
-	cli.EnumFlag(c, "cipher", cipherNames()...)
 	return c
 }
 
@@ -555,7 +396,7 @@ func enableCommand() *cobra.Command { return wayInCommand("enable", true) }
 
 func disableCommand() *cobra.Command { return wayInCommand("disable", false) }
 
-// wayInCommand builds `olr remote enable|disable wireguard|shadowsocks`.
+// wayInCommand builds `olr remote enable|disable wireguard`.
 //
 // The object is required rather than defaulted. "Turn on remote access" stopped
 // being a sentence with one meaning the moment there were two ways in — the
@@ -568,29 +409,18 @@ func wayInCommand(name string, on bool) *cobra.Command {
 	}[on]
 
 	return verb(name, short, func(c *cobra.Command) {
-		c.Use = name + " wireguard|shadowsocks"
+		c.Use = name + " <way>"
 		c.Args = cobra.ExactArgs(1)
 		c.ValidArgs = waysIn
 		c.Long = map[bool]string{
-			true: "Start accepting connections over one of the two ways in.\n\n" +
-				"wireguard puts a device inside your network: it reaches your NAS,\n" +
-				"your printer and this router, as if it were at home.\n\n" +
-				"shadowsocks lends a device this router's way out and nothing else.\n" +
-				"It cannot see your network at all — it is for using your own\n" +
-				"internet connection from somewhere that is filtering or watching.\n\n" +
-				"olr generates the key or password the first time, so this is also\n" +
-				"what makes a configuration or a link possible.",
-			false: "Stop accepting connections over one of the two ways in.\n\n" +
-				"The configuration is kept, including the key or password, so\n" +
-				"turning it back on needs nothing to be re-issued.",
+			true:  "Start accepting WireGuard connections. OLR generates the tunnel key on first enable.",
+			false: "Stop accepting WireGuard connections, keeping the saved key and devices.",
 		}[on]
 
 		c.RunE = func(c *cobra.Command, args []string) error {
 			switch args[0] {
 			case "wireguard":
 				return sendTunnel(c, "PATCH", wgConfigEndpoint, map[string]any{"enabled": on})
-			case "shadowsocks":
-				return sendProxy(c, "PATCH", ssConfigEndpoint, map[string]any{"enabled": on})
 			default:
 				return cli.UnknownObject("way in", args[0], "", waysIn)
 			}
@@ -745,11 +575,3 @@ func scopeNames() []string {
 }
 
 func joinScopes() string { return strings.Join(scopeNames(), ", ") }
-
-func cipherNames() []string {
-	out := make([]string, 0, len(Ciphers()))
-	for _, c := range Ciphers() {
-		out = append(out, string(c))
-	}
-	return out
-}

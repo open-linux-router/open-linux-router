@@ -79,13 +79,14 @@ func TestClientsAnswersEachProxyThatIsOnWithPlaces(t *testing.T) {
 	tunnel, _ := testApplier(t)
 	proxy := ProxyApplier{
 		Store:  tunnel.Store,
-		Paths:  Paths{Conf: filepath.Join(t.TempDir(), "rendered", "shadowsocks.json")},
-		Locate: func() (string, error) { return "ssserver", nil },
+		Paths:  Paths{SocksConf: filepath.Join(t.TempDir(), "rendered", "3proxy.cfg")},
+		Locate: func() (string, error) { return "3proxy", nil },
 		Settle: -1,
+		Object: ObjectSocks,
 	}
 	h := HTTP{
-		Tunnel: tunnel, Proxy: proxy, Lock: core.NewLock(), Events: core.NewEvents(),
-		Conns:  fakeConns{flows: []Flow{flow("203.0.113.7", DefaultShadowsocksPort, "tcp", 0)}},
+		Tunnel: tunnel, Socks: proxy, Lock: core.NewLock(), Events: core.NewEvents(),
+		Conns:  fakeConns{flows: []Flow{flow("203.0.113.7", DefaultSocksPort, "tcp", 0)}},
 		Places: fakePlaces{"203.0.113.7": {Country: "CN", Org: "Chinanet"}},
 	}.Handler()
 
@@ -98,11 +99,11 @@ func TestClientsAnswersEachProxyThatIsOnWithPlaces(t *testing.T) {
 	if w := do(t, h, http.MethodPatch, "/config?confirm=true", `{"endpoint":"home.example.net"}`); w.Code != http.StatusOK {
 		t.Fatalf("endpoint = %d: %s", w.Code, w.Body)
 	}
-	if w := do(t, h, http.MethodPatch, "/shadowsocks/config?confirm=true", `{"enabled":true}`); w.Code != http.StatusOK {
+	if w := do(t, h, http.MethodPatch, "/socks5/config?confirm=true", `{"enabled":true}`); w.Code != http.StatusOK {
 		t.Fatalf("enable = %d: %s", w.Code, w.Body)
 	}
 	got = decode[clientsResponse](t, do(t, h, http.MethodGet, "/clients", ""))
-	if len(got.Proxies) != 1 || got.Proxies[0].Proxy != "shadowsocks" || len(got.Proxies[0].Clients) != 1 {
+	if len(got.Proxies) != 1 || got.Proxies[0].Proxy != "socks5" || len(got.Proxies[0].Clients) != 1 {
 		t.Fatalf("proxies = %+v", got.Proxies)
 	}
 	if got.Places["203.0.113.7"].Org != "Chinanet" || got.Locations.Source != geoip.Source {

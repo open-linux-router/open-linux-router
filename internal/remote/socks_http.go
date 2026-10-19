@@ -9,21 +9,6 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// The SOCKS5 proxy's surface.
-//
-// The third of three under one module namespace, and it needed no new argument —
-// which is what docs/remote-access.md §9 predicted when it deferred this object.
-// Same route shape as Shadowsocks', same write path (mutateProxy, now given the
-// applier to drive), same refusal semantics.
-//
-// One route differs in a way worth stating: `/socks5/link` returns a
-// `socks5://` URL carrying the credential, so like its Shadowsocks counterpart
-// it is **deliberately not published as an MCP tool**. The conformance suite's
-// R2 wants every read to be a tool and wants exceptions argued rather than
-// assumed; the argument is that the response *is* the secret, and a tool whose
-// purpose is to return one would put it in a transcript the first time somebody
-// asked a model how remote access is set up.
-
 func (h HTTP) socksRoutes() []core.Route {
 	return []core.Route{
 		{
@@ -43,8 +28,6 @@ func (h HTTP) socksRoutes() []core.Route {
 			Handler:  h.patchSocksConfig,
 		},
 		{
-			// No Tool, for the reason ss_http.go argues about its own link
-			// route: the response is the credential.
 			Method: "GET", Path: "/socks5/link",
 			Summary: "Return the socks5:// link a client imports. This contains the password, " +
 				"so unlike every other read here it is not redacted.",
@@ -246,6 +229,10 @@ func (h HTTP) getSocksStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	core.WriteJSON(w, http.StatusOK, h.socksStatusFor(r, cfg))
+}
+
+func (h HTTP) socksStatusFor(r *http.Request, cfg Config) socksStatus {
 	s := cfg.Socks
 	out := socksStatus{
 		Enabled: s.Enabled,
@@ -258,7 +245,9 @@ func (h HTTP) getSocksStatus(w http.ResponseWriter, r *http.Request) {
 		out.Warning = SocksExposureWarning
 	}
 
-	if status, err := h.Socks.Unit.Status(r.Context()); err != nil {
+	if h.Socks.Unit == nil {
+		out.ServiceError = "no service manager available"
+	} else if status, err := h.Socks.Unit.Status(r.Context()); err != nil {
 		out.ServiceError = err.Error()
 	} else {
 		out.Service = &status
@@ -279,5 +268,5 @@ func (h HTTP) getSocksStatus(w http.ResponseWriter, r *http.Request) {
 		out.Drifted, out.Drift = true, &view
 	}
 
-	core.WriteJSON(w, http.StatusOK, out)
+	return out
 }

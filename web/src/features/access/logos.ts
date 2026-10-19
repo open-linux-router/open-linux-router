@@ -1,4 +1,3 @@
-import shadowsocks from '@/assets/way-marks/shadowsocks.svg'
 
 // Local copies of project artwork; provenance is in public/access-logos/README.md.
 // Protocols without an established logo use existing Lucide SVGs in the launcher.
@@ -9,12 +8,6 @@ export const ACCESS_LOGOS: Record<string, string> = {
   netbird: '/access-logos/netbird.svg',
   zerotier: '/access-logos/zerotier.svg',
   nebula: '/access-logos/nebula.svg',
-  openvpn: '/access-logos/openvpn.svg',
-  ipsec: '/access-logos/ipsec.png',
   cloudflare: '/access-logos/cloudflare.svg',
-  vless: '/access-logos/vless.svg',
-  vmess: '/access-logos/vmess.png',
-  hysteria: '/access-logos/hysteria.svg',
-  shadowsocks,
   ssh: '/access-logos/ssh.gif',
 }

@@ -9,15 +9,14 @@ const { gatewaySummary, socksOutSummary, remoteSummary, ingressSummary, forwards
 const snapshot = (data, isError = false) => ({ data, isError })
 const unavailable = { text: 'Status unavailable', attention: true }
 const attention = { text: 'Needs attention', attention: true }
-const noRemote = snapshot({ wireguard: { enabled: false }, shadowsocks: { enabled: false } })
+const noRemote = snapshot({ wireguard: { enabled: false } })
 const noSocks = snapshot({ enabled: false })
 
 test('individual ways in do not inherit unrelated service failures', () => {
   const failed = snapshot(undefined, true)
-  assert.deepEqual(remoteSummary(noRemote, failed, failed, failed, 'wireguard'), { text: 'Off' })
-  assert.deepEqual(remoteSummary(noRemote, failed, failed, failed, 'shadowsocks'), { text: 'Off' })
-  assert.deepEqual(remoteSummary(failed, failed, failed, noSocks, 'socks'), { text: 'Off' })
-  assert.deepEqual(remoteSummary(noRemote, failed, failed, failed, 'socks'), unavailable)
+  assert.deepEqual(remoteSummary(noRemote, failed, failed, 'wireguard'), { text: 'Off' })
+  assert.deepEqual(remoteSummary(failed, failed, noSocks, 'socks'), { text: 'Off' })
+  assert.deepEqual(remoteSummary(noRemote, failed, failed, 'socks'), unavailable)
 })
 
 test('system default distinguishes no route from an unavailable observation', () => {
@@ -51,22 +50,20 @@ test('outbound proxy distinguishes saved intent, stopped service and running TUN
   assert.deepEqual(socksOutSummary(config, snapshot({ enabled: true, service: { active: true } })), { text: 'TUN running' })
 })
 
-test('remote access includes SOCKS5 even when WireGuard and Shadowsocks are off', () => {
-  assert.deepEqual(remoteSummary(noRemote, snapshot(), snapshot(), noSocks), { text: 'Off' })
-  assert.deepEqual(remoteSummary(noRemote, snapshot(), snapshot(), snapshot({ enabled: true, service: { active: true } })), { text: 'SOCKS5 on' })
-  assert.deepEqual(remoteSummary(noRemote, snapshot(), snapshot(), snapshot(undefined, true)), unavailable)
-  assert.deepEqual(remoteSummary(noRemote, snapshot(), snapshot(), snapshot({ enabled: true, service_error: 'no D-Bus' })), unavailable)
-  assert.deepEqual(remoteSummary(noRemote, snapshot(), snapshot(), snapshot({ enabled: true, service: { active: true }, warning: 'unencrypted internet listener' })), attention)
+test('remote access includes SOCKS5 even when WireGuard is off', () => {
+  assert.deepEqual(remoteSummary(noRemote, snapshot(), noSocks), { text: 'Off' })
+  assert.deepEqual(remoteSummary(noRemote, snapshot(), snapshot({ enabled: true, service: { active: true } })), { text: 'SOCKS5 on' })
+  assert.deepEqual(remoteSummary(noRemote, snapshot(), snapshot(undefined, true)), unavailable)
+  assert.deepEqual(remoteSummary(noRemote, snapshot(), snapshot({ enabled: true, service_error: 'no D-Bus' })), unavailable)
+  assert.deepEqual(remoteSummary(noRemote, snapshot(), snapshot({ enabled: true, service: { active: true }, warning: 'unencrypted internet listener' })), attention)
 })
 
 test('remote access only reports connections when the tunnel can be observed', () => {
-  const config = snapshot({ wireguard: { enabled: true }, shadowsocks: { enabled: true } })
+  const config = snapshot({ wireguard: { enabled: true } })
   const wg = { enabled: true, kernel_known: true, interface_present: true, interface_up: true, peers: [{ online: true }, { online: false }] }
-  const ss = snapshot({ enabled: true, service: { active: true } })
-  assert.equal(remoteSummary(config, snapshot(wg), ss, noSocks).text, '2 devices · 1 connected · Shadowsocks on')
-  assert.deepEqual(remoteSummary(config, snapshot({ ...wg, kernel_known: false }), ss, noSocks), unavailable)
-  assert.deepEqual(remoteSummary(config, snapshot({ ...wg, interface_up: false }), ss, noSocks), attention)
-  assert.deepEqual(remoteSummary(config, snapshot(wg), snapshot({ enabled: true, service: { active: false } }), noSocks), attention)
+  assert.equal(remoteSummary(config, snapshot(wg), noSocks).text, '2 devices · 1 connected')
+  assert.deepEqual(remoteSummary(config, snapshot({ ...wg, kernel_known: false }), noSocks), unavailable)
+  assert.deepEqual(remoteSummary(config, snapshot({ ...wg, interface_up: false }), noSocks), attention)
 })
 
 test('ways out excludes blocking destinations and reports failed probes or unknown kernel state', () => {

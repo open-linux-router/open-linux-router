@@ -9,31 +9,6 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// Finding the 3proxy server the operator supplied.
-//
-// This backend sits between the two situations olr already knows how to be in,
-// and the difference decides why there is no core.Dependency here.
-//
-// `wireguard-tools` is in every distribution, so wg_deps.go declares a
-// core.Dependency and an operator gets a package name and a button.
-// `shadowsocks-rust` is in none, so ss_binary.go points at a release page. 3proxy
-// is the third case: **not in Debian, but publishing its own signed apt
-// repository**, the way Caddy does. So `apt install 3proxy` is exactly the right
-// command and it fails on a box that has not added the repository first.
-//
-// A core.Dependency would render that as a one-line fix and, worse, an *action
-// button* — and core/dependency.go's own comment is explicit that a box which
-// only gets advice must not also get a button, because the single table behind
-// both is what stops olr recommending one thing and running another. Two steps
-// cannot be expressed there, so the honest form is this one: find the binary,
-// and when it is missing say both steps.
-//
-// The repository has two channels and the choice is not arbitrary: **lts**
-// tracks the 0.9 branch and is what belongs on a router, where the config
-// surviving an upgrade matters more than new features. `current` tracks master.
-// That also answers, for this backend, the config-drift worry that made
-// gateway:§10 refuse to wrap proxy routers at all.
-
 // SocksSearchPath is where a 3proxy binary is looked for, in order.
 //
 // The first entry is checked before PATH for the reason the other two backends
@@ -94,13 +69,6 @@ sudo apt update && sudo apt install 3proxy
 #   sudo install -m 0755 3proxy %s`, SocksSearchPath[0])
 }
 
-// ErrSocksMissing explains how to satisfy FindSocks.
-//
-// Long, and deliberately so: this is the message standing between an operator
-// and the feature. Unlike the Shadowsocks one it can end with a real `apt
-// install`, which is why the two steps are numbered — the failure this prevents
-// is somebody running the second line first, getting "E: Unable to locate
-// package 3proxy", and concluding olr asked for something that does not exist.
 func ErrSocksMissing() error {
 	return fmt.Errorf(
 		"no 3proxy server found at %s, and no `3proxy` on PATH.\n\n"+

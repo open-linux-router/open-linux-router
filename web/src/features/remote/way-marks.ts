@@ -1,4 +1,3 @@
-import shadowsocks from '@/assets/way-marks/shadowsocks.svg'
 import wireguard from '@/assets/way-marks/wireguard.svg'
 
 /**
@@ -19,14 +18,9 @@ import wireguard from '@/assets/way-marks/wireguard.svg'
  * a gap the ladder already handles — an undrawn mark falls back to a line
  * glyph rather than to a stand-in picture — so it needs no entry here.
  */
-export type WayKey = 'wireguard' | 'shadowsocks' | 'socks5'
+export type WayKey = 'wireguard' | 'socks5'
 
-/**
- * WireGuard's knot from thesvg.org (MIT), Shadowsocks' paper plane from the
- * project's own artwork. Both in the house red the two brands share, which is
- * also why they sit together without either looking borrowed.
- */
+
 export const WAY_MARKS: Partial<Record<WayKey, string>> = {
   wireguard,
-  shadowsocks,
 }

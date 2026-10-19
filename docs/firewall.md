@@ -112,7 +112,6 @@ What stays reachable from outside comes from the objects that need it:
 | Opening | From |
 |---|---|
 | udp WireGuard port | `remote.wireguard`, when enabled |
-| tcp (+udp) Shadowsocks port | `remote.shadowsocks`, when enabled |
 | tcp SOCKS5 port | `remote.socks5`, only with `listen: internet` |
 | tcp 80, tcp 443, udp 443 | `ingress`, when enabled (443/udp is HTTP/3) |
 | IP protocol 41, **from the broker only** | `dial`'s IPv6 tunnel (`uplink.ipv6`), when set |

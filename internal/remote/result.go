@@ -78,7 +78,7 @@ func validateEndpoint(r *Result, c Config) {
 	// box's address *inside* WireGuard, which clients already have from their
 	// peer configuration. Requiring a public endpoint for it would demand a fact
 	// that plays no part in reaching it.
-	needed := c.WireGuard.Enabled || c.Shadowsocks.Enabled ||
+	needed := c.WireGuard.Enabled ||
 		(c.Socks.Enabled && c.Socks.ListenScopeOrDefault() == ListenInternet)
 
 	if host == "" {

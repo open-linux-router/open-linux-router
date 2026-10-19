@@ -6,8 +6,7 @@ grids; dialogs only expose configuration actions owned by that direction.
 Hover/focus explains functions and observed state; click exposes the same details
 on touch devices. Unintegrated directions link to external documentation.
 
-Tiles use bundled project artwork from `web/public/access-logos` and the existing
-Shadowsocks mark. Protocols without an established logo use text rather than
+Tiles use bundled project artwork from `web/public/access-logos` and the WireGuard mark. Protocols without an established logo use text rather than
 invented symbols. See the logo directory README for provenance.
 
 ## Connection model
@@ -23,7 +22,6 @@ direction: SOCKS5 appears in both directions with different configuration owners
 | Out | External SOCKS5 | socksout | `/access/socks5` |
 | Out | Tunnel Broker / HE | dial.tunnelbroker | `/access/tunnelbroker` |
 | In | WireGuard | remote.wireguard and remote endpoint | `/access/wireguard` |
-| In | Shadowsocks | remote.shadowsocks and remote endpoint | `/access/shadowsocks` |
 | In | SOCKS5 server | remote SOCKS5 | `/access/socks-server` |
 | In | HTTPS service | ingress | `/access/ingress` |
 | In | Port forwarding | gateway forwards | `/access/forwards` |
@@ -61,6 +59,13 @@ the external proxy. Protocol settings and configuration apply paths remain on
 their respective pages.
 
 ## Validation
+
+Protocol removal: Go 1.27 Linux vet and all tests pass. Node 24 lint (existing
+warnings only), all 29 UI tests, interface-rate checks and production build pass.
+Browser checks verify removed technologies are absent, retained technologies
+and SOCKS5 configuration links remain, bundled logos load and no page overflows
+at 375, 768 and 1440 pixels in light and dark themes. Screenshots are in
+`/tmp/olr-protocol-removal-review`. No live router configuration was changed.
 
 Direction/logo revision: Node 24 lint, production build, all UI tests and Linux
 Go 1.27 vet/tests pass. Browser checks at 375, 768 and 1440 pixels in both themes

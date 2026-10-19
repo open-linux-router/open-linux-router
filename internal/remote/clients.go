@@ -72,7 +72,6 @@ type clientView struct {
 }
 
 type proxyClientsView struct {
-	// Proxy is the object: "shadowsocks" or "socks5".
 	Proxy   string       `json:"proxy"`
 	Port    uint16       `json:"port"`
 	Clients []clientView `json:"clients"`
@@ -156,7 +155,6 @@ func (h HTTP) getClients(w http.ResponseWriter, r *http.Request) {
 		udp  bool
 	}
 	proxies := []proxy{
-		{"shadowsocks", cfg.Shadowsocks.Enabled, cfg.Shadowsocks.PortOrDefault(), cfg.Shadowsocks.UDPEnabled()},
 		{string(ObjectSocks), cfg.Socks.Enabled, cfg.Socks.PortOrDefault(), false},
 	}
 	var flows []Flow

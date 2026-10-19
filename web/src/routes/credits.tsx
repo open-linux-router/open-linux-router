@@ -10,7 +10,6 @@ const backends: Credit[] = [
   { name: 'Unbound', url: 'https://nlnetlabs.nl/projects/unbound/about/', use: 'DNS resolution' },
   { name: 'nftables', url: 'https://netfilter.org/projects/nftables/', use: 'NAT, firewall and DNS enforcement' },
   { name: 'WireGuard', url: 'https://www.wireguard.com/', use: 'VPN access' },
-  { name: 'shadowsocks-rust', url: 'https://github.com/shadowsocks/shadowsocks-rust', use: 'Shadowsocks server' },
   { name: '3proxy', url: 'https://3proxy.org/', use: 'SOCKS5 server' },
   { name: 'Caddy', url: 'https://caddyserver.com/', use: 'HTTPS ingress and certificates' },
   { name: 'mitmproxy', url: 'https://mitmproxy.org/', use: 'Optional request inspection' },

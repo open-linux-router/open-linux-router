@@ -48,7 +48,7 @@ ExecStart=/usr/lib/open-linux-router/3proxy /etc/open-linux-router/rendered/remo
 Restart=on-failure
 RestartSec=5
 
-# on-failure and five seconds, like olr-shadowsocks. It does double duty here:
+# Restart on failure after five seconds. It does double duty here:
 # besides a configuration 3proxy rejects, it covers the tunnel-address race
 # described above.
 

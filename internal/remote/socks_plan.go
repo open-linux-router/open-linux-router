@@ -6,21 +6,6 @@ import (
 	"sort"
 )
 
-// The SOCKS5 proxy's plan.
-//
-// It reuses ss_plan.go's vocabulary — FileChange, ServiceAction, ProxyObserved,
-// ProxyPlan — rather than defining a parallel set, and that is a different
-// decision from the one the module makes about the tunnel. The tunnel is kernel
-// state, so sharing a plan type with it would produce a struct whose every field
-// is empty half the time. These two are both "render a file, drive a unit": the
-// same mechanism, so the same plan shape, discovered rather than invented.
-//
-// What is *not* shared is what makes a change disruptive, because that is about
-// the object rather than the mechanism. Shadowsocks turns on the secret, the
-// cipher and the dialled address. Here the cipher does not exist, and one thing
-// no Shadowsocks change can do appears instead: **moving the listener between
-// the tunnel and the internet**, which changes who can reach the proxy at all.
-
 // BuildSocksPlan renders the desired config and diffs it against what is on
 // disk and running.
 //

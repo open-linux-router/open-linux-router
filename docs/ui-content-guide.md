@@ -231,6 +231,11 @@ addresses and provider errors readable rather than silently truncating them.
 ## Disclosure and hierarchy
 
 Access groups technology tiles under “Add a way out” and “Add a way in”.
+Keep WireGuard, Tailscale, NetBird, ZeroTier, Headscale, Nebula, SSH, HTTP,
+SOCKS5, Gateway and HE Tunnel Broker in the directory. Shadowsocks, Trojan,
+VLESS, VMess, Hysteria, TUIC, OpenVPN and IPsec are outside the product scope.
+Do not label the directory as proof of legal compliance or describe removed
+technologies as a statutory list of prohibited products.
 A technology can appear in both directions; each dialog offers only configuration
 owners for that direction. Remove System default and purpose filters from this
 page. Use app-style icons above names without enclosing cards. Use project logos

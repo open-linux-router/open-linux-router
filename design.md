@@ -513,7 +513,7 @@ Bounded list. Not expected to grow much. The object they all key off is the
 | | `qos` | tc — per-device priority and upload/download limits; see docs/qos.md | |
 | | `gateway` | **the boundary between the networks this box serves and everything else, in both directions**: static + policy routes and exits (`olr_route`), egress NAT and port forwarding (`olr_nat`), byte accounting (`olr_stat`); later bird (BGP/OSPF). Absorbed the deleted `firewall` module (docs/gateway.md §0, docs/port-forwarding.md) | ✅ |
 | | `firewall` | **native nftables rules**: inspect tables/chains/ordered expressions; edit and persist `inet olr_filter`. Automatic default generation remains available until native rules are saved. The old module of this name was NAT only and moved to `gateway` (docs/firewall.md, docs/port-forwarding.md §0) | ✅ |
-| | `remote` | getting back in from outside: **WireGuard and Shadowsocks** built as parallel objects; SOCKS5 planned beside them, never under them (docs/remote-access.md) | ✅ |
+| | `remote` | getting back in from outside: **WireGuard and SOCKS5** built as parallel objects (docs/remote-access.md) | ✅ |
 | | `wifi` | hostapd — only if the box has radios | |
 | **Operational** | `system` | hostname, time, admin users, updates, backup, logs | ✅ |
 

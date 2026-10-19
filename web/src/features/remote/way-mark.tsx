@@ -4,21 +4,7 @@ import type { LucideIcon } from 'lucide-react'
 import { WAY_MARKS, type WayKey } from '@/features/remote/way-marks'
 import { cn } from '@/lib/utils'
 
-/**
- * How a connection arrived: the protocol's mark where we have one, the caller's
- * line glyph where we do not.
- *
- * The fallback is passed in rather than chosen here because the callers are
- * asking different questions. The map asks "who is this and how did they get
- * in", where a key says WireGuard and a globe says somebody else's proxy; the
- * proxy card asks the narrower question already answered by its own title, and
- * wants a plain globe for anything that is not Shadowsocks. One map of
- * fallbacks would have to pick one of those answers for both.
- *
- * The glyph stays inside the caller's quiet tile either way — a mark is flat
- * artwork, and floating one bare beside the device photographs made it look
- * like a sticker. See DeviceIcon for the same treatment applied to OS marks.
- */
+
 export function WayMark({
   way,
   fallback,

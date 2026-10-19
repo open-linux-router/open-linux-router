@@ -198,7 +198,6 @@ export const SECTIONS: Section[] = [
       { slug: 'gateway', label: 'Gateway', blurb: 'Use another gateway or an existing VPN interface.' },
       { slug: 'tunnelbroker', label: 'Tunnel Broker', blurb: '' },
       { slug: 'wireguard', label: 'WireGuard', blurb: '' },
-      { slug: 'shadowsocks', label: 'Shadowsocks', blurb: '' },
       { slug: 'socks-server', label: 'SOCKS5 server', blurb: '' },
       {
         slug: 'socks5',

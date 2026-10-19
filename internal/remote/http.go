@@ -12,29 +12,12 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// The module's REST surface (design.md §3.2 rule 2, §6.2).
-//
-// **Two objects, two surfaces.** `/api/remote/wireguard/…` and
-// `/api/remote/shadowsocks/…` each carry their own config, plan, apply and
-// status, because what sits underneath them has nothing in common: one is
-// kernel state with no daemon, the other is a file and a unit. A single
-// `/config` that applied both would need a plan covering two mechanisms, and a
-// caller changing a cipher would be told about a network interface.
-//
-// What stays at the module level is what is genuinely shared: reading the whole
-// document, the one field that belongs to the box rather than to a protocol,
-// the combined status an overview wants, and clearing what is in the way.
-
 // HTTP serves the module.
 type HTTP struct {
 	// Tunnel owns the read and write paths onto WireGuard.
 	Tunnel TunnelApplier
 
-	// Proxy owns the read and write paths onto Shadowsocks.
-	Proxy ProxyApplier
-
-	// Socks owns the read and write paths onto SOCKS5. Same type as Proxy,
-	// differing only in its Object — see socks_apply.go.
+	// Socks owns the read and write paths onto SOCKS5.
 	Socks ProxyApplier
 
 	// Lock is core's one global apply lock (§3.6). Writes take it; reads never
@@ -117,7 +100,6 @@ func (h HTTP) Routes() []core.Route {
 		},
 	}
 	out = append(out, h.wireguardRoutes()...)
-	out = append(out, h.shadowsocksRoutes()...)
 	out = append(out, h.socksRoutes()...)
 	return out
 }
@@ -174,7 +156,7 @@ func (h HTTP) patchConfig(w http.ResponseWriter, r *http.Request) {
 	if err := dec.Decode(&patch); err != nil {
 		core.WriteError(w, http.StatusBadRequest,
 			"this route changes the shared endpoint only; use /wireguard/config or "+
-				"/shadowsocks/config for the rest: "+err.Error())
+				"/socks5/config for the rest: "+err.Error())
 		return
 	}
 	if patch.Endpoint == nil {
@@ -291,9 +273,8 @@ func classifyEndpoint(previous, next Config) (Impact, []string) {
 			"%s already has a configuration naming %s, and it will stop connecting",
 			core.Plural(len(previous.WireGuard.Peers), "device"), previous.EndpointHost()))
 	}
-	if previous.Shadowsocks.Enabled && previous.Shadowsocks.Password != "" {
-		reasons = append(reasons,
-			"every proxy link already handed out names the old address and has to be replaced")
+	if previous.Socks.Enabled && previous.Socks.Password != "" && previous.Socks.ListenScopeOrDefault() == ListenInternet {
+		reasons = append(reasons, "every SOCKS5 link already handed out names the old address and has to be replaced")
 	}
 	if len(reasons) == 0 {
 		return ImpactNone, nil
@@ -329,7 +310,7 @@ type moduleStatus struct {
 	Blockers []core.Blocker `json:"blockers,omitempty"`
 
 	Tunnel tunnelStatus `json:"tunnel"`
-	Proxy  proxyStatus  `json:"proxy"`
+	Proxy  socksStatus  `json:"proxy"`
 
 	AsOf time.Time `json:"as_of"`
 }
@@ -342,7 +323,7 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tunnel := h.tunnelStatusFor(r, cfg)
-	proxy := h.proxyStatusFor(r, cfg)
+	proxy := h.socksStatusFor(r, cfg)
 
 	core.WriteJSON(w, http.StatusOK, moduleStatus{
 		Endpoint: cfg.Endpoint,
@@ -389,14 +370,6 @@ func (h HTTP) postFixBlockers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Only the tunnel's blocker can be cleared. The proxy's is a download from
-	// a release page, and fetching and executing a binary from the internet is
-	// a different kind of act from running the distribution's package manager —
-	// so its blocker carries the command and no button (ss_binary.go).
-	//
-	// No apply lock: core.FixBlockers says why — an install waits on the dpkg
-	// lock for as long as unattended-upgrades holds it, and §3.6's global lock
-	// is only affordable because everything that takes it is bounded.
 	steps, err := core.FixBlockers(r.Context(), Blockers(), req.IDs)
 	if err != nil {
 		status := http.StatusInternalServerError

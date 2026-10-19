@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
@@ -29,31 +27,15 @@ type ProxyApplier struct {
 	// Unit supervises the backend.
 	Unit core.Unit
 
-	// Locate finds the proxy binary. Nil means the finder for Object.
-	//
-	// Injectable for the reason internal/ingress injects its own: left to the
-	// real thing, every test in this package would pass or fail depending on
-	// whether the build machine happens to have an `ssserver` on its PATH.
 	Locate func() (string, error)
 
 	// Settle is how long apply watches a started backend before believing it.
 	// Zero means DefaultSettle; negative means check once and return.
 	Settle time.Duration
 
-	// Object selects which of the two file-backed proxies this applier drives.
-	// The zero value is Shadowsocks, so a construction that predates the second
-	// object keeps its meaning (socks_apply.go).
 	Object ProxyObject
 }
 
-// DefaultSettle is the post-apply observation window.
-//
-// Not a guess at how long the proxy takes to start: it is how long we watch the
-// unit *after* systemd says the job is done. A configuration the server rejects
-// at runtime looks identical to a healthy start for the first fraction of a
-// second — and the rejection this exists to catch is the cipher/password one
-// (Cipher.KeyLen), which is exactly the failure an operator would otherwise
-// discover from a client that will not connect.
 const DefaultSettle = 1500 * time.Millisecond
 
 const settleInterval = 250 * time.Millisecond
@@ -80,32 +62,12 @@ func (a ProxyApplier) locate() func() (string, error) {
 func (a ProxyApplier) Observe(ctx context.Context) (ProxyObserved, error) {
 	obs := ProxyObserved{Files: map[string][]byte{}}
 
-	root := filepath.Dir(a.Object.kind().Conf(a.Paths))
-	err := filepath.WalkDir(root, func(path string, e fs.DirEntry, err error) error {
-		switch {
-		case os.IsNotExist(err):
-			return nil
-		case err != nil:
-			return err
-		case e.IsDir():
-			return nil
-		case strings.HasPrefix(e.Name(), "."):
-			// core.WriteFileAtomic's temporaries. Skipping them keeps a crashed
-			// apply's leftovers out of the plan.
-			return nil
-		}
-		data, readErr := os.ReadFile(path)
-		if os.IsNotExist(readErr) {
-			return nil
-		}
-		if readErr != nil {
-			return fmt.Errorf("reading %s: %w", path, readErr)
-		}
+	path := a.Object.kind().Conf(a.Paths)
+	data, err := os.ReadFile(path)
+	if err == nil {
 		obs.Files[path] = data
-		return nil
-	})
-	if err != nil && !os.IsNotExist(err) {
-		return ProxyObserved{}, fmt.Errorf("reading %s: %w", root, err)
+	} else if !os.IsNotExist(err) {
+		return ProxyObserved{}, fmt.Errorf("reading %s: %w", path, err)
 	}
 
 	// A missing service manager is reported as "not running" rather than
@@ -340,7 +302,7 @@ func (a ProxyApplier) verifyServing(ctx context.Context) error {
 		case !status.Active:
 			return fmt.Errorf(
 				"%s did not stay running. The server exits rather than serving a configuration "+
-					"it cannot load, so check `olr remote logs shadowsocks`", status.Unit)
+					"it cannot load, so check `olr remote status`", status.Unit)
 		}
 		if !time.Now().Before(deadline) {
 			return nil
@@ -351,26 +313,4 @@ func (a ProxyApplier) verifyServing(ctx context.Context) error {
 		case <-time.After(settleInterval):
 		}
 	}
-}
-
-// ShadowsocksBlockers reports what stands between this object and working.
-//
-// One thing, and it is not a package: olr ships no Shadowsocks server and no
-// distribution carries shadowsocks-rust, so this is the internal/ingress
-// situation rather than the internal/dhcp one — a binary the operator fetches,
-// not a `core.Dependency` with a package name per distribution. Declaring one
-// would produce "install shadowsocks-rust with your package manager", which is
-// advice naming a package that does not exist anywhere.
-func ShadowsocksBlockers() []core.Blocker {
-	if _, err := FindShadowsocks(); err == nil {
-		return nil
-	}
-	return []core.Blocker{{
-		Kind:    core.BlockerMissingDependency,
-		Summary: "No Shadowsocks server is installed on this box.",
-		Detail: "olr does not implement Shadowsocks and does not ship a server. " +
-			"No distribution packages the one this drives, so it is a download rather than " +
-			"an apt line — which also means security updates are yours to apply.",
-		Fix: shadowsocksInstallHint(),
-	}}
 }

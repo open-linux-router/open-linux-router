@@ -89,7 +89,6 @@ export function App() {
           <Route path="access/gateway" element={<GatewayExitsPage />} />
           <Route path="access/tunnelbroker" element={<TunnelBrokerPage />} />
           <Route path="access/wireguard" element={<RemotePage way="wireguard" />} />
-          <Route path="access/shadowsocks" element={<RemotePage way="shadowsocks" />} />
           <Route path="access/socks-server" element={<RemotePage way="socks-server" />} />
           <Route path="access/remote" element={<RemotePage />} />
           <Route path="access/ingress" element={<IngressPage />} />

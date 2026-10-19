@@ -52,7 +52,7 @@ func enabledConfig() Config {
 // what the HTTP surface does before it plans anything.
 func validateAll(c Config, networks NetworkView) Result {
 	r := ValidateWireGuard(c, networks)
-	r.merge(ValidateShadowsocks(c))
+	r.merge(ValidateSocks(c))
 	validateEndpoint(&r, c)
 	return r
 }

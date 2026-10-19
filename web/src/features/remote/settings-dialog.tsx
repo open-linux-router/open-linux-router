@@ -66,7 +66,7 @@ export function SettingsDialog({
         <DialogHeader>
           <DialogTitle>{endpointOnly ? 'Public address' : 'WireGuard settings'}</DialogTitle>
           <DialogDescription>
-            {endpointOnly ? 'Shared by WireGuard and Shadowsocks client configurations.' : 'Every device’s configuration is generated from these.'}
+            {endpointOnly ? 'Shared by WireGuard and SOCKS5 client configurations.' : 'Every device’s configuration is generated from these.'}
           </DialogDescription>
         </DialogHeader>
 

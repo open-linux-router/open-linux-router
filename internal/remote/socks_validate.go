@@ -4,22 +4,6 @@ import (
 	"strings"
 )
 
-// The SOCKS5 proxy's rules. Pure — no files, no network, no root — so the whole
-// set is table-tested and `olr remote` can check a config on a laptop.
-//
-// Two of these carry most of the object's weight, and neither exists for the
-// object beside it:
-//
-//   - **an explicitly selected tunnel listener.** This optional scope must be
-//     checked, because a proxy told to bind an
-//     address that does not exist starts, binds nothing, and reports itself as
-//     running.
-//   - **the escape hatch is an append, not a merge.** 3proxy's configuration is
-//     a script read top to bottom, so a line in raw_3proxy_conf can undo the
-//     authentication olr rendered above it. That is a different risk from the
-//     Shadowsocks hatch, where a bad key produces a server that refuses to start
-//     rather than one that quietly lets everybody in.
-
 // ValidateSocks checks the SOCKS5 proxy's half of a config.
 func ValidateSocks(c Config) Result {
 	var r Result
@@ -98,16 +82,6 @@ func validateSocksPorts(r *Result, c Config) {
 		r.warnf("socks5.listen_port",
 			"%d is a privileged port; the convention is %d and nothing here needs a low one",
 			s.ListenPort, DefaultSocksPort)
-	}
-
-	// Against Shadowsocks, because both take TCP and a collision is a unit that
-	// will not start — reported one layer away from the field that caused it.
-	// Not against WireGuard: that listens on UDP and this on TCP, so sharing a
-	// number is legal and occasionally even deliberate.
-	if s.PortOrDefault() == c.Shadowsocks.PortOrDefault() &&
-		(s.Enabled || c.Shadowsocks.Enabled) {
-		r.errorf("socks5.listen_port",
-			"%d is already Shadowsocks' port, and both listen on TCP", s.PortOrDefault())
 	}
 
 	if s.PublicPort != 0 && s.ListenScopeOrDefault() == ListenTunnel {

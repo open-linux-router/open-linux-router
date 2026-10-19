@@ -10,7 +10,7 @@ import (
 
 // Turning the SOCKS5 proxy's intent into the file 3proxy reads.
 //
-// Shaped like ss_render.go — a 0600 file holding a credential, plus a line a
+// Shaped like proxy_render.go — a 0600 file holding a credential, plus a line a
 // client can import — and it differs in one way worth stating up front: 3proxy's
 // configuration is a line-oriented script rather than a document, so **what is
 // left out matters as much as what is put in**. Three things are deliberately
@@ -30,13 +30,6 @@ import (
 // What is rendered is the smallest configuration that is certainly correct:
 // require authentication, define one account, allow that account, listen.
 
-// SocksUnitName is the systemd unit for the SOCKS5 proxy.
-//
-// `olr-socks5.service`, not `3proxy.service`: the distribution's own unit, if
-// the operator's 3proxy came from a repository that ships one, points at
-// /etc/3proxy/3proxy.cfg and is somebody else's. Same rule internal/ingress
-// applies to Caddy and ss_render.go applies to shadowsocks-rust, and it is the
-// difference between working and not on a box that has done this before.
 const SocksUnitName = "olr-socks5.service"
 
 // udpNotRendered records, in the one place a reader will look for it, why olr
@@ -160,17 +153,6 @@ func socksHeader(c Config) string {
 `, source)
 }
 
-// SocksClientURL renders the `socks5://` line a client imports.
-//
-// The widely accepted form — `socks5://user:password@host:port` — which browsers,
-// proxy switchers and most command-line tools accept directly. Credentials are
-// percent-encoded, because a base64 password can contain `+` and `/` and both
-// change meaning in a URL's userinfo.
-//
-// Like the Shadowsocks link and unlike a WireGuard peer's configuration, this
-// can be produced again whenever it is asked for: there is one credential for
-// every client and olr stores it, so there is nothing that exists for only an
-// instant.
 func SocksClientURL(c Config) (string, error) {
 	s := c.Socks
 	if strings.TrimSpace(s.Password) == "" {

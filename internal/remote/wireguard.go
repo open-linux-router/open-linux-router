@@ -11,19 +11,6 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// The WireGuard object: the one that puts a device *inside* the network.
-//
-// That is the whole difference from the object beside it, and it is what an
-// operator has to understand before choosing between them. A WireGuard peer
-// reaches the NAS, the printer and this router's own UI, because it is a device
-// on a network at home. A Shadowsocks client reaches none of those; it borrows
-// this box's way out and nothing else (shadowsocks.go).
-//
-// Unlike every other backend-driven object in olr, this one has no unit.
-// WireGuard's data path is in the kernel, so what it configures *is* kernel
-// state — which makes it shaped like internal/gateway, applied at olrd startup
-// because a reboot is what kernel state does not survive.
-
 // DefaultInterface is the kernel name of the tunnel olr creates.
 //
 // `wg0` and not `olr-wg0`, which would have matched the naming everywhere else

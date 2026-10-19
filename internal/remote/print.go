@@ -24,7 +24,9 @@ func writeConfigText(w io.Writer, c Config) error {
 		return err
 	}
 	fmt.Fprintln(w)
-	return writeShadowsocksText(w, c)
+	fmt.Fprintf(w, "Proxy (SOCKS5) is %s\n", onOff(c.Socks.Enabled))
+	fmt.Fprintf(w, "  port: %d\n  listen: %s\n", c.Socks.PortOrDefault(), c.Socks.ListenScopeOrDefault())
+	return nil
 }
 
 // writeWireGuardText is the tunnel: the one that puts a device inside the
@@ -50,32 +52,6 @@ func writeWireGuardText(w io.Writer, c Config) error {
 		return err
 	}
 	return writeExtra(w, "WireGuard", g.ExtraConf)
-}
-
-// writeShadowsocksText is the proxy: the one that lends this box's way out and
-// shows the network to nobody.
-//
-// The second line is the whole reason the two are printed differently. An
-// operator scanning this has to be able to tell, without reading a manual,
-// which of the two does what — and "one link for every device" against "one
-// configuration per device" is the difference they will actually run into.
-func writeShadowsocksText(w io.Writer, c Config) error {
-	s := c.Shadowsocks
-	fmt.Fprintf(w, "Proxy (Shadowsocks) is %s — devices borrow this box's way out, and see nothing else\n\n",
-		onOff(s.Enabled))
-
-	t := table(w)
-	fmt.Fprintf(t, "  devices dial\t%s\n", orDash(c.DialAddress(s.DialPort())))
-	fmt.Fprintf(t, "  cipher\t%s\n", s.Cipher.OrDefault())
-	fmt.Fprintf(t, "  carries UDP\t%s\n", yesNo(s.UDPEnabled()))
-	fmt.Fprintf(t, "  password\t%s\n", keyState(s.Password))
-	if err := t.Flush(); err != nil {
-		return err
-	}
-	if s.Password != "" {
-		fmt.Fprintf(w, "\n  One link serves every device: `olr remote show link`\n")
-	}
-	return writeExtra(w, "Shadowsocks", s.ExtraConf)
 }
 
 func writeExtra(w io.Writer, what, extra string) error {
@@ -199,7 +175,15 @@ func writeStatusText(w io.Writer, s moduleStatus) error {
 		return err
 	}
 	fmt.Fprintln(w)
-	return writeProxyStatus(w, s.Proxy)
+	fmt.Fprintf(w, "Proxy (SOCKS5) is %s\n", onOff(s.Proxy.Enabled))
+	fmt.Fprintf(w, "  port: %d\n  listen: %s\n", s.Proxy.Port, s.Proxy.Listen)
+	if s.Proxy.ServiceError != "" {
+		fmt.Fprintf(w, "  service: unknown (%s)\n", s.Proxy.ServiceError)
+	} else if s.Proxy.Service != nil {
+		fmt.Fprintf(w, "  service: %s\n", unitLine(*s.Proxy.Service))
+	}
+	fmt.Fprintf(w, "  config: %s\n", driftLine(s.Proxy.Drifted, s.Proxy.DriftError))
+	return nil
 }
 
 func writeTunnelStatus(w io.Writer, s tunnelStatus) error {
@@ -224,41 +208,6 @@ func writeTunnelStatus(w io.Writer, s tunnelStatus) error {
 	if s.Drifted && s.Drift != nil {
 		fmt.Fprintln(w)
 		return writePlanText(w, *s.Drift, true)
-	}
-	return nil
-}
-
-func writeProxyStatus(w io.Writer, s proxyStatus) error {
-	fmt.Fprintf(w, "Proxy (Shadowsocks) is %s\n", onOff(s.Enabled))
-
-	t := table(w)
-	fmt.Fprintf(t, "  port\tTCP%s/%d\n", map[bool]string{true: " and UDP", false: ""}[s.UDP], s.Port)
-	fmt.Fprintf(t, "  cipher\t%s\n", s.Cipher)
-	switch {
-	case s.BinaryError != "":
-		fmt.Fprintf(t, "  server\tnot installed\n")
-	case s.Binary != "":
-		fmt.Fprintf(t, "  server\t%s\n", s.Binary)
-	}
-	switch {
-	case s.ServiceError != "":
-		fmt.Fprintf(t, "  service\tunknown (%s)\n", s.ServiceError)
-	case s.Service == nil:
-		fmt.Fprintf(t, "  service\tunknown\n")
-	default:
-		fmt.Fprintf(t, "  service\t%s\n", unitLine(*s.Service))
-	}
-	if err := t.Flush(); err != nil {
-		return err
-	}
-
-	if s.BinaryError != "" {
-		fmt.Fprintf(w, "\n%s\n\n", s.BinaryError)
-	}
-	fmt.Fprintf(w, "  config: %s\n", driftLine(s.Drifted, s.DriftError))
-	if s.Drifted && s.Drift != nil {
-		fmt.Fprintln(w)
-		return writeProxyPlanText(w, *s.Drift, true)
 	}
 	return nil
 }

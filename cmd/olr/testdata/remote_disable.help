@@ -1,10 +1,7 @@
-Stop accepting connections over one of the two ways in.
-
-The configuration is kept, including the key or password, so
-turning it back on needs nothing to be re-issued.
+Stop accepting WireGuard connections, keeping the saved key and devices.
 
 Usage:
-  olr remote disable wireguard|shadowsocks [flags]
+  olr remote disable <way> [flags]
 
 Flags:
   -h, --help   help for disable

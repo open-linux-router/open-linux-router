@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Cable, ExternalLink, Globe, LockKeyhole, Network, Route, Server, Shield, Terminal, Waypoints } from 'lucide-react'
+import { ArrowLeftRight, ExternalLink, Globe, LockKeyhole, Network, Route, Server, Terminal, Waypoints } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 
@@ -16,7 +16,7 @@ import { useDialConfig, useTunnelBrokerStatus } from '@/features/dial/queries'
 import { useGatewayConfig, useGatewayStatus } from '@/features/gateway/queries'
 import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
 import { useForwardsStatus } from '@/features/nat/queries'
-import { useRemoteConfig, useRemoteStatus, useShadowsocksStatus, useSocksStatus } from '@/features/remote/queries'
+import { useRemoteConfig, useRemoteStatus, useSocksStatus } from '@/features/remote/queries'
 import { useSocksOutConfig, useSocksOutStatus } from '@/features/socksout/queries'
 import { cn } from '@/lib/utils'
 
@@ -24,8 +24,6 @@ import { cn } from '@/lib/utils'
 const PROTOCOL_ICONS = {
   socks: Waypoints,
   http: Globe,
-  trojan: Shield,
-  tuic: Cable,
   gateway: Route,
   tunnelbroker: Network,
   https: LockKeyhole,
@@ -44,7 +42,6 @@ export function AccessPage() {
   const broker = useTunnelBrokerStatus()
   const remote = useRemoteConfig()
   const wireguard = useRemoteStatus()
-  const shadowsocks = useShadowsocksStatus()
   const socks = useSocksStatus()
   const ingress = useIngressConfig()
   const ingressStatus = useIngressStatus()
@@ -53,9 +50,8 @@ export function AccessPage() {
     gateway: gatewaySummary(gateway, gatewayStatus),
     'socks-out': socksOutSummary(socksOut, socksOutStatus),
     tunnelbroker: tunnelBrokerSummary(dial, broker),
-    wireguard: remoteSummary(remote, wireguard, shadowsocks, socks, 'wireguard'),
-    shadowsocks: remoteSummary(remote, wireguard, shadowsocks, socks, 'shadowsocks'),
-    'socks-in': remoteSummary(remote, wireguard, shadowsocks, socks, 'socks'),
+    wireguard: remoteSummary(remote, wireguard, socks, 'wireguard'),
+    'socks-in': remoteSummary(remote, wireguard, socks, 'socks'),
     https: ingressSummary(ingress, ingressStatus),
     'port-forward': forwardsSummary(gateway, forwards),
   }

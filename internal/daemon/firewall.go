@@ -73,14 +73,6 @@ func (b firewallBoundary) Openings() ([]firewall.Opening, error) {
 		out = append(out, firewall.Opening{For: "remote access (WireGuard)",
 			Protocol: firewall.UDP, Port: rc.WireGuard.PortOrDefault()})
 	}
-	if ss := rc.Shadowsocks; ss.Enabled {
-		out = append(out, firewall.Opening{For: "remote access (Shadowsocks)",
-			Protocol: firewall.TCP, Port: ss.PortOrDefault()})
-		if ss.UDPEnabled() {
-			out = append(out, firewall.Opening{For: "remote access (Shadowsocks)",
-				Protocol: firewall.UDP, Port: ss.PortOrDefault()})
-		}
-	}
 	// Only when it listens on the internet. The tunnel-scoped default binds
 	// the WireGuard address, and the tunnel is inside.
 	if s := rc.Socks; s.Enabled && s.ListenScopeOrDefault() == remote.ListenInternet {

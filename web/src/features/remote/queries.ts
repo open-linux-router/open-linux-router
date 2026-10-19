@@ -2,9 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
 import type {
-  ProxyApplyResult,
   ProxyLink,
-  ProxyStatus,
   RemoteApplyResult,
   RemoteClients,
   RemotePeers,
@@ -115,19 +113,7 @@ export const remoteChange = {
     path: `${base}/wireguard/peers/${seg(name)}`,
     label: `${name} can no longer dial in`,
   }),
-  /**
-   * The tunnel's settings, patched key by key.
-   *
-   * Nested under `wireguard` because the stored document is: Shadowsocks and
-   * SOCKS5 land beside it later, and a flat document would have to move a key
-   * in everybody's backup to make room (docs/remote-access.md §11 #4).
-   *
-   * Note what this cannot accidentally do: a patch that does not mention
-   * `private_key` leaves the stored key alone, and one that sends back the mask
-   * the API handed out means the same thing. So a form can round-trip every
-   * field here without a way to destroy the key by saving a screen it only read
-   * — which would invalidate every configuration ever issued.
-   */
+
   settings: (fields: Record<string, unknown>): RemoteChangeRequest => ({
     method: 'PATCH',
     path: `${base}/wireguard/config`,
@@ -204,83 +190,6 @@ export function useReapplyRemote() {
 // invalidation after any write refreshes both; a change to the endpoint really
 // does affect them both at once.
 
-export function useShadowsocksStatus() {
-  return useQuery({
-    queryKey: [...remoteKeys.status, 'shadowsocks'] as const,
-    queryFn: () => api.get<ProxyStatus>(`${base}/shadowsocks/status`),
-    refetchInterval: OBSERVED_REFETCH_MS,
-  })
-}
-
-export const shadowsocksChange = {
-  /**
-   * The proxy's settings, patched key by key.
-   *
-   * Same safety as the tunnel's: a patch that does not mention `password`
-   * leaves the stored one alone, and sending back the mask the API handed out
-   * means the same thing — so a form can round-trip every field it only read
-   * without re-issuing a credential to everybody.
-   *
-   * The exception is the cipher, and it is the daemon's to enforce rather than
-   * this form's: changing it changes what a password *is*, so olr regenerates
-   * one and the plan comes back disruptive. That is why the confirmation dialog
-   * has to show `password_generated` rather than treating it as detail.
-   */
-  settings: (fields: Record<string, unknown>): RemoteChangeRequest => ({
-    method: 'PATCH',
-    path: `${base}/shadowsocks/config`,
-    body: fields,
-    label: 'Saved',
-  }),
-  enabled: (enabled: boolean): RemoteChangeRequest => ({
-    method: 'PATCH',
-    path: `${base}/shadowsocks/config`,
-    body: { enabled },
-    label: enabled ? 'Shadowsocks is on' : 'Shadowsocks is off',
-  }),
-}
-
-/**
- * Fetch the client link, on purpose and never in the background.
- *
- * A mutation rather than a query, which is not a workaround — it is the point.
- * **The response is the credential.** A query would prefetch it, cache it, and
- * refetch it on window focus, which would put a password in memory and in the
- * devtools network log of anybody who merely opened this page. Asking for it has
- * to be an act.
- *
- * The daemon answers 409 rather than 500 when there is no link to give (no
- * password yet, or no endpoint set): nothing is broken, the configuration is
- * simply not far enough along, and the message says which half is missing.
- */
-export function useShadowsocksLink() {
-  return useMutation({
-    mutationFn: () => api.get<ProxyLink>(`${base}/shadowsocks/link`),
-  })
-}
-
-/**
- * Re-render the proxy's configuration and restart it from stored intent.
- *
- * The repair path, and it has a different job from the tunnel's: a file on disk
- * can be edited by hand or lost, and this is what puts it back. Needs no
- * confirmation, because the intent being re-applied is intent the operator
- * stored earlier.
- */
-export function useReapplyShadowsocks() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: () => api.send<ProxyApplyResult>('POST', `${base}/shadowsocks/apply`, undefined),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['remote'] }),
-  })
-}
-
-// --- SOCKS5 ------------------------------------------------------------------
-//
-// The same shape as Shadowsocks', because internal/remote gives it the same
-// routes and the same write path. The link is a mutation for the same reason:
-// the response is the credential.
 
 export function useSocksStatus() {
   return useQuery({

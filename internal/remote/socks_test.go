@@ -98,9 +98,6 @@ func TestGenerateSocksPasswordIsUsableInAConfigLine(t *testing.T) {
 }
 
 func TestWithGeneratedPasswordKeepsAnExistingOne(t *testing.T) {
-	// Unlike Shadowsocks, nothing about this object's other fields can
-	// invalidate a password — so changing the port or the scope must not
-	// re-issue credentials to everybody.
 	s := Socks5{Password: "already-set"}
 	out, changed, err := s.WithGeneratedPassword()
 	if err != nil {
@@ -175,25 +172,6 @@ func TestValidateSocksTunnelScopeIsSilent(t *testing.T) {
 	// warning nobody reads.
 	if r := ValidateSocks(socksConfig()); len(r.Warnings) != 0 {
 		t.Errorf("the default scope produced warnings: %v", r.Warnings)
-	}
-}
-
-func TestValidateSocksPortCollidesWithShadowsocksOnly(t *testing.T) {
-	c := socksConfig()
-	c.Shadowsocks.Enabled = true
-	c.Shadowsocks.ListenPort = 1080
-	c.Socks.ListenPort = 1080
-
-	if r := ValidateSocks(c); r.OK() {
-		t.Fatal("two TCP listeners on one port were accepted")
-	}
-
-	// The tunnel is UDP, so sharing its number is legal.
-	c = socksConfig()
-	c.WireGuard.ListenPort = 1080
-	c.Socks.ListenPort = 1080
-	if r := ValidateSocks(c); !r.OK() {
-		t.Errorf("TCP and UDP on the same number were refused: %v", r.Errors)
 	}
 }
 
@@ -467,11 +445,6 @@ func TestClassifySocksScopeMoveIsDisruptive(t *testing.T) {
 }
 
 func TestProxyObjectSelectsTheRightBackend(t *testing.T) {
-	// The parameterisation itself: the zero value must still mean Shadowsocks,
-	// or every existing construction silently changes meaning.
-	if got := ObjectShadowsocks.kind().Unit; got != UnitName {
-		t.Errorf("zero ProxyObject drives %q, want %q", got, UnitName)
-	}
 	if got := ObjectSocks.kind().Unit; got != SocksUnitName {
 		t.Errorf("ObjectSocks drives %q, want %q", got, SocksUnitName)
 	}

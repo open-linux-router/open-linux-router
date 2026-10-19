@@ -1,42 +1,3 @@
-// Package remote owns the ways an operator reaches their own network from
-// outside it.
-//
-// # Three objects, not one abstraction
-//
-// design.md §4 reserved the name `vpn` for "wireguard — remote access,
-// site-to-site". This is the remote-access half under a different name, and the
-// rename is argued in docs/remote-access.md §10: two of the three objects this
-// module holds are not VPNs, so the reserved word would describe a third of it
-// and mis-describe the rest.
-//
-// The three are WireGuard, Shadowsocks and SOCKS5, and they share no field —
-// peers and public keys, a port and a cipher, a listen scope and credentials.
-// So they are three concrete objects rather than one abstraction with three
-// backends, and the second one arriving is what settled that the parallelism
-// goes all the way down: **they do not share a plan or an apply either.**
-// WireGuard configures the kernel; Shadowsocks renders a file and drives a
-// unit. Folding those into one plan would produce a type whose every field is
-// empty half the time, describing two mechanisms that never interact.
-//
-// So the surfaces are parallel too — `/api/remote/wireguard/…` and
-// `/api/remote/shadowsocks/…`, each with its own config, plan, apply and status
-// — and the module is a namespace rather than a thing. What the module level
-// still owns is this file: the document, and the one fact that belongs to the
-// box rather than to a protocol.
-//
-// # What is built
-//
-// All three. SOCKS5 arrived last and needed no new argument, which is what
-// docs/remote-access.md §9 predicted when it deferred it: the second object had
-// already settled that the parallelism goes all the way down, so the third only
-// had to follow it.
-//
-// It did add one thing the other two did not need — a listen *scope*. SOCKS5
-// carries no encryption, so where it listens is the difference between a
-// sensible thing to run and an open door. It defaults to listening inside the
-// WireGuard tunnel, which is the one place a plaintext protocol is fine, and
-// composing the two objects that way is cheaper than giving SOCKS5 a crypto
-// layer it was never designed to have.
 package remote
 
 import (
@@ -56,8 +17,7 @@ const ModuleName = "remote"
 // Config is the remote-access module's intent.
 //
 // One shared field and one section per object. The sections are what the stored
-// document has to get right: adding `socks` beside the other two must not move
-// a key anybody's backup contains.
+// document has to get right: WireGuard and SOCKS5 keep separate settings.
 type Config struct {
 	// Endpoint is the public name or address clients dial — the one thing in
 	// this module olr cannot work out for itself, and the one that belongs to
@@ -79,13 +39,8 @@ type Config struct {
 	// WireGuard is the tunnel that puts a device inside the network.
 	WireGuard WireGuard `json:"wireguard"`
 
-	// Shadowsocks is the proxy that lends a device this box's way out, and
-	// gives it no access to the network at all.
-	Shadowsocks Shadowsocks `json:"shadowsocks"`
-
-	// Socks is the plain SOCKS5 proxy: the same lending of a way out, with no
-	// encryption of its own and therefore a default that keeps it inside the
-	// tunnel (socks.go).
+	// Socks is the authenticated plaintext SOCKS5 proxy. Its listen scope
+	// controls whether it is reachable on all interfaces or only inside WireGuard.
 	Socks Socks5 `json:"socks5"`
 }
 
@@ -141,7 +96,6 @@ func portOr(public, listen uint16) uint16 {
 func (c *Config) Normalize() {
 	c.Endpoint = strings.TrimSpace(c.Endpoint)
 	c.WireGuard.Normalize()
-	c.Shadowsocks.Normalize()
 	c.Socks.Normalize()
 }
 
@@ -150,31 +104,14 @@ func (c *Config) Normalize() {
 func (c Config) Clone() Config {
 	out := c
 	out.WireGuard = c.WireGuard.Clone()
-	out.Shadowsocks = c.Shadowsocks.Clone()
 	out.Socks = c.Socks.Clone()
 	return out
 }
 
-// Redacted returns a copy safe to print, log, or return over the API.
-//
-// Applied by every surface rather than by the ones that looked risky, because
-// the failure mode is silent: nothing breaks when a credential is printed, it
-// just ends up in a scrollback buffer and then in a bug report.
-//
-// Both objects hold one and they are not the same kind of secret. WireGuard's
-// is a key an operator never sees and never needs. Shadowsocks' password *is*
-// half of what a client has to be told — so it is redacted here like everything
-// else, and handed over deliberately by the one route that exists to hand it
-// over (ss_http.go). Redacting it and then having no way to see it would make
-// the feature unusable; not redacting it would put it in every `olr remote
-// show`.
 func (c Config) Redacted() Config {
 	out := c.Clone()
 	if out.WireGuard.PrivateKey != "" {
 		out.WireGuard.PrivateKey = RedactedSecret
-	}
-	if out.Shadowsocks.Password != "" {
-		out.Shadowsocks.Password = RedactedSecret
 	}
 	if out.Socks.Password != "" {
 		out.Socks.Password = RedactedSecret
@@ -184,7 +121,7 @@ func (c Config) Redacted() Config {
 
 // Empty reports whether the module has been configured at all.
 func (c Config) Empty() bool {
-	return c.Endpoint == "" && c.WireGuard.Empty() && c.Shadowsocks.Empty() && c.Socks.Empty()
+	return c.Endpoint == "" && c.WireGuard.Empty() && c.Socks.Empty()
 }
 
 // MarshalConfig encodes a config for the store, normalising first so that two
@@ -230,13 +167,6 @@ func FromDocument(d core.Document) (Config, error) {
 	return c, nil
 }
 
-// Store is the read and write path onto the module's document, shared by both
-// objects' appliers.
-//
-// Embedded rather than passed, so that `WireGuardApplier` and
-// `ShadowsocksApplier` load the same document through the same code and cannot
-// drift about what "stored intent" means — while staying two types, because
-// what they do with it afterwards has nothing in common.
 type Store struct {
 	// Store is core's configuration document.
 	Store *core.Store

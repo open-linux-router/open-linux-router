@@ -141,24 +141,8 @@ func TestEveryRouteHasASummary(t *testing.T) {
 // rule saying every read *must* be published fails loudly instead, and an
 // intentional exception has to be argued for here.
 func TestEveryReadRouteIsPublishedAsATool(t *testing.T) {
-	// The one argued exception, and it is argued rather than assumed.
-	//
-	// `GET /api/remote/shadowsocks/link` returns the ss:// line a client
-	// imports, and that line *contains the proxy password* — it is the one read
-	// in olr whose response is a credential rather than a description of one.
-	// Every other read redacts. Publishing this as a tool would put the
-	// password in a transcript the first time somebody asked a model how remote
-	// access is set up on this box, which is a disclosure nothing about the
-	// question invited.
-	//
-	// A human reaches it through `olr remote show link`, which is something
-	// they chose to type. The route is still listed by `olr routes`, so it is
-	// discoverable — it is only absent from the surface that gets called
-	// without a person reading the result first.
 	exceptions := map[string]bool{
-		"remote GET /shadowsocks/link": true,
-		// The same argument, for the same reason, about the third object: the
-		// socks5:// line carries the username and password.
+		// The socks5:// link carries credentials and must not enter tool transcripts.
 		"remote GET /socks5/link": true,
 		// Image bytes are for the browser, not a JSON tool response. The
 		// structured service list remains available to agents.
