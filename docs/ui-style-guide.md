@@ -83,7 +83,10 @@ each edge, with logarithmic widths normalized separately for each side and a
 with their units on one line. Reserve separate label space so small traffic
 categories remain readable.
 
-Access has two app-launcher grids headed “Add a way out” and “Add a way in”.
+Access has three app-launcher grids headed “Networking”, “Add a way out” and
+“Add a way in”, in that order. Networking contains WireGuard, Tailscale, NetBird,
+ZeroTier, Headscale and Nebula, shown once rather than repeated
+in the directional groups. Keep their existing configuration actions available.
 Do not show System default or purpose filters. Each tile shows a locally bundled
 project logo above a short name, without an enclosing card, border, shadow or
 corner arrow. Preserve brand colors on a white 64px rounded icon backing in

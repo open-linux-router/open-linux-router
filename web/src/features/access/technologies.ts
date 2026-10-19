@@ -5,20 +5,21 @@ export interface AccessTechnology {
   id: string
   name: string
   description: string
-  directions: ('in' | 'out')[]
+  directions: ('network' | 'in' | 'out')[]
   connections: AccessKind[]
   website?: string
 }
 
-// A technology can appear in both direction groups. Only real OLR configuration
-// owners belong in connections; documentation is not integrated support.
+// Networking technologies appear once, before the directional groups.
+// Only real OLR configuration owners belong in connections; documentation is
+// not integrated support.
 export const ACCESS_TECHNOLOGIES: AccessTechnology[] = [
-  { id: 'wireguard', name: 'WireGuard', description: 'Encrypted tunnels for remote access, site links and internet exits. OLR currently configures incoming device connections.', directions: ['out', 'in'], connections: ['wireguard'], website: 'https://www.wireguard.com/' },
-  { id: 'tailscale', name: 'Tailscale', description: 'Managed WireGuard networking with remote access, subnet routes and exit nodes.', directions: ['out', 'in'], connections: [], website: 'https://tailscale.com/' },
-  { id: 'netbird', name: 'NetBird', description: 'WireGuard networking with managed access, network routes and exit nodes; hosted or self-hosted.', directions: ['out', 'in'], connections: [], website: 'https://netbird.io/' },
-  { id: 'zerotier', name: 'ZeroTier', description: 'Virtual networks connecting devices and sites, with managed routes to other networks.', directions: ['out', 'in'], connections: [], website: 'https://www.zerotier.com/' },
-  { id: 'headscale', name: 'Headscale', description: 'A self-hosted control server for Tailscale clients, including subnet routes and exit nodes.', directions: ['out', 'in'], connections: [], website: 'https://headscale.net/' },
-  { id: 'nebula', name: 'Nebula', description: 'Certificate-based overlay networking for connecting devices and sites.', directions: ['out', 'in'], connections: [], website: 'https://nebula.defined.net/' },
+  { id: 'wireguard', name: 'WireGuard', description: 'Encrypted tunnels for remote access, site links and internet exits. OLR currently configures incoming device connections.', directions: ['network'], connections: ['wireguard'], website: 'https://www.wireguard.com/' },
+  { id: 'tailscale', name: 'Tailscale', description: 'Managed WireGuard networking with remote access, subnet routes and exit nodes.', directions: ['network'], connections: [], website: 'https://tailscale.com/' },
+  { id: 'netbird', name: 'NetBird', description: 'WireGuard networking with managed access, network routes and exit nodes; hosted or self-hosted.', directions: ['network'], connections: [], website: 'https://netbird.io/' },
+  { id: 'zerotier', name: 'ZeroTier', description: 'Virtual networks connecting devices and sites, with managed routes to other networks.', directions: ['network'], connections: [], website: 'https://www.zerotier.com/' },
+  { id: 'headscale', name: 'Headscale', description: 'A self-hosted control server for Tailscale clients, including subnet routes and exit nodes.', directions: ['network'], connections: [], website: 'https://headscale.net/' },
+  { id: 'nebula', name: 'Nebula', description: 'Certificate-based overlay networking for connecting devices and sites.', directions: ['network'], connections: [], website: 'https://nebula.defined.net/' },
   { id: 'frp', name: 'frp', description: 'Publish web and TCP/UDP services through a remote server, including private service access with visitor clients.', directions: ['in'], connections: [], website: 'https://gofrp.org/' },
   { id: 'cloudflare', name: 'Cloudflare', description: 'Cloudflare Tunnel publishes services through outbound tunnels; Access can restrict who reaches them.', directions: ['in'], connections: [], website: 'https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/' },
   { id: 'rathole', name: 'rathole', description: 'Expose selected TCP/UDP services through a server using a reverse tunnel.', directions: ['in'], connections: [], website: 'https://github.com/rathole-org/rathole' },

@@ -57,12 +57,12 @@ export function AccessPage() {
   }
   return (
     <div className="space-y-8">
-      {(['out', 'in'] as const).map(direction => (
+      {(['network', 'out', 'in'] as const).map(direction => (
       <section key={direction} className="space-y-4" aria-labelledby={`access-${direction}`}>
-        <h2 id={`access-${direction}`} className="text-2xl leading-8 font-semibold">Add a way {direction}</h2>
+        <h2 id={`access-${direction}`} className="text-2xl leading-8 font-semibold">{direction === 'network' ? 'Networking' : `Add a way ${direction}`}</h2>
         <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8">
           {ACCESS_TECHNOLOGIES.filter(entry => entry.directions.includes(direction)).map(entry => {
-            const directional = { ...entry, connections: entry.connections.filter(kind => ACCESS_DEFINITIONS.find(definition => definition.kind === kind)?.direction === direction) }
+            const directional = { ...entry, connections: entry.connections.filter(kind => direction === 'network' || ACCESS_DEFINITIONS.find(definition => definition.kind === kind)?.direction === direction) }
             return <TechnologyTile key={entry.id} entry={directional} onSelect={() => setSelected(directional)} summaries={summaries} />
           })}
         </div>
