@@ -90,7 +90,6 @@ export function App() {
           <Route path="access/tunnelbroker" element={<TunnelBrokerPage />} />
           <Route path="access/wireguard" element={<RemotePage way="wireguard" />} />
           <Route path="access/socks-server" element={<RemotePage way="socks-server" />} />
-          <Route path="access/remote" element={<RemotePage />} />
           <Route path="access/ingress" element={<IngressPage />} />
           <Route path="access/forwards" element={<ForwardsPage />} />
           <Route path="access/filtering" element={<FilteringPage />} />
@@ -106,7 +105,7 @@ export function App() {
             <Route path="forwards" element={<AccessRedirect slug="forwards" />} />
             <Route path="filtering" element={<AccessRedirect slug="filtering" />} />
             <Route path="ddns" element={<DdnsPage />} />
-            <Route path="remote" element={<AccessRedirect slug="remote" />} />
+            <Route path="remote" element={<AccessRedirect slug="wireguard" />} />
             <Route path="ingress" element={<AccessRedirect slug="ingress" />} />
             <Route path="iptv" element={<IptvPage />} />
           </Route>
@@ -123,7 +122,8 @@ export function App() {
           <Route path="firewall/unmanaged" element={<AccessRedirect slug="filtering" />} />
           <Route path="gateway/forwards" element={<AccessRedirect slug="forwards" />} />
           <Route path="gateway/filtering" element={<AccessRedirect slug="filtering" />} />
-          <Route path="remote" element={<AccessRedirect slug="remote" />} />
+          <Route path="remote" element={<AccessRedirect slug="wireguard" />} />
+          <Route path="access/remote" element={<AccessRedirect slug="wireguard" />} />
           <Route path="ingress" element={<AccessRedirect slug="ingress" />} />
           <Route path="devices" element={<Navigate to="/" replace />} />
           <Route path="dhcp/interfaces" element={<Navigate to="/gateway#interfaces" replace />} />

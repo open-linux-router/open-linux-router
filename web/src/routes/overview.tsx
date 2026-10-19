@@ -155,7 +155,7 @@ export function OverviewPage() {
           pending={devices.isPending}
           density="auto"
           onSelect={(device) => navigate(`/devices/${device.mac}`)}
-          onOpenDialIn={() => navigate('/access/remote')}
+          onOpenDialIn={() => navigate('/access/wireguard')}
           onCreateGroup={groupActions.create}
           onRenameGroup={groupActions.rename}
           onDeleteGroup={groupActions.remove}

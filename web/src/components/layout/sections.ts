@@ -205,11 +205,6 @@ export const SECTIONS: Section[] = [
         blurb: '',
       },
       {
-        slug: 'remote',
-        label: 'Remote access',
-        blurb: '',
-      },
-      {
         slug: 'ingress',
         label: 'Publish web services',
         blurb: 'Published services still need their own access controls.',

@@ -47,9 +47,10 @@ workflows. The directory references each technology once, with separate actions
 where it has multiple configuration owners.
 
 Former Gateway URLs and Advanced addresses redirect while preserving query
-parameters and fragments. `/access/remote` retains its combined view for existing
-bookmarks and shared endpoint settings. Directory dialogs link to individual
-views of the same configuration, with independent status summaries.
+parameters and fragments. There is no combined remote access page: the old
+`/access/remote` address redirects to `/access/wireguard`, and WireGuard and
+SOCKS5 each keep their own view. Directory dialogs link to individual views of
+the same configuration, with independent status summaries.
 
 The landing page reads existing configuration and status endpoints. It never
 applies network changes. A failed observation is shown as unavailable rather than

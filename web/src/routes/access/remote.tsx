@@ -43,8 +43,8 @@ import { useRemoteApply } from '@/features/remote/use-apply'
 import { WayMark } from '@/features/remote/way-mark'
 import type { ProxyPlan, RemotePeer, RemoteStatus } from '@/lib/api-types'
 
-export function RemotePage({ way }: { way?: 'wireguard' | 'socks-server' }) {
-  const slug = way ?? 'remote'
+export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
+  const slug = way
   const config = useRemoteConfig()
   const status = useRemoteStatus()
   const socks = useSocksStatus()
@@ -73,8 +73,8 @@ export function RemotePage({ way }: { way?: 'wireguard' | 'socks-server' }) {
 
   return (
     <SubPage section="/access" slug={slug}>
-      {way && selectedStatus.isError && <Alert variant="destructive"><AlertTriangle /><AlertTitle>Status unavailable</AlertTitle><AlertDescription>{selectedStatus.error?.message}</AlertDescription></Alert>}
-      {way && selectedStatus.isPending && <p className="text-sm text-muted-foreground">Loading status…</p>}
+      {selectedStatus.isError && <Alert variant="destructive"><AlertTriangle /><AlertTitle>Status unavailable</AlertTitle><AlertDescription>{selectedStatus.error?.message}</AlertDescription></Alert>}
+      {selectedStatus.isPending && <p className="text-sm text-muted-foreground">Loading status…</p>}
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />
@@ -101,7 +101,7 @@ export function RemotePage({ way }: { way?: 'wireguard' | 'socks-server' }) {
         </Alert>
       )}
 
-      {(!way || way === 'wireguard') && <>
+      {way === 'wireguard' && <>
       {/* Ordered by what has to be true first. Without wireguard-tools nothing
           below it can work, so the blocker comes before the switch that would
           fail against it. */}
@@ -177,7 +177,7 @@ export function RemotePage({ way }: { way?: 'wireguard' | 'socks-server' }) {
       </Card>
 
       </>}
-      {(!way || (way === 'socks-server' && !socks.isPending && !socks.isError)) && <SocksCard status={socks.data} applier={applier} />}
+      {way === 'socks-server' && !socks.isPending && !socks.isError && <SocksCard status={socks.data} applier={applier} />}
 
       <PeerDialog
         open={adding}

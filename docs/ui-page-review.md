@@ -21,7 +21,7 @@ OLR capabilities, and a calm, consistent interface. This record accompanies the
 | Firewall | One vertical Sankey with three visual rows: external semantic categories above one virtual OLR / Firewall node, trusted/LAN and router-local categories below. Both sides arrive at OLR; outer nodes state source and Allowed/Blocked decision. Use one actual packet scale and only nonzero categories. Matching conditions include source, destination, packets and bytes. Wrap labels and adapt chart width; overflowing charts scroll from the leading edge with a visible hint. Preserve switch and warnings; native, disabled, unverified and unavailable counters do not claim automatic traffic measurements. Editing lives at `/firewall/rules`. |
 | Access | Remove duplicate hero introduction; keep the established directional groups and capability links. |
 | SOCKS5 outbound | Keep status, authentication and address fields; concise support scope and routing next step. |
-| Remote access | Keep separate status/settings/peer cards; remove duplicate WireGuard labels and onboarding prose; retain exposure and password information. |
+| WireGuard and SOCKS5 server | Keep separate status/settings/peer cards per view; remove duplicate WireGuard labels and onboarding prose; retain exposure and password information. |
 | HTTPS ingress | Preserve certificate details and all service domains/targets; show configuration counts accurately; keep service-authentication warning. |
 | Port forwards | Keep shared routing switch and counters; distinguish unknown rules from inactive rules; configuration counts do not promise public reachability. |
 | External filtering | Distinguish loading/error/unknown/empty; retain policy and counters without claiming end-to-end connectivity. |
