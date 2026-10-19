@@ -10,6 +10,7 @@ import { Links } from '@/features/topology/links'
 import { buildTree } from '@/features/topology/model'
 import {
   DeviceNode,
+  DialInNode,
   GroupNode,
   NextHopNode,
   MoreNode,
@@ -19,14 +20,22 @@ import {
   type MapActions,
   type NetworkInfo,
 } from '@/features/topology/nodes'
+import type { DialIn } from '@/features/topology/dial-in'
 import type { Outside } from '@/features/topology/outside'
 import { magnitude, type TrafficView } from '@/features/topology/traffic'
 import type { AssignmentStatus, DeviceRow, ExitStatus, NetworkRow } from '@/lib/api-types'
 import type { DevicesGroup, Pool, Service } from '@/lib/config-types'
 
 /**
- * The network, drawn top-down: observed default next hops, this router, then
+ * The network, drawn top-down: what is outside this router, the router, then
  * the operator's groups as lists of devices and nested groups.
+ *
+ * What is outside is the ways out observed in the kernel and the devices that
+ * dialed in over WireGuard — the two kinds of box that are not on a network
+ * this router serves and connect to it directly. A peer is there rather than
+ * under the router because everything under the router hangs off a group, and a
+ * card of its own down there would put every group's line through it
+ * (docs/remote-access.md §3.4).
  *
  * It is organised by *group*, not by network. A network is how a device is
  * attached; a group is what the operator thinks it is for ("Serving",
@@ -63,6 +72,7 @@ export function NetworkMap({
   assignments,
   exits,
   outside,
+  dialIn,
   pools,
   pending,
   filter = '',
@@ -80,6 +90,8 @@ export function NetworkMap({
   exits?: ExitStatus[]
   /** Default-route next hops observed in the kernel. */
   outside?: Outside
+  /** Devices dialed in over WireGuard, when the tunnel has any. */
+  dialIn?: DialIn
   pools?: Pool[]
   pending: boolean
   filter?: string
@@ -125,6 +137,7 @@ export function NetworkMap({
       traffic={traffic}
       networks={networks}
       outside={outside}
+      dialIn={dialIn}
       filter={filter}
       network={network}
       density={density}
@@ -158,6 +171,7 @@ function Canvas({
   traffic,
   networks,
   outside,
+  dialIn,
   filter,
   network,
   density: wanted,
@@ -171,6 +185,7 @@ function Canvas({
   traffic: TrafficView
   networks: NetworkInfo[]
   outside?: Outside
+  dialIn?: DialIn
   filter: string
   network: string
   density: Density | 'auto'
@@ -274,6 +289,12 @@ function Canvas({
     () => ({ hops: outside?.hops.map((h) => ({ key: h.key, down: h.down })) ?? [] }),
     [outside],
   )
+  // Keys only: whether a peer is connected changes on every poll, and the map
+  // should move when the set of peers changes rather than when one wakes up.
+  const dialInInput = useMemo(
+    () => (dialIn ? { peers: dialIn.peers.map((p) => ({ key: p.key })) } : undefined),
+    [dialIn],
+  )
 
   const [geo, density] = useMemo((): [Layout | null, Density] => {
     if (width === 0) return [null, wanted === 'auto' ? 'detail' : wanted]
@@ -288,6 +309,7 @@ function Canvas({
         counting: traffic.counting,
         rated: traffic.rated,
         outside: outsideInput,
+        dialIn: dialInInput,
         serviceDevices: new Set(services.keys()),
       })
     if (wanted !== 'auto') return [at(wanted), wanted]
@@ -300,7 +322,7 @@ function Canvas({
     const whole = at('detail', undefined)
     const d: Density = !whole.narrow && !focus && (whole.fits || expanded.size > 0) ? 'detail' : 'compact'
     return [d === 'detail' ? whole : at(d), d]
-  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated, outsideInput, services])
+  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated, outsideInput, dialInInput, services])
 
   useEffect(() => {
     onDensity?.(density)
@@ -375,6 +397,12 @@ function Canvas({
       case 'hop': {
         const hop = outside?.hops.find((h) => `o:${h.key}` === item.key)
         return hop ? <NextHopNode hop={hop} onSelect={actions.onSelect} /> : null
+      }
+      case 'dialin': {
+        const peer = dialIn?.peers.find((p) => `p:${p.key}` === item.key)
+        return peer && dialIn
+          ? <DialInNode peer={peer} iface={dialIn.interface} onOpen={actions.onOpenDialIn} />
+          : null
       }
 
     }

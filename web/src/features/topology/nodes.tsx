@@ -7,6 +7,7 @@ import {
   FolderPlus,
   Layers,
   MoreHorizontal,
+  Network,
   Pencil,
   Plus,
   Router,
@@ -33,7 +34,9 @@ import {
 import { DeviceIcon } from '@/features/devices/device-icon'
 import type { GroupDeletion } from '@/features/devices/group-actions'
 import { groupOptions, MAX_GROUP_DEPTH, parentChoices } from '@/features/devices/group-tree'
+import { WayMark } from '@/features/remote/way-mark'
 
+import type { DialInPeer } from '@/features/topology/dial-in'
 import type { Density, GroupVariant, Hidden } from '@/features/topology/layout'
 import type { MapGroup } from '@/features/topology/model'
 import type { Outside } from '@/features/topology/outside'
@@ -49,6 +52,8 @@ import { cn, formatAgo, formatBytes, formatRate, formatRateCompact } from '@/lib
  */
 export interface MapActions {
   onSelect?: (device: DeviceRow) => void
+  /** Open the tunnel's own page, which is the only one that can change a peer. */
+  onOpenDialIn?: () => void
   onCreateGroup?: (parent?: string) => void
   onRenameGroup?: (name: string) => void
   onDeleteGroup?: (deletion: GroupDeletion) => void
@@ -130,6 +135,84 @@ function NetworkChip({ network: n }: { network: NetworkInfo }) {
       {n.exit || 'direct'}
     </span>
   )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Devices dialed in over WireGuard                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A device that reached this router over the tunnel.
+ *
+ * A peer of the router, not a client of one of its networks: there is no MAC to
+ * hang a device row on (docs/remote-access.md §3.3), so the card is the whole
+ * of what the map says about it, and it says what a tunnel knows — the address
+ * it was given, whether it is connected, and, on hover, where it dialed from.
+ *
+ * Dashed, like every other thing on this map that the operator did not make.
+ * The mark is the WireGuard knot with its colour dropped: the map spends colour
+ * on faults alone, and a red logo would read as one.
+ */
+export function DialInNode({ peer, iface, onOpen }: { peer: DialInPeer; iface: string; onOpen?: () => void }) {
+  const label = dialInLabel(peer)
+  const where = peer.endpoint ? `, last heard from ${peer.endpoint}` : ''
+  const moved = peer.rxBytes || peer.txBytes
+    ? `, ↓ ${formatBytes(peer.rxBytes)} ↑ ${formatBytes(peer.txBytes)} since it connected`
+    : ''
+  const title = `${peer.name} over ${iface}${peer.address ? ` at ${peer.address}` : ''}: ${label}${where}${moved}`
+  return (
+    <Shell
+      onClick={onOpen}
+      title={title}
+      className={cn(
+        'flex size-full min-w-0 items-center gap-3 rounded-2xl border border-dashed bg-card pr-4 pl-2.5 text-left shadow-xs',
+        onOpen && 'interactive-surface',
+        focusRing,
+      )}
+    >
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+        <WayMark way="wireguard" fallback={Network} className="size-4 brightness-0 opacity-75 dark:invert" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className={cn('truncate text-sm font-semibold', (peer.state === 'away' || peer.state === 'never') && 'text-muted-foreground')}>
+            {peer.name}
+          </span>
+          <span
+            aria-label={peer.state}
+            className={cn('size-1.5 shrink-0 rounded-full',
+              peer.state === 'connected' ? 'bg-success' : 'bg-muted-foreground/30')}
+          />
+        </span>
+        <span className="flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
+          {/* The state has the width; the address gives way, and is on hover in
+              full either way. "Never connected" truncated to "Never conne…" is
+              the one word on the card an operator has to act on. */}
+          {peer.address && <span className="min-w-0 truncate font-mono">{peer.address}</span>}
+          {peer.address && <span aria-hidden className="shrink-0">·</span>}
+          <span className="shrink-0">{label}</span>
+        </span>
+      </span>
+    </Shell>
+  )
+}
+
+/**
+ * Four states in four words.
+ *
+ * "Never connected" is not a synonym for "offline": it is the answer to a setup
+ * question — was the configuration imported, is the port reachable — and it is
+ * the one state the operator can still fix (`PeerBadge` on the tunnel's page
+ * draws the same distinction). "Status unavailable" exists so that a kernel
+ * that could not be read is not reported as a device that never called.
+ */
+function dialInLabel(peer: DialInPeer): string {
+  switch (peer.state) {
+    case 'connected': return 'Connected'
+    case 'away': return peer.lastHandshake ? formatAgo(peer.lastHandshake) : 'Away'
+    case 'never': return 'Never connected'
+    case 'unknown': return 'Status unavailable'
+  }
 }
 
 /* -------------------------------------------------------------------------- */

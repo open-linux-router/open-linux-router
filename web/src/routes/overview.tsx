@@ -25,6 +25,8 @@ import 'flag-icons/css/flag-icons.min.css'
 import thesvgSlugs from '@/features/gateway/thesvg-slugs.json'
 import { useGatewayConfig, useGatewayLatency, useSaveLatencySites, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
+import { useRemoteStatus } from '@/features/remote/queries'
+import { buildDialIn } from '@/features/topology/dial-in'
 import { NetworkMap } from '@/features/topology/network-map'
 import { buildOutside } from '@/features/topology/outside'
 import { useTrafficView, type TrafficView } from '@/features/topology/traffic'
@@ -44,7 +46,9 @@ import { cn, formatBytes, formatRate } from '@/lib/utils'
  * this network doing, and what is on it. The answer to the first is the
  * first card; faults follow the cards in full. Then the map, which is both the
  * only place three modules' answers are joined into one picture and the only
- * place devices are listed.
+ * place devices are listed — including the ones that dialed in over the
+ * tunnel, which are on no network this box serves and are drawn as what they
+ * are rather than as device rows (docs/remote-access.md §3.3).
  *
  * The map has no toolbar. A search box, a network filter, a density switch and
  * a New group button sat between the counters and the picture on every visit,
@@ -83,6 +87,11 @@ export function OverviewPage() {
   const publicAddresses = usePublicAddresses()
   const dial = useDialStatus()
   const outside = useMemo(() => buildOutside(dial.data, devices.data?.devices), [dial.data, devices.data])
+  // The tunnel's own list, not a second reading of the kernel: a peer is not a
+  // device and does not belong in `devices` (docs/remote-access.md §3.3), so the
+  // map takes it from the module that owns it.
+  const remote = useRemoteStatus()
+  const dialIn = useMemo(() => buildDialIn(remote.data), [remote.data])
   const navigate = useNavigate()
   const groupActions = useGroupActions()
 
@@ -92,7 +101,10 @@ export function OverviewPage() {
   // box where nothing is switched on — there are no faults because nothing is
   // running, which is what the first-run panel is there to say.
   const known = Boolean(dhcp.data && dns.data && gateway.data)
-  const idle = known && !dhcp.data!.enabled && !dns.data!.enabled && !gateway.data!.enabled
+  // A box whose only job is letting devices in is doing something, even though
+  // it hands out no addresses, answers no names and routes nothing: the tunnel
+  // is the point, and its devices are on the map below.
+  const idle = known && !dhcp.data!.enabled && !dns.data!.enabled && !gateway.data!.enabled && !remote.data?.enabled
 
   return (
     <div className="space-y-6">
@@ -138,10 +150,12 @@ export function OverviewPage() {
           assignments={gateway.data?.assignments}
           exits={gateway.data?.exits}
           outside={outside}
+          dialIn={dialIn}
           pools={dhcpConfig.data?.pools}
           pending={devices.isPending}
           density="auto"
           onSelect={(device) => navigate(`/devices/${device.mac}`)}
+          onOpenDialIn={() => navigate('/access/remote')}
           onCreateGroup={groupActions.create}
           onRenameGroup={groupActions.rename}
           onDeleteGroup={groupActions.remove}

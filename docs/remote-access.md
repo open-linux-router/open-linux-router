@@ -63,6 +63,7 @@ overstates its own payoff is worse than a smaller true one.
 | `gateway`'s `Internet via` | **nothing — it already works** | assignments are keyed by kernel interface (`internal/gateway/config.go`), so `olr gateway set via wg0 <exit>` sends a peer's traffic out a chosen exit today. gateway:§2.5 will re-key these to network names eventually; until it does, the absence of a network is not felt |
 | `dns` answering `phone.home.example.com` | **one command, the same one every other device costs** | `olr dns add host phone --address 10.6.0.2` |
 | a peer appearing in `devices` | **blocked, and not on this module** | §3.3 |
+| a peer appearing on the overview's network map | **its own box above the router, keyed by name** | §3.4 |
 
 The second row is the one that looked like a gap and is not. A local name in
 `dns` is *stored intent*, never derived from another module's addresses:
@@ -158,6 +159,43 @@ every client configuration they have already handed out.
 That second consequence is why changing the subnet is classified `disruptive`
 (§7.4) even though nothing is disconnected at the instant it is applied. The
 damage is to files that already left the box.
+
+---
+
+### 3.4 On the map, as a box of their own
+
+§3.3 leaves a peer nowhere in `devices`, and a network map with nothing on it
+for a phone that is connected right now is a map that is wrong about the
+router's own state. So the overview draws each peer itself, and this section is
+the two decisions that took.
+
+**Above the router, beside the ways out.** Everything under the router hangs
+off something — a group by its column, a device by its row — and a card of its
+own down there would need every group's line to run through it or squeeze past
+it. Above the router there is exactly one box per line, each joining the router
+directly, which is what a peer is: a device on the far side of this box. The
+band therefore holds both kinds of thing that are outside it — where traffic
+leaves (observed next hops) and where it arrives (peers) — and the two are told
+apart by their cards, not by their position. Gateway policy exits stay off the
+map entirely: an exit this box chooses among is not a thing outside it.
+
+**Four states, not two.** `connected` (a handshake inside
+`internal/remote/view.go`'s three-minute window), `away` (last seen at a time),
+`never` (no handshake ever — almost always a configuration that was not
+imported, or a port that does not reach the box), and `unknown` (the kernel
+could not be read, which is an absence of an answer and never a "no"). They are
+the same four `PeerBadge` draws on the tunnel's own page, for the same reason:
+"never connected" is the one state the operator can still fix, and folding it
+into "offline" hides the only failure this module reliably produces.
+
+A peer is not a fault. The one colour the map spends is red, on a way out that
+has stopped answering; a sleeping laptop is not that, so its card is drawn in
+the same neutral as everything else and says when it last called.
+
+`RemoteStatus.peers` is the only input. A box with the tunnel switched off gets
+no box, no empty container and no "WireGuard is off" note — the map is about
+what is on the network, and `remote`'s page is where a module that is off is
+described.
 
 ---
 

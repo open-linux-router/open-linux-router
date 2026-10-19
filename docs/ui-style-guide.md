@@ -342,6 +342,16 @@ on leaving. Rates and counters keep their normal live refresh; do not smooth the
 New devices appear after existing rows until the next reorder; removed devices
 disappear immediately. Groups retain their name order.
 
+The band above the router holds both things that are outside it: observed
+default next hops and the devices dialed in over WireGuard, one card each, drawn
+side by side and joined to the router by their own line. Keep the two apart by
+what the card says, not by where it sits. A dial-in card carries the WireGuard
+mark in neutral foreground, the peer's name, its tunnel address and one of four
+states (Connected, an elapsed time, Never connected, Status unavailable), with
+the endpoint and totals on hover. Never mark an absent peer as a fault: the only
+red on the map is a way out that has stopped answering. WireGuard off, or a
+tunnel with no peers, adds nothing to the map.
+
 Firewall uses one vertical Sankey with three visual rows: external semantic
 categories above, one virtual OLR / Firewall node in the middle, and trusted/LAN
 and router-local semantic categories below. Both sides flow toward OLR. These

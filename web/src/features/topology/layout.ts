@@ -1,5 +1,8 @@
 import { chainTo, OTHER_KEY, type MapGroup, type MapTree } from '@/features/topology/model'
 import type { DeviceRow } from '@/lib/api-types'
+import { chunk, edgeWidth, link, withBand, EDGE_MIN, type Box, type Link } from './band'
+
+export type { Box, Link } from './band'
 
 /**
  * Where everything on the network map goes, worked out as numbers.
@@ -48,8 +51,13 @@ import type { DeviceRow } from '@/lib/api-types'
  * An earlier version drew more than one row inside one outline with a single
  * link into it, which put a box around boxes around lists.
  *
- * **Default next hops are above the router.** Only observed main-table routes
- * belong there; gateway policy exits and remote clients are separate concerns.
+ * **Everything outside the router is above it.** Observed main-table next hops,
+ * and the devices dialed in over WireGuard: both are boxes on the far side of
+ * this router, and the band is the only place a box can join the router with a
+ * line of its own. A card hung under the router beside a group, or on a row of
+ * its own between them, would need the lines to those groups to run through it
+ * or squeeze past it. Gateway policy exits stay off the map: an exit this box
+ * chooses among is not a thing outside it.
  */
 
 export type Density = 'compact' | 'detail'
@@ -118,17 +126,6 @@ const FAN_GAP = 16
 export const RAIL_X = 15
 const RAIL_INSET = 32
 
-/** Line thickness, from a share of the heaviest sibling's traffic. */
-export const EDGE_MIN = 1.5
-export const EDGE_MAX = 5
-
-export interface Box {
-  x: number
-  y: number
-  w: number
-  h: number
-}
-
 /**
  * How a group is drawn. `container` holds its children; `chip` is a group set
  * aside while another is focused, or a rung on the way down to it; `focused`
@@ -163,6 +160,7 @@ export type Item =
       row?: { first: boolean }
     }
   | { kind: 'hop'; key: string; box: Box }
+  | { kind: 'dialin'; key: string; box: Box }
   | {
       kind: 'more'
       key: string
@@ -180,21 +178,6 @@ export type Item =
     }
   | { kind: 'pick'; key: string; box: Box; groups: MapGroup[] }
   | { kind: 'note'; key: string; box: Box; note: 'empty' | 'hint' | 'nothing' }
-
-export interface Link {
-  key: string
-  x0: number
-  y0: number
-  x1: number
-  y1: number
-  width: number
-  /** For links to something that is not a group of the operator's. */
-  dashed?: boolean
-  /** For links to groups set aside while another is focused. */
-  faint?: boolean
-  /** For the line from a next hop that is not answering. */
-  fault?: boolean
-}
 
 export interface Rail {
   x: number
@@ -226,6 +209,18 @@ export interface OutsideInput {
   hops: { key: string; down: boolean }[]
 }
 
+/**
+ * The devices dialed in over WireGuard, keyed by name.
+ *
+ * Bare keys: the band only needs to know how many boxes there are and what to
+ * call them. Whether a peer is connected, and where it last dialed from, is
+ * the node's business, because it changes on every poll and the layout should
+ * only move when the set of peers does.
+ */
+export interface DialInInput {
+  peers: { key: string }[]
+}
+
 export interface LayoutInput {
   tree: MapTree
   width: number
@@ -238,6 +233,8 @@ export interface LayoutInput {
   rated: boolean
   /** Observed next hops above the router. */
   outside?: OutsideInput
+  /** Peers of the tunnel, beside the next hops above the router. */
+  dialIn?: DialInInput
   serviceDevices?: ReadonlySet<string>
 }
 
@@ -254,91 +251,6 @@ export function layout(input: LayoutInput): Layout {
         ? layoutFocus(input, input.focus)
         : layoutTree(input)
   return withBand(below, input)
-}
-
-/* -------------------------------------------------------------------------- */
-/* Above the router                                                            */
-/* -------------------------------------------------------------------------- */
-
-export const EXIT_H = 52
-const HOP_W = 240
-const BAND_ROW_GAP = 28
-const EXIT_DROP = 48
-
-/** One box in the band over the router, before it has a place. */
-type BandNode = { kind: 'hop'; key: string; w: number; h: number; down: boolean }
-
-/**
- * Everything above the router, in rows, and everything else moved down to
- * make room. Done after the rest is laid out rather than inside each layout,
- * because it is the same band on every one of them: the wide map centres it on
- * the router, the narrow one starts it at the left edge where the router is.
- *
- * Each default next hop is directly connected to this router.
- */
-function withBand(below: Layout, input: LayoutInput): Layout {
-  const outside = input.outside
-  const A = input.width
-  const gap = below.narrow ? 12 : 40
-
-  const rows: BandNode[][] = []
-  if (outside?.hops.length) {
-    const perRow = Math.max(1, Math.floor((A + gap) / (HOP_W + gap)))
-    for (const row of chunk(outside.hops, perRow)) {
-      const w = Math.min(HOP_W, (A - (row.length - 1) * gap) / row.length)
-      rows.push(row.map((hop) => ({ kind: 'hop', key: `o:${hop.key}`, w, h: EXIT_H, down: hop.down })))
-    }
-  }
-  if (rows.length === 0) return below
-
-  const heights = rows.map((row) => Math.max(...row.map((n) => n.h)))
-  const band = heights.reduce((a, b) => a + b, 0) + (rows.length - 1) * BAND_ROW_GAP + EXIT_DROP
-
-  const down = (b: Box): Box => ({ ...b, y: b.y + band })
-  const router = down(below.router)
-  const centre = router.x + router.w / 2
-  const items: Item[] = []
-  const links: Link[] = []
-
-  // Each row is centred on the router, with one direct line per next hop.
-  const placed: { node: BandNode; box: Box }[][] = []
-  let y = 0
-  rows.forEach((row, r) => {
-    const rowW = row.reduce((sum, n) => sum + n.w, 0) + (row.length - 1) * gap
-    const wanted = centre - rowW / 2
-    const x0 = below.narrow ? 0 : Math.max(0, Math.min(A - rowW, wanted))
-    let x = x0
-    placed.push(
-      row.map((node) => {
-        const box = { x, y, w: node.w, h: node.h }
-        x += node.w + gap
-        return { node, box }
-      }),
-    )
-    y += heights[r] + BAND_ROW_GAP
-  })
-
-  for (const row of placed) {
-    for (const { node, box } of row) {
-      items.push({ kind: node.kind, key: node.key, box })
-    }
-  }
-
-  for (const row of placed) {
-    for (const { node, box } of row) {
-      links.push(link(node.key, box, router, edgeWidth(1, 1, input.rated), { fault: node.down }))
-    }
-  }
-
-  for (const item of below.items) items.push({ ...item, box: down(item.box) } as Item)
-  for (const l of below.links) links.push({ ...l, y0: l.y0 + band, y1: l.y1 + band })
-  const rail = below.rail && {
-    ...below.rail,
-    y0: below.rail.y0 + band,
-    y1: below.rail.y1 + band,
-    dots: below.rail.dots.map((d) => ({ ...d, y: d.y + band })),
-  }
-  return { ...below, height: below.height + band, router, items, links, rail }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -371,12 +283,6 @@ interface Ctx {
   hint?: string
   cache: Map<string, Plan[]>
   serviceDevices?: ReadonlySet<string>
-}
-
-function chunk<T>(list: T[], size: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size))
-  return out
 }
 
 function hintHeight(narrow: boolean) {
@@ -916,35 +822,6 @@ function layoutNarrow(input: LayoutInput): Layout {
 function nothingNote(A: number, y: number): Item {
   const w = Math.min(360, A)
   return { kind: 'note', key: 'note: nothing', box: { x: (A - w) / 2, y, w, h: EMPTY_H }, note: 'nothing' }
-}
-
-/**
- * A line from the bottom of one box to the top-centre of another.
- *
- * Lines leave from along the parent's bottom edge, shifted toward where they
- * are heading, rather than all from one point: from one point the thick ones
- * lie on top of each other for their first inch.
- */
-function link(key: string, from: Box, to: Box, width: number, opts: { dashed?: boolean; faint?: boolean; fault?: boolean } = {}): Link {
-  const px = from.x + from.w / 2
-  const cx = to.x + to.w / 2
-  const reach = Math.max(0, from.w / 2 - 16)
-  const x0 = px + Math.max(-reach, Math.min(reach, (cx - px) * 0.15))
-  // A dashed line is drawn no thicker than a hair over the thin one: thick
-  // dashes read as a row of beads, not as a line with a weight.
-  const w = opts.dashed ? Math.min(width, 2) : width
-  return { key: `l:${key}`, x0, y0: from.y + from.h, x1: cx, y1: to.y, width: w, ...opts }
-}
-
-/**
- * Thickness from a share of the heaviest sibling's traffic, square-rooted so a
- * group doing a tenth of the work still reads as a line and not a hair. With
- * no rate every line is the thin one, which is the honest drawing of "we do
- * not know".
- */
-function edgeWidth(weight: number, heaviest: number, rated: boolean) {
-  if (!rated || heaviest <= 0) return EDGE_MIN
-  return EDGE_MIN + (EDGE_MAX - EDGE_MIN) * Math.sqrt(Math.max(0, weight) / heaviest)
 }
 
 function finish(
