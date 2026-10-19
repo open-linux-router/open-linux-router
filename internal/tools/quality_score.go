@@ -254,15 +254,10 @@ func scoreQuality(s QualitySnapshot, now time.Time) ([]QualityCategory, QualityO
 
 func aggregateQuality(categories []QualityCategory, s QualitySnapshot, now time.Time) ([]QualityCategory, QualityOverall) {
 	o := QualityOverall{State: "unavailable"}
-	stale := s.ExpiresAt != nil && !now.Before(*s.ExpiresAt)
 	budget := 0.0
 	for i := range categories {
 		c := &categories[i]
 		c.Earned, c.Available = 0, 0
-		if stale && c.Score != nil {
-			c.State = "stale"
-			continue
-		}
 		if c.Score == nil {
 			continue
 		}
@@ -276,7 +271,7 @@ func aggregateQuality(categories []QualityCategory, s QualitySnapshot, now time.
 	if budget > 0 {
 		for i := range categories {
 			c := &categories[i]
-			if c.Score == nil || c.State == "stale" {
+			if c.Score == nil {
 				continue
 			}
 			c.Available = 100 * c.Budget / budget
@@ -286,9 +281,6 @@ func aggregateQuality(categories []QualityCategory, s QualitySnapshot, now time.
 		o.Available = 100
 		o.State = "ready"
 		o.Score = valuePointer(o.Earned)
-	}
-	if stale {
-		o.State = "stale"
 	}
 	if s.State == "running" {
 		o.State = "measuring"

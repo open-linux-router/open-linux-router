@@ -24,12 +24,11 @@ function polygon(score: number) {
 }
 
 const points = (value: number) => Number(value.toFixed(1)).toString()
-const categoryState = { ready: 'Measured', partial: 'Limited measurements', stale: 'Stale', unavailable: 'Not measured' }
+const categoryState = { ready: 'Measured', partial: 'Limited measurements', stale: 'Measured', unavailable: 'Not measured' }
 
 function stateLabel(data: QualitySnapshot | undefined) {
   if (!data) return 'Loading…'
   if (data.state === 'running') return 'Testing…'
-  if (data.overall.state === 'stale') return 'Stale'
   if (data.state === 'cancelled') return 'Cancelled · Partial'
   if (data.state === 'timed_out') return 'Timed out · Partial'
   if (data.overall.state === 'ready') return `${Math.round(data.overall.score!)} / 100`
@@ -43,9 +42,9 @@ export function NetworkQuality() {
   // A failed read must not keep a cached healthy result looking current.
   const data = query.isError ? undefined : query.data
   const categories = axes.map(label => data?.categories.find(category => categoryLabel(category.label) === label))
-  const freshScore = (category: QualityCategory | undefined) => category?.state === 'stale' ? null : category?.score ?? null
+  const measuredScore = (category: QualityCategory | undefined) => category?.score ?? null
   // Wireless has a display-only default until client/AP measurements exist.
-  const scores = categories.map((category, index) => freshScore(category) ?? (axes[index] === 'Wireless' ? 80 : null))
+  const scores = categories.map((category, index) => measuredScore(category) ?? (axes[index] === 'Wireless' ? 80 : null))
   const complete = scores.every(score => score != null)
 
   return <>
@@ -54,7 +53,7 @@ export function NetworkQuality() {
         <Heading size="sm"><button type="button" className="relative z-10 -my-2.5 min-h-11 py-2 text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring" onClick={() => setOpen(true)} aria-label="Network quality details">Quality</button></Heading>
       </div>
       <button type="button" onClick={() => setOpen(true)} aria-label="Open network quality assessment" className="-mx-1.5 -mb-1.5 flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2">
-        <svg viewBox="0 -12 340 245" className="min-h-0 w-full flex-1" role="img" aria-label={`Network quality scores out of 100. ${axes.map((label, i) => `${label}: ${scores[i] == null ? 'not measured or stale' : Math.round(scores[i]!)}${label === 'Wireless' && freshScore(categories[i]) == null ? ' (default)' : categories[i]?.state === 'partial' ? ' (partial)' : ''}`).join('. ')}. Higher is better.`}>
+        <svg viewBox="0 -12 340 245" className="min-h-0 w-full flex-1" role="img" aria-label={`Network quality scores out of 100. ${axes.map((label, i) => `${label}: ${scores[i] == null ? 'not measured' : Math.round(scores[i]!)}${label === 'Wireless' && measuredScore(categories[i]) == null ? ' (default)' : categories[i]?.state === 'partial' ? ' (partial)' : ''}`).join('. ')}. Higher is better.`}>
           <g transform="translate(20 0)">
             {[25, 50, 75, 100].map(score => <polygon key={score} points={polygon(score)} className="fill-none stroke-border" strokeWidth="1" />)}
             {axes.map((label, index) => {
@@ -74,9 +73,6 @@ export function NetworkQuality() {
           </g>
         </svg>
       </button>
-      <div className="flex justify-end">
-        <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>Test</Button>
-      </div>
     </section>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-2xl">
@@ -105,7 +101,7 @@ function QualityDetails({ data, readError, retry }: { data?: QualitySnapshot; re
         ? <Button variant="outline" disabled={action.isPending} onClick={() => action.mutate({ cancel: true })}>Cancel test</Button>
         : <Button disabled={action.isPending || readError} onClick={() => action.mutate({ speed })}>{action.isPending ? 'Starting…' : 'Run assessment'}</Button>}
     </div>
-    <p className="text-sm text-muted-foreground">{bandwidth ? 'Download and upload testing can use substantial data and affect other traffic. Allow up to 150 seconds.' : 'Checks small HTTPS responses and STUN. No bulk download or upload. Allow up to 60 seconds.'} Results remain in memory for this daemon session and become stale after 30 minutes.</p>
+    <p className="text-sm text-muted-foreground">{bandwidth ? 'Download and upload testing can use substantial data and affect other traffic. Allow up to 150 seconds.' : 'Checks small HTTPS responses and STUN. No bulk download or upload. Allow up to 60 seconds.'} Tests run on demand. Results stay available until the next assessment or daemon restart.</p>
     {action.isError && <p role="alert" className="text-sm text-destructive">{action.error.message}</p>}
     <div className="flex flex-wrap items-baseline justify-between gap-2" role="status">
       <Heading as="h3" size="sm">{data?.overall.state === 'ready' ? 'Overall score' : data ? stateLabel(data) : readError ? 'Unavailable' : 'Loading…'}</Heading>
@@ -113,7 +109,7 @@ function QualityDetails({ data, readError, retry }: { data?: QualitySnapshot; re
       {data?.overall.score != null && <MetricValue size="md" value={points(data.overall.score)} unit="/ 100" />}
     </div>
     {data && <>
-      <p className="text-sm text-muted-foreground">Measured components and categories share the full 100 points. Unimplemented or unmeasured tests are excluded; confirmed failures still count. Wireless requires client or AP measurements; the chart defaults to 80 until a current score is available. This default is excluded from the overall score.</p>
+      <p className="text-sm text-muted-foreground">Measured components and categories share the full 100 points. Unimplemented or unmeasured tests are excluded; confirmed failures still count. Wireless requires client or AP measurements; the chart defaults to 80 until a measured score is available. This default is excluded from the overall score.</p>
       {data.started_at && <p className="text-xs text-muted-foreground">{data.completed_at ? 'Completed' : 'Started'} {new Date(data.completed_at ?? data.started_at).toLocaleString()} · {data.scoring_version}</p>}
       <div className="space-y-2">
         {data.categories.map(category => <Disclosure key={category.id} className="border-b last:border-0" summary={<span className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 py-2 text-foreground">

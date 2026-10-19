@@ -502,9 +502,8 @@ It replaces the fixed sample scores and renames Reachability to Functionality.
   reservations after stopping and retains completed evidence. Daemon shutdown
   also cancels it. Closing the details dialog does not cancel a test.
 - A new assessment replaces the previous in-memory result, including its speed
-  data. Results reset on daemon restart and expire 30 minutes after completion.
-  Categories retain their historical values with a stale label after expiry;
-  stale results do not supply current overall points.
+  data. Tests run only on demand. Scores do not expire and stay available until
+  the next assessment or daemon restart.
 
 The run first samples the following fixed resources with IPv4 and IPv6
 independently: Cloudflare `https://speed.cloudflare.com/__down?bytes=0` (200),

@@ -96,6 +96,10 @@ hidden page title. Detail and operation pages keep their identifying titles.
 
 ## State and data contracts
 
+Quality assessments run on demand from the dialog opened by the card heading or
+chart. Measured scores do not expire; results remain until another assessment
+or daemon restart.
+
 World traffic combines IPs at the same remote coordinates into one map connection.
 Line width represents combined upload and download; per-IP rates stay in details.
 Each connection has one dot that travels out and back, illustrating both directions

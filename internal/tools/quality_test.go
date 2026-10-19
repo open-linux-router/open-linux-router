@@ -156,7 +156,7 @@ func TestQualityAlternativesCompareNormalizedScores(t *testing.T) {
 	}
 }
 
-func TestQualityCurvesAndExpiry(t *testing.T) {
+func TestQualityCurvesAndRetention(t *testing.T) {
 	for _, curve := range [][]scoreAnchor{downloadCurve, uploadCurve, tcpCurve, dnsCurve, responseCurve, variationCurve} {
 		for _, invalid := range []float64{-1, math.NaN(), math.Inf(1)} {
 			if scoreValue(invalid, curve) != nil {
@@ -171,8 +171,12 @@ func TestQualityCurvesAndExpiry(t *testing.T) {
 	}
 	expires := time.Now()
 	categories, total := scoreQuality(QualitySnapshot{Speed: &SpeedResult{Download: 75, Upload: 30}, ExpiresAt: &expires}, expires)
-	if categories[0].State != "stale" || total.State != "stale" || total.Score != nil || total.Available != 0 {
-		t.Fatalf("stale evidence became current points: %+v", total)
+	if categories[0].State == "stale" || categories[0].Score == nil || total.State != "ready" || total.Score == nil || total.Available != 100 {
+		t.Fatalf("retained evidence lost its score: %+v", total)
+	}
+	_, later := scoreQuality(QualitySnapshot{Speed: &SpeedResult{Download: 75, Upload: 30}, ExpiresAt: &expires}, expires.Add(365*24*time.Hour))
+	if later.Score == nil || *later.Score != *total.Score {
+		t.Fatalf("score changed with age: %+v", later)
 	}
 }
 

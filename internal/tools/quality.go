@@ -13,7 +13,6 @@ import (
 const (
 	qualityVersion = "quality-v2"
 	qualityCatalog = "reference-v1"
-	qualityTTL     = 30 * time.Minute
 	qualitySamples = 6
 )
 
@@ -158,8 +157,7 @@ func (h *HTTP) measureQuality(ctx context.Context, includeSpeed bool) {
 	defer func() {
 		h.quality.mu.Lock()
 		now := time.Now().UTC()
-		expires := now.Add(qualityTTL)
-		h.quality.snapshot.CompletedAt, h.quality.snapshot.ExpiresAt = &now, &expires
+		h.quality.snapshot.CompletedAt = &now
 		h.quality.snapshot.State = "completed"
 		if ctx.Err() == context.Canceled {
 			h.quality.snapshot.State = "cancelled"

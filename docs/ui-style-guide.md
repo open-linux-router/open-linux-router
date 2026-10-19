@@ -287,6 +287,8 @@ continuity. Rotate the whole card 180 degrees around its vertical axis over
 title and toggle so the map appears on the back of the card. Reduced motion
 switches faces immediately. Make the inactive face inert and hidden to assistive
 technology. Do not add a Map details row; clicking the map opens fullscreen.
+The Quality heading and radar open the assessment dialog; omit a separate Test
+button on the card. Retain measured scores without age-based fading or hiding.
 Network quality uses a five-axis radar with theme-aware primary fill and border
 grid lines. It occupies one card at every breakpoint. Only measured, current
 axes have points; missing/stale axes show dashes and prevent a filled polygon,
