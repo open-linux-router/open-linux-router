@@ -1,6 +1,7 @@
 
-// Local copies of project artwork; provenance is in public/access-logos/README.md.
-// Protocols without an established logo use existing Lucide SVGs in the launcher.
+// Local copies of project artwork, taken from theSVG (thesvg.org) wherever the
+// library carries the project; provenance is in public/access-logos/README.md.
+// Projects it does not carry use existing Lucide SVGs in the launcher.
 export const ACCESS_LOGOS: Record<string, string> = {
   wireguard: '/access-logos/wireguard.svg',
   tailscale: '/access-logos/tailscale.svg',

@@ -6,8 +6,12 @@ grids; dialogs only expose configuration actions owned by that direction.
 Hover/focus explains functions and observed state; click exposes the same details
 on touch devices. Unintegrated directions link to external documentation.
 
-Tiles use bundled project artwork from `web/public/access-logos` and the WireGuard mark. Protocols without an established logo use text rather than
-invented symbols. See the logo directory README for provenance.
+Tiles use bundled project artwork from `web/public/access-logos`, taken from
+[theSVG](https://thesvg.org) wherever the library carries the project, so the
+launcher matches the marks used elsewhere in the interface. Projects it does not
+carry — Headscale, SOCKS5, HTTP, HTTPS, Gateway, 6in4, NAT, frp, rathole — use
+their Lucide line icon rather than an invented symbol. See the logo directory
+README for provenance.
 
 ## Connection model
 
