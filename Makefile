@@ -171,8 +171,12 @@ dev: build ## Run olrd against a scratch root, for `npm run dev` to proxy to
 	  --links $(WEB)/dev-links.json \
 	  --log-level debug
 
+.PHONY: cloudflare-speed
+cloudflare-speed: ## Fetch pinned Cloudflare speed CLI binaries and corresponding source
+	sh packaging/scripts/cloudflare-speed.sh $(DIST)/cloudflare-speed
+
 .PHONY: package
-package: web cross ## Build the .deb for every architecture
+package: web cross cloudflare-speed ## Build the .deb for every architecture
 	@# The dependency on dnsmasq is declared in the package rather than checked
 	@# in Go: apt resolves it before any of our code runs.
 	@#

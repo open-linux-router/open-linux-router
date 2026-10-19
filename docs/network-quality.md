@@ -480,7 +480,7 @@ Next reviews should settle:
 5. Coordinator/API ownership and reuse of current Tools implementations.
 6. External-peer operation and the first supported Wi-Fi/client data source.
 
-## 13. Reference implementation: reference-v1 / quality-v2
+## 13. Reference implementation: reference-v1 / quality-v3
 
 This is an initial reference assessment, not the complete service catalog.
 Snapshots identify the fixed `reference` profile at version `1` separately
@@ -522,10 +522,28 @@ inconclusive access evidence rather than a scored network failure. An expected
 status verifies only that HEAD resource transaction; it does not verify response
 body content or all functionality of the named service.
 
-The optional speedtest-go reference transfer runs after response sampling, with
-a 90-second deadline and its existing single-server selection/fallback. It
-uses four transfer threads and ten-second capture intervals. It has no fixed
-byte cap and can consume substantial data; bandwidth testing defaults to off.
+The optional Cloudflare reference transfer runs after response sampling, with
+a 90-second deadline. OLR invokes the upstream Rust `cloudflare-speed-cli`
+with JSON output and history saving disabled; OLR does not reimplement its
+measurement algorithm. The packaged version is v1.0.10, with six concurrent
+workers and ten-second download and upload phases. It has no fixed byte cap
+and can consume substantial data; bandwidth testing defaults to off.
+This measures the router's default route to Cloudflare, not Wi-Fi or all
+internet services. Speed scoring uses the existing curves, weighting download
+70% and upload 30%; missing, invalid or timed-out transfers are excluded.
+Scoring version `quality-v3` identifies this change of reference provider.
+The standalone Speedtest tool retains its selectable server and exit.
+
+The `.deb` includes the unmodified CLI, its GPLv3 license and corresponding
+source under `/usr/share/doc/olr/cloudflare-speed-cli`. `make cloudflare-speed`
+downloads pinned amd64/arm64 musl builds and verifies committed SHA-256 hashes.
+Build hosts need curl, tar, xz and sha256sum. Single-binary tarball users must
+install `cloudflare-speed-cli` separately on the router's PATH, using the
+[upstream release](https://github.com/kavehtehrani/cloudflare-speed-cli/releases/tag/v1.0.10)
+or `cargo install cloudflare-speed-cli --version 1.0.10 --locked`.
+An absent CLI is reported as an unmeasured speed component, without silently
+falling back to another provider. Proxy environment variables are removed from
+the child process so they cannot change the measured path.
 Finally, the existing IPv4 STUN test has up to 15 seconds. NAT results are
 diagnostic only and do not prove public IPv4 assignment, inbound or P2P access.
 The entire assessment has a 150-second deadline. No configuration changes,

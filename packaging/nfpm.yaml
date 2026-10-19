@@ -20,7 +20,8 @@ priority: optional
 maintainer: open-linux-router <iloahz@gmail.com>
 vendor: open-linux-router
 homepage: https://github.com/open-linux-router/open-linux-router
-license: MIT
+# OLR remains MIT; the separately executed upstream speed CLI is GPLv3.
+license: MIT AND GPL-3.0-only
 description: |
   Router control plane for an ordinary Linux box.
   olr renders configuration for the daemons a router is already made of —
@@ -75,6 +76,16 @@ depends:
 # that had none. The tarball covers those boxes honestly instead.
 
 contents:
+  # Separate, unmodified GPLv3 program; ship its corresponding source and license.
+  - src: dist/cloudflare-speed/cloudflare-speed-cli-${ARCH}
+    dst: /usr/bin/cloudflare-speed-cli
+    expand: true
+    file_info:
+      mode: 0755
+  - src: dist/cloudflare-speed/cloudflare-speed-cli-source.tar.gz
+    dst: /usr/share/doc/olr/cloudflare-speed-cli/source.tar.gz
+  - src: dist/cloudflare-speed/cloudflare-speed-cli-LICENSE
+    dst: /usr/share/doc/olr/cloudflare-speed-cli/LICENSE
   # `expand: true` is required for ${ARCH} to mean anything here. nfpm expands
   # environment variables in top-level fields unconditionally, but in contents
   # only for entries that ask — so without it, the source path stays literal and

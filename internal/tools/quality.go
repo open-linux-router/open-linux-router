@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	qualityVersion = "quality-v2"
+	qualityVersion = "quality-v3"
 	qualityCatalog = "reference-v1"
 	qualitySamples = 6
 )
@@ -203,13 +203,7 @@ func (h *HTTP) measureQuality(ctx context.Context, includeSpeed bool) {
 		bounded, cancel := context.WithTimeout(ctx, 90*time.Second)
 		run := h.Run
 		if run == nil {
-			run = func(ctx context.Context) (SpeedResult, error) {
-				client, err := h.client("")
-				if err != nil {
-					return SpeedResult{}, err
-				}
-				return measure(ctx, client, "")
-			}
+			run = runCloudflare
 		}
 		result, err := run(bounded)
 		cancel()

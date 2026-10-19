@@ -219,12 +219,12 @@ func category(id, label string, budget float64, components ...QualityComponent) 
 }
 
 func scoreQuality(s QualitySnapshot, now time.Time) ([]QualityCategory, QualityOverall) {
-	reference := QualityComponent{ID: "reference", Label: "Reference download and upload", Weight: .4, Reason: "Bandwidth test not run"}
+	reference := QualityComponent{ID: "reference", Label: "Cloudflare download and upload", Weight: .4, Reason: "Bandwidth test not run"}
 	if s.Speed != nil {
 		d, u := scoreValue(s.Speed.Download, downloadCurve), scoreValue(s.Speed.Upload, uploadCurve)
 		if d != nil && u != nil {
 			reference.Score = valuePointer(*d*.7 + *u*.3)
-			reference.Reason = "Single reference server; service transfers not measured"
+			reference.Reason = "Cloudflare edge throughput; 70% download and 30% upload; other service transfers not measured"
 		}
 	}
 	if s.SpeedError != "" {
