@@ -40,27 +40,50 @@ func (r *Relay) Run(ctx context.Context, ready func()) error {
 
 	var (
 		wg      sync.WaitGroup
+		mu      sync.Mutex
 		closers []io.Closer
+		closed  bool
 	)
 	fail := func(err error) error {
-		for _, c := range closers {
-			c.Close()
-		}
+		r.closeListeners(&mu, &closers, &closed)
 		return err
+	}
+	// start is called from Run and from the goroutine that waits for optional
+	// addresses, so the two can be adding sockets at the same moment the
+	// context is cancelled. The guard is what keeps a late bind from adding a
+	// socket after shutdown has already gone past.
+	start := func(l bound) {
+		mu.Lock()
+		defer mu.Unlock()
+		if closed {
+			l.udp.Close()
+			l.tcp.Close()
+			return
+		}
+		closers = append(closers, l.udp, l.tcp)
+
+		wg.Add(2)
+		go func() { defer wg.Done(); r.serveUDP(ctx, l.udp) }()
+		go func() { defer wg.Done(); r.serveTCP(ctx, l.tcp) }()
 	}
 
 	listeners, err := r.bind()
 	if err != nil {
 		return fail(err)
 	}
-
 	for _, l := range listeners {
-		closers = append(closers, l.udp, l.tcp)
 		r.logger.Info("listening", "address", l.addr, "upstream", r.cfg.Upstream)
+		start(l)
+	}
 
-		wg.Add(2)
-		go func() { defer wg.Done(); r.serveUDP(ctx, l.udp) }()
-		go func() { defer wg.Done(); r.serveTCP(ctx, l.tcp) }()
+	// The addresses olr itself promised to a client. Answered on when the
+	// address is up, retried when it is not — see serveOptional.
+	if optional := r.cfg.Also(); len(optional) > 0 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r.serveOptional(ctx, optional, start)
+		}()
 	}
 
 	// The observation side and the read-only API both live behind the tee and
@@ -86,14 +109,84 @@ func (r *Relay) Run(ctx context.Context, ready func()) error {
 	}
 
 	<-ctx.Done()
-	for _, c := range closers {
-		c.Close()
-	}
+	r.closeListeners(&mu, &closers, &closed)
 	if api != nil {
 		api.Close()
 	}
 	wg.Wait()
 	return nil
+}
+
+// closeListeners closes everything bound so far, and refuses anything after.
+func (r *Relay) closeListeners(mu *sync.Mutex, closers *[]io.Closer, closed *bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	*closed = true
+	for _, c := range *closers {
+		c.Close()
+	}
+	*closers = nil
+}
+
+// optionalRetryInterval is how long to wait before trying an absent service
+// address again.
+//
+// Two seconds, chosen the same way systemd's RestartSec is: fast enough that an
+// interface coming up during boot is answered before anyone notices, slow
+// enough that a box which will never have the address does not look busy.
+const optionalRetryInterval = 2 * time.Second
+
+// serveOptional answers on addresses that are allowed to appear late.
+//
+// The asymmetry with bind is deliberate and is the one socket.go states for
+// bindAny: an address an operator wrote down is intent, and refusing over it is
+// right; an address this box has not brought up yet is a fact about the kernel,
+// not a misconfiguration. Failing the whole relay would turn "the tunnel is
+// down" into "the house has no DNS" — the worse of the two, and the one nobody
+// would think to look for.
+//
+// It runs until every address is up, then returns. The first attempt happens
+// immediately, so a box where everything is already present pays one syscall
+// and no wait.
+func (r *Relay) serveOptional(ctx context.Context, pending []netip.AddrPort, start func(bound)) {
+	wait := r.retryInterval()
+	ticker := time.NewTicker(wait)
+	defer ticker.Stop()
+
+	for first := true; ; first = false {
+		var left []netip.AddrPort
+		for _, addr := range pending {
+			l, err := bindOne(addr)
+			if err != nil {
+				left = append(left, addr)
+				continue
+			}
+			r.logger.Info("listening on an address that came up after start", "address", addr)
+			start(l)
+		}
+		pending = left
+		if len(pending) == 0 {
+			return
+		}
+		if first {
+			r.logger.Warn("an address olr answers DNS on is not up yet; it will be retried",
+				"addresses", pending)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// retryInterval resolves the zero value, and is a field only so tests need not
+// wait two seconds to watch a retry succeed.
+func (r *Relay) retryInterval() time.Duration {
+	if r.retryEvery > 0 {
+		return r.retryEvery
+	}
+	return optionalRetryInterval
 }
 
 // bind honours explicit listen addresses exactly. Only the default wildcard

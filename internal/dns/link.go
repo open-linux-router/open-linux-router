@@ -147,10 +147,28 @@ func (s StaticLinks) Interfaces() ([]LinkInfo, error) {
 	return out, nil
 }
 
-// DerivedNotes describes the wildcard default when DNS is enabled.
-func DerivedNotes(c Config, _ LinkView) []string {
-	if c.Enabled && len(c.Listen) == 0 {
-		return []string{fmt.Sprintf("answering DNS on every address this router holds, port %d", DNSPort)}
+// DerivedNotes describes what the module filled in for a caller who did not say.
+//
+// Two things, both of which have to be said out loud rather than done quietly
+// (design.md §5.6): the wildcard default, and the address devices that dial in
+// are told to use. The second is not a default at all — it is the other half of
+// a promise `remote` made when it printed a client configuration (dialin.go) —
+// but it is still an address this module answers on without the operator naming
+// it, and an operator reading `olr dns status` should not have to infer that
+// from the absence of a pin.
+func DerivedNotes(c Config, _ LinkView, dialIn DialInView) []string {
+	if !c.Enabled {
+		return nil
 	}
-	return nil
+	var out []string
+	if len(c.Listen) == 0 {
+		out = append(out, fmt.Sprintf("answering DNS on every address this router holds, port %d", DNSPort))
+	}
+	// An unreadable store is the renderer's problem to report, not this
+	// function's: it builds sentences for a preview, and a plan that cannot be
+	// rendered has already failed by the time anybody reads them.
+	if service, err := ServiceListen(c, dialIn); err == nil && len(service) > 0 {
+		out = append(out, fmt.Sprintf("answering DNS on %s for devices that dial in", joinAddrPorts(service)))
+	}
+	return out
 }

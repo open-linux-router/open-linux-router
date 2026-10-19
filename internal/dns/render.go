@@ -193,6 +193,15 @@ type Backend struct {
 	// Nil keeps isolated renderer tests and fresh installs independent.
 	Intent *core.Store
 
+	// DialIn is the tunnel whose clients are told to resolve here, so that its
+	// address can be answered on without the operator pinning it (dialin.go).
+	//
+	// A fact, not a policy: the renderer does not decide whether to serve the
+	// dial-in address, only which address that is. Nil — isolated tests, or a
+	// box with no remote access — adds nothing, which is also what a box with
+	// the wildcard renders to.
+	DialIn DialInView
+
 	// Source is the intent file named in every generated file's ownership
 	// header. An operator who finds one of these needs pointing at the file
 	// that actually produced it.
@@ -656,6 +665,22 @@ func formatForwardAddr(srv netip.AddrPort, u Upstream) string {
 // --- the relay -------------------------------------------------------------
 
 func (b Backend) renderRelay(c Config, links LinkView) ([]byte, error) {
+	// What olr owes a client, as opposed to what the operator pinned. Kept in
+	// its own field because the two fail differently: a pin that cannot bind is
+	// a misconfiguration, while this address may simply not be up yet (see
+	// dnsrelay.Config.AlsoListen).
+	also, err := ServiceListen(c, b.DialIn)
+	if err != nil {
+		return nil, fmt.Errorf("reading the dial-in address: %w", err)
+	}
+	// A pin that already names the tunnel's address is the same socket asked
+	// for twice, so it is not a second entry. Dropped here rather than at bind
+	// time: a rendered file that repeats itself would read as drift the moment
+	// an operator pinned an address olr was going to answer on anyway.
+	also = slices.DeleteFunc(also, func(addr netip.AddrPort) bool {
+		return slices.Contains(c.Listen, addr)
+	})
+
 	cfg := dnsrelay.Config{
 		FilterAAAA: c.FilterAAAA,
 		// Passed through as the operator wrote it, empty included: an empty
@@ -664,6 +689,7 @@ func (b Backend) renderRelay(c Config, links LinkView) ([]byte, error) {
 		// would put addresses back in a rendered file that the kernel is free
 		// to change underneath.
 		Listen:          c.Listen,
+		AlsoListen:      also,
 		Upstream:        DefaultResolver,
 		PolicyDir:       b.Paths.PolicyDir,
 		PublishedFile:   b.Paths.Published,

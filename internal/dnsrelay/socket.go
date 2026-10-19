@@ -215,20 +215,33 @@ func bindAll(addrs []netip.AddrPort) ([]bound, error) {
 	}
 
 	for _, addr := range addrs {
-		udp, err := listenUDP(addr)
+		b, err := bindOne(addr)
 		if err != nil {
 			unwind()
-			return nil, fmt.Errorf("listening on %s/udp: %w", addr, err)
+			return nil, fmt.Errorf("listening on %w", err)
 		}
-		tcp, err := listenTCP(addr)
-		if err != nil {
-			udp.Close()
-			unwind()
-			return nil, fmt.Errorf("listening on %s/tcp: %w", addr, err)
-		}
-		out = append(out, bound{addr: addr, udp: udp, tcp: tcp})
+		out = append(out, b)
 	}
 	return out, nil
+}
+
+// bindOne binds both of one address's sockets, or neither.
+//
+// Split out of bindAll because the optional addresses need exactly this and
+// nothing else: one address, one attempt, no unwinding anybody else's work.
+// The pair stays together here for the reason `bound` does — a UDP socket with
+// no TCP listener beside it is a partial answer nobody asked for.
+func bindOne(addr netip.AddrPort) (bound, error) {
+	udp, err := listenUDP(addr)
+	if err != nil {
+		return bound{}, fmt.Errorf("%s/udp: %w", addr, err)
+	}
+	tcp, err := listenTCP(addr)
+	if err != nil {
+		udp.Close()
+		return bound{}, fmt.Errorf("%s/tcp: %w", addr, err)
+	}
+	return bound{addr: addr, udp: udp, tcp: tcp}, nil
 }
 
 // bindAny binds as many of the addresses as the kernel will take, and fails

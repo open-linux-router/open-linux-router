@@ -56,6 +56,12 @@ type Relay struct {
 	clients  *ClientTable
 	started  time.Time
 
+	// retryEvery is how long to wait before trying an absent optional listen
+	// address again (server.go). Zero means optionalRetryInterval; a field
+	// rather than a constant only so tests need not wait seconds to watch a
+	// retry succeed.
+	retryEvery time.Duration
+
 	tee chan observation
 }
 

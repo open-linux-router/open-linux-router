@@ -32,6 +32,16 @@ type TunnelApplier struct {
 	// Nil means core.UDPPortInUse. Injectable so the refusal path is testable
 	// without arranging a real conflict on the build machine.
 	PortInUse func(port uint64) (bool, error)
+
+	// Follow re-applies what was built from this tunnel's addressing after it
+	// changes — today the resolver, whose listen set contains the dial-in
+	// address every client configuration names (internal/dns/dialin.go).
+	//
+	// A function rather than a module list, for the reason
+	// internal/daemon/dependents.go gives: this module imports none of the ones
+	// behind it, and the wiring in internal/daemon already knows the whole list.
+	// Nil is legitimate — a test, or a build with nothing following.
+	Follow func(context.Context) []core.Step
 }
 
 func (a TunnelApplier) kernel() Kernel {
@@ -164,6 +174,22 @@ func (a TunnelApplier) ApplyPlanned(ctx context.Context, desired Config, plan Pl
 	result.Steps = append(result.Steps, steps...)
 	if err != nil {
 		return result, fmt.Errorf("configuring %s: %w", d.Interface, err)
+	}
+
+	// After the kernel, never before: a dependent that renders the tunnel's
+	// address answers nothing if the tunnel does not hold it yet, and the retry
+	// would be indistinguishable from drift. It runs even when the plan only
+	// moved a peer, because "did this change the address" is a question the
+	// dependent answers cheaper than we can — its own plan comes back empty and
+	// it reports nothing.
+	if a.Follow != nil {
+		for _, step := range a.Follow(ctx) {
+			result.Steps = append(result.Steps, Step{
+				Description: step.Description,
+				Done:        step.Done,
+				Error:       step.Error,
+			})
+		}
 	}
 	return result, nil
 }

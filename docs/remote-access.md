@@ -405,6 +405,13 @@ for people who memorised addresses. The address is the box's own on the dial-in
 network, which is inside `AllowedIPs` in both modes, so it works for split
 tunnels too.
 
+`dns` answers on that address by construction rather than by an operator
+remembering to pin it: it subscribes to the tunnel's address (design.md §4.1's
+`remote → dns` arrow) and binds it leniently, so a tunnel that comes up after the
+relay does is still answered on. A tunnel that is on while `dns` is off is the
+one combination olr cannot make work; `olr dns status` reports the served set so
+"not configured" and "not served" stay distinguishable.
+
 ### 6.4 `PersistentKeepalive = 25`
 
 Rendered always. Without it a peer behind NAT is reachable only while it is

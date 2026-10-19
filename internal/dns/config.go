@@ -54,6 +54,11 @@ type Config struct {
 	// Listen is where the relay answers queries. Empty means the wildcard on
 	// port 53; pinning an address is optional and may go stale on renumbering.
 	// The firewall controls which networks can reach the listener.
+	//
+	// Pins are not the whole story: the relay also answers on addresses olr
+	// itself promised to a client, today the dial-in address every peer
+	// configuration names (dialin.go). Those are derived, not stored, and are
+	// retried rather than required if the interface is not up yet.
 	Listen []netip.AddrPort `json:"listen,omitempty"`
 
 	// Upstream is how names actually get resolved.

@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 )
@@ -50,6 +51,23 @@ type Config struct {
 	//
 	// Inbound access is governed by the firewall, not a second DNS ACL.
 	Listen []netip.AddrPort `json:"listen"`
+
+	// AlsoListen is where queries are answered *when the address is up*, and
+	// it is the half olr supplies rather than the operator.
+	//
+	// It exists because the two kinds of listen address fail differently. An
+	// address in Listen is intent an operator wrote down: if it cannot be
+	// bound, the configuration is wrong and refusing is right (bindAll). An
+	// address here is a promise olr made on its own — the box's address on the
+	// network devices dial into, which the resolver must answer on because
+	// every client configuration names it. That address is created by another
+	// module and may not exist yet when the relay starts, so an absent one is
+	// "not yet", not "misconfigured", and must not take the rest of the
+	// resolver down with it (bindOne, and Relay.serveOptional).
+	//
+	// Ignored when Listen is empty, where the wildcard already covers every
+	// address this box holds or will hold.
+	AlsoListen []netip.AddrPort `json:"also_listen,omitempty"`
 
 	// Upstream is the resolver doing the actual work — unbound, on loopback.
 	Upstream netip.AddrPort `json:"upstream"`
@@ -141,6 +159,26 @@ func (c Config) Port() uint16 {
 		return DefaultPort
 	}
 	return c.Listen[0].Port()
+}
+
+// Also returns the addresses to answer on only once they exist.
+//
+// Empty under the wildcard: ListenOrWildcard already binds every address this
+// box holds, so a second, pinned copy of one would ask the kernel for the same
+// socket twice. Addresses already pinned are dropped for the same reason — a
+// duplicate here would be a bind that can only ever fail, retried forever.
+func (c Config) Also() []netip.AddrPort {
+	if len(c.Listen) == 0 {
+		return nil
+	}
+	var out []netip.AddrPort
+	for _, addr := range c.AlsoListen {
+		if slices.Contains(c.Listen, addr) || slices.Contains(out, addr) {
+			continue
+		}
+		out = append(out, addr)
+	}
+	return out
 }
 
 // DefaultUpstreamTimeout bounds one forwarded query.

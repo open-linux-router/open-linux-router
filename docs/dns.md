@@ -430,6 +430,15 @@ into intent can go stale when a network is renumbered. An explicitly pinned addr
 current: if it cannot be bound, the relay fails rather than widening its
 listen address silently.
 
+Pins are not the whole listen set. The relay also answers on addresses olr
+itself has promised to a client — today the dial-in address every WireGuard
+configuration names — and those are derived from the module that owns them
+rather than pinned. They are bound leniently: the tunnel may come up after the
+relay does, and a missing service address is retried rather than allowed to fail
+the whole listener, because "the tunnel is down" must not become "the house has
+no DNS". `olr dns status` prints the resulting set and where each address came
+from (internal/dns/dialin.go, internal/dnsrelay).
+
 DNS does not maintain a second source-access list. In particular, delegated IPv6
 prefix changes no longer rewrite `relay.json` or ask the operator to apply DNS.
 The firewall owns which networks may reach the resolver. With the firewall off

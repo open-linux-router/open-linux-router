@@ -539,6 +539,7 @@ link ──┬─→ dial ──┬─→ dns      (upstream resolvers)
 
 dns ────→ ingress  (local domain, local names)
 ingress ─→ dns     (published names, one-way publish)
+remote ──→ dns     (the dial-in address peers are told to resolve through)
 ```
 
 **When a cycle appears, invert one side into a fact subscription.** The real
@@ -567,7 +568,17 @@ apply per arrow, and a step reported for the ones that were not. §5.2 still
 holds — this is a sequence of independent applies, not a transaction, and a
 half-applied change follows nothing until it is re-run. The dependents a
 change reaches are `dhcp` and `gateway` (from `link` and `dial`) and `dns` (from
-`ingress`), and internal/daemon's `dependents.go` is the list.
+`ingress` and `remote`), and internal/daemon's `dependents.go` is the list.
+
+The `remote → dns` arrow is the one worth spelling out, because the fact at its
+tail is not something `dns` could have inferred. `remote` writes this box's
+dial-in address into every client configuration it prints, and prints it once —
+the file lives on a phone afterwards. A resolver that does not answer there is a
+device that reports "connected" and resolves nothing: both modules internally
+consistent, and nobody owning the intersection. So `dns` subscribes to the
+tunnel's address and answers on it, derived rather than pinned, because the
+address is olr's to create and not the operator's to keep correct
+(internal/dns/dialin.go).
 
 ### 4.2 One backend, one owner
 

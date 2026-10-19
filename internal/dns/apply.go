@@ -38,6 +38,12 @@ type Applier struct {
 	// relay answers itself (published.go). Nil publishes nothing.
 	Published PublishedView
 
+	// DialIn is the window onto the tunnel's DNS promise (dialin.go): the
+	// address every dial-in client configuration names, which this module has
+	// to answer on whether or not the operator pinned it. Nil means no tunnel,
+	// and adds nothing.
+	DialIn DialInView
+
 	// Resolver supervises unbound; Relay supervises our own olr-dnsd.
 	//
 	// Two, because this module drives two daemons and they fail differently. A
@@ -235,13 +241,24 @@ func (a Applier) Observe(ctx context.Context) (Observed, error) {
 	return obs, nil
 }
 
+// backend is the renderer with this applier's facts attached.
+//
+// Backend stays a value with no methods that reach outside itself, which is what
+// lets a test render without a daemon; the applier is where the views live, so
+// the join happens here rather than in every BuildPlan caller.
+func (a Applier) backend() Backend {
+	b := a.Backend
+	b.DialIn = a.DialIn
+	return b
+}
+
 // Plan reports what applying desired would do, without doing it.
 func (a Applier) Plan(ctx context.Context, desired Config) (Plan, error) {
 	obs, err := a.Observe(ctx)
 	if err != nil {
 		return Plan{}, err
 	}
-	return BuildPlan(a.Backend, desired, a.Links, a.Reservations, a.Published, obs, time.Now())
+	return BuildPlan(a.backend(), desired, a.Links, a.Reservations, a.Published, obs, time.Now())
 }
 
 // Drift reports what has changed underneath stored intent.
@@ -271,7 +288,7 @@ func (a Applier) ApplyChecked(ctx context.Context, desired Config, check func(Pl
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	plan, err := BuildPlan(a.Backend, desired, a.Links, a.Reservations, a.Published, obs, time.Now())
+	plan, err := BuildPlan(a.backend(), desired, a.Links, a.Reservations, a.Published, obs, time.Now())
 	if err != nil {
 		return ApplyResult{Plan: plan}, err
 	}

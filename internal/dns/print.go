@@ -149,6 +149,14 @@ func writeStatusText(w io.Writer, status statusResponse) error {
 		fmt.Fprintf(w, "starts at boot: NO for %s — DNS will not come back after a reboot\n", s.Unit)
 	}
 
+	// What the relay answers on, and why. Stated even when it matches what was
+	// asked for, because the failure this line exists for is an address that is
+	// answered on by nobody: a dial-in device is told to use one address and
+	// only two surfaces can say whether it is served (dialin.go).
+	if len(status.Served) > 0 {
+		fmt.Fprintf(w, "answering on:   %s\n", describeServed(status.Served))
+	}
+
 	switch {
 	case status.DriftError != "":
 		// Honest about not knowing, rather than reporting "no drift" because we
@@ -415,6 +423,19 @@ func describeQueryLog(q QueryLog) string {
 }
 
 // short trims the ".service" suffix so a status column is readable.
+// describeServed spells the served set the way an operator would say it.
+func describeServed(in []servedView) string {
+	parts := make([]string, 0, len(in))
+	for _, s := range in {
+		if s.Source == servedWildcard {
+			parts = append(parts, fmt.Sprintf("every address this router holds, port %d", DNSPort))
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s (%s)", s.Addr, s.Source))
+	}
+	return strings.Join(parts, ", ")
+}
+
 func short(unit string) string { return strings.TrimSuffix(unit, ".service") }
 
 func orDash(s string) string {

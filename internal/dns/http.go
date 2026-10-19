@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/netip"
+	"slices"
 	"strconv"
 	"time"
 
@@ -248,7 +250,7 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 	}
 
 	// Report the wildcard default without storing a copy of kernel addresses.
-	derived := DerivedNotes(cfg, h.Applier.Links)
+	derived := DerivedNotes(cfg, h.Applier.Links, h.Applier.DialIn)
 
 	// Cross-module inputs stay stable until the change is stored.
 	if res := Validate(cfg, h.Applier.Links, h.Applier.Reservations); !res.OK() {
@@ -330,7 +332,7 @@ func (h HTTP) postPlan(w http.ResponseWriter, r *http.Request) {
 	} else {
 		cfg, err = UnmarshalConfig(data)
 		if err == nil {
-			derived = DerivedNotes(cfg, h.Applier.Links)
+			derived = DerivedNotes(cfg, h.Applier.Links, h.Applier.DialIn)
 		}
 	}
 	if err != nil {
@@ -403,9 +405,66 @@ type statusResponse struct {
 	Stats      *statsView `json:"stats,omitempty"`
 	StatsError string     `json:"stats_error,omitempty"`
 
+	// Served is every address the relay answers on, and why.
+	//
+	// A list rather than a sentence because the interesting failure is a
+	// *missing* one. "Connected but nothing resolves" is what a client
+	// configuration naming an address this box does not answer on looks like,
+	// and a status that said only "listening on 172.16.1.1:53" left the
+	// operator to notice the absence themselves — which is exactly how the
+	// dial-in address went unanswered for a week.
+	Served []servedView `json:"served"`
+
 	// AsOf stamps the whole reply. Every observed object carries its freshness
 	// so no surface can imply one it does not have (§4.5).
 	AsOf time.Time `json:"as_of"`
+}
+
+// Where a served address came from.
+const (
+	servedWildcard = "wildcard"
+	servedPinned   = "pinned"
+	servedDialIn   = "dial-in"
+)
+
+// servedView is one address the relay answers on.
+type servedView struct {
+	// Addr is the address, or zero for the wildcard.
+	Addr netip.AddrPort `json:"addr,omitempty"`
+
+	// Source is wildcard, pinned or dial-in — the operator's word for why this
+	// address is answered on, not this module's.
+	Source string `json:"source"`
+}
+
+// serveView is every address the relay answers on, in the operator's terms.
+//
+// The wildcard is one entry, not zero: "answering everywhere" is a different
+// statement from "answering nowhere", and a client that showed "nothing served"
+// for the ordinary box would be worse than useless.
+func serveView(c Config, dialIn DialInView) []servedView {
+	// A module that is off answers nowhere, whatever its pins say. Listing them
+	// anyway would put "answering on 172.16.1.1:53" under "DNS: disabled", which
+	// is the kind of contradiction an operator reads as a bug in olr rather than
+	// as their own setting.
+	if !c.Enabled {
+		return nil
+	}
+	if len(c.Listen) == 0 {
+		return []servedView{{Source: servedWildcard}}
+	}
+	out := make([]servedView, 0, len(c.Listen)+1)
+	for _, addr := range c.Listen {
+		out = append(out, servedView{Addr: addr, Source: servedPinned})
+	}
+	if service, err := ServiceListen(c, dialIn); err == nil {
+		for _, addr := range service {
+			if !slices.Contains(c.Listen, addr) {
+				out = append(out, servedView{Addr: addr, Source: servedDialIn})
+			}
+		}
+	}
+	return out
 }
 
 func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
@@ -417,6 +476,7 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp.Enabled = cfg.Enabled
+	resp.Served = serveView(cfg, h.Applier.DialIn)
 
 	// Each part of "health" is reported independently and none can suppress the
 	// others (§5.4 — drift and backend liveness are different questions, and

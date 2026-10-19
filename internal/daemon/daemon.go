@@ -248,6 +248,10 @@ func run(args []string) error {
 		return fmt.Errorf("initialising dns: %w", err)
 	}
 	dnsApplier.Published = dnsPublished{store: store}
+	// The tunnel's address, read through `remote`: the resolver answers on it
+	// because every client configuration names it, not because an operator
+	// remembered to pin it (internal/dns/dialin.go).
+	dnsApplier.DialIn = dnsDialIn{store: remote.Store{Store: store}}
 	if opts.root != "" {
 		logger.Warn("running against a relocated root; this is a development mode",
 			"root", opts.root)
@@ -591,6 +595,14 @@ func run(args []string) error {
 		Paths:  remote.RootedPaths(opts.root),
 		Unit:   socksUnit,
 		Object: remote.ObjectSocks,
+	}
+
+	// design.md §4.1's remote → dns arrow: moving the tunnel changes an address
+	// the relay was rendered to answer on, and nothing in dns's own intent
+	// moved, so dns cannot notice by itself. Re-applied under the same apply
+	// lock as the tunnel edit.
+	remoteTunnel.Follow = func(ctx context.Context) []core.Step {
+		return applyDependents(ctx, logger, dnsDependent(dnsApplier))
 	}
 
 	srv.Mount(remote.ModuleName, remote.HTTP{

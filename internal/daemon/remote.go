@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
 )
@@ -39,4 +40,29 @@ func (r remoteNetworks) Networks() ([]remote.NetworkInfo, error) {
 		out = append(out, remote.NetworkInfo{Name: n.Name, Subnet: n.Subnet})
 	}
 	return out, nil
+}
+
+// dnsDialIn is the dns module's window onto the tunnel (internal/dns/dialin.go).
+//
+// It exists so that the address in a client configuration's `DNS =` line and
+// the address the resolver answers on are the same number, computed once. That
+// is the whole fix for "the phone says connected and nothing resolves": the
+// resolver used to answer only where an operator had pinned it, while this line
+// was written by a module that had never asked.
+//
+// Read through remote.RouterAddr rather than recomputed here: it is the exact
+// function wg_render uses for the client file, so the two cannot drift apart by
+// a derivation that was copied instead of called.
+type dnsDialIn struct{ store remote.Store }
+
+// DialIn implements dns.DialInView.
+func (d dnsDialIn) DialIn() (dns.DialInInfo, error) {
+	cfg, err := d.store.Load()
+	if err != nil {
+		return dns.DialInInfo{}, err
+	}
+	if !cfg.WireGuard.Enabled {
+		return dns.DialInInfo{}, nil
+	}
+	return dns.DialInInfo{Enabled: true, Addr: cfg.WireGuard.RouterAddr()}, nil
 }

@@ -301,7 +301,8 @@ func (f *configFlags) register(c *cobra.Command) {
 	c.Flags().BoolVar(&f.filterAAAA, "filter-aaaa", false, "answer AAAA queries without IPv6 addresses")
 	c.Flags().StringArrayVar(&f.listen, "listen", nil,
 		"pin DNS to specific addresses, repeatable, e.g. 192.168.1.1:53 "+
-			"(default: every address this router holds; pinned addresses are yours to keep correct)")
+			"(default: every address this router holds; pins are yours to keep correct, and olr adds "+
+			"the addresses it hands to clients itself)")
 	c.Flags().StringVar(&f.mode, "mode", "",
 		"how names are resolved: "+joinUpstreamModes())
 	c.Flags().StringArrayVar(&f.servers, "upstream", nil,
