@@ -566,7 +566,7 @@ export function DeviceNode({
             {density === 'detail' && <Address device={device} />}
           </span>
           {services?.length ? <span aria-hidden className="shrink-0" style={{ width: serviceWidth }} /> : null}
-          <span className="w-[68px] shrink-0 text-right text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+          <span className="w-12 shrink-0 text-right text-xs text-muted-foreground tabular-nums whitespace-nowrap">
             {/* Away is said beside the dimmed name, so presence is never
                 colour alone — and a green dot on every row that is fine was
                 the one mark on the list that said nothing. */}
@@ -574,7 +574,7 @@ export function DeviceNode({
           </span>
         </Shell>
         <ServiceLinks services={services} domain={serviceDomain}
-          className="absolute inset-y-0 right-20" width={serviceWidth} compact />
+          className="absolute inset-y-0 right-15" width={serviceWidth} compact />
       </div>
     )
   }

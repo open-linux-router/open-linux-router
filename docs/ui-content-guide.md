@@ -252,6 +252,8 @@ consequences visible; disclose server comparisons and technical explanations.
 
 Overview group headers open the group's detail page directly on desktop and
 mobile. The unnamed device bucket retains its in-place disclosure.
+Keep service icons beside the compact activity column, leaving the remaining
+row width for the device name.
 Group details lead with parent, device counts and subgroup links beside bulk
 uplink and priority controls in the device summary layout. Keep current-member
 scope, replacement behavior and the priority enforcement caveat beside the

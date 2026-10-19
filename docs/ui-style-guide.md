@@ -334,6 +334,8 @@ Overview group headers navigate directly to group details at every screen size;
 do not expand or focus named groups in place.
 Device list rows reserve space for up to three 24px service icons with 4px gaps.
 Use only the space needed by the device's services; additional icons scroll horizontally.
+Keep the trailing activity column at 48px so service icons sit close to rates
+and last-seen values without taking space from device names.
 
 Network-map device ordering samples current traffic ranks every five seconds.
 Pause reordering while the pointer is over the map, keyboard focus is inside it,
