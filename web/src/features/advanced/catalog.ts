@@ -8,10 +8,12 @@ import { TOOL_ARTWORK, TOOL_DEFINITIONS } from '@/features/tools/catalog'
  * it, Services are the background jobs it runs for the network, and Diagnostics
  * are the measurements an operator runs on demand.
  *
- * A tile is a link and one short name. The letter is the mark — these are OLR's
- * own features, so there is no brand to wear — and the hue is the group's, which
- * is why `hue` sits on the group rather than on each tile. A diagnostic that
- * names an upstream tool (NextTrace) wears that project's own artwork instead.
+ * A tile is a link and one short name. The letter is the mark for OLR's own
+ * features — the hue is the group's, which is why `hue` sits on the group rather
+ * than on each tile. A tile that names an upstream project may wear that
+ * project's mark instead: a self-contained app icon that fills the tile
+ * (NextTrace), or a plain glyph the launcher sets on its white tile, the way
+ * Access draws its project marks (Caddy).
  */
 export interface AdvancedTile {
   slug: string
@@ -19,6 +21,8 @@ export interface AdvancedTile {
   letter: string
   /** The upstream project's app icon, for a tile that names that project. */
   artwork?: string
+  /** A project's plain glyph, drawn on the launcher's white tile. */
+  logo?: string
   /** One sentence for the tooltip; the name and letter are the tile. */
   description: string
   to: string
@@ -77,6 +81,7 @@ export const ADVANCED_GROUPS: AdvancedGroup[] = [
         slug: 'caddy',
         name: 'Caddy',
         letter: 'C',
+        logo: '/service-logos/caddy.svg',
         description: 'Publish a service on your own domain over HTTPS.',
         to: '/advanced/caddy',
         state: 'ingress',

@@ -78,13 +78,15 @@ Caddy-directory revision: publishing moved out of Access entirely, to Advanced �
 Services → Caddy (`/advanced/caddy`), and `/access/ingress`, `/advanced/ingress`
 and `/ingress` redirect there with their query string and fragment intact. The
 page keeps its device-row entry points and its live "addresses / certificate"
-answer on the tile. Node 24 lint (27 existing warnings, 0 errors), the production
-build, all 56 UI tests and the interface-rate checks pass. A headless browser
-against a scratch daemon verifies the Services grid carries a Caddy tile whose
-link and accessible name are `/advanced/caddy` and `Caddy · Off`, that all three
-former addresses land on `/advanced/caddy` (including `?device=`), that Access no
-longer offers the page, and that the document does not overflow at a true 375-pixel
-viewport (scrollWidth 375). Screenshots at 1440 and 375 in light and dark themes:
+answer on the tile, which wears Caddy's own mark from theSVG
+(`web/public/service-logos/caddy.svg`) on the launcher's white tile. Node 24 lint
+(27 existing warnings, 0 errors), the production build, all 56 UI tests and the
+interface-rate checks pass. A headless browser against a scratch daemon verifies
+the Services grid carries a Caddy tile whose link and accessible name are
+`/advanced/caddy` and `Caddy · Off`, that all three former addresses land on
+`/advanced/caddy` (including `?device=`), that Access no longer offers the page,
+and that the document does not overflow at a true 375-pixel viewport (scrollWidth
+375). Screenshots at 1440 and 375 in light and dark themes:
 `/tmp/olr-caddy-review`. Linux-targeted `go vet` passes, and `go test ./...` passes
 except `TestCloudflareResultAndScore`, which fails identically on unmodified
 `main`. No live router settings were changed.
