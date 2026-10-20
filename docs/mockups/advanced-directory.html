@@ -43,9 +43,7 @@
   .tile:hover .backing { filter: brightness(1.1); }
   .letter { font-size: 28px; line-height: 1; font-weight: 600; letter-spacing: -0.02em; }
   .label { display: flex; min-width: 0; flex-direction: column; gap: 2px; align-items: center; }
-  .name { max-width: 100%; text-align: center; font-size: 14px; line-height: 20px; font-weight: 500; overflow-wrap: break-word; }
-  .state { max-width: 100%; text-align: center; font-size: 12px; line-height: 16px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .state.attention { color: var(--warning); }
+  .name { width: 100%; text-align: center; font-size: 14px; line-height: 20px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tooltip { display: none; position: absolute; z-index: 40; bottom: calc(100% + 6px); left: 50%; translate: -50% 0; width: max-content; max-width: 288px; border-radius: 6px; background: var(--foreground); padding: 6px 12px; font-size: 12px; line-height: 1.6; font-weight: 400; color: var(--background); text-align: left; }
   .tooltip p { margin: 0; }
   .tooltip p + p { margin-top: 6px; }
@@ -75,7 +73,7 @@
 
   <main>
     <div class="groups" id="groups"></div>
-    <p class="caption">One hue per group · hover/focus tooltip on “Traceroute” · <code>#tile</code> gives each tile its own hue · <code>#tip</code> and <code>#dark</code></p>
+    <p class="caption">One hue per group · one line of name · hover/focus tooltip carries the state · <code>#tile</code> gives each tile its own hue · <code>#tip</code> and <code>#dark</code></p>
   </main>
 
   <footer>
@@ -95,7 +93,7 @@
     {
       id: 'system', title: 'System', hue: 250, tiles: [
         { name: 'Firewall', letter: 'F', hue: 220, state: 'On', description: 'Decide what may reach this router and the devices behind it.' },
-        { name: 'Administrator access', letter: 'A', hue: 290, state: 'Password set', description: 'Password, sessions and sign-out for this web interface.' },
+        { name: 'Admin access', letter: 'A', hue: 290, state: 'Password set', description: 'Password, sessions and sign-out for this web interface.' },
         { name: 'Port forwarding', letter: 'P', hue: 25, state: '2 rules', description: 'Reach a service inside this network through an external port.' },
       ],
     },
@@ -122,7 +120,7 @@
   const tile = (t, hue, focus) => `
     <a class="tile" href="#"${focus ? ' tabindex="0"' : ''} aria-label="${t.name}${t.state ? ` \u00b7 ${t.state}` : ''}">
       <span class="backing" style="background: oklch(0.52 0.12 ${hue})"><span class="letter" aria-hidden="true">${t.letter}</span></span>
-      <span class="label"><span class="name">${t.name}</span>${t.state ? `<span class="state">${t.state}</span>` : ''}</span>
+      <span class="label"><span class="name">${t.name}</span></span>
       <span class="tooltip" role="tooltip"><p>${t.description}</p>${t.state ? `<p>${t.state}</p>` : ''}</span>
     </a>`
 

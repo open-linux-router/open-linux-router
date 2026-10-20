@@ -8,10 +8,11 @@ import { cn } from '@/lib/utils'
  * Advanced), not a list of settings.
  *
  * A directory answers "where do I go" before it answers "what does it say", so
- * the tile is an icon, a short name, and — where a feature has a state worth
- * knowing from the landing page — one compact line under the name. The state is
- * visible rather than hover-only: a tooltip is not available to a finger, and
- * the value is the reason the operator opened this page at all.
+ * the tile is a mark and a short name on one line. The state still travels with
+ * the tile — hover/focus explains the function and the current answer, and the
+ * accessible name repeats that answer for touch and screen readers — but it does
+ * not get a line of its own, because a directory that prints nine statuses has
+ * stopped being a directory.
  *
  * Every tile is one link with one destination. A destination OLR does not
  * configure may open the project's own site instead; there is no tile whose
@@ -32,7 +33,7 @@ export function LauncherSection({ id, title, children }: { id: string; title: st
 }
 
 /** A feature's current answer, in the same shape the section summaries use. */
-export type LauncherState = { text: string; attention?: boolean }
+export type LauncherState = { text: string }
 
 /**
  * What sits on the 64px backing.
@@ -57,7 +58,6 @@ export function LauncherTile({
   name,
   description,
   mark,
-  state,
   notes,
   to,
   href,
@@ -66,15 +66,12 @@ export function LauncherTile({
   /** One sentence for the tooltip; never the only place a function is stated. */
   description: string
   mark: LauncherMark
-  /** Shown under the name, then repeated in the tooltip and the accessible name. */
-  state?: LauncherState
-  /** Tooltip-only state lines, for a directory that keeps its values on hover. */
+  /** The tile's current answer: hover/focus and the accessible name, nowhere else. */
   notes?: LauncherState[]
   to?: string
   href?: string
 }) {
-  const lines = [...(state ? [state] : []), ...(notes ?? [])]
-  const summary = lines[0]
+  const summary = notes?.[0]
   const label = `${name} · ${summary?.text ?? 'Not integrated'}`
   return (
     <Tooltip>
@@ -93,20 +90,13 @@ export function LauncherTile({
               ? <span aria-hidden className="text-[28px] leading-none font-semibold tracking-tight">{mark.letter}</span>
               : mark.children}
         </span>
-        {/* The label owns the tile's width, so a long state truncates inside
-            the grid cell instead of spilling into the neighbouring tile. */}
-        <span className="flex w-full min-w-0 flex-col items-center gap-0.5">
-          <span className="max-w-full break-words text-center text-[13px] font-medium sm:text-sm">{name}</span>
-          {state && (
-            <span className={cn('max-w-full truncate text-xs leading-4', state.attention ? 'text-warning-foreground' : 'text-muted-foreground')}>
-              {state.text}
-            </span>
-          )}
-        </span>
+        {/* One line, always: a name that wraps turns one row of tiles into a
+            ragged block and makes the next group's heading look misplaced. */}
+        <span className="w-full truncate text-center text-[13px] font-medium sm:text-sm">{name}</span>
       </TooltipTrigger>
       <TooltipContent className="block space-y-2 text-sm leading-relaxed">
         <p>{description}</p>
-        {lines.length ? lines.map((line, index) => <p key={index}>{line.text}</p>) : <p>Not integrated · External setup</p>}
+        {notes?.length ? notes.map((note, index) => <p key={index}>{note.text}</p>) : <p>Not integrated · External setup</p>}
       </TooltipContent>
     </Tooltip>
   )

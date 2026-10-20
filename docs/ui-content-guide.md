@@ -347,9 +347,10 @@ Its contract is:
   Place a feature by its charter, not by which module happens to own it.
 - One tile per destination, with a capital initial on a 64px tinted tile. The
   tiles of a group share one hue; the letter carries identity.
-- A short name below the tile. The page behind it may carry a longer name.
-- State prints as one 12px line under the name when the feature has one, and in
-  warning colour when it needs attention. Never hide state on hover alone.
+- One line of name below the tile, never wrapped, and nothing printed under it.
+  Keep the tile's name short enough for one line; the page behind it may carry
+  the longer name (Admin access opens Administrator access).
+- Function and state appear on hover/focus and in the tile's accessible name.
 - The whole tile is a keyboard-accessible link; no dialog opens on click.
 - There is no intermediate "Tools" page: a diagnostic tile opens the tool.
 - Keep explanations, requirements and results on the individual pages.

@@ -50,7 +50,7 @@ export function AdvancedPage() {
               name={tile.name}
               description={tile.description}
               mark={{ kind: 'letter', letter: tile.letter, hue: group.hue }}
-              state={tile.state ? states[tile.state] : undefined}
+              notes={tile.state ? [states[tile.state]] : undefined}
               to={tile.to}
             />
           ))}

@@ -113,12 +113,17 @@ Advanced is the same launcher, with three grids headed “System”, “Services
 (firewall, administrator access, port forwarding); Services holds the background
 jobs it runs for the network (Dynamic DNS, IPTV multicast); Diagnostics holds the
 five tools. Each tile wears a capital initial on a tinted tile, and the tiles of
-one group share a single hue, so the tint groups them without a legend. Tools
-have no persistent state and no line under the name. A tile that does have a
-state repeats it in 12px muted text — warning colour when it needs attention —
-because the state is what saves opening nine pages. Keep the directory's tiles
-and the shared launcher in `components/layout/launcher.tsx`; a tool tile links to
-its diagnostic page, and there is no Tools directory page in between.
+one group share a single hue, so the tint groups them without a legend.
+
+A tile is a mark and one line of name. No name wraps and nothing prints under
+it: a row of two-line labels makes the next group's heading look misplaced, and
+a directory that reports nine statuses has stopped being a directory. Keep the
+tile's name short enough for one line — the page behind it may carry the longer
+name, as Admin access opens Administrator access. The state still travels with
+the tile: hover/focus explains the function and the current answer, and the
+accessible name repeats it for touch and screen readers. Keep the directory's
+tiles and the shared launcher in `components/layout/launcher.tsx`; a tool tile
+links to its diagnostic page, and there is no Tools directory page in between.
 
 Tunnel Broker uses one scrollable page with five numbered sections and a sticky
 step navigation immediately below the 64px shell header. Keep section anchors

@@ -47,7 +47,9 @@ export const ADVANCED_GROUPS: AdvancedGroup[] = [
       },
       {
         slug: 'access',
-        name: 'Administrator access',
+        // The tile is one line, so it takes the short name; the page behind it
+        // is still Administrator access.
+        name: 'Admin access',
         letter: 'A',
         description: 'Password, sessions and sign-out for this web interface.',
         to: '/advanced/access',
