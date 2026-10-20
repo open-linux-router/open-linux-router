@@ -73,8 +73,17 @@ const (
 	// turning routing off must not take the byte counters with it.
 	StatTableName = "olr_stat"
 
-	// AccountChain counts forwarded traffic in both directions.
+	// AccountChain counts traffic that crosses the box, in both directions. It
+	// is the forward hook.
 	AccountChain = "account"
+
+	// LocalInChain and LocalOutChain count the client's half of a conversation
+	// the box is an end of rather than a way through: what a device sent to a
+	// socket here, and what that socket sent back. Separate chains because a
+	// base chain has one hook, and the hook is what decides which traffic a
+	// rule sees at all.
+	LocalInChain  = "local-in"
+	LocalOutChain = "local-out"
 )
 
 // The accounting sets, one per direction per family (§7.1).

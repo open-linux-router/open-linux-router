@@ -249,44 +249,91 @@ func (k LinuxKernel) observeStat(conn *nftables.Conn) ([]string, error) {
 
 	out := []string{fmt.Sprintf("nft table inet %s", StatTableName)}
 
-	chain, err := statChain(conn)
+	chains, err := statChains(conn)
 	if err != nil {
 		return nil, err
 	}
-	if chain == nil {
-		// A table with no accounting chain counts nothing. Reported as the
-		// table alone, which does not match what we would write, so the plan
-		// shows it and applying rebuilds it.
-		return out, nil
+	for _, want := range StatChains() {
+		chain, ok := chains[want.Name]
+		if !ok {
+			// A table missing a chain counts part of what it was built to
+			// count. Reported as the table alone, which does not match what we
+			// would write, so the plan shows it and applying rebuilds it —
+			// rather than as a missing chain line, which would read as
+			// something to add beside the chains that are already there.
+			return out, nil
+		}
+		out = append(out, observedChainLine(chain))
+		lines, err := statRuleLines(conn, table, chain, want)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, lines...)
 	}
-	out = append(out, fmt.Sprintf("nft chain %s forward filter", AccountChain))
-
-	lines, err := statRuleLines(conn, table, chain)
-	if err != nil {
-		return nil, err
-	}
-	out = append(out, lines...)
 
 	return out, nil
 }
 
-// statChain finds the accounting chain, or nil when there is not one.
+// observedChainLine renders a chain the kernel holds in the canonical form the
+// plan diffs against.
 //
-// Its own function because both readers need it and because "absent" has to be
-// a value rather than an error: asking the kernel for the rules of a chain that
-// does not exist is an error, and a half-built table is a thing to rebuild, not
-// a thing to fail the status endpoint over.
-func statChain(conn *nftables.Conn) (*nftables.Chain, error) {
+// Read from the chain rather than written from the spec, for the reason
+// statRuleLines gives about rules: a chain moved to another hook, or hung off
+// another hook by an older version, has to read back differently or the drift
+// is invisible and never repaired.
+func observedChainLine(c *nftables.Chain) string {
+	return fmt.Sprintf("nft chain %s %s %s", c.Name, hookName(c.Hooknum), c.Type)
+}
+
+// hookName is nft's word for the hook a base chain runs on.
+func hookName(hook *nftables.ChainHook) string {
+	switch hook {
+	case nftables.ChainHookForward:
+		return "forward"
+	case nftables.ChainHookInput:
+		return "input"
+	case nftables.ChainHookOutput:
+		return "output"
+	case nil:
+		return "none"
+	}
+	return fmt.Sprintf("hook %d", *hook)
+}
+
+// hookNumber is the reverse, for building a chain.
+func hookNumber(hook string) *nftables.ChainHook {
+	switch hook {
+	case "forward":
+		return nftables.ChainHookForward
+	case "input":
+		return nftables.ChainHookInput
+	case "output":
+		return nftables.ChainHookOutput
+	}
+	// Callers pass the constants in StatChains, so this is a programming error
+	// rather than a condition to report: a chain with no hook would be built
+	// and count nothing, which is the failure this whole change is about.
+	panic("gateway: unknown accounting hook " + hook)
+}
+
+// statChains finds the accounting table's chains, keyed by name.
+//
+// Its own function because both readers need the same view and because "absent"
+// has to be a value rather than an error: asking the kernel for the rules of a
+// chain that does not exist is an error, and a half-built table is a thing to
+// rebuild, not a thing to fail the status endpoint over.
+func statChains(conn *nftables.Conn) (map[string]*nftables.Chain, error) {
 	chains, err := conn.ListChainsOfTableFamily(nftables.TableFamilyINet)
 	if err != nil {
 		return nil, err
 	}
+	out := map[string]*nftables.Chain{}
 	for _, c := range chains {
-		if c.Table != nil && c.Table.Name == StatTableName && c.Name == AccountChain {
-			return c, nil
+		if c.Table != nil && c.Table.Name == StatTableName {
+			out[c.Name] = c
 		}
 	}
-	return nil, nil
+	return out, nil
 }
 
 // statRuleLines reads the accounting rules' canonical forms back off the rules
@@ -303,16 +350,11 @@ func statChain(conn *nftables.Conn) (*nftables.Chain, error) {
 // A rule whose comment we cannot read at all is reported under its set's name
 // with no detail. That is still a mismatch against the line we would write, so
 // it rebuilds too, which is the safe direction to fail in.
-func statRuleLines(conn *nftables.Conn, table *nftables.Table, chain *nftables.Chain) ([]string, error) {
-	sets, err := conn.GetSets(table)
-	if err != nil {
-		return nil, err
-	}
-	present := map[string]bool{}
-	for _, s := range sets {
-		present[s.Name] = true
-	}
-
+//
+// Extra rules in the chain are reported as one line saying so. Nothing we write
+// puts them there, and a table carrying rules from a version whose comments we
+// no longer recognise is a table to replace rather than to leave counting.
+func statRuleLines(conn *nftables.Conn, table *nftables.Table, chain *nftables.Chain, want StatChain) ([]string, error) {
 	rules, err := conn.GetRules(table, chain)
 	if err != nil {
 		return nil, err
@@ -324,18 +366,24 @@ func statRuleLines(conn *nftables.Conn, table *nftables.Table, chain *nftables.C
 		}
 	}
 
-	var out []string
-	for _, s := range StatSets() {
-		if !present[s.Name] {
-			continue
+	// The line does not name its chain, so the same rule text appears in more
+	// than one chain by design: up4's ordinary rule is what forward and input
+	// both install. Who compares what, then: statTableMatches reads each chain
+	// separately, and the plan's diff counts lines, so two chains carrying the
+	// same rule is two entries either way. A rule *moved* between two existing
+	// chains is the one shape this cannot see, and applyStat's own comparison
+	// is what replaces the table in that case.
+	out := make([]string, 0, len(want.Rules))
+	for _, r := range want.Rules {
+		line := r.Line()
+		if comments[line] {
+			out = append(out, line)
+		} else {
+			out = append(out, fmt.Sprintf("nft stat set %s built by another version", r.Set.Name))
 		}
-		for _, line := range []string{s.Line(), s.DNATLine()} {
-			if comments[line] {
-				out = append(out, line)
-			} else {
-				out = append(out, fmt.Sprintf("nft stat set %s built by another version", s.Name))
-			}
-		}
+	}
+	if extra := len(rules) - len(want.Rules); extra > 0 {
+		out = append(out, fmt.Sprintf("nft chain %s carries %d rules this version does not write", chain.Name, extra))
 	}
 	return out, nil
 }
@@ -347,26 +395,47 @@ func statRuleLines(conn *nftables.Conn, table *nftables.Table, chain *nftables.C
 // second, private notion of "close enough": if `olr gateway plan` says the
 // accounting table is drifting, applying is what stops it saying so.
 func statTableMatches(conn *nftables.Conn, table *nftables.Table, want StatTable) (bool, error) {
-	chain, err := statChain(conn)
+	chains, err := statChains(conn)
 	if err != nil {
 		return false, err
 	}
-	if chain == nil {
+	// Exactly the chains we would write, no more and no fewer: a leftover chain
+	// from a version that counted somewhere else would keep counting.
+	if len(chains) != len(want.Chains) {
 		return false, nil
 	}
-	have, err := statRuleLines(conn, table, chain)
-	if err != nil {
-		return false, err
-	}
-	if len(have) != 2*len(want.Sets) {
-		return false, nil
-	}
-	for i, s := range want.Sets {
-		if have[2*i] != s.Line() || have[2*i+1] != s.DNATLine() {
+	for _, wantChain := range want.Chains {
+		chain, ok := chains[wantChain.Name]
+		if !ok {
 			return false, nil
+		}
+		if observedChainLine(chain) != wantChain.Line() {
+			return false, nil
+		}
+		have, err := statRuleLines(conn, table, chain, wantChain)
+		if err != nil {
+			return false, err
+		}
+		wantLines := ruleLines(wantChain)
+		if len(have) != len(wantLines) {
+			return false, nil
+		}
+		for i := range have {
+			if have[i] != wantLines[i] {
+				return false, nil
+			}
 		}
 	}
 	return true, nil
+}
+
+// ruleLines is a chain's rules' canonical forms.
+func ruleLines(c StatChain) []string {
+	out := make([]string, 0, len(c.Rules))
+	for _, r := range c.Rules {
+		out = append(out, r.Line())
+	}
+	return out
 }
 
 // applyStat replaces the accounting table, in its own transaction.
@@ -438,22 +507,7 @@ func (k LinuxKernel) applyStat(d Desired) error {
 		Name:   StatTableName,
 	})
 
-	policy := nftables.ChainPolicyAccept
-	chain := conn.AddChain(&nftables.Chain{
-		Name:  AccountChain,
-		Table: table,
-		Type:  nftables.ChainTypeFilter,
-		// The forward hook, so this counts traffic that crosses the router and
-		// nothing else. §7.4's first limit falls straight out of that and is
-		// worth printing in the UI rather than discovering: two devices on one
-		// network talking to each other never reach here, so a NAS shows 200 MB
-		// when 40 GB was copied to it.
-		Hooknum:  nftables.ChainHookForward,
-		Priority: nftables.ChainPriorityFilter,
-		Policy:   &policy,
-	})
-
-	for _, s := range d.Stat.Sets {
+	for _, s := range StatSets() {
 		addr := nftables.TypeIPAddr
 		if s.V6 {
 			addr = nftables.TypeIP6Addr
@@ -472,11 +526,28 @@ func (k LinuxKernel) applyStat(d Desired) error {
 		if err := conn.AddSet(set, nil); err != nil {
 			return fmt.Errorf("creating set %s: %w", s.Name, err)
 		}
-		for _, dnat := range []bool{false, true} {
+	}
+
+	policy := nftables.ChainPolicyAccept
+	for _, c := range d.Stat.Chains {
+		chain := conn.AddChain(&nftables.Chain{
+			Name:    c.Name,
+			Table:   table,
+			Type:    nftables.ChainTypeFilter,
+			Hooknum: hookNumber(c.Hook),
+			// The same priority as everything else that filters, because this
+			// counting is not a policy: no rule here can accept, drop or
+			// redirect, and the chain's policy is accept. See §7.1 — an earlier
+			// reading put these before the firewall so a dropped packet would
+			// still be counted, which measures attempts rather than use.
+			Priority: nftables.ChainPriorityFilter,
+			Policy:   &policy,
+		})
+		for _, r := range c.Rules {
 			conn.AddRule(&nftables.Rule{
 				Table: table, Chain: chain,
-				Exprs:    accountSetExprs(s, dnat),
-				UserData: comment(s.ruleLine(dnat)),
+				Exprs:    accountSetExprs(r.Set, r.DNAT),
+				UserData: comment(r.Line()),
 			})
 		}
 	}
@@ -486,6 +557,11 @@ func (k LinuxKernel) applyStat(d Desired) error {
 
 // accountSetExprs keys each packet on the local device. After DNAT and
 // before reverse SNAT, forwarded packet headers already contain that address.
+//
+// The same expression serves the local chains, where the header contains the
+// client's address for exactly the same reason and the hook does the rest: a
+// packet addressed to a socket here is keyed on what sent it, and one sent from
+// a socket here is keyed on what asked for it.
 func accountSetExprs(s StatSet, dnat bool) []expr.Any {
 	proto := byte(unix.NFPROTO_IPV4)
 	offset, length := uint32(12), uint32(4) // ip saddr

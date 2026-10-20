@@ -390,6 +390,57 @@ func TestAccountingSurvivesRoutingBeingDisabled(t *testing.T) {
 	}
 }
 
+// §7.1: three chains, because forwarding is not the only way bytes reach a
+// device. A name Ingress publishes is terminated here, and before the local
+// chains existed every byte of it was invisible: the device page read 0 B/s
+// while a video streamed at 12 MB/s, because caddy on the box was the other end
+// of the connection and no packet of it was ever forwarded.
+func TestAccountingCountsTheLocalHalf(t *testing.T) {
+	got := lines(t, testConfig(), nil)
+
+	for _, c := range StatChains() {
+		if !contains(got, c.Line()) {
+			t.Errorf("missing accounting chain: %q", c.Line())
+		}
+		for _, r := range c.Rules {
+			if !contains(got, r.Line()) {
+				t.Errorf("chain %s is missing %q", c.Name, r.Line())
+			}
+		}
+	}
+
+	// The local chains carry the ordinary rule only: a translated connection's
+	// remote end is this box, and this box's own address is no device's.
+	for _, c := range StatChains() {
+		if c.Name == AccountChain {
+			continue
+		}
+		for _, r := range c.Rules {
+			if r.DNAT || strings.Contains(r.Line(), "status dnat") {
+				t.Errorf("%s carries %q, which would key this box's own address", c.Name, r.Line())
+			}
+			switch {
+			case c.Hook == "input" && r.Set.Down:
+				t.Errorf("%s on input carries %s: input counts what a device sent here", c.Name, r.Set.Name)
+			case c.Hook == "output" && !r.Set.Down:
+				t.Errorf("%s on output carries %s: output counts what it was sent back", c.Name, r.Set.Name)
+			}
+		}
+	}
+
+	// And every set is still reachable from the forward chain, so a device on
+	// the same network as the router keeps being counted there.
+	fwd := StatChains()[0]
+	if fwd.Name != AccountChain || fwd.Hook != "forward" {
+		t.Fatalf("the first chain must be the forward hook: %+v", fwd)
+	}
+	for _, s := range StatSets() {
+		if !contains(got, s.Line()) || !contains(got, s.DNATLine()) {
+			t.Errorf("the forward chain no longer carries both halves of %s", s.Name)
+		}
+	}
+}
+
 func TestAccountingCanBeTurnedOff(t *testing.T) {
 	// §7.5 asks for a visible off switch, and this is it.
 	c := testConfig()

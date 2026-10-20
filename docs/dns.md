@@ -47,9 +47,9 @@ something a device is ever told about.
 ### 1.2 Why — two failures that have no fix at the device layer
 
 **A device pointed elsewhere is invisible, not merely unaccounted.** Traffic
-that never crosses olr's forward hook is absent from the `ipv4_addr . mark`
-counters, and absent from the residual too, because nothing knows it should be
-there. This is a different class of problem from unattributed bytes, and it
+another gateway carries never reaches olr's counters at all — not the
+`ipv4_addr . mark` sets (docs/gateway.md §7.1), and not the residual either,
+because nothing knows it should be there. This is a different class of problem from unattributed bytes, and it
 defeats the "always show what you cannot account for" rule by construction —
 there is no counter to show. Detection is limited to the heuristic *has a lease
 and answers ARP but has produced no traffic*.

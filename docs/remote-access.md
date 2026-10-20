@@ -189,7 +189,9 @@ is online. The two pages report the same rows wherever they can: Last heard, and
 Way in closes both. Beside those sit the three readings that are keyed by
 **address** rather than by hardware, and so need no pretending: the activity
 history and the traffic counters (`gateway` keys its accounting on the local
-device address it forwards from, and a tunnel address is one), and the DNS query
+device address at either end of the box — forwarded through it, or the far end
+of a socket here, which is what an `ingress` name is — and a tunnel address is
+one), and the DNS query
 log (`dnsrelay` records the source address, and the resolver already answers on
 the tunnel's own — `internal/dns/dialin.go`).
 

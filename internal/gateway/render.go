@@ -58,18 +58,67 @@ type Desired struct {
 }
 
 // StatTable is `inet olr_stat` — per-device *and* per-exit bytes from one
-// structure, in two rules per family (§7.1).
+// structure, in three base chains (§7.1).
 //
-// The concatenated key is what makes that true: the mark is already on the
-// packet from the classify chain, so keying on `address . mark` costs nothing
-// over keying on the address alone and answers "Living Room TV: 40 GB, of which
-// 38 via Proxy" without a second table.
+// The concatenated key is what makes per-device and per-exit one measurement:
+// the mark is already on the packet from the classify chain, so keying on
+// `address . mark` costs nothing over keying on the address alone and answers
+// "Living Room TV: 40 GB, of which 38 via Proxy" without a second table.
+//
+// Three chains rather than one because forwarding is not the only way bytes
+// reach a device. A name published by ingress, the resolver on port 53, the web
+// UI: the box is the *end* of those conversations, not a way through them, so
+// not one of their packets ever reaches the forward hook. The first report of
+// this table showing 0 B/s came from exactly that — a video streamed at
+// 12 MB/s from an ingress name, the topology drawing the stream, and the device
+// page insisting the device was idle, because caddy on the box was the other
+// end of the connection. The join on `address . mark` is unchanged; the local
+// chains only move where the counting happens.
 type StatTable struct {
 	Enabled bool
 
-	// Sets are the four dynamic sets, in a stable order.
-	Sets []StatSet
+	// Chains are the base chains, in a stable order.
+	Chains []StatChain
 }
+
+// StatChain is one base chain of the accounting table: the hook it counts on
+// and the rules it carries.
+//
+// The forward chain counts both halves of a conversation that crosses the box,
+// so it carries the DNAT pair as well (§7.1 — a port forward is attributed to
+// the local endpoint it was translated to). The local chains count the one half
+// a client has with the box itself, and only the ordinary rule exists there: a
+// packet addressed to a local socket was never forwarded, and a translated
+// connection's *remote* end is this box, whose own address is no device's.
+type StatChain struct {
+	// Name is the chain's name in the table.
+	Name string
+
+	// Hook is the nft hook keyword: forward, input or output.
+	Hook string
+
+	// Rules are the rules, in evaluation order.
+	Rules []StatRule
+}
+
+// Line is the chain's canonical form, the same one the plan diffs.
+func (c StatChain) Line() string {
+	return fmt.Sprintf("nft chain %s %s filter", c.Name, c.Hook)
+}
+
+// StatRule is one accounting rule: the set it feeds, and which side of the
+// conversation it keys on.
+type StatRule struct {
+	Set StatSet
+
+	// DNAT says this rule takes the connections conntrack has translated. It is
+	// one half of a pair: exactly one of the two matches any packet.
+	DNAT bool
+}
+
+// Line is the rule's canonical form, which is also the comment it carries in
+// the kernel, so a rule that changed shape reads back differently (§7.5).
+func (r StatRule) Line() string { return r.Set.ruleLine(r.DNAT) }
 
 // StatSetSize bounds each accounting set.
 //
@@ -94,15 +143,53 @@ type StatSet struct {
 	Down bool
 }
 
-// StatSets is the fixed set of four. A function rather than a var so a caller
-// cannot mutate the list everything else derives from.
-func StatSets() []StatSet {
-	return []StatSet{
-		{Name: StatUp4, V6: false, Down: false},
-		{Name: StatDown4, V6: false, Down: true},
-		{Name: StatUp6, V6: true, Down: false},
-		{Name: StatDown6, V6: true, Down: true},
+// StatChains is the fixed shape of the accounting table. A function rather than
+// a var so a caller cannot mutate the list everything else derives from.
+//
+// The local chains deliberately reuse the four sets rather than bringing their
+// own. A device's upload is its upload whether the bytes left for the internet
+// or ended in this box, and splitting it would leave every reader summing two
+// rows per device — the same reason the mark is part of the key rather than a
+// second table.
+func StatChains() []StatChain {
+	up4 := StatSet{Name: StatUp4, V6: false, Down: false}
+	down4 := StatSet{Name: StatDown4, V6: false, Down: true}
+	up6 := StatSet{Name: StatUp6, V6: true, Down: false}
+	down6 := StatSet{Name: StatDown6, V6: true, Down: true}
+
+	return []StatChain{
+		{Name: AccountChain, Hook: "forward", Rules: []StatRule{
+			{Set: up4}, {Set: up4, DNAT: true},
+			{Set: down4}, {Set: down4, DNAT: true},
+			{Set: up6}, {Set: up6, DNAT: true},
+			{Set: down6}, {Set: down6, DNAT: true},
+		}},
+		// Input is what a device sent here; output is what it was sent back.
+		// The two hooks are split this way round rather than each holding both
+		// directions because the opposite halves belong to this box's own
+		// conversations — a proxy dialling the NAS on a client's behalf — and
+		// counting those would double every stream the box relays and hang it
+		// all on an address that is nobody's device.
+		{Name: LocalInChain, Hook: "input", Rules: []StatRule{{Set: up4}, {Set: up6}}},
+		{Name: LocalOutChain, Hook: "output", Rules: []StatRule{{Set: down4}, {Set: down6}}},
 	}
+}
+
+// StatSets is the fixed set of four, derived from the chains so that a set
+// cannot be handed to a chain and left out of the readers.
+func StatSets() []StatSet {
+	var out []StatSet
+	seen := map[string]bool{}
+	for _, c := range StatChains() {
+		for _, r := range c.Rules {
+			if seen[r.Set.Name] {
+				continue
+			}
+			seen[r.Set.Name] = true
+			out = append(out, r.Set)
+		}
+	}
+	return out
 }
 
 // KeyBytes is the width of one element's key: the address, then the mark, each
@@ -418,7 +505,7 @@ func Render(c Config, links LinkView, health Health) Desired {
 	// (§7.1). A box with `enabled: false` and stats on still counts bytes; it
 	// just counts them all against mark 0.
 	if c.StatsOrDefault() {
-		d.Stat = StatTable{Enabled: true, Sets: StatSets()}
+		d.Stat = StatTable{Enabled: true, Chains: StatChains()}
 		// Enables byte counters for new conntrack entries. Do not force this
 		// shared kernel facility off: remote access also consumes its counters.
 		d.Sysctls = append(d.Sysctls, SysctlSpec{Key: "net.netfilter.nf_conntrack_acct", Value: "1"})
@@ -834,11 +921,12 @@ func (d Desired) objectLines() []string {
 	// First, and outside the Enabled guard below, because the accounting table
 	// has its own lifetime (§7.1).
 	if d.Stat.Enabled {
-		out = append(out,
-			fmt.Sprintf("nft table inet %s", StatTableName),
-			fmt.Sprintf("nft chain %s forward filter", AccountChain))
-		for _, s := range d.Stat.Sets {
-			out = append(out, s.Line(), s.DNATLine())
+		out = append(out, fmt.Sprintf("nft table inet %s", StatTableName))
+		for _, c := range d.Stat.Chains {
+			out = append(out, c.Line())
+			for _, r := range c.Rules {
+				out = append(out, r.Line())
+			}
 		}
 	}
 

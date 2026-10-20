@@ -191,3 +191,30 @@ func TestTrafficViewSaysWhenItIsRunningOutOfRoom(t *testing.T) {
 		t.Error("a table at nine tenths should say so while the numbers are still mostly right")
 	}
 }
+
+// The local chains count conversations with the box, and the box has some with
+// itself: the resolver asking its own forwarder, a proxy dialling a loopback
+// socket. 127.0.0.1 is nobody's device, so those rows are dropped rather than
+// handed to a screen with nowhere to draw them.
+func TestTrafficDropsTheBoxTalkingToItself(t *testing.T) {
+	c := testConfig()
+	c.Normalize()
+
+	k := &StaticKernel{Flows: []Flow{
+		{Addr: netip.MustParseAddr("127.0.0.1"), UpBytes: 400, DownBytes: 900},
+		{Addr: netip.MustParseAddr("::1"), UpBytes: 40, DownBytes: 90},
+		{Addr: netip.MustParseAddr("192.168.1.23"), UpBytes: 1, DownBytes: 2},
+	}}
+	a := Applier{Kernel: k, Links: testLinks(), Store: newTestStore(t)}
+	if _, err := a.Save(c); err != nil {
+		t.Fatal(err)
+	}
+
+	usage, err := a.Traffic(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(usage) != 1 || usage[0].Addr.String() != "192.168.1.23" {
+		t.Fatalf("only the device's row should survive: %+v", usage)
+	}
+}

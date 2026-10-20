@@ -842,8 +842,47 @@ table inet olr_stat {
     ct status dnat    ct direction reply    update @up4   { ip saddr . meta mark }
     # The same four rules and sets exist for IPv6.
   }
+  chain local-in {
+    type filter hook input priority 0 ; policy accept ;
+    ct status != dnat ct direction original update @up4 { ip saddr . meta mark }
+    # And IPv6.
+  }
+  chain local-out {
+    type filter hook output priority 0 ; policy accept ;
+    ct status != dnat ct direction reply    update @down4 { ip daddr . meta mark }
+    # And IPv6.
+  }
 }
 ```
+
+**Three chains because forwarding is not the only way bytes reach a device.**
+The forward hook counts a conversation that crosses the box; it sees nothing of
+one the box is an *end* of. A name `ingress` publishes, the resolver on port 53,
+this web UI: those arrive on `input` and leave on `output`, and an earlier
+version of this table counted none of them. What that looked like was a device
+page reading **0 B/s while a video streamed from it at 12 MB/s** — the player was
+talking to caddy on the box, which proxied the stream to the NAS, and every byte
+of it went: peer → local socket → proxy → NAS. The topology drew the stream; the
+counters insisted nothing was happening. That is §7.3's failure in the direction
+that cannot be seen at all, so the local hooks are part of the mechanism now and
+not a documented limit.
+
+Each hook carries one direction, and the split is deliberate. `input` holds the
+upload rules and `output` the download rules, so the halves that belong to the
+box's *own* conversations are never counted: a proxy dialling the NAS on a
+client's behalf is `output` in the original direction and `input` in the reply
+direction, and neither matches. Counting them would add every relayed stream
+twice and hang the second half on an address that is nobody's device. Loopback
+is the same reasoning at read time — the box's conversations with itself land in
+the same sets keyed on `127.0.0.1`, and `gateway` drops those rows rather than
+giving the screen a device it cannot draw.
+
+The local chains carry only the ordinary rule. The DNAT pair exists to
+attribute a port forward to the local endpoint it was translated to, and a
+translated connection's remote end is this box, so any second rule there would
+key this box's own address. Everything else about the join is unchanged: the
+mark is 0 for traffic that no assignment classified, so it lands in the residual
+row of §7.3 rather than in an exit's.
 
 The concatenated key gives per-device **and** per-exit from one structure,
 because the mark is already there from §3.3. *"Living Room TV: 40 GB, of which 38
@@ -926,7 +965,14 @@ different class of gap, and it is why the topology rule exists.
 
 - **Traffic that does not cross the router is invisible.** Two devices on one
   segment — a NAS backup, a Plex stream — never reach the forward hook. *"Why
-  does my NAS show 200 MB when I copied 40 GB?"* will be asked.
+  does my NAS show 200 MB when I copied 40 GB?"* will be asked. §7.1's local
+  chains do not change this: they count what a device does with *the box*, not
+  what it does with a sibling.
+- **A relayed conversation is counted for the client.** A stream the box serves
+  through `ingress` shows on the player and not on the NAS. That is the choice
+  §7.1 records — the alternative double-counts every relayed byte and gives the
+  second half to an address nobody owns — but it surprises anyone who watches
+  the NAS's numbers instead.
 - IPv6 privacy addresses rotate, so per-IP counters fragment across one device.
 - A device that changes address splits its history. Fixed leases mostly fix it.
 - Anything behind a second router counts as one device.

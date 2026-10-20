@@ -259,6 +259,14 @@ func (a Applier) Traffic(ctx context.Context) ([]Usage, error) {
 
 	out := make([]Usage, 0, len(flows))
 	for _, f := range flows {
+		// A conversation the box has with itself is counted too — the local
+		// chains do not know which end is a device — and 127.0.0.1 is nobody's
+		// address. Dropped here rather than kept out of the kernel, because a
+		// loopback guard would cost a rule on every packet to save a row that
+		// has nowhere to be drawn.
+		if f.Addr.IsLoopback() {
+			continue
+		}
 		u := Usage{
 			Addr:        f.Addr,
 			UpBytes:     f.UpBytes,

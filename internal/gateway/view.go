@@ -187,7 +187,8 @@ type usageView struct {
 	Address string `json:"address"`
 
 	// Exit is empty for the residual and explicit-direct device traffic, both
-	// of which take the box's normal route.
+	// of which take the box's normal route, and for a conversation this router
+	// served itself (§7.1): nothing classified it, because nothing forwarded it.
 	Exit string `json:"exit"`
 
 	// Unknown marks traffic still carrying a deleted exit's mark.
@@ -257,6 +258,9 @@ func trafficLimits() []string {
 		"Traffic between two devices on the same network never passes through " +
 			"this router, so it is not counted. Copying to a NAS on your own " +
 			"network is the usual surprise.",
+		"A conversation this router serves itself — a name Ingress publishes, " +
+			"its own pages — counts for the device that asked, not for the far " +
+			"side: a NAS streamed through it shows on the player, not on the NAS.",
 		"A device that changes address starts a new count, and IPv6 privacy " +
 			"addresses rotate on purpose, so one device can appear as several.",
 		"Anything behind a second router is counted as that router.",
