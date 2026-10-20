@@ -298,7 +298,7 @@ function Canvas({
   // Keys only: whether a peer is connected changes on every poll, and the map
   // should move when the set of peers changes rather than when one wakes up.
   const dialInInput = useMemo(
-    () => (dialIn ? { peers: dialIn.peers.map((p) => ({ key: p.key })) } : undefined),
+    () => (dialIn ? { peers: dialIn.peers.map((p) => ({ key: p.name })) } : undefined),
     [dialIn],
   )
 
@@ -406,7 +406,7 @@ function Canvas({
         return hop ? <NextHopNode hop={hop} onSelect={actions.onSelect} /> : null
       }
       case 'dialin': {
-        const peer = dialIn?.peers.find((p) => `p:${p.key}` === item.key)
+        const peer = dialIn?.peers.find((p) => `p:${p.name}` === item.key)
         return peer && dialIn
           ? <DialInNode peer={peer} iface={dialIn.interface} onOpen={() => actions.onOpenDialIn?.(peer)} />
           : null

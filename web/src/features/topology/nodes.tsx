@@ -159,7 +159,7 @@ export function DialInNode({ peer, iface, onOpen }: { peer: DialInPeer; iface: s
   const moved = peer.rxBytes || peer.txBytes
     ? `, ↓ ${formatBytes(peer.rxBytes)} ↑ ${formatBytes(peer.txBytes)} since it connected`
     : ''
-  const named = peer.key === peer.name ? peer.name : `${peer.name} (${peer.key})`
+  const named = peer.label === peer.name ? peer.name : `${peer.label} (${peer.name})`
   const title = `${named} over ${iface}${peer.address ? ` at ${peer.address}` : ''}: ${label}${where}${moved}`
   return (
     <Shell
@@ -177,7 +177,7 @@ export function DialInNode({ peer, iface, onOpen }: { peer: DialInPeer; iface: s
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className={cn('truncate text-sm font-semibold', (peer.state === 'away' || peer.state === 'never') && 'text-muted-foreground')}>
-            {peer.name}
+            {peer.label}
           </span>
           <span
             aria-label={peer.state}

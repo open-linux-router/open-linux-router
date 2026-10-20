@@ -31,9 +31,16 @@ export type DialInState = 'connected' | 'away' | 'never' | 'unknown'
 
 /** One peer, as the map needs it. Fields, not sentences: the node formats. */
 export interface DialInPeer {
-  /** Unique on the map. Peer names are unique in the configuration. */
-  key: string
+  /**
+   * The peer's name: unique on the map, and the only thing that identifies it
+   * anywhere else — the key of the configuration, the last segment of its page's
+   * URL, the argument every command takes.
+   */
   name: string
+
+  /** What to draw on the card: `display_name` when there is one, else the name. */
+  label: string
+
   address?: string
   state: DialInState
   lastHandshake?: string
@@ -64,9 +71,10 @@ export function dialInState(peer: RemotePeer): DialInState {
  * picture rearranging itself; each card carries its own dot and its own word,
  * so the order has no work left to do.
  *
- * "Label" is `display_name` when there is one and the name otherwise: the card
- * is read by a person, while the name stays the key the map and every command
- * identify the device by.
+ * The card says the `label` and the map keys it by the `name`. The two are
+ * different fields rather than one that changes meaning, because the name is
+ * also the last segment of the device's page URL: mixing them up is a card that
+ * opens nothing.
  */
 export function buildDialIn(status?: RemoteStatus): DialIn | undefined {
   if (!status?.enabled || status.peers.length === 0) return undefined
@@ -74,8 +82,8 @@ export function buildDialIn(status?: RemoteStatus): DialIn | undefined {
     interface: status.interface,
     peers: status.peers
       .map((peer) => ({
-        key: peer.name,
-        name: peer.display_name || peer.name,
+        name: peer.name,
+        label: peer.display_name || peer.name,
         address: peer.address,
         state: dialInState(peer),
         lastHandshake: peer.last_handshake,
@@ -83,6 +91,6 @@ export function buildDialIn(status?: RemoteStatus): DialIn | undefined {
         rxBytes: peer.rx_bytes ?? 0,
         txBytes: peer.tx_bytes ?? 0,
       }))
-      .sort((a, b) => a.name.localeCompare(b.name)),
+      .sort((a, b) => a.label.localeCompare(b.label) || a.name.localeCompare(b.name)),
   }
 }

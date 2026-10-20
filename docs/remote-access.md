@@ -274,6 +274,12 @@ A peer is not a fault. The one colour the map spends is red, on a way out that
 has stopped answering; a sleeping laptop is not that, so its card is drawn in
 the same neutral as everything else and says when it last called.
 
+**The card says the label, the click target says the name.** `display_name` when
+there is one and the name otherwise, because a card in a band is read by a
+person — while what it opens is the device's page, keyed by the name (§2.2). The
+two are separate fields on the map's own shape for that reason: one string that
+meant both at once was a card that opened nothing the day a label arrived.
+
 `RemoteStatus.peers` is the only input. A box with the tunnel switched off gets
 no box, no empty container and no "WireGuard is off" note — the map is about
 what is on the network, and `remote`'s page is where a module that is off is

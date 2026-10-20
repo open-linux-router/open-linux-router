@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -55,8 +55,22 @@ export function WireguardPeerPage() {
   const traffic = useGatewayTraffic()
   const flow = useTrafficView(traffic.data, traffic.isError)
   const patch = usePatchPeer()
-  const peer = status.data?.peers.find((p) => p.name === name)
+  const navigate = useNavigate()
+  const peers = status.data?.peers ?? []
+  // The URL carries the name, which is the key. A link that somehow says the
+  // label instead — a card opened by an older build, a hand-typed address —
+  // finds the device and is corrected below rather than 404ing on somebody who
+  // did nothing wrong.
+  const peer =
+    peers.find((p) => p.name === name) ??
+    peers.find((p) => p.display_name && p.display_name.toLowerCase() === (name ?? '').toLowerCase())
   const usage = peer?.address ? flow.flowOfAddress(peer.address) : undefined
+
+  useEffect(() => {
+    if (peer && peer.name !== name) {
+      navigate(`/devices/wireguard/${encodeURIComponent(peer.name)}`, { replace: true })
+    }
+  }, [peer, name, navigate])
 
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState('')
