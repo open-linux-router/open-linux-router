@@ -81,7 +81,7 @@ export function LauncherTile({
       <TooltipTrigger
         render={to ? <Link to={to} /> : href ? <a href={href} target="_blank" rel="noopener noreferrer" /> : <span />}
         aria-label={label}
-        className="group flex min-w-0 flex-col items-center gap-2 rounded-xl px-1 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background"
+        className="group flex min-w-0 flex-col items-center gap-2 rounded-xl px-0 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background"
       >
         <span
           className={cn('flex size-16 shrink-0 items-center justify-center rounded-2xl p-3 transition duration-150', MARK_BACKING[mark.kind])}
