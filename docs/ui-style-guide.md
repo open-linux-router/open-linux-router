@@ -29,13 +29,14 @@ secondary information. See the [page review record](ui-page-review.md).
 
 ## Color and surfaces
 
-World traffic is the one map where hue describes data. Each location gets one
-translucent arc and one moving dot: the arc runs from transmit teal at the
-router to receive blue at the remote end, its width and opacity follow that
-location's share of the busiest flow, and a blurred halo underneath accumulates
-where arcs bunch up so busy junctions read as light rather than as spaghetti.
-The dot travels out teal and back blue along the arc, four seconds each way.
-The halo is a glow, not an elevation effect; it stays confined to the map.
+World traffic is the one map where hue belongs to data rather than to status.
+Each location gets one translucent amber arc and one moving dot. Amber sits
+outside the country palette, so traffic reads as an overlay on geography; the
+arc fades in at the router, its width and opacity follow that location's share
+of the busiest flow, and a blurred halo underneath accumulates where arcs bunch
+up so busy junctions read as light rather than as spaghetti. The dot keeps the
+semantic pair for direction — teal outbound, blue on return, four seconds each
+way. The halo is a map effect only; it does not introduce glow elsewhere.
 
 Use semantic Tailwind tokens from `web/src/index.css`, never page-local gray or
 blue approximations. Light and dark themes are designed as separate contrast

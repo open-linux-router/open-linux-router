@@ -22,21 +22,19 @@ interface Snapshot { state: string; error?: string; as_of: string; seconds: numb
 type Position = [number, number]
 interface FlowTarget { feature: GeoJSON.Feature; coordinates?: Position[] }
 const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
-// Arcs are drawn from the router outwards, so a line-progress gradient can
-// carry the direction reading the moving dots already use: transmit teal at
-// this end, receive blue at the remote end. Colours are the theme's semantic
-// receive/transmit pair, lightened for the halo that trails each arc.
+// Traffic is one colour, outside the teal-green-blue family the map itself
+// uses. A line-progress gradient only fades the alpha in at the router, where
+// every arc starts, so the shared pixel becomes a fan instead of a knot.
+const flowColor = (dark: boolean, halo: boolean) => dark
+  ? (halo ? '#fdba74' : '#fb923c')
+  : (halo ? '#fb923c' : '#ea580c')
 const transparent = (hex: string) => {
   const n = parseInt(hex.slice(1), 16)
   return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, 0)`
 }
 const flowGradient = (dark: boolean, halo: boolean) => {
-  const [from, mid, to] = dark
-    ? (halo ? ['#5eead4', '#67e8f9', '#93c5fd'] : ['#6bd4c6', '#38bdf8', '#8ab4ff'])
-    : (halo ? ['#2dd4bf', '#38bdf8', '#60a5fa'] : ['#0d9488', '#0e7490', '#1d4ed8'])
-  // Every arc leaves the same point. Fading in over the first sixth of the
-  // path turns that shared pixel from a dark knot into a fan of light.
-  return ['interpolate', ['linear'], ['line-progress'], 0, transparent(from), 0.15, from, 0.55, mid, 1, to] as ExpressionSpecification
+  const color = flowColor(dark, halo)
+  return ['interpolate', ['linear'], ['line-progress'], 0, transparent(color), 0.15, color, 1, color] as ExpressionSpecification
 }
 // Zoom may only appear as the input of a top-level step/interpolate expression.
 // Layout expressions are evaluated at integer zooms; use integer thresholds
@@ -140,7 +138,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         instance.setPaintProperty(id, 'text-halo-color', dark ? '#232731' : '#ffffff')
       }
     }
-    const blue = dark ? '#8ab4ff' : '#1d4ed8'
+    const traffic = flowColor(dark, false)
     const start = origin ? position(origin) : undefined
     const next = new Map<string, FlowTarget>()
     if (start) next.set(`place:${start}`, { feature: { type: 'Feature', properties: { color: dark ? '#f1f3f7' : '#171b22' }, geometry: { type: 'Point', coordinates: start } } })
@@ -157,7 +155,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     for (const [location, peer] of locations) {
       const end = position(peer.place)
       if (!end) continue
-      if (!start || start[0] !== end[0] || start[1] !== end[1]) next.set(`place:${end}`, { feature: { type: 'Feature', properties: { color: blue }, geometry: { type: 'Point', coordinates: end } } })
+      if (!start || start[0] !== end[0] || start[1] !== end[1]) next.set(`place:${end}`, { feature: { type: 'Feature', properties: { color: traffic }, geometry: { type: 'Point', coordinates: end } } })
       if (!start || (start[0] === end[0] && start[1] === end[1])) continue
       const total = peer.download + peer.upload
       if (total <= 0) continue
@@ -166,8 +164,8 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       // still stands out. The square root keeps small flows visible instead
       // of collapsing them into hairlines beside a dominant one.
       const weight = Math.sqrt(total / Math.max(1, peak))
-      const width = 1.3 + 6.2 * weight
-      const strength = 0.3 + 0.45 * weight
+      const width = 1.2 + 5.4 * weight
+      const strength = 0.3 + 0.42 * weight
       const coordinates = arc(start, end, 0)
       next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: { width, strength }, geometry: { type: 'LineString', coordinates } }, coordinates })
     }
@@ -254,7 +252,7 @@ export function WorldTraffic({ origin, embedded = false }: { origin?: Origin; em
       <DialogClose render={<Button variant="secondary" size="icon-lg" className="absolute top-3 right-3 z-10 rounded-full bg-card/95 shadow-md ring-1 ring-border backdrop-blur-sm sm:size-9" />}><X aria-hidden="true" /><span className="sr-only">Close</span></DialogClose>
       <div className="min-h-0 flex-1" role="region" aria-label="World traffic map, drag to pan and scroll to zoom"><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} expanded /></div>
     </DialogContent></Dialog>
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription>Remote IPs by upload and download in the last 30 seconds. Arcs are wider and more opaque for the busiest locations; colour runs from transmit teal at the router to receive blue at the far end. IP locations are approximate.{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription>Remote IPs by upload and download in the last 30 seconds. Arcs are wider and more opaque for the busiest locations; the moving dot is teal outbound and blue on return. IP locations are approximate.{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
       <p className="text-sm text-muted-foreground">{status}{data?.seconds ? ` · ${Math.round(data.seconds)}s sampled` : ''}. {data?.state === 'disabled' ? 'Connection byte accounting is off. Enable Gateway traffic counting and apply its configuration.' : 'Counts include router and forwarded connections observed in Linux conntrack. Connections ending between samples and traffic bypassing conntrack may be missed.'} {(!origin || !position(origin)) && 'Router location is unknown; only remote points are shown.'}</p>
       {data?.error && <p className="break-words text-sm text-destructive">{data.error}</p>}
       {data?.locations?.error && <p className="break-words text-sm text-destructive">{data.locations.error}</p>}

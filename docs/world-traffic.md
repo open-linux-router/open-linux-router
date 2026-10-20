@@ -54,16 +54,16 @@ over the available window; the first sample is a baseline. Coverage is the
 top forty's share of all observed eligible remote-IP traffic, not a share of
 the separate nftables interface/device totals.
 
-Blue indicates download, teal upload. Each arc carries that pair as a gradient:
-transmit teal at the router, receive blue at the remote end, so direction is
-visible along a still arc as well as on its particle. A blurred halo in the
-same direction colours sits under each arc; because arcs composite per feature,
-the halo accumulates where they bunch up — around the router and along busy
-corridors — and concentration reads as light. Width and opacity are relative
-to the busiest plotted location, not to an absolute rate: square-root scaling
-keeps a one-percent flow visible while the busiest one still stands out, and
-every arc stays translucent so overlaps build up instead of replacing each
-other. Reduced motion disables particles and interpolation. The UI polls every
+Blue indicates download, teal upload, and the particle carries that pair:
+teal outbound, blue on the return. The arcs themselves are one amber hue,
+deliberately outside the teal-green-blue country palette, so colour marks
+traffic as a category and width and opacity carry its size. A blurred amber
+halo sits under each arc; because arcs composite per feature, the halo
+accumulates where they bunch up — around the router and along busy corridors —
+and concentration reads as light. Width and opacity are relative to the
+busiest plotted location, not to an absolute rate: square-root scaling keeps
+a one-percent flow visible while the busiest one still stands out, and every
+arc stays translucent so overlaps build up instead of replacing each other. Reduced motion disables particles and interpolation. The UI polls every
 two seconds, but keeps each IP/direction's particle phase independent of
 ranking. Paths and endpoints fade in and out with a 450ms exponential time
 constant (about two seconds to settle); widths and opacity ease toward new

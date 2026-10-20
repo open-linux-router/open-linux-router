@@ -102,9 +102,9 @@ and survive daemon and router restarts.
 
 World traffic combines IPs at the same remote coordinates into one map connection.
 Line width and opacity represent that connection's combined upload and download
-relative to the busiest one; per-IP rates stay in details. Arcs fade from transmit
-teal at the router to receive blue at the far end, and each connection has one dot
-that travels out and back, illustrating both directions without selecting a
+relative to the busiest one; per-IP rates stay in details. Arcs are one amber
+hue, outside the map's country colours, and each connection has one dot that
+travels out teal and back blue, illustrating both directions without selecting a
 direction based on traffic volume.
 
 Ingress distinguishes saved repairs from applied settings. When other existing
