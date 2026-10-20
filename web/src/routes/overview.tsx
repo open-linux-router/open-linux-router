@@ -145,6 +145,7 @@ export function OverviewPage() {
           devices={devices.data?.devices ?? []}
           services={services}
           serviceDomain={ingressStatus.data?.domain}
+          serviceDomainKnown={!ingressStatus.isPending}
           groups={identity.data?.groups}
           traffic={flows}
           assignments={gateway.data?.assignments}

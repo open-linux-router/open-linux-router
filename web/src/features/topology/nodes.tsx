@@ -511,6 +511,7 @@ export function DeviceNode({
   device,
   services,
   serviceDomain,
+  serviceDomainKnown,
   density,
   row,
   traffic,
@@ -520,6 +521,8 @@ export function DeviceNode({
   device: DeviceRow
   services?: Service[]
   serviceDomain?: string
+  /** Whether that suffix has been answered for, or is still on its way. */
+  serviceDomainKnown?: boolean
   density: Density
   /** Drawn as a row of its container's list rather than as a card of its own. */
   row?: { first: boolean }
@@ -573,7 +576,7 @@ export function DeviceNode({
             <DeviceActivity device={device} flow={flow} rated={traffic.rated} counting={traffic.counting} />
           </span>
         </Shell>
-        <ServiceLinks services={services} domain={serviceDomain}
+        <ServiceLinks services={services} domain={serviceDomain} domainKnown={serviceDomainKnown}
           className="absolute inset-y-0 right-15" width={serviceWidth} compact />
       </div>
     )
@@ -644,21 +647,26 @@ export function DeviceNode({
   return (
     <div className="group/node relative size-full">
       {body}
-      <ServiceLinks services={services} domain={serviceDomain}
+      <ServiceLinks services={services} domain={serviceDomain} domainKnown={serviceDomainKnown}
         className={cn('absolute bottom-0.5 right-2', density === 'compact' ? 'left-10' : 'left-[54px]')} />
     </div>
   )
 }
 
 /** Links sit beside, not inside, the device detail button. */
-function ServiceLinks({ services, domain, className, width, compact = false }: { services?: Service[]; domain?: string; className: string; width?: number; compact?: boolean }) {
+function ServiceLinks({ services, domain, domainKnown = true, className, width, compact = false }: { services?: Service[]; domain?: string; domainKnown?: boolean; className: string; width?: number; compact?: boolean }) {
   if (!services?.length) return null
   return (
     <span style={{ width }} className={cn('flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden', compact ? 'h-full' : 'h-8', className)}>
       {services.slice(0, 8).map((service) => {
         const label = domain ? `${service.name}.${domain}` : service.name
-        const version = serviceIconVersion(service, domain)
-        const tile = <ServiceIcon key={`${service.name}:${version}`} name={service.name} version={version} choice={service.icon} />
+        // No version until the suffix that goes into it is known. The suffix
+        // arrives with the ingress status, a beat after the device list the map
+        // waits on, so a tile drawn before it would ask for an icon under a
+        // name it is about to abandon — and asking is not free: the daemon
+        // discovers the icon by fetching the published site.
+        const version = domainKnown ? serviceIconVersion(service, domain) : undefined
+        const tile = <ServiceIcon key={`${service.name}:${version ?? ''}`} name={service.name} version={version} choice={service.icon} />
         return domain ? (
           <a key={service.name} href={`https://${label}${service.link_path ?? ''}`} target="_blank" rel="noopener noreferrer"
             title={`Open ${label}${service.link_path ?? ''}`} aria-label={`Open ${label}${service.link_path ?? ''}`}
@@ -690,26 +698,51 @@ export function serviceIconVersion(service: Service, domain?: string): string {
   return (hash >>> 0).toString(36)
 }
 
-export function ServiceIcon({ name, version, choice }: { name: string; version: string; choice?: string }) {
+/**
+ * Icons are shared, not owned.
+ *
+ * The same service is a tile on the map, a tile on its device's page, and the
+ * same tile again after a density change or a visit back to a page. A fetch
+ * owned by the tile would abort on every unmount, cancelling bytes the next
+ * mount then asks for again — and the daemon discovers an icon by fetching the
+ * published site, so each of those cancellations is a discovery thrown away.
+ * So the request and its object URL belong to the module, keyed by the URL that
+ * versions it, and unmounting only stops listening.
+ */
+const icons = new Map<string, Promise<string | undefined>>()
+
+function loadIcon(url: string): Promise<string | undefined> {
+  const started = icons.get(url)
+  if (started) return started
+  const token = getToken()
+  const loading = fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    .then(async (response) => (response.ok ? URL.createObjectURL(await response.blob()) : undefined))
+    .catch(() => undefined)
+    // A site with no icon is answering for itself; a failed request may just
+    // be a flat network, so it is forgotten and the next tile asks again.
+    .then((objectURL) => {
+      if (!objectURL) icons.delete(url)
+      return objectURL
+    })
+  icons.set(url, loading)
+  return loading
+}
+
+/**
+ * One published service's icon, or its initials while there is none to draw.
+ *
+ * `version` is absent until the published suffix is known — see ServiceLinks —
+ * and an absent version means nothing is asked for yet.
+ */
+export function ServiceIcon({ name, version, choice }: { name: string; version?: string; choice?: string }) {
   const [icon, setIcon] = useState<string>()
   useEffect(() => {
-    if (choice) return
-    const controller = new AbortController()
-    let objectURL: string | undefined
-    const token = getToken()
-    fetch(`/api/ingress/services/${encodeURIComponent(name)}/icon?v=${version}`, {
-      signal: controller.signal,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }).then(async (response) => {
-      if (!response.ok) return
-      objectURL = URL.createObjectURL(await response.blob())
-      if (!controller.signal.aborted) setIcon(objectURL)
-      else URL.revokeObjectURL(objectURL)
-    }).catch(() => {})
-    return () => {
-      controller.abort()
-      if (objectURL) URL.revokeObjectURL(objectURL)
-    }
+    if (choice || !version) return
+    let listening = true
+    loadIcon(`/api/ingress/services/${encodeURIComponent(name)}/icon?v=${version}`).then((objectURL) => {
+      if (listening && objectURL) setIcon(objectURL)
+    })
+    return () => { listening = false }
   }, [name, version, choice])
   const preview = choice?.startsWith('data:') ? choice : choice?.startsWith('thesvg:')
     ? `https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${choice.slice(7)}/default.svg` : icon

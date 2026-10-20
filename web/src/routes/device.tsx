@@ -57,8 +57,8 @@ export function DevicePage() {
       <DeviceInlineEditor key={device.mac} device={device} services={
         <div className="flex flex-wrap items-center justify-end gap-2">
           {ingress.isError ? <span className="text-destructive">Unavailable</span> : ingress.isPending ? <span className="text-muted-foreground">Loading…</span> : services.map((service) => {
-            const version = serviceIconVersion(service, serviceDomain)
-            const icon = <ServiceIcon key={version} name={service.name} version={version} choice={service.icon} />
+            const version = ingressStatus.isPending ? undefined : serviceIconVersion(service, serviceDomain)
+            const icon = <ServiceIcon key={version ?? ''} name={service.name} version={version} choice={service.icon} />
             const label = `${service.name}.${serviceDomain}${service.link_path ?? ''}`
             const className = 'flex size-7 shrink-0 items-center justify-center rounded-md bg-muted transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring'
             return serviceDomain ? <a key={service.name} href={`https://${label}`} target="_blank" rel="noopener noreferrer" title={`Open ${label}`} aria-label={`Open ${label}`} className={className}>{icon}</a>

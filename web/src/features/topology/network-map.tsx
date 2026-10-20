@@ -67,6 +67,7 @@ export function NetworkMap({
   devices: all,
   services = new Map(),
   serviceDomain,
+  serviceDomainKnown,
   groups = [],
   traffic,
   assignments,
@@ -84,6 +85,8 @@ export function NetworkMap({
   devices: DeviceRow[]
   services?: Map<string, Service[]>
   serviceDomain?: string
+  /** Whether that suffix has been answered for, or is still on its way. */
+  serviceDomainKnown?: boolean
   groups?: DevicesGroup[]
   traffic: TrafficView
   assignments?: AssignmentStatus[]
@@ -133,6 +136,7 @@ export function NetworkMap({
       devices={all}
       services={services}
       serviceDomain={serviceDomain}
+      serviceDomainKnown={serviceDomainKnown}
       groups={groups}
       traffic={traffic}
       networks={networks}
@@ -167,6 +171,7 @@ function Canvas({
   devices: all,
   services,
   serviceDomain,
+  serviceDomainKnown,
   groups,
   traffic,
   networks,
@@ -181,6 +186,7 @@ function Canvas({
   devices: DeviceRow[]
   services: Map<string, Service[]>
   serviceDomain?: string
+  serviceDomainKnown?: boolean
   groups: DevicesGroup[]
   traffic: TrafficView
   networks: NetworkInfo[]
@@ -372,6 +378,7 @@ function Canvas({
             device={item.device}
             services={services.get(item.device.mac)}
             serviceDomain={serviceDomain}
+            serviceDomainKnown={serviceDomainKnown}
             density={density}
             row={item.row}
             traffic={traffic}
