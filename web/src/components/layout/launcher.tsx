@@ -40,10 +40,10 @@ export type LauncherState = { text: string }
  *
  * Bundled project artwork stays on white so brand colours survive both themes.
  * Artwork that already carries its own rounded background fills the tile
- * instead of sitting inside a second one. A protocol or an OLR feature has no
- * mark to borrow, so it wears its initial on a tinted tile — the hue is what
- * keeps two tiles sharing an initial apart. The icon variant is the fallback
- * for a directory entry with neither.
+ * instead of sitting inside a second one. Protocols and OLR features may use
+ * approved original app artwork too. Entries without artwork wear their initial
+ * on a tinted tile — the hue keeps shared initials apart. The icon variant is
+ * the fallback for a directory entry with neither.
  */
 export type LauncherMark =
   | { kind: 'logo'; src: string }

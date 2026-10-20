@@ -259,9 +259,13 @@ A technology can appear in both directions; its tile goes straight to the
 configuration owner for that direction, and a technology OLR does not configure
 opens its project documentation instead. Remove System default and purpose
 filters from this page. Use app-style icons above names without enclosing cards.
-Use project logos for branded technologies and a capital initial on a tinted tile
-for protocols, never generated or hand-drawn artwork. Port forwarding is a
-forwarding rule rather than a remote-access technology, so it is not a tile
+Use project logos for branded technologies, including frp's official icon.
+SOCKS5 and Port forwarding use reviewed original app artwork with simple flat
+functional shapes and no lettering; the name remains below each icon. Other
+unbranded entries retain a capital initial on a tinted tile. The approved HTTP
+and HTTPS artwork does not introduce directory entries or replace Caddy's mark.
+Port forwarding is a forwarding rule rather than a remote-access technology,
+so it is not a tile
 here; it lives under Advanced with the firewall whose ruleset it shares.
 Functions and state appear on hover/focus and in the tile's accessible name.
 External technologies remain explicitly “Not integrated”; broader ecosystem uses

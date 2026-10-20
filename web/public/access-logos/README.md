@@ -16,9 +16,10 @@ from the same library as the OS marks and selectable service icons.
   own badge, since the tunnel broker service is theirs.
 - Headscale: `https://raw.githubusercontent.com/juanfont/headscale/main/docs/assets/logo/headscale3-dots.svg`
   (BSD-3-Clause project). theSVG has no entry for it.
+- frp: `https://gofrp.org/favicons/android-192x192.png`, from the official
+  website, whose navigation uses the same paper-and-colored-lines mark.
 
-Trademarks remain with their owners. Protocols are named, not branded — SOCKS5,
-Gateway, NAT, frp and SSH wear their initial on a tinted tile
-(`MONOGRAMS` in `web/src/routes/access.tsx`) instead of borrowing a third
-party's mark. theSVG's `ssh` entry is a dotted ring rather than a shell mark, so
-it is not used. No launcher artwork is generated or drawn locally.
+Trademarks remain with their owners. SOCKS5 and Port forwarding use approved
+original artwork documented in [../feature-icons/README.md](../feature-icons/README.md).
+Gateway and SSH retain their initials on tinted tiles. theSVG's `ssh` entry is
+a dotted ring rather than a shell mark, so it is not used.

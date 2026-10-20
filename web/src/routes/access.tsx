@@ -5,7 +5,7 @@ import type { LauncherMark } from '@/components/layout/launcher'
 import { ACCESS_DEFINITIONS } from '@/features/access/catalog'
 import type { AccessDirection, AccessKind } from '@/features/access/catalog'
 import { ACCESS_TECHNOLOGIES } from '@/features/access/technologies'
-import { ACCESS_LOGOS } from '@/features/access/logos'
+import { ACCESS_ARTWORK, ACCESS_LOGOS } from '@/features/access/logos'
 import type { AccessTechnology } from '@/features/access/technologies'
 import { gatewaySummary, remoteSummary, socksOutSummary, tunnelBrokerSummary } from '@/features/access/summary'
 import type { Summary } from '@/features/access/summary'
@@ -14,14 +14,10 @@ import { useGatewayConfig, useGatewayStatus } from '@/features/gateway/queries'
 import { useRemoteConfig, useRemoteStatus, useSocksStatus } from '@/features/remote/queries'
 import { useSocksOutConfig, useSocksOutStatus } from '@/features/socksout/queries'
 
-// Protocols are named, not branded: theSVG carries no mark for them, so each
-// wears its initial on a tinted tile. SSH and SOCKS5 share an initial; the hue
-// keeps them apart at a glance.
+// Entries without project artwork or an approved app icon retain an initial.
 const MONOGRAMS: Record<string, { letter: string; hue: number }> = {
   ssh: { letter: 'S', hue: 220 },
-  socks: { letter: 'S', hue: 290 },
   gateway: { letter: 'G', hue: 330 },
-  frp: { letter: 'F', hue: 190 },
 }
 
 export function AccessPage() {
@@ -64,14 +60,17 @@ function connectionsFor(entry: AccessTechnology, direction: 'network' | AccessDi
 // Clicking a tile leaves the directory: a technology OLR configures opens its
 // configuration page, and one it does not opens the project's own documentation.
 function TechnologyTile({ entry, kinds, summaries }: { entry: AccessTechnology; kinds: AccessKind[]; summaries: Record<AccessKind, Summary> }) {
+  const artwork = ACCESS_ARTWORK[entry.id]
   const logo = ACCESS_LOGOS[entry.id]
   const monogram = MONOGRAMS[entry.id]
   const definition = kinds.length ? ACCESS_DEFINITIONS.find(item => item.kind === kinds[0]) : undefined
-  const mark: LauncherMark = logo
-    ? { kind: 'logo', src: logo }
-    : monogram
-      ? { kind: 'letter', letter: monogram.letter, hue: monogram.hue }
-      : { kind: 'icon', children: <Network className="size-9" strokeWidth={1.75} aria-hidden /> }
+  const mark: LauncherMark = artwork
+    ? { kind: 'app-icon', src: artwork }
+    : logo
+      ? { kind: 'logo', src: logo }
+      : monogram
+        ? { kind: 'letter', letter: monogram.letter, hue: monogram.hue }
+        : { kind: 'icon', children: <Network className="size-9" strokeWidth={1.75} aria-hidden /> }
   return (
     <LauncherTile
       name={entry.name}

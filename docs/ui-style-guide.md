@@ -105,9 +105,13 @@ groups. Keep their existing configuration actions available. Do not show System
 default or purpose filters. Each tile shows a locally bundled
 project logo above a short name, without an enclosing card, border, shadow or
 corner arrow. Preserve brand colors on a white 64px rounded icon backing in
-both themes. Protocols without a recognized logo wear a capital initial on a
-tinted tile; the hue is what keeps two tiles sharing an initial apart. Never
-generate or draw replacement artwork. Use three columns on phones, five
+both themes. SOCKS5 and Advanced's Port forwarding use the reviewed original
+app icons in `web/public/feature-icons`: simple flat color blocks on a softly
+colored rounded tile, without 3D or material effects. These fill the 64px backing
+without a second white inset; remove the generated masters' outside white field
+before bundling. Use frp's official website icon as project artwork. Other
+protocols without approved artwork retain a capital initial on a tinted tile;
+the hue keeps shared initials apart. Use three columns on phones, five
 from 640px, seven from 1024px and eight from 1280px, with 12px horizontal and
 24px vertical gaps. Keep names below icons with an 8px gap and visible keyboard
 focus around the whole tile. Group headings use 24px/32px semibold text. Each

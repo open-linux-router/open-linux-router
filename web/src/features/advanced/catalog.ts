@@ -8,18 +8,17 @@ import { TOOL_ARTWORK, TOOL_DEFINITIONS } from '@/features/tools/catalog'
  * it, Services are the background jobs it runs for the network, and Diagnostics
  * are the measurements an operator runs on demand.
  *
- * A tile is a link and one short name. The letter is the mark for OLR's own
- * features — the hue is the group's, which is why `hue` sits on the group rather
- * than on each tile. A tile that names an upstream project may wear that
- * project's mark instead: a self-contained app icon that fills the tile
- * (NextTrace), or a plain glyph the launcher sets on its white tile, the way
- * Access draws its project marks (Caddy).
+ * A tile is a link and one short name. OLR features use approved app artwork
+ * where available, otherwise a letter in the group's hue. A tile that names an
+ * upstream project may wear its mark instead: a self-contained app icon that
+ * fills the tile (NextTrace), or a plain glyph on white (Caddy), like Access's
+ * project marks.
  */
 export interface AdvancedTile {
   slug: string
   name: string
   letter: string
-  /** The upstream project's app icon, for a tile that names that project. */
+  /** An app icon with its own backing, for an OLR feature or upstream project. */
   artwork?: string
   /** A project's plain glyph, drawn on the launcher's white tile. */
   logo?: string
@@ -66,6 +65,7 @@ export const ADVANCED_GROUPS: AdvancedGroup[] = [
         slug: 'forwards',
         name: 'Port forwarding',
         letter: 'P',
+        artwork: '/feature-icons/port-forwarding.webp',
         description: 'Reach a service inside this network through an external port.',
         to: '/advanced/forwards',
         state: 'forwards',
