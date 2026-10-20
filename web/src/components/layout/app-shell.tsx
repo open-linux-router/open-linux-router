@@ -2,7 +2,7 @@ import { useLayoutEffect } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 
 import { Logo } from '@/components/layout/logo'
-import { SECTIONS, sectionOf } from '@/components/layout/sections'
+import { SECTIONS, isOverviewPanel, sectionOf } from '@/components/layout/sections'
 import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { TokenButton } from '@/components/layout/token-button'
 import { cn } from '@/lib/utils'
@@ -11,9 +11,15 @@ export function AppShell() {
   const { pathname, hash } = useLocation()
   const section = sectionOf(pathname)
   const landing = section && pathname === section.to
+  // A section keeps its place in the navigation when the address belongs to a
+  // state of it rather than to the section's own path — /map and /quality are
+  // still Overview.
+  const owns = (to: string) => section?.to === to || section?.navTo === to
 
   useLayoutEffect(() => {
-    if (!hash) window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    // A fullscreen state of the overview keeps the page where it was, so
+    // closing it lands on the card it was opened from.
+    if (!hash && !isOverviewPanel(pathname)) window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   }, [pathname, hash])
 
   return (
@@ -31,7 +37,7 @@ export function AppShell() {
                 <li key={to} className="flex items-center">
                   <NavLink to={to} end={end} className={({ isActive }) => cn(
                     'flex h-10 items-center rounded-lg px-3 text-sm transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring',
-                    (isActive || section?.navTo === to)
+                    (isActive || owns(to))
                       ? 'bg-primary/10 font-medium text-primary dark:bg-primary/15'
                       : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                   )}>{label}</NavLink>
@@ -63,7 +69,7 @@ export function AppShell() {
             <li key={to} className="min-w-0">
               <NavLink to={to} end={end} className={({ isActive }) => cn(
                 'flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 text-[0.625rem] font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring',
-                (isActive || section?.navTo === to) ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+                (isActive || owns(to)) ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
               )}><Icon className="size-5" aria-hidden />{label}</NavLink>
             </li>
           ))}

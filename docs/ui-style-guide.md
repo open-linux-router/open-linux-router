@@ -334,16 +334,18 @@ continuity. Rotate the whole card 180 degrees around its vertical axis over
 title and toggle so the map appears on the back of the card. Reduced motion
 switches faces immediately. Make the inactive face inert and hidden to assistive
 technology. Do not add a Map details row; clicking the map opens fullscreen.
-The Quality heading and radar open the assessment dialog; omit a separate Test
-button on the card. Retain measured scores without age-based fading or hiding.
+The Quality heading and radar open the fullscreen assessment view; omit a
+separate Test button on the card. Retain measured scores without age-based fading or hiding.
 Network quality uses a five-axis radar with theme-aware primary fill and border
 grid lines. It occupies one card at every breakpoint. Only measured, current
 axes have points; missing/stale axes show dashes and prevent a filled polygon,
 except Wireless, which defaults to 80 for display. Omit the title-right total
 and below-plot scope caption; retain Test aligned right. The heading, plot and Test action open the shared
-scrollable details dialog. Category disclosures show score, measured scope,
+fullscreen assessment view: the content scrolls in a centred reading column, with
+one floating close control at top right and no other chrome. Category
+disclosures show score, measured scope,
 normalized weight and point contributions, with raw evidence below. Keep long
-errors and addresses wrapping inside the dialog.
+errors and addresses wrapping inside the view.
 Accessible chart descriptions identify partial and missing measurements.
 Uptime is
 the first plain disclosure row in Status, above system health. Both rows use
@@ -364,8 +366,10 @@ to traffic; traffic points have no GeoIP text labels.
 Pan, pinch, scroll and double-click zoom stand alone, so place no zoom or
 whole-world reset buttons over the map. Resizing must preserve the current
 fullscreen view. Escape
-closes it and restores focus to the preview. On
-phones each card uses the full column. Its local MapLibre map uses receive/transmit
+closes it and restores focus to the preview. Both fullscreen views are page
+states with addresses of their own, /map and /quality, so a shared link or a
+bookmark lands on the open view; Back and the close control return to Overview.
+On phones each card uses the full column. Its local MapLibre map uses receive/transmit
 colors and bounded logarithmic path widths. Moving particles indicate observed
 traffic direction and stop for reduced motion. Use 1.4px endpoints merged at
 shared coordinates. Keep particle phases stable

@@ -4,7 +4,7 @@ import { WorldTraffic } from '@/features/world-traffic/world-traffic'
 import { NetworkQuality } from '@/features/network-quality/network-quality'
 import { AlertTriangle, CircleAlert, CircleCheck, CircleHelp, ChevronRight, Info, Trash2, GripVertical, Map } from 'lucide-react'
 import { useEffect, useMemo, useState, type DragEvent, type MouseEvent } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -66,8 +66,16 @@ import { cn, formatBytes, formatRate } from '@/lib/utils'
  *
  * It polls more endpoints than any other screen. That is the cost of being the
  * one screen that saves you visiting the other three.
+ *
+ * Two of its views take the whole screen — the traffic map and the quality
+ * assessment. Each is a state of this page with its own address (/map and
+ * /quality) rather than a separate destination: they are opened from a card,
+ * closed back onto it, and a shared link should show the thing that was open,
+ * not the page it was opened from.
  */
-export function OverviewPage() {
+export type OverviewPanel = 'map' | 'quality'
+
+export function OverviewPage({ panel }: { panel?: OverviewPanel }) {
   const devices = useDeviceList()
   const dhcp = useDhcpStatus()
   const dhcpConfig = useDhcpConfig()
@@ -90,6 +98,17 @@ export function OverviewPage() {
   const remote = useRemoteStatus()
   const dialIn = useMemo(() => buildDialIn(remote.data), [remote.data])
   const navigate = useNavigate()
+  const location = useLocation()
+  // Opening a panel pushes an entry, so Back closes it. The close control
+  // returns to that entry rather than pushing a second overview; a deep link
+  // has no entry to return to and replaces itself with the overview.
+  const openedHere = Boolean((location.state as { panel?: boolean } | null)?.panel)
+  const setPanel = (next?: OverviewPanel) => {
+    if (next === panel) return
+    if (next) navigate(`/${next}`, { state: { panel: true } })
+    else if (openedHere) navigate(-1)
+    else navigate('/', { replace: true })
+  }
   const groupActions = useGroupActions()
 
   const faults = collectFaults(dhcp.data, dns.data, gateway.data)
@@ -116,7 +135,8 @@ export function OverviewPage() {
           { name: 'Gateway', to: '/gateway', data: gateway.data, failed: gateway.isError, observed: Boolean(gateway.data?.known) },
         ]}
         faults={faults} known={known} idle={idle} failed={dhcp.isError || dns.isError || gateway.isError}
-        latency={latency.data} exits={gatewayConfig.data?.enabled ? gatewayConfig.data.exits?.map((exit) => exit.name) ?? [] : []} latencyFailed={latency.isError} trafficFailed={traffic.isError} />
+        latency={latency.data} exits={gatewayConfig.data?.enabled ? gatewayConfig.data.exits?.map((exit) => exit.name) ?? [] : []} latencyFailed={latency.isError} trafficFailed={traffic.isError}
+        panel={panel} onPanelChange={setPanel} />
 
       {faults.map((fault) => (
         <Alert key={fault.key} variant={fault.tone === 'bad' ? 'destructive' : 'default'}>
@@ -574,7 +594,7 @@ function LatencySitesDialog({ sites, exits, latency, onClose }: { sites: Monitor
   </Dialog>
 }
 
-function Stats({ flows, host, publicAddresses, modules, faults, known, idle, failed, latency, exits, latencyFailed, trafficFailed }: {
+function Stats({ flows, host, publicAddresses, modules, faults, known, idle, failed, latency, exits, latencyFailed, trafficFailed, panel, onPanelChange }: {
   flows: TrafficView
   host?: HostMetrics
   publicAddresses?: PublicAddresses
@@ -587,6 +607,8 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
   exits: string[]
   latencyFailed: boolean
   trafficFailed: boolean
+  panel?: OverviewPanel
+  onPanelChange: (panel?: OverviewPanel) => void
 }) {
   const [limits, setLimits] = useState(readLimits)
   const [editing, setEditing] = useState<Direction | null>(null)
@@ -647,7 +669,7 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
         <PublicAddressRow addresses={publicAddresses} />
       </div>
     </StatCard>
-    <StatCard title="Traffic" flipped={showMap} back={<WorldTraffic embedded origin={publicAddresses?.ipv4.ip ? publicAddresses.ipv4 : publicAddresses?.ipv6} />} action={<button type="button" onClick={flipTraffic} aria-label={showMap ? 'Show traffic statistics' : 'Show traffic map'} aria-pressed={showMap} title={showMap ? 'Show traffic statistics' : 'Show traffic map'} className={cn('relative inline-flex size-6 items-center justify-center rounded-sm text-muted-foreground before:absolute before:-inset-2.5 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring', showMap && 'bg-primary/10 text-primary')}><Map aria-hidden className="size-4" /></button>}>
+    <StatCard title="Traffic" flipped={showMap} back={<WorldTraffic embedded expanded={panel === 'map'} onExpandedChange={(open) => onPanelChange(open ? 'map' : undefined)} origin={publicAddresses?.ipv4.ip ? publicAddresses.ipv4 : publicAddresses?.ipv6} />} action={<button type="button" onClick={flipTraffic} aria-label={showMap ? 'Show traffic statistics' : 'Show traffic map'} aria-pressed={showMap} title={showMap ? 'Show traffic statistics' : 'Show traffic map'} className={cn('relative inline-flex size-6 items-center justify-center rounded-sm text-muted-foreground before:absolute before:-inset-2.5 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring', showMap && 'bg-primary/10 text-primary')}><Map aria-hidden className="size-4" /></button>}>
       <div className="space-y-1">
         <Meter label="Download" arrow="↓" onClick={() => setEditing('down')} current={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.down ? (flows.total.downRate ?? 0) * 8 / (limits.down * 1_000_000) * 100 : undefined} />
@@ -679,7 +701,7 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
         </div>
       </div>
     </StatCard>
-    <NetworkQuality />
+    <NetworkQuality open={panel === 'quality'} onOpenChange={(open) => onPanelChange(open ? 'quality' : undefined)} />
     {sitesOpen && <LatencySitesDialog sites={latency?.custom ?? []} exits={exits} latency={latency} onClose={() => setSitesOpen(false)} />}
     <BandwidthLimitDialog key={editing ?? 'closed'} direction={editing} limits={limits} onClose={() => setEditing(null)} onSave={saveLimits} />
   </div>

@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Disclosure } from '@/components/ui/disclosure'
 import { Heading } from '@/components/ui/heading'
 import { MetricValue } from '@/components/ui/metric-value'
@@ -36,9 +37,12 @@ function stateLabel(data: QualitySnapshot | undefined) {
   return data.state === 'idle' ? 'Not tested' : 'No scored results'
 }
 
-export function NetworkQuality() {
+export function NetworkQuality({ open, onOpenChange }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
   const query = useNetworkQuality()
-  const [open, setOpen] = useState(false)
+  const chart = useRef<HTMLButtonElement>(null)
   // A failed read must not keep a cached healthy result looking current.
   const data = query.isError ? undefined : query.data
   const categories = axes.map(label => data?.categories.find(category => categoryLabel(category.label) === label))
@@ -50,9 +54,9 @@ export function NetworkQuality() {
   return <>
     <section aria-label="Quality" className="flex w-full min-w-0 flex-col gap-2 panel-surface p-3 sm:p-4 lg:min-h-60 lg:aspect-[4/3] lg:h-fit">
       <div className="flex h-6 items-center justify-between gap-2">
-        <Heading size="sm"><button type="button" className="relative z-10 -my-2.5 min-h-11 py-2 text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring" onClick={() => setOpen(true)} aria-label="Network quality details">Quality</button></Heading>
+        <Heading size="sm"><button type="button" className="relative z-10 -my-2.5 min-h-11 py-2 text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring" onClick={() => onOpenChange(true)} aria-label="Network quality details">Quality</button></Heading>
       </div>
-      <button type="button" onClick={() => setOpen(true)} aria-label="Open network quality assessment" className="-mx-1.5 -mb-1.5 flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2">
+      <button ref={chart} type="button" onClick={() => onOpenChange(true)} aria-label="Open network quality assessment" className="-mx-1.5 -mb-1.5 flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2">
         <svg viewBox="0 -12 340 245" className="min-h-0 w-full flex-1" role="img" aria-label={`Network quality scores out of 100. ${axes.map((label, i) => `${label}: ${scores[i] == null ? 'not measured' : Math.round(scores[i]!)}${label === 'Wireless' && measuredScore(categories[i]) == null ? ' (default)' : categories[i]?.state === 'partial' ? ' (partial)' : ''}`).join('. ')}. Higher is better.`}>
           <g transform="translate(20 0)">
             {[25, 50, 75, 100].map(score => <polygon key={score} points={polygon(score)} className="fill-none stroke-border" strokeWidth="1" />)}
@@ -74,13 +78,18 @@ export function NetworkQuality() {
         </svg>
       </button>
     </section>
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Network quality</DialogTitle>
-          <DialogDescription>Tests run from this router over its default route. The score reflects the measurements available in this assessment.</DialogDescription>
-        </DialogHeader>
-        <QualityDetails data={data} readError={query.isError} retry={() => query.refetch()} />
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent showCloseButton={false} finalFocus={chart} className="flex h-dvh max-h-dvh w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none p-0 sm:max-w-none sm:p-0">
+        <DialogClose render={<Button variant="secondary" size="icon-lg" className="absolute top-3 right-3 z-10 rounded-full bg-card/95 shadow-md ring-1 ring-border backdrop-blur-sm sm:size-9" />}><X aria-hidden="true" /><span className="sr-only">Close</span></DialogClose>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6 sm:px-6 sm:py-8">
+            <DialogHeader className="pr-14">
+              <DialogTitle>Network quality</DialogTitle>
+              <DialogDescription>Tests run from this router over its default route. The score reflects the measurements available in this assessment.</DialogDescription>
+            </DialogHeader>
+            <QualityDetails data={data} readError={query.isError} retry={() => query.refetch()} />
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   </>

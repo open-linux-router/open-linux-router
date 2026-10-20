@@ -230,9 +230,19 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
   return <div className={cn('relative h-full min-h-32 w-full overflow-hidden', !expanded && 'rounded-lg')} style={expanded ? { backgroundColor: dark ? '#1c3545' : '#d6effb' } : undefined}><div ref={container} style={{ position: 'absolute', inset: 0 }} aria-hidden={!expanded} />{failed && <p className="absolute inset-0 flex items-center justify-center bg-muted p-3 text-xs text-muted-foreground">Map unavailable.</p>}</div>
 }
 
-export function WorldTraffic({ origin, embedded = false }: { origin?: Origin; embedded?: boolean }) {
+export function WorldTraffic({ origin, embedded = false, expanded, onExpandedChange }: {
+  origin?: Origin
+  embedded?: boolean
+  /** Whether the fullscreen map is open. The page may own this, so its URL can. */
+  expanded?: boolean
+  onExpandedChange?: (expanded: boolean) => void
+}) {
   const [open, setOpen] = useState(false)
-  const [expanded, setExpanded] = useState(false)
+  // Uncontrolled when the card is used on its own; Overview passes the state
+  // through so the address bar can hold the fullscreen map.
+  const [ownExpanded, setOwnExpanded] = useState(false)
+  const fullscreen = expanded ?? ownExpanded
+  const setFullscreen = onExpandedChange ?? setOwnExpanded
   const preview = useRef<HTMLButtonElement>(null)
   const { resolvedTheme } = useTheme()
   const query = useQuery({ queryKey: ['gateway', 'world-traffic'], queryFn: () => api.get<Snapshot>('/api/gateway/world-traffic'), refetchInterval: 2000 })
@@ -245,9 +255,9 @@ export function WorldTraffic({ origin, embedded = false }: { origin?: Origin; em
   const status = query.isError || stale ? 'Unavailable' : !data ? 'Loading…' : data.state === 'disabled' ? 'Counting off' : data.state === 'warming' ? 'Measuring…' : data.state !== 'ready' ? 'Unavailable' : peers.length ? `Top ${peers.length} · ${share}%` : 'No observed traffic'
   return <section aria-label="Traffic map" className={embedded ? 'flex min-h-0 w-full min-w-0 flex-col gap-1' : 'col-span-2 flex min-w-0 flex-col gap-2 panel-surface p-3 sm:p-4 lg:col-span-1 lg:row-span-3'}>
     {!embedded && <Heading size="sm" className="flex h-6 items-center"><button onClick={() => setOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 focus-visible:outline-2 focus-visible:outline-ring" aria-label="Map details">Map</button></Heading>}
-    <button ref={preview} type="button" onClick={() => setExpanded(true)} aria-label="Open fullscreen map" aria-haspopup="dialog" className={embedded ? 'flex min-h-32 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring' : '-mx-1 -mb-1 flex min-h-44 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2'}><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} /></button>
+    <button ref={preview} type="button" onClick={() => setFullscreen(true)} aria-label="Open fullscreen map" aria-haspopup="dialog" className={embedded ? 'flex min-h-32 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring' : '-mx-1 -mb-1 flex min-h-44 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2'}><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} /></button>
     {(!ready || !peers.length) && <p className="text-xs text-muted-foreground">{status}</p>}
-    <Dialog open={expanded} onOpenChange={setExpanded}><DialogContent showCloseButton={false} finalFocus={preview} className="flex h-dvh max-h-dvh w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none p-0 sm:max-w-none sm:p-0">
+    <Dialog open={fullscreen} onOpenChange={setFullscreen}><DialogContent showCloseButton={false} finalFocus={preview} className="flex h-dvh max-h-dvh w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none p-0 sm:max-w-none sm:p-0">
       <DialogTitle className="sr-only">Map</DialogTitle>
       <DialogClose render={<Button variant="secondary" size="icon-lg" className="absolute top-3 right-3 z-10 rounded-full bg-card/95 shadow-md ring-1 ring-border backdrop-blur-sm sm:size-9" />}><X aria-hidden="true" /><span className="sr-only">Close</span></DialogClose>
       <div className="min-h-0 flex-1" role="region" aria-label="World traffic map, drag to pan and scroll to zoom"><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} expanded /></div>

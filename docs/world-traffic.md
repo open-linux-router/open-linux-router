@@ -12,8 +12,9 @@ rather than copied from a street basemap; integer thresholds match MapLibre's
 symbol layout evaluation. Zoom stops at 6: this is an
 administrative traffic map, without roads or buildings. The fullscreen view is
 map only: no title, legend, status, credit or other text overlaps it, and the
-single floating close button at top right is its only control. Pan, pinch,
-scroll and double-click zoom stand alone. Resizing preserves the chosen
+single floating close button at top right is its only control. It has its own
+/map address, so a link or bookmark opens the map directly. Pan, pinch, scroll
+and double-click zoom stand alone. Resizing preserves the chosen
 fullscreen view. MapLibre renders labels with local system fonts; there are
 no external map, font, sprite or tile requests, including on first use.
 The asset ships inside OLR and uses the existing immutable asset cache.

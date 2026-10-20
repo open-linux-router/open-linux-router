@@ -40,7 +40,8 @@ hidden page title. Detail and operation pages keep their identifying titles.
 
 - Overview shows Status, Traffic, Latency and Quality cards. Traffic's
   title-right map icon toggles statistics and map views in place. Its pressed
-  state identifies the active map, and its accessible label names the next view. The
+  state identifies the active map, and its accessible label names the next view.
+  The fullscreen map has its own /map address. The
   quality radar shows Speed, Latency, Stability, Wireless and Functionality
   on a 0–100 higher-is-better scale. Wireless defaults to 80 when unmeasured or
   stale; explain this display-only default in details and the accessible chart
@@ -50,8 +51,9 @@ hidden page title. Detail and operation pages keep their identifying titles.
   categories and components. Missing tests never reduce the score; measured
   failures still count. Show the measured scope, effective weights and earned
   contributions in details. Clicking Quality, its chart or
-  Test opens a dialog with run/cancel, an optional bandwidth test, freshness,
-  category contributions and raw service/NAT evidence. Keep bandwidth cost and
+  Test opens the fullscreen assessment view with run/cancel, an optional
+  bandwidth test, freshness, category contributions and raw service/NAT
+  evidence. The view has its own /quality address. Keep bandwidth cost and
   router-default-route scope beside the run action. Snapshot reads never start
   tests. Clicking the Latency title opens
   latency settings, without a separate plus button. The dialog starts with an
@@ -96,9 +98,9 @@ hidden page title. Detail and operation pages keep their identifying titles.
 
 ## State and data contracts
 
-Quality assessments run on demand from the dialog opened by the card heading or
-chart. Measured scores do not expire; results remain until another assessment
-and survive daemon and router restarts.
+Quality assessments run on demand from the fullscreen assessment view opened by
+the card heading or chart. Measured scores do not expire; results remain until
+another assessment and survive daemon and router restarts.
 
 World traffic combines IPs at the same remote coordinates into one map connection.
 Line width and opacity represent that connection's combined upload and download

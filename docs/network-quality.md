@@ -486,7 +486,8 @@ This is an initial reference assessment, not the complete service catalog.
 Snapshots identify the fixed `reference` profile at version `1` separately
 from the scoring and catalog versions.
 All measurements originate at the router over its default route, without
-environment proxies. The UI is reached through Overview's Quality card.
+environment proxies. The UI is reached through Overview's Quality card, whose
+fullscreen assessment view has its own /quality address.
 It replaces the fixed sample scores and renames Reachability to Functionality.
 
 ### API and lifecycle
@@ -500,7 +501,7 @@ It replaces the fixed sample scores and renames Reachability to Functionality.
   reservations and produces 409. Regular user traffic is not controlled.
 - `DELETE /api/tools/quality` requests cancellation. The runner releases its
   reservations after stopping and retains completed evidence. Daemon shutdown
-  also cancels it. Closing the details dialog does not cancel a test.
+  also cancels it. Closing the assessment view does not cancel a test.
 - A new assessment replaces the previous in-memory result, including its speed
   data. Tests run only on demand. Scores do not expire and stay available until
   the next assessment. Finished assessments (including cancelled or timed-out

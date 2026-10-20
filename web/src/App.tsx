@@ -48,6 +48,12 @@ export function App() {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<OverviewPage />} />
+          {/* The two fullscreen states of the overview, each with its own
+              address so a link or a bookmark lands on the picture rather than
+              the page it was opened from. Overview still renders underneath:
+              these are states of it, and closing one returns there. */}
+          <Route path="map" element={<OverviewPage panel="map" />} />
+          <Route path="quality" element={<OverviewPage panel="quality" />} />
           {/* Static segment before the MAC route: a device that dialed in is not
               in the device list, so it gets its own path rather than a made-up
               hardware address (docs/remote-access.md §3.3). */}
