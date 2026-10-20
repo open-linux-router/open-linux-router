@@ -1,0 +1,19 @@
+Confirm or revert a pending connectivity change
+
+Usage:
+  olr recovery [command]
+
+Available Commands:
+  confirm     Keep a connectivity change after checking access
+  revert      Restore the configuration before a connectivity change
+  status      Show the connectivity confirmation deadline
+
+Flags:
+  -h, --help   help for recovery
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")
+
+Use "olr recovery [command] --help" for more information about a command.

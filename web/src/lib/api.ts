@@ -20,6 +20,10 @@ export interface ErrorBody {
 /** Where the API token is kept. Only ever read and written here. */
 const TOKEN_KEY = 'olr.token'
 
+// Only the browser that applied a change continues a multi-request edit in
+// that trial. Other tabs/clients must explicitly confirm or revert it first.
+let recoveryID: string | null = null
+
 // Enumerable symbols survive an editor's object spread and are omitted by
 // JSON.stringify. Each draft carries the revision it was actually based on.
 const CONFIG_REVISION = Symbol('config revision')
@@ -90,6 +94,7 @@ export class ApiError extends Error {
 
 async function request<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>, encode = JSON.stringify, decode: (text: string) => unknown = JSON.parse): Promise<T> {
   const headers: Record<string, string> = { ...extraHeaders }
+  if (method !== 'GET' && recoveryID) headers['X-OLR-Recovery-ID'] = recoveryID
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
   if (body !== undefined) headers['Content-Type'] = 'application/json'
@@ -103,6 +108,8 @@ async function request<T>(method: string, path: string, body?: unknown, extraHea
     headers,
     body: body === undefined ? undefined : encode(body),
   })
+
+  if (method !== 'GET') recoveryID = response.headers.get('X-OLR-Recovery-ID')
 
   if (response.status === 204) return undefined as T
 

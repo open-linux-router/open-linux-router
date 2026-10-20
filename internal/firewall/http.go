@@ -232,6 +232,10 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, forceConfirm bool,
 			return nil
 		}
 
+		if err := core.ProtectConnectivity(r.Context(), plan.Impact == ImpactDisruptive); err != nil {
+			badErr = err
+			return nil
+		}
 		resp.Config = next
 		resp.Steps, err = h.Applier.ApplyPlanned(r.Context(), next, plan, desired)
 		if err != nil {

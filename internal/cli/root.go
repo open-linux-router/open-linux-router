@@ -49,8 +49,9 @@ func NewRoot() *cobra.Command {
 			"under Service manage that service itself, and work without it running.",
 
 		// Runtime failures should not dump usage; a bad invocation still does.
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		SilenceUsage:      true,
+		SilenceErrors:     true,
+		PersistentPostRun: reportPendingRecovery,
 	}
 
 	root.PersistentFlags().StringVar(&opts.socket, FlagSocket, DefaultSocket,
@@ -78,6 +79,7 @@ func NewRoot() *cobra.Command {
 	root.SetCompletionCommandGroupID(GroupOther)
 
 	root.AddCommand(operationCommands()...)
+	root.AddCommand(recoveryCommand())
 	root.AddCommand(statusCommand())
 	root.AddCommand(serviceCommands()...)
 	root.AddCommand(versionCommand())

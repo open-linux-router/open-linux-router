@@ -29,6 +29,10 @@ secondary information. See the [page review record](ui-page-review.md).
 
 ## Color and surfaces
 
+Connectivity recovery uses the shared Alert and Button components above the
+application shell. Match shell width/gutters, wrap actions on phones, and retain
+visible errors and remaining confirmation time on every page and after reload.
+
 World traffic is the one map where hue belongs to data rather than to status.
 Each location gets one translucent amber arc, and the fullscreen view adds one
 neutral moving dot. Amber sits outside the country palette, so traffic reads as

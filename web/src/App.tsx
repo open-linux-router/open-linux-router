@@ -6,6 +6,7 @@ import { SubPage } from '@/components/layout/sub-page'
 import { WirelessPage } from '@/routes/wireless'
 import { Button } from '@/components/ui/button'
 import { AuthGate } from '@/components/layout/auth-gate'
+import { ConnectivityRecovery } from '@/components/layout/connectivity-recovery'
 import { DhcpAdvancedPage } from '@/routes/dhcp/advanced'
 import { DhcpDetailsPage } from '@/routes/dhcp/details'
 import { DhcpRangesPage } from '@/routes/dhcp/ranges'
@@ -45,6 +46,7 @@ import { CreditsPage } from '@/routes/credits'
 export function App() {
   return (
     <AuthGate>
+      <ConnectivityRecovery />
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<OverviewPage />} />

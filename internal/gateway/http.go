@@ -385,6 +385,10 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 			return nil
 		}
 
+		if err := core.ProtectConnectivity(r.Context(), plan.Impact == ImpactDisruptive); err != nil {
+			failed = err
+			return nil
+		}
 		result, stored, applyErr = h.Applier.ApplyPlanned(r.Context(), cfg, plan, desired)
 		return nil
 	}); err != nil {

@@ -245,7 +245,7 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config, opts Opt
 		applyErr error
 	)
 	result, applyErr = h.Applier.ApplyChecked(r.Context(), cfg, opts, func(plan planView) error {
-		return gate.Check(plan.Impact == impactDisruptive, r.URL.Path == "/apply")
+		return gate.CheckConnectivity(r.Context(), plan.Impact == impactDisruptive, r.URL.Path == "/apply")
 	})
 	if applyErr == nil && !result.Plan.Empty && h.Dependents != nil {
 		for _, s := range h.Dependents(r.Context()) {

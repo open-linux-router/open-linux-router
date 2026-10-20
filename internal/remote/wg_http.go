@@ -585,6 +585,10 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 			return nil
 		}
 
+		if err := core.ProtectConnectivity(r.Context(), plan.Impact == ImpactDisruptive); err != nil {
+			failed = err
+			return nil
+		}
 		result, applyErr = h.Tunnel.ApplyPlanned(r.Context(), cfg, plan, desired)
 		stored, _ = h.Tunnel.Load()
 		return nil

@@ -7,6 +7,16 @@ type mutationGuardKey struct{}
 // WithMutationGuard rechecks a TCP caller's authorization after acquiring the
 // write lock, closing the race with password rotation while a request queues.
 func WithMutationGuard(ctx context.Context, check func() error) context.Context {
+	previous, _ := ctx.Value(mutationGuardKey{}).(func() error)
+	if previous != nil {
+		next := check
+		check = func() error {
+			if err := previous(); err != nil {
+				return err
+			}
+			return next()
+		}
+	}
 	return context.WithValue(ctx, mutationGuardKey{}, check)
 }
 

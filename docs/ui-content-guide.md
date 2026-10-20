@@ -6,6 +6,12 @@ supporting text. This guide complements [the visual guide](ui-style-guide.md).
 
 ## Start with the user's decision
 
+Disruptive network changes require a second decision after application. A global
+recovery notice shows the remaining confirmation time, Keep changes and Revert
+now. Never confirm automatically on a successful API response or page load.
+Keep failed recovery and lost connectivity visible; explain how to reconnect to
+the previous address after the countdown.
+
 Device priority and speed limits apply automatically, without an enable switch.
 Use “applied” only after observing matching runtime state. Show pending device
 placement and apply failures explicitly. Blank means unlimited. Keep the user

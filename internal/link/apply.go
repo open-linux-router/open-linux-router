@@ -339,6 +339,26 @@ func (a Applier) Restore(ctx context.Context) ([]Step, error) {
 	return steps, nil
 }
 
+// Recover reconciles restored intent and removes addressing introduced by a
+// failed trial, even when that trial moved a network to another interface.
+func (a Applier) Recover(ctx context.Context, previous Config) error {
+	cfg, err := a.Load()
+	if err != nil {
+		return err
+	}
+	prefix := a.delegated()
+	want := append(DesiredFor(cfg, prefix), RetiredFor(previous, cfg, prefix, prefix)...)
+	if len(want) > 0 {
+		if _, err := a.writer().Apply(ctx, want); err != nil {
+			return err
+		}
+	}
+	if a.Host != nil {
+		_, err = a.Host(ctx)
+	}
+	return err
+}
+
 // Claim is an address another module owns on an interface — today only the
 // uplink's, which `dial` configures and RemoveAddress must not take away.
 type Claim struct {

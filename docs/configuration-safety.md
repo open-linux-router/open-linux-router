@@ -38,5 +38,21 @@ confirmation dialog; the local CLI sends it explicitly, matching the existing
 gateway CLI contract. Use `--dry-run` to review CLI changes first.
 
 `POST /apply` repairs previously stored intent without another confirmation.
-This confirmation gate does not provide automatic rollback after losing
-connectivity; console access is still needed for deliberate address changes.
+Disruptive link, uplink, DHCP, DNS, gateway, firewall and WireGuard changes
+save a durable recovery point before applying. Explicitly keep the change in
+the browser within two minutes, or use `olr recovery status` followed by
+`olr recovery confirm <id>`. A successful apply or reconnect never confirms
+automatically. `olr recovery revert <id>` restores immediately. While a trial
+is pending, unrelated configuration edits are refused, including from local CLI.
+Multi-request browser edits continue the same trial using the
+`X-OLR-Recovery-ID` response/request header, without extending its deadline.
+
+Timeout restores the previous complete intent and reconciles managed network
+state, including retiring addresses/routes introduced by the trial. Existing
+IPv4 addresses and main-table default routes are captured for first-adoption
+recovery. The mode-0600 journal in `/var/lib/open-linux-router/connectivity.json`
+survives restart; startup reverts an unconfirmed trial immediately. Recovery
+failures remain visible and retry, preserving both the previous and trial intent.
+Physical link failure, hardware removal, external configuration changes and
+unavailable backends can still require console access. Recovery does not undo
+external package installations or changes made outside OLR.

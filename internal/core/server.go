@@ -24,8 +24,9 @@ const APIPrefix = "/api"
 
 // Server is the route table, the schema aggregator, and the apply lock.
 type Server struct {
-	lock   *Lock
-	events *Events
+	Recovery *Recovery
+	lock     *Lock
+	events   *Events
 
 	modules []*module
 	byName  map[string]*module
@@ -98,6 +99,11 @@ func (s *Server) Mount(name string, routes []Route, schema any) {
 		panic(fmt.Sprintf("core: module %q mounted with no routes", name))
 	}
 
+	if s.Recovery != nil {
+		for i := range routes {
+			routes[i] = s.Recovery.Wrap(routes[i])
+		}
+	}
 	m := &module{
 		name:    name,
 		handler: RouteTable(routes),

@@ -264,7 +264,7 @@ func (h HTTP) apply(w http.ResponseWriter, r *http.Request, cfg Config) {
 		applyErr error
 	)
 	result, applyErr = h.Applier.ApplyChecked(r.Context(), cfg, func(plan Plan) error {
-		return gate.Check(plan.Impact == ImpactDisruptive, r.URL.Path == "/apply")
+		return gate.CheckConnectivity(r.Context(), plan.Impact == ImpactDisruptive, r.URL.Path == "/apply")
 	})
 
 	// Published whenever anything was attempted, including a partial failure —

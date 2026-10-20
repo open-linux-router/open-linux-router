@@ -16,6 +16,7 @@ package daemon
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -258,6 +259,8 @@ func run(args []string) error {
 	}
 
 	srv := core.New()
+	recovery := &core.Recovery{Store: store, Lock: srv.ApplyLock(), Path: filepath.Join(opts.root, "/var/lib/open-linux-router/connectivity.json"), Capture: captureConnectivity}
+	srv.Recovery = recovery
 	runtimeDB, runtimeErr := runtimedb.Open(filepath.Join(opts.root, runtimedb.Path))
 	if runtimeErr != nil {
 		logger.Error("runtime database unavailable; history and sessions will be memory-only, QoS changes disabled", "error", runtimeErr)
@@ -761,6 +764,119 @@ func run(args []string) error {
 	srv.Mount(tools.ModuleName, toolHTTP.Routes(), struct{}{})
 
 	// --- routes -----------------------------------------------------------
+	recovery.Rollback = func(ctx context.Context, from, before core.Document, runtime json.RawMessage) error {
+		previousLink, err := link.FromDocument(from)
+		if err != nil {
+			return err
+		}
+		previousDial, err := dial.FromDocument(from)
+		if err != nil {
+			return err
+		}
+		if err := store.Save(before); err != nil {
+			return err
+		}
+		var failures []error
+		failures = append(failures, dialApplier.Recover(ctx, previousDial), linkApplier.Recover(ctx, previousLink), restoreConnectivity(runtime))
+		repair := func(name string, fn func(context.Context) error) func(context.Context) error {
+			return func(ctx context.Context) error {
+				_, was := from.Raw(name)
+				_, exists := before.Raw(name)
+				if !was && !exists && name != firewall.ModuleName {
+					return nil
+				}
+				return fn(ctx)
+			}
+		}
+		failures = append(failures, reconcileConfiguration(ctx,
+			repair(dhcp.ModuleName, func(ctx context.Context) error {
+				c, e := applier.Load()
+				if e != nil {
+					return e
+				}
+				_, e = applier.Apply(ctx, c)
+				return e
+			}),
+			repair(remote.ModuleName, func(ctx context.Context) error {
+				c, e := remoteTunnel.Load()
+				if e != nil {
+					return e
+				}
+				_, e = remoteTunnel.Apply(ctx, c)
+				return e
+			}),
+			repair(remote.ModuleName, func(ctx context.Context) error {
+				c, e := remoteSocks.Load()
+				if e != nil {
+					return e
+				}
+				_, e = remoteSocks.Apply(ctx, c)
+				return e
+			}),
+			repair(dns.ModuleName, func(ctx context.Context) error {
+				c, e := dnsApplier.Load()
+				if e != nil {
+					return e
+				}
+				_, e = dnsApplier.Apply(ctx, c)
+				return e
+			}),
+			repair(socksout.ModuleName, func(ctx context.Context) error {
+				c, e := socksApplier.Load()
+				if e != nil {
+					return e
+				}
+				_, e = socksApplier.Apply(ctx, c, false)
+				return e
+			}),
+			repair(gateway.ModuleName, func(ctx context.Context) error {
+				c, e := gatewayApplier.Load()
+				if e != nil {
+					return e
+				}
+				_, _, e = gatewayApplier.Apply(ctx, c, netip.Addr{})
+				return e
+			}),
+			repair(gateway.ModuleName, func(ctx context.Context) error {
+				c, e := natApplier.Load()
+				if e != nil {
+					return e
+				}
+				_, _, e = natApplier.Apply(ctx, c)
+				return e
+			}),
+			repair(ingress.ModuleName, func(ctx context.Context) error {
+				c, e := ingressApplier.Load()
+				if e != nil {
+					return e
+				}
+				_, e = ingressApplier.Apply(ctx, c)
+				return e
+			}),
+			repair(iptv.ModuleName, func(ctx context.Context) error {
+				c, e := iptvApplier.Load()
+				if e != nil {
+					return e
+				}
+				_, e = iptvApplier.Apply(ctx, c, false)
+				return e
+			}),
+			repair(qos.ModuleName, qosApplier.Reconcile),
+			repair(firewall.ModuleName, func(ctx context.Context) error { _, _, e := firewallApplier.Reapply(ctx); return e }),
+		))
+		if c, e := dialApplier.Load(); e == nil {
+			publisher.Watch(context.Background(), c)
+			delegation.Watch(context.Background(), c)
+		}
+		if c, e := gatewayApplier.Load(); e == nil {
+			prober.Watch(context.Background(), c)
+		}
+		return errors.Join(failures...)
+	}
+	if err := recovery.Load(context.Background()); err != nil {
+		logger.Error("connectivity recovery needs attention; journal retained", "error", err)
+	}
+	srv.Mount("recovery", recovery.Routes(), core.RecoveryRequest{})
 	//
 	// The API and the SPA are composed here rather than inside core, which has
 	// no business knowing a UI exists. ServeMux prefers the longer pattern, so
@@ -796,6 +912,7 @@ func run(args []string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go recovery.Run(ctx, func(err error) { logger.Error("connectivity recovery failed; retrying", "error", err) })
 	toolHTTP.QualityContext = ctx
 	toolHTTP.QualityPath = filepath.Join(opts.root, "/var/lib/open-linux-router/quality.json")
 	if err := toolHTTP.RestoreQuality(); err != nil {

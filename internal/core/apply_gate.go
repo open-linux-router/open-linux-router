@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -39,6 +40,13 @@ func (g ApplyGate) Check(disruptive, repair bool) error {
 		return ErrApplyHeld
 	}
 	return nil
+}
+
+func (g ApplyGate) CheckConnectivity(ctx context.Context, disruptive, repair bool) error {
+	if err := g.Check(disruptive, repair); err != nil {
+		return err
+	}
+	return ProtectConnectivity(ctx, disruptive)
 }
 
 func ApplyQuery() []QueryParam {

@@ -25,6 +25,7 @@ Operations:
   diff        Show drifted or pending configuration, per module
   history     List configuration revisions, per module
   net         Networks this router serves
+  recovery    Confirm or revert a pending connectivity change
   release     Hand an interface back to the system
   rollback    Roll a module back to an earlier revision
   status      Report whether olr is running

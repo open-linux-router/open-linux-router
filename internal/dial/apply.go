@@ -240,6 +240,22 @@ func profileOnlyChange(a, b Config) bool {
 		reflect.DeepEqual(a.Records, b.Records) && reflect.DeepEqual(DesiredFor(a), DesiredFor(b))
 }
 
+// Recover removes routes, addresses and tunnels introduced by an unconfirmed
+// trial before reconciling the restored uplink.
+func (a Applier) Recover(ctx context.Context, previous Config) error {
+	cfg, err := a.Load()
+	if err != nil {
+		return err
+	}
+	want := DesiredFor(cfg)
+	want.RetireFrom, want.Retire = Retiring(previous, cfg)
+	want.RemoveTunnel = RemovingTunnel(previous, cfg)
+	if !want.Empty() {
+		_, err = a.writer().Apply(ctx, want)
+	}
+	return err
+}
+
 // Restore puts the uplink back on the box after a reboot.
 //
 // # Why this exists at all

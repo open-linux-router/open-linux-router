@@ -473,7 +473,7 @@ func (h HTTP) mutate(w http.ResponseWriter, r *http.Request, edit func(*Config) 
 			}
 		} else {
 			result, applyErr = h.Applier.ApplyChecked(r.Context(), next, func(plan planView) error {
-				return gate.Check(plan.Impact == impactDisruptive, r.URL.Path == "/apply")
+				return gate.CheckConnectivity(r.Context(), plan.Impact == impactDisruptive, r.URL.Path == "/apply")
 			})
 		}
 		if applyErr == nil && !result.Plan.Empty && !inventorySave && !profileOnlyChange(previous, stored) && h.Dependents != nil {
