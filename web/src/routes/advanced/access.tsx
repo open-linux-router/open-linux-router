@@ -1,20 +1,20 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import { SubPage } from '@/components/layout/sub-page'
 import { Button } from '@/components/ui/button'
-import { PageHeading } from '@/components/layout/page-heading'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useAdminAccess } from '@/features/system/queries'
 import { api, setToken } from '@/lib/api'
-import type { AccessView } from '@/lib/api'
 
-export function AdminAccessPage() {
+export function AdministratorAccessPage() {
   const client = useQueryClient()
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [removing, setRemoving] = useState(false)
-  const access = useQuery({ queryKey: ['system', 'access'], queryFn: () => api.get<AccessView>('/api/system/access') })
+  const access = useAdminAccess()
   const save = useMutation({
     mutationFn: (noPassword: boolean) => api.put('/api/system/access/password', { password: noPassword ? '' : password, no_password: noPassword }),
     onSuccess: () => { setPassword(''); setConfirmation(''); client.clear(); window.location.reload() },
@@ -23,8 +23,7 @@ export function AdminAccessPage() {
     mutationFn: () => api.post('/api/system/access/logout'),
     onSuccess: () => { setToken(null); client.clear(); window.location.reload() },
   })
-  return <div className="space-y-8">
-    <PageHeading title="Administrator access" back={{ to: '/', label: 'Network overview' }} />
+  return <SubPage section="/advanced" slug="access">
     <Card>
       <CardHeader>
         <CardTitle>Password and sessions</CardTitle>
@@ -57,5 +56,5 @@ export function AdminAccessPage() {
         {logout.error && <p className="text-sm text-destructive" role="alert">{logout.error.message}</p>}
       </CardContent>
     </Card>
-  </div>
+  </SubPage>
 }

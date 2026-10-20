@@ -5,7 +5,7 @@ import ts from 'typescript'
 
 const source = readFileSync(new URL('./summary.ts', import.meta.url), 'utf8')
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText
-const { gatewaySummary, socksOutSummary, remoteSummary, ingressSummary, forwardsSummary, systemSummary, tunnelBrokerSummary } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`)
+const { gatewaySummary, socksOutSummary, remoteSummary, ingressSummary, systemSummary, tunnelBrokerSummary } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`)
 const snapshot = (data, isError = false) => ({ data, isError })
 const unavailable = { text: 'Status unavailable', attention: true }
 const attention = { text: 'Needs attention', attention: true }
@@ -84,12 +84,4 @@ test('publishing distinguishes certificate provisioning, renewal failure and ser
   }
   assert.deepEqual(ingressSummary(config, snapshot({ ...status, service: { active: false } })), attention)
   assert.deepEqual(ingressSummary(config, snapshot({ ...status, service: undefined, service_error: 'no D-Bus' })), unavailable)
-})
-
-test('port forwards do not claim saved rules are in force when kernel state is unknown', () => {
-  const config = snapshot({ enabled: true, forwards: [{ name: 'ssh' }] })
-  const status = { enabled: true, known: true }
-  assert.equal(forwardsSummary(config, snapshot(status)).text, '1 rule')
-  assert.deepEqual(forwardsSummary(config, snapshot({ ...status, known: false })), unavailable)
-  assert.deepEqual(forwardsSummary(config, snapshot({ ...status, drifted: true })), attention)
 })

@@ -26,9 +26,9 @@ export function SettingsList({
   /** The section's path, e.g. `/dns`. */
   section: string
   /**
-   * Null for a section whose rows are not settings but the whole of it —
-   * Advanced, where each row is a feature of its own and the heading would
-   * mislabel all four.
+   * Null for a list whose rows are not settings but the whole of it — the
+   * gateway's external routing rules, where a "Settings" heading would label
+   * somebody else's rules as ours.
    */
   heading?: string | null
   rows: {

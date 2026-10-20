@@ -11,7 +11,7 @@ export function FilteringPage() {
   const drops = foreign.some((rule) => rule.policy.toLowerCase() === 'drop')
 
   return (
-    <SubPage section="/access" slug="filtering">
+    <SubPage section="/advanced" slug="filtering">
       {status.isError ? (
         <Alert variant="destructive"><AlertTitle>Could not read filtering rules</AlertTitle><AlertDescription>{status.error.message}<Button variant="outline" size="sm" onClick={() => void status.refetch()}>Try again</Button></AlertDescription></Alert>
       ) : status.isPending ? (

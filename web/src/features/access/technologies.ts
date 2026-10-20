@@ -25,5 +25,4 @@ export const ACCESS_TECHNOLOGIES: AccessTechnology[] = [
   { id: 'socks', name: 'SOCKS5', description: 'Use an external proxy as an exit, or let remote clients use this router as their proxy.', directions: ['out', 'in'], connections: ['socks-out', 'socks-in'] },
   { id: 'gateway', name: 'Gateway', description: 'Route traffic through another gateway or an existing VPN interface.', directions: ['out'], connections: ['gateway'] },
   { id: 'tunnelbroker', name: 'Tunnel Broker', description: 'Obtain routed IPv6 connectivity through Hurricane Electric Tunnel Broker.', directions: ['out'], connections: ['tunnelbroker'] },
-  { id: 'nat', name: 'NAT', description: 'Forward an external TCP/UDP port to a service inside this network.', directions: ['in'], connections: ['port-forward'] },
 ]

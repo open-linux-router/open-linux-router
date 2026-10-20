@@ -1,6 +1,6 @@
 # Traceroute
 
-The Tools page runs a finite traditional traceroute from the router with
+The traceroute page runs a finite traditional traceroute from the router with
 [NextTrace](https://github.com/nxtrace/NTrace-core). Install the `nexttrace`
 command on the router (for Debian, use the upstream nexttrace-debs repository;
 other distributions can use the upstream release or build from source). OLR

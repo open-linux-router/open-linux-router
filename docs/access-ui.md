@@ -12,10 +12,14 @@ Tiles use bundled project artwork from `web/public/access-logos`, taken from
 [theSVG](https://thesvg.org) wherever the library carries the project, so the
 launcher matches the marks used elsewhere in the interface. Headscale is the one
 mark outside the library, from its own repository. The rest are protocols rather
-than projects: SOCKS5, Gateway, NAT, frp and SSH wear a capital initial on a
-tinted tile, which keeps two entries sharing an initial (SSH and SOCKS5) apart by
-hue instead of by borrowed branding. See the logo directory README for
-provenance.
+than projects: SOCKS5, Gateway, frp and SSH wear a capital initial on a tinted
+tile, which keeps two entries sharing an initial (SSH and SOCKS5) apart by hue
+instead of by borrowed branding. See the logo directory README for provenance.
+
+Port forwarding is not in this directory. It is a forwarding rule rather than a
+remote-access technology, it shares one nftables ruleset with the firewall, and
+it lives under Advanced → System. The grid, heading and tile live in
+`components/layout/launcher.tsx`, which Advanced uses as well.
 
 ## Connection model
 
@@ -31,7 +35,6 @@ direction: SOCKS5 appears in both directions with different configuration owners
 | Out | Tunnel Broker / HE | dial.tunnelbroker | `/access/tunnelbroker` |
 | In | WireGuard | remote.wireguard and remote endpoint | `/access/wireguard` |
 | In | SOCKS5 server | remote SOCKS5 | `/access/socks-server` |
-| In | Port forwarding | gateway forwards | `/access/forwards` |
 
 System default is a built-in way out, displayed separately with observed IPv4
 and IPv6 routes. It cannot be added or deleted. No default-for-networks setting
@@ -69,6 +72,13 @@ the external proxy. Protocol settings and configuration apply paths remain on
 their respective pages.
 
 ## Validation
+
+Advanced-directory revision: port forwarding, external filtering and
+administrator access left this section for Advanced; the directory is the
+technology list only. Node 24 lint (existing warnings only), production build
+and all UI tests pass, including the summaries that now answer for port
+forwarding and the two services. No browser pass against a live router was run
+for this revision, and no live router settings were changed.
 
 Direct-navigation revision: removing Nebula, HTTP and HTTPS leaves five
 Networking tiles, four ways out and five ways in. Node 24 lint, production build,

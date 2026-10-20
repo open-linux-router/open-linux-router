@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
+import type { AccessView } from '@/lib/api'
 
 export interface HostMetrics {
   uptime_seconds: number
@@ -10,6 +11,13 @@ export interface HostMetrics {
   memory_total_bytes: number
   disk_used_bytes: number | null
   disk_total_bytes: number | null
+}
+
+// One read for the Advanced directory tile and the page that changes it.
+export const adminAccessKey = ['system', 'access'] as const
+
+export function useAdminAccess() {
+  return useQuery({ queryKey: adminAccessKey, queryFn: () => api.get<AccessView>('/api/system/access') })
 }
 
 export function useHostMetrics() {

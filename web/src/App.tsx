@@ -19,16 +19,15 @@ import { DnsNamesPage } from '@/routes/dns/names'
 import { DnsResolvingPage } from '@/routes/dns/resolving'
 import { AccessPage } from '@/routes/access'
 import { SocksOutPage } from '@/routes/access/socks-out'
-import { AdminAccessPage } from '@/routes/admin-access'
+import { AdministratorAccessPage } from '@/routes/advanced/access'
 import { AdvancedPage } from '@/routes/advanced/index'
 import { DdnsPage } from '@/routes/advanced/ddns'
-import { FilteringPage } from '@/routes/access/filtering'
-import { ForwardsPage } from '@/routes/access/forwards'
+import { FilteringPage } from '@/routes/advanced/filtering'
+import { ForwardsPage } from '@/routes/advanced/forwards'
 import { IngressPage } from '@/routes/access/ingress'
 import { IptvPage } from '@/routes/advanced/iptv'
 import { RemotePage } from '@/routes/access/remote'
 import { OverviewPage } from '@/routes/overview'
-import { ToolsPage } from '@/routes/tools'
 import { ToolPage } from '@/routes/tool-page'
 import { DevicePage } from '@/routes/device'
 import { WireguardPeerPage } from '@/routes/peer'
@@ -58,10 +57,10 @@ export function App() {
           <Route path="gateway">
             <Route index element={<GatewayPage />} />
             <Route path="interfaces" element={<GatewayInterfacesPage />} />
-            <Route path="tunnelbroker" element={<AccessRedirect slug="tunnelbroker" />} />
+            <Route path="tunnelbroker" element={<RedirectWithState to="/access/tunnelbroker" />} />
             <Route path="interfaces/:name" element={<GatewayInterfacePage />} />
             <Route path="networks" element={<Navigate to="/gateway/dhcp/details" replace />} />
-            <Route path="exits" element={<AccessRedirect slug="gateway" />} />
+            <Route path="exits" element={<RedirectWithState to="/access/gateway" />} />
             <Route path="usage" element={<Navigate to="/gateway" replace />} />
             <Route path="ipv6" element={<Navigate to="/gateway/interfaces#forwarding" replace />} />
             <Route path="unmanaged" element={<GatewayUnmanagedPage />} />
@@ -89,16 +88,16 @@ export function App() {
           <Route path="firewall" element={<SubPage section="/advanced" slug="firewall"><FirewallPage /></SubPage>} />
           <Route path="firewall/rules" element={<FirewallRulesPage />} />
           <Route path="access" element={<AccessPage />} />
-          <Route path="settings/access" element={<AdminAccessPage />} />
+          <Route path="settings/access" element={<RedirectWithState to="/advanced/access" />} />
           <Route path="access/socks5" element={<SocksOutPage />} />
           <Route path="access/gateway" element={<GatewayExitsPage />} />
           <Route path="access/tunnelbroker" element={<TunnelBrokerPage />} />
           <Route path="access/wireguard" element={<RemotePage way="wireguard" />} />
           <Route path="access/socks-server" element={<RemotePage way="socks-server" />} />
           <Route path="access/ingress" element={<IngressPage />} />
-          <Route path="access/forwards" element={<ForwardsPage />} />
-          <Route path="access/filtering" element={<FilteringPage />} />
-          <Route path="tools" element={<SubPage section="/advanced" slug="tools"><ToolsPage /></SubPage>} />
+          <Route path="access/forwards" element={<RedirectWithState to="/advanced/forwards" />} />
+          <Route path="access/filtering" element={<RedirectWithState to="/advanced/filtering" />} />
+          <Route path="tools" element={<RedirectWithState to="/advanced" />} />
           <Route path="tools/speedtest" element={<ToolPage tool="speedtest" />} />
           <Route path="tools/link-test" element={<ToolPage tool="link-test" />} />
           <Route path="tools/nat" element={<ToolPage tool="nat" />} />
@@ -107,11 +106,12 @@ export function App() {
           <Route path="credits" element={<CreditsPage />} />
           <Route path="advanced">
             <Route index element={<AdvancedPage />} />
-            <Route path="forwards" element={<AccessRedirect slug="forwards" />} />
-            <Route path="filtering" element={<AccessRedirect slug="filtering" />} />
+            <Route path="forwards" element={<ForwardsPage />} />
+            <Route path="filtering" element={<FilteringPage />} />
+            <Route path="access" element={<AdministratorAccessPage />} />
             <Route path="ddns" element={<DdnsPage />} />
-            <Route path="remote" element={<AccessRedirect slug="wireguard" />} />
-            <Route path="ingress" element={<AccessRedirect slug="ingress" />} />
+            <Route path="remote" element={<RedirectWithState to="/access/wireguard" />} />
+            <Route path="ingress" element={<RedirectWithState to="/access/ingress" />} />
             <Route path="iptv" element={<IptvPage />} />
           </Route>
 
@@ -124,12 +124,12 @@ export function App() {
           <Route path="networks" element={<Navigate to="/gateway" replace />} />
           <Route path="networks/settings" element={<Navigate to="/gateway/interfaces" replace />} />
           <Route path="gateway/firewall" element={<Navigate to="/firewall" replace />} />
-          <Route path="firewall/unmanaged" element={<AccessRedirect slug="filtering" />} />
-          <Route path="gateway/forwards" element={<AccessRedirect slug="forwards" />} />
-          <Route path="gateway/filtering" element={<AccessRedirect slug="filtering" />} />
-          <Route path="remote" element={<AccessRedirect slug="wireguard" />} />
-          <Route path="access/remote" element={<AccessRedirect slug="wireguard" />} />
-          <Route path="ingress" element={<AccessRedirect slug="ingress" />} />
+          <Route path="firewall/unmanaged" element={<RedirectWithState to="/advanced/filtering" />} />
+          <Route path="gateway/forwards" element={<RedirectWithState to="/advanced/forwards" />} />
+          <Route path="gateway/filtering" element={<RedirectWithState to="/advanced/filtering" />} />
+          <Route path="remote" element={<RedirectWithState to="/access/wireguard" />} />
+          <Route path="access/remote" element={<RedirectWithState to="/access/wireguard" />} />
+          <Route path="ingress" element={<RedirectWithState to="/access/ingress" />} />
           <Route path="devices" element={<Navigate to="/" replace />} />
           <Route path="dhcp/interfaces" element={<Navigate to="/gateway#interfaces" replace />} />
           <Route path="dhcp/*" element={<LegacySectionRedirect />} />
@@ -158,7 +158,8 @@ function LegacySectionRedirect() {
   return <Navigate to={`/gateway${pathname}${search}${hash}`} replace />
 }
 
-function AccessRedirect({ slug }: { slug: string }) {
+/** Carries a query string and fragment across an address that moved. */
+function RedirectWithState({ to }: { to: string }) {
   const { search, hash } = useLocation()
-  return <Navigate to={`/access/${slug}${search}${hash}`} replace />
+  return <Navigate to={`${to}${search}${hash}`} replace />
 }

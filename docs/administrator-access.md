@@ -2,8 +2,8 @@
 
 The first-run screen offers an administrator password (at least 12 characters)
 and an explicit choice to continue without one. Existing password-free boxes
-keep that choice until the administrator sets a password under **Administrator
-access** in the footer. A password protects the TCP API immediately; restarting
+keep that choice until the administrator sets a password under **Advanced** →
+**System** → **Administrator access**. A password protects the TCP API immediately; restarting
 the daemon is unnecessary.
 
 Passwords are stored as salted PBKDF2-SHA256 hashes with 600,000 iterations.

@@ -27,9 +27,11 @@ import type { LucideIcon } from 'lucide-react'
  * serves, the addresses it hands out, and the names it resolves belong together.
  * Wireless has its own placeholder section; Access follows it.
  *
- * Access owns the directory of ways in and out. Configuration stays with its
- * module; networks and devices retain their routing choices. Advanced keeps
- * Firewall, Tools, Dynamic DNS and IPTV. Firewall and Tools retain their URLs.
+ * Access is the directory of remote-access technologies; configuration stays
+ * with its module. Advanced is the low-level plumbing and the machine itself:
+ * System (firewall, the way in to configure it, port forwarding), Services
+ * (Dynamic DNS, multicast) and Diagnostics (the tools). Firewall and Tools keep
+ * their URLs; Tools is flattened into the directory, its detail pages remain.
  *
  * Devices is absent because it is not a section: the device list is the body of
  * the overview. Filing it under DHCP was considered and rejected — the
@@ -209,17 +211,6 @@ export const SECTIONS: Section[] = [
         label: 'Publish web services',
         blurb: 'Published services still need their own access controls.',
       },
-      {
-        slug: 'forwards',
-        label: 'Port forwards',
-        blurb: 'Forwarding a port also grants its firewall permission.',
-      },
-      {
-        // Reached from port forwards when foreign filtering exists.
-        slug: 'filtering',
-        label: 'External filtering',
-        blurb: 'Read-only forwarding policies outside OLR management.',
-      },
     ],
   },
   {
@@ -236,20 +227,28 @@ export const SECTIONS: Section[] = [
     label: 'Advanced',
     icon: SlidersHorizontal,
     end: false,
+    // Only the labels and explanations: the directory's own page decides which
+    // group each feature belongs to and whether it gets a tile at all.
     groups: [
-      { slug: 'firewall', label: 'Firewall', blurb: '', to: '/firewall' },
-      { slug: 'tools', label: 'Tools', blurb: '', to: '/tools' },
+      { slug: 'firewall', label: 'Firewall', blurb: '' },
       {
-        slug: 'ddns',
-        label: 'Dynamic DNS',
-        blurb:
-          '',
+        slug: 'access',
+        label: 'Administrator access',
+        blurb: 'Who may configure this router, and how they sign in.',
       },
       {
-        slug: 'iptv',
-        label: 'IPTV multicast',
-        blurb: '',
+        // Reached from port forwarding when foreign filtering exists.
+        slug: 'forwards',
+        label: 'Port forwarding',
+        blurb: 'Forwarding a port also grants its firewall permission.',
       },
+      {
+        slug: 'filtering',
+        label: 'External filtering',
+        blurb: 'Read-only forwarding policies outside OLR management.',
+      },
+      { slug: 'ddns', label: 'Dynamic DNS', blurb: '' },
+      { slug: 'iptv', label: 'IPTV multicast', blurb: '' },
     ],
   },
 ]

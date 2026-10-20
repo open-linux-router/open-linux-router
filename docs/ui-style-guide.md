@@ -76,8 +76,11 @@ use 16px and shadow-md. Card spacing and title size are independent variants.
 
 Desktop and mobile navigation use Overview, Gateway, Wireless, Access and
 Advanced, in that order. Wireless currently shows an under-construction placeholder.
-Firewall and Tools are reached through Advanced, retain their existing URLs,
-and highlight Advanced in navigation, including on their detail pages.
+Firewall, port forwarding, administrator access and the five diagnostic pages
+are reached through Advanced and highlight Advanced in navigation, including on
+their detail pages. Firewall and the tool pages keep their addresses; port
+forwarding and administrator access moved from Access, so their old addresses
+redirect rather than disappear.
 
 Firewall's arrival diagram uses a centered firewall boundary spanning 40% of
 the chart width inside its 24px gutters. Pack incoming bands contiguously along
@@ -93,8 +96,9 @@ groups. Keep their existing configuration actions available. Do not show System
 default or purpose filters. Each tile shows a locally bundled
 project logo above a short name, without an enclosing card, border, shadow or
 corner arrow. Preserve brand colors on a white 64px rounded icon backing in
-both themes. Protocols without a recognized logo use existing Lucide SVG icons;
-never generate or draw replacement artwork. Use three columns on phones, five
+both themes. Protocols without a recognized logo wear a capital initial on a
+tinted tile; the hue is what keeps two tiles sharing an initial apart. Never
+generate or draw replacement artwork. Use three columns on phones, five
 from 640px, seven from 1024px and eight from 1280px, with 12px horizontal and
 24px vertical gaps. Keep names below icons with an 8px gap and visible keyboard
 focus around the whole tile. Group headings use 24px/32px semibold text. Each
@@ -103,6 +107,18 @@ belongs to, or the project's documentation in a new tab when OLR does not
 configure it. Do not open a dialog on click. Hover/focus explains function and
 state, and the accessible name repeats that state for touch and screen readers.
 External setup stays explicit.
+
+Advanced is the same launcher, with three grids headed “System”, “Services” and
+“Diagnostics”, in that order. System holds the machine and what may reach it
+(firewall, administrator access, port forwarding); Services holds the background
+jobs it runs for the network (Dynamic DNS, IPTV multicast); Diagnostics holds the
+five tools. Each tile wears a capital initial on a tinted tile, and the tiles of
+one group share a single hue, so the tint groups them without a legend. Tools
+have no persistent state and no line under the name. A tile that does have a
+state repeats it in 12px muted text — warning colour when it needs attention —
+because the state is what saves opening nine pages. Keep the directory's tiles
+and the shared launcher in `components/layout/launcher.tsx`; a tool tile links to
+its diagnostic page, and there is no Tools directory page in between.
 
 Tunnel Broker uses one scrollable page with five numbered sections and a sticky
 step navigation immediately below the 64px shell header. Keep section anchors
@@ -426,9 +442,10 @@ historical cells retain their traffic fills. Honor prefers-reduced-motion in the
 
 Review Overview; device and group details; Gateway and interface details; exits,
 usage and unmanaged settings; every DNS and DHCP detail/settings page; native
-Firewall; Access and SOCKS5, remote, ingress, forwards and filtering; Tools and
-all five diagnostic pages; Advanced, DDNS and IPTV; administrator access;
-Credits; not-found; token/password sign-in; initial setup and first-run states.
+Firewall; Access and SOCKS5, remote and ingress; Advanced with its port
+forwarding, external filtering, DDNS, IPTV, administrator access and all five
+diagnostic pages; Credits; not-found; token/password sign-in; initial setup and
+first-run states.
 Legacy URLs should still redirect to the appropriate current page.
 
 For every iteration:

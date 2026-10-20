@@ -8,9 +8,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useFirewallStatus, useReapplyFirewall, useSetFirewall } from '@/features/firewall/queries'
+import { firewallSummary } from '@/features/firewall/summary'
 import { TrafficPermissions } from '@/features/firewall/traffic-permissions'
 import { ApiError } from '@/lib/api'
-import type { FirewallApplyResult, FirewallStatus } from '@/lib/api-types'
+import type { FirewallApplyResult } from '@/lib/api-types'
 
 /** Firewall arrivals and status; native inspection and editing live on Rules. */
 export function FirewallPage() {
@@ -61,7 +62,7 @@ export function FirewallPage() {
     )
   }
   const st = status.data
-  const summary = summarize(st)
+  const summary = firewallSummary(st)
 
   return (
     <div className="space-y-6">
@@ -120,45 +121,4 @@ export function FirewallPage() {
       <Button variant="outline" nativeButton={false} render={<Link to="/firewall/rules" />}>Rules</Button>
     </div>
   )
-}
-
-function summarize(st: FirewallStatus): {
-  headline: string
-  detail: string
-  dot: string
-} {
-  if (!st.enabled) {
-    return {
-      headline: 'Off',
-      detail:
-        'Anything that can reach this router may connect to it, and to devices with public IPv6 addresses.',
-      dot: 'bg-muted-foreground/40',
-    }
-  }
-  if (!st.known) {
-    return {
-      headline: 'Status unknown',
-      detail: st.problem ?? 'The router could not read its own firewall rules.',
-      dot: 'bg-warning',
-    }
-  }
-  if (st.native) {
-    return { headline: st.problem ? 'Native rules not verified' : st.drifted ? 'Native rules changed' : 'On — native nftables rules', detail: st.problem ?? (st.drifted ? 'The kernel table differs from the saved native rules.' : 'The saved native table is in force. Review its chains and policies on the Rules page.'), dot: st.problem || st.drifted ? 'bg-warning' : 'bg-success' }
-  }
-  if (st.drifted || st.problem) {
-    return {
-      headline: 'Rules not verified',
-      detail: 'The stored setting is on, but the configured protection could not be verified.',
-      dot: 'bg-warning',
-    }
-  }
-  const blocked = st.blocked_input + st.blocked_forward
-  return {
-    headline: 'On',
-    detail:
-      blocked > 0
-        ? `${blocked.toLocaleString()} packets from outside turned away since the rules were last written.`
-        : 'Connections from outside are blocked unless something here asked for them.',
-    dot: 'bg-success',
-  }
 }

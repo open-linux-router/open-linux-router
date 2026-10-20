@@ -27,7 +27,7 @@ The original audit found differences in role definitions and local overrides:
 | `features/devices/device-inline-editor.tsx` | Entity title grows to 30px on desktop | Page/entity title defaults to 24px; identity comes from imagery and placement |
 | `features/devices/device-setting-row.tsx`, `features/link/network-status.tsx` | Label/value patterns exist as local components with different text sizes | Reusable property rows and technical-value role |
 | `components/layout/settings-list.tsx`, `components/ui/list.tsx` | Settings answers inherit subdued trailing-text styling | Distinguish an answer value from secondary metadata |
-| `routes/tools.tsx`, `routes/access.tsx`, interface cards | Several locally composed interactive surfaces | Shared surface interaction rules while preserving directory-specific layouts |
+| `routes/access.tsx`, `routes/advanced/index.tsx`, interface cards | Several locally composed interactive surfaces | One launcher (`components/layout/launcher.tsx`) for both directories; panels keep their own layouts |
 
 The table records the original audit. Its radius, heading, measurement,
 property-value and interaction differences are addressed by the shared contracts
@@ -45,7 +45,7 @@ can be shared variants/tokens within those components.
 | Page heading | h1, optional context, back/breadcrumb, action | Reuse PageHeading; converge local entity headings visually |
 | Section heading | Heading plus optional action/context | Heading; choose `as` independently of `size` |
 | Panel | Static information group with header/content/footer | Reuse Card family; unify radius and heading variants |
-| Navigation tile | A capability/entity with one primary destination | Shared `panel-surface interactive-surface` utilities; retain directory layouts |
+| Navigation tile | A capability/entity with one primary destination | LauncherTile in `components/layout/launcher.tsx`; logo, initial or icon mark, optional state line |
 | Property list / row | Label and current answer, optionally an edit trigger | PropertyRow inside a `dl`; DeviceSettingRow re-exports the same component |
 | Metric value | Measurement and optional unit | MetricValue, used by Tools, traffic primitives, Gateway and DNS summaries |
 | Traffic meter | Current rate, optional limit and utilization | Reuse Meter; keep data/direction semantics in traffic code |
@@ -122,7 +122,7 @@ theme foreground unless stated otherwise; do not make ordinary values primary bl
 | Page / entity title | 24 / 32px | 600 | Foreground, tracking -0.015em |
 | Section / panel title | 16 / 24px | 600 | Foreground |
 | Compact monitoring title | 14 / 24px | 600 | Foreground; explicit monitoring variant |
-| Directory item name | 18 / 24px | 600 | Tools entry role; Access retains its short-name tile layout |
+| Directory item name | 14 / 20px | 500 | Launcher tile name below the mark (Access, Advanced); 13px on phones |
 | Body / ordinary value | 14 / 20px | 400 | Foreground |
 | Property label | 14 / 20px | 400 | Muted foreground |
 | Form label | 14 / 20px | 500 | Foreground; use Label with a control association |

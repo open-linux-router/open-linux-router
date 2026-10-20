@@ -255,11 +255,14 @@ A technology can appear in both directions; its tile goes straight to the
 configuration owner for that direction, and a technology OLR does not configure
 opens its project documentation instead. Remove System default and purpose
 filters from this page. Use app-style icons above names without enclosing cards.
-Use project logos and existing Lucide SVG icons for unbranded protocols, never
-generated or hand-drawn artwork. Functions and state appear on hover/focus and in
-the tile's accessible name. External technologies remain explicitly “Not
-integrated”; broader ecosystem uses are not promises of OLR configuration
-support. Existing service states remain authoritative.
+Use project logos for branded technologies and a capital initial on a tinted tile
+for protocols, never generated or hand-drawn artwork. Port forwarding is a
+forwarding rule rather than a remote-access technology, so it is not a tile
+here; it lives under Advanced with the firewall whose ruleset it shares.
+Functions and state appear on hover/focus and in the tile's accessible name.
+External technologies remain explicitly “Not integrated”; broader ecosystem uses
+are not promises of OLR configuration support. Existing service states remain
+authoritative.
 
 Tunnel Broker keeps provider details together in one saved assignment, with
 activation and LAN assignment as separate decisions. Saving defaults to off.
@@ -334,17 +337,22 @@ Use a consistent ordering. Add grouping when the collection is large enough that
 groups reduce search effort; add search when scanning the collection becomes
 burdensome. Five tools need neither filters nor one category per card.
 
-## Tools directory reference
+## Advanced directory reference
 
-The Tools page's goals are quick selection, a visible range of OLR capabilities
-and a calm presentation. Its current contract is:
+Advanced's goals are quick selection, a current answer and a calm presentation.
+Its contract is:
 
-- Show all five real tools in a uniform directory.
-- Each entry contains a recognizable Lucide outline icon, one tool name and a chevron.
-- The whole entry is a keyboard-accessible link.
-- No category, paragraph, instruction footer or generic page subtitle.
-- Keep full names visible on phones; retain contrast and focus in both themes.
-- Keep detailed explanations and requirements on the individual tool pages.
+- Three groups with charters: System (the machine and what may reach it),
+  Services (background work for the network), Diagnostics (measurements).
+  Place a feature by its charter, not by which module happens to own it.
+- One tile per destination, with a capital initial on a 64px tinted tile. The
+  tiles of a group share one hue; the letter carries identity.
+- A short name below the tile. The page behind it may carry a longer name.
+- State prints as one 12px line under the name when the feature has one, and in
+  warning colour when it needs attention. Never hide state on hover alone.
+- The whole tile is a keyboard-accessible link; no dialog opens on click.
+- There is no intermediate "Tools" page: a diagnostic tile opens the tool.
+- Keep explanations, requirements and results on the individual pages.
 
 ## Review before shipping
 

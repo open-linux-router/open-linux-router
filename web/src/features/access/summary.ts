@@ -1,4 +1,4 @@
-import type { DialStatus, ForwardsStatus, GatewayStatus, IngressStatus, RemoteStatus, SocksStatus } from '@/lib/api-types'
+import type { DialStatus, GatewayStatus, IngressStatus, RemoteStatus, SocksStatus } from '@/lib/api-types'
 import type { DialConfig, GatewayConfig, IngressConfig, RemoteConfig } from '@/lib/config-types'
 import type { TunnelBrokerStatus } from '@/features/dial/queries'
 import type { SocksOutConfig, SocksOutStatus } from '@/features/socksout/queries'
@@ -98,15 +98,4 @@ export function ingressSummary(config: Snapshot<IngressConfig>, status: Snapshot
   if (!s.enabled || !s.service.active || s.binary_error || s.drifted || s.certificate.renewal_overdue || s.certificate_warnings?.length || (s.certificate.found && (s.certificate.expires_in_days ?? 0) <= 0)) return attention
   if (!s.certificate.found) return { text: 'Waiting for certificate' }
   return { text: count(config.data!.services?.length ?? 0, 'address', 'addresses') }
-}
-
-export function forwardsSummary(config: Snapshot<GatewayConfig>, status: Snapshot<ForwardsStatus>): Summary {
-  const pending = missing(config)
-  if (pending) return pending
-  if (!config.data!.enabled) return off
-  const observed = missing(status)
-  if (observed) return observed
-  if (!status.data!.known) return unavailable
-  if (!status.data!.enabled || status.data!.drifted || status.data!.problems?.length) return attention
-  return { text: count(config.data!.forwards?.length ?? 0, 'rule') }
 }

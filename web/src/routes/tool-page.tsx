@@ -133,7 +133,7 @@ export function ToolPage({ tool }: { tool: ToolSlug }) {
   const definition = TOOL_DEFINITIONS.find(item => item.slug === tool)!
   const Content = { speedtest: SpeedTest, 'link-test': LinkTest, nat: NATTest, ping: PingTest, traceroute: TracerouteTest }[tool]
   return <div className="space-y-8">
-    <PageHeading id="tool-title" title={definition.label} back={{ to: '/tools', label: 'Tools' }} />
+    <PageHeading id="tool-title" title={definition.label} back={{ to: '/advanced', label: 'Advanced' }} />
     <Content key={tool} />
   </div>
 }
