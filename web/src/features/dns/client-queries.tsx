@@ -1,5 +1,5 @@
 import { Search, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -65,12 +65,21 @@ export function ClientQueries({ addresses }: { addresses: string[] }) {
         <p className="text-sm text-muted-foreground">{matching.length ? 'Nothing matches that filter.' : 'No matching queries in the recent sample.'}</p>
       ) : (
         <div className="max-h-80 overflow-y-auto">
-          <Table aria-label="Recent DNS queries: time, record, type, answer" className="[&_td:last-child]:text-right">
-            <TableBody>{shown.map((q, i) => <TableRow key={`${q.at}-${q.client}-${q.name}-${i}`}>
+          {/* One line per query. A name or a CDN answer list wraps into four
+              lines and the table scrolls sideways; each column owns its width
+              instead and cuts what does not fit. */}
+          <Table aria-label="Recent DNS queries: time, record, type, answer" className="min-w-[36rem] table-fixed">
+            <colgroup>
+              <col className="w-24" />
+              <col className="w-[36%]" />
+              <col className="w-[4.5rem]" />
+              <col />
+            </colgroup>
+            <TableBody>{shown.map((q, i) => <TableRow key={`${q.at}-${q.client}-${q.name}-${i}`} className="h-10">
               <TableCell><time dateTime={q.at} className="font-mono text-xs text-muted-foreground">{new Date(q.at).toLocaleTimeString()}</time></TableCell>
-              <TableCell className="min-w-32 whitespace-normal break-all">{q.name}</TableCell>
-              <TableCell className="text-muted-foreground">{q.type}</TableCell>
-              <TableCell className="min-w-40 whitespace-normal break-all">{q.blocked ? <Badge variant="secondary">Blocked{q.policy ? ` · ${q.policy}` : ''}</Badge> : q.rcode !== 'NOERROR' ? <Badge variant="warning">{q.rcode}</Badge> : q.answers?.length ? <DnsAnswers answers={q.answers} /> : <span className="text-xs text-muted-foreground">No answer</span>}</TableCell>
+              <TableCell><span className="block truncate" title={q.name}>{q.name}</span></TableCell>
+              <TableCell className="text-muted-foreground"><span className="block truncate">{q.type}</span></TableCell>
+              <TableCell>{q.blocked ? <Badge variant="secondary" className="max-w-full"><span className="min-w-0 truncate">Blocked{q.policy ? ` · ${q.policy}` : ''}</span></Badge> : q.rcode !== 'NOERROR' ? <Badge variant="warning">{q.rcode}</Badge> : q.answers?.length ? <DnsAnswers answers={q.answers} /> : <span className="text-xs text-muted-foreground">No answer</span>}</TableCell>
             </TableRow>)}</TableBody>
           </Table>
         </div>
@@ -79,6 +88,64 @@ export function ClientQueries({ addresses }: { addresses: string[] }) {
   </Card>
 }
 
+/**
+ * The answers on one line.
+ *
+ * A name behind a CDN comes back with a dozen addresses. Left to wrap, one row
+ * grew to four lines and pushed the table sideways, so the list keeps the
+ * addresses that fit and counts the rest. The addresses the count replaces are
+ * still in the accessible text; the ellipsis is only how it looks.
+ *
+ * The hidden copy is what makes the count honest: it is laid out off-screen in
+ * the same font so each address can be measured before anything is dropped.
+ */
 function DnsAnswers({ answers }: { answers: string[] }) {
-  return <span className="font-mono text-xs text-muted-foreground">{answers.join(', ')}</span>
+  const cell = useRef<HTMLSpanElement>(null)
+  const mirror = useRef<HTMLSpanElement>(null)
+  const [fit, setFit] = useState(answers.length)
+
+  useLayoutEffect(() => {
+    const element = cell.current
+    const measure = mirror.current
+    if (!element || !measure) return
+    const update = () => {
+      // Each shown address carries its own ", " lead, so the list adds up
+      // without a gap; only the count needs the gap before it (ml-1).
+      const available = element.clientWidth
+      const items = [...measure.querySelectorAll<HTMLElement>('[data-answer]')]
+      const reserved = (measure.querySelector<HTMLElement>('[data-more]')?.offsetWidth ?? 0) + 4
+      let used = 0
+      let shown = 0
+      for (const [index, item] of items.entries()) {
+        const next = used + item.offsetWidth + (index < items.length - 1 ? reserved : 0)
+        if (next > available) break
+        used += item.offsetWidth
+        shown = index + 1
+      }
+      setFit((previous) => previous === shown ? previous : shown)
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    // Text metrics change when the webfont lands, without the cell resizing.
+    observer.observe(measure)
+    return () => observer.disconnect()
+  }, [answers])
+
+  // Nothing fitting still shows the first address, cut with an ellipsis.
+  const visible = answers.slice(0, fit || 1)
+  const hidden = answers.length - visible.length
+  const counted = fit > 0 && hidden > 0
+
+  return <span ref={cell} className="relative flex min-w-0 items-center overflow-hidden">
+    <span ref={mirror} aria-hidden="true" className="pointer-events-none invisible absolute top-0 left-0 w-max font-mono text-xs whitespace-nowrap">
+      {answers.map((answer, i) => <span key={i} data-answer>{i ? `, ${answer}` : answer}</span>)}
+      <span data-more className="ml-1">+{answers.length} more</span>
+    </span>
+    {visible.map((answer, i) => (
+      // Alone in the cell, the first address is the one that gets cut.
+      <span key={`${i}-${answer}`} className={`font-mono text-xs text-muted-foreground ${fit === 0 && i === 0 ? 'min-w-0 truncate' : 'shrink-0'}`}>{i ? `, ${answer}` : answer}</span>
+    ))}
+    {counted && <span className="ml-1 shrink-0 text-xs text-muted-foreground" title={answers.join(', ')}>+{hidden} more<span className="sr-only">: {answers.slice(visible.length).join(', ')}</span></span>}
+  </span>
 }
