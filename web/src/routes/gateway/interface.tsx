@@ -1,6 +1,6 @@
 import { Heading } from '@/components/ui/heading'
 import { TechnicalValue } from '@/components/ui/property-row'
-import { ArrowLeft, ArrowUpRight, Pencil } from 'lucide-react'
+import { ArrowUpRight, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 
@@ -48,7 +48,6 @@ export function GatewayInterfacePage() {
   }
 
   return <div className="space-y-6 pb-12">
-    <Link to="/gateway" className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"><ArrowLeft className="size-4" aria-hidden /> Gateway</Link>
     <header className="flex flex-wrap items-start gap-4">
       <InterfaceVisual row={row} uplink={isUplink} />
       <div className="min-w-0 flex-1">

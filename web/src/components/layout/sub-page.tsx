@@ -8,16 +8,16 @@ export function SubPage({ section, slug, children, action }: {
   action?: React.ReactNode
 }) {
   const { section: parent, group } = groupOf(section, slug)
-  const nested = parent.nested
-  const parentTo = nested ? `${parent.to}/details` : parent.to
-  const breadcrumbs = nested
-    ? [{ to: '/gateway', label: 'Gateway' }, ...(slug === 'details' ? [] : [{ to: parentTo, label: parent.label }])]
+  // The top bar already highlights the section, so a sub-page never links back
+  // to it. Only Gateway's nested settings need a position, and the page that
+  // carries its section's own name is that position.
+  const breadcrumbs = parent.nested && slug !== 'details'
+    ? [{ to: '/gateway', label: 'Gateway' }, { to: `${parent.to}/details`, label: parent.label }]
     : undefined
 
   return (
     <div className="space-y-8">
       <PageHeading title={group.label} description={group.blurb}
-        back={nested ? undefined : { to: parentTo, label: parent.label }}
         breadcrumbs={breadcrumbs} action={action} />
       {children}
     </div>

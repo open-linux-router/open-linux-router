@@ -1,18 +1,21 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 import { Heading } from '@/components/ui/heading'
 
-export function PageHeading({ title, description, back, breadcrumbs, action, id }: {
+export function PageHeading({ title, description, breadcrumbs, action, id }: {
   id?: string
   title: React.ReactNode
   description?: React.ReactNode
-  back?: { to: string; label: string }
+  /**
+   * Position inside a nested section, for pages the top bar cannot locate on
+   * its own. A page already named by its section gets no crumb and no back link.
+   */
   breadcrumbs?: { to: string; label: string }[]
   action?: React.ReactNode
 }) {
   return (
     <header className="space-y-3">
-      {breadcrumbs ? (
+      {breadcrumbs && (
         <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
           {breadcrumbs.map((item, index) => (
             <span key={item.to} className="inline-flex items-center gap-1">
@@ -21,10 +24,6 @@ export function PageHeading({ title, description, back, breadcrumbs, action, id 
             </span>
           ))}
         </nav>
-      ) : back && (
-        <Link to={back.to} className="-ml-1 inline-flex min-h-11 items-center gap-1 rounded-md px-1 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
-          <ChevronLeft className="size-4" aria-hidden />{back.label}
-        </Link>
       )}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-2">

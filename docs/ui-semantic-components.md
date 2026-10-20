@@ -42,7 +42,7 @@ can be shared variants/tokens within those components.
 | Semantic component | Responsibility | Existing owner / next step |
 | --- | --- | --- |
 | Page frame | Width, gutters, navigation, page spacing | Reuse AppShell and SubPage |
-| Page heading | h1, optional context, back/breadcrumb, action | Reuse PageHeading; converge local entity headings visually |
+| Page heading | h1, optional context, nested breadcrumb, action | Reuse PageHeading; converge local entity headings visually |
 | Section heading | Heading plus optional action/context | Heading; choose `as` independently of `size` |
 | Panel | Static information group with header/content/footer | Reuse Card family; unify radius and heading variants |
 | Navigation tile | A capability/entity with one primary destination | LauncherTile in `components/layout/launcher.tsx`; logo, initial or icon mark, optional state line |

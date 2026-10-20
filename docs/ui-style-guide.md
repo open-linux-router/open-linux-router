@@ -146,10 +146,13 @@ apply route-dependent page widths. Individual fields and explanatory paragraphs
 may constrain their own reading width without narrowing the entire page.
 Section landing pages omit the visible heading already named in navigation;
 retain an `sr-only` h1 for assistive technology, with no heading gap. Detail and
-operation pages use `PageHeading` and `SubPage`: a visible
-title, an explanation only when needed, optional back link or breadcrumb, and optional
-primary action. Nested DNS and DHCP breadcrumbs lead through Gateway. Preserve
-existing redirects and deep links when moving settings.
+operation pages use `PageHeading` and `SubPage`: a visible title, an explanation
+only when needed, and an optional primary action. Sub-pages do not repeat the
+section navigation, because the shell's section tabs already name the section
+they are under. Gateway's nested DNS and DHCP settings are the one exception:
+those pages keep a Gateway › DNS breadcrumb, since the top bar can only name
+Gateway, while the page that carries its section's own name (details) shows
+none. Preserve existing redirects and deep links when moving settings.
 
 The spacing vocabulary is 4, 8, 12, 16, 24 and 32px. Use 32px between major
 sections, 16–24px inside cards and 8px between label and control. Basic corner
