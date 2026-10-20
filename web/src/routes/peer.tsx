@@ -66,19 +66,16 @@ export function WireguardPeerPage() {
 
       <ClientQueries addresses={peer.address ? [peer.address] : []} />
 
-      {/* A card rather than an absent switch: an operator who inspected a device
-          on the LAN will look for it here, and the reason it is not offered is a
-          property of the tunnel rather than a setting somebody turned off. */}
+      {/* The reason stays in the tooltip rather than the page: an operator who
+          inspected a device on the LAN will look for the switch here, and one
+          word answers them — the detail is a property of the tunnel, not a
+          setting somebody turned off. */}
       <section className="overflow-hidden rounded-xl border bg-card shadow-xs" aria-labelledby="peer-connections-title">
-        <div className="flex h-18 items-center px-4 sm:px-6">
+        <div className="flex h-18 items-center justify-between gap-3 px-4 sm:px-6">
           <Heading id="peer-connections-title">Connections</Heading>
-        </div>
-        <div className="mx-4 border-t py-4 sm:mx-6 sm:py-6">
-          <p className="text-sm text-muted-foreground">
-            Inspection intercepts a device&rsquo;s traffic by matching its MAC address before the traffic reaches the
-            network. Traffic that arrives over the tunnel has no MAC address, so a device that dials in cannot be
-            inspected yet.
-          </p>
+          <span className="text-sm text-muted-foreground" title="Inspection matches a device's MAC address before its traffic reaches the network, and traffic arriving over the tunnel has none.">
+            Not supported
+          </span>
         </div>
       </section>
 
@@ -147,13 +144,11 @@ function Usage({ flow, usage, trafficFailed }: { flow: TrafficView; usage?: Flow
         </span>
       </DeviceSettingRow>
     </dl>
-    <p className="pt-2 text-xs leading-relaxed text-muted-foreground">
-      {!flow.counting
-        ? trafficFailed
-          ? 'Traffic counters are unavailable right now.'
-          : 'Traffic counting is off, so there is nothing to show here.'
-        : 'Counted where traffic crosses this router, on its way to your network or out to the internet. What this device asks the router itself — names, this page — does not pass that point, so it is not in these numbers.'}
-    </p>
+    {!flow.counting && (
+      <p className="pt-2 text-xs leading-relaxed text-muted-foreground">
+        {trafficFailed ? 'Traffic counters are unavailable right now.' : 'Traffic counting is off, so there is nothing to show here.'}
+      </p>
+    )}
   </div>
 }
 
