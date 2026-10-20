@@ -56,10 +56,13 @@ pairs.
 | Destructive text | #b42335 | #ff9daa |
 
 Use `primary-fill` with `primary-foreground` for filled actions. Use `primary`
-for links and selected navigation. Use `success-foreground` and
-`warning-foreground` for readable status text. Color accompanies a label or
-icon; it never replaces one. A normally blocked DNS request is neutral activity,
-not an incident. Reserve destructive emphasis for errors and destructive actions.
+for links and selected navigation. The selected section in desktop navigation is
+a 40px `primary/10` tinted pill rather than a rule under the label; the tint is
+a shape, so the selection survives without reading the hue. Use
+`success-foreground` and `warning-foreground` for readable status text. Color
+accompanies a label or icon; it never replaces one. A normally blocked DNS
+request is neutral activity, not an incident. Reserve destructive emphasis for
+errors and destructive actions.
 
 Cards use a one-pixel border and shadow-xs. Shadows clarify elevation rather
 than decorate every nested row. A list inside CardContent does not need a second
@@ -377,7 +380,10 @@ Page navigation resets document scroll to the top before paint. Hash links retai
 their section-target behavior; query-only changes preserve the current scroll.
 
 Desktop section navigation begins at 1024px. Below that, show all five sections
-in a five-column bottom navigation; do not require horizontal scrolling.
+in a five-column bottom navigation; do not require horizontal scrolling. The
+bottom bar marks the current section with `text-primary` on an icon and label
+alone: it has no room for the desktop pill, and a fill behind a 20px icon reads
+as a pressed button rather than as a location.
 Account for the device safe area and bottom navigation when laying out content
 and the footer. At 375px, keep labels, statuses, addresses and action buttons
 usable. Monitoring statistics use two columns on phones.

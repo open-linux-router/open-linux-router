@@ -28,10 +28,12 @@ export function AppShell() {
           <nav className="ml-6 hidden min-w-0 self-stretch lg:block" aria-label="Sections">
             <ul className="flex h-full gap-1">
               {SECTIONS.filter(s => !s.nested).map(({ to, label, end }) => (
-                <li key={to}>
+                <li key={to} className="flex items-center">
                   <NavLink to={to} end={end} className={({ isActive }) => cn(
-                    'relative flex h-full items-center px-3 text-sm transition-colors duration-150 after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring',
-                    (isActive || section?.navTo === to) ? 'font-medium text-primary after:bg-primary' : 'text-muted-foreground hover:text-foreground',
+                    'flex h-10 items-center rounded-lg px-3 text-sm transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ring',
+                    (isActive || section?.navTo === to)
+                      ? 'bg-primary/10 font-medium text-primary dark:bg-primary/15'
+                      : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                   )}>{label}</NavLink>
                 </li>
               ))}
