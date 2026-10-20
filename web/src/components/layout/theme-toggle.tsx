@@ -13,12 +13,12 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      className="size-11 text-muted-foreground hover:text-foreground lg:items-end"
+      className="size-11 text-muted-foreground transition-colors duration-150 hover:bg-transparent hover:text-foreground active:bg-transparent dark:hover:bg-transparent lg:items-end"
       aria-label={`Theme: ${current === 'system' ? 'auto' : current}. Switch to ${next[current] === 'system' ? 'auto' : next[current]}`}
       title={`Theme: ${current === 'system' ? 'auto' : current}. Switch to ${next[current] === 'system' ? 'auto' : next[current]}`}
       onClick={() => setTheme(next[current])}
     >
-      <Icon className="size-4" aria-hidden />
+      <Icon className="size-3.5" aria-hidden />
     </Button>
   )
 }
