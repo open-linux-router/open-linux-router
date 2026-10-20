@@ -43,6 +43,34 @@ have logins:
   session assume one endpoint per key — so the validator cannot catch it and
   the documentation has to say it instead.
 
+### 2.2 Renaming is a label change, not a re-issue
+
+The name being a label rather than something the tunnel carries has a second
+consequence, and it is the pleasant one: **renaming a peer changes nothing on
+the box**. `Render` does not put the name into the desired state — only keys and
+addresses reach `wg setconf` — so `olr remote set peer phone --name handset` (or
+the name field in the device dialog) produces an empty plan: no `wg setconf`, no
+new key, no new address, and the configuration already imported on the device
+keeps working.
+
+That is why removing and adding the peer again is *not* the answer to a typo in
+a name. A new peer gets the next free address and a fresh key pair (§3, §4), so
+the file on the device stops matching — a re-issue for what the operator
+intended as a cosmetic edit.
+
+Two things deliberately do not follow a rename, and both are another owner's:
+
+- **A local name in `dns`.** `olr dns add host` stored that name separately, and
+  §3's rule — stored intent is never derived from another module's addresses —
+  applies to a rename as much as to an add. The rename's response says so.
+- **The comment at the top of the imported file.** It still carries the old
+  name. It is a comment; nothing reads it.
+
+What is refused is refused before anything is written: a name another device
+already holds (409), a device that does not exist (404), and a name the
+validator would not accept for a device at all (422, the same rule
+`olr remote add peer` uses).
+
 ---
 
 ## 3. The dial-in segment is a network

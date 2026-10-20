@@ -25,10 +25,15 @@ import type { RemotePeer } from '@/lib/api-types'
 /**
  * Lets a device dial in, or changes one.
  *
- * One field is asked for on the way in — a name — which is the module's whole
+ * On the way in, one field is asked for — a name — which is the module's whole
  * claim. The key pair, the address on the tunnel and every line of the file the
  * device imports are derived from things settled once when remote access was
  * switched on.
+ *
+ * Editing asks for the same name field, and that is not a second kind of
+ * question: a name is olr's label, and WireGuard knows a device by its key, so
+ * a rename reaches nothing on the device and the file already imported keeps
+ * working (docs/remote-access.md §2.1).
  *
  * The second field is a real choice and is the only one on this screen an
  * operator can get wrong in a way that matters, so it is a pair of described
@@ -47,7 +52,8 @@ export function PeerDialog({
   initial?: RemotePeer
   /** The dial-in network, for the preview. */
   subnet?: string
-  onSubmit: (peer: { name: string; routes: string; public_key?: string }) => void
+  /** May be async: editing a device can be two changes, in order. */
+  onSubmit: (peer: { name: string; routes: string; public_key?: string }) => void | Promise<unknown>
   /** Only supplied when editing. Removing is an edit to the thing you opened. */
   onRemove?: () => void
 }) {
@@ -75,27 +81,27 @@ export function PeerDialog({
           <DialogTitle>{editing ? name : 'Let a device in'}</DialogTitle>
           <DialogDescription>
             {editing
-              ? 'What this device sends through the tunnel. Its address and its key do not change.'
+              ? 'What this device is called, and what it sends through the tunnel. Its address and its key do not change.'
               : 'One device, one entry. A phone and a laptop are two.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {!editing && (
-            <div className="space-y-2">
-              <Label htmlFor="peer-name">Name</Label>
-              <Input
-                id="peer-name"
-                value={name}
-                autoFocus
-                placeholder="phone"
-                onChange={(e) => setName(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Letters, digits and hyphens. {subnet ? `It gets an address on ${subnet}.` : ''}
-              </p>
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="peer-name">Name</Label>
+            <Input
+              id="peer-name"
+              value={name}
+              autoFocus={!editing}
+              placeholder="phone"
+              onChange={(e) => setName(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {editing
+                ? 'Letters, digits and hyphens. The file already on the device keeps working.'
+                : `Letters, digits and hyphens. ${subnet ? `It gets an address on ${subnet}.` : ''}`}
+            </p>
+          </div>
 
           <RouteChoice value={routes} onChange={setRoutes} editing={editing} />
 

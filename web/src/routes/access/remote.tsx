@@ -198,7 +198,20 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
           onOpenChange={(open) => !open && setEditing(null)}
           initial={editing}
           subnet={status.data?.subnet}
-          onSubmit={(peer) => change(remoteChange.savePeer(editing.name, { routes: peer.routes }))}
+          onSubmit={async (peer) => {
+            // Two changes, two requests, and the rename first: it is the one
+            // that can be refused (a name another device holds), and there is
+            // no point rewriting what the device sends if the device is still
+            // called what it was.
+            if (peer.name !== editing.name) {
+              if (!(await change(remoteChange.renamePeer(editing.name, peer.name)))) return
+            }
+            // Compared with the same default the dialog applies, or an
+            // unstored `routes` would read as a change on every save.
+            if (peer.routes !== (editing.routes || 'home')) {
+              await change(remoteChange.savePeer(peer.name, { routes: peer.routes }))
+            }
+          }}
           onRemove={() => {
             setEditing(null)
             change(remoteChange.removePeer(editing.name))

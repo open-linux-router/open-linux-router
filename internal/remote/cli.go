@@ -200,7 +200,7 @@ func loadPeers(c *cobra.Command) (peersResponse, error) {
 func setCommand() *cobra.Command {
 	var endpoint string
 
-	c := verb("set", "Set how devices reach this box", func(c *cobra.Command) {
+	c := verb("set", "Set how devices reach this box, or what a device is called", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
 		c.Long = "Set the address your devices dial from outside.\n\n" +
 			"This is shared by every way in, which is why it is here rather than\n" +
@@ -209,7 +209,9 @@ func setCommand() *cobra.Command {
 			"out for itself: if a name already follows this router's address, use\n" +
 			"it — `olr dial show` lists the ones olr keeps current.\n\n" +
 			"Give the host alone. A port here could only be right for one way in;\n" +
-			"use --public-port on the one whose forwarded port differs."
+			"use --public-port on the one whose forwarded port differs.\n\n" +
+			"`olr remote set wireguard` changes the tunnel's own settings, and\n" +
+			"`olr remote set peer` gives one device a different name."
 
 		c.Flags().StringVar(&endpoint, "endpoint", "",
 			"public name or address your devices dial")
@@ -222,7 +224,41 @@ func setCommand() *cobra.Command {
 		}
 	})
 
-	c.AddCommand(setWireGuardCommand())
+	c.AddCommand(setWireGuardCommand(), setPeerCommand())
+	return c
+}
+
+// setPeerCommand renames a device.
+//
+// `set` rather than a verb of its own: the name is a configuration field, and
+// the shared vocabulary has a word for changing one (design.md §3.2 rule 4). It
+// is deliberately not spelled `rm` + `add` — that would allocate a new address
+// and a new key, and invalidate the file already on the device, for a change
+// the device never hears about.
+func setPeerCommand() *cobra.Command {
+	var name string
+
+	c := &cobra.Command{
+		Use:   "peer <name>",
+		Short: "Give a device a different name",
+		Args:  cobra.ExactArgs(1),
+		Long: "Give a device a different name, keeping its address and its key.\n\n" +
+			"A name is olr's label, not part of the tunnel — WireGuard knows a\n" +
+			"device by its key. So the configuration already on the device keeps\n" +
+			"working, and nothing has to be re-issued or re-imported.\n\n" +
+			"A local name added with `olr dns` does not follow: that name is `dns`'s\n" +
+			"stored intent, and this module does not write another module's.",
+		Example: "  olr remote set peer phone --name handset",
+		RunE: func(c *cobra.Command, args []string) error {
+			if !c.Flags().Changed("name") {
+				return fmt.Errorf("nothing to set; --name is the only field here")
+			}
+			return sendTunnel(c, "PATCH", peerEndpoint(args[0]), map[string]string{"name": name})
+		},
+	}
+
+	c.Flags().StringVar(&name, "name", "", "the name to give the device")
+	c.ValidArgsFunction = cli.CompleteArgs(peerNamesFor)
 	return c
 }
 

@@ -3,6 +3,7 @@ package remote
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/netip"
 	"slices"
@@ -276,6 +277,54 @@ func (w *WireGuard) RemovePeer(name string) bool {
 	}
 	w.Peers = slices.Delete(w.Peers, i, i+1)
 	return true
+}
+
+// The three ways a rename can be wrong, named so the HTTP surface can answer
+// each with its own status: a caller retrying a 404 is wasting its time, while
+// a 409 is a name it can pick again.
+var (
+	ErrNoSuchPeer     = errors.New("no device by that name may dial in")
+	ErrPeerNameTaken  = errors.New("a device already goes by that name")
+	ErrPeerNameNeeded = errors.New("a device needs a name")
+)
+
+// RenamePeer gives one peer a different name, and nothing else about it.
+//
+// This is the one edit to a device that changes no tunnel state at all, and the
+// reason is the module's own claim (docs/remote-access.md §2.1): a peer is a
+// public key, and its name is olr's label. `Render` does not put the name in
+// the desired state, so a rename produces an empty plan — no `wg setconf`, no
+// re-issued file, and the configuration already on the device keeps working
+// with the old name in a comment at the top of it.
+//
+// The address and the key are deliberately not parameters. They are what the
+// device's file names, and a rename that could move either would be an add and
+// a remove wearing a friendlier word.
+func (w *WireGuard) RenamePeer(from, to string) (Peer, error) {
+	from, to = normalizeName(from), normalizeName(to)
+
+	i := slices.IndexFunc(w.Peers, func(p Peer) bool { return p.Name == from })
+	if i < 0 {
+		return Peer{}, ErrNoSuchPeer
+	}
+	switch {
+	case to == "":
+		// Not left to the validator: `Normalize` drops a peer whose name is
+		// empty, so reaching it with one would delete the device rather than
+		// refuse the rename.
+		return Peer{}, ErrPeerNameNeeded
+	case to == from:
+		return w.Peers[i], nil
+	case slices.ContainsFunc(w.Peers, func(p Peer) bool { return p.Name == to }):
+		return Peer{}, ErrPeerNameTaken
+	}
+
+	w.Peers[i].Name = to
+	renamed := w.Peers[i]
+	// Sorted back into place, and normalised like every other write, so a
+	// rename cannot leave the document in a shape the next read would change.
+	w.Normalize()
+	return renamed, nil
 }
 
 // NextAddress allocates the lowest free address on the dial-in network.

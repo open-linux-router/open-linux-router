@@ -380,6 +380,7 @@ func TestHelpIsUnchanged(t *testing.T) {
 		{"dns"}, {"dns", "show"}, {"dns", "add"}, {"dns", "set"}, {"dns", "rm"},
 		{"gateway"}, {"gateway", "show"}, {"gateway", "add"}, {"gateway", "set"}, {"gateway", "rm"},
 		{"remote"}, {"remote", "show"}, {"remote", "add"}, {"remote", "set"}, {"remote", "rm"},
+		{"remote", "set", "peer"},
 		{"remote", "enable"}, {"remote", "disable"},
 		{"ingress"}, {"ingress", "show"}, {"ingress", "add"}, {"ingress", "set"}, {"ingress", "rm"},
 		{"listen"}, {"status"}, {"enable"}, {"disable"},

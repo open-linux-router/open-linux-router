@@ -409,6 +409,11 @@ func (e editError) Unwrap() error { return e.err }
 func notFound(err error) error   { return editError{status: http.StatusNotFound, err: err} }
 func badRequest(err error) error { return editError{status: http.StatusBadRequest, err: err} }
 
+// conflict is for a request refused by what is already stored rather than by
+// its own shape — a name another device holds. Not a bad request: nothing here
+// is malformed, and the answer is a different value, not a corrected one.
+func conflict(err error) error { return editError{status: http.StatusConflict, err: err} }
+
 func statusFor(err error) int {
 	var e editError
 	if errors.As(err, &e) {

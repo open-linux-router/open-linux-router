@@ -3,6 +3,7 @@ package remote
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/netip"
@@ -66,6 +67,19 @@ func (h HTTP) wireguardRoutes() []core.Route {
 			Query:    gate(),
 			Mutating: true,
 			Handler:  h.putPeer,
+		},
+		{
+			// The one device edit that is not a replace. PUT says what the
+			// device's settings should be, so a body naming only a new name
+			// would reset its routes to the default; a rename asks for one
+			// field to change and nothing else to move.
+			Method: "PATCH", Path: "/wireguard/peers/{name}",
+			Summary: "Change one device without replacing it. Today that is its name, and a rename " +
+				"leaves its address and its key alone — so the configuration already on the device keeps working.",
+			Body:     core.BodyRelaxed,
+			Query:    gate(),
+			Mutating: true,
+			Handler:  h.patchPeer,
 		},
 		{
 			Method: "DELETE", Path: "/wireguard/peers/{name}",
@@ -186,6 +200,80 @@ type peerBody struct {
 	// themselves. Empty means olr generates one, which is the ordinary path and
 	// the one that produces a complete client configuration.
 	PublicKey string `json:"public_key,omitempty"`
+}
+
+// peerPatch is the body of an edit that is not a replacement.
+//
+// One field, and separate from peerBody rather than folded into it: the two
+// answer different questions. PUT says what this device's settings are, so a
+// body carrying only a name would also set its routes back to the default —
+// which is not what somebody who typed a new name asked for. PATCH says what
+// to change, and changes nothing else.
+type peerPatch struct {
+	// Name is what the device should be called from now on.
+	Name string `json:"name,omitempty"`
+}
+
+func (h HTTP) patchPeer(w http.ResponseWriter, r *http.Request) {
+	name := normalizeName(r.PathValue("name"))
+
+	var body peerPatch
+	if r.ContentLength != 0 {
+		if err := core.DecodeJSON(w, r, &body); err != nil {
+			core.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	to := normalizeName(body.Name)
+	if to == "" {
+		core.WriteError(w, http.StatusBadRequest,
+			"nothing to change: the only field a device's patch carries is `name`")
+		return
+	}
+
+	h.mutate(w, r, func(cfg *Config) (*peerResult, error) {
+		renamed, err := cfg.WireGuard.RenamePeer(name, to)
+		if err != nil {
+			return nil, renameRefusal(name, to, err)
+		}
+		if renamed.Name == name {
+			// The name it already has. Not an error — a form posted back
+			// unchanged must not fail — and not worth a sentence either.
+			return &peerResult{Name: renamed.Name, Address: renamed.Address}, nil
+		}
+		return &peerResult{
+			Name:    renamed.Name,
+			Address: renamed.Address,
+			// The opposite of the routes edit's note, and the reason a rename is
+			// safe where that one is not: nothing here is decided on the
+			// device. A name is olr's label; WireGuard knows the key. So the
+			// file already imported keeps working, and the only thing left
+			// naming the old name is a comment at the top of it.
+			Note: "Nothing on the device changes: its address and its key are the same, so " +
+				"the configuration it already has keeps working. A local name added with " +
+				"`olr dns` does not follow the rename.",
+		}, nil
+	})
+}
+
+// renameRefusal turns the config layer's answer into the right status.
+//
+// The three are genuinely different to a caller: a 404 is a stale device list, a
+// 409 is a name somebody else holds and can be picked again, and anything else
+// is a name the validator will complain about with a field path.
+func renameRefusal(from, to string, err error) error {
+	switch {
+	case errors.Is(err, ErrNoSuchPeer):
+		return notFound(fmt.Errorf("no device named %q may dial in", from))
+	case errors.Is(err, ErrPeerNameTaken):
+		return conflict(fmt.Errorf(
+			"%q already names another device, and one name cannot hold two of them; pick one that "+
+				"is not taken", to))
+	case errors.Is(err, ErrPeerNameNeeded):
+		return badRequest(errors.New("give the device a name"))
+	default:
+		return err
+	}
 }
 
 func (h HTTP) putPeer(w http.ResponseWriter, r *http.Request) {

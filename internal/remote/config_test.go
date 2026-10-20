@@ -1,7 +1,9 @@
 package remote
 
 import (
+	"errors"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -110,6 +112,80 @@ func TestSetPeerKeepsTheAddressAndKeyWhenTheEditOmitsThem(t *testing.T) {
 	}
 	if got.Routes != RouteEverything {
 		t.Errorf("routes = %q, want the edit to have landed", got.Routes)
+	}
+}
+
+// Renaming is the one edit to a device that changes nothing on the box, and the
+// test says so in the terms that matter: the kernel's view of the tunnel —
+// `Render`'s lines — is identical before and after.
+func TestRenamePeerKeepsEverythingButTheName(t *testing.T) {
+	c, peer := withPeer(enabledConfig(), "phone", RouteEverything)
+	c, _ = withPeer(c, "laptop", RouteHome)
+	before := slices.Clone(Render(c).Lines())
+
+	// Cased, because a name typed into a form is lower-cased like every other
+	// spelling of it (normalizeName).
+	renamed, err := c.WireGuard.RenamePeer("Phone", "handset")
+	if err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if renamed.Name != "handset" {
+		t.Errorf("name = %q, want the new one", renamed.Name)
+	}
+	if renamed.Address != peer.Address {
+		t.Errorf("address = %s, want the original %s — it is in the file on the device",
+			renamed.Address, peer.Address)
+	}
+	if renamed.PublicKey != peer.PublicKey {
+		t.Error("the key changed, so every configuration naming the old one stopped working")
+	}
+
+	if _, ok := c.WireGuard.Peer("phone"); ok {
+		t.Error("the old name still resolves to a device")
+	}
+	got, ok := c.WireGuard.Peer("handset")
+	if !ok {
+		t.Fatal("the new name holds nothing")
+	}
+	if got.Routes != RouteEverything {
+		t.Errorf("routes = %q, want what the device sends to have survived", got.Routes)
+	}
+
+	if after := Render(c).Lines(); !slices.Equal(before, after) {
+		t.Errorf("a rename changed kernel state:\nbefore %v\nafter  %v", before, after)
+	}
+}
+
+// The three ways a rename is refused. Each leaves the document exactly as it
+// was, which is the half that matters: `Normalize` drops a peer whose name
+// collides or is empty, so a careless rename would not fail — it would delete a
+// device.
+func TestRenameRefusesWhatItCannotDo(t *testing.T) {
+	c, _ := withPeer(enabledConfig(), "phone", RouteHome)
+	c, _ = withPeer(c, "laptop", RouteHome)
+
+	if _, err := c.WireGuard.RenamePeer("phone", "laptop"); !errors.Is(err, ErrPeerNameTaken) {
+		t.Errorf("err = %v, want ErrPeerNameTaken", err)
+	}
+	if _, err := c.WireGuard.RenamePeer("nobody", "handset"); !errors.Is(err, ErrNoSuchPeer) {
+		t.Errorf("err = %v, want ErrNoSuchPeer", err)
+	}
+	if _, err := c.WireGuard.RenamePeer("phone", "   "); !errors.Is(err, ErrPeerNameNeeded) {
+		t.Errorf("err = %v, want ErrPeerNameNeeded", err)
+	}
+	// The name it already has is not a refusal: a form posted back unchanged
+	// must succeed.
+	if _, err := c.WireGuard.RenamePeer("phone", "phone"); err != nil {
+		t.Errorf("renaming to the current name: %v", err)
+	}
+
+	for _, name := range []string{"phone", "laptop"} {
+		if _, ok := c.WireGuard.Peer(name); !ok {
+			t.Fatalf("%q was lost by a refused rename", name)
+		}
+	}
+	if n := len(c.WireGuard.Peers); n != 2 {
+		t.Errorf("peers = %d, want the two that were there", n)
 	}
 }
 

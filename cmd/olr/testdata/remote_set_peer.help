@@ -1,0 +1,23 @@
+Give a device a different name, keeping its address and its key.
+
+A name is olr's label, not part of the tunnel — WireGuard knows a
+device by its key. So the configuration already on the device keeps
+working, and nothing has to be re-issued or re-imported.
+
+A local name added with `olr dns` does not follow: that name is `dns`'s
+stored intent, and this module does not write another module's.
+
+Usage:
+  olr remote set peer <name> [flags]
+
+Examples:
+  olr remote set peer phone --name handset
+
+Flags:
+  -h, --help          help for peer
+      --name string   the name to give the device
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

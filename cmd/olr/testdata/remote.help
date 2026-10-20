@@ -9,7 +9,7 @@ Available Commands:
   enable      Start accepting connections from outside
   fix         Clear what is standing in remote access's way on this box
   rm          Stop a device dialling in
-  set         Set how devices reach this box
+  set         Set how devices reach this box, or what a device is called
   show        Show remote-access configuration
   status      Show whether each way in is working
 

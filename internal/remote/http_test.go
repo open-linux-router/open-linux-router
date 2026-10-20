@@ -253,6 +253,98 @@ func TestDeletingAnUnknownPeerIsNotFound(t *testing.T) {
 	}
 }
 
+// A rename is the one thing an operator can change about a device that the
+// device never hears about, so the test is about everything staying put: the
+// address, the key, what the device sends home, and the kernel.
+func TestRenamingADeviceLeavesEverythingElseAlone(t *testing.T) {
+	h, applier := testHTTP(t)
+	turnOn(t, h)
+	if w := do(t, h, http.MethodPut, "/wireguard/peers/phone?confirm=true",
+		`{"routes":"everything"}`); w.Code != http.StatusOK {
+		t.Fatalf("setup PUT = %d: %s", w.Code, w.Body)
+	}
+	before, _ := applier.Load()
+	was, _ := before.WireGuard.Peer("phone")
+
+	w := do(t, h, http.MethodPatch, "/wireguard/peers/phone?confirm=true", `{"name":"handset"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", w.Code, w.Body)
+	}
+	resp := decode[tunnelApplyResponse](t, w)
+	if resp.Peer == nil || resp.Peer.Name != "handset" {
+		t.Fatalf("the response does not say what the device is called now: %+v", resp.Peer)
+	}
+	// Nothing in the kernel knows a name, so nothing in the kernel moved — and
+	// that is the whole reason this edit is safe on a device olr cannot reach.
+	if !resp.Plan.Empty {
+		t.Errorf("a rename produced kernel work: %+v", resp.Plan.Changes)
+	}
+	if !strings.Contains(resp.Peer.Note, "keeps working") {
+		t.Errorf("nothing says the device's file is still good: %q", resp.Peer.Note)
+	}
+	if resp.Peer.ClientConfig != "" {
+		t.Error("a rename re-issued a client configuration, which would mean the key had changed")
+	}
+
+	after, _ := applier.Load()
+	got, ok := after.WireGuard.Peer("handset")
+	if !ok {
+		t.Fatal("the device is not under its new name")
+	}
+	if _, still := after.WireGuard.Peer("phone"); still {
+		t.Error("the old name is still held by a device")
+	}
+	if got.Address != was.Address || got.PublicKey != was.PublicKey {
+		t.Errorf("the rename moved the device: %+v, was %+v", got, was)
+	}
+	// The trap a rename sent as a PUT would fall into: a body naming one field
+	// and resetting the others.
+	if got.Routes != RouteEverything {
+		t.Errorf("routes = %q, want what the device sends to have survived", got.Routes)
+	}
+}
+
+func TestRenamingRefusesWhatItCannotDo(t *testing.T) {
+	h, applier := testHTTP(t)
+	turnOn(t, h)
+	for _, name := range []string{"phone", "laptop"} {
+		if w := do(t, h, http.MethodPut, "/wireguard/peers/"+name+"?confirm=true", ""); w.Code != http.StatusOK {
+			t.Fatalf("setup PUT %s = %d: %s", name, w.Code, w.Body)
+		}
+	}
+
+	// A name another device holds is a conflict, not a malformed request: the
+	// caller can pick again without changing anything about how it asked.
+	if w := do(t, h, http.MethodPatch, "/wireguard/peers/phone?confirm=true", `{"name":"laptop"}`); w.Code != http.StatusConflict {
+		t.Errorf("rename onto a taken name = %d, want 409: %s", w.Code, w.Body)
+	}
+	if w := do(t, h, http.MethodPatch, "/wireguard/peers/nobody?confirm=true", `{"name":"handset"}`); w.Code != http.StatusNotFound {
+		t.Errorf("rename of an unknown device = %d, want 404: %s", w.Code, w.Body)
+	}
+	// A patch carrying nothing to change, and one carrying a field this route
+	// does not have. Both are refused rather than silently ignored: a caller
+	// that meant to change routes and reached this route must be told.
+	if w := do(t, h, http.MethodPatch, "/wireguard/peers/phone?confirm=true", `{}`); w.Code != http.StatusBadRequest {
+		t.Errorf("empty patch = %d, want 400: %s", w.Code, w.Body)
+	}
+	if w := do(t, h, http.MethodPatch, "/wireguard/peers/phone?confirm=true", `{"routes":"home"}`); w.Code != http.StatusBadRequest {
+		t.Errorf("patch of another field = %d, want 400: %s", w.Code, w.Body)
+	}
+	// A name the validator refuses arrives as a field path, the same as it
+	// would through a PUT — one rule, one place.
+	if w := do(t, h, http.MethodPatch, "/wireguard/peers/phone?confirm=true", `{"name":"my phone"}`); w.Code != http.StatusUnprocessableEntity {
+		t.Errorf("invalid name = %d, want 422: %s", w.Code, w.Body)
+	}
+
+	after, _ := applier.Load()
+	if _, ok := after.WireGuard.Peer("phone"); !ok {
+		t.Fatal("a refused rename lost the device")
+	}
+	if _, ok := after.WireGuard.Peer("laptop"); !ok {
+		t.Fatal("a refused rename lost the device it collided with")
+	}
+}
+
 func TestTheKeyIsNeverReturnedAndTheMaskMeansUnchanged(t *testing.T) {
 	h, applier := testHTTP(t)
 	turnOn(t, h)

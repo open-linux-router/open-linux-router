@@ -113,6 +113,20 @@ export const remoteChange = {
     path: `${base}/wireguard/peers/${seg(name)}`,
     label: `${name} can no longer dial in`,
   }),
+  /**
+   * Change a device's name, and nothing else about it.
+   *
+   * PATCH rather than PUT because the two answer different questions: PUT says
+   * what the device's settings are, so a body carrying only a name would reset
+   * what it sends home. A name is olr's label — the tunnel knows the key — so
+   * this changes nothing on the box and the file on the device keeps working.
+   */
+  renamePeer: (name: string, newName: string): RemoteChangeRequest => ({
+    method: 'PATCH',
+    path: `${base}/wireguard/peers/${seg(name)}`,
+    body: { name: newName },
+    label: `${name} is now ${newName}`,
+  }),
 
   settings: (fields: Record<string, unknown>): RemoteChangeRequest => ({
     method: 'PATCH',

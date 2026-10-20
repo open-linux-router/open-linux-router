@@ -9,11 +9,15 @@ it — `olr dial show` lists the ones olr keeps current.
 Give the host alone. A port here could only be right for one way in;
 use --public-port on the one whose forwarded port differs.
 
+`olr remote set wireguard` changes the tunnel's own settings, and
+`olr remote set peer` gives one device a different name.
+
 Usage:
   olr remote set [flags]
   olr remote set [command]
 
 Available Commands:
+  peer        Give a device a different name
   wireguard   Set the tunnel's settings
 
 Flags:
