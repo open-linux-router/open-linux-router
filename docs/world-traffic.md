@@ -55,22 +55,25 @@ over the available window; the first sample is a baseline. Coverage is the
 top forty's share of all observed eligible remote-IP traffic, not a share of
 the separate nftables interface/device totals.
 
-Blue indicates download, teal upload, and the particle carries that pair:
-teal outbound, blue on the return. The arcs themselves are one amber hue,
-deliberately outside the teal-green-blue country palette, so colour marks
-traffic as a category and width and opacity carry its size. A blurred amber
-halo sits under each arc; because arcs composite per feature, the halo
-accumulates where they bunch up — around the router and along busy corridors —
-and concentration reads as light. Width and opacity are relative to the
-busiest plotted location, not to an absolute rate: square-root scaling keeps
-a one-percent flow visible while the busiest one still stands out, and every
-arc stays translucent so overlaps build up instead of replacing each other. Reduced motion disables particles and interpolation. The UI polls every
-two seconds, but keeps each IP/direction's particle phase independent of
-ranking. Paths and endpoints fade in and out with a 450ms exponential time
-constant (about two seconds to settle); widths and opacity ease toward new
-measured rates on the same timeline. Particles fade at path ends and render at
-up to 30fps. Hidden tabs pause visual updates.
-Endpoints use a 1.6px radius and shared coordinates render only one point.
+Blue indicates download and teal upload in the details list. The map itself
+uses one amber hue for every arc, deliberately outside the teal-green-blue
+country palette, so colour marks traffic as a category and width and opacity
+carry its size; the moving particle is neutral, and its out-and-back motion
+shows both directions without spending another colour. A blurred amber halo
+sits under each arc; because arcs composite per feature, the halo accumulates
+where they bunch up — around the router and along busy corridors — and
+concentration reads as light. Width and opacity are relative to the busiest
+plotted location, not to an absolute rate: square-root scaling keeps a
+one-percent flow visible while the busiest one still stands out, and every arc
+stays translucent so overlaps build up instead of replacing each other.
+Reduced motion disables particles and interpolation. The UI polls every two
+seconds, but keeps each IP's particle phase independent of ranking. Paths and
+endpoints fade in and out with a 450ms exponential time constant (about two
+seconds to settle); widths and opacity ease toward new measured rates on the
+same timeline. Particles fade at path ends and render at up to 30fps. Hidden
+tabs pause visual updates. Endpoints and particles use the neutral text scale,
+so amber is the only hue the map adds. Endpoints use a 1.6px radius and shared
+coordinates render only one point.
 This interpolation visualizes sampled activity; it is not a packet trace.
 Different returned locations within one country can have an arc; endpoints
 with identical coordinates share one point without an arc. The details dialog

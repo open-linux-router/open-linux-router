@@ -112,7 +112,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         'line-opacity': ['*', ['get', 'strength'], ['get', 'opacity']],
       } })
       instance.addLayer({ id: 'places', type: 'circle', source: 'places', paint: { 'circle-radius': 1.6, 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'], 'circle-stroke-opacity': ['get', 'opacity'], 'circle-stroke-width': 0.6, 'circle-stroke-color': '#ffffff' } })
-      instance.addLayer({ id: 'dots', type: 'circle', source: 'dots', paint: { 'circle-radius': ['+', 1, ['*', ['get', 'width'], 0.26]], 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'] } })
+      instance.addLayer({ id: 'dots', type: 'circle', source: 'dots', paint: { 'circle-radius': ['+', 0.9, ['*', ['get', 'width'], 0.2]], 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'] } })
       fit()
       setReady(true)
     })
@@ -138,7 +138,10 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         instance.setPaintProperty(id, 'text-halo-color', dark ? '#232731' : '#ffffff')
       }
     }
-    const traffic = flowColor(dark, false)
+    // Endpoints are punctuation, not data: both the router and each remote
+    // location sit in the neutral text scale, so amber stays the only traffic
+    // colour and the neutral dot carries direction through its motion.
+    const remote = dark ? '#abb4c3' : '#5b6472'
     const start = origin ? position(origin) : undefined
     const next = new Map<string, FlowTarget>()
     if (start) next.set(`place:${start}`, { feature: { type: 'Feature', properties: { color: dark ? '#f1f3f7' : '#171b22' }, geometry: { type: 'Point', coordinates: start } } })
@@ -155,7 +158,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     for (const [location, peer] of locations) {
       const end = position(peer.place)
       if (!end) continue
-      if (!start || start[0] !== end[0] || start[1] !== end[1]) next.set(`place:${end}`, { feature: { type: 'Feature', properties: { color: traffic }, geometry: { type: 'Point', coordinates: end } } })
+      if (!start || start[0] !== end[0] || start[1] !== end[1]) next.set(`place:${end}`, { feature: { type: 'Feature', properties: { color: remote }, geometry: { type: 'Point', coordinates: end } } })
       if (!start || (start[0] === end[0] && start[1] === end[1])) continue
       const total = peer.download + peer.upload
       if (total <= 0) continue
@@ -210,12 +213,12 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         lines.push(feature)
         if (reduced.matches) continue
         // One dot travels out and back, taking four seconds in each direction.
+        // The motion says which way it is going; the bead itself is neutral so
+        // the amber arc stays the only traffic colour.
         visual.phase = (visual.phase + elapsed / 8000) % 1
         const returning = visual.phase >= 0.5
         const progress = returning ? (1 - visual.phase) * 2 : visual.phase * 2
-        // Lighter than either end of the ribbon, so the travelling dot reads
-        // as a bead on the arc rather than a break in it.
-        const color = returning ? (dark ? '#bfdbfe' : '#3b82f6') : (dark ? '#99f6e4' : '#14b8a6')
+        const color = dark ? '#e2e8f0' : '#ffffff'
         const p = progress * 48
         const a = path.coordinates[Math.floor(p)], b = path.coordinates[Math.min(48, Math.floor(p) + 1)]
         dots.push({ type: 'Feature', properties: { ...properties, color }, geometry: { type: 'Point', coordinates: [a[0] + (b[0] - a[0]) * (p % 1), a[1] + (b[1] - a[1]) * (p % 1)] } })
@@ -262,7 +265,7 @@ export function WorldTraffic({ origin, embedded = false, expanded, onExpandedCha
       <DialogClose render={<Button variant="secondary" size="icon-lg" className="absolute top-3 right-3 z-10 rounded-full bg-card/95 shadow-md ring-1 ring-border backdrop-blur-sm sm:size-9" />}><X aria-hidden="true" /><span className="sr-only">Close</span></DialogClose>
       <div className="min-h-0 flex-1" role="region" aria-label="World traffic map, drag to pan and scroll to zoom"><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} expanded /></div>
     </DialogContent></Dialog>
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription>Remote IPs by upload and download in the last 30 seconds. Arcs are wider and more opaque for the busiest locations; the moving dot is teal outbound and blue on return. IP locations are approximate.{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription>Remote IPs by upload and download in the last 30 seconds. Arcs are wider and more opaque for the busiest locations; each arc carries one dot that travels out and back. IP locations are approximate.{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
       <p className="text-sm text-muted-foreground">{status}{data?.seconds ? ` · ${Math.round(data.seconds)}s sampled` : ''}. {data?.state === 'disabled' ? 'Connection byte accounting is off. Enable Gateway traffic counting and apply its configuration.' : 'Counts include router and forwarded connections observed in Linux conntrack. Connections ending between samples and traffic bypassing conntrack may be missed.'} {(!origin || !position(origin)) && 'Router location is unknown; only remote points are shown.'}</p>
       {data?.error && <p className="break-words text-sm text-destructive">{data.error}</p>}
       {data?.locations?.error && <p className="break-words text-sm text-destructive">{data.locations.error}</p>}
