@@ -8,7 +8,6 @@ export const ACCESS_LOGOS: Record<string, string> = {
   headscale: '/access-logos/headscale.svg',
   netbird: '/access-logos/netbird.svg',
   zerotier: '/access-logos/zerotier.svg',
-  nebula: '/access-logos/nebula.svg',
   cloudflare: '/access-logos/cloudflare.svg',
   tunnelbroker: '/access-logos/tunnelbroker.svg',
 }

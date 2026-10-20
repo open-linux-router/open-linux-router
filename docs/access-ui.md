@@ -1,19 +1,21 @@
 # Access UI
 
-Access shows two square-tile grids: **Add a way out** and **Add a way in**.
-There is no System default row or purpose filter. A technology can appear in both
-grids; dialogs only expose configuration actions owned by that direction.
-Hover/focus explains functions and observed state; click exposes the same details
-on touch devices. Unintegrated directions link to external documentation.
+Access shows three square-tile grids: **Networking**, **Add a way out** and
+**Add a way in**. There is no System default row or purpose filter. A technology
+can appear in both directional grids; each tile is a link to the configuration
+owner for that direction, so there is no intermediate dialog. Hover/focus
+explains functions and observed state, and the tile's accessible name carries
+that state for touch and screen readers. A technology OLR does not configure
+links to the project's own documentation in a new tab.
 
 Tiles use bundled project artwork from `web/public/access-logos`, taken from
 [theSVG](https://thesvg.org) wherever the library carries the project, so the
 launcher matches the marks used elsewhere in the interface. Headscale is the one
 mark outside the library, from its own repository. The rest are protocols rather
-than projects: SOCKS5, HTTP, HTTPS, Gateway, NAT, frp and SSH wear a capital
-initial on a tinted tile, which keeps two entries sharing an initial (SSH and
-SOCKS5, HTTP and HTTPS) apart by hue instead of by borrowed branding. See the
-logo directory README for provenance.
+than projects: SOCKS5, Gateway, NAT, frp and SSH wear a capital initial on a
+tinted tile, which keeps two entries sharing an initial (SSH and SOCKS5) apart by
+hue instead of by borrowed branding. See the logo directory README for
+provenance.
 
 ## Connection model
 
@@ -29,7 +31,6 @@ direction: SOCKS5 appears in both directions with different configuration owners
 | Out | Tunnel Broker / HE | dial.tunnelbroker | `/access/tunnelbroker` |
 | In | WireGuard | remote.wireguard and remote endpoint | `/access/wireguard` |
 | In | SOCKS5 server | remote SOCKS5 | `/access/socks-server` |
-| In | HTTPS service | ingress | `/access/ingress` |
 | In | Port forwarding | gateway forwards | `/access/forwards` |
 
 System default is a built-in way out, displayed separately with observed IPv4
@@ -49,14 +50,16 @@ dependencies must reject cycles and keep transport traffic out of its own tunnel
 Ways in express either joining the network, borrowing its internet access or
 publishing a service. Those intents share a directory, not permissions or a
 universal configuration form. Credentials and exposure remain in their own
-workflows. The directory references each technology once, with separate actions
-where it has multiple configuration owners.
+workflows. The directory references each technology once, with a separate tile
+per direction where it has multiple configuration owners. The HTTPS ingress view
+(`/access/ingress`), which publishes a service by domain name, is reached from a
+device's service action rather than from the directory.
 
 Former Gateway URLs and Advanced addresses redirect while preserving query
 parameters and fragments. There is no combined remote access page: the old
 `/access/remote` address redirects to `/access/wireguard`, and WireGuard and
-SOCKS5 each keep their own view. Directory dialogs link to individual views of
-the same configuration, with independent status summaries.
+SOCKS5 each keep their own view. Directory tiles link to individual views of the
+same configuration, with independent status summaries.
 
 The landing page reads existing configuration and status endpoints. It never
 applies network changes. A failed observation is shown as unavailable rather than
@@ -66,6 +69,16 @@ the external proxy. Protocol settings and configuration apply paths remain on
 their respective pages.
 
 ## Validation
+
+Direct-navigation revision: removing Nebula, HTTP and HTTPS leaves five
+Networking tiles, four ways out and five ways in. Node 24 lint, production build,
+all 42 UI tests and the interface-rate checks pass. A headless browser against a
+scratch daemon verifies every tile is an anchor, that configuration tiles route
+in place (Gateway, SOCKS5 and NAT open `/access/gateway`, `/access/socks5` and
+`/access/forwards`), that no dialog element exists, that unintegrated tiles keep
+`target="_blank"` with `rel="noopener noreferrer"`, and that nothing overflows at
+375 pixels. Screenshots at 1440 and 375 pixels in light and dark themes:
+`/tmp/access-{light,dark}-{1440,375}.png`. No live router settings changed.
 
 Protocol removal: Go 1.27 Linux vet and all tests pass. Node 24 lint (existing
 warnings only), all 29 UI tests, interface-rate checks and production build pass.
