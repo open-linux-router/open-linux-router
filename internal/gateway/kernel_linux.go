@@ -286,16 +286,26 @@ func observedChainLine(c *nftables.Chain) string {
 }
 
 // hookName is nft's word for the hook a base chain runs on.
+//
+// The comparison is on the hook's value, not on the pointer. google/nftables
+// exposes the known hooks as package-level *ChainHook values, and a chain read
+// back from netlink carries a pointer of its own to the same number — so
+// `switch hook { case nftables.ChainHookForward: }` compared two addresses and
+// never matched. Every real chain then rendered as "hook 2", which read as
+// drift on a box that was already correct and, because apply compares the same
+// lines, could not be cleared by restoring. Dereferencing both sides is what
+// makes "the kernel installed forward" and "we want forward" the same answer.
 func hookName(hook *nftables.ChainHook) string {
-	switch hook {
-	case nftables.ChainHookForward:
-		return "forward"
-	case nftables.ChainHookInput:
-		return "input"
-	case nftables.ChainHookOutput:
-		return "output"
-	case nil:
+	if hook == nil {
 		return "none"
+	}
+	switch *hook {
+	case *nftables.ChainHookForward:
+		return "forward"
+	case *nftables.ChainHookInput:
+		return "input"
+	case *nftables.ChainHookOutput:
+		return "output"
 	}
 	return fmt.Sprintf("hook %d", *hook)
 }
