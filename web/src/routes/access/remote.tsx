@@ -34,6 +34,7 @@ import { PeerDialog } from '@/features/remote/peer-dialog'
 import { SocksCard } from '@/features/remote/socks-card'
 import {
   remoteChange,
+  type PeerPatch,
   useRemoteConfig,
   useRemoteStatus,
   useReapplyRemote,
@@ -189,6 +190,7 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
           change(
             remoteChange.savePeer(peer.name, {
               routes: peer.routes,
+              display_name: peer.display_name || undefined,
               public_key: peer.public_key,
             }),
           )
@@ -201,12 +203,16 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
           initial={editing}
           subnet={status.data?.subnet}
           onSubmit={async (peer) => {
-            // Two changes, two requests, and the rename first: it is the one
-            // that can be refused (a name another device holds), and there is
+            // Two changes, two requests, and the labels first: the name is the
+            // one that can be refused (another device holds it), and there is
             // no point rewriting what the device sends if the device is still
-            // called what it was.
-            if (peer.name !== editing.name) {
-              if (!(await change(remoteChange.renamePeer(editing.name, peer.name)))) return
+            // called what it was. The label travels in the same request as the
+            // name — one entry, one patch.
+            const patch: PeerPatch = {}
+            if (peer.name !== editing.name) patch.name = peer.name
+            if (peer.display_name !== (editing.display_name ?? '')) patch.display_name = peer.display_name
+            if (Object.keys(patch).length > 0) {
+              if (!(await change(remoteChange.patchPeer(editing.name, patch)))) return
             }
             // Compared with the same default the dialog applies, or an
             // unstored `routes` would read as a change on every save.
@@ -338,7 +344,7 @@ function PeerList({
           // is the pencil, which stays outside the link.
           to={`/devices/wireguard/${encodeURIComponent(p.name)}`}
           leading={<DeviceIcon icon={p.icon} category={p.category ?? ''} online={p.online} size="sm" />}
-          title={p.name}
+          title={p.display_name || p.name}
           subtitle={describePeer(p)}
           trailing={<PeerBadge peer={p} />}
           action={
@@ -355,7 +361,10 @@ function PeerList({
 function describePeer(p: RemotePeer): string {
   const sends =
     p.routes === 'everything' ? 'sends everything home' : 'reaches your network'
-  return `${p.address ?? '—'} · ${sends}`
+  const where = `${p.address ?? '—'} · ${sends}`
+  // The name stays on the row when a label hides it: it is what the commands
+  // and the address bar take, and the row is where somebody reads it off.
+  return p.display_name ? `${p.name} · ${where}` : where
 }
 
 /**

@@ -120,6 +120,21 @@ type Peer struct {
 	// operator will give the same device in `dns` (docs/remote-access.md §3).
 	Name string `json:"name"`
 
+	// DisplayName is what the operator calls this device, when the name is not
+	// what they would write. Empty means the name is shown.
+	//
+	// A second field rather than a looser name, because the name is not only a
+	// label: it is the key of the item routes, the positional argument every
+	// command takes, and the name `olr remote add peer` suggests to `olr dns` —
+	// so it has to stay a DNS label (docs/remote-access.md §3). "Li's Macbook
+	// Pro" is a perfectly good thing to call a laptop and a poor thing to type
+	// in a URL, and the two questions deserve two answers.
+	//
+	// Free text, unlike the name: trimmed, bounded and free of control
+	// characters, and otherwise the operator's business. Not unique either —
+	// two devices may both be "the work laptop" — because the name already is.
+	DisplayName string `json:"display_name,omitempty"`
+
 	// PublicKey is the device's half of the key pair, base64.
 	//
 	// Normally generated here along with the private half, which is handed back
@@ -413,6 +428,9 @@ func (w *WireGuard) Normalize() {
 	seen := map[string]bool{}
 	for _, p := range w.Peers {
 		p.Name = normalizeName(p.Name)
+		// Trimmed but never case-folded: this one is a person's words, not a
+		// key. Only the name is a label the machine has to agree on.
+		p.DisplayName = strings.TrimSpace(p.DisplayName)
 		p.PublicKey = strings.TrimSpace(p.PublicKey)
 		// Lower-cased because both vocabularies are, and a form that sent
 		// "Apple/Laptop" would otherwise store a picture the resolver cannot

@@ -197,6 +197,13 @@ type peerBody struct {
 	// RouteHome.
 	Routes RouteScope `json:"routes,omitempty"`
 
+	// DisplayName is what to call the device, when its name is not what the
+	// operator would write. Empty means the name is shown, and on an existing
+	// device it also means "leave the label alone": this route is what the
+	// device dialog sends to change what a device *does*, and it must not clear
+	// a label somebody typed. Clearing one is a PATCH with `"display_name": ""`.
+	DisplayName string `json:"display_name,omitempty"`
+
 	// PublicKey is set by an operator who generated the key pair on the device
 	// themselves. Empty means olr generates one, which is the ordinary path and
 	// the one that produces a complete client configuration.
@@ -224,6 +231,9 @@ type peerPatch struct {
 	// patch carrying only these changes nothing in the kernel — and they are
 	// only here, not on the PUT body, because PUT's routes-only edit is what the
 	// device dialog sends and it must not clear a picture somebody chose.
+	// DisplayName is the label, and empty clears it — the name is the fallback.
+	DisplayName *string `json:"display_name,omitempty"`
+
 	Category *string `json:"category,omitempty"`
 	Icon     *string `json:"icon,omitempty"`
 }
@@ -238,9 +248,9 @@ func (h HTTP) patchPeer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if body.Name == nil && body.Category == nil && body.Icon == nil {
+	if body.Name == nil && body.DisplayName == nil && body.Category == nil && body.Icon == nil {
 		core.WriteError(w, http.StatusBadRequest,
-			"nothing to change: a device's patch carries its name, its category or its icon")
+			"nothing to change: a device's patch carries its name, its label, its category or its icon")
 		return
 	}
 
@@ -248,6 +258,11 @@ func (h HTTP) patchPeer(w http.ResponseWriter, r *http.Request) {
 		peer, ok := cfg.WireGuard.Peer(name)
 		if !ok {
 			return nil, notFound(fmt.Errorf("no device named %q may dial in", name))
+		}
+
+		if body.DisplayName != nil {
+			peer.DisplayName = *body.DisplayName
+			cfg.WireGuard.SetPeer(peer)
 		}
 
 		if body.Category != nil || body.Icon != nil {
@@ -332,6 +347,11 @@ func (h HTTP) putPeer(w http.ResponseWriter, r *http.Request) {
 			if body.PublicKey != "" {
 				existing.PublicKey = body.PublicKey
 			}
+			// Only when given: this route is what the dialog sends to change
+			// what a device does, and it has never heard of the label.
+			if body.DisplayName != "" {
+				existing.DisplayName = body.DisplayName
+			}
 			cfg.WireGuard.SetPeer(existing)
 
 			if existing.Routes.OrDefault() == was {
@@ -362,7 +382,13 @@ func (h HTTP) putPeer(w http.ResponseWriter, r *http.Request) {
 				cfg.WireGuard.SubnetOrDefault())
 		}
 
-		peer := Peer{Name: name, Address: addr, Routes: body.Routes, PublicKey: body.PublicKey}
+		peer := Peer{
+			Name:        name,
+			DisplayName: body.DisplayName,
+			Address:     addr,
+			Routes:      body.Routes,
+			PublicKey:   body.PublicKey,
+		}
 		created := &peerResult{Name: name, Address: addr}
 
 		private := ""

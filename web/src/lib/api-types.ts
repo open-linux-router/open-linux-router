@@ -1293,6 +1293,12 @@ export interface RemotePlan {
  */
 export interface RemotePeer {
   name: string
+  /**
+   * What the operator calls it, when the name is not what they would write.
+   * Absent means the name is shown. The name stays the key: it is what every
+   * command and the URL take, and it has to be a DNS label.
+   */
+  display_name?: string
   address?: string
   routes: 'home' | 'everything'
   public_key?: string

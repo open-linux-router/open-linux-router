@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -51,7 +51,6 @@ import type { RemotePeer, RemoteStatus } from '@/lib/api-types'
  */
 export function WireguardPeerPage() {
   const { name } = useParams()
-  const navigate = useNavigate()
   const status = useRemoteStatus()
   const traffic = useGatewayTraffic()
   const flow = useTrafficView(traffic.data, traffic.isError)
@@ -61,6 +60,7 @@ export function WireguardPeerPage() {
 
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState('')
+
   const [picture, setPicture] = useState<IconChoice>({ category: '', icon: '' })
   const [choosing, setChoosing] = useState(false)
   // A ref, not state: the second save is the one blur fires after Enter has
@@ -70,23 +70,30 @@ export function WireguardPeerPage() {
   function beginRename() {
     if (!peer) return
     saved.current = false
-    setDraft(peer.name)
+    setDraft(peer.display_name ?? '')
     setRenaming(true)
   }
 
-  async function saveName(discard = false) {
+  /**
+   * Saves the label, not the name.
+   *
+   * The name is the key — the URL this page lives at, the argument every
+   * command takes, the local name `olr dns` would be told to answer — so it
+   * stays a DNS label and is edited where the rest of the device is (the tunnel
+   * page's dialog). What is edited here is what a person reads, which is why
+   * it can be "Li's Macbook Pro". Empty puts the name back.
+   */
+  async function saveLabel(discard = false) {
     if (!peer || saved.current) return
     saved.current = true
     const next = draft.trim()
     setRenaming(false)
-    if (discard || next === '' || next === peer.name) return
+    if (discard || next === (peer.display_name ?? '')) return
     try {
-      const result = await patch.mutateAsync({ name: peer.name, patch: { name: next } })
-      const renamed = result.name || next
-      toast.success('Name saved', { description: result.note })
-      if (renamed !== peer.name) navigate(`/devices/wireguard/${encodeURIComponent(renamed)}`, { replace: true })
+      await patch.mutateAsync({ name: peer.name, patch: { display_name: next } })
+      toast.success(next === '' ? 'Name shown again' : 'Name saved')
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : String(error))
+      toast.error(failureText(error))
     }
   }
 
@@ -124,26 +131,40 @@ export function WireguardPeerPage() {
               {renaming ? (
                 <Input
                   autoFocus
-                  aria-label="Device name"
+                  aria-label="What this device is called"
+                  placeholder={peer.name}
                   className="h-auto w-80 max-w-full py-1 text-2xl font-semibold"
                   value={draft}
                   disabled={patch.isPending}
                   onChange={(event) => { saved.current = false; setDraft(event.target.value) }}
-                  onBlur={() => void saveName()}
+                  onBlur={() => void saveLabel()}
                   onKeyDown={(event) => {
                     if (event.nativeEvent.isComposing) return
                     if (event.key === 'Enter' || event.key === 'Escape') {
                       event.preventDefault()
-                      void saveName(event.key === 'Escape')
+                      void saveLabel(event.key === 'Escape')
                     }
                   }}
                 />
               ) : (
                 <Heading as="h1" size="lg" className="min-w-0 max-w-full [overflow-wrap:anywhere]">
-                  <button type="button" onClick={beginRename} aria-label={`Change the name of ${peer.name}`} className="w-full break-words rounded-md text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">
-                    {peer.name}
+                  <button
+                    type="button"
+                    onClick={beginRename}
+                    aria-label={`Change what ${peer.display_name || peer.name} is called`}
+                    className="w-full break-words rounded-md text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    {peer.display_name || peer.name}
                   </button>
                 </Heading>
+              )}
+              {/* The key the URL and every command use, when the label hides it.
+                  A chip rather than a fact row: it belongs beside the name it
+                  belongs to, and only when the two differ. */}
+              {peer.display_name && (
+                <span className="font-mono text-xs text-muted-foreground" title="The name the address bar and every command use">
+                  {peer.name}
+                </span>
               )}
               <PeerBadge peer={peer} />
             </div>
@@ -258,6 +279,20 @@ function Usage({ flow, usage, trafficFailed }: { flow: TrafficView; usage?: Flow
       </p>
     )}
   </div>
+}
+
+/**
+ * The problem, not just the headline.
+ *
+ * A 422 from this module names the field it refused ("a name may use letters,
+ * digits and hyphens", at `display_name`), and a toast that said only "invalid
+ * remote-access configuration" would leave the operator guessing at a rule the
+ * daemon had already quoted.
+ */
+function failureText(error: unknown): string {
+  if (!(error instanceof ApiError)) return String(error)
+  const problems = error.problems.map((p) => [p.path, p.message].filter(Boolean).join(' '))
+  return problems.length ? `${error.message} — ${problems.join('; ')}` : error.message
 }
 
 function routesLabel(routes: RemotePeer['routes']): string {

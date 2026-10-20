@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/netip"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/devices"
@@ -32,6 +34,11 @@ const MaxInterfaceNameLen = 15
 // (docs/remote-access.md §3.1), so a name that could not be one is refused now
 // rather than migrated later.
 const MaxPeerNameLen = 63
+
+// MaxPeerDisplayNameLen bounds the label, generously. Long enough for "Li's
+// Macbook Pro (work)" and short enough that a heading can be laid out without
+// defending against a megabyte.
+const MaxPeerDisplayNameLen = 64
 
 // ValidateWireGuard checks the tunnel's half of a config, and the networks it
 // has to coexist with.
@@ -165,6 +172,7 @@ func validatePeers(r *Result, w WireGuard, networks []NetworkInfo) {
 		}
 		byName[p.Name] = i
 		validatePeerName(r, path, p.Name)
+		validatePeerDisplayName(r, path, p.DisplayName)
 		validatePeerPicture(r, path, p)
 
 		switch {
@@ -198,6 +206,25 @@ func validatePeers(r *Result, w WireGuard, networks []NetworkInfo) {
 	if w.Enabled && len(w.Peers) == 0 {
 		r.warnf("wireguard.peers",
 			"remote access is on and no device can dial in yet; add one with `olr remote add peer <name>`")
+	}
+}
+
+// validatePeerDisplayName checks the one field that is free text.
+//
+// Loose on purpose: a label is the operator's words. What it is not allowed to
+// carry is a control character, because every rendering of it — a table cell, a
+// page heading, a log line quoting it — is single-line, and a newline in a name
+// breaks all of them at once (the same rule `devices` applies to its names).
+func validatePeerDisplayName(r *Result, path, label string) {
+	if label == "" {
+		return
+	}
+	if n := utf8.RuneCountInString(label); n > MaxPeerDisplayNameLen {
+		r.errorf(path+".display_name", "the label is %d characters; the limit is %d", n, MaxPeerDisplayNameLen)
+		return
+	}
+	if i := strings.IndexFunc(label, unicode.IsControl); i >= 0 {
+		r.errorf(path+".display_name", "the label contains a control character (%q)", label[i])
 	}
 }
 

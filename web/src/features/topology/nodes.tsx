@@ -159,7 +159,8 @@ export function DialInNode({ peer, iface, onOpen }: { peer: DialInPeer; iface: s
   const moved = peer.rxBytes || peer.txBytes
     ? `, ↓ ${formatBytes(peer.rxBytes)} ↑ ${formatBytes(peer.txBytes)} since it connected`
     : ''
-  const title = `${peer.name} over ${iface}${peer.address ? ` at ${peer.address}` : ''}: ${label}${where}${moved}`
+  const named = peer.key === peer.name ? peer.name : `${peer.name} (${peer.key})`
+  const title = `${named} over ${iface}${peer.address ? ` at ${peer.address}` : ''}: ${label}${where}${moved}`
   return (
     <Shell
       onClick={onOpen}

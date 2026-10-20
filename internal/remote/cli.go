@@ -236,28 +236,42 @@ func setCommand() *cobra.Command {
 // and a new key, and invalidate the file already on the device, for a change
 // the device never hears about.
 func setPeerCommand() *cobra.Command {
-	var name string
+	var name, display string
 
 	c := &cobra.Command{
 		Use:   "peer <name>",
-		Short: "Give a device a different name",
+		Short: "Rename a device, or give it a label to show",
 		Args:  cobra.ExactArgs(1),
-		Long: "Give a device a different name, keeping its address and its key.\n\n" +
+		Long: "Change what a device is called, keeping its address and its key.\n\n" +
 			"A name is olr's label, not part of the tunnel — WireGuard knows a\n" +
 			"device by its key. So the configuration already on the device keeps\n" +
 			"working, and nothing has to be re-issued or re-imported.\n\n" +
 			"A local name added with `olr dns` does not follow: that name is `dns`'s\n" +
-			"stored intent, and this module does not write another module's.",
-		Example: "  olr remote set peer phone --name handset",
+			"stored intent, and this module does not write another module's.\n\n" +
+			"--name has to stay a DNS label — letters, digits and hyphens — because\n" +
+			"it is the name every command takes and the one `olr dns` would be told\n" +
+			"to answer. --display-name is what a person reads instead, so it takes\n" +
+			"whatever you would write: \"Li's Macbook Pro\". Empty puts the name back.",
+		Example: "  olr remote set peer phone --name handset\n" +
+			"  olr remote set peer handset --display-name \"Li's Macbook Pro\"",
 		RunE: func(c *cobra.Command, args []string) error {
-			if !c.Flags().Changed("name") {
-				return fmt.Errorf("nothing to set; --name is the only field here")
+			patch := map[string]string{}
+			if c.Flags().Changed("name") {
+				patch["name"] = name
 			}
-			return sendTunnel(c, "PATCH", peerEndpoint(args[0]), map[string]string{"name": name})
+			if c.Flags().Changed("display-name") {
+				patch["display_name"] = display
+			}
+			if len(patch) == 0 {
+				return fmt.Errorf("nothing to set; see `olr remote set peer --help`")
+			}
+			return sendTunnel(c, "PATCH", peerEndpoint(args[0]), patch)
 		},
 	}
 
-	c.Flags().StringVar(&name, "name", "", "the name to give the device")
+	c.Flags().StringVar(&name, "name", "", "the device's name: letters, digits and hyphens")
+	c.Flags().StringVar(&display, "display-name", "",
+		"what to call it where a person reads it; anything you would write, or empty for the name")
 	c.ValidArgsFunction = cli.CompleteArgs(peerNamesFor)
 	return c
 }
@@ -348,6 +362,7 @@ func addCommand() *cobra.Command {
 func addPeerCommand() *cobra.Command {
 	var (
 		routes    string
+		display   string
 		publicKey string
 	)
 
@@ -368,7 +383,7 @@ func addPeerCommand() *cobra.Command {
 			"  olr remote add peer laptop --routes everything\n" +
 			"  olr remote add peer work --public-key <key generated on the device>",
 		RunE: func(c *cobra.Command, args []string) error {
-			body := peerBody{Routes: RouteScope(routes), PublicKey: publicKey}
+			body := peerBody{Routes: RouteScope(routes), DisplayName: display, PublicKey: publicKey}
 			return sendTunnel(c, "PUT", peerEndpoint(args[0]), body)
 		},
 	}
@@ -376,6 +391,8 @@ func addPeerCommand() *cobra.Command {
 	c.Flags().StringVar(&routes, "routes", "",
 		fmt.Sprintf("what the device sends through the tunnel: %s (default %s)",
 			joinScopes(), RouteHome))
+	c.Flags().StringVar(&display, "display-name", "",
+		"what to call it where a person reads it; anything you would write, or empty for the name")
 	c.Flags().StringVar(&publicKey, "public-key", "",
 		"public key generated on the device itself, if you would rather olr never held the private one")
 	cli.EnumFlag(c, "routes", scopeNames()...)

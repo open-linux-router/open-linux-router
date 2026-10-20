@@ -547,3 +547,110 @@ func TestAPeerIsDrawnWithoutTouchingTheTunnel(t *testing.T) {
 		t.Errorf("picture for an unknown device = %d, want 404: %s", w.Code, w.Body)
 	}
 }
+
+// A device is called what the operator calls it, which is not always what has
+// to be typed. The name stays a DNS label because every command and the dns
+// suggestion use it; the label is the operator's words and reaches nothing.
+func TestADeviceCanBeCalledWhatItIsNotNamed(t *testing.T) {
+	h, applier := testHTTP(t)
+	turnOn(t, h)
+
+	// Given at creation, which is the one moment the CLI has it in hand.
+	if w := do(t, h, http.MethodPut, "/wireguard/peers/li-mbp?confirm=true",
+		`{"display_name":"Li's Macbook Pro"}`); w.Code != http.StatusOK {
+		t.Fatalf("setup PUT = %d: %s", w.Code, w.Body)
+	}
+	before, _ := applier.Load()
+	was, _ := before.WireGuard.Peer("li-mbp")
+	if was.DisplayName != "Li's Macbook Pro" {
+		t.Fatalf("the label was not stored as written: %q", was.DisplayName)
+	}
+
+	// What the dialog sends to change what a device does: it has never heard of
+	// a label and must not clear one.
+	if w := do(t, h, http.MethodPut, "/wireguard/peers/li-mbp?confirm=true", `{"routes":"everything"}`); w.Code != http.StatusOK {
+		t.Fatalf("routes PUT = %d: %s", w.Code, w.Body)
+	}
+	after, _ := applier.Load()
+	got, _ := after.WireGuard.Peer("li-mbp")
+	if got.DisplayName != "Li's Macbook Pro" {
+		t.Errorf("a routes-only PUT cleared the label: %+v", got)
+	}
+	if got.Address != was.Address || got.PublicKey != was.PublicKey {
+		t.Error("changing the route list re-issued the device")
+	}
+
+	// Changing only the label is a stored write and no kernel work, exactly like
+	// a rename — the whole point of it being a second field.
+	w := do(t, h, http.MethodPatch, "/wireguard/peers/li-mbp?confirm=true",
+		`{"display_name":"  Li’s laptop  "}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("label PATCH = %d: %s", w.Code, w.Body)
+	}
+	if resp := decode[tunnelApplyResponse](t, w); !resp.Plan.Empty {
+		t.Errorf("a label produced kernel work: %+v", resp.Plan.Changes)
+	}
+	after, _ = applier.Load()
+	if got, _ := after.WireGuard.Peer("li-mbp"); got.DisplayName != "Li’s laptop" {
+		t.Errorf("label = %q, want it trimmed and otherwise untouched", got.DisplayName)
+	}
+
+	// The label follows the name, because it is the same entry's label.
+	if w := do(t, h, http.MethodPatch, "/wireguard/peers/li-mbp?confirm=true", `{"name":"handset"}`); w.Code != http.StatusOK {
+		t.Fatalf("rename = %d: %s", w.Code, w.Body)
+	}
+	after, _ = applier.Load()
+	if got, _ := after.WireGuard.Peer("handset"); got.DisplayName != "Li’s laptop" {
+		t.Errorf("the rename dropped the label: %+v", got)
+	}
+
+	// The read path reports it, and the name stays the key.
+	if w := do(t, h, http.MethodGet, "/wireguard/peers", ""); w.Code != http.StatusOK {
+		t.Fatalf("peers = %d: %s", w.Code, w.Body)
+	} else if list := decode[peersResponse](t, w); list.Peers[0].DisplayName != "Li’s laptop" || list.Peers[0].Name != "handset" {
+		t.Errorf("the list reported %+v", list.Peers[0])
+	}
+
+	// Empty is how the name comes back, and it is not an error.
+	if w := do(t, h, http.MethodPatch, "/wireguard/peers/handset?confirm=true", `{"display_name":""}`); w.Code != http.StatusOK {
+		t.Fatalf("clearing = %d: %s", w.Code, w.Body)
+	}
+	after, _ = applier.Load()
+	if got, _ := after.WireGuard.Peer("handset"); got.DisplayName != "" {
+		t.Errorf("label = %q, want it cleared", got.DisplayName)
+	}
+
+	// Both labels in one request, which is what the dialog sends when somebody
+	// renamed a device and gave it a readable name in the same edit.
+	if w := do(t, h, http.MethodPatch, "/wireguard/peers/handset?confirm=true",
+		`{"name":"work","display_name":"Work phone"}`); w.Code != http.StatusOK {
+		t.Fatalf("combined patch = %d: %s", w.Code, w.Body)
+	}
+	after, _ = applier.Load()
+	if got, ok := after.WireGuard.Peer("work"); !ok || got.DisplayName != "Work phone" {
+		t.Errorf("the combined patch left %+v", got)
+	}
+	if _, still := after.WireGuard.Peer("handset"); still {
+		t.Error("the old name survived the rename")
+	}
+
+	for _, tc := range []struct{ body, why string }{
+		{`{"display_name":"` + strings.Repeat("x", MaxPeerDisplayNameLen+1) + `"}`, "longer than the limit"},
+		{`{"display_name":"two\nlines"}`, "a control character"},
+	} {
+		w := do(t, h, http.MethodPatch, "/wireguard/peers/work?confirm=true", tc.body)
+		if w.Code != http.StatusUnprocessableEntity {
+			t.Errorf("a label %s = %d, want 422: %s", tc.why, w.Code, w.Body)
+			continue
+		}
+		var body struct {
+			Error core.ErrorBody `json:"error"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decoding %s: %v", w.Body, err)
+		}
+		if len(body.Error.Problems) == 0 || body.Error.Problems[0].Path != "wireguard.peers[0].display_name" {
+			t.Errorf("a label %s reported %+v", tc.why, body.Error.Problems)
+		}
+	}
+}

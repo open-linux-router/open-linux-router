@@ -73,7 +73,14 @@ func viewPlan(p Plan, before, after []string) planView {
 // seconds ago" is the only signal WireGuard offers, and it is not in the
 // config.
 type peerView struct {
-	Name    string     `json:"name"`
+	Name string `json:"name"`
+
+	// DisplayName is the operator's label, absent when the name is shown.
+	// Reported rather than resolved here: a client that wants one string picks
+	// the fallback itself, and one that shows both (a heading and the key it
+	// lives under) still can.
+	DisplayName string `json:"display_name,omitempty"`
+
 	Address netip.Addr `json:"address,omitempty"`
 	Routes  RouteScope `json:"routes"`
 
@@ -132,13 +139,14 @@ func viewPeers(c Config, obs Observed, now time.Time) []peerView {
 	out := make([]peerView, 0, len(c.WireGuard.Peers))
 	for _, p := range c.WireGuard.Peers {
 		v := peerView{
-			Name:      p.Name,
-			Address:   p.Address,
-			Routes:    p.Routes.OrDefault(),
-			Category:  p.Category,
-			Icon:      p.Icon,
-			PublicKey: p.PublicKey,
-			Unknown:   !obs.Known,
+			Name:        p.Name,
+			DisplayName: p.DisplayName,
+			Address:     p.Address,
+			Routes:      p.Routes.OrDefault(),
+			Category:    p.Category,
+			Icon:        p.Icon,
+			PublicKey:   p.PublicKey,
+			Unknown:     !obs.Known,
 		}
 		if state, ok := live[p.PublicKey]; ok && obs.Known {
 			v.LastHandshake = state.LastHandshake

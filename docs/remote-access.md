@@ -14,11 +14,11 @@ The operator gives two things:
 
 | Field | Example | |
 |---|---|---|
-| `name` | `phone` | what this device is called, here and later in `devices` |
+| `name` | `phone` | the device's name, here and later in `devices` |
 | `routes` | `home` | what the device sends through the tunnel |
 
-Two more are optional and only decide how the device is drawn: `category` and
-`icon` (§2.2).
+Three more are optional and change only how the device reads: `display_name`,
+and the `category` and `icon` that decide its picture (§2.2).
 
 Everything else is derived and never asked:
 
@@ -47,6 +47,25 @@ have logins:
   the documentation has to say it instead.
 
 ### 2.2 Renaming is a label change, not a re-issue
+
+**A device has a name and, if the operator wants one, a label.** The name is the
+key: it is the last segment of the item routes
+(`/api/remote/wireguard/peers/li-mbp`), the positional argument every command
+takes, the unique key of the device list, and the name `olr remote add peer`
+hands to `olr dns` as the local name to answer. So it has to stay a DNS label —
+letters, digits and hyphens — and it is refused otherwise.
+
+That is a poor fit for the thing a person actually calls their laptop. "Li's
+Macbook Pro" is what belongs on a screen, a URL path segment is not, and
+`olr dns add host "Li's Macbook Pro"` is not a name any resolver would take. So
+`display_name` is free text — trimmed, bounded, free of control characters, and
+otherwise the operator's business — and it is what every surface shows when it
+is set. It is not unique, because the name already is.
+
+The two are edited in different places for that reason: the label where it is
+read (the device's own page heading, or the display-name field in the tunnel's
+device dialog), the name where the device's settings are. Renaming either one
+changes nothing on the box.
 
 The name being a label rather than something the tunnel carries has a second
 consequence, and it is the pleasant one: **renaming a peer changes nothing on

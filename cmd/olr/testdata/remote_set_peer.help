@@ -1,4 +1,4 @@
-Give a device a different name, keeping its address and its key.
+Change what a device is called, keeping its address and its key.
 
 A name is olr's label, not part of the tunnel — WireGuard knows a
 device by its key. So the configuration already on the device keeps
@@ -7,15 +7,22 @@ working, and nothing has to be re-issued or re-imported.
 A local name added with `olr dns` does not follow: that name is `dns`'s
 stored intent, and this module does not write another module's.
 
+--name has to stay a DNS label — letters, digits and hyphens — because
+it is the name every command takes and the one `olr dns` would be told
+to answer. --display-name is what a person reads instead, so it takes
+whatever you would write: "Li's Macbook Pro". Empty puts the name back.
+
 Usage:
   olr remote set peer <name> [flags]
 
 Examples:
   olr remote set peer phone --name handset
+  olr remote set peer handset --display-name "Li's Macbook Pro"
 
 Flags:
-  -h, --help          help for peer
-      --name string   the name to give the device
+      --display-name string   what to call it where a person reads it; anything you would write, or empty for the name
+  -h, --help                  help for peer
+      --name string           the device's name: letters, digits and hyphens
 
 Global Flags:
       --dry-run         show what would change and exit without applying it

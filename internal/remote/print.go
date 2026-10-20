@@ -92,13 +92,14 @@ func peersOf(c Config) []peerView {
 	out := make([]peerView, 0, len(c.WireGuard.Peers))
 	for _, p := range c.WireGuard.Peers {
 		out = append(out, peerView{
-			Name:      p.Name,
-			Address:   p.Address,
-			Routes:    p.Routes.OrDefault(),
-			Category:  p.Category,
-			Icon:      p.Icon,
-			PublicKey: p.PublicKey,
-			Unknown:   true,
+			Name:        p.Name,
+			DisplayName: p.DisplayName,
+			Address:     p.Address,
+			Routes:      p.Routes.OrDefault(),
+			Category:    p.Category,
+			Icon:        p.Icon,
+			PublicKey:   p.PublicKey,
+			Unknown:     true,
 		})
 	}
 	return out
@@ -142,6 +143,9 @@ func lastSeen(p peerView) string {
 func writePeerText(w io.Writer, p peerView) error {
 	t := table(w)
 	fmt.Fprintf(t, "name\t%s\n", p.Name)
+	if p.DisplayName != "" {
+		fmt.Fprintf(t, "called\t%s\n", p.DisplayName)
+	}
 	fmt.Fprintf(t, "address\t%s\n", p.Address)
 	fmt.Fprintf(t, "sends home\t%s\n", p.Routes)
 	fmt.Fprintf(t, "public key\t%s\n", orDash(p.PublicKey))

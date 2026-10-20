@@ -59,10 +59,14 @@ export function dialInState(peer: RemotePeer): DialInState {
 /**
  * Nothing, or every peer — never a half-drawn state.
  *
- * Name order, not "connected first". The band sits above the router, where a
+ * Label order, not "connected first". The band sits above the router, where a
  * card that jumped to the front every time a phone woke up would read as the
  * picture rearranging itself; each card carries its own dot and its own word,
  * so the order has no work left to do.
+ *
+ * "Label" is `display_name` when there is one and the name otherwise: the card
+ * is read by a person, while the name stays the key the map and every command
+ * identify the device by.
  */
 export function buildDialIn(status?: RemoteStatus): DialIn | undefined {
   if (!status?.enabled || status.peers.length === 0) return undefined
@@ -71,7 +75,7 @@ export function buildDialIn(status?: RemoteStatus): DialIn | undefined {
     peers: status.peers
       .map((peer) => ({
         key: peer.name,
-        name: peer.name,
+        name: peer.display_name || peer.name,
         address: peer.address,
         state: dialInState(peer),
         lastHandshake: peer.last_handshake,

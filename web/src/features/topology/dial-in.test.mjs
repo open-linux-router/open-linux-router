@@ -53,3 +53,13 @@ test('absent transfer figures are zero rather than undefined', () => {
   assert.equal(only.rxBytes, 0)
   assert.equal(only.txBytes, 0)
 })
+
+test('the card says the label, and keeps the name it is identified by', () => {
+  const [only] = buildDialIn({
+    enabled: true,
+    interface: 'wg0',
+    peers: [peer({ name: 'li-mbp', display_name: "Li's Macbook Pro" })],
+  }).peers
+  assert.equal(only.name, "Li's Macbook Pro")
+  assert.equal(only.key, 'li-mbp')
+})

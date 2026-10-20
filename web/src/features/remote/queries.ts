@@ -103,6 +103,7 @@ const seg = (s: string) => encodeURIComponent(s)
  */
 export interface PeerPatch {
   name?: string
+  display_name?: string
   category?: string
   icon?: string
 }
@@ -116,7 +117,7 @@ export const remoteChange = {
    * of the key and nothing else. Whatever consumes this has exactly one chance
    * to put it in front of somebody.
    */
-  savePeer: (name: string, body: { routes?: string; public_key?: string }): RemoteChangeRequest => ({
+  savePeer: (name: string, body: { routes?: string; display_name?: string; public_key?: string }): RemoteChangeRequest => ({
     method: 'PUT',
     path: `${base}/wireguard/peers/${seg(name)}`,
     body,
@@ -128,18 +129,19 @@ export const remoteChange = {
     label: `${name} can no longer dial in`,
   }),
   /**
-   * Change a device's name, and nothing else about it.
+   * Change what a device is called, and nothing else about it.
    *
    * PATCH rather than PUT because the two answer different questions: PUT says
    * what the device's settings are, so a body carrying only a name would reset
-   * what it sends home. A name is olr's label — the tunnel knows the key — so
-   * this changes nothing on the box and the file on the device keeps working.
+   * what it sends home. A name and a label are both just labels — the tunnel
+   * knows the key — so this changes nothing on the box and the file on the
+   * device keeps working.
    */
-  renamePeer: (name: string, newName: string): RemoteChangeRequest => ({
+  patchPeer: (name: string, patch: PeerPatch): RemoteChangeRequest => ({
     method: 'PATCH',
     path: `${base}/wireguard/peers/${seg(name)}`,
-    body: { name: newName },
-    label: `${name} is now ${newName}`,
+    body: patch,
+    label: 'Saved',
   }),
 
   settings: (fields: Record<string, unknown>): RemoteChangeRequest => ({

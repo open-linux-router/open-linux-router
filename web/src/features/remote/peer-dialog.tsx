@@ -53,12 +53,13 @@ export function PeerDialog({
   /** The dial-in network, for the preview. */
   subnet?: string
   /** May be async: editing a device can be two changes, in order. */
-  onSubmit: (peer: { name: string; routes: string; public_key?: string }) => void | Promise<unknown>
+  onSubmit: (peer: { name: string; display_name: string; routes: string; public_key?: string }) => void | Promise<unknown>
   /** Only supplied when editing. Removing is an edit to the thing you opened. */
   onRemove?: () => void
 }) {
   const editing = initial !== undefined
   const [name, setName] = useState(initial?.name ?? '')
+  const [label, setLabel] = useState(initial?.display_name ?? '')
   const [routes, setRoutes] = useState<string>(initial?.routes ?? 'home')
   const [publicKey, setPublicKey] = useState('')
 
@@ -68,6 +69,7 @@ export function PeerDialog({
     if (!valid) return
     onSubmit({
       name: name.trim(),
+      display_name: label.trim(),
       routes,
       public_key: publicKey.trim() || undefined,
     })
@@ -100,6 +102,20 @@ export function PeerDialog({
               {editing
                 ? 'Letters, digits and hyphens. The file already on the device keeps working.'
                 : `Letters, digits and hyphens. ${subnet ? `It gets an address on ${subnet}.` : ''}`}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="peer-label">Display name</Label>
+            <Input
+              id="peer-label"
+              value={label}
+              placeholder={name.trim() || 'what you call it'}
+              onChange={(e) => setLabel(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              What you call it where you read it — anything you would write, spaces and apostrophes included.
+              Leave it empty to show the name above, which is what every command and the address bar use.
             </p>
           </div>
 
