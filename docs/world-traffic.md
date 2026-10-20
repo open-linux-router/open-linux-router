@@ -18,7 +18,7 @@ fullscreen view. MapLibre renders labels with local system fonts; there are
 no external map, font, sprite or tile requests, including on first use.
 The asset ships inside OLR and uses the existing immutable asset cache.
 
-Only the top ten IPs are located using cached ip.sb city lookups; unknown
+Only the top forty IPs are located using cached ip.sb city lookups; unknown
 locations remain in the ranking and its coverage denominator. Coordinates
 are approximate IP locations, not physical device positions. Traffic points
 use only valid returned coordinates, without GeoIP city, region or country labels
@@ -48,20 +48,28 @@ indices. Dataset order and traffic volume do not affect country colors.
 
 The daemon samples IPv4/IPv6 conntrack counters every two seconds, shared
 across browsers. It retains counter differences over up to thirty seconds
-in memory, aggregates by remote IP, and selects ten by combined upload and
+in memory, aggregates by remote IP, and selects forty by combined upload and
 download. Ranking has deterministic IP tie-breaking. Rates are bytes/second
 over the available window; the first sample is a baseline. Coverage is the
-top ten's share of all observed eligible remote-IP traffic, not a share of
+top forty's share of all observed eligible remote-IP traffic, not a share of
 the separate nftables interface/device totals.
 
-Blue indicates download, teal upload. Separate curved paths carry directional
-particles; logarithmic line widths cap visual extremes. Reduced motion
-disables particles and interpolation. The UI polls every two seconds, but keeps
-each IP/direction's particle phase independent of ranking. Paths and endpoints
-fade in and out with a 450ms exponential time constant (about two seconds to
-settle); widths ease toward new measured rates on the same timeline. Particles
-fade at path ends and render at up to 30fps. Hidden tabs pause visual updates.
-Endpoints use a 1.4px radius and shared coordinates render only one point.
+Blue indicates download, teal upload. Each arc carries that pair as a gradient:
+transmit teal at the router, receive blue at the remote end, so direction is
+visible along a still arc as well as on its particle. A blurred halo in the
+same direction colours sits under each arc; because arcs composite per feature,
+the halo accumulates where they bunch up — around the router and along busy
+corridors — and concentration reads as light. Width and opacity are relative
+to the busiest plotted location, not to an absolute rate: square-root scaling
+keeps a one-percent flow visible while the busiest one still stands out, and
+every arc stays translucent so overlaps build up instead of replacing each
+other. Reduced motion disables particles and interpolation. The UI polls every
+two seconds, but keeps each IP/direction's particle phase independent of
+ranking. Paths and endpoints fade in and out with a 450ms exponential time
+constant (about two seconds to settle); widths and opacity ease toward new
+measured rates on the same timeline. Particles fade at path ends and render at
+up to 30fps. Hidden tabs pause visual updates.
+Endpoints use a 1.6px radius and shared coordinates render only one point.
 This interpolation visualizes sampled activity; it is not a packet trace.
 Different returned locations within one country can have an arc; endpoints
 with identical coordinates share one point without an arc. The details dialog

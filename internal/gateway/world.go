@@ -12,6 +12,11 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/geoip"
 )
 
+// worldPeers bounds both the ranked snapshot and the GeoIP lookups it
+// triggers. Forty distinct arcs read as a traffic map on a busy router; a
+// handful read as loose threads.
+const worldPeers = 40
+
 type worldFlow struct {
 	Key      string
 	IP       netip.Addr
@@ -144,25 +149,22 @@ func (m *WorldTraffic) sample(now time.Time, flows []worldFlow, enabled bool, er
 		s.Total += up + down
 		s.Peers = append(s.Peers, WorldPeer{IP: ip.String(), Upload: up, Download: down})
 	}
-	// Keep only ten candidates during selection: O(number of remote IPs).
-	top := make([]WorldPeer, 0, 11)
-	for _, peer := range s.Peers {
-		top = append(top, peer)
-		sort.Slice(top, func(i, j int) bool {
-			a, b := top[i], top[j]
-			if a.Upload+a.Download == b.Upload+b.Download {
-				return a.IP < b.IP
-			}
-			return a.Upload+a.Download > b.Upload+b.Download
-		})
-		if len(top) > 10 {
-			top = top[:10]
+	// The map draws one arc per location; forty keeps a busy router legible
+	// without locating every remote IP. Sorting once is cheaper than the
+	// insertion loop it replaces, and the denominator stays the full set.
+	sort.Slice(s.Peers, func(i, j int) bool {
+		a, b := s.Peers[i], s.Peers[j]
+		if a.Upload+a.Download == b.Upload+b.Download {
+			return a.IP < b.IP
 		}
+		return a.Upload+a.Download > b.Upload+b.Download
+	})
+	if len(s.Peers) > worldPeers {
+		s.Peers = s.Peers[:worldPeers]
 	}
-	s.Peers = top
 	if m.places != nil {
-		ips := make([]netip.Addr, len(top))
-		for i, p := range top {
+		ips := make([]netip.Addr, len(s.Peers))
+		for i, p := range s.Peers {
 			ips[i] = netip.MustParseAddr(p.IP)
 		}
 		places, status := m.places.Locate(ips)

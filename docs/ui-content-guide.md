@@ -101,9 +101,11 @@ chart. Measured scores do not expire; results remain until another assessment
 and survive daemon and router restarts.
 
 World traffic combines IPs at the same remote coordinates into one map connection.
-Line width represents combined upload and download; per-IP rates stay in details.
-Each connection has one dot that travels out and back, illustrating both directions
-without selecting a direction based on traffic volume.
+Line width and opacity represent that connection's combined upload and download
+relative to the busiest one; per-IP rates stay in details. Arcs fade from transmit
+teal at the router to receive blue at the far end, and each connection has one dot
+that travels out and back, illustrating both directions without selecting a
+direction based on traffic volume.
 
 Ingress distinguishes saved repairs from applied settings. When other existing
 errors prevent application, say the repair was saved, list the remaining service
@@ -114,7 +116,7 @@ World traffic uses two-second sampling and UI refresh. Smooth map transitions co
 continuity between samples, not individual packets or exact connection lifetimes;
 the details ranking and rates continue to show the latest observed snapshot.
 World traffic ranks remote IPs over a rolling thirty-second observed window,
-then locates only the top ten using cached ip.sb city lookups. Details show
+then locates only the top forty using cached ip.sb city lookups. Details show
 city (or region) and country; points use only valid returned coordinates,
 omitting IPs without coordinates. State that IP locations are approximate in the
 details dialog, which also carries the sampling caveats and ip.sb attribution. The fullscreen

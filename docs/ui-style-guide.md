@@ -29,9 +29,13 @@ secondary information. See the [page review record](ui-page-review.md).
 
 ## Color and surfaces
 
-World traffic uses one neutral arc and one moving dot per remote location.
-The same dot travels to the remote location and back along the arc, using
-transmit color outbound and receive color on return, four seconds each way.
+World traffic is the one map where hue describes data. Each location gets one
+translucent arc and one moving dot: the arc runs from transmit teal at the
+router to receive blue at the remote end, its width and opacity follow that
+location's share of the busiest flow, and a blurred halo underneath accumulates
+where arcs bunch up so busy junctions read as light rather than as spaghetti.
+The dot travels out teal and back blue along the arc, four seconds each way.
+The halo is a glow, not an elevation effect; it stays confined to the map.
 
 Use semantic Tailwind tokens from `web/src/index.css`, never page-local gray or
 blue approximations. Light and dark themes are designed as separate contrast

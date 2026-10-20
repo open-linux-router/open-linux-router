@@ -41,16 +41,16 @@ func TestWorldWindow(t *testing.T) {
 	}
 }
 
-func TestWorldTopTenKeepsFullDenominator(t *testing.T) {
+func TestWorldTopPeersKeepFullDenominator(t *testing.T) {
 	m := NewWorldTraffic(nil)
 	now := time.Unix(1000, 0)
 	m.sample(now, nil, true, nil)
 	var flows []worldFlow
-	for i := 1; i <= 20; i++ {
+	for i := 1; i <= 100; i++ {
 		flows = append(flows, worldFlow{Key: fmt.Sprint(i), IP: netip.MustParseAddr(fmt.Sprintf("8.8.8.%d", i)), Up: uint64(i * 2)})
 	}
 	m.sample(now.Add(2*time.Second), flows, true, nil)
-	if len(m.snapshot.Peers) != 10 || m.snapshot.Total != 210 || m.snapshot.Peers[0].Upload != 20 || m.snapshot.Peers[9].Upload != 11 {
+	if len(m.snapshot.Peers) != worldPeers || m.snapshot.Total != 5050 || m.snapshot.Peers[0].Upload != 100 || m.snapshot.Peers[worldPeers-1].Upload != 61 {
 		t.Fatal(m.snapshot)
 	}
 }

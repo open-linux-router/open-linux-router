@@ -73,7 +73,7 @@ func (h HTTP) Routes() []core.Route {
 	}
 
 	routes := []core.Route{
-		{Method: "GET", Path: "/world-traffic", Tool: "show world traffic", Summary: "Top ten remote IPs by observed connection bytes over the last thirty seconds.", Handler: h.getWorldTraffic},
+		{Method: "GET", Path: "/world-traffic", Tool: "show world traffic", Summary: "Top forty remote IPs by observed connection bytes over the last thirty seconds.", Handler: h.getWorldTraffic},
 		{Method: "GET", Path: "/latency", Tool: "show latency", Summary: "Latest router HTTPS response measurements and selected websites.", Handler: h.getLatency},
 		{Method: "PUT", Path: "/latency/target", Summary: "Choose an Internet latency target; empty selects the fastest once.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencyTarget},
 		{Method: "GET", Path: "/latency/sites/{name}/icon", Summary: "Discover a monitored site icon.", Handler: h.getLatencyIcon},

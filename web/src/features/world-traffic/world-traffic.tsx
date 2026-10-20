@@ -20,7 +20,24 @@ interface Peer { ip: string; upload: number; download: number; place: GeoPlace }
 interface Origin { latitude?: number; longitude?: number }
 interface Snapshot { state: string; error?: string; as_of: string; seconds: number; total: number; peers: Peer[]; locations: { state: string; error?: string } }
 type Position = [number, number]
+interface FlowTarget { feature: GeoJSON.Feature; coordinates?: Position[] }
 const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
+// Arcs are drawn from the router outwards, so a line-progress gradient can
+// carry the direction reading the moving dots already use: transmit teal at
+// this end, receive blue at the remote end. Colours are the theme's semantic
+// receive/transmit pair, lightened for the halo that trails each arc.
+const transparent = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, 0)`
+}
+const flowGradient = (dark: boolean, halo: boolean) => {
+  const [from, mid, to] = dark
+    ? (halo ? ['#5eead4', '#67e8f9', '#93c5fd'] : ['#6bd4c6', '#38bdf8', '#8ab4ff'])
+    : (halo ? ['#2dd4bf', '#38bdf8', '#60a5fa'] : ['#0d9488', '#0e7490', '#1d4ed8'])
+  // Every arc leaves the same point. Fading in over the first sixth of the
+  // path turns that shared pixel from a dark knot into a fan of light.
+  return ['interpolate', ['linear'], ['line-progress'], 0, transparent(from), 0.15, from, 0.55, mid, 1, to] as ExpressionSpecification
+}
 // Zoom may only appear as the input of a top-level step/interpolate expression.
 // Layout expressions are evaluated at integer zooms; use integer thresholds
 // for regions and cities so names don't wait for the final zoom level.
@@ -47,7 +64,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
   const map = useRef<maplibregl.Map | null>(null)
   const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(false)
-  const targets = useRef(new Map<string, { feature: GeoJSON.Feature; coordinates?: Position[] }>())
+  const targets = useRef(new Map<string, FlowTarget>())
   useEffect(() => {
     if (!container.current) return
     let instance: maplibregl.Map
@@ -81,10 +98,23 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
           }, paint: { 'text-color': '#171b22', 'text-halo-color': '#ffffff', 'text-halo-width': 1 } })
         }
       }
-      for (const id of ['flows', 'dots', 'places']) instance.addSource(id, { type: 'geojson', data: empty })
-      instance.addLayer({ id: 'flows', type: 'line', source: 'flows', paint: { 'line-color': ['get', 'color'], 'line-width': ['get', 'width'], 'line-opacity': ['*', 0.7, ['get', 'opacity']] } })
-      instance.addLayer({ id: 'places', type: 'circle', source: 'places', paint: { 'circle-radius': 1.4, 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'], 'circle-stroke-opacity': ['get', 'opacity'], 'circle-stroke-width': 0.5, 'circle-stroke-color': '#ffffff' } })
-      instance.addLayer({ id: 'dots', type: 'circle', source: 'dots', paint: { 'circle-radius': 1.2, 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'] } })
+      // lineMetrics computes the distances a line-progress gradient needs.
+      instance.addSource('flows', { type: 'geojson', data: empty, lineMetrics: true })
+      for (const id of ['dots', 'places']) instance.addSource(id, { type: 'geojson', data: empty })
+      // Each arc is a soft halo under a translucent ribbon. Both composite
+      // per feature, so where arcs bunch up — at the router, or along a busy
+      // corridor — the halo accumulates into light and the ribbon deepens.
+      instance.addLayer({ id: 'flow-halo', type: 'line', source: 'flows', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: {
+        'line-width': ['+', ['*', ['get', 'width'], 2.2], 4],
+        'line-blur': ['+', ['*', ['get', 'width'], 0.9], 2.5],
+        'line-opacity': ['*', ['*', ['get', 'strength'], ['get', 'opacity']], 0.38],
+      } })
+      instance.addLayer({ id: 'flows', type: 'line', source: 'flows', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: {
+        'line-width': ['get', 'width'],
+        'line-opacity': ['*', ['get', 'strength'], ['get', 'opacity']],
+      } })
+      instance.addLayer({ id: 'places', type: 'circle', source: 'places', paint: { 'circle-radius': 1.6, 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'], 'circle-stroke-opacity': ['get', 'opacity'], 'circle-stroke-width': 0.6, 'circle-stroke-color': '#ffffff' } })
+      instance.addLayer({ id: 'dots', type: 'circle', source: 'dots', paint: { 'circle-radius': ['+', 1, ['*', ['get', 'width'], 0.26]], 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'] } })
       fit()
       setReady(true)
     })
@@ -101,6 +131,8 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     const countryColors: ExpressionSpecification = ['match', ['get', 'color'], 0, palette[0], ...palette.slice(1).flatMap((color, index) => [index + 1, color]), dark ? '#424b5b' : '#e2e6ec']
     instance.setPaintProperty('land', 'fill-color', expanded ? countryColors : (dark ? '#424b5b' : '#e2e6ec'))
     instance.setPaintProperty('borders', 'line-color', dark ? '#232731' : '#ffffff')
+    instance.setPaintProperty('flow-halo', 'line-gradient', flowGradient(dark, true))
+    instance.setPaintProperty('flows', 'line-gradient', flowGradient(dark, false))
     if (expanded) {
       instance.setPaintProperty('regions', 'line-color', dark ? '#232731' : '#5b6472')
       for (const id of ['country-labels', 'region-labels', 'city-labels']) {
@@ -110,7 +142,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     }
     const blue = dark ? '#8ab4ff' : '#1d4ed8'
     const start = origin ? position(origin) : undefined
-    const next: typeof targets.current = new Map()
+    const next = new Map<string, FlowTarget>()
     if (start) next.set(`place:${start}`, { feature: { type: 'Feature', properties: { color: dark ? '#f1f3f7' : '#171b22' }, geometry: { type: 'Point', coordinates: start } } })
     const locations = new Map<string, Peer>()
     for (const peer of peers) {
@@ -120,6 +152,8 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       const previous = locations.get(key)
       locations.set(key, { ...peer, upload: (previous?.upload ?? 0) + peer.upload, download: (previous?.download ?? 0) + peer.download })
     }
+    let peak = 0
+    for (const peer of locations.values()) peak = Math.max(peak, peer.download + peer.upload)
     for (const [location, peer] of locations) {
       const end = position(peer.place)
       if (!end) continue
@@ -127,9 +161,15 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       if (!start || (start[0] === end[0] && start[1] === end[1])) continue
       const total = peer.download + peer.upload
       if (total <= 0) continue
+      // Width and translucency are relative to the busiest flow, not to an
+      // absolute byte rate: a quiet router still reads, and one heavy flow
+      // still stands out. The square root keeps small flows visible instead
+      // of collapsing them into hairlines beside a dominant one.
+      const weight = Math.sqrt(total / Math.max(1, peak))
+      const width = 1.3 + 6.2 * weight
+      const strength = 0.3 + 0.45 * weight
       const coordinates = arc(start, end, 0)
-      const width = Math.min(3.5, 0.6 + Math.log10(1 + total / 1024) * 0.7)
-      next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: { width }, geometry: { type: 'LineString', coordinates } }, coordinates })
+      next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: { width, strength }, geometry: { type: 'LineString', coordinates } }, coordinates })
     }
     targets.current = next
   }, [peers, origin, dark, ready, expanded])
@@ -138,7 +178,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     if (!instance || !ready) return
     const set = (id: string, features: GeoJSON.Feature[]) => (instance.getSource(id) as GeoJSONSource).setData({ type: 'FeatureCollection', features })
     // Keep identity and phase independent of snapshot order and rank changes.
-    const visible = new Map<string, { target: typeof targets.current extends Map<string, infer T> ? T : never; opacity: number; width: number; phase: number }>()
+    const visible = new Map<string, { target: FlowTarget; opacity: number; width: number; strength: number; phase: number }>()
     const reduced = matchMedia('(prefers-reduced-motion: reduce)')
     let previous = performance.now(), lastDraw = 0, frame = 0
     const animate = (now: number) => {
@@ -155,7 +195,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         else {
           let hash = 0
           for (const char of key) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-          visible.set(key, { target, opacity: 0, width: Number(target.feature.properties?.width || 0), phase: hash / 4294967296 })
+          visible.set(key, { target, opacity: 0, width: Number(target.feature.properties?.width || 0), strength: Number(target.feature.properties?.strength || 0), phase: hash / 4294967296 })
         }
       }
       const lines: GeoJSON.Feature[] = [], points: GeoJSON.Feature[] = [], dots: GeoJSON.Feature[] = []
@@ -165,16 +205,19 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         if (!active && visual.opacity < 0.01) { visible.delete(key); continue }
         const path = visual.target
         visual.width += (Number(path.feature.properties?.width || 0) - visual.width) * blend
-        const properties = { ...path.feature.properties, opacity: visual.opacity, width: visual.width }
+        visual.strength += (Number(path.feature.properties?.strength || 0) - visual.strength) * blend
+        const properties = { ...path.feature.properties, opacity: visual.opacity, width: visual.width, strength: visual.strength }
         const feature = { ...path.feature, properties }
         if (!path.coordinates) { points.push(feature); continue }
-        lines.push({ ...feature, properties: { ...properties, color: dark ? '#abb4c3' : '#5b6472' } })
+        lines.push(feature)
         if (reduced.matches) continue
         // One dot travels out and back, taking four seconds in each direction.
         visual.phase = (visual.phase + elapsed / 8000) % 1
         const returning = visual.phase >= 0.5
         const progress = returning ? (1 - visual.phase) * 2 : visual.phase * 2
-        const color = returning ? (dark ? '#8ab4ff' : '#1d4ed8') : (dark ? '#6bd4c6' : '#0f766e')
+        // Lighter than either end of the ribbon, so the travelling dot reads
+        // as a bead on the arc rather than a break in it.
+        const color = returning ? (dark ? '#bfdbfe' : '#3b82f6') : (dark ? '#99f6e4' : '#14b8a6')
         const p = progress * 48
         const a = path.coordinates[Math.floor(p)], b = path.coordinates[Math.min(48, Math.floor(p) + 1)]
         dots.push({ type: 'Feature', properties: { ...properties, color }, geometry: { type: 'Point', coordinates: [a[0] + (b[0] - a[0]) * (p % 1), a[1] + (b[1] - a[1]) * (p % 1)] } })
@@ -211,7 +254,7 @@ export function WorldTraffic({ origin, embedded = false }: { origin?: Origin; em
       <DialogClose render={<Button variant="secondary" size="icon-lg" className="absolute top-3 right-3 z-10 rounded-full bg-card/95 shadow-md ring-1 ring-border backdrop-blur-sm sm:size-9" />}><X aria-hidden="true" /><span className="sr-only">Close</span></DialogClose>
       <div className="min-h-0 flex-1" role="region" aria-label="World traffic map, drag to pan and scroll to zoom"><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} expanded /></div>
     </DialogContent></Dialog>
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription>Remote IPs by upload and download in the last 30 seconds. IP locations are approximate.{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Map</DialogTitle><DialogDescription>Remote IPs by upload and download in the last 30 seconds. Arcs are wider and more opaque for the busiest locations; colour runs from transmit teal at the router to receive blue at the far end. IP locations are approximate.{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
       <p className="text-sm text-muted-foreground">{status}{data?.seconds ? ` · ${Math.round(data.seconds)}s sampled` : ''}. {data?.state === 'disabled' ? 'Connection byte accounting is off. Enable Gateway traffic counting and apply its configuration.' : 'Counts include router and forwarded connections observed in Linux conntrack. Connections ending between samples and traffic bypassing conntrack may be missed.'} {(!origin || !position(origin)) && 'Router location is unknown; only remote points are shown.'}</p>
       {data?.error && <p className="break-words text-sm text-destructive">{data.error}</p>}
       {data?.locations?.error && <p className="break-words text-sm text-destructive">{data.locations.error}</p>}
