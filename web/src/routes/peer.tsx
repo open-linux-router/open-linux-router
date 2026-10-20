@@ -140,28 +140,34 @@ export function WireguardPeerPage() {
           <button type="button" onClick={beginPicture} disabled={patch.isPending} aria-label="Change device icon" className="shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             <DeviceIcon icon={peer.icon} category={peer.category ?? ''} online={peer.online} size="lg" />
           </button>
-          <div className="relative min-w-0 flex-1">
+          {/* The activity dots are painted behind this block, and a transparent
+              box still takes the pointer: without this, the two rows of dots at
+              the title's height — 08:00 and 12:00 today, and the current period
+              with them — answered no hover at all. The name and its chip take
+              the pointer back, because the name is a button and the chip has a
+              tooltip of its own. */}
+          <div className="pointer-events-none relative min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              {renaming ? (
-                <Input
-                  autoFocus
-                  aria-label="What this device is called"
-                  placeholder={peer.name}
-                  className="h-auto w-80 max-w-full py-1 text-2xl font-semibold"
-                  value={draft}
-                  disabled={patch.isPending}
-                  onChange={(event) => { saved.current = false; setDraft(event.target.value) }}
-                  onBlur={() => void saveLabel()}
-                  onKeyDown={(event) => {
-                    if (event.nativeEvent.isComposing) return
-                    if (event.key === 'Enter' || event.key === 'Escape') {
-                      event.preventDefault()
-                      void saveLabel(event.key === 'Escape')
-                    }
-                  }}
-                />
-              ) : (
-                <Heading as="h1" size="lg" className="min-w-0 max-w-full [overflow-wrap:anywhere]">
+              <Heading as="h1" size="lg" className="pointer-events-auto min-w-0 max-w-full [overflow-wrap:anywhere]">
+                {renaming ? (
+                  <Input
+                    autoFocus
+                    aria-label="What this device is called"
+                    placeholder={peer.name}
+                    className="h-auto w-80 max-w-full py-1 text-2xl font-semibold"
+                    value={draft}
+                    disabled={patch.isPending}
+                    onChange={(event) => { saved.current = false; setDraft(event.target.value) }}
+                    onBlur={() => void saveLabel()}
+                    onKeyDown={(event) => {
+                      if (event.nativeEvent.isComposing) return
+                      if (event.key === 'Enter' || event.key === 'Escape') {
+                        event.preventDefault()
+                        void saveLabel(event.key === 'Escape')
+                      }
+                    }}
+                  />
+                ) : (
                   <button
                     type="button"
                     onClick={beginRename}
@@ -170,13 +176,14 @@ export function WireguardPeerPage() {
                   >
                     {peer.display_name || peer.name}
                   </button>
-                </Heading>
-              )}
+                )}
+              </Heading>
               {/* The key the URL and every command use, when the label hides it.
                   A chip rather than a fact row: it belongs beside the name it
-                  belongs to, and only when the two differ. */}
+                  belongs to, and only when the two differ. It keeps the pointer
+                  for its own tooltip, and the few dots behind it go with it. */}
               {peer.display_name && (
-                <span className="font-mono text-xs text-muted-foreground" title="The name the address bar and every command use">
+                <span className="pointer-events-auto font-mono text-xs text-muted-foreground" title="The name the address bar and every command use">
                   {peer.name}
                 </span>
               )}
