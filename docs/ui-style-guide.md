@@ -30,15 +30,17 @@ secondary information. See the [page review record](ui-page-review.md).
 ## Color and surfaces
 
 World traffic is the one map where hue belongs to data rather than to status.
-Each location gets one translucent amber arc and one neutral moving dot. Amber
-sits outside the country palette, so traffic reads as an overlay on geography;
-the arc fades in at the router, its width and opacity follow that location's
-share of the busiest flow, and a blurred halo underneath accumulates where arcs
-bunch up so busy junctions read as light rather than as spaghetti. The dot
-travels out and back in four seconds each way: motion, not colour, carries the
-direction. Endpoints and particles stay in the neutral text scale, so amber
-remains the map's only hue. The halo is a map effect only; it does not
-introduce glow elsewhere.
+Each location gets one translucent amber arc, and the fullscreen view adds one
+neutral moving dot. Amber sits outside the country palette, so traffic reads as
+an overlay on geography; the arc fades in at the router, its width and opacity
+follow that location's share of the busiest flow, and a blurred halo underneath
+accumulates where arcs bunch up so busy junctions read as light rather than as
+spaghetti. The dot travels out and back in four seconds each way: motion, not
+colour, carries the direction, and the neutral particle leaves amber as the
+map's only hue. There
+are no endpoint dots — nearby destinations would turn them into a cluster of
+specks at the hub, and the converging arcs already mark both ends. The halo is
+a map effect only; it does not introduce glow elsewhere.
 
 Use semantic Tailwind tokens from `web/src/index.css`, never page-local gray or
 blue approximations. Light and dark themes are designed as separate contrast
@@ -364,24 +366,26 @@ on zoom, stopping at regional detail (zoom 6). State names and capital/world-cit
 names begin at zoom 3; other major cities appear at zooms 4–5. Country fill
 indices are stable and checked against neighboring countries, with separate
 light/dark palettes. Keep administrative labels neutral and secondary
-to traffic; traffic points have no GeoIP text labels.
+to traffic; traffic carries no GeoIP text labels.
 Pan, pinch, scroll and double-click zoom stand alone, so place no zoom or
 whole-world reset buttons over the map. Resizing must preserve the current
 fullscreen view. Escape
 closes it and restores focus to the preview. Both fullscreen views are page
 states with addresses of their own, /map and /quality, so a shared link or a
 bookmark lands on the open view; Back and the close control return to Overview.
-On phones each card uses the full column. Its local MapLibre map uses receive/transmit
-colors and bounded logarithmic path widths. Moving particles indicate observed
-traffic direction and stop for reduced motion. Use 1.4px endpoints merged at
-shared coordinates. Keep particle phases stable
-across ranking updates; ease line widths and fade arriving/departing paths and
-points with a 450ms exponential time constant. Fade particles at path ends.
-Reduced motion disables both particles and interpolation; hidden tabs pause updates.
-IP points use valid returned coordinates without country-center fallbacks;
-omit points without coordinates. Draw flows between different locations even
-within one country. The details dialog supplies city/country, rates and ip.sb
-attribution without crowding the map.
+On phones each card uses the full column. Its local MapLibre map draws one amber
+arc per remote location, with width and opacity relative to the busiest plotted
+location. The card preview shows the arcs alone, without endpoint dots or
+particles: at thumbnail size any dot is a speck, and nearby destinations turn a
+cluster of them into noise. The fullscreen map animates neutral particles that
+indicate observed traffic direction and stop for reduced motion. Keep particle
+phases stable across ranking updates; ease line widths and fade
+arriving/departing arcs with a 450ms exponential time constant. Fade particles
+at path ends. Reduced motion disables both particles and interpolation; hidden
+tabs pause updates. Arcs use valid returned coordinates without country-center
+fallbacks; omit locations without coordinates. Draw flows between different
+locations even within one country. The details dialog supplies city/country,
+rates and ip.sb attribution without crowding the map.
 
 Overview group headers navigate directly to group details at every screen size;
 do not expand or focus named groups in place.

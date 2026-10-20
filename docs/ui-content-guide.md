@@ -119,14 +119,14 @@ continuity between samples, not individual packets or exact connection lifetimes
 the details ranking and rates continue to show the latest observed snapshot.
 World traffic ranks remote IPs over a rolling thirty-second observed window,
 then locates only the top forty using cached ip.sb city lookups. Details show
-city (or region) and country; points use only valid returned coordinates,
+city (or region) and country; arcs use only valid returned coordinates,
 omitting IPs without coordinates. State that IP locations are approximate in the
 details dialog, which also carries the sampling caveats and ip.sb attribution. The fullscreen
 administrative map adds country, province/state and major-city names progressively
 on zoom, stopping at regional detail because IP locations are approximate; it
 shows no title, legend, summary, status or credits, only the map and a close button.
 Country fill colors distinguish geography and carry no traffic or status meaning.
-Traffic points have no GeoIP city, region or country labels. Map labels use bundled
+Traffic has no GeoIP city, region or country labels. Map labels use bundled
 geography and local fonts, without fetching an external basemap.
 Show their share of observed traffic in the details dialog,
 and retain unknown locations in that denominator. Never imply
