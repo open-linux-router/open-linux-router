@@ -353,15 +353,22 @@ on leaving. Rates and counters keep their normal live refresh; do not smooth the
 New devices appear after existing rows until the next reorder; removed devices
 disappear immediately. Groups retain their name order.
 
-The band above the router holds both things that are outside it: observed
-default next hops and the devices dialed in over WireGuard, one card each, drawn
-side by side and joined to the router by their own line. Keep the two apart by
-what the card says, not by where it sits. A dial-in card carries the WireGuard
-mark in neutral foreground, the peer's name, its tunnel address and one of four
-states (Connected, an elapsed time, Never connected, Status unavailable), with
-the endpoint and totals on hover. Never mark an absent peer as a fault: the only
-red on the map is a way out that has stopped answering. WireGuard off, or a
-tunnel with no peers, adds nothing to the map.
+The band above the router holds the only thing outside it: the devices dialed
+in over WireGuard, one card each, drawn side by side and joined to the router by
+their own line. A dial-in card carries the WireGuard mark in neutral foreground,
+the peer's name, its tunnel address and one of four states (Connected, an
+elapsed time, Never connected, Status unavailable), with the endpoint and totals
+on hover. Never mark an absent peer as a fault. WireGuard off, or a tunnel with
+no peers, puts no band there at all: the map starts at the router, and with no
+groups either it is one box.
+Observed default routes are not cards on the map. A next hop is one line of
+Link's status — address, interface, family — and drawing each one was a row of
+boxes above the router that said less than that line while pushing every group a
+third of a screen down. The device a next hop names is a device on this network,
+so it is drawn in its group like any other, not lifted out of it. A way out that
+has stopped answering is red where it can be acted on: the uplink card under
+Gateway, which also names the interface the next hop does answer on, and a
+network chip on the router when the gateway exit behind it is down.
 
 Firewall uses one vertical Sankey with three visual rows: external semantic
 categories above, one virtual OLR / Firewall node in the middle, and trusted/LAN

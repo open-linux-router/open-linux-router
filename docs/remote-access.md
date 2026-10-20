@@ -251,15 +251,16 @@ for a phone that is connected right now is a map that is wrong about the
 router's own state. So the overview draws each peer itself, and this section is
 the two decisions that took.
 
-**Above the router, beside the ways out.** Everything under the router hangs
-off something — a group by its column, a device by its row — and a card of its
-own down there would need every group's line to run through it or squeeze past
-it. Above the router there is exactly one box per line, each joining the router
-directly, which is what a peer is: a device on the far side of this box. The
-band therefore holds both kinds of thing that are outside it — where traffic
-leaves (observed next hops) and where it arrives (peers) — and the two are told
-apart by their cards, not by their position. Gateway policy exits stay off the
-map entirely: an exit this box chooses among is not a thing outside it.
+**Above the router, in the band.** Everything under the router hangs off
+something — a group by its column, a device by its row — and a card of its own
+down there would need every group's line to run through it or squeeze past it.
+Above the router there is exactly one box per line, each joining the router
+directly, which is what a peer is: a device on the far side of this box. So the
+band holds where traffic arrives, and a peer is its only kind of box: where
+traffic leaves is not a thing on this network, and drawing each observed next
+hop there was a row of cards above the router saying less than Link's routing
+summary does. Gateway policy exits stay off the map for the same reason: an exit
+this box chooses among is not a thing outside it.
 
 **Four states, not two.** `connected` (a handshake inside
 `internal/remote/view.go`'s three-minute window), `away` (last seen at a time),

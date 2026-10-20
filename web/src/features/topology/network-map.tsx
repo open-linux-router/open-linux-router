@@ -12,7 +12,6 @@ import {
   DeviceNode,
   DialInNode,
   GroupNode,
-  NextHopNode,
   MoreNode,
   NoteNode,
   PickNode,
@@ -21,21 +20,23 @@ import {
   type NetworkInfo,
 } from '@/features/topology/nodes'
 import type { DialIn } from '@/features/topology/dial-in'
-import type { Outside } from '@/features/topology/outside'
 import { magnitude, type TrafficView } from '@/features/topology/traffic'
 import type { AssignmentStatus, DeviceRow, ExitStatus, NetworkRow } from '@/lib/api-types'
 import type { DevicesGroup, Pool, Service } from '@/lib/config-types'
 
 /**
- * The network, drawn top-down: what is outside this router, the router, then
- * the operator's groups as lists of devices and nested groups.
+ * The network, drawn top-down: what reached this router from outside, the
+ * router, then the operator's groups as lists of devices and nested groups.
  *
- * What is outside is the ways out observed in the kernel and the devices that
- * dialed in over WireGuard — the two kinds of box that are not on a network
- * this router serves and connect to it directly. A peer is there rather than
- * under the router because everything under the router hangs off a group, and a
- * card of its own down there would put every group's line through it
- * (docs/remote-access.md §3.4).
+ * What is outside is the devices that dialed in over WireGuard — the one kind
+ * of box that is not on a network this router serves and connects to it
+ * directly. A peer is there rather than under the router because everything
+ * under the router hangs off a group, and a card of its own down there would
+ * put every group's line through it (docs/remote-access.md §3.4). The default
+ * routes observed in the kernel used to be drawn beside them, one card each,
+ * and that was a row above the router for things that are not boxes in it: a
+ * next hop is one line of Link's status, and the modem it names belongs in its
+ * group like any other device.
  *
  * It is organised by *group*, not by network. A network is how a device is
  * attached; a group is what the operator thinks it is for ("Serving",
@@ -72,7 +73,6 @@ export function NetworkMap({
   traffic,
   assignments,
   exits,
-  outside,
   dialIn,
   pools,
   pending,
@@ -91,8 +91,6 @@ export function NetworkMap({
   traffic: TrafficView
   assignments?: AssignmentStatus[]
   exits?: ExitStatus[]
-  /** Default-route next hops observed in the kernel. */
-  outside?: Outside
   /** Devices dialed in over WireGuard, when the tunnel has any. */
   dialIn?: DialIn
   pools?: Pool[]
@@ -140,7 +138,6 @@ export function NetworkMap({
       groups={groups}
       traffic={traffic}
       networks={networks}
-      outside={outside}
       dialIn={dialIn}
       filter={filter}
       network={network}
@@ -175,7 +172,6 @@ function Canvas({
   groups,
   traffic,
   networks,
-  outside,
   dialIn,
   filter,
   network,
@@ -190,7 +186,6 @@ function Canvas({
   groups: DevicesGroup[]
   traffic: TrafficView
   networks: NetworkInfo[]
-  outside?: Outside
   dialIn?: DialIn
   filter: string
   network: string
@@ -198,21 +193,19 @@ function Canvas({
   onDensity?: (density: Density) => void
   actions: MapActions
 }) {
-  // A known next hop is already shown above the router, not again below.
   const navigate = useNavigate()
-  const listed = useMemo(() => {
-    const upstreamMacs = new Set(outside?.hops.map((h) => h.device?.mac).filter(Boolean))
-    return all.filter((d) => !upstreamMacs.has(d.mac))
-  }, [all, outside])
-
+  // Every device is drawn where it belongs. The box a default route points at
+  // — the ISP modem, typically — used to be taken out of its group so it could
+  // be drawn above the router as a next hop, which meant the one device that
+  // was definitely on this network was the one the map did not list.
   // Sample only sort keys. Live rates and device data keep refreshing normally.
   const [frozen, setFrozen] = useState<Map<string, DeviceRank>>(() =>
-    buildTree({ devices: listed, groups, traffic, filter, network }).ranks,
+    buildTree({ devices: all, groups, traffic, filter, network }).ranks,
   )
   const interacting = useRef({ pointer: false, focus: false, touch: false })
   const tree = useMemo(
-    () => buildTree({ devices: listed, groups, traffic, filter, network, frozen }),
-    [listed, groups, traffic, filter, network, frozen],
+    () => buildTree({ devices: all, groups, traffic, filter, network, frozen }),
+    [all, groups, traffic, filter, network, frozen],
   )
   const latestRanks = useRef(tree.ranks)
   // Initialize when the first devices arrive after an empty/loading map.
@@ -291,10 +284,6 @@ function Canvas({
   }, [width, settled])
   const transition = settled && !reduced ? MOVE : STILL
 
-  const outsideInput = useMemo(
-    () => ({ hops: outside?.hops.map((h) => ({ key: h.key, down: h.down })) ?? [] }),
-    [outside],
-  )
   // Keys only: whether a peer is connected changes on every poll, and the map
   // should move when the set of peers changes rather than when one wakes up.
   const dialInInput = useMemo(
@@ -314,7 +303,6 @@ function Canvas({
         focus: f,
         counting: traffic.counting,
         rated: traffic.rated,
-        outside: outsideInput,
         dialIn: dialInInput,
         serviceDevices: new Set(services.keys()),
       })
@@ -328,7 +316,7 @@ function Canvas({
     const whole = at('detail', undefined)
     const d: Density = !whole.narrow && !focus && (whole.fits || expanded.size > 0) ? 'detail' : 'compact'
     return [d === 'detail' ? whole : at(d), d]
-  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated, outsideInput, dialInInput, services])
+  }, [tree, width, wanted, routerSize, expanded, focus, traffic.counting, traffic.rated, dialInInput, services])
 
   useEffect(() => {
     onDensity?.(density)
@@ -401,10 +389,6 @@ function Canvas({
         return <PickNode groups={item.groups} onFocus={onGroup} />
       case 'note':
         return <NoteNode note={item.note} filtering={tree.filtering} onCreateGroup={actions.onCreateGroup} />
-      case 'hop': {
-        const hop = outside?.hops.find((h) => `o:${h.key}` === item.key)
-        return hop ? <NextHopNode hop={hop} onSelect={actions.onSelect} /> : null
-      }
       case 'dialin': {
         const peer = dialIn?.peers.find((p) => `p:${p.name}` === item.key)
         return peer && dialIn

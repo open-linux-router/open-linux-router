@@ -39,7 +39,6 @@ import { WayMark } from '@/features/remote/way-mark'
 import type { DialInPeer } from '@/features/topology/dial-in'
 import type { Density, GroupVariant, Hidden } from '@/features/topology/layout'
 import type { MapGroup } from '@/features/topology/model'
-import type { Outside } from '@/features/topology/outside'
 import { magnitude, type Flow, type TrafficView } from '@/features/topology/traffic'
 import type { DeviceRow } from '@/lib/api-types'
 import type { DevicesGroup, Service } from '@/lib/config-types'
@@ -214,45 +213,6 @@ function dialInLabel(peer: DialInPeer): string {
     case 'never': return 'Never connected'
     case 'unknown': return 'Status unavailable'
   }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Observed default-route next hops                                            */
-/* -------------------------------------------------------------------------- */
-
-export function NextHopNode({ hop, onSelect }: { hop: Outside['hops'][number]; onSelect?: (device: DeviceRow) => void }) {
-  const device = hop.device
-  const open = device && onSelect ? () => onSelect(device) : undefined
-  const name = device?.name || device?.mac || (hop.routes[0].via ? 'Gateway' : 'Direct route')
-  const detail = hop.routes.map((r) => `IPv${r.family} ${r.via ?? `direct on ${hop.dev}`}${r.down ? ' (not responding)' : ''}`).join(' · ')
-  const title = hop.routes.map((r) => `IPv${r.family} default route ${r.via ? `via ${r.via}` : 'without a next-hop address'} on ${hop.dev} (metric ${r.metric})`).join('; ') +
-    (device ? `. Next hop matches ${name}.` : '. No device identified.')
-  return (
-    <Shell
-      onClick={open}
-      title={title}
-      className={cn(
-        'flex size-full min-w-0 items-center gap-3 rounded-2xl border bg-card pr-4 pl-2.5 text-left shadow-xs',
-        open && 'interactive-surface',
-        hop.down && 'border-destructive/50',
-        focusRing,
-      )}
-    >
-      {device ? (
-        <DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor}
-          vendorKey={device.vendor_key} online={device.online} size="sm" />
-      ) : (
-        <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-full',
-          hop.down ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground/75')}>
-          <Router className="size-4" aria-hidden />
-        </span>
-      )}
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-semibold">{name}</span>
-        <span className={cn('truncate font-mono text-xs', hop.down ? 'text-destructive' : 'text-muted-foreground')}>{detail}</span>
-      </span>
-    </Shell>
-  )
 }
 
 /* -------------------------------------------------------------------------- */

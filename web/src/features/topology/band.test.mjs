@@ -33,7 +33,7 @@ const input = (over = {}) => ({
   ...over,
 })
 
-const cards = (out) => out.items.filter((i) => i.kind === 'hop' || i.kind === 'dialin')
+const cards = (out) => out.items.filter((i) => i.kind === 'dialin')
 
 test('a dialed-in device sits above the router and joins it directly', () => {
   const out = withBand(below(), input({ dialIn: { peers: [{ key: 'phone' }] } }))
@@ -47,7 +47,7 @@ test('a dialed-in device sits above the router and joins it directly', () => {
   assert.equal(line.x1, out.router.x + out.router.w / 2, 'at the router')
 })
 
-test('nothing outside the router leaves the map exactly as it was', () => {
+test('no dialed-in device leaves the map exactly as it was', () => {
   const start = below()
   assert.equal(withBand(start, input()), start)
 })
@@ -66,19 +66,12 @@ test('each peer is its own card, and no two overlap', () => {
   }
 })
 
-test('the way out keeps the row, and a peer follows it side by side', () => {
-  const out = withBand(below(), input({
-    outside: { hops: [{ key: 'dev:eth0:192.168.1.1', down: true }] },
-    dialIn: { peers: [{ key: 'phone' }] },
-  }))
-  const hop = out.items.find((i) => i.kind === 'hop')
-  const peer = out.items.find((i) => i.kind === 'dialin')
-  assert.ok(hop.box.y + hop.box.h <= out.router.y)
-  assert.ok(peer.box.y + peer.box.h <= out.router.y)
-  assert.ok(hop.box.x + hop.box.w <= peer.box.x, 'the next hop is drawn first')
-  // A way out that is not answering is the only red thing in the band.
-  assert.equal(out.links.find((l) => l.key === 'l:o:dev:eth0:192.168.1.1').fault, true)
-  assert.equal(out.links.find((l) => l.key === 'l:p:phone').fault, false)
+test('everything above the router is a dialed-in device, one card each', () => {
+  // The default routes the kernel reports used to be cards up here as well.
+  // Nothing but a peer is, now: the map starts at the router for its own side.
+  const out = withBand(below(), input({ dialIn: { peers: [{ key: 'phone' }, { key: 'laptop' }] } }))
+  const above = out.items.filter((i) => i.box.y + i.box.h <= out.router.y)
+  assert.deepEqual(above.map((i) => i.kind), ['dialin', 'dialin'])
 })
 
 test('everything below drops by the height of the band, links included', () => {

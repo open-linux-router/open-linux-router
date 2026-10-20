@@ -9,22 +9,20 @@ import type { Item, Layout, LayoutInput } from './layout'
  * one starts it at the left edge where the router is, and every layout below it
  * only has to be moved down by its height. Nothing here reads the device tree.
  *
- * **Everything outside the router is in it.** Observed main-table next hops,
- * and the devices dialed in over WireGuard: both are boxes on the far side of
- * this router, and the band is the only place a box can join the router with a
- * line of its own. A card hung under the router beside a group, or on a row of
- * its own between them, would need the lines to those groups to run through it
- * or squeeze past it. Gateway policy exits stay off the map: an exit this box
- * chooses among is not a thing outside it.
- *
- * Each box in it is directly connected to this router: a next hop because that
- * is where traffic leaves, a dialed-in device because that is where it arrives.
+ * **Only what is on the far side of this router is in it**, which is the
+ * devices dialed in over WireGuard, each joined to the router by a line of its
+ * own. The observed default-route next hops used to be here too, one card
+ * apiece, and that was a row of boxes above the router saying what one line of
+ * Link's status says better — which interface, which family, which address —
+ * while pushing every group on the map a third of a screen down. So two
+ * default routes read as two more things in the network. Where traffic leaves
+ * is not its shape; the devices that reached it from outside are.
  */
 
-export const EXIT_H = 52
-const HOP_W = 240
+const CARD_H = 52
+const CARD_W = 240
 const BAND_ROW_GAP = 28
-const EXIT_DROP = 48
+const BAND_DROP = 48
 
 /** Line thickness, from a share of the heaviest sibling's traffic. */
 export const EDGE_MIN = 1.5
@@ -48,8 +46,6 @@ export interface Link {
   dashed?: boolean
   /** For links to groups set aside while another is focused. */
   faint?: boolean
-  /** For the line from a next hop that is not answering. */
-  fault?: boolean
 }
 
 export function chunk<T>(list: T[], size: number): T[][] {
@@ -65,7 +61,7 @@ export function chunk<T>(list: T[], size: number): T[][] {
  * are heading, rather than all from one point: from one point the thick ones
  * lie on top of each other for their first inch.
  */
-export function link(key: string, from: Box, to: Box, width: number, opts: { dashed?: boolean; faint?: boolean; fault?: boolean } = {}): Link {
+export function link(key: string, from: Box, to: Box, width: number, opts: { dashed?: boolean; faint?: boolean } = {}): Link {
   const px = from.x + from.w / 2
   const cx = to.x + to.w / 2
   const reach = Math.max(0, from.w / 2 - 16)
@@ -87,38 +83,39 @@ export function edgeWidth(weight: number, heaviest: number, rated: boolean) {
   return EDGE_MIN + (EDGE_MAX - EDGE_MIN) * Math.sqrt(Math.max(0, weight) / heaviest)
 }
 
-/** One box in the band over the router, before it has a place. */
-type BandNode = { kind: 'hop' | 'dialin'; key: string; w: number; h: number; down: boolean }
+/** One card in the band over the router, before it has a place. */
+type BandNode = { kind: 'dialin'; key: string; w: number; h: number }
 
 /**
  * Everything above the router, in rows, and everything else moved down to make
  * room. Done after the rest is laid out rather than inside each layout, because
  * it is the same band on every one of them.
  *
- * Only a next hop that is not answering is marked: a peer that is asleep, or
- * has never connected, is not a fault of the network, and its card says which
- * of the four states it is in.
+ * A band line is the thin one: a peer's card carries no traffic rate, and
+ * thickness here would be a measurement the map does not have — every line in
+ * this band used to be drawn at the widest one instead, which said nothing at
+ * all. A peer that is asleep, or has never connected, is not a fault of the
+ * network, and its card says which of the four states it is in.
  */
 export function withBand(below: Layout, input: LayoutInput): Layout {
   const A = input.width
   const gap = below.narrow ? 12 : 40
 
   const boxes: Omit<BandNode, 'w' | 'h'>[] = []
-  for (const hop of input.outside?.hops ?? []) boxes.push({ kind: 'hop', key: `o:${hop.key}`, down: hop.down })
-  for (const peer of input.dialIn?.peers ?? []) boxes.push({ kind: 'dialin', key: `p:${peer.key}`, down: false })
+  for (const peer of input.dialIn?.peers ?? []) boxes.push({ kind: 'dialin', key: `p:${peer.key}` })
 
   const rows: BandNode[][] = []
   if (boxes.length) {
-    const perRow = Math.max(1, Math.floor((A + gap) / (HOP_W + gap)))
+    const perRow = Math.max(1, Math.floor((A + gap) / (CARD_W + gap)))
     for (const row of chunk(boxes, perRow)) {
-      const w = Math.min(HOP_W, (A - (row.length - 1) * gap) / row.length)
-      rows.push(row.map((node) => ({ ...node, w, h: EXIT_H })))
+      const w = Math.min(CARD_W, (A - (row.length - 1) * gap) / row.length)
+      rows.push(row.map((node) => ({ ...node, w, h: CARD_H })))
     }
   }
   if (rows.length === 0) return below
 
   const heights = rows.map((row) => Math.max(...row.map((n) => n.h)))
-  const band = heights.reduce((a, b) => a + b, 0) + (rows.length - 1) * BAND_ROW_GAP + EXIT_DROP
+  const band = heights.reduce((a, b) => a + b, 0) + (rows.length - 1) * BAND_ROW_GAP + BAND_DROP
 
   const down = (b: Box): Box => ({ ...b, y: b.y + band })
   const router = down(below.router)
@@ -146,15 +143,13 @@ export function withBand(below: Layout, input: LayoutInput): Layout {
 
   for (const row of placed) {
     for (const { node, box } of row) {
-      items.push(node.kind === 'hop'
-        ? { kind: 'hop', key: node.key, box }
-        : { kind: 'dialin', key: node.key, box })
+      items.push({ kind: 'dialin', key: node.key, box })
     }
   }
 
   for (const row of placed) {
     for (const { node, box } of row) {
-      links.push(link(node.key, box, router, edgeWidth(1, 1, input.rated), { fault: node.down }))
+      links.push(link(node.key, box, router, EDGE_MIN))
     }
   }
 

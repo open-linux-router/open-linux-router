@@ -15,7 +15,6 @@ import { Label } from '@/components/ui/label'
 import { useGroupActions } from '@/features/devices/group-actions'
 import { useDeviceList, useDevicesConfig } from '@/features/devices/queries'
 import { useDhcpConfig, useDhcpStatus } from '@/features/dhcp/queries'
-import { useDialStatus } from '@/features/dial/queries'
 import { useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, serviceOf } from '@/features/dns/units'
 import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
@@ -28,7 +27,6 @@ import { FirstRun } from '@/features/setup/first-run'
 import { useRemoteStatus } from '@/features/remote/queries'
 import { buildDialIn } from '@/features/topology/dial-in'
 import { NetworkMap } from '@/features/topology/network-map'
-import { buildOutside } from '@/features/topology/outside'
 import { useTrafficView, type TrafficView } from '@/features/topology/traffic'
 import type { DhcpStatus, DnsStatus, GatewayLatency, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
 import { getToken } from '@/lib/api'
@@ -40,7 +38,8 @@ import { cn, formatBytes, formatRate } from '@/lib/utils'
  * This used to be two cards and a placeholder saying the rest arrived with link
  * and dial — which stayed on screen after three more modules shipped, so an
  * operator's first view under-described their own router and the most urgent
- * fact it held, a way out that had stopped responding, appeared nowhere.
+ * fact it held, a way out that had stopped responding, appeared nowhere. The
+ * faults below the cards are where that answer lives now.
  *
  * The order is what an operator asks in order: is anything wrong, how much is
  * this network doing, and what is on it. The answer to the first is the
@@ -85,8 +84,6 @@ export function OverviewPage() {
   const flows = useTrafficView(traffic.data, traffic.isError)
   const host = useHostMetrics()
   const publicAddresses = usePublicAddresses()
-  const dial = useDialStatus()
-  const outside = useMemo(() => buildOutside(dial.data, devices.data?.devices), [dial.data, devices.data])
   // The tunnel's own list, not a second reading of the kernel: a peer is not a
   // device and does not belong in `devices` (docs/remote-access.md §3.3), so the
   // map takes it from the module that owns it.
@@ -150,7 +147,6 @@ export function OverviewPage() {
           traffic={flows}
           assignments={gateway.data?.assignments}
           exits={gateway.data?.exits}
-          outside={outside}
           dialIn={dialIn}
           pools={dhcpConfig.data?.pools}
           pending={devices.isPending}

@@ -51,13 +51,15 @@ export type { Box, Link } from './band'
  * An earlier version drew more than one row inside one outline with a single
  * link into it, which put a box around boxes around lists.
  *
- * **Everything outside the router is above it.** Observed main-table next hops,
- * and the devices dialed in over WireGuard: both are boxes on the far side of
- * this router, and the band is the only place a box can join the router with a
- * line of its own. A card hung under the router beside a group, or on a row of
- * its own between them, would need the lines to those groups to run through it
- * or squeeze past it. Gateway policy exits stay off the map: an exit this box
- * chooses among is not a thing outside it.
+ * **Everything outside the router is above it.** The devices dialed in over
+ * WireGuard are boxes on the far side of this router, and the band is the only
+ * place a box can join the router with a line of its own. A card hung under the
+ * router beside a group, or on a row of its own between them, would need the
+ * lines to those groups to run through it or squeeze past it. Observed default
+ * routes are not boxes there: a next hop is one address on a line of Link's
+ * status, and drawing each one cost a row over the map while saying less than
+ * that line does. Gateway policy exits stay off the map for the same reason: an
+ * exit this box chooses among is not a thing outside it.
  */
 
 export type Density = 'compact' | 'detail'
@@ -159,7 +161,6 @@ export type Item =
       /** Present when the device is a row of a container's list rather than a card of its own. */
       row?: { first: boolean }
     }
-  | { kind: 'hop'; key: string; box: Box }
   | { kind: 'dialin'; key: string; box: Box }
   | {
       kind: 'more'
@@ -204,11 +205,6 @@ export interface Layout {
   rail?: Rail
 }
 
-/** The observed default-route next hops, not policy exits. */
-export interface OutsideInput {
-  hops: { key: string; down: boolean }[]
-}
-
 /**
  * The devices dialed in over WireGuard, keyed by name.
  *
@@ -231,9 +227,7 @@ export interface LayoutInput {
   focus?: string
   counting: boolean
   rated: boolean
-  /** Observed next hops above the router. */
-  outside?: OutsideInput
-  /** Peers of the tunnel, beside the next hops above the router. */
+  /** Peers of the tunnel, above the router. */
   dialIn?: DialInInput
   serviceDevices?: ReadonlySet<string>
 }
