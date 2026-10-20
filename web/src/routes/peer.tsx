@@ -193,11 +193,6 @@ export function WireguardPeerPage() {
         </div>
       </section>
 
-      <p className="text-sm text-muted-foreground">
-        What it sends home and whether it may dial in are set on the{' '}
-        <Link to="/access/wireguard" className="text-primary underline-offset-4 hover:underline">tunnel page</Link>.
-      </p>
-
       <Dialog open={choosing} onOpenChange={setChoosing}>
         <DialogContent className="max-h-[90svh] overflow-y-auto">
           <DialogHeader>
