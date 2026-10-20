@@ -461,6 +461,28 @@ function GroupMenu({ group, groups, actions }: { group: MapGroup; groups: Device
 /* -------------------------------------------------------------------------- */
 
 /**
+ * The air between a row's service tiles and the column that says the rate or
+ * when the device was last heard.
+ *
+ * Both are alignment columns: the tiles start at a fixed offset from the right
+ * edge so they line up down a group, and the label sits in a box of its own so
+ * rates line up too. A wide label ("16m ago") fills that box, so the offset has
+ * to leave room beyond it; without the gap the two met on the row where a
+ * device had a service but no live rate. See SERVICE_INSET for the sum.
+ */
+const SERVICE_GAP = 8
+
+/**
+ * Where the service tiles begin, in px from a row's right edge: the row's own
+ * `px-1`, the shell's `px-3`, the `w-12` label column, and SERVICE_GAP.
+ *
+ * Spelled out rather than folded into a class name because three of the terms
+ * are set elsewhere in this file; when one of them changes, this is the line
+ * that should stop adding up.
+ */
+const SERVICE_INSET = 4 + 12 + 48 + SERVICE_GAP
+
+/**
  * One device, at either density.
  *
  * Compact is an icon and a name — enough to see what is where, small enough
@@ -527,7 +549,7 @@ export function DeviceNode({
             <span className="truncate text-sm font-medium">{name}</span>
             {density === 'detail' && <Address device={device} />}
           </span>
-          {services?.length ? <span aria-hidden className="shrink-0" style={{ width: serviceWidth }} /> : null}
+          {services?.length ? <span aria-hidden className="shrink-0" style={{ width: serviceWidth + SERVICE_GAP }} /> : null}
           <span className="w-12 shrink-0 text-right text-xs text-muted-foreground tabular-nums whitespace-nowrap">
             {/* Away is said beside the dimmed name, so presence is never
                 colour alone — and a green dot on every row that is fine was
@@ -536,7 +558,7 @@ export function DeviceNode({
           </span>
         </Shell>
         <ServiceLinks services={services} domain={serviceDomain} domainKnown={serviceDomainKnown}
-          className="absolute inset-y-0 right-15" width={serviceWidth} compact />
+          className="absolute inset-y-0" inset={SERVICE_INSET} width={serviceWidth} compact />
       </div>
     )
   }
@@ -605,10 +627,23 @@ export function DeviceNode({
 }
 
 /** Links sit beside, not inside, the device detail button. */
-function ServiceLinks({ services, domain, domainKnown = true, className, width, compact = false }: { services?: Service[]; domain?: string; domainKnown?: boolean; className: string; width?: number; compact?: boolean }) {
+function ServiceLinks({ services, domain, domainKnown = true, className, width, inset, compact = false }: {
+  services?: Service[]
+  domain?: string
+  domainKnown?: boolean
+  className: string
+  width?: number
+  /**
+   * Distance from the right edge. Only the copy of a row's tiles, which is
+   * placed absolutely so it lines up across rows, passes this; the card copy
+   * sits in the flow.
+   */
+  inset?: number
+  compact?: boolean
+}) {
   if (!services?.length) return null
   return (
-    <span style={{ width }} className={cn('flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden', compact ? 'h-full' : 'h-8', className)}>
+    <span style={{ width, right: inset }} className={cn('flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden', compact ? 'h-full' : 'h-8', className)}>
       {services.slice(0, 8).map((service) => {
         const label = domain ? `${service.name}.${domain}` : service.name
         // No version until the suffix that goes into it is known. The suffix
