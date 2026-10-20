@@ -1,4 +1,4 @@
-import { TOOL_DEFINITIONS } from '@/features/tools/catalog'
+import { TOOL_ARTWORK, TOOL_DEFINITIONS } from '@/features/tools/catalog'
 
 /**
  * The Advanced directory.
@@ -10,12 +10,15 @@ import { TOOL_DEFINITIONS } from '@/features/tools/catalog'
  *
  * A tile is a link and one short name. The letter is the mark — these are OLR's
  * own features, so there is no brand to wear — and the hue is the group's, which
- * is why `hue` sits on the group rather than on each tile.
+ * is why `hue` sits on the group rather than on each tile. A diagnostic that
+ * names an upstream tool (NextTrace) wears that project's own artwork instead.
  */
 export interface AdvancedTile {
   slug: string
   name: string
   letter: string
+  /** The upstream project's app icon, for a tile that names that project. */
+  artwork?: string
   /** One sentence for the tooltip; the name and letter are the tile. */
   description: string
   to: string
@@ -96,6 +99,7 @@ export const ADVANCED_GROUPS: AdvancedGroup[] = [
       slug: `tool:${tool.slug}`,
       name: tool.tileLabel,
       letter: tool.letter,
+      artwork: TOOL_ARTWORK[tool.slug],
       description: tool.description,
       to: `/tools/${tool.slug}`,
     })),

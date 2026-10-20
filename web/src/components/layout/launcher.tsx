@@ -39,19 +39,26 @@ export type LauncherState = { text: string }
  * What sits on the 64px backing.
  *
  * Bundled project artwork stays on white so brand colours survive both themes.
- * A protocol or an OLR feature has no mark to borrow, so it wears its initial
- * on a tinted tile — the hue is what keeps two tiles sharing an initial apart.
- * The icon variant is the fallback for a directory entry with neither.
+ * Artwork that already carries its own rounded background fills the tile
+ * instead of sitting inside a second one. A protocol or an OLR feature has no
+ * mark to borrow, so it wears its initial on a tinted tile — the hue is what
+ * keeps two tiles sharing an initial apart. The icon variant is the fallback
+ * for a directory entry with neither.
  */
 export type LauncherMark =
   | { kind: 'logo'; src: string }
+  | { kind: 'app-icon'; src: string }
   | { kind: 'letter'; letter: string; hue: number }
   | { kind: 'icon'; children: React.ReactNode }
 
+// Each variant owns its whole surface: a logo needs white behind it, and an
+// app icon brings its own background, so it is neither white-backed nor padded
+// away from the tile edge.
 const MARK_BACKING = {
-  logo: 'bg-white group-hover:bg-accent group-active:bg-accent',
-  letter: 'text-white group-hover:brightness-110 group-active:brightness-95',
-  icon: 'bg-accent/60 text-primary group-hover:bg-accent group-active:bg-accent',
+  logo: 'bg-white p-3 group-hover:bg-accent group-active:bg-accent',
+  'app-icon': 'overflow-hidden group-hover:brightness-110 group-active:brightness-95',
+  letter: 'p-3 text-white group-hover:brightness-110 group-active:brightness-95',
+  icon: 'p-3 bg-accent/60 text-primary group-hover:bg-accent group-active:bg-accent',
 }
 
 export function LauncherTile({
@@ -72,7 +79,10 @@ export function LauncherTile({
   href?: string
 }) {
   const summary = notes?.[0]
-  const label = `${name} · ${summary?.text ?? 'Not integrated'}`
+  // A tile with an OLR page is integrated even when it has nothing live to
+  // report; only a tile that leaves the app is an external setup.
+  const external = !to
+  const label = summary ? `${name} · ${summary.text}` : external ? `${name} · Not integrated` : name
   return (
     <Tooltip>
       <TooltipTrigger
@@ -81,14 +91,16 @@ export function LauncherTile({
         className="group flex min-w-0 flex-col items-center gap-2 rounded-xl px-0 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background"
       >
         <span
-          className={cn('flex size-16 shrink-0 items-center justify-center rounded-2xl p-3 transition duration-150', MARK_BACKING[mark.kind])}
+          className={cn('flex size-16 shrink-0 items-center justify-center rounded-2xl transition duration-150', MARK_BACKING[mark.kind])}
           style={mark.kind === 'letter' ? { background: `oklch(0.52 0.12 ${mark.hue})` } : undefined}
         >
-          {mark.kind === 'logo'
-            ? <img src={mark.src} alt="" className="max-h-full max-w-full object-contain" />
-            : mark.kind === 'letter'
-              ? <span aria-hidden className="text-[28px] leading-none font-semibold tracking-tight">{mark.letter}</span>
-              : mark.children}
+          {mark.kind === 'app-icon'
+            ? <img src={mark.src} alt="" className="size-full object-cover" />
+            : mark.kind === 'logo'
+              ? <img src={mark.src} alt="" className="max-h-full max-w-full object-contain" />
+              : mark.kind === 'letter'
+                ? <span aria-hidden className="text-[28px] leading-none font-semibold tracking-tight">{mark.letter}</span>
+                : mark.children}
         </span>
         {/* One line, always: a name that wraps turns one row of tiles into a
             ragged block and makes the next group's heading look misplaced. */}
@@ -96,7 +108,9 @@ export function LauncherTile({
       </TooltipTrigger>
       <TooltipContent className="block space-y-2 text-sm leading-relaxed">
         <p>{description}</p>
-        {notes?.length ? notes.map((note, index) => <p key={index}>{note.text}</p>) : <p>Not integrated · External setup</p>}
+        {notes?.length
+          ? notes.map((note, index) => <p key={index}>{note.text}</p>)
+          : external ? <p>Not integrated · External setup</p> : null}
       </TooltipContent>
     </Tooltip>
   )

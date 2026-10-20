@@ -113,7 +113,13 @@ Advanced is the same launcher, with three grids headed “System”, “Services
 (firewall, administrator access, port forwarding); Services holds the background
 jobs it runs for the network (Dynamic DNS, IPTV multicast); Diagnostics holds the
 five tools. Each tile wears a capital initial on a tinted tile, and the tiles of
-one group share a single hue, so the tint groups them without a legend.
+one group share a single hue, so the tint groups them without a legend. The one
+exception is a diagnostic that names an upstream tool: it wears that tool's own
+app icon. NextTrace's artwork carries its own rounded background, so it fills
+the 64px tile instead of sitting inside a white or tinted one. Keep such artwork
+bundled under `web/public/tool-logos` with its provenance recorded there, and
+never borrow the mark of a protocol or of a service a test merely contacts — a
+speed test keeps its initial, because the measurement is OLR's, not Ookla's.
 
 A tile is a mark and one line of name. No name wraps and nothing prints under
 it: a row of two-line labels makes the next group's heading look misplaced, and

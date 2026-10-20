@@ -1,11 +1,13 @@
 # Traceroute
 
 The traceroute page runs a finite traditional traceroute from the router with
-[NextTrace](https://github.com/nxtrace/NTrace-core). Install the `nexttrace`
-command on the router (for Debian, use the upstream nexttrace-debs repository;
-other distributions can use the upstream release or build from source). OLR
-does not download or install it automatically. The daemon must have permission
-to send the probes; the packaged `olrd` service runs as root.
+[NextTrace](https://github.com/nxtrace/NTrace-core). The Advanced tile takes the
+engine's name and its app icon, while the page keeps the operation's name.
+Install the `nexttrace` command on the router (for Debian, use the upstream
+nexttrace-debs repository; other distributions can use the upstream release or
+build from source). OLR does not download or install it automatically. The
+daemon must have permission to send the probes; the packaged `olrd` service runs
+as root.
 
 The `/api/tools/traceroute` POST endpoint accepts `{"target":"example.com"}`.
 Targets must be a domain or IP literal, not a URL or command line. It runs at

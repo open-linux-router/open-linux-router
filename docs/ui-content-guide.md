@@ -347,6 +347,9 @@ Its contract is:
   Place a feature by its charter, not by which module happens to own it.
 - One tile per destination, with a capital initial on a 64px tinted tile. The
   tiles of a group share one hue; the letter carries identity.
+- A tile that names an upstream tool takes that project's name and its app icon
+  (NextTrace opens Traceroute); a tile that is a protocol or OLR's own
+  measurement keeps its initial.
 - One line of name below the tile, never wrapped, and nothing printed under it.
   Keep the tile's name short enough for one line; the page behind it may carry
   the longer name (Admin access opens Administrator access).

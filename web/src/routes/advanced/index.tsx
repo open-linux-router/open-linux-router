@@ -49,7 +49,9 @@ export function AdvancedPage() {
               key={tile.slug}
               name={tile.name}
               description={tile.description}
-              mark={{ kind: 'letter', letter: tile.letter, hue: group.hue }}
+              mark={tile.artwork
+                ? { kind: 'app-icon', src: tile.artwork }
+                : { kind: 'letter', letter: tile.letter, hue: group.hue }}
               notes={tile.state ? [states[tile.state]] : undefined}
               to={tile.to}
             />
