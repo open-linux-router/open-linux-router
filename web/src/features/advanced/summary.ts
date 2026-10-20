@@ -1,6 +1,6 @@
 import type { AccessView } from '@/lib/api'
-import type { DialStatus, ForwardsStatus } from '@/lib/api-types'
-import type { DialConfig, GatewayConfig } from '@/lib/config-types'
+import type { DialStatus, ForwardsStatus, IngressStatus } from '@/lib/api-types'
+import type { DialConfig, GatewayConfig, IngressConfig } from '@/lib/config-types'
 import type { IptvConfig, IptvStatus } from '@/features/iptv/queries'
 
 /**
@@ -65,6 +65,19 @@ export function iptvSummary(config: Snapshot<IptvConfig>, status: Snapshot<IptvS
   if (observedStatus.problem) return attention
   if (!observedStatus.service.active) return { text: 'Stopped', attention: true }
   return { text: `On · ${config.data!.networks?.join(', ') || 'No LAN'}` }
+}
+
+export function ingressSummary(config: Snapshot<IngressConfig>, status: Snapshot<IngressStatus>): Summary {
+  const pending = missing(config)
+  if (pending) return pending
+  if (!config.data!.enabled) return off
+  const observed = missing(status)
+  if (observed) return observed
+  const s = status.data!
+  if (s.service_error || !s.service || s.certificate_error || s.drift_error) return unavailable
+  if (!s.enabled || !s.service.active || s.binary_error || s.drifted || s.certificate.renewal_overdue || s.certificate_warnings?.length || (s.certificate.found && (s.certificate.expires_in_days ?? 0) <= 0)) return attention
+  if (!s.certificate.found) return { text: 'Waiting for certificate' }
+  return { text: count(config.data!.services?.length ?? 0, 'address', 'addresses') }
 }
 
 export function adminAccessSummary(access: Snapshot<AccessView>): Summary {

@@ -21,10 +21,10 @@ import { AccessPage } from '@/routes/access'
 import { SocksOutPage } from '@/routes/access/socks-out'
 import { AdministratorAccessPage } from '@/routes/advanced/access'
 import { AdvancedPage } from '@/routes/advanced/index'
+import { CaddyPage } from '@/routes/advanced/caddy'
 import { DdnsPage } from '@/routes/advanced/ddns'
 import { FilteringPage } from '@/routes/advanced/filtering'
 import { ForwardsPage } from '@/routes/advanced/forwards'
-import { IngressPage } from '@/routes/access/ingress'
 import { IptvPage } from '@/routes/advanced/iptv'
 import { RemotePage } from '@/routes/access/remote'
 import { OverviewPage } from '@/routes/overview'
@@ -94,7 +94,7 @@ export function App() {
           <Route path="access/tunnelbroker" element={<TunnelBrokerPage />} />
           <Route path="access/wireguard" element={<RemotePage way="wireguard" />} />
           <Route path="access/socks-server" element={<RemotePage way="socks-server" />} />
-          <Route path="access/ingress" element={<IngressPage />} />
+          <Route path="access/ingress" element={<RedirectWithState to="/advanced/caddy" />} />
           <Route path="access/forwards" element={<RedirectWithState to="/advanced/forwards" />} />
           <Route path="access/filtering" element={<RedirectWithState to="/advanced/filtering" />} />
           <Route path="tools" element={<RedirectWithState to="/advanced" />} />
@@ -106,12 +106,12 @@ export function App() {
           <Route path="credits" element={<CreditsPage />} />
           <Route path="advanced">
             <Route index element={<AdvancedPage />} />
+            <Route path="caddy" element={<CaddyPage />} />
             <Route path="forwards" element={<ForwardsPage />} />
             <Route path="filtering" element={<FilteringPage />} />
             <Route path="access" element={<AdministratorAccessPage />} />
             <Route path="ddns" element={<DdnsPage />} />
             <Route path="remote" element={<RedirectWithState to="/access/wireguard" />} />
-            <Route path="ingress" element={<RedirectWithState to="/access/ingress" />} />
             <Route path="iptv" element={<IptvPage />} />
           </Route>
 
@@ -129,7 +129,8 @@ export function App() {
           <Route path="gateway/filtering" element={<RedirectWithState to="/advanced/filtering" />} />
           <Route path="remote" element={<RedirectWithState to="/access/wireguard" />} />
           <Route path="access/remote" element={<RedirectWithState to="/access/wireguard" />} />
-          <Route path="ingress" element={<RedirectWithState to="/access/ingress" />} />
+          <Route path="ingress" element={<RedirectWithState to="/advanced/caddy" />} />
+          <Route path="advanced/ingress" element={<RedirectWithState to="/advanced/caddy" />} />
           <Route path="devices" element={<Navigate to="/" replace />} />
           <Route path="dhcp/interfaces" element={<Navigate to="/gateway#interfaces" replace />} />
           <Route path="dhcp/*" element={<LegacySectionRedirect />} />

@@ -16,7 +16,7 @@ import { servicesOf } from '@/features/topology/services'
  * on the address and nothing else.
  *
  * That is also why the add action takes its own link: a device prefills
- * `/access/ingress?device=<mac>`, a peer `?host=<address>`, and the dialog lands
+ * `/advanced/caddy?device=<mac>`, a peer `?host=<address>`, and the dialog lands
  * on whichever target form the service will actually have.
  */
 export function DeviceServices({

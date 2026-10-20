@@ -2,11 +2,12 @@ import { Launcher, LauncherSection, LauncherTile } from '@/components/layout/lau
 import type { LauncherState } from '@/components/layout/launcher'
 import { ADVANCED_GROUPS } from '@/features/advanced/catalog'
 import type { AdvancedTile } from '@/features/advanced/catalog'
-import { adminAccessSummary, ddnsSummary, forwardsSummary, iptvSummary, loading, unavailable } from '@/features/advanced/summary'
+import { adminAccessSummary, ddnsSummary, forwardsSummary, ingressSummary, iptvSummary, loading, unavailable } from '@/features/advanced/summary'
 import { useDialConfig, useDialStatus } from '@/features/dial/queries'
 import { useFirewallStatus } from '@/features/firewall/queries'
 import { firewallState } from '@/features/firewall/summary'
 import { useGatewayConfig } from '@/features/gateway/queries'
+import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
 import { useIptvConfig, useIptvStatus } from '@/features/iptv/queries'
 import { useForwardsStatus } from '@/features/nat/queries'
 import { useAdminAccess } from '@/features/system/queries'
@@ -28,6 +29,8 @@ export function AdvancedPage() {
   const dialStatus = useDialStatus()
   const iptv = useIptvConfig()
   const iptvStatus = useIptvStatus()
+  const ingress = useIngressConfig()
+  const ingressStatus = useIngressStatus()
   const admin = useAdminAccess()
 
   const states: Record<NonNullable<AdvancedTile['state']>, LauncherState> = {
@@ -37,6 +40,7 @@ export function AdvancedPage() {
     forwards: forwardsSummary(gateway, forwards),
     ddns: ddnsSummary(dial, dialStatus),
     iptv: iptvSummary(iptv, iptvStatus),
+    ingress: ingressSummary(ingress, ingressStatus),
     admin: adminAccessSummary(admin),
   }
 

@@ -461,7 +461,7 @@ historical cells retain their traffic fills. Honor prefers-reduced-motion in the
 
 Review Overview; device and group details; Gateway and interface details; exits,
 usage and unmanaged settings; every DNS and DHCP detail/settings page; native
-Firewall; Access and SOCKS5, remote and ingress; Advanced with its port
+Firewall; Access and SOCKS5, remote and WireGuard; Advanced with its Caddy, port
 forwarding, external filtering, DDNS, IPTV, administrator access and all five
 diagnostic pages; Credits; not-found; token/password sign-in; initial setup and
 first-run states.

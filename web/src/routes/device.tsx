@@ -33,7 +33,7 @@ export function DevicePage() {
           mac={device.mac}
           name={device.name}
           addresses={[device.fixed_ip ?? '', ...(device.ips ?? [])]}
-          add={`/access/ingress?device=${encodeURIComponent(device.mac)}`}
+          add={`/advanced/caddy?device=${encodeURIComponent(device.mac)}`}
         />
       } total={<span className="inline-flex flex-wrap justify-end gap-3 tabular-nums" title="Traffic through this router since counters were reset">
         <span className="inline-flex items-center gap-0.5" aria-label="Download total"><span aria-hidden className="text-base font-normal text-muted-foreground">↓</span><MetricValue value={flow.counting ? formatBytes(usage?.down ?? 0) : null} /></span>

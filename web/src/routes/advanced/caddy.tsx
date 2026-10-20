@@ -42,7 +42,7 @@ import { useIngressApply } from '@/features/ingress/use-apply'
 import type { IngressStatus } from '@/lib/api-types'
 import type { Service } from '@/lib/config-types'
 
-export function IngressPage() {
+export function CaddyPage() {
   const config = useIngressConfig()
   const status = useIngressStatus()
   const applier = useIngressApply()
@@ -65,10 +65,10 @@ export function IngressPage() {
   const [editing, setEditing] = useState<Service | null>(null)
   const [cert, setCert] = useState(false)
 
-  if (config.isPending) return <SubPage section="/access" slug="ingress"><PageSkeleton /></SubPage>
+  if (config.isPending) return <SubPage section="/advanced" slug="caddy"><PageSkeleton /></SubPage>
   if (config.isError) {
     return (
-      <SubPage section="/access" slug="ingress"><Alert variant="destructive">
+      <SubPage section="/advanced" slug="caddy"><Alert variant="destructive">
         <AlertTriangle />
         <AlertTitle>Could not load the published services</AlertTitle>
         <AlertDescription>{(config.error as Error).message}</AlertDescription>
@@ -82,7 +82,7 @@ export function IngressPage() {
   const change = (c: IngressChange) => applier.submit(c)
 
   return (
-    <SubPage section="/access" slug="ingress">
+    <SubPage section="/advanced" slug="caddy">
       {!!status.data?.problems?.length && (
         <Alert>
           <AlertTriangle />

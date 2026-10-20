@@ -180,7 +180,7 @@ export function WireguardPeerPage() {
             // no MAC to reference and no reservation to require
             // (docs/ingress.md §1.2, docs/remote-access.md §3.3).
             <DeviceServices addresses={peer.address ? [peer.address] : []} add={
-              peer.address ? `/access/ingress?host=${encodeURIComponent(peer.address)}` : '/access/ingress'
+              peer.address ? `/advanced/caddy?host=${encodeURIComponent(peer.address)}` : '/advanced/caddy'
             } />
           } />
           <Usage flow={flow} usage={usage} trafficFailed={traffic.isError} />

@@ -23,7 +23,7 @@ export interface AdvancedTile {
   description: string
   to: string
   /** Which live answer the tile shows under its name. Absent when it has none. */
-  state?: 'firewall' | 'forwards' | 'ddns' | 'iptv' | 'admin'
+  state?: 'firewall' | 'forwards' | 'ddns' | 'iptv' | 'admin' | 'ingress'
 }
 
 export interface AdvancedGroup {
@@ -73,6 +73,14 @@ export const ADVANCED_GROUPS: AdvancedGroup[] = [
     title: 'Services',
     hue: 190,
     tiles: [
+      {
+        slug: 'caddy',
+        name: 'Caddy',
+        letter: 'C',
+        description: 'Publish a service on your own domain over HTTPS.',
+        to: '/advanced/caddy',
+        state: 'ingress',
+      },
       {
         slug: 'ddns',
         name: 'Dynamic DNS',

@@ -30,16 +30,17 @@ import type { LucideIcon } from 'lucide-react'
  * Access is the directory of remote-access technologies; configuration stays
  * with its module. Advanced is the low-level plumbing and the machine itself:
  * System (firewall, the way in to configure it, port forwarding), Services
- * (Dynamic DNS, multicast) and Diagnostics (the tools). Firewall and Tools keep
- * their URLs; Tools is flattened into the directory, its detail pages remain.
+ * (Caddy, Dynamic DNS, multicast) and Diagnostics (the tools). Firewall and
+ * Tools keep their URLs; Tools is flattened into the directory, its detail
+ * pages remain.
  *
  * Devices is absent because it is not a section: the device list is the body of
  * the overview. Filing it under DHCP was considered and rejected — the
  * statically-addressed printer has never held a lease, and would have lived on
  * a page named for the protocol that has never seen it.
  *
- * Publishing is named by its purpose in the UI. The ingress slug and CLI
- * module name remain stable, so operator documentation still maps to it.
+ * Caddy is named for the proxy it runs, which is what an operator troubleshoots;
+ * the module, the config field and the CLI still say `ingress`.
  */
 export interface SettingGroup {
   /** The last segment of the URL: /gateway/dns/blocking. */
@@ -206,11 +207,6 @@ export const SECTIONS: Section[] = [
         label: 'External SOCKS5 proxy',
         blurb: '',
       },
-      {
-        slug: 'ingress',
-        label: 'Publish web services',
-        blurb: 'Published services still need their own access controls.',
-      },
     ],
   },
   {
@@ -249,6 +245,13 @@ export const SECTIONS: Section[] = [
       },
       { slug: 'ddns', label: 'Dynamic DNS', blurb: '' },
       { slug: 'iptv', label: 'IPTV multicast', blurb: '' },
+      {
+        slug: 'caddy',
+        label: 'Caddy',
+        // The module and the CLI call this `ingress`; the page wears the proxy's
+        // name because that is what an operator is running here.
+        blurb: 'Publish a service on your own domain. Published addresses still need their own access controls.',
+      },
     ],
   },
 ]

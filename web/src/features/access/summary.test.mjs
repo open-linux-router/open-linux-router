@@ -5,7 +5,7 @@ import ts from 'typescript'
 
 const source = readFileSync(new URL('./summary.ts', import.meta.url), 'utf8')
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText
-const { gatewaySummary, socksOutSummary, remoteSummary, ingressSummary, systemSummary, tunnelBrokerSummary } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`)
+const { gatewaySummary, socksOutSummary, remoteSummary, systemSummary, tunnelBrokerSummary } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`)
 const snapshot = (data, isError = false) => ({ data, isError })
 const unavailable = { text: 'Status unavailable', attention: true }
 const attention = { text: 'Needs attention', attention: true }
@@ -72,16 +72,4 @@ test('ways out excludes blocking destinations and reports failed probes or unkno
   assert.equal(gatewaySummary(config, snapshot(status)).text, '2 ways out')
   assert.deepEqual(gatewaySummary(config, snapshot({ ...status, known: false })), unavailable)
   assert.deepEqual(gatewaySummary(config, snapshot({ ...status, exits: [{ probed: true, up: false }] })), attention)
-})
-
-test('publishing distinguishes certificate provisioning, renewal failure and service failure', () => {
-  const config = snapshot({ enabled: true, services: [{ name: 'nas' }] })
-  const status = { enabled: true, service: { active: true }, certificate: { found: true, expires_in_days: 60 } }
-  assert.equal(ingressSummary(config, snapshot(status)).text, '1 address')
-  assert.equal(ingressSummary(config, snapshot({ ...status, certificate: { found: false } })).text, 'Waiting for certificate')
-  for (const certificate of [{ found: true, expires_in_days: 0 }, { found: true, expires_in_days: 20, renewal_overdue: true }]) {
-    assert.deepEqual(ingressSummary(config, snapshot({ ...status, certificate })), attention)
-  }
-  assert.deepEqual(ingressSummary(config, snapshot({ ...status, service: { active: false } })), attention)
-  assert.deepEqual(ingressSummary(config, snapshot({ ...status, service: undefined, service_error: 'no D-Bus' })), unavailable)
 })

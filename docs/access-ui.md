@@ -54,9 +54,10 @@ Ways in express either joining the network, borrowing its internet access or
 publishing a service. Those intents share a directory, not permissions or a
 universal configuration form. Credentials and exposure remain in their own
 workflows. The directory references each technology once, with a separate tile
-per direction where it has multiple configuration owners. The HTTPS ingress view
-(`/access/ingress`), which publishes a service by domain name, is reached from a
-device's service action rather than from the directory.
+per direction where it has multiple configuration owners. Publishing a service
+by domain name is not in this directory: it is Advanced → Services → Caddy
+(`/advanced/caddy`), reached from the Advanced directory or from a device's
+service action. The old `/access/ingress` address redirects there.
 
 Former Gateway URLs and Advanced addresses redirect while preserving query
 parameters and fragments. There is no combined remote access page: the old
@@ -72,6 +73,21 @@ the external proxy. Protocol settings and configuration apply paths remain on
 their respective pages.
 
 ## Validation
+
+Caddy-directory revision: publishing moved out of Access entirely, to Advanced →
+Services → Caddy (`/advanced/caddy`), and `/access/ingress`, `/advanced/ingress`
+and `/ingress` redirect there with their query string and fragment intact. The
+page keeps its device-row entry points and its live "addresses / certificate"
+answer on the tile. Node 24 lint (27 existing warnings, 0 errors), the production
+build, all 56 UI tests and the interface-rate checks pass. A headless browser
+against a scratch daemon verifies the Services grid carries a Caddy tile whose
+link and accessible name are `/advanced/caddy` and `Caddy · Off`, that all three
+former addresses land on `/advanced/caddy` (including `?device=`), that Access no
+longer offers the page, and that the document does not overflow at a true 375-pixel
+viewport (scrollWidth 375). Screenshots at 1440 and 375 in light and dark themes:
+`/tmp/olr-caddy-review`. Linux-targeted `go vet` passes, and `go test ./...` passes
+except `TestCloudflareResultAndScore`, which fails identically on unmodified
+`main`. No live router settings were changed.
 
 Advanced-directory revision: port forwarding, external filtering and
 administrator access left this section for Advanced; the directory is the

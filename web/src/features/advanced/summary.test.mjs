@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { adminAccessSummary, ddnsSummary, forwardsSummary, iptvSummary, loading, unavailable } from './summary.ts'
+import { adminAccessSummary, ddnsSummary, forwardsSummary, ingressSummary, iptvSummary, loading, unavailable } from './summary.ts'
 
 const snapshot = (data, isError = false) => ({ data, isError })
 const attention = { text: 'Needs attention', attention: true }
@@ -31,6 +31,18 @@ test('IPTV separates saved intent, a stopped proxy and a provider problem', () =
   assert.deepEqual(iptvSummary(on, snapshot({ service: { active: false } })), { text: 'Stopped', attention: true })
   assert.deepEqual(iptvSummary(on, snapshot({ service: { active: true }, problem: 'no upstream' })), attention)
   assert.deepEqual(iptvSummary(on, snapshot(undefined, true)), unavailable)
+})
+
+test('publishing distinguishes certificate provisioning, renewal failure and service failure', () => {
+  const config = snapshot({ enabled: true, services: [{ name: 'nas' }] })
+  const status = { enabled: true, service: { active: true }, certificate: { found: true, expires_in_days: 60 } }
+  assert.equal(ingressSummary(config, snapshot(status)).text, '1 address')
+  assert.equal(ingressSummary(config, snapshot({ ...status, certificate: { found: false } })).text, 'Waiting for certificate')
+  for (const certificate of [{ found: true, expires_in_days: 0 }, { found: true, expires_in_days: 20, renewal_overdue: true }]) {
+    assert.deepEqual(ingressSummary(config, snapshot({ ...status, certificate })), attention)
+  }
+  assert.deepEqual(ingressSummary(config, snapshot({ ...status, service: { active: false } })), attention)
+  assert.deepEqual(ingressSummary(config, snapshot({ ...status, service: undefined, service_error: 'no D-Bus' })), unavailable)
 })
 
 test('administrator access reports the password it has, not a service state', () => {
