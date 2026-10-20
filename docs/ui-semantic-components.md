@@ -81,8 +81,10 @@ the medium heading scale.
 undefined value displays an accessible unavailable dash without a unit. Keep
 observed zero as zero. PropertyRow children supply any actual editing controls.
 
-ListRow's `trailingTone="value"` emphasizes a setting's answer and subdues its
-label. The default `muted` variant remains for auxiliary metadata.
+ListRow titles share one treatment — 14px foreground text — so a list stays
+readable when only some rows have a value. `trailingTone="value"` carries the
+emphasis instead: the setting's answer is medium weight in the foreground. The
+default `muted` variant remains for auxiliary metadata.
 
 ## Surface and interaction contract
 
