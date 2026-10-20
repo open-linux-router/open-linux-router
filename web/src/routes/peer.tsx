@@ -169,11 +169,6 @@ export function WireguardPeerPage() {
               {peer.display_name || peer.name}
             </button>
           )}
-          keyName={peer.display_name && (
-            <span className="pointer-events-auto font-mono text-xs text-muted-foreground" title="The name the address bar and every command use">
-              {peer.name}
-            </span>
-          )}
           status={<PeerBadge peer={peer} />}
         />
 
@@ -225,19 +220,27 @@ export function WireguardPeerPage() {
 /**
  * What the tunnel knows, which is the whole of what can be said about a peer.
  *
+ * The name leads, because it is the key: the address bar, every command and
+ * `wg show` all use it, while the title above may show a friendlier label that
+ * hides it. It is a fact in the table rather than a chip beside the title, the
+ * same place the device page puts its hardware address.
+ *
  * The public key is on screen rather than hidden: it is not a secret — it is in
  * every configuration this router has handed out — and it is what matches this
  * page against `wg show` on the box, or against what the device itself shows.
  *
- * "Last heard" is the handshake, and it is called what the device page calls its
- * own last sighting rather than "Handshake": the two pages answer the same
- * question with the same row, and the tunnel's word for it is in the tooltip
- * where a `wg show` reader will look for it. The badge above answers whether it
- * is connected; this answers exactly when, which is the number to compare
- * against the router's clock when something is subtly wrong.
+ * "Last heard" is the handshake, and it is called "Last heard" rather than
+ * "Handshake" for the reader who came from a device list, where that is the
+ * column they saw. The tunnel's word for it is in the tooltip, where a
+ * `wg show` reader will look for it. The badge above answers whether it is
+ * connected; this answers exactly when, which is the number to compare against
+ * the router's clock when something is subtly wrong.
  */
 function Facts({ peer, status }: { peer: RemotePeer; status?: RemoteStatus }) {
   return <dl className="min-w-0 text-sm">
+    <DeviceSettingRow label="Name" title="The name the address bar and every command use">
+      <TechnicalValue>{peer.name}</TechnicalValue>
+    </DeviceSettingRow>
     <DeviceSettingRow label="Address">
       {peer.address ? <TechnicalValue>{peer.address}</TechnicalValue> : '—'}
     </DeviceSettingRow>

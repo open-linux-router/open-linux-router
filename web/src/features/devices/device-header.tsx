@@ -14,20 +14,19 @@ import { Heading } from '@/components/ui/heading'
  *
  * What is *not* shared is as deliberate. A name is the only editable thing here,
  * and both pages store it in a different place — `devices` in olr.json, `remote`
- * on the peer entry — so each page keeps its own editor and passes it in. The
- * same goes for what follows the name:
+ * on the peer entry — so each page keeps its own editor and passes it in. What
+ * follows the name is `status`, and only one page has evidence for one: a peer's
+ * connection state is a fact about the tunnel (`PersistentKeepalive = 25` in
+ * every configuration this router renders means a connected peer handshakes at
+ * least every two minutes, so "no handshake for three minutes" really is "not
+ * connected"), while a device at home has no equivalent — its lease outlives its
+ * presence by hours and the neighbour table keeps a STALE entry looking complete
+ * — so it gets no status at all. See docs/ui-content-guide.md.
  *
- *   - `keyName` is the machine key — the MAC, or the peer's configured name —
- *     shown only when the label hides it. The rule is one rule for both pages:
- *     a name you gave the device is not a name the network answers to.
- *   - `status` is where the two pages part company. A peer's connection state is
- *     a fact about the tunnel: `PersistentKeepalive = 25` in every configuration
- *     this router renders means a connected peer handshakes at least every two
- *     minutes, so "no handshake for three minutes" really is "not connected". A
- *     device at home has no equivalent — its lease outlives its presence by
- *     hours and the neighbour table keeps a STALE entry looking complete — so it
- *     gets no status at all, and reports when it was last heard instead. See
- *     docs/ui-content-guide.md.
+ * The key each page is addressed by — the MAC, or the peer's configured name —
+ * is not drawn here. Both pages put it in their facts table, where it is a row
+ * like any other identity, rather than a chip that only appears when the title
+ * happens to hide it.
  */
 export function DeviceHeader({
   activity,
@@ -35,7 +34,6 @@ export function DeviceHeader({
   onPicture,
   pictureBusy,
   title,
-  keyName,
   status,
 }: {
   /** The traffic matrix, drawn behind everything else. */
@@ -46,8 +44,6 @@ export function DeviceHeader({
   pictureBusy?: boolean
   /** The name, either a button or the field that replaces it. */
   title: ReactNode
-  /** The key the name hides, when it hides one. */
-  keyName?: ReactNode
   /** A connection state, for a page that has evidence for one. */
   status?: ReactNode
 }) {
@@ -73,7 +69,6 @@ export function DeviceHeader({
           <Heading as="h1" size="lg" className="pointer-events-auto min-w-0 max-w-full [overflow-wrap:anywhere]">
             {title}
           </Heading>
-          {keyName}
           {status}
         </div>
       </div>

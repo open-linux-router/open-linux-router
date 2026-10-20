@@ -161,26 +161,28 @@ Devices without a reserved name/address prefill their observed host instead.
 Group is a tag that opens its edit dialog.
 Compact Uplink and Priority segmented selectors lead the right column, in that
 order. Uplink selections retain network-change confirmation and apply feedback.
-On desktop, pair Vendor with Uplink, Last heard with Priority, IP with Download,
-Group with Upload and Services with Total in shared rows, and leave Way in below
-them unpaired. Place read errors and traffic availability
-messages after those rows so they do not shift the corresponding values.
+On desktop, pair Vendor with Uplink, MAC with Priority, IP with Download,
+Group with Upload and Services with Total in shared rows. Place read errors and
+traffic availability messages after those rows so they do not shift the
+corresponding values.
 The title's activity matrix shows one day per column, newest
 on the right, and six four-hour periods from top to bottom. The displayed date
 range adapts to the available width, with fixed square cells; dates without
 retained history remain explicitly missing data. Leave future periods
 blank and show download/upload totals immediately on hover or focus. Format the
 time as `10-14 4:00-8:00`, followed by traffic only; omit sampled/progress wording.
-A device at home reports when it was last heard, never whether it is online. A
-DHCP lease outlives presence by hours and the kernel keeps a stale neighbour
-entry looking complete, so Online would be a claim this box cannot support;
-Last heard is the fact it can. Put the hardware address beside the title only
-when the name above hides it, and the last-heard time in the facts — not a
-badge. The one exception is a device that dialed in: every configuration this
-router renders carries a keepalive, so three minutes without a handshake really
-is a broken tunnel, and that page alone says Connected. Way in closes both
-pages with how the device reaches the router — the network and subnet here, the
-tunnel interface and subnet there.
+A device page reports identity and settings, and leaves presence to the lists and
+the map. It draws no Last heard and no Way in row, and the hardware address is a
+fact row rather than a chip beside the title. Lists, the network map and the
+device dialog still report when a device was last heard, never whether it is
+online: a DHCP lease outlives presence by hours and the kernel keeps a stale
+neighbour entry looking complete, so Online would be a claim this box cannot
+support; Last heard is the fact it can. The one exception is a device that dialed
+in: every configuration this router renders carries a keepalive, so three minutes
+without a handshake really is a broken tunnel, and that page alone says Connected.
+Its Last heard (the handshake) and Way in (the tunnel interface and subnet) stay,
+because the tunnel is the only thing that can answer them, and its configured
+name is a fact row in the same place the device page puts its MAC.
 Speed bars open download/upload limit dialogs; keep the
 configuration-only caveat in those dialogs and save feedback, without a status row.
 Omit Notes and the QoS heading.

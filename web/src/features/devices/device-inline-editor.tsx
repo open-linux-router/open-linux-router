@@ -22,7 +22,6 @@ import { useDhcpApply } from '@/features/dhcp/use-apply'
 import { ApplyOutcome as GatewayOutcome } from '@/features/gateway/editor'
 import { gatewayChange, useGatewayConfig } from '@/features/gateway/queries'
 import { useGatewayApply } from '@/features/gateway/use-apply'
-import { useInterfaces } from '@/features/link/queries'
 import { ApiError } from '@/lib/api'
 import type { DeviceRow } from '@/lib/api-types'
 import type { Device, DevicesConfig, Reservation } from '@/lib/config-types'
@@ -40,12 +39,6 @@ export function DeviceInlineEditor({ device, traffic, activity, services, total 
   const dhcpApplier = useDhcpApply()
   const gateway = useGatewayConfig()
   const gatewayApplier = useGatewayApply()
-  // The network's subnet, for the "Way in" row below. Read from `link`, which
-  // owns a network's address, rather than from the dhcp pool that happens to
-  // serve it: a pool's range is a subset of the subnet and would be a different
-  // number wearing the same name.
-  const interfaces = useInterfaces()
-  const network = device.network ? interfaces.data?.networks.find((n) => n.name === device.network) : undefined
   const reservation = dhcp.data?.reservations?.find((r) => r.mac.toLowerCase() === device.mac.toLowerCase())
   const override = gateway.data?.devices?.find((r) => r.mac.toLowerCase() === device.mac.toLowerCase())
   const exit = override ? override.exit || DIRECT_EXIT : INHERIT_EXIT
@@ -115,27 +108,16 @@ export function DeviceInlineEditor({ device, traffic, activity, services, total 
         onPicture={() => begin('icon')}
         title={editing === 'name' ? <Input autoFocus aria-label="Device name" className="h-auto w-80 max-w-full py-1 text-2xl font-semibold" value={name} disabled={saveIdentity.isPending} onChange={(e) => { nameFinished.current = false; setName(e.target.value) }} onBlur={() => finishName()} onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); finishName(e.key === 'Escape') } }} />
           : <button type="button" disabled={identityBusy} onClick={() => begin('name')} aria-label="Edit device name" className="w-full break-words rounded-md text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">{device.name || device.mac}</button>}
-        keyName={device.name ? (
-          <span className="pointer-events-auto font-mono text-xs text-muted-foreground" title="The hardware address every other screen uses">
-            {device.mac}
-          </span>
-        ) : undefined}
       />
     </header>
     <div className="mt-4 grid gap-y-8 lg:grid-cols-2 lg:gap-x-16 lg:gap-y-0">
-      <div className="min-w-0 lg:row-span-6 lg:grid lg:grid-rows-subgrid">
-        <dl className="text-sm lg:row-span-6 lg:grid lg:grid-rows-subgrid">
+      <div className="min-w-0 lg:row-span-5 lg:grid lg:grid-rows-subgrid">
+        <dl className="text-sm lg:row-span-5 lg:grid lg:grid-rows-subgrid">
           <Fact label="Vendor" value={device.vendor || 'Unknown'} />
-          {/* When, not whether. `online` would be a claim this box cannot support
-              — its lease outlives its presence by hours — so the page reports
-              the last time anything heard from it and lets that speak. A device
-              with no hearing recorded is `Unknown`, not `Never`: a lease can
-              list one that never answered the neighbour table. */}
-          <DeviceSettingRow label="Last heard">
-            {device.last_seen
-              ? <time dateTime={device.last_seen}>{new Date(device.last_seen).toLocaleString()}</time>
-              : <span className="text-muted-foreground">{device.seen ? 'Unknown' : 'Never'}</span>}
-          </DeviceSettingRow>
+          {/* The hardware address is the key every other screen uses, so it
+              belongs in the facts with the rest of the identity rather than
+              floating beside the title. */}
+          <Fact label="MAC" value={device.mac} mono />
           <DeviceSettingRow label="IP">
             <div className="flex flex-wrap items-center justify-end gap-2">
               <Tooltip><TooltipTrigger onClick={() => begin('reservation')} disabled={!dhcp.data || dhcpApplier.busy} aria-label="Edit IP address" className="min-h-11 sm:min-h-9 min-w-0 rounded-sm text-right font-mono text-[0.8125rem] leading-5 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"><span className="break-all">{device.ips?.length ? device.ips.join(', ') : device.fixed_ip || 'None observed'}</span></TooltipTrigger><TooltipContent>{device.expires ? `DHCP lease ends ${new Date(device.expires).toLocaleString()}` : 'No expiring DHCP lease'}</TooltipContent></Tooltip>
@@ -144,14 +126,6 @@ export function DeviceInlineEditor({ device, traffic, activity, services, total 
           </DeviceSettingRow>
           <DeviceSettingRow label="Group"><button type="button" aria-label="Edit device group" disabled={identityBusy} onClick={() => begin('group')} className="min-h-11 rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9"><Badge variant="secondary" className="whitespace-normal break-words">{device.group || 'No group'}</Badge></button></DeviceSettingRow>
           <DeviceSettingRow label="Services">{services}</DeviceSettingRow>
-          {/* The last row of both device pages, and the same one on both: how
-              this device reaches the router. The peer's says `WireGuard · wg0 ·
-              10.6.0.0/24`; here it is the network an operator named and the
-              subnet `link` gives it. A device nothing could place is `—` rather
-              than a plausible guess. */}
-          <DeviceSettingRow label="Way in">
-            <TechnicalValue>LAN · {device.network || '—'} · {network?.subnet || '—'}</TechnicalValue>
-          </DeviceSettingRow>
         </dl>
       </div>
       <div className="min-w-0 space-y-2 lg:contents lg:space-y-0">
@@ -161,7 +135,7 @@ export function DeviceInlineEditor({ device, traffic, activity, services, total 
             {[{ value: INHERIT_EXIT, label: 'Default' }, ...(exit === DIRECT_EXIT ? [{ value: DIRECT_EXIT, label: 'This router’s connection' }] : []), ...(gateway.data?.exits ?? []).map((e) => ({ value: e.name, label: e.name }))].map((option) => <Button key={option.value} size="sm" className="h-11 max-w-full whitespace-normal break-words px-2 sm:h-7" variant={exit === option.value ? 'outline' : 'ghost'} aria-pressed={exit === option.value} disabled={!gateway.data || gatewayApplier.busy} onClick={() => { if (exit !== option.value) void gatewayApplier.submit(option.value === INHERIT_EXIT ? gatewayChange.removeDevice(device.mac) : gatewayChange.device(device.mac, option.value === DIRECT_EXIT ? '' : option.value)) }}>{option.label}</Button>)}
           </div>
         </div>
-        {gateway.isError && <p className="text-sm text-destructive lg:col-start-2 lg:row-start-7">Could not load uplinks.</p>}
+        {gateway.isError && <p className="text-sm text-destructive lg:col-start-2 lg:row-start-6">Could not load uplinks.</p>}
         {traffic}
         <div className="flex min-h-11 flex-wrap items-center justify-between gap-3 py-1 text-sm sm:min-h-9 lg:col-start-2 lg:row-start-5"><span className="text-muted-foreground">Total</span>{total}</div>
       </div>

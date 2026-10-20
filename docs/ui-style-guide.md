@@ -199,18 +199,18 @@ Blur or Enter saves; Escape discards. No pencil or save/cancel controls accompan
 the title. The name input is 320px wide, capped by available space.
 Device traffic activity sits behind the title, aligned right and fading to
 transparent toward the overlapping name and icon. Omit the visible presence chip:
-a device at home reports when it was last heard, and that belongs in the facts,
-not beside the title. Each day is one column, newest on the right, with
+lists and the map say when a device was last heard, and the device page does not
+repeat it. Each day is one column, newest on the right, with
 six four-hour dots from midnight downward. Future periods stay blank, and dot
 tooltips appear immediately. A divider separates the
 title from two columns of 36px desktop / 44px mobile minimum-height label/value rows: stable identity
 and settings on the left, routing, priority and traffic on the right. Group uses
 a clickable tag with a muted surface that opens its edit dialog.
 Device traffic reuses Overview meters with visible direction labels.
-At desktop widths both halves share six grid rows: Vendor/Uplink, Last
-heard/Priority, IP/Download, Group/Upload, Services/Total, and Way in alone below
-them. The hardware address sits beside the title, in the mono chip the dialed-in
-device uses for its configured name, whenever the name hides it. Services shows matching configured
+At desktop widths both halves share five grid rows: Vendor/Uplink,
+MAC/Priority, IP/Download, Group/Upload and Services/Total. The hardware address
+is a mono fact row, not a chip beside the title; the dialed-in page puts its
+configured name in the same place. Services shows matching configured
 services as 28px icon tiles linking directly to their published webpages. A matching
 28px outlined add button opens Ingress with the device prefilled. An empty list
 shows only the add button. Total uses the Overview Traffic meter's neutral text

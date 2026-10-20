@@ -184,9 +184,13 @@ box can support: every configuration this router renders carries
 minutes and `internal/remote/view.go`'s three-minute window turns "no handshake"
 into "not connected". A device at home has no equivalent — its DHCP lease
 outlives its presence by hours, and `/proc/net/arp` reports a STALE neighbour
-entry as complete — so its page says when it was last heard and never whether it
-is online. The two pages report the same rows wherever they can: Last heard, and
-Way in closes both. Beside those sit the three readings that are keyed by
+entry as complete — so its page claims no presence at all: the lists and the map
+say when it was last heard, never whether it is online. That is why this page
+keeps the two rows a device page does not draw: Last heard is the handshake, and
+only the tunnel can date it; Way in is the tunnel it arrived on, and only the
+tunnel can name it. What the two pages do share is the facts table and the key
+each is addressed by — the MAC there, the configured name here — beside the
+three readings that are keyed by
 **address** rather than by hardware, and so need no pretending: the activity
 history and the traffic counters (`gateway` keys its accounting on the local
 device address at either end of the box — forwarded through it, or the far end
