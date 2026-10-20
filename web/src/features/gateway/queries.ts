@@ -4,6 +4,8 @@ import { api } from '@/lib/api'
 import type { GatewayApplyResult, GatewayLatency, GatewayPlan, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
 import type { GatewayConfig } from '@/lib/config-types'
 
+import { TRAFFIC_SAMPLE_SAVE_MS, writeTrafficSample } from './traffic-sample'
+
 // The same polling story as the other modules: EventSource cannot send an
 // Authorization header, so streaming from the browser needs a cookie session or
 // a fetch-based reader, and neither is worth inventing before there is live
@@ -48,16 +50,30 @@ export function useGatewayStatus() {
   })
 }
 
+/** When the last reading was kept for the next visit; see traffic-sample.ts. */
+let trafficSampleSavedAt = 0
+
 /**
  * Per-device byte counts, read from the kernel on every request.
  *
  * Its own query rather than part of the status one, because it costs a walk of
  * every device on the network and is wanted at a different rate.
+ *
+ * Writing the reading on every tick would be work for a value only a reload
+ * reads, so it is saved at most every few seconds. A slightly older reading
+ * still differences against the counters just as well.
  */
 export function useGatewayTraffic(refetchInterval = TRAFFIC_REFETCH_MS) {
   return useQuery({
     queryKey: gatewayKeys.traffic,
-    queryFn: () => api.get<GatewayTraffic>('/api/gateway/traffic'),
+    queryFn: async () => {
+      const next = await api.get<GatewayTraffic>('/api/gateway/traffic')
+      if (Date.now() - trafficSampleSavedAt >= TRAFFIC_SAMPLE_SAVE_MS) {
+        writeTrafficSample(next)
+        trafficSampleSavedAt = Date.now()
+      }
+      return next
+    },
     refetchInterval,
   })
 }

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 
+import { readTrafficSample, type TrafficSample } from '@/features/gateway/traffic-sample'
 import type { DeviceRow, GatewayTraffic } from '@/lib/api-types'
 
 /**
@@ -81,9 +82,18 @@ export function useTrafficView(data: GatewayTraffic | undefined, failed: boolean
   // pair consistent without an effect that would render once with a stale
   // previous sample. Keyed on `as_of` rather than identity, so a refetch that
   // returned the very same moment does not become a zero-second interval.
-  const [samples, setSamples] = useState<{ prev?: GatewayTraffic; cur?: GatewayTraffic }>({})
+  //
+  // It starts from the reading the last visit kept (traffic-sample.ts): the
+  // counters are the router's, so a refresh does not wipe out the first half of
+  // the difference and the first poll can already carry a rate.
+  const [samples, setSamples] = useState<{ prev?: TrafficSample; cur?: GatewayTraffic }>(() => {
+    const saved = readTrafficSample()
+    return saved ? { prev: saved } : {}
+  })
   if (data && data.as_of !== samples.cur?.as_of) {
-    setSamples({ prev: samples.cur, cur: data })
+    // Normally the current sample becomes the previous one. A seeded sample is
+    // only ever `prev`, because there was no current one yet.
+    setSamples({ prev: samples.cur ?? samples.prev, cur: data })
   }
 
   return useMemo(() => {
