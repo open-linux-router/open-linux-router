@@ -1,7 +1,6 @@
 import { Tag, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -26,9 +25,9 @@ import { CategoryPicker, type IconChoice } from '@/features/devices/category-pic
 import { DeviceIcon } from '@/features/devices/device-icon'
 import { groupOptions } from '@/features/devices/group-tree'
 import { categoryLabel } from '@/features/devices/icons'
+import { lastHeardTitle } from '@/features/devices/last-heard'
 import type { DeviceRow } from '@/lib/api-types'
 import type { Device, DevicesGroup, GatewayConfig } from '@/lib/config-types'
-import { formatAgo } from '@/lib/utils'
 
 /**
  * The Select's value for "in no group". Base UI treats an empty string as a
@@ -106,7 +105,6 @@ export function DeviceDetail({
               category={device.category}
               vendor={device.vendor}
               vendorKey={device.vendor_key}
-              online={device.online}
               size="lg"
             />
             <div className="min-w-0">
@@ -114,7 +112,10 @@ export function DeviceDetail({
               <DialogDescription className="truncate font-mono text-xs">
                 {device.mac}
               </DialogDescription>
-              <PresenceBadge device={device} />
+              {/* The same fact every other surface reports, in its long form:
+                  a dialog has room for the sentence, and the sentence is what
+                  makes a dash or "never seen" mean something. */}
+              <p className="mt-1 text-xs text-muted-foreground">{lastHeardTitle(device)}</p>
             </div>
           </div>
         </DialogHeader>
@@ -289,30 +290,6 @@ function storedLook(device: DeviceRow): IconChoice {
   }
 }
 
-function PresenceBadge({ device }: { device: DeviceRow }) {
-  if (device.online) {
-    return (
-      <Badge variant="success" className="mt-1">
-        Online
-      </Badge>
-    )
-  }
-  // Never seen is not the same as away, and the difference is usually a typo in
-  // a hand-entered MAC.
-  if (!device.seen) {
-    return (
-      <Badge variant="outline" className="mt-1">
-        Never seen
-      </Badge>
-    )
-  }
-  return (
-    <Badge variant="secondary" className="mt-1">
-      Offline
-    </Badge>
-  )
-}
-
 /**
  * The fixed address, owned by dhcp.
  *
@@ -363,9 +340,6 @@ function Observed({ device }: { device: DeviceRow }) {
   if (device.vendor) rows.push(['Vendor', device.vendor])
   if (device.sources?.length) {
     rows.push(['Seen by', device.sources.map(sourceLabel).join(', ')])
-  }
-  if (device.last_seen) {
-    rows.push(['Last seen', `${formatAgo(device.last_seen)} · ${new Date(device.last_seen).toLocaleString()}`])
   }
   if (device.expires) {
     rows.push(['Lease expires', new Date(device.expires).toLocaleString()])

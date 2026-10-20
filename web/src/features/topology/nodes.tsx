@@ -34,6 +34,7 @@ import {
 import { DeviceIcon } from '@/features/devices/device-icon'
 import type { GroupDeletion } from '@/features/devices/group-actions'
 import { groupOptions, MAX_GROUP_DEPTH, parentChoices } from '@/features/devices/group-tree'
+import { lastHeardLabel, lastHeardTitle } from '@/features/devices/last-heard'
 import { WayMark } from '@/features/remote/way-mark'
 
 import type { DialInPeer } from '@/features/topology/dial-in'
@@ -520,13 +521,10 @@ export function DeviceNode({
             category={device.category}
             vendor={device.vendor}
             vendorKey={device.vendor_key}
-            online={device.online}
             size="sm"
           />
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className={cn('truncate text-sm font-medium', !device.online && 'text-muted-foreground')}>
-              {name}
-            </span>
+            <span className="truncate text-sm font-medium">{name}</span>
             {density === 'detail' && <Address device={device} />}
           </span>
           {services?.length ? <span aria-hidden className="shrink-0" style={{ width: serviceWidth }} /> : null}
@@ -558,14 +556,10 @@ export function DeviceNode({
           category={device.category}
           vendor={device.vendor}
           vendorKey={device.vendor_key}
-          online={device.online}
           size="sm"
           className="size-6"
         />
-        <span className={cn('min-w-0 flex-1 truncate text-xs font-medium', !device.online && 'text-muted-foreground')}>
-          {name}
-        </span>
-        <Presence device={device} />
+        <span className="min-w-0 flex-1 truncate text-xs font-medium">{name}</span>
       </Shell>
     ) : (
       <Shell onClick={open} className={cn(shell, 'gap-2.5 px-3')}>
@@ -574,15 +568,11 @@ export function DeviceNode({
           category={device.category}
           vendor={device.vendor}
           vendorKey={device.vendor_key}
-          online={device.online}
           size="sm"
         />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className={cn('truncate text-[13px] leading-[18px] font-medium', !device.online && 'text-muted-foreground')}>
-              {name}
-            </span>
-            <Presence device={device} />
+            <span className="truncate text-[13px] leading-[18px] font-medium">{name}</span>
           </span>
           <Address device={device} />
           {traffic.counting && device.seen && (
@@ -737,16 +727,6 @@ function Shell({
   )
 }
 
-/** Presence as a dot, paired with the dimmed name — never colour alone. */
-function Presence({ device }: { device: DeviceRow }) {
-  return (
-    <span
-      aria-label={device.online ? 'here' : device.seen ? 'away' : 'never seen'}
-      className={cn('size-1.5 shrink-0 rounded-full', device.online ? 'bg-success' : 'bg-muted-foreground/30')}
-    />
-  )
-}
-
 /** The second line of a detail node: the address, whole where it fits. */
 function Address({ device }: { device: DeviceRow }) {
   const address = device.fixed_ip ?? device.ips?.[0]
@@ -826,17 +806,15 @@ function DeviceActivity({ device, flow, rated, counting }: {
   )
 }
 
-/** When a device was last heard, or the word for why there is no time. */
+/**
+ * When a device was last heard, or the word for why there is no time.
+ *
+ * The same three words as every other list (features/devices/last-heard) — this
+ * node used to add "idle" and "away", which were the map's private names for
+ * "we do not know" while the group list said "Offline" about the same device.
+ */
 function Quiet({ device }: { device: DeviceRow }) {
-  const at = device.last_seen
-  return (
-    <span
-      className="text-muted-foreground/60"
-      title={at ? `Last heard ${new Date(at).toLocaleString()}` : undefined}
-    >
-      {at ? formatAgo(at) : device.online ? 'idle' : device.seen ? 'away' : 'never seen'}
-    </span>
-  )
+  return <span className="text-muted-foreground/60" title={lastHeardTitle(device)}>{lastHeardLabel(device)}</span>
 }
 
 /* -------------------------------------------------------------------------- */

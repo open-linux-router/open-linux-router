@@ -174,7 +174,19 @@ The gap was worth closing on screen without closing it in the model.
 `/devices/:mac` and `/devices/wireguard/<name>` look alike because they answer
 one question — *what is this client doing* — and the second is the tunnel's
 answer, drawn in the same place: the name and picture a device at home also
-has, address, key, what it sends home, when it last handshaked and from where. Beside those sit the three readings that are keyed by
+has, address, key, what it sends home, when it last handshaked and from where. The
+header itself is one component (`web/src/features/devices/device-header.tsx`), shared
+so the two pages cannot drift apart again.
+
+**One state, and only this page has it.** A peer's Connected badge is a claim the
+box can support: every configuration this router renders carries
+`PersistentKeepalive = 25`, so a connected peer handshakes at least every two
+minutes and `internal/remote/view.go`'s three-minute window turns "no handshake"
+into "not connected". A device at home has no equivalent — its DHCP lease
+outlives its presence by hours, and `/proc/net/arp` reports a STALE neighbour
+entry as complete — so its page says when it was last heard and never whether it
+is online. The two pages report the same rows wherever they can: Last heard, and
+Way in closes both. Beside those sit the three readings that are keyed by
 **address** rather than by hardware, and so need no pretending: the activity
 history and the traffic counters (`gateway` keys its accounting on the local
 device address it forwards from, and a tunnel address is one), and the DNS query

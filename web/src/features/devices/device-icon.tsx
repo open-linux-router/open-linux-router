@@ -46,9 +46,13 @@ import { cn } from '@/lib/utils'
  * supply one, which is what stops a cut-out picture on a flat card looking like a
  * sticker. It is kept subtle: this is a list of things you own, not a shop.
  *
- * Offline devices are dimmed and desaturated rather than hidden or flattened to
- * a silhouette. The device is still yours and still worth recognising at a
- * glance; what changed is whether it is here.
+ * A device known to be away is dimmed and desaturated rather than hidden or
+ * flattened to a silhouette. The device is still yours and still worth
+ * recognising at a glance; what changed is whether it is here. Only a dialed-in
+ * device passes `online` today: its keepalive makes "not connected" a fact,
+ * while a device at home reports when it was last heard instead (see
+ * features/devices/last-heard.ts). Callers that leave it out get the undimmed
+ * picture, which claims nothing.
  */
 export function DeviceIcon({
   icon,

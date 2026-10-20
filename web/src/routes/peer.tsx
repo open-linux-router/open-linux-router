@@ -18,6 +18,7 @@ import { MetricValue } from '@/components/ui/metric-value'
 import { TechnicalValue } from '@/components/ui/property-row'
 import { DeviceActivity } from '@/features/devices/activity'
 import { CategoryPicker, type IconChoice } from '@/features/devices/category-picker'
+import { DeviceHeader } from '@/features/devices/device-header'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import { DeviceSettingRow } from '@/features/devices/device-setting-row'
 import { ClientQueries } from '@/features/dns/client-queries'
@@ -135,62 +136,46 @@ export function WireguardPeerPage() {
   return (
     <div className="space-y-4 pb-12">
       <Card className="gap-0 p-4 sm:p-6">
-        <div className="relative flex min-h-20 items-center gap-4 border-b pb-4">
-          {peer.address && <DeviceActivity addresses={[peer.address]} downRate={usage?.downRate} upRate={usage?.upRate} />}
-          <button type="button" onClick={beginPicture} disabled={patch.isPending} aria-label="Change device icon" className="shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-            <DeviceIcon icon={peer.icon} category={peer.category ?? ''} online={peer.online} size="lg" />
-          </button>
-          {/* The activity dots are painted behind this block, and a transparent
-              box still takes the pointer: without this, the two rows of dots at
-              the title's height — 08:00 and 12:00 today, and the current period
-              with them — answered no hover at all. The name and its chip take
-              the pointer back, because the name is a button and the chip has a
-              tooltip of its own. */}
-          <div className="pointer-events-none relative min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <Heading as="h1" size="lg" className="pointer-events-auto min-w-0 max-w-full [overflow-wrap:anywhere]">
-                {renaming ? (
-                  <Input
-                    autoFocus
-                    aria-label="What this device is called"
-                    placeholder={peer.name}
-                    className="h-auto w-80 max-w-full py-1 text-2xl font-semibold"
-                    value={draft}
-                    disabled={patch.isPending}
-                    onChange={(event) => { saved.current = false; setDraft(event.target.value) }}
-                    onBlur={() => void saveLabel()}
-                    onKeyDown={(event) => {
-                      if (event.nativeEvent.isComposing) return
-                      if (event.key === 'Enter' || event.key === 'Escape') {
-                        event.preventDefault()
-                        void saveLabel(event.key === 'Escape')
-                      }
-                    }}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={beginRename}
-                    aria-label={`Change what ${peer.display_name || peer.name} is called`}
-                    className="w-full break-words rounded-md text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
-                  >
-                    {peer.display_name || peer.name}
-                  </button>
-                )}
-              </Heading>
-              {/* The key the URL and every command use, when the label hides it.
-                  A chip rather than a fact row: it belongs beside the name it
-                  belongs to, and only when the two differ. It keeps the pointer
-                  for its own tooltip, and the few dots behind it go with it. */}
-              {peer.display_name && (
-                <span className="pointer-events-auto font-mono text-xs text-muted-foreground" title="The name the address bar and every command use">
-                  {peer.name}
-                </span>
-              )}
-              <PeerBadge peer={peer} />
-            </div>
-          </div>
-        </div>
+        <DeviceHeader
+          activity={peer.address && <DeviceActivity addresses={[peer.address]} downRate={usage?.downRate} upRate={usage?.upRate} />}
+          picture={<DeviceIcon icon={peer.icon} category={peer.category ?? ''} online={peer.online} size="lg" />}
+          pictureBusy={patch.isPending}
+          onPicture={beginPicture}
+          title={renaming ? (
+            <Input
+              autoFocus
+              aria-label="What this device is called"
+              placeholder={peer.name}
+              className="h-auto w-80 max-w-full py-1 text-2xl font-semibold"
+              value={draft}
+              disabled={patch.isPending}
+              onChange={(event) => { saved.current = false; setDraft(event.target.value) }}
+              onBlur={() => void saveLabel()}
+              onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing) return
+                if (event.key === 'Enter' || event.key === 'Escape') {
+                  event.preventDefault()
+                  void saveLabel(event.key === 'Escape')
+                }
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={beginRename}
+              aria-label={`Change what ${peer.display_name || peer.name} is called`}
+              className="w-full break-words rounded-md text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              {peer.display_name || peer.name}
+            </button>
+          )}
+          keyName={peer.display_name && (
+            <span className="pointer-events-auto font-mono text-xs text-muted-foreground" title="The name the address bar and every command use">
+              {peer.name}
+            </span>
+          )}
+          status={<PeerBadge peer={peer} />}
+        />
 
         <div className="mt-4 grid gap-y-8 lg:grid-cols-2 lg:gap-x-16 lg:gap-y-0">
           <Facts peer={peer} status={status.data} />
@@ -244,9 +229,12 @@ export function WireguardPeerPage() {
  * every configuration this router has handed out — and it is what matches this
  * page against `wg show` on the box, or against what the device itself shows.
  *
- * "Handshake" sits beside the badge on purpose. The badge answers whether it is
- * connected; this answers exactly when, which is the number to compare against
- * the router's clock when something is subtly wrong.
+ * "Last heard" is the handshake, and it is called what the device page calls its
+ * own last sighting rather than "Handshake": the two pages answer the same
+ * question with the same row, and the tunnel's word for it is in the tooltip
+ * where a `wg show` reader will look for it. The badge above answers whether it
+ * is connected; this answers exactly when, which is the number to compare
+ * against the router's clock when something is subtly wrong.
  */
 function Facts({ peer, status }: { peer: RemotePeer; status?: RemoteStatus }) {
   return <dl className="min-w-0 text-sm">
@@ -257,7 +245,7 @@ function Facts({ peer, status }: { peer: RemotePeer; status?: RemoteStatus }) {
       {peer.public_key ? <TechnicalValue>{peer.public_key}</TechnicalValue> : '—'}
     </DeviceSettingRow>
     <DeviceSettingRow label="Sends home">{routesLabel(peer.routes)}</DeviceSettingRow>
-    <DeviceSettingRow label="Handshake">
+    <DeviceSettingRow label="Last heard" title="The last WireGuard handshake: the tunnel's own record of hearing from this device">
       {peer.last_handshake
         ? <time dateTime={peer.last_handshake}>{new Date(peer.last_handshake).toLocaleString()}</time>
         : peer.unknown ? 'Unknown' : 'Never'}

@@ -40,8 +40,6 @@ export interface MapGroup {
   subgroupCount: number
   /** Every device at any depth below it, before the filters. */
   total: number
-  /** …and how many of those are here now. */
-  online: number
   /** Traffic of every device at any depth below it. */
   flow?: Flow
   /** Its live traffic as one number, for link and layout sizing. */
@@ -180,10 +178,8 @@ export function buildTree({
     const everyone = [...members]
     const flows = members.map((d) => traffic.flowOf(d))
     let total = members.length
-    let online = members.filter((d) => d.online).length
     for (const s of subs) {
       total += s.total
-      online += s.online
       flows.push(s.flow)
     }
     const flow = sumFlows(flows)
@@ -199,7 +195,6 @@ export function buildTree({
       directCount: everyone.length,
       subgroupCount: subNames.length,
       total,
-      online,
       flow,
       weight: magnitude(flow, traffic.rated),
     }

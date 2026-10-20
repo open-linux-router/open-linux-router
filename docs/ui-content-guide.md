@@ -158,11 +158,12 @@ unavailable counters show dashes. Services below Group lists matching configured
 services as icons that open their webpages, with an equally sized add action
 that opens Ingress and prefills the current device. Empty lists show only the add action.
 Devices without a reserved name/address prefill their observed host instead.
-Omit Last seen. Group is a tag that opens its edit dialog.
+Group is a tag that opens its edit dialog.
 Compact Uplink and Priority segmented selectors lead the right column, in that
 order. Uplink selections retain network-change confirmation and apply feedback.
-On desktop, pair Vendor with Uplink, MAC with Priority, IP with Download and
-Group with Upload and Services with Total in shared rows. Place read errors and traffic availability
+On desktop, pair Vendor with Uplink, Last heard with Priority, IP with Download,
+Group with Upload and Services with Total in shared rows, and leave Way in below
+them unpaired. Place read errors and traffic availability
 messages after those rows so they do not shift the corresponding values.
 The title's activity matrix shows one day per column, newest
 on the right, and six four-hour periods from top to bottom. The displayed date
@@ -170,7 +171,16 @@ range adapts to the available width, with fixed square cells; dates without
 retained history remain explicitly missing data. Leave future periods
 blank and show download/upload totals immediately on hover or focus. Format the
 time as `10-14 4:00-8:00`, followed by traffic only; omit sampled/progress wording.
-Keep presence available to assistive technology without a visible title badge.
+A device at home reports when it was last heard, never whether it is online. A
+DHCP lease outlives presence by hours and the kernel keeps a stale neighbour
+entry looking complete, so Online would be a claim this box cannot support;
+Last heard is the fact it can. Put the hardware address beside the title only
+when the name above hides it, and the last-heard time in the facts — not a
+badge. The one exception is a device that dialed in: every configuration this
+router renders carries a keepalive, so three minutes without a handshake really
+is a broken tunnel, and that page alone says Connected. Way in closes both
+pages with how the device reaches the router — the network and subnet here, the
+tunnel interface and subnet there.
 Speed bars open download/upload limit dialogs; keep the
 configuration-only caveat in those dialogs and save feedback, without a status row.
 Omit Notes and the QoS heading.

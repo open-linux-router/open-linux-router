@@ -47,7 +47,7 @@ export function DevicePolicy({ mac, downRate, upRate, children }: { mac: string;
         {(['high', 'normal', 'low'] as Priority[]).map((value) => <Button key={value} size="sm" className="h-11 px-2 sm:h-7" variant={priority === value ? 'outline' : 'ghost'} aria-pressed={priority === value} disabled={busy} onClick={() => void save(value)}>{value[0].toUpperCase() + value.slice(1)}</Button>)}
       </div>
     </div>
-    {config.isError && <p className="text-sm text-destructive lg:col-start-2 lg:row-start-6">Could not load priority and limits.</p>}
+    {config.isError && <p className="text-sm text-destructive lg:col-start-2 lg:row-start-7">Could not load priority and limits.</p>}
     <div className="space-y-1 lg:contents lg:space-y-0">
       <div className="grid min-h-11 grid-cols-[6rem_minmax(0,1fr)] items-center gap-3 py-1 text-sm sm:min-h-9 sm:[&>div]:w-1/2 sm:[&>div]:justify-self-end lg:col-start-2 lg:row-start-3">
         <span className="text-muted-foreground">Download</span>
@@ -58,7 +58,7 @@ export function DevicePolicy({ mac, downRate, upRate, children }: { mac: string;
         <Meter label="Upload" current={upRate === undefined ? '—' : formatRate(upRate)} maximum={current?.upload_mbps ? String(current.upload_mbps) + ' Mbps' : undefined} tone="amber" onClick={() => begin('upload')} />
       </div>
     </div>
-    {children && <div className="lg:col-start-2 lg:row-start-7">{children}</div>}
+    {children && <div className="lg:col-start-2 lg:row-start-8">{children}</div>}
     <Dialog open={!!editing} onOpenChange={(open) => { if (!open && !apply.isPending) setEditing(null) }}>
       <DialogContent>
         <DialogHeader><DialogTitle>{editing === 'download' ? 'Download limit' : 'Upload limit'}</DialogTitle><DialogDescription>Applies immediately to traffic crossing this router. Leave blank for unlimited.</DialogDescription></DialogHeader>

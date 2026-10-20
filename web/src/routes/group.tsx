@@ -13,6 +13,7 @@ import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import { DeviceSettingRow } from '@/features/devices/device-setting-row'
 import { groupOptions, subtreeOf } from '@/features/devices/group-tree'
+import { lastHeardLabel, lastHeardTitle } from '@/features/devices/last-heard'
 import { useDeviceList, useDevicesConfig } from '@/features/devices/queries'
 import { ApplyOutcome as GatewayOutcome } from '@/features/gateway/editor'
 import { gatewayChange, useGatewayConfig } from '@/features/gateway/queries'
@@ -119,7 +120,7 @@ export function GroupPage() {
 
     <Card><CardHeader><CardTitle>Devices in this group</CardTitle></CardHeader><CardContent className="space-y-4">
       <p className="text-sm text-muted-foreground">Includes devices in subgroups.</p>
-      {members.length ? <List>{members.map((device) => <ListRow key={device.mac} to={`/devices/${encodeURIComponent(device.mac)}`} title={device.name || device.mac} subtitle={`${device.group === name ? device.network || 'Network unknown' : `${device.group} · ${device.network || 'Network unknown'}`}`} leading={<DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor} vendorKey={device.vendor_key} online={device.online} />} trailing={<Badge variant={device.online ? 'success' : device.seen ? 'secondary' : 'outline'}>{device.online ? 'Online' : device.seen ? 'Offline' : 'Never seen'}</Badge>} />)}</List> : <ListEmpty>No devices in this group or its subgroups yet.</ListEmpty>}
+      {members.length ? <List>{members.map((device) => <ListRow key={device.mac} to={`/devices/${encodeURIComponent(device.mac)}`} title={device.name || device.mac} subtitle={`${device.group === name ? device.network || 'Network unknown' : `${device.group} · ${device.network || 'Network unknown'}`}`} leading={<DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor} vendorKey={device.vendor_key} />} trailing={<span className="text-xs tabular-nums text-muted-foreground" title={lastHeardTitle(device)}>{lastHeardLabel(device)}</span>} />)}</List> : <ListEmpty>No devices in this group or its subgroups yet.</ListEmpty>}
     </CardContent></Card>
 
     <Dialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}><DialogContent><DialogHeader><DialogTitle>Change {members.length} current devices?</DialogTitle><DialogDescription>{confirming === 'exit' ? 'Their existing Internet via overrides will be changed. Traffic may take a different path; established connections normally keep theirs.' : 'Their priorities will apply to traffic crossing this router. Queue updates may briefly interrupt queued packets.'} New members will not inherit this setting.</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setConfirming(null)}>Cancel</Button><Button onClick={() => void applyCurrentMembers()}>Continue</Button></DialogFooter></DialogContent></Dialog>
