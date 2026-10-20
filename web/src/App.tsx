@@ -31,6 +31,7 @@ import { OverviewPage } from '@/routes/overview'
 import { ToolsPage } from '@/routes/tools'
 import { ToolPage } from '@/routes/tool-page'
 import { DevicePage } from '@/routes/device'
+import { WireguardPeerPage } from '@/routes/peer'
 import { GroupPage } from '@/routes/group'
 import { GatewayPage } from '@/routes/gateway/index'
 import { GatewayInterfacesPage } from '@/routes/gateway/interfaces'
@@ -48,6 +49,10 @@ export function App() {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<OverviewPage />} />
+          {/* Static segment before the MAC route: a device that dialed in is not
+              in the device list, so it gets its own path rather than a made-up
+              hardware address (docs/remote-access.md §3.3). */}
+          <Route path="devices/wireguard/:name" element={<WireguardPeerPage />} />
           <Route path="devices/:mac" element={<DevicePage />} />
           <Route path="groups/:name" element={<GroupPage />} />
           <Route path="gateway">

@@ -31,6 +31,16 @@ export interface TrafficView {
   /** Every counted byte, whether or not it belongs to a device we know. */
   total: Flow
 
+  /**
+   * One address's share: its rows, summed across every exit.
+   *
+   * The level a device is built on, exposed for clients that are an address and
+   * nothing else. A device that dialed in over WireGuard is one of those: it has
+   * no MAC, so it is not a `DeviceRow` (docs/remote-access.md §3.3), and the
+   * counters key on exactly the tunnel address it was given.
+   */
+  flowOfAddress: (address: string) => Flow | undefined
+
   /** One device's share: its addresses' rows, summed across every exit. */
   flowOf: (device: DeviceRow) => Flow | undefined
 
@@ -84,6 +94,7 @@ export function useTrafficView(data: GatewayTraffic | undefined, failed: boolean
         counting: false,
         rated: false,
         total: { down: 0, up: 0 },
+        flowOfAddress: () => undefined,
         flowOf: () => undefined,
         flowOfExit: () => undefined,
       }
@@ -124,17 +135,12 @@ export function useTrafficView(data: GatewayTraffic | undefined, failed: boolean
       byExit.set(u.exit, exit)
     }
 
-    const flowOf = (device: DeviceRow): Flow | undefined => {
-      let found: Flow | undefined
-      for (const ip of device.ips ?? []) {
-        const f = byAddress.get(ip.toLowerCase())
-        if (!f) continue
-        found = sumFlows([found, f])
-      }
-      return found
-    }
+    const flowOfAddress = (address: string): Flow | undefined => byAddress.get(address.toLowerCase())
 
-    return { counting, rated, total, flowOf, flowOfExit: (exit: string) => byExit.get(exit) }
+    const flowOf = (device: DeviceRow): Flow | undefined =>
+      sumFlows((device.ips ?? []).map(flowOfAddress))
+
+    return { counting, rated, total, flowOfAddress, flowOf, flowOfExit: (exit: string) => byExit.get(exit) }
   }, [samples, failed])
 }
 

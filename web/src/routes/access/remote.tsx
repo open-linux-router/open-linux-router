@@ -1,4 +1,4 @@
-import { AlertTriangle, KeyRound, Plus } from 'lucide-react'
+import { AlertTriangle, KeyRound, Pencil, Plus } from 'lucide-react'
 import { useState } from 'react'
 
 import { BlockerAlerts } from '@/components/layout/blockers'
@@ -28,6 +28,7 @@ import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ClientConfigDialog } from '@/features/remote/client-config'
 import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/remote/impact'
+import { PeerBadge } from '@/features/remote/peer-badge'
 import { PeerDialog } from '@/features/remote/peer-dialog'
 import { SocksCard } from '@/features/remote/socks-card'
 import {
@@ -332,10 +333,17 @@ function PeerList({
       {peers.map((p) => (
         <ListRow
           key={p.name}
+          // The row opens what the tunnel knows about this device; changing it
+          // is the pencil, which stays outside the link.
+          to={`/devices/wireguard/${encodeURIComponent(p.name)}`}
           title={p.name}
           subtitle={describePeer(p)}
           trailing={<PeerBadge peer={p} />}
-          onSelect={() => onEdit(p)}
+          action={
+            <Button variant="ghost" size="icon" className="text-muted-foreground" aria-label={`Edit ${p.name}`} title="Edit device" onClick={() => onEdit(p)}>
+              <Pencil />
+            </Button>
+          }
         />
       ))}
     </List>
@@ -346,30 +354,6 @@ function describePeer(p: RemotePeer): string {
   const sends =
     p.routes === 'everything' ? 'sends everything home' : 'reaches your network'
   return `${p.address ?? '—'} · ${sends}`
-}
-
-/**
- * Three states, not two, and the third is the one that matters.
- *
- * A device that has *never* connected almost always means the configuration was
- * never imported, or the port is not reachable from outside — a setup problem
- * with somewhere to look. A device last seen yesterday is working and asleep.
- * Collapsing them into "offline" would hide the only failure this module
- * reliably produces on a first install.
- */
-function PeerBadge({ peer }: { peer: RemotePeer }) {
-  if (peer.unknown) return <Badge variant="secondary">Unknown</Badge>
-  if (peer.online) return <Badge variant="success">Connected</Badge>
-  if (!peer.last_handshake) return <Badge variant="warning">Never connected</Badge>
-  return <Badge variant="secondary">{lastSeen(peer.last_handshake)}</Badge>
-}
-
-function lastSeen(iso: string): string {
-  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60_000)
-  if (minutes < 60) return `${minutes} min ago`
-  const hours = Math.round(minutes / 60)
-  if (hours < 48) return `${hours}h ago`
-  return `${Math.round(hours / 24)}d ago`
 }
 
 /**

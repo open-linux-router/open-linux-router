@@ -52,8 +52,8 @@ import { cn, formatAgo, formatBytes, formatRate, formatRateCompact } from '@/lib
  */
 export interface MapActions {
   onSelect?: (device: DeviceRow) => void
-  /** Open the tunnel's own page, which is the only one that can change a peer. */
-  onOpenDialIn?: () => void
+  /** Open one dialed-in device, whose page is the tunnel's answer about it. */
+  onOpenDialIn?: (peer: DialInPeer) => void
   onCreateGroup?: (parent?: string) => void
   onRenameGroup?: (name: string) => void
   onDeleteGroup?: (deletion: GroupDeletion) => void

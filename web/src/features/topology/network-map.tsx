@@ -408,7 +408,7 @@ function Canvas({
       case 'dialin': {
         const peer = dialIn?.peers.find((p) => `p:${p.key}` === item.key)
         return peer && dialIn
-          ? <DialInNode peer={peer} iface={dialIn.interface} onOpen={actions.onOpenDialIn} />
+          ? <DialInNode peer={peer} iface={dialIn.interface} onOpen={() => actions.onOpenDialIn?.(peer)} />
           : null
       }
 

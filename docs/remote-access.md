@@ -134,6 +134,24 @@ things, and two of them are worse than the gap:
 The third is what is built, and §11 #2 keeps the question open rather than
 closed.
 
+The gap was worth closing on screen without closing it in the model.
+`/devices/:mac` and `/devices/wireguard/<name>` look alike because they answer
+one question — *what is this client doing* — and the second is the tunnel's
+answer, drawn in the same place: address, key, what it sends home, when it last
+handshaked and from where. Beside those sit the three readings that are keyed by
+**address** rather than by hardware, and so need no pretending: the activity
+history and the traffic counters (`gateway` keys its accounting on the local
+device address it forwards from, and a tunnel address is one), and the DNS query
+log (`dnsrelay` records the source address, and the resolver already answers on
+the tunnel's own — `internal/dns/dialin.go`).
+
+What is deliberately absent is everything keyed by MAC: vendor, group, address
+reservation, per-device priority and speed limits (`qos` classifies with
+`src_mac`/`dst_mac`), and inspection (`internal/inspection` matches
+`ether saddr` before the traffic reaches the network). Those are not switches
+somebody turned off, and the page says so once rather than showing a control
+that cannot work.
+
 ### 3.1 Registered, not managed — who writes the address
 
 This is the first time in olr that **two modules touch one interface**, and it
