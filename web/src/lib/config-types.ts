@@ -39,6 +39,11 @@
 // `TunnelBroker` was extracted from a real schema generation; optional omitzero
 // fields are marked optional to match their JSON representation. Other modules
 // retain the compatibility names documented above.
+//
+// `Peer.category` and `Peer.icon` are the latest of these: a device that dials
+// in can be drawn like one at home, and internal/remote/wireguard.go borrows
+// `devices.Category` and `devices.Icon` to say so — which a real run resolves
+// to the `DeviceCategory` and `DevicePicture` types spelled here.
 
 /**
  * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
@@ -484,6 +489,14 @@ export interface Peer {
   public_key: string
   address?: IPAddress10
   routes?: WhatTheDeviceSendsThroughTheTunnel
+  /**
+   * What kind of device this is. It selects the picture shown in the device list, and an operator-set value always beats a detected one. Empty means nothing has been set, so detection may answer; "unknown" means the device was looked at and could not be placed.
+   */
+  category?: DeviceCategory
+  /**
+   * A picture chosen for this device, overriding the one its category and vendor would pick: <vendor>/<category> such as "apple/laptop", optionally followed by /<variant> such as "apple/desktop/mini", <category>/<variant> such as "nas/4bay", os/<system> such as "os/debian", or thesvg:<slug> such as "thesvg:proxmox". Empty means the picture follows category and vendor.
+   */
+  icon?: DevicePicture
 }
 export interface SystemConfig {
   access?: Access

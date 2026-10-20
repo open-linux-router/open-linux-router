@@ -95,6 +95,8 @@ func peersOf(c Config) []peerView {
 			Name:      p.Name,
 			Address:   p.Address,
 			Routes:    p.Routes.OrDefault(),
+			Category:  p.Category,
+			Icon:      p.Icon,
 			PublicKey: p.PublicKey,
 			Unknown:   true,
 		})

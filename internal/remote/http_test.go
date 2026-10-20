@@ -439,3 +439,111 @@ func privateKeyOf(t *testing.T, conf string) string {
 	t.Fatalf("no PrivateKey line in:\n%s", conf)
 	return ""
 }
+
+// A picture is a label, exactly like a name: nothing in the kernel knows it, so
+// choosing one cannot move a device or re-issue a configuration. The two
+// vocabularies belong to `devices`, which is why the refusal arrives as a field
+// path rather than as a bare 422.
+func TestAPeerIsDrawnWithoutTouchingTheTunnel(t *testing.T) {
+	h, applier := testHTTP(t)
+	turnOn(t, h)
+	if w := do(t, h, http.MethodPut, "/wireguard/peers/phone?confirm=true", ""); w.Code != http.StatusOK {
+		t.Fatalf("setup PUT = %d: %s", w.Code, w.Body)
+	}
+	before, _ := applier.Load()
+	was, _ := before.WireGuard.Peer("phone")
+
+	// Stored as sent, but normalized on the way in — a form that sends the
+	// vocabulary in another case must not store a picture nothing can find.
+	w := do(t, h, http.MethodPatch, "/wireguard/peers/phone?confirm=true",
+		`{"category":" Server ","icon":" OS/Debian "}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", w.Code, w.Body)
+	}
+	resp := decode[tunnelApplyResponse](t, w)
+	if !resp.Plan.Empty {
+		t.Errorf("a picture produced kernel work: %+v", resp.Plan.Changes)
+	}
+	if resp.Peer == nil || resp.Peer.Name != "phone" {
+		t.Fatalf("the response does not say which device it drew: %+v", resp.Peer)
+	}
+
+	after, _ := applier.Load()
+	got, _ := after.WireGuard.Peer("phone")
+	if got.Category != "server" || got.Icon != "os/debian" {
+		t.Errorf("picture = %q %q, want it lower-cased and trimmed", got.Category, got.Icon)
+	}
+	if got.Address != was.Address || got.PublicKey != was.PublicKey || got.Routes != was.Routes {
+		t.Errorf("choosing a picture moved the device: %+v, was %+v", got, was)
+	}
+
+	// The trap a routes-only PUT would fall into: it says what the device's
+	// settings are, and the dialog that sends it has never heard of a picture.
+	if w := do(t, h, http.MethodPut, "/wireguard/peers/phone?confirm=true", `{"routes":"everything"}`); w.Code != http.StatusOK {
+		t.Fatalf("routes PUT = %d: %s", w.Code, w.Body)
+	}
+	after, _ = applier.Load()
+	if got, _ := after.WireGuard.Peer("phone"); got.Icon != "os/debian" {
+		t.Error("a routes-only PUT cleared a picture somebody chose")
+	}
+
+	// A rename carries it, because it is the same label on the same entry.
+	if w := do(t, h, http.MethodPatch, "/wireguard/peers/phone?confirm=true", `{"name":"handset"}`); w.Code != http.StatusOK {
+		t.Fatalf("rename = %d: %s", w.Code, w.Body)
+	}
+	after, _ = applier.Load()
+	handset, ok := after.WireGuard.Peer("handset")
+	if !ok {
+		t.Fatal("the device is not under its new name")
+	}
+	if handset.Icon != "os/debian" || handset.Category != "server" {
+		t.Errorf("the rename dropped the picture: %+v", handset)
+	}
+
+	// The read path reports it, or the page would draw a device nobody
+	// described every time it reloaded.
+	if w := do(t, h, http.MethodGet, "/wireguard/peers", ""); w.Code != http.StatusOK {
+		t.Fatalf("peers = %d: %s", w.Code, w.Body)
+	} else if list := decode[peersResponse](t, w); list.Peers[0].Icon != "os/debian" {
+		t.Errorf("the list reported no picture: %+v", list.Peers[0])
+	}
+
+	// Empty is a request, not an omission: that is how a picture goes back to
+	// the one its category picks, and it leaves the category alone.
+	if w := do(t, h, http.MethodPatch, "/wireguard/peers/handset?confirm=true", `{"icon":""}`); w.Code != http.StatusOK {
+		t.Fatalf("clearing = %d: %s", w.Code, w.Body)
+	}
+	after, _ = applier.Load()
+	if got, _ := after.WireGuard.Peer("handset"); got.Icon != "" || got.Category != "server" {
+		t.Errorf("clearing the icon left %+v, want the category kept and no picture", got)
+	}
+
+	for _, tc := range []struct {
+		body, field string
+	}{
+		{`{"category":"nonsense"}`, "wireguard.peers[0].category"},
+		{`{"icon":"../../etc/passwd"}`, "wireguard.peers[0].icon"},
+		{`{"icon":"thesvg:Not A Slug"}`, "wireguard.peers[0].icon"},
+	} {
+		w := do(t, h, http.MethodPatch, "/wireguard/peers/handset?confirm=true", tc.body)
+		if w.Code != http.StatusUnprocessableEntity {
+			t.Errorf("%s = %d, want 422: %s", tc.body, w.Code, w.Body)
+			continue
+		}
+		var body struct {
+			Error core.ErrorBody `json:"error"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decoding %s: %v", w.Body, err)
+		}
+		if len(body.Error.Problems) != 1 || body.Error.Problems[0].Path != tc.field {
+			t.Errorf("%s reported %+v, want one problem at %s", tc.body, body.Error.Problems, tc.field)
+		}
+	}
+
+	// A device that does not exist is a 404 for every field, including the ones
+	// that reach nothing.
+	if w := do(t, h, http.MethodPatch, "/wireguard/peers/nobody?confirm=true", `{"icon":"os/debian"}`); w.Code != http.StatusNotFound {
+		t.Errorf("picture for an unknown device = %d, want 404: %s", w.Code, w.Body)
+	}
+}

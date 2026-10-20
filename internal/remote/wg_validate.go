@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/devices"
 )
 
 // Validation is the highest-value mechanism in the apply story (design.md
@@ -164,6 +165,7 @@ func validatePeers(r *Result, w WireGuard, networks []NetworkInfo) {
 		}
 		byName[p.Name] = i
 		validatePeerName(r, path, p.Name)
+		validatePeerPicture(r, path, p)
 
 		switch {
 		case p.PublicKey == "":
@@ -237,6 +239,36 @@ func validatePeerAddress(r *Result, path string, i int, p Peer, subnet netip.Pre
 		}
 		seen[p.Address] = i
 	}
+}
+
+// validatePeerPicture checks the two fields that only decide how a device is
+// drawn.
+//
+// Checked here rather than left to the UI, because a stored picture is stored
+// intent and the document has to mean something to every reader — `devices`
+// closes its vocabulary for the same reason: a value the renderer cannot
+// resolve is a device that silently loses its picture after a reload. Both
+// halves are the other module's rules, called rather than copied (design.md
+// §4.1: one owner).
+func validatePeerPicture(r *Result, path string, p Peer) {
+	if !p.Category.Valid() {
+		r.errorf(path+".category", "unknown category %q; valid values are %s",
+			p.Category, categoryVocabulary())
+	}
+	if err := p.Icon.Validate(); err != nil {
+		r.errorf(path+".icon", "%v", err)
+	}
+}
+
+// categoryVocabulary renders the categories for a message, the way the module
+// that owns them does.
+func categoryVocabulary() string {
+	all := devices.Categories()
+	out := make([]string, 0, len(all))
+	for _, c := range all {
+		out = append(out, string(c))
+	}
+	return strings.Join(out, ", ")
 }
 
 // validatePeerRoutes reports the two things that make a client configuration

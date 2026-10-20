@@ -1304,6 +1304,14 @@ export interface RemotePeer {
    */
   last_handshake?: string
   online: boolean
+  /**
+   * How the device is drawn — what it is and the picture that overrides the one
+   * its category would pick. Labels rather than tunnel state, like the name:
+   * WireGuard knows a key, so neither reaches the kernel and changing one
+   * re-issues nothing.
+   */
+  category?: DeviceCategory
+  icon?: string
   /** Where the device was last heard from: its address out in the world. */
   endpoint?: string
   rx_bytes?: number

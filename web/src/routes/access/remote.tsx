@@ -26,6 +26,7 @@ import {
 import { Disclosure } from '@/components/ui/disclosure'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
+import { DeviceIcon } from '@/features/devices/device-icon'
 import { ClientConfigDialog } from '@/features/remote/client-config'
 import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/remote/impact'
 import { PeerBadge } from '@/features/remote/peer-badge'
@@ -336,6 +337,7 @@ function PeerList({
           // The row opens what the tunnel knows about this device; changing it
           // is the pencil, which stays outside the link.
           to={`/devices/wireguard/${encodeURIComponent(p.name)}`}
+          leading={<DeviceIcon icon={p.icon} category={p.category ?? ''} online={p.online} size="sm" />}
           title={p.name}
           subtitle={describePeer(p)}
           trailing={<PeerBadge peer={p} />}

@@ -1,18 +1,31 @@
-import { KeyRound } from 'lucide-react'
-import { Link, useParams } from 'react-router'
+import { useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router'
+import { toast } from 'sonner'
 
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Heading } from '@/components/ui/heading'
+import { Input } from '@/components/ui/input'
 import { MetricValue } from '@/components/ui/metric-value'
 import { TechnicalValue } from '@/components/ui/property-row'
-import { ClientQueries } from '@/features/dns/client-queries'
 import { DeviceActivity } from '@/features/devices/activity'
+import { CategoryPicker, type IconChoice } from '@/features/devices/category-picker'
+import { DeviceIcon } from '@/features/devices/device-icon'
 import { DeviceSettingRow } from '@/features/devices/device-setting-row'
+import { ClientQueries } from '@/features/dns/client-queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
 import { PeerBadge } from '@/features/remote/peer-badge'
-import { useRemoteStatus } from '@/features/remote/queries'
-import { WayMark } from '@/features/remote/way-mark'
+import { usePatchPeer, useRemoteStatus } from '@/features/remote/queries'
 import { useTrafficView, type Flow, type TrafficView } from '@/features/topology/traffic'
+import { ApiError } from '@/lib/api'
 import { formatBytes, formatRate } from '@/lib/utils'
 import type { RemotePeer, RemoteStatus } from '@/lib/api-types'
 
@@ -29,14 +42,70 @@ import type { RemotePeer, RemoteStatus } from '@/lib/api-types'
  * sends home, when it last handshaked and from where — beside the three things
  * that are keyed by *address* and therefore work exactly as they do for a
  * device: the activity history, the traffic counters, and the DNS query log.
+ *
+ * The two labels a device has and a peer used to lack are here too: its name and
+ * its picture. Both are stored on the peer entry rather than inferred, both are
+ * editable in place the way a device's are, and neither reaches the kernel — a
+ * rename does not re-issue a configuration and a picture does not even reach
+ * the tunnel.
  */
 export function WireguardPeerPage() {
   const { name } = useParams()
+  const navigate = useNavigate()
   const status = useRemoteStatus()
   const traffic = useGatewayTraffic()
   const flow = useTrafficView(traffic.data, traffic.isError)
+  const patch = usePatchPeer()
   const peer = status.data?.peers.find((p) => p.name === name)
   const usage = peer?.address ? flow.flowOfAddress(peer.address) : undefined
+
+  const [renaming, setRenaming] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [picture, setPicture] = useState<IconChoice>({ category: '', icon: '' })
+  const [choosing, setChoosing] = useState(false)
+  // A ref, not state: the second save is the one blur fires after Enter has
+  // already sent the first, and it has to be dropped before it renames twice.
+  const saved = useRef(false)
+
+  function beginRename() {
+    if (!peer) return
+    saved.current = false
+    setDraft(peer.name)
+    setRenaming(true)
+  }
+
+  async function saveName(discard = false) {
+    if (!peer || saved.current) return
+    saved.current = true
+    const next = draft.trim()
+    setRenaming(false)
+    if (discard || next === '' || next === peer.name) return
+    try {
+      const result = await patch.mutateAsync({ name: peer.name, patch: { name: next } })
+      const renamed = result.name || next
+      toast.success('Name saved', { description: result.note })
+      if (renamed !== peer.name) navigate(`/devices/wireguard/${encodeURIComponent(renamed)}`, { replace: true })
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : String(error))
+    }
+  }
+
+  function beginPicture() {
+    if (!peer) return
+    setPicture({ category: peer.category ?? '', icon: peer.icon ?? '' })
+    setChoosing(true)
+  }
+
+  async function savePicture() {
+    if (!peer) return
+    try {
+      await patch.mutateAsync({ name: peer.name, patch: { category: picture.category, icon: picture.icon } })
+      setChoosing(false)
+      toast.success('Icon saved')
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : String(error))
+    }
+  }
 
   if (status.isPending) return <p className="py-16 text-sm text-muted-foreground">Loading device…</p>
   if (status.isError) return <State title="Could not load the tunnel" detail="Try again when the router is reachable." />
@@ -47,12 +116,35 @@ export function WireguardPeerPage() {
       <Card className="gap-0 p-4 sm:p-6">
         <div className="relative flex min-h-20 items-center gap-4 border-b pb-4">
           {peer.address && <DeviceActivity addresses={[peer.address]} downRate={usage?.downRate} upRate={usage?.upRate} />}
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted">
-            <WayMark way="wireguard" fallback={KeyRound} className="size-5 brightness-0 opacity-75 dark:invert" />
-          </span>
-          <div className="min-w-0 flex-1">
+          <button type="button" onClick={beginPicture} disabled={patch.isPending} aria-label="Change device icon" className="shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <DeviceIcon icon={peer.icon} category={peer.category ?? ''} online={peer.online} size="lg" />
+          </button>
+          <div className="relative min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <Heading as="h1" size="lg" className="min-w-0 max-w-full [overflow-wrap:anywhere]">{peer.name}</Heading>
+              {renaming ? (
+                <Input
+                  autoFocus
+                  aria-label="Device name"
+                  className="h-auto w-80 max-w-full py-1 text-2xl font-semibold"
+                  value={draft}
+                  disabled={patch.isPending}
+                  onChange={(event) => { saved.current = false; setDraft(event.target.value) }}
+                  onBlur={() => void saveName()}
+                  onKeyDown={(event) => {
+                    if (event.nativeEvent.isComposing) return
+                    if (event.key === 'Enter' || event.key === 'Escape') {
+                      event.preventDefault()
+                      void saveName(event.key === 'Escape')
+                    }
+                  }}
+                />
+              ) : (
+                <Heading as="h1" size="lg" className="min-w-0 max-w-full [overflow-wrap:anywhere]">
+                  <button type="button" onClick={beginRename} aria-label={`Change the name of ${peer.name}`} className="w-full break-words rounded-md text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">
+                    {peer.name}
+                  </button>
+                </Heading>
+              )}
               <PeerBadge peer={peer} />
             </div>
           </div>
@@ -80,9 +172,25 @@ export function WireguardPeerPage() {
       </section>
 
       <p className="text-sm text-muted-foreground">
-        Its name, what it sends home and whether it may dial in are set on the{' '}
+        What it sends home and whether it may dial in are set on the{' '}
         <Link to="/access/wireguard" className="text-primary underline-offset-4 hover:underline">tunnel page</Link>.
       </p>
+
+      <Dialog open={choosing} onOpenChange={setChoosing}>
+        <DialogContent className="max-h-[90svh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Device icon</DialogTitle>
+            <DialogDescription>
+              Choose an icon for {peer.name}. It changes nothing about what the device is or how it connects.
+            </DialogDescription>
+          </DialogHeader>
+          <CategoryPicker value={picture} onChange={setPicture} />
+          <DialogFooter>
+            <Button variant="ghost" disabled={patch.isPending} onClick={() => setChoosing(false)}>Cancel</Button>
+            <Button disabled={patch.isPending} onClick={() => void savePicture()}>Save icon</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

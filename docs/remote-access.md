@@ -17,6 +17,9 @@ The operator gives two things:
 | `name` | `phone` | what this device is called, here and later in `devices` |
 | `routes` | `home` | what the device sends through the tunnel |
 
+Two more are optional and only decide how the device is drawn: `category` and
+`icon` (§2.2).
+
 Everything else is derived and never asked:
 
 - the key pair — generated on the box, §4
@@ -57,6 +60,20 @@ That is why removing and adding the peer again is *not* the answer to a typo in
 a name. A new peer gets the next free address and a fresh key pair (§3, §4), so
 the file on the device stops matching — a re-issue for what the operator
 intended as a cosmetic edit.
+
+**A picture is the same kind of thing.** A peer carries `category` and `icon`,
+and both are labels for exactly the reason the name is one: `Render` writes
+neither, so choosing one also produces an empty plan — no `wg setconf`, no
+re-issue, nothing for the device to notice. They live on the peer entry rather
+than anywhere else, so a rename carries them and removing the peer takes them
+away with it.
+
+The vocabulary is `devices`' rather than a second one spelled here — one list of
+categories, one set of pictures, one validator (design.md §4.1). That is a
+borrow of words, not of identity: nothing in that module is keyed by anything
+but a MAC, and a peer still has none (§3.3). It is what keeps the picture picker
+on this page, the picker on a device's page and the API's schema from being
+three answers to "which pictures exist".
 
 Two things deliberately do not follow a rename, and both are another owner's:
 
@@ -137,8 +154,8 @@ closed.
 The gap was worth closing on screen without closing it in the model.
 `/devices/:mac` and `/devices/wireguard/<name>` look alike because they answer
 one question — *what is this client doing* — and the second is the tunnel's
-answer, drawn in the same place: address, key, what it sends home, when it last
-handshaked and from where. Beside those sit the three readings that are keyed by
+answer, drawn in the same place: the name and picture a device at home also
+has, address, key, what it sends home, when it last handshaked and from where. Beside those sit the three readings that are keyed by
 **address** rather than by hardware, and so need no pretending: the activity
 history and the traffic counters (`gateway` keys its accounting on the local
 device address it forwards from, and a tunnel address is one), and the DNS query

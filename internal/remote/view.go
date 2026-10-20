@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/devices"
 )
 
 // The API's own shapes for things the module models internally.
@@ -76,6 +77,13 @@ type peerView struct {
 	Address netip.Addr `json:"address,omitempty"`
 	Routes  RouteScope `json:"routes"`
 
+	// Category and Icon are the operator's answer about how this device looks,
+	// passed through as stored. Absent means nothing was chosen, which is not
+	// the same as "unknown": the screen falls back to the tunnel's own mark
+	// rather than drawing a question mark over a device nobody described.
+	Category devices.Category `json:"category,omitempty"`
+	Icon     devices.Icon     `json:"icon,omitempty"`
+
 	// PublicKey is reported. It is not a secret — it is in every client
 	// configuration and in `wg show` — and it is the only way to match a peer
 	// against output from the tool.
@@ -127,6 +135,8 @@ func viewPeers(c Config, obs Observed, now time.Time) []peerView {
 			Name:      p.Name,
 			Address:   p.Address,
 			Routes:    p.Routes.OrDefault(),
+			Category:  p.Category,
+			Icon:      p.Icon,
 			PublicKey: p.PublicKey,
 			Unknown:   !obs.Known,
 		}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/devices"
 )
 
 // The module's REST surface (design.md §3.2 rule 2, §6.2).
@@ -204,14 +205,27 @@ type peerBody struct {
 
 // peerPatch is the body of an edit that is not a replacement.
 //
-// One field, and separate from peerBody rather than folded into it: the two
+// Three fields, and separate from peerBody rather than folded into it: the two
 // answer different questions. PUT says what this device's settings are, so a
 // body carrying only a name would also set its routes back to the default —
-// which is not what somebody who typed a new name asked for. PATCH says what
-// to change, and changes nothing else.
+// which is not what somebody who typed a new name asked for. PATCH says what to
+// change, and changes nothing else.
+//
+// Every field is a pointer, because absent and empty are different requests
+// here: leaving the icon out keeps the picture, and `"icon": ""` is how it goes
+// back to following the category. A body that names none of them is refused
+// rather than stored as a no-op with a 200.
 type peerPatch struct {
 	// Name is what the device should be called from now on.
-	Name string `json:"name,omitempty"`
+	Name *string `json:"name,omitempty"`
+
+	// Category and Icon are how it is drawn: what it is, and a picture that
+	// stands in for the one its category would pick. Both are labels, so a
+	// patch carrying only these changes nothing in the kernel — and they are
+	// only here, not on the PUT body, because PUT's routes-only edit is what the
+	// device dialog sends and it must not clear a picture somebody chose.
+	Category *string `json:"category,omitempty"`
+	Icon     *string `json:"icon,omitempty"`
 }
 
 func (h HTTP) patchPeer(w http.ResponseWriter, r *http.Request) {
@@ -224,35 +238,57 @@ func (h HTTP) patchPeer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	to := normalizeName(body.Name)
-	if to == "" {
+	if body.Name == nil && body.Category == nil && body.Icon == nil {
 		core.WriteError(w, http.StatusBadRequest,
-			"nothing to change: the only field a device's patch carries is `name`")
+			"nothing to change: a device's patch carries its name, its category or its icon")
 		return
 	}
 
 	h.mutate(w, r, func(cfg *Config) (*peerResult, error) {
+		peer, ok := cfg.WireGuard.Peer(name)
+		if !ok {
+			return nil, notFound(fmt.Errorf("no device named %q may dial in", name))
+		}
+
+		if body.Category != nil || body.Icon != nil {
+			// Assigned unnormalized and unvalidated: Normalize lower-cases them
+			// and the validator judges them, in that order, below. Doing either
+			// here would be a second copy of a rule that already has a home.
+			if body.Category != nil {
+				peer.Category = devices.Category(*body.Category)
+			}
+			if body.Icon != nil {
+				peer.Icon = devices.Icon(*body.Icon)
+			}
+			cfg.WireGuard.SetPeer(peer)
+		}
+
+		result := &peerResult{Name: peer.Name, Address: peer.Address}
+		if body.Name == nil {
+			return result, nil
+		}
+		to := normalizeName(*body.Name)
+		if to == "" {
+			return nil, badRequest(errors.New("give the device a name"))
+		}
 		renamed, err := cfg.WireGuard.RenamePeer(name, to)
 		if err != nil {
 			return nil, renameRefusal(name, to, err)
 		}
-		if renamed.Name == name {
-			// The name it already has. Not an error — a form posted back
-			// unchanged must not fail — and not worth a sentence either.
-			return &peerResult{Name: renamed.Name, Address: renamed.Address}, nil
-		}
-		return &peerResult{
-			Name:    renamed.Name,
-			Address: renamed.Address,
+		result.Name, result.Address = renamed.Name, renamed.Address
+		if renamed.Name != name {
 			// The opposite of the routes edit's note, and the reason a rename is
 			// safe where that one is not: nothing here is decided on the
 			// device. A name is olr's label; WireGuard knows the key. So the
 			// file already imported keeps working, and the only thing left
 			// naming the old name is a comment at the top of it.
-			Note: "Nothing on the device changes: its address and its key are the same, so " +
+			result.Note = "Nothing on the device changes: its address and its key are the same, so " +
 				"the configuration it already has keeps working. A local name added with " +
-				"`olr dns` does not follow the rename.",
-		}, nil
+				"`olr dns` does not follow the rename."
+		}
+		// The name it already has. Not an error — a form posted back unchanged
+		// must not fail — and not worth a sentence either.
+		return result, nil
 	})
 }
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/devices"
 )
 
 // DefaultInterface is the kernel name of the tunnel olr creates.
@@ -144,6 +145,23 @@ type Peer struct {
 	// source addresses this key may use" and the only defensible answer is the
 	// peer's own address. docs/remote-access.md §6.2 is the two meanings.
 	Routes RouteScope `json:"routes,omitempty"`
+
+	// Category and Icon are how this device is drawn: what it is, and the
+	// picture that stands in for the one its category would pick.
+	//
+	// Labels rather than tunnel state, for exactly the reason Name is one —
+	// WireGuard knows a key, so both can change without re-issuing anything,
+	// and neither appears in a rendered configuration for the kernel to drift
+	// against.
+	//
+	// Borrowed from `devices` instead of defined here, because "what does this
+	// client look like" has one owner (design.md §4.1) and a second vocabulary
+	// would be a second answer to which pictures exist — in the API's schema as
+	// well as in the picker. It does not put the peer in the device list:
+	// nothing in `devices` is keyed by anything but a MAC
+	// (docs/remote-access.md §3.3), which is what this borrows nothing of.
+	Category devices.Category `json:"category,omitempty"`
+	Icon     devices.Icon     `json:"icon,omitempty"`
 }
 
 // RouteScope is what a client sends into the tunnel.
@@ -396,6 +414,11 @@ func (w *WireGuard) Normalize() {
 	for _, p := range w.Peers {
 		p.Name = normalizeName(p.Name)
 		p.PublicKey = strings.TrimSpace(p.PublicKey)
+		// Lower-cased because both vocabularies are, and a form that sent
+		// "Apple/Laptop" would otherwise store a picture the resolver cannot
+		// find — the same argument as the name's, one level down.
+		p.Category = devices.Category(strings.ToLower(strings.TrimSpace(string(p.Category))))
+		p.Icon = devices.Icon(strings.ToLower(strings.TrimSpace(string(p.Icon))))
 		if p.Name == "" || seen[p.Name] {
 			continue
 		}

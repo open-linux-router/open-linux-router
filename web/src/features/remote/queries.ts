@@ -5,6 +5,7 @@ import type {
   ProxyLink,
   RemoteApplyResult,
   RemoteClients,
+  RemotePeerResult,
   RemotePeers,
   RemoteStatus,
   SocksStatus,
@@ -93,6 +94,19 @@ const seg = (s: string) => encodeURIComponent(s)
  * PATCH and the devices get a route per item. Here that is not a nicety — a
  * patch meaning to edit one device would revoke every other one.
  */
+/**
+ * The fields of a device that are labels rather than tunnel state.
+ *
+ * Every field optional and every one a real request when present: `icon: ''` is
+ * how a picture goes back to the one its category picks, which is not the same
+ * as leaving the field out.
+ */
+export interface PeerPatch {
+  name?: string
+  category?: string
+  icon?: string
+}
+
 export const remoteChange = {
   /**
    * Add a device, or change one.
@@ -192,6 +206,25 @@ export function useReapplyRemote() {
 
   return useMutation({
     mutationFn: () => api.send<RemoteApplyResult>('POST', `${base}/wireguard/apply`, undefined),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['remote'] }),
+  })
+}
+
+/**
+ * What a device is called and how it is drawn.
+ *
+ * The route directly, rather than through {@link useRemoteApply}: that
+ * interaction exists to keep an operator from revoking somebody's way in by
+ * accident, and neither of these reaches the kernel. WireGuard knows a key, so
+ * a name and a picture can change while the file on the device keeps working —
+ * there is nothing to plan and nothing to confirm.
+ */
+export function usePatchPeer() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ name, patch }: { name: string; patch: PeerPatch }) =>
+      api.send<RemotePeerResult>('PATCH', `${base}/wireguard/peers/${seg(name)}`, patch),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['remote'] }),
   })
 }
