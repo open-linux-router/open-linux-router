@@ -7,7 +7,6 @@ import {
   FolderPlus,
   Layers,
   MoreHorizontal,
-  Network,
   Pencil,
   Plus,
   Router,
@@ -35,7 +34,6 @@ import { DeviceIcon } from '@/features/devices/device-icon'
 import type { GroupDeletion } from '@/features/devices/group-actions'
 import { groupOptions, MAX_GROUP_DEPTH, parentChoices } from '@/features/devices/group-tree'
 import { lastHeardLabel, lastHeardTitle } from '@/features/devices/last-heard'
-import { WayMark } from '@/features/remote/way-mark'
 
 import type { DialInPeer } from '@/features/topology/dial-in'
 import type { Density, GroupVariant, Hidden } from '@/features/topology/layout'
@@ -142,58 +140,60 @@ function NetworkChip({ network: n }: { network: NetworkInfo }) {
 /* -------------------------------------------------------------------------- */
 
 /**
- * A device that reached this router over the tunnel.
+ * A device that reached this router over the tunnel, drawn as a device is.
  *
  * A peer of the router, not a client of one of its networks: there is no MAC to
  * hang a device row on (docs/remote-access.md §3.3), so the card is the whole
- * of what the map says about it, and it says what a tunnel knows — the address
- * it was given, whether it is connected, and, on hover, where it dialed from.
+ * of what the map says about it. What it looks like is nonetheless a device
+ * node — the peer's own picture, its label over its tunnel address, a figure in
+ * the same narrow column a device row keeps for its rate or its last-heard
+ * time — because an operator reads a dialled-in phone as a device either way,
+ * and a box that announced the protocol it arrived on told them which module to
+ * edit rather than which machine this is.
  *
- * Dashed, like every other thing on this map that the operator did not make.
- * The mark is the WireGuard knot with its colour dropped: the map spends colour
- * on faults alone, and a red logo would read as one.
+ * The figure is the one thing the tunnel can answer and a device cannot: the
+ * four states in `dialInLabel` (docs/remote-access.md §3.4). No rate, and no
+ * bandwidth bar, which is why the band's lines stay the thin ones (band.ts).
  */
 export function DialInNode({ peer, iface, onOpen }: { peer: DialInPeer; iface: string; onOpen?: () => void }) {
-  const label = dialInLabel(peer)
+  const state = dialInLabel(peer)
   const where = peer.endpoint ? `, last heard from ${peer.endpoint}` : ''
   const moved = peer.rxBytes || peer.txBytes
     ? `, ↓ ${formatBytes(peer.rxBytes)} ↑ ${formatBytes(peer.txBytes)} since it connected`
     : ''
   const named = peer.label === peer.name ? peer.name : `${peer.label} (${peer.name})`
-  const title = `${named} over ${iface}${peer.address ? ` at ${peer.address}` : ''}: ${label}${where}${moved}`
+  const title = `${named} over ${iface}${peer.address ? ` at ${peer.address}` : ''}: ${state}${where}${moved}`
+  // Away and never-connected dim the picture, the way a device's is dimmed on
+  // its own page; `never` is not a fault, so nothing here takes the colour the
+  // map keeps for a way out that has stopped answering.
+  const here = peer.state === 'connected' || peer.state === 'unknown'
   return (
     <Shell
       onClick={onOpen}
       title={title}
       className={cn(
-        'flex size-full min-w-0 items-center gap-3 rounded-2xl border border-dashed bg-card pr-4 pl-2.5 text-left shadow-xs',
-        onOpen && 'interactive-surface',
+        'flex size-full min-w-0 items-center gap-2.5 rounded-lg border bg-card pr-2 pl-3 text-left shadow-xs transition-colors duration-150',
+        onOpen && 'hover:bg-accent/60 active:bg-accent',
         focusRing,
       )}
     >
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
-        <WayMark way="wireguard" fallback={Network} className="size-4 brightness-0 opacity-75 dark:invert" />
-      </span>
+      <DeviceIcon
+        icon={peer.icon}
+        category={peer.category ?? 'unknown'}
+        online={here ? undefined : false}
+        size="sm"
+      />
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className={cn('truncate text-sm font-semibold', (peer.state === 'away' || peer.state === 'never') && 'text-muted-foreground')}>
-            {peer.label}
-          </span>
-          <span
-            aria-label={peer.state}
-            className={cn('size-1.5 shrink-0 rounded-full',
-              peer.state === 'connected' ? 'bg-success' : 'bg-muted-foreground/30')}
-          />
-        </span>
-        <span className="flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
-          {/* The state has the width; the address gives way, and is on hover in
-              full either way. "Never connected" truncated to "Never conne…" is
-              the one word on the card an operator has to act on. */}
-          {peer.address && <span className="min-w-0 truncate font-mono">{peer.address}</span>}
-          {peer.address && <span aria-hidden className="shrink-0">·</span>}
-          <span className="shrink-0">{label}</span>
-        </span>
+        <span className="truncate text-[13px] leading-[18px] font-medium">{peer.label}</span>
+        {peer.address ? (
+          <span className="truncate font-mono text-[11px] leading-4 text-muted-foreground">{peer.address}</span>
+        ) : (
+          // The tunnel has not said: a peer that never connected has no address
+          // observed, which is not the same as one without a configuration.
+          <span className="truncate text-[11px] leading-4 text-muted-foreground italic">no address</span>
+        )}
       </span>
+      <span className="w-16 shrink-0 text-right text-[11px] leading-4 text-muted-foreground">{state}</span>
     </Shell>
   )
 }

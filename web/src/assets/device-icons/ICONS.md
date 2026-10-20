@@ -181,16 +181,18 @@ against.
 ## Protocol marks
 
 The other place a logo is allowed, and the narrower one: WireGuard's knot and
-Shadowsocks' paper plane, worn by the nodes on the map that say how somebody
-reached this router. Same argument as the OS marks — "a picture of WireGuard"
-is a grey box — and the same treatment: flat colour artwork in the quiet tile,
-never floating bare.
+Shadowsocks' paper plane, worn by the cards on the access pages that say how
+somebody reached this router. Same argument as the OS marks — "a picture of
+WireGuard" is a grey box — and the same treatment: flat colour artwork in the
+quiet tile, never floating bare. The network map's dialled-in nodes used to wear
+the knot too; they now draw the device's own picture, because a peer on that map
+is a device to the person reading it (docs/remote-access.md §3.4).
 
 They live in `../way-marks/`, one SVG each. WireGuard's is from
 [thesvg.org](https://thesvg.org) (MIT) like the OS marks; Shadowsocks' is the
 project's own paper plane, transcribed from the vector in its Android client.
 Both carry the red the two brands share, which is why they sit together on one
-map without either looking borrowed.
+page without either looking borrowed.
 
 **Not part of the device vocabulary, and that is the difference from the OS
 marks.** An OS mark is *identity* — it says this machine runs Debian — so it is

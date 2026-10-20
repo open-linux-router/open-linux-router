@@ -361,12 +361,14 @@ disappear immediately. Groups retain their name order.
 
 The band above the router holds the only thing outside it: the devices dialed
 in over WireGuard, one card each, drawn side by side and joined to the router by
-their own line. A dial-in card carries the WireGuard mark in neutral foreground,
-the peer's name, its tunnel address and one of four states (Connected, an
-elapsed time, Never connected, Status unavailable), with the endpoint and totals
-on hover. Never mark an absent peer as a fault. WireGuard off, or a tunnel with
-no peers, puts no band there at all: the map starts at the router, and with no
-groups either it is one box.
+their own line. A dial-in card is a device node, drawn in the band: the peer's
+own picture from the same picker a device uses, its label over its tunnel
+address, and one of four states (Connected, an elapsed time, Never connected,
+Status unavailable) in the same narrow figure column a device row keeps for its
+rate or its last-heard time, with the endpoint and totals on hover. It carries
+no rate, which is why the band's lines stay the thin ones. Never mark an absent
+peer as a fault. WireGuard off, or a tunnel with no peers, puts no band there at
+all: the map starts at the router, and with no groups either it is one box.
 Observed default routes are not cards on the map. A next hop is one line of
 Link's status — address, interface, family — and drawing each one was a row of
 boxes above the router that said less than that line while pushing every group a

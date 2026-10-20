@@ -23,6 +23,7 @@ import { DeviceIcon } from '@/features/devices/device-icon'
 import { DeviceSettingRow } from '@/features/devices/device-setting-row'
 import { ClientQueries } from '@/features/dns/client-queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
+import { DeviceServices } from '@/features/ingress/device-services'
 import { PeerBadge } from '@/features/remote/peer-badge'
 import { usePatchPeer, useRemoteStatus } from '@/features/remote/queries'
 import { useTrafficView, type Flow, type TrafficView } from '@/features/topology/traffic'
@@ -173,7 +174,15 @@ export function WireguardPeerPage() {
         />
 
         <div className="mt-4 grid gap-y-8 lg:grid-cols-2 lg:gap-x-16 lg:gap-y-0">
-          <Facts peer={peer} status={status.data} />
+          <Facts peer={peer} status={status.data} services={
+            // Published by its tunnel address, which is the only name for this
+            // device that `ingress` has: a peer is not in `devices`, so there is
+            // no MAC to reference and no reservation to require
+            // (docs/ingress.md §1.2, docs/remote-access.md §3.3).
+            <DeviceServices addresses={peer.address ? [peer.address] : []} add={
+              peer.address ? `/access/ingress?host=${encodeURIComponent(peer.address)}` : '/access/ingress'
+            } />
+          } />
           <Usage flow={flow} usage={usage} trafficFailed={traffic.isError} />
         </div>
       </Card>
@@ -231,7 +240,7 @@ export function WireguardPeerPage() {
  * connected; this answers exactly when, which is the number to compare against
  * the router's clock when something is subtly wrong.
  */
-function Facts({ peer, status }: { peer: RemotePeer; status?: RemoteStatus }) {
+function Facts({ peer, status, services }: { peer: RemotePeer; status?: RemoteStatus; services: React.ReactNode }) {
   return <dl className="min-w-0 text-sm">
     <DeviceSettingRow label="Name" title="The name the address bar and every command use">
       <TechnicalValue>{peer.name}</TechnicalValue>
@@ -254,6 +263,7 @@ function Facts({ peer, status }: { peer: RemotePeer; status?: RemoteStatus }) {
     <DeviceSettingRow label="Way in">
       <TechnicalValue>WireGuard · {status?.interface ?? '—'} · {status?.subnet ?? '—'}</TechnicalValue>
     </DeviceSettingRow>
+    <DeviceSettingRow label="Services">{services}</DeviceSettingRow>
   </dl>
 }
 

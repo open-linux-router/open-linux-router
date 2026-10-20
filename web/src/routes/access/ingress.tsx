@@ -51,10 +51,15 @@ export function IngressPage() {
   const devices = useDeviceList()
   const deviceMac = params.get('device')
   const device = devices.data?.devices.find((d) => d.mac.toLowerCase() === deviceMac?.toLowerCase())
+  // `host` is the other half of the same shortcut, for a target that is not in
+  // `devices` at all: a device that dialled in over the tunnel is published by
+  // its address (docs/remote-access.md §3.3), so its page can prefill one and
+  // has no MAC to prefill the other with.
+  const host = params.get('host')?.trim()
   const initialUpstream = device ? device.fixed_ip && device.name
     ? { device: device.mac, port: 0 }
     : { host: device.fixed_ip || device.ips?.find((ip) => !ip.includes(':')) || device.ips?.[0] || '', port: 0 }
-    : undefined
+    : host ? { host, port: 0 } : undefined
 
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Service | null>(null)
@@ -218,14 +223,17 @@ export function IngressPage() {
       </Card>
 
       <ServiceDialog
-        key={deviceMac && device ? device.mac : 'new'}
-        open={adding || !!device}
+        key={device?.mac ?? host ?? 'new'}
+        open={adding || !!device || !!host}
         initialUpstream={initialUpstream}
         onOpenChange={(open) => {
           setAdding(open)
-          if (!open && deviceMac) {
+          // Both shortcuts are spent once the dialog closes: the address is in
+          // the draft or it was abandoned, and a reload should not reopen it.
+          if (!open && (deviceMac || host)) {
             const next = new URLSearchParams(params)
             next.delete('device')
+            next.delete('host')
             setParams(next, { replace: true })
           }
         }}

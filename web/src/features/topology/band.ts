@@ -19,8 +19,13 @@ import type { Item, Layout, LayoutInput } from './layout'
  * is not its shape; the devices that reached it from outside are.
  */
 
-const CARD_H = 52
-const CARD_W = 240
+// A band box is a device row with its own outline: the detail node's row height
+// and a width inside its 232–288 range, so a peer and a device two rows below it
+// are the same object in two places. The width leans long because the state
+// column and the picture both take their share of it and what is left is the
+// name — the one thing on the card a person recognises.
+const CARD_H = 56
+const CARD_W = 272
 const BAND_ROW_GAP = 28
 const BAND_DROP = 48
 

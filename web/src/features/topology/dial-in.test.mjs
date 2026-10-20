@@ -63,3 +63,13 @@ test('the card says the label, and keeps the name it is identified by', () => {
   assert.equal(only.label, "Li's Macbook Pro")
   assert.equal(only.name, 'li-mbp')
 })
+
+test('the picture a peer was given reaches the map', () => {
+  const [only] = buildDialIn({
+    enabled: true,
+    interface: 'wg0',
+    peers: [peer({ category: 'laptop', icon: 'apple/laptop' })],
+  }).peers
+  assert.equal(only.category, 'laptop')
+  assert.equal(only.icon, 'apple/laptop')
+})

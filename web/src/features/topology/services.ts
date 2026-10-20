@@ -32,3 +32,31 @@ export function servicesByDevice(config: IngressConfig | undefined, devices: Dev
   }
   return result
 }
+
+/**
+ * The services one target is the upstream of, on that target's own page.
+ *
+ * Looser than `servicesByDevice` on purpose: that one decides which device a
+ * manually addressed service belongs to *among all of them* and refuses when the
+ * answer is ambiguous, while this one is asked about a device already named by
+ * the URL, so its addresses and its stored name are answers rather than
+ * candidates.
+ *
+ * Both upstream forms are here for the same reason: `device` is stored as a MAC
+ * now and as a name in older documents, and `host` is the literal address an
+ * upstream that is not a device is published at — which is how a device that
+ * dialled in over the tunnel is published at all (docs/ingress.md §1.2).
+ */
+export function servicesOf(
+  services: Service[] | undefined,
+  target: { mac?: string; name?: string; addresses?: string[] },
+): Service[] {
+  const mac = target.mac?.toLowerCase()
+  const addresses = new Set((target.addresses ?? []).filter(Boolean).map((address) => address.toLowerCase()))
+  return (services ?? []).filter((service) => {
+    const upstream = service.upstream
+    if (mac && upstream.device?.toLowerCase() === mac) return true
+    if (target.name && upstream.device === target.name) return true
+    return Boolean(upstream.host && addresses.has(upstream.host.toLowerCase()))
+  })
+}

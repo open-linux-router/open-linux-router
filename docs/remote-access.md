@@ -293,6 +293,17 @@ A peer is not a fault. The one colour the map spends is red, on a way out that
 has stopped answering; a sleeping laptop is not that, so its card is drawn in
 the same neutral as everything else and says when it last called.
 
+**Drawn as a device, not as a protocol.** The card is a device node: the peer's
+own picture from the same picker a device uses, its label over its tunnel
+address, and the state in the narrow figure column a device row keeps for its
+rate or its last-heard time. A card that announced the tunnel instead — a
+WireGuard mark in place of the picture, a dashed outline nothing else on the map
+uses — told an operator which module to edit rather than which machine this is,
+and the band above the router already says where it came from. The state stays
+because it is the one thing a tunnel can answer and a device cannot (§3.3): a
+device list reports when it was last heard, while a keepalive makes "connected
+right now" a fact here.
+
 **The card says the label, the click target says the name.** `display_name` when
 there is one and the name otherwise, because a card in a band is read by a
 person — while what it opens is the device's page, keyed by the name (§2.2). The

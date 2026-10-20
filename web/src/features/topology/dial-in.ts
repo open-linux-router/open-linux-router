@@ -1,4 +1,5 @@
 import type { RemotePeer, RemoteStatus } from '@/lib/api-types'
+import type { DeviceCategory } from '@/lib/config-types'
 
 /**
  * The devices that dialed in over WireGuard, as the map draws them.
@@ -44,6 +45,14 @@ export interface DialInPeer {
   address?: string
   state: DialInState
   lastHandshake?: string
+  /**
+   * How the device is drawn: what it is and the picture that overrides the one
+   * its category would pick. Stored on the peer entry and editable on its page,
+   * so the map hands a peer the same picture a device on the LAN has instead of
+   * a mark for the tunnel it arrived on.
+   */
+  category?: DeviceCategory
+  icon?: string
   /** Where it was last heard from, which is its address out in the world. */
   endpoint?: string
   rxBytes: number
@@ -68,8 +77,8 @@ export function dialInState(peer: RemotePeer): DialInState {
  *
  * Label order, not "connected first". The band sits above the router, where a
  * card that jumped to the front every time a phone woke up would read as the
- * picture rearranging itself; each card carries its own dot and its own word,
- * so the order has no work left to do.
+ * picture rearranging itself; each card carries its own state word, so the
+ * order has no work left to do.
  *
  * The card says the `label` and the map keys it by the `name`. The two are
  * different fields rather than one that changes meaning, because the name is
@@ -87,6 +96,8 @@ export function buildDialIn(status?: RemoteStatus): DialIn | undefined {
         address: peer.address,
         state: dialInState(peer),
         lastHandshake: peer.last_handshake,
+        category: peer.category,
+        icon: peer.icon,
         endpoint: peer.endpoint,
         rxBytes: peer.rx_bytes ?? 0,
         txBytes: peer.tx_bytes ?? 0,
