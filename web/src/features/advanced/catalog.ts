@@ -44,6 +44,13 @@ export const ADVANCED_GROUPS: AdvancedGroup[] = [
     hue: 250,
     tiles: [
       {
+        slug: 'backup',
+        name: 'Backup',
+        letter: 'B',
+        description: 'Back up or restore all router settings in one olr.json file.',
+        to: '/advanced/backup',
+      },
+      {
         slug: 'firewall',
         name: 'Firewall',
         letter: 'F',

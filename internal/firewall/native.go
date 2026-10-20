@@ -17,6 +17,13 @@ import (
 
 var errNativeValidation = errors.New("invalid native nftables ruleset")
 
+// ValidateNative checks ownership and declarative structure without touching
+// the kernel. Full expression validation still runs before nft applies it.
+func ValidateNative(raw []byte) error {
+	_, err := nativeCommands(raw)
+	return err
+}
+
 // nativeCommands accepts nft's declarative listing format, without interpreting
 // expressions. Only our table may be replaced; arbitrary commands are refused.
 func nativeCommands(raw []byte) ([]any, error) {

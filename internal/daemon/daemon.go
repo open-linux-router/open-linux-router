@@ -207,10 +207,7 @@ func run(args []string) error {
 	// `firewall` is last because it is built from three of the others: the
 	// networks say what is inside, and `remote` and `ingress` say which ports
 	// are served to the outside (internal/daemon/firewall.go).
-	store := core.NewStore(core.RootedConfigPath(opts.root),
-		link.ModuleName, dial.ModuleName, dhcp.ModuleName, dns.ModuleName,
-		devices.ModuleName, gateway.ModuleName, iptv.ModuleName, socksout.ModuleName, qos.ModuleName,
-		remote.ModuleName, ingress.ModuleName, firewall.ModuleName)
+	store := configurationStore(core.RootedConfigPath(opts.root))
 	checkStore(store, logger)
 
 	// The consumers' windows onto link, all backed by one Facts: the kernel for
@@ -773,6 +770,10 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
+		previousRemote, err := remote.FromDocument(from)
+		if err != nil {
+			return err
+		}
 		if err := store.Save(before); err != nil {
 			return err
 		}
@@ -798,12 +799,7 @@ func run(args []string) error {
 				return e
 			}),
 			repair(remote.ModuleName, func(ctx context.Context) error {
-				c, e := remoteTunnel.Load()
-				if e != nil {
-					return e
-				}
-				_, e = remoteTunnel.Apply(ctx, c)
-				return e
+				return remoteTunnel.Recover(ctx, previousRemote)
 			}),
 			repair(remote.ModuleName, func(ctx context.Context) error {
 				c, e := remoteSocks.Load()
@@ -877,6 +873,8 @@ func run(args []string) error {
 		logger.Error("connectivity recovery needs attention; journal retained", "error", err)
 	}
 	srv.Mount("recovery", recovery.Routes(), core.RecoveryRequest{})
+	backup := &core.Backup{Store: store, Recovery: recovery, Validate: func(ctx context.Context, doc core.Document) error { return validateBackup(ctx, doc, source) }}
+	srv.Mount("configuration", backup.Routes(), configurationSchema{})
 	//
 	// The API and the SPA are composed here rather than inside core, which has
 	// no business knowing a UI exists. ServeMux prefers the longer pattern, so

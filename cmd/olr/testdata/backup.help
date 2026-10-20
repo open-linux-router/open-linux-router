@@ -1,0 +1,12 @@
+Back up complete olr.json, including stored credentials
+
+Usage:
+  olr backup <file> [flags]
+
+Flags:
+  -h, --help   help for backup
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

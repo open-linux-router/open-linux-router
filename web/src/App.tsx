@@ -7,6 +7,7 @@ import { WirelessPage } from '@/routes/wireless'
 import { Button } from '@/components/ui/button'
 import { AuthGate } from '@/components/layout/auth-gate'
 import { ConnectivityRecovery } from '@/components/layout/connectivity-recovery'
+import { BackupPage } from '@/routes/advanced/backup'
 import { DhcpAdvancedPage } from '@/routes/dhcp/advanced'
 import { DhcpDetailsPage } from '@/routes/dhcp/details'
 import { DhcpRangesPage } from '@/routes/dhcp/ranges'
@@ -113,6 +114,7 @@ export function App() {
           <Route path="tools/traceroute" element={<ToolPage tool="traceroute" />} />
           <Route path="credits" element={<CreditsPage />} />
           <Route path="advanced">
+            <Route path="backup" element={<BackupPage />} />
             <Route index element={<AdvancedPage />} />
             <Route path="caddy" element={<CaddyPage />} />
             <Route path="forwards" element={<ForwardsPage />} />

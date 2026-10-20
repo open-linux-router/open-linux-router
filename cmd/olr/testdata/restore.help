@@ -1,0 +1,13 @@
+Validate and restore a complete olr.json backup
+
+Usage:
+  olr restore <file> [flags]
+
+Flags:
+      --confirm   replace all settings after reviewing the backup
+  -h, --help      help for restore
+
+Global Flags:
+      --dry-run         show what would change and exit without applying it
+  -o, --output string   output format: text|json (default "text")
+      --socket string   olrd control socket (default "/run/olr/olrd.sock")

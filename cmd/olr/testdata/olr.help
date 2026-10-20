@@ -21,12 +21,14 @@ Modules:
 
 Operations:
   adopt       Take ownership of an interface
+  backup      Back up complete olr.json, including stored credentials
   claim       Set this router up for the first time
   diff        Show drifted or pending configuration, per module
   history     List configuration revisions, per module
   net         Networks this router serves
   recovery    Confirm or revert a pending connectivity change
   release     Hand an interface back to the system
+  restore     Validate and restore a complete olr.json backup
   rollback    Roll a module back to an earlier revision
   status      Report whether olr is running
 

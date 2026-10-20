@@ -386,6 +386,7 @@ func TestHelpIsUnchanged(t *testing.T) {
 		{"listen"}, {"status"}, {"enable"}, {"disable"},
 		{"claim"}, {"system"}, {"system", "set"}, {"system", "set", "password"},
 		{"recovery"}, {"recovery", "status"}, {"recovery", "confirm"}, {"recovery", "revert"},
+		{"backup"}, {"restore"},
 	} {
 		name := "olr"
 		if len(path) > 0 {

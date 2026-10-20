@@ -87,6 +87,18 @@ func (d *Document) Set(module string, raw []byte) {
 	d.keys[module] = append(json.RawMessage(nil), raw...)
 }
 
+// DecodeStrict checks a complete candidate against the composition root's
+// declared configuration types, including unknown fields inside modules.
+func (d Document) DecodeStrict(dst any) error {
+	data, err := json.Marshal(d.keys)
+	if err != nil {
+		return err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(dst)
+}
+
 // Unknown lists top-level keys belonging to no mounted module.
 //
 // These are preserved verbatim rather than rejected, and the reason is a

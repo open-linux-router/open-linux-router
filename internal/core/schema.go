@@ -142,6 +142,15 @@ func Reflect(name string, v any) (Projections, error) {
 	// those inline instead of dereferencing a missing definition.
 	newReflector := func() *jsonschema.Reflector {
 		r := reflector()
+		// The complete-file schema embeds several packages' Config types.
+		// Qualify definitions there so a later module cannot reuse the first
+		// module's identically named definition. Existing module schemas retain
+		// their published names.
+		if name == "configuration" {
+			r.Namer = func(t reflect.Type) string {
+				return strings.ReplaceAll(t.PkgPath(), "/", "_") + "_" + t.Name()
+			}
+		}
 		t := reflect.TypeOf(v)
 		if t.Kind() == reflect.Pointer {
 			t = t.Elem()

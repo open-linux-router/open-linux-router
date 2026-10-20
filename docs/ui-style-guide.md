@@ -29,6 +29,10 @@ secondary information. See the [page review record](ui-page-review.md).
 
 ## Color and surfaces
 
+Configuration backup reuses PageHeading, Card, Input and Button. Use a shared
+Alert for the validated restore review. Keep file selection and restore actions
+reachable on phones; wrap module names, errors and long addresses.
+
 Connectivity recovery uses the shared Alert and Button components above the
 application shell. Match shell width/gutters, wrap actions on phones, and retain
 visible errors and remaining confirmation time on every page and after reload.

@@ -6,6 +6,12 @@ supporting text. This guide complements [the visual guide](ui-style-guide.md).
 
 ## Start with the user's decision
 
+Advanced's System group includes Backup. The backup page distinguishes a
+credential-bearing configuration export from runtime or whole-machine backups.
+Selecting a restore file validates it first; replacement requires a separate
+explicit action showing scope, credential changes and the recovery deadline.
+Preserve the original JSON bytes in both directions, including uint64 values.
+
 Disruptive network changes require a second decision after application. A global
 recovery notice shows the remaining confirmation time, Keep changes and Revert
 now. Never confirm automatically on a successful API response or page load.

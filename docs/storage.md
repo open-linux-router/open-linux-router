@@ -79,6 +79,10 @@ revocation.
 
 ## Backup and future analysis
 
+Use `olr backup <file>` and `olr restore <file> --dry-run` for the complete intent
+document, or Advanced → Backup in the browser. [backup.md](backup.md) describes
+protected restore, credential handling and the external files to retain.
+
 Back up `olr.json` for intent, and use SQLite's backup API or the sqlite3
 `.backup` command for runtime history. Copying only the database file while WAL
 is active is not a consistent backup. With the daemon stopped, the database and

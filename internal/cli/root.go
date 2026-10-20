@@ -80,6 +80,7 @@ func NewRoot() *cobra.Command {
 
 	root.AddCommand(operationCommands()...)
 	root.AddCommand(recoveryCommand())
+	root.AddCommand(backupCommand(), restoreCommand())
 	root.AddCommand(statusCommand())
 	root.AddCommand(serviceCommands()...)
 	root.AddCommand(versionCommand())

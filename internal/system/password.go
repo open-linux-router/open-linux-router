@@ -53,3 +53,25 @@ func (p *Password) Matches(value string) bool {
 	got, err := pbkdf2.Key(sha256.New, value, salt, iterations, 32)
 	return err == nil && subtle.ConstantTimeCompare(got, want) == 1
 }
+
+// ValidHash checks a stored credential without performing password hashing.
+// Restore must reject a malformed hash before replacing working admin access.
+func (p *Password) ValidHash() bool {
+	if p == nil {
+		return false
+	}
+	parts := strings.Split(p.Hash, "$")
+	if len(parts) != 4 || parts[0] != "pbkdf2-sha256" {
+		return false
+	}
+	iterations, err := strconv.Atoi(parts[1])
+	if err != nil || iterations < passwordIterations || iterations > 1000000 {
+		return false
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(parts[2])
+	if err != nil || len(salt) != 16 {
+		return false
+	}
+	key, err := base64.RawStdEncoding.DecodeString(parts[3])
+	return err == nil && len(key) == 32
+}

@@ -114,6 +114,33 @@ func (a TunnelApplier) Apply(ctx context.Context, desired Config) (ApplyResult, 
 	return a.ApplyPlanned(ctx, desired, plan, d)
 }
 
+// Recover cleans up a trial's old interface name before reconciling restored
+// intent. The whole-file restore has already replaced stored configuration.
+func (a TunnelApplier) Recover(ctx context.Context, previous Config) error {
+	cfg, err := a.Load()
+	if err != nil {
+		return err
+	}
+	if !previous.WireGuard.Enabled && !cfg.WireGuard.Enabled {
+		return nil
+	}
+	if previous.WireGuard.Enabled && previous.WireGuard.InterfaceOrDefault() != cfg.WireGuard.InterfaceOrDefault() {
+		iface := previous.WireGuard.InterfaceOrDefault()
+		obs, err := a.kernel().Observe(ctx, iface)
+		if err != nil {
+			return err
+		}
+		if obs.Foreign {
+			return fmt.Errorf("refusing to remove foreign interface %s during recovery", iface)
+		}
+		if _, err := a.kernel().Apply(ctx, Desired{Interface: iface}); err != nil {
+			return err
+		}
+	}
+	_, err = a.Apply(ctx, cfg)
+	return err
+}
+
 // ApplyPlanned applies a plan that has already been built and looked at.
 //
 // Split out of Apply for the HTTP surface, which has to do something between
