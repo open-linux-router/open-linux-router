@@ -89,12 +89,14 @@ hidden page title. Detail and operation pages keep their identifying titles.
   the dialog; replace only that site's value with a spinner until its probe
   lands, and keep the title as the only settings control. Say when the request
   to measure failed, and read measurements without starting any.
-  `Up` and elapsed uptime
-  lead Status above system health. Click uptime for a dialog with CPU, memory and root disk
-  used/total values; omit the separate System card.
-  Click system health for a dialog with DHCP, DNS and Gateway states, with links to their
-  pages. Distinguish checking, unavailable, disabled, needs attention and OK;
-  retain the visible fault alerts below the cards.
+  Status itself is the sentence — all systems OK, needs attention, not set up,
+  checking, status unavailable — and it is the card's headline; clicking it opens
+  the system-health dialog. Uptime and the public address follow beneath it, not
+  above it. Click uptime for a dialog with CPU, memory and root disk used/total
+  values; omit the separate System card. The health dialog lists DHCP, DNS and
+  Gateway states with links to their pages, and distinguishes checking,
+  unavailable, disabled, needs attention and OK; retain the visible fault alerts
+  below the cards.
   Latency and Map have no information icons. Traffic flips to reveal its map
   on the back, without a Map details row;
   clicking the enlarged grayscale map opens a viewport-filling color map,

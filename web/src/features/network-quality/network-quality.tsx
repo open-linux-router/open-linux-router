@@ -92,11 +92,19 @@ export function NetworkQuality({ open, onOpenChange }: {
   // Wireless has a display-only default until client/AP measurements exist.
   const scores = categories.map((category, index) => measuredScore(category) ?? (axes[index] === 'Wireless' ? 80 : null))
   const complete = scores.every(score => score != null)
+  const total = publishedScore(data)
+  const grade = total == null ? null : gradeFor(total)
 
   return <>
     <section aria-label={t('Quality')} className="flex w-full min-w-0 flex-col gap-2 panel-surface p-3 sm:p-4 lg:min-h-60 lg:aspect-[4/3] lg:h-fit">
       <div className="flex h-6 items-center justify-between gap-2">
         <Heading size="sm"><button type="button" className="relative z-10 -my-2.5 min-h-11 py-2 text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring" onClick={() => onOpenChange(true)} aria-label={t('Network quality details')}>{t('Quality')}</button></Heading>
+        {/* The card carries the published score only; an untested or expired
+            run leaves the slot empty rather than advertising a number. */}
+        <span className="flex items-baseline gap-1" title={grade ? t(grade.label) : t('No score')}>
+          <MetricValue size={total == null ? 'sm' : 'lg'} className={cn('leading-6', total == null && 'text-muted-foreground')}
+            value={total == null ? null : points(total)} unit={total == null ? undefined : '/ 100'} />
+        </span>
       </div>
       <button ref={chart} type="button" onClick={() => onOpenChange(true)} aria-label={t('Open network quality assessment')} className="-mx-1.5 -mb-1.5 flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2">
         <svg viewBox="0 -12 340 245" className="min-h-0 w-full flex-1" role="img" aria-label={`Network quality scores out of 100. ${axes.map((label, i) => `${label}: ${scores[i] == null ? 'not measured' : Math.round(scores[i]!)}${label === 'Wireless' && measuredScore(categories[i]) == null ? ' (default)' : categories[i]?.state === 'partial' ? ' (partial)' : ''}`).join('. ')}. Higher is better.`}>
@@ -134,6 +142,16 @@ export function NetworkQuality({ open, onOpenChange }: {
       </DialogContent>
     </Dialog>
   </>
+}
+
+/**
+ * The score the assessment stands behind, or nothing.
+ *
+ * A cancelled, timed-out, stale or unfinished run keeps the dash the report
+ * shows, so the card never advertises a number the report would not.
+ */
+function publishedScore(data: QualitySnapshot | undefined) {
+  return data && data.state === 'completed' && data.overall.state === 'ready' ? data.overall.score : null
 }
 
 function formatWhen(value: string, locale: string) {
@@ -179,7 +197,7 @@ function QualityReport({ data, readError, loading, retry }: {
   const runningScope: QualityScope | '' = data?.running_scope ?? (fullRunning ? 'all' : '')
   const scopedRunning = !fullRunning && Boolean(data?.running_scope)
   const running = fullRunning || scopedRunning
-  const score = data && data.state === 'completed' && data.overall.state === 'ready' ? data.overall.score : null
+  const score = publishedScore(data)
   const grade = score == null ? null : gradeFor(score)
   const categories = data?.categories ?? []
   const services = serviceEvidence(data)
