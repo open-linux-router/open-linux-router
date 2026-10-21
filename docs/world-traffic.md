@@ -57,34 +57,35 @@ the separate nftables interface/device totals.
 
 Blue indicates download and teal upload in the details list. The map itself
 uses one amber hue for every arc, deliberately outside the teal-green-blue
-country palette, so colour marks traffic as a category and tempo carries its
-size: every arc is 2px, and a busier location breathes faster. Breathing is a
-long fade to a quiet trough, a short hold and a shorter return, with zero
-endpoint slopes, matching the device activity block's shape; the trough is deep
-enough that a dip reads as the arc arriving or leaving. A blurred amber halo
-sits under each arc; because arcs composite per feature, the halo accumulates
-where they bunch up — around the router and along busy corridors — and
-concentration reads as light. Breath length is relative to the busiest plotted
-location, not to an absolute rate, and it maps logarithmically from 5.6 seconds
-for a quiet flow to 2.4 seconds at the peak, so modest flows still differ
-visibly. Every arc stays translucent so overlaps build up instead of replacing
-each other. Width is a single 2px at the world view and thins with zoom, so a
-country-sized view is not covered by ribbons meant for a globe.
+country palette, so colour marks traffic as a category. Every arc is 2px and
+keeps that weight for as long as its location reports traffic in the sampled
+window; an arc fades out only when the location leaves the window — no eligible
+bytes in the last thirty seconds, or pushed below the top forty. A line that
+dimmed while its flow continued would claim that a connection had ended, which
+the sampler cannot know: it differences conntrack counters every two seconds,
+keeps thirty seconds of deltas, and reports a rate per remote IP. It observes no
+connection start or end, so appearance and disappearance mean "in the window"
+and "out of it", not "opened" and "closed". Width carries no volume either; the
+ranked rates live in the details dialog, and the map stays a presence and
+direction picture. A blurred amber halo sits under each arc; because arcs
+composite per feature, the halo accumulates where they bunch up — around the
+router and along busy corridors — and concentration reads as light. Every arc
+stays translucent so overlaps build up instead of replacing each other, and
+width is a single 2px at the world view that thins with zoom, so a country-sized
+view is not covered by ribbons meant for a globe.
 One soft highlight rides each arc: a short stretch of the path drawn as two
 blurred strokes with a tail-to-head gradient, pale warm light rather than white
 so it lifts the amber without becoming a second hue. It travels out and back in
-four seconds each way, fades near both ends and dims with its arc's breath, so
-the light never floats on a line that has already left. Both views draw it; the
-card preview has room for a soft streak where a bead used to be a speck.
-Reduced motion freezes the breath at full strength and drops the highlight and
-interpolation. The UI polls every two seconds, but keeps each IP's breath and
-highlight phases independent of ranking. Paths fade in and out with a 450ms
-exponential time constant (about two seconds to settle), and the breath tempo
-eases toward new measured rates with a 350ms one, preserving phase. Visual
-updates render at up to 30fps, and hidden tabs pause them. The highlight stays
-within amber and warm light, so amber is the only hue the map adds. There are
-no endpoint dots: the arcs carry the whole reading, and the hub is where they
-converge.
+four seconds each way and fades near both ends, so the light never lands at the
+hub or on a destination. Both views draw it; the card preview has room for a
+soft streak where a bead used to be a speck.
+Reduced motion drops the highlight and interpolation. The UI polls every two
+seconds and keeps each IP's highlight phase independent of ranking. Paths fade
+in and out with a 450ms exponential time constant (about two seconds to settle).
+Visual updates render at up to 30fps, and hidden tabs pause them. The highlight
+stays within amber and warm light, so amber is the only hue the map adds. There
+are no endpoint dots: the arcs carry the whole reading, and the hub is where
+they converge.
 This interpolation visualizes sampled activity; it is not a packet trace.
 Different returned locations within one country can have an arc; a location at
 the router's own coordinates gets no arc. The details dialog

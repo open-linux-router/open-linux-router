@@ -49,29 +49,14 @@ const glowGradient = (dark: boolean) => {
   return ['interpolate', ['linear'], ['line-progress'], 0, transparent(color), 0.55, transparent(color, 0.5), 1, color] as ExpressionSpecification
 }
 // One width for every arc at the world view. Zooming into a region thins it, so
-// a country-sized view is not covered by a ribbon meant for a globe. Volume is
-// no longer in the line: four thicknesses compared badly once dozens of arcs
-// overlapped, so the arc's tempo carries its size instead.
+// a country-sized view is not covered by a ribbon meant for a globe. Four
+// thicknesses compared badly once dozens of arcs overlapped, so width no longer
+// carries volume; the map shows which locations are active and which way their
+// traffic runs, and the ranked rates live in the details dialog.
 // Zoom may only be the input of a top-level interpolate, so the scale wraps
 // the width instead of multiplying it.
 const arcWidth = 2
 const scaledWidth = (base: number) => ['interpolate', ['linear'], ['zoom'], 1, base, 3, base * 0.9, 4.5, base * 0.7, 6, base * 0.55] as ExpressionSpecification
-// Each arc breathes on its own clock: a long exhale to a quiet trough, a short
-// hold, then a shorter inhale back, with zero endpoint slopes. The shape is the
-// activity block's, so the two live-traffic animations read as one family, and
-// the trough is deep enough that a dip reads as the arc arriving or leaving.
-// A busier location breathes faster instead of drawing fatter.
-const trough = 0.2
-function breathe(phase: number) {
-  if (phase < 0.55) return 1 - (1 - trough) * (0.5 - 0.5 * Math.cos(Math.PI * phase / 0.55))
-  if (phase < 0.65) return trough
-  return trough + (1 - trough) * (0.5 - 0.5 * Math.cos(Math.PI * (phase - 0.65) / 0.35))
-}
-// Seconds per breath, from the quietest plotted location to the busiest. The
-// share maps logarithmically, so a modest flow still differs from the peak.
-function breathSeconds(share: number) {
-  return 5.6 - 3.2 * Math.min(1, Math.max(0, Math.log(Math.max(share, 0.02) / 0.02) / Math.log(25)))
-}
 // The highlight is a short stretch of the arc drawn as two blurred strokes, so
 // it has no hard edge and needs no extra hue. It travels out and back in four
 // seconds each way; the window is a fixed number of the path's samples, so a
@@ -224,19 +209,14 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       const previous = locations.get(key)
       locations.set(key, { ...peer, upload: (previous?.upload ?? 0) + peer.upload, download: (previous?.download ?? 0) + peer.download })
     }
-    let peak = 0
-    for (const peer of locations.values()) peak = Math.max(peak, peer.download + peer.upload)
     for (const [location, peer] of locations) {
       const end = position(peer.place)
       if (!end) continue
       if (!start || (start[0] === end[0] && start[1] === end[1])) continue
       const total = peer.download + peer.upload
       if (total <= 0) continue
-      // Tempo is relative to the busiest flow, not to an absolute byte rate:
-      // the busiest arc breathes fastest and the rest fall away by share.
-      const cycle = breathSeconds(total / Math.max(1, peak))
       const coordinates = arc(start, end, 0)
-      next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: { cycle }, geometry: { type: 'LineString', coordinates } }, coordinates })
+      next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } }, coordinates })
     }
     targets.current = next
   }, [peers, origin, dark, ready, expanded])
@@ -245,7 +225,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     if (!instance || !ready) return
     const set = (id: string, features: GeoJSON.Feature[]) => (instance.getSource(id) as GeoJSONSource).setData({ type: 'FeatureCollection', features })
     // Keep identity and phase independent of snapshot order and rank changes.
-    const visible = new Map<string, { target: FlowTarget; opacity: number; cycle: number; phase: number; glide: number }>()
+    const visible = new Map<string, { target: FlowTarget; opacity: number; glide: number }>()
     const reduced = matchMedia('(prefers-reduced-motion: reduce)')
     let previous = performance.now(), lastDraw = 0, frame = 0
     const animate = (now: number) => {
@@ -260,14 +240,10 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         const existing = visible.get(key)
         if (existing) existing.target = target
         else {
-          // Two hashes: the breath and the highlight should not start together,
-          // or every arc would pulse and glow on the same beat.
-          let breathHash = 0, glideHash = 0
-          for (const char of key) {
-            breathHash = (breathHash * 31 + char.charCodeAt(0)) >>> 0
-            glideHash = (glideHash * 131 + char.charCodeAt(0)) >>> 0
-          }
-          visible.set(key, { target, opacity: 0, cycle: Number(target.feature.properties?.cycle || 5), phase: breathHash / 4294967296, glide: glideHash / 4294967296 })
+          // One hash: the highlights should not all leave the router together.
+          let hash = 0
+          for (const char of key) hash = (hash * 131 + char.charCodeAt(0)) >>> 0
+          visible.set(key, { target, opacity: 0, glide: hash / 4294967296 })
         }
       }
       const lines: GeoJSON.Feature[] = [], glows: GeoJSON.Feature[] = []
@@ -276,21 +252,16 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         visual.opacity += ((active ? 1 : 0) - visual.opacity) * blend
         if (!active && visual.opacity < 0.01) { visible.delete(key); continue }
         const path = visual.target
-        // Light is the arrival fade times the breath: a settled arc keeps
-        // moving, and one that leaves still fades out the same way.
-        let light = visual.opacity
-        if (!reduced.matches) {
-          // Ease the tempo, never the phase, so a location that grows busier
-          // speeds up where it stands instead of jumping in its breath.
-          visual.cycle += (Number(path.feature.properties?.cycle || 5) - visual.cycle) * (1 - Math.exp(-elapsed / 350))
-          visual.phase = (visual.phase + elapsed / (visual.cycle * 1000)) % 1
-          visual.glide = (visual.glide + elapsed / glowSeconds) % 1
-          light *= breathe(visual.phase)
-        }
+        // Presence is the only thing that changes a line. It fades in when its
+        // location starts reporting traffic and out when the location leaves
+        // the window; while the location stays, the line stays at full weight
+        // and only the highlight moves along it.
+        const light = visual.opacity
         lines.push({ ...path.feature, properties: { opacity: light } })
         // Both views carry the highlight: at card size a soft streak still
         // reads, where a bead was a speck.
         if (reduced.matches) continue
+        visual.glide = (visual.glide + elapsed / glowSeconds) % 1
         // The light dims with its arc and leaves when the arc leaves, so it
         // never floats on a line that has already faded.
         const returning = visual.glide >= 0.5
@@ -345,7 +316,7 @@ export function WorldTraffic({ origin, embedded = false, expanded, onExpandedCha
       <DialogClose render={<Button variant="secondary" size="icon-lg" className="absolute top-3 right-3 z-10 rounded-full bg-card/95 shadow-md ring-1 ring-border backdrop-blur-sm sm:size-9" />}><X aria-hidden="true" /><span className="sr-only">{t('Close')}</span></DialogClose>
       <div className="min-h-0 flex-1" role="region" aria-label={t('World traffic map, drag to pan and scroll to zoom')}><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} expanded /></div>
     </DialogContent></Dialog>
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>{t('Map')}</DialogTitle><DialogDescription>{t('Remote IPs by upload and download in the last 30 seconds. Every arc is the same width; a busier location breathes faster and carries one soft highlight that travels out and back. IP locations are approximate.')}{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>{t('Map')}</DialogTitle><DialogDescription>{t('Remote IPs by upload and download in the last 30 seconds. Every arc is the same width and carries one soft highlight that travels out and back. An arc stays while its location reports traffic and fades when it leaves the window. IP locations are approximate.')}{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
       <p className="text-sm text-muted-foreground">{status}{data?.seconds ? ` · ${Math.round(data.seconds)}s sampled` : ''}. {data?.state === 'disabled' ? 'Connection byte accounting is off. Enable Gateway traffic counting and apply its configuration.' : 'Counts include router and forwarded connections observed in Linux conntrack. Connections ending between samples and traffic bypassing conntrack may be missed.'} {(!origin || !position(origin)) && 'Router location is unknown; arcs cannot be drawn.'}</p>
       {data?.error && <p className="break-words text-sm text-destructive">{data.error}</p>}
       {data?.locations?.error && <p className="break-words text-sm text-destructive">{data.locations.error}</p>}
