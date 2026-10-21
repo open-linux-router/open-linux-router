@@ -50,7 +50,8 @@ can be shared variants/tokens within those components.
 | Metric value | Measurement and optional unit | MetricValue, used by Tools, traffic primitives, Gateway and DNS summaries |
 | Primary metric | A summary card's one headline answer, figure or words | PrimaryMetric over MetricValue; one per Overview card, at the top of its content (Quality keeps its figure in the heading row, above its radar) |
 | Traffic meter | Current rate, optional limit and utilization | Reuse Meter; keep data/direction semantics in traffic code |
-| Status indicator | State label plus optional icon | Proposed StatusIndicator, composed into existing StatusStrip/rows; Badge remains a tag primitive |
+| Status | A state's tone and its one word | `state()` in `lib/state.ts` owns the words and their tones; `StatusPill`, `StatusInline` and `StatusDot` in `components/ui/status.tsx` draw them; `StatusStrip` owns a module verdict. Badge remains a tag primitive |
+| Row action | One trailing action, or a menu of several | `RowAction`, `RowMenu` and `RowChevron` in `components/ui/row-action.tsx`; ListRow renders the pencil for `editLabel` rows |
 | Technical value | IP, MAC, hostname, interface identifier, command | TechnicalValue for wrapping identifiers; literal output retains pre/code |
 | List / table | Repeated entities or comparable records | Reuse List/ListRow and Table; right-align numeric columns |
 | Form field | Label, control, hint, validation and feedback | Compose existing Label/Input/Select/Switch/EditableField; share repeated field structure |
@@ -67,6 +68,9 @@ support every size.
 
 | Component | Small | Medium / default | Large |
 | --- | --- | --- | --- |
+| Button | `sm`: 32px desktop / 44px phone | `default`: 36px desktop / 44px phone | `lg`: 44px |
+| Switch | — | 44 × 24px at every size; `busy` and `disabled` are different states | — |
+| StatusPill | — | 24px tall, 12px medium text, no dot; one per surface | — |
 | Heading / CardTitle | `sm`: 14/24px, compact monitoring/list group | `md`: 16/24px, section/panel (default) | `lg`: 24/32px, page/entity title |
 | MetricValue | `sm`: 14/20px, inline (default) | `md`: 20/28px, summary; Overview's word-answer headline | `lg`: 30/36px, diagnostic result; Overview's figure headline |
 | PrimaryMetric | — | `md`: 36px reserved line box, 20px words | `lg`: 36px reserved line box, 30px figure |
@@ -213,9 +217,14 @@ authentication headings and dialog depth. Ping without replies renders unavailab
 latency. Phone input typography takes precedence over compact text utilities;
 latency configuration actions use shared buttons and retain touch targets.
 
-Reuse these owners before extracting more components. StatusIndicator, a general
-form-field wrapper and a chart frame remain possible extractions when repeated
-behavior warrants them. Keep data fetching, formatting and apply behavior local.
+Reuse these owners before extracting more components. A general form-field wrapper
+and a chart frame remain possible extractions when repeated behavior warrants
+them. The control language — tones, status shapes, switch placement, button rank
+and row glyphs — is specified in
+[the control language contract](ui-control-language.md), and
+`web/scripts/test-control-language.mjs` enforces the parts that text can check:
+no page writes a status colour, no 10px status dot, every switch names its
+subject, and "apply anyway" is never painted destructive. Keep data fetching, formatting and apply behavior local.
 
 For implementation, review 375px, 768px and 1440px, both themes, keyboard-only
 navigation, long IPv6/device names, missing data and live updates. Capture

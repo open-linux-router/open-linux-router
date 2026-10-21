@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>OLR control language — specimen</title>
+<!--
+  Illustrative specimen for docs/ui-control-language.md. Hand-written CSS that
+  restates the theme tokens and the proposed primitives; it is not shipped and
+  not built. Open it in a browser: `open docs/ui-control-specimen.html`.
+-->
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --radius: 8px;
+  }
+  .t-light {
+    --background: #f6f7f9; --foreground: #171b22; --card: #ffffff;
+    --muted: #f0f2f5; --muted-foreground: #5b6472; --accent: #eef2f8;
+    --border: #e2e6ec; --input: #a4adbb;
+    --primary: #1d4ed8; --primary-fill: #2563eb; --primary-foreground: #fff;
+    --secondary: #f0f2f5; --secondary-foreground: #171b22;
+    --destructive: #b42335; --success: #22a06b; --success-foreground: #167447;
+    --warning: #c58a24; --warning-foreground: #935a10;
+    --ring: #1d4ed8;
+    --shadow-xs: 0 1px 2px rgb(23 27 34 / 4%);
+  }
+  .t-dark {
+    --background: #111318; --foreground: #f1f3f7; --card: #1a1d24;
+    --muted: #232731; --muted-foreground: #abb4c3; --accent: #283142;
+    --border: #343b48; --input: #67758b;
+    --primary: #8ab4ff; --primary-fill: #2563eb; --primary-foreground: #fff;
+    --secondary: #232731; --secondary-foreground: #f1f3f7;
+    --destructive: #ff9daa; --success: #42bb82; --success-foreground: #70d8a5;
+    --warning: #d9a13c; --warning-foreground: #f1c071;
+    --ring: #8ab4ff;
+    --shadow-xs: 0 1px 2px rgb(0 0 0 / 30%);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: ui-sans-serif, -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    background: #0b0d11; color: #e8ebf1; padding: 28px 32px 40px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; letter-spacing: -.01em; }
+  .lede { margin: 0 0 22px; font-size: 12.5px; color: #98a2b3; max-width: 92ch; line-height: 1.6; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .panel {
+    background: var(--background); color: var(--foreground);
+    border-radius: 14px; padding: 18px 18px 20px; min-width: 0;
+  }
+  .panel.dark { outline: 1px solid #262b34; }
+  .eyebrow {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--muted-foreground); margin: 0 0 12px; font-weight: 600;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: var(--shadow-xs);
+  }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .grow { flex: 1 1 auto; min-width: 0; }
+  .muted { color: var(--muted-foreground); }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  /* ---- status glyphs ---- */
+  .dot { border-radius: 999px; flex: none; }
+  .dot.sm { width: 6px; height: 6px; }
+  .dot.md { width: 8px; height: 8px; }
+  .t-ok.dot { background: var(--success); }
+  .t-warn.dot { background: var(--warning); }
+  .t-fault.dot { background: var(--destructive); }
+  .t-off.dot { background: color-mix(in oklab, var(--muted-foreground) 40%, transparent); }
+  .t-unknown.dot { background: transparent; border: 1.5px solid color-mix(in oklab, var(--muted-foreground) 85%, transparent); }
+  .word { font-size: 13px; line-height: 20px; }
+  .word.answer { color: var(--foreground); font-weight: 500; }
+  .word.dense { color: var(--muted-foreground); }
+  .pill {
+    display: inline-flex; align-items: center; height: 24px; padding: 0 8px;
+    border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .pill.ok { background: color-mix(in oklab, var(--success) 10%, transparent); color: var(--success-foreground); }
+  .pill.warn { background: color-mix(in oklab, var(--warning) 10%, transparent); color: var(--warning-foreground); }
+  .pill.fault { background: color-mix(in oklab, var(--destructive) 10%, transparent); color: var(--destructive); }
+  .pill.off { background: var(--muted); color: var(--muted-foreground); }
+  .pill.unknown { background: transparent; border-color: var(--border); color: var(--muted-foreground); }
+
+  /* ---- buttons ---- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 36px; padding: 0 14px; border-radius: 8px; font-size: 14px;
+    font-weight: 500; border: 1px solid transparent; background: none;
+    color: var(--foreground); font-family: inherit; white-space: nowrap;
+  }
+  .btn.primary { background: var(--primary-fill); color: var(--primary-foreground); }
+  .btn.secondary { border-color: var(--border); background: var(--card); }
+  .btn.quiet { color: var(--foreground); }
+  .btn.danger { background: color-mix(in oklab, var(--destructive) 10%, transparent); color: var(--destructive); }
+  .btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
+  .btn.icon { width: 36px; padding: 0; }
+  .btn.iconsm { width: 28px; height: 28px; padding: 0; border-radius: 8px; }
+  .btn[disabled] { opacity: .5; }
+
+  /* ---- switch ---- */
+  .sw {
+    position: relative; width: 44px; height: 24px; border-radius: 999px; flex: none;
+    background: var(--input);
+  }
+  .sw.on { background: var(--primary-fill); }
+  .sw.busy { background: color-mix(in oklab, var(--primary-fill) 70%, var(--muted)); }
+  .sw::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+    border-radius: 999px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
+    transition: transform .15s;
+  }
+  .sw.on::after, .sw.busy::after { transform: translateX(20px); }
+  .sw.off-disabled { opacity: .5; }
+
+  .label { font-size: 14px; font-weight: 500; }
+  .hint { font-size: 12px; line-height: 1.55; color: var(--muted-foreground); margin: 2px 0 0; }
+  .field { display: flex; align-items: center; gap: 18px; padding: 14px 16px; }
+
+  /* ---- list rows ---- */
+  .list { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
+  .li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+  .li + .li { border-top: 1px solid var(--border); }
+  .thumb { width: 28px; height: 28px; border-radius: 8px; background: var(--muted); flex: none; }
+  .title { display: block; font-size: 14px; color: var(--foreground); }
+  .sub { display: block; font-size: 13px; color: var(--muted-foreground); margin-top: 1px; }
+  .chev { width: 16px; height: 16px; color: var(--muted-foreground); flex: none; }
+  .chev.rot { transform: rotate(90deg); }
+  .act {
+    width: 36px; height: 36px; border-radius: 8px; display: inline-flex;
+    align-items: center; justify-content: center; color: var(--muted-foreground); flex: none;
+    border: 1px solid transparent;
+  }
+  .act.hover { background: color-mix(in oklab, var(--accent) 60%, transparent); color: var(--foreground); }
+  .act.dotted { border-color: var(--border); }
+
+
+  .mrow { display: grid; grid-template-columns: 50px 1fr 1fr 112px; align-items: center; gap: 10px; }
+  .cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .mhead { font-size: 10px; letter-spacing: .04em; color: var(--muted-foreground); }
+  .cap { font-size: 11px; color: #7f8a9b; margin: 0 0 6px; letter-spacing: .02em; }
+  .panel .cap { color: var(--muted-foreground); }
+  .stack > * + * { margin-top: 12px; }
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .snippet { padding: 14px 16px; }
+  .keyline { border-top: 1px solid var(--border); margin: 14px 0; }
+  .tag { font-size: 11px; color: #7f8a9b; }
+  .arrow { color: #7f8a9b; font-size: 12px; }
+  svg { display: block; }
+</style>
+</head>
+
+<body>
+  <h1>Control language — specimen</h1>
+  <p class="lede">
+    Companion to <span class="mono">docs/ui-control-language.md</span>. Light and dark are the
+    real token pairs. Row 1 is the whole state vocabulary: five tones × three shapes. The rest
+    applies it to switches, buttons, rows and the WireGuard card from the report.
+  </p>
+
+  <!-- ============ 1. STATE ============ -->
+  <div class="pair">
+    <section class="panel t-light">
+      <p class="eyebrow">State · tone × shape</p>
+      <div class="card">
+        <div class="snippet stack">
+          <div class="mrow mhead"><span></span><span>answer</span><span>dense</span><span>pill</span></div>
+          <div class="mrow"><span class="mono" style="font-size:11px">ok</span><span class="cell"><span class="dot sm t-ok"></span><span class="word answer">Running</span></span><span class="cell"><span class="dot sm t-ok"></span><span class="word dense">Connected</span></span><span class="pill ok">Up to date</span></div>
+          <div class="mrow"><span class="mono" style="font-size:11px">warn</span><span class="cell"><span class="dot sm t-warn"></span><span class="word answer">Not answering</span></span><span class="cell"><span class="dot sm t-warn"></span><span class="word dense">Needs attention</span></span><span class="pill warn">Not yet applied</span></div>
+          <div class="mrow"><span class="mono" style="font-size:11px">fault</span><span class="cell"><span class="dot sm t-fault"></span><span class="word answer">Not running</span></span><span class="cell"><span class="dot sm t-fault"></span><span class="word dense">Unreachable</span></span><span class="pill fault">Expired</span></div>
+          <div class="mrow"><span class="mono" style="font-size:11px">off</span><span class="cell"><span class="dot sm t-off"></span><span class="word answer">Off</span></span><span class="cell"><span class="dot sm t-off"></span><span class="word dense">Off</span></span><span class="pill off">Disabled</span></div>
+          <div class="mrow"><span class="mono" style="font-size:11px">unknown</span><span class="cell"><span class="dot sm t-unknown"></span><span class="word answer">Unavailable</span></span><span class="cell"><span class="dot sm t-unknown"></span><span class="word dense">Not checked</span></span><span class="pill unknown">Waiting</span></div>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:10px">filled = we know · ring = we cannot see · word carries meaning, dot carries tone</p>
+
+      <div class="keyline"></div>
+      <p class="cap">StatusStrip · page density · the verdict for one module</p>
+      <div class="card snippet">
+        <div class="row" style="align-items:flex-start">
+          <span class="dot md t-ok" style="margin-top:7px"></span>
+          <div class="grow">
+            <p style="margin:0;font-size:14px;font-weight:500">Handing out addresses</p>
+            <p style="margin:2px 0 0;font-size:13px" class="muted">12 devices with active leases</p>
+          </div>
+          <div class="sw on"></div>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:10px">8px dot · sentence headline · one switch, labelled by the headline</p>
+    </section>
+
+    <section class="panel t-dark dark">
+      <p class="eyebrow">State · tone × shape</p>
+      <div class="card">
+        <div class="snippet stack">
+          <div class="mrow mhead"><span></span><span>answer</span><span>dense</span><span>pill</span></div>
+          <div class="mrow"><span class="mono" style="font-size:11px">ok</span><span class="cell"><span class="dot sm t-ok"></span><span class="word answer">Running</span></span><span class="cell"><span class="dot sm t-ok"></span><span class="word dense">Connected</span></span><span class="pill ok">Up to date</span></div>
+          <div class="mrow"><span class="mono" style="font-size:11px">warn</span><span class="cell"><span class="dot sm t-warn"></span><span class="word answer">Not answering</span></span><span class="cell"><span class="dot sm t-warn"></span><span class="word dense">Needs attention</span></span><span class="pill warn">Not yet applied</span></div>
+          <div class="mrow"><span class="mono" style="font-size:11px">fault</span><span class="cell"><span class="dot sm t-fault"></span><span class="word answer">Not running</span></span><span class="cell"><span class="dot sm t-fault"></span><span class="word dense">Unreachable</span></span><span class="pill fault">Expired</span></div>
+          <div class="mrow"><span class="mono" style="font-size:11px">off</span><span class="cell"><span class="dot sm t-off"></span><span class="word answer">Off</span></span><span class="cell"><span class="dot sm t-off"></span><span class="word dense">Off</span></span><span class="pill off">Disabled</span></div>
+          <div class="mrow"><span class="mono" style="font-size:11px">unknown</span><span class="cell"><span class="dot sm t-unknown"></span><span class="word answer">Unavailable</span></span><span class="cell"><span class="dot sm t-unknown"></span><span class="word dense">Not checked</span></span><span class="pill unknown">Waiting</span></div>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:10px">filled = we know · ring = we cannot see · word carries meaning, dot carries tone</p>
+
+      <div class="keyline"></div>
+      <p class="cap">StatusStrip · page density · the verdict for one module</p>
+      <div class="card snippet">
+        <div class="row" style="align-items:flex-start">
+          <span class="dot md t-warn" style="margin-top:7px"></span>
+          <div class="grow">
+            <p style="margin:0;font-size:14px;font-weight:500">Not yet applied</p>
+            <p style="margin:2px 0 0;font-size:13px" class="muted">What is running is behind these settings.</p>
+          </div>
+          <div class="sw on"></div>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:10px">drift keeps the switch where the operator put it, and says what is behind</p>
+    </section>
+  </div>
+
+  <!-- ============ 2. SWITCH + BUTTON ============ -->
+  <div class="pair">
+    <section class="panel t-light">
+      <p class="eyebrow">Switch · three placements</p>
+      <div class="stack">
+        <div class="card field">
+          <div class="grow">
+            <div class="label">Answer DNS for this network</div>
+            <p class="hint">Stops name resolution for every device the moment it is off.</p>
+          </div>
+          <div class="sw on"></div>
+        </div>
+        <div class="card field">
+          <div class="grow">
+            <div class="label">Hand out addresses</div>
+            <p class="hint">Applying…</p>
+          </div>
+          <div class="sw busy"></div>
+        </div>
+        <div class="card field">
+          <div class="grow">
+            <div class="label">Give wan1 to this router</div>
+            <p class="hint">Refused here: loopback has no clients.</p>
+          </div>
+          <div class="sw off-disabled"></div>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:10px">busy keeps contrast and pairs with a word · disabled means the router will refuse</p>
+
+      <div class="keyline"></div>
+      <p class="eyebrow">Buttons · rank and size</p>
+      <div class="stack">
+        <div class="row" style="flex-wrap:wrap;gap:8px">
+          <button class="btn primary">Add</button>
+          <button class="btn secondary">Settings</button>
+          <button class="btn quiet">Cancel</button>
+          <button class="btn danger">Remove</button>
+          <button class="btn quiet" style="color:var(--primary);text-decoration:underline">Set limit</button>
+        </div>
+        <div class="row" style="gap:8px">
+          <button class="btn primary sm">Add</button>
+          <span class="tag">sm 32</span>
+          <button class="btn primary">Add</button>
+          <span class="tag">default 36</span>
+          <button class="btn icon" style="background:color-mix(in oklab, var(--accent) 60%, transparent)" aria-label="Edit">
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <span class="tag">icon 36</span>
+          <button class="btn iconsm quiet" aria-label="More">
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+          </button>
+          <span class="tag">icon-sm 28</span>
+        </div>
+        <div class="card" style="padding:12px 14px;display:flex;gap:8px;align-items:center">
+          <button class="btn quiet" style="color:var(--destructive)">Stop publishing</button>
+          <span class="grow"></span>
+          <button class="btn secondary">Cancel</button>
+          <button class="btn primary">Publish</button>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:10px">one primary per region · destructive left, commit last · Apply-anyway is primary, never red</p>
+    </section>
+
+    <section class="panel t-dark dark">
+      <p class="eyebrow">Switch · three placements</p>
+      <div class="stack">
+        <div class="card field">
+          <div class="grow">
+            <div class="label">Answer DNS for this network</div>
+            <p class="hint">Stops name resolution for every device the moment it is off.</p>
+          </div>
+          <div class="sw on"></div>
+        </div>
+        <div class="card field">
+          <div class="grow">
+            <div class="label">Hand out addresses</div>
+            <p class="hint">Applying…</p>
+          </div>
+          <div class="sw busy"></div>
+        </div>
+        <div class="card field">
+          <div class="grow">
+            <div class="label">Give wan1 to this router</div>
+            <p class="hint">Refused here: loopback has no clients.</p>
+          </div>
+          <div class="sw off-disabled"></div>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:10px">busy keeps contrast and pairs with a word · disabled means the router will refuse</p>
+
+      <div class="keyline"></div>
+      <p class="eyebrow">Buttons · rank and size</p>
+      <div class="stack">
+        <div class="row" style="flex-wrap:wrap;gap:8px">
+          <button class="btn primary">Add</button>
+          <button class="btn secondary">Settings</button>
+          <button class="btn quiet">Cancel</button>
+          <button class="btn danger">Remove</button>
+          <button class="btn quiet" style="color:var(--primary);text-decoration:underline">Set limit</button>
+        </div>
+        <div class="row" style="gap:8px">
+          <button class="btn primary sm">Add</button>
+          <span class="tag">sm 32</span>
+          <button class="btn primary">Add</button>
+          <span class="tag">default 36</span>
+          <button class="btn icon" style="background:color-mix(in oklab, var(--accent) 60%, transparent)" aria-label="Edit">
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <span class="tag">icon 36</span>
+          <button class="btn iconsm quiet" aria-label="More">
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+          </button>
+          <span class="tag">icon-sm 28</span>
+        </div>
+        <div class="card" style="padding:12px 14px;display:flex;gap:8px;align-items:center">
+          <button class="btn quiet" style="color:var(--destructive)">Stop publishing</button>
+          <span class="grow"></span>
+          <button class="btn secondary">Cancel</button>
+          <button class="btn primary">Publish</button>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:10px">one primary per region · destructive left, commit last · Apply-anyway is primary, never red</p>
+    </section>
+  </div>
+
+  <!-- ============ 3. ROWS ============ -->
+  <div class="pair">
+    <section class="panel t-light">
+      <p class="eyebrow">Rows · the glyph is the verb</p>
+      <div class="list">
+        <div class="li">
+          <span class="thumb"></span>
+          <span class="grow">
+            <span class="title">Li's iPhone</span>
+            <span class="sub">lis-iphone · 10.6.0.2 · reaches your network</span>
+          </span>
+          <span class="row" style="gap:6px"><span class="dot sm t-ok"></span><span class="word answer" style="font-size:12.5px">Connected</span></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+        <div class="li">
+          <span class="thumb"></span>
+          <span class="grow">
+            <span class="title">Li's iPhone</span>
+            <span class="sub">lis-iphone · 10.6.0.2 · reaches your network</span>
+          </span>
+          <span class="row" style="gap:6px"><span class="dot sm t-ok"></span><span class="word answer" style="font-size:12.5px">Connected</span></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+          <span class="act hover" aria-label="Edit Li's iPhone">
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </span>
+        </div>
+        <div class="li">
+          <span class="thumb"></span>
+          <span class="grow">
+            <span class="title">Backup NAS</span>
+            <span class="sub">nas · 10.6.0.9 · sends everything home</span>
+          </span>
+          <span class="row" style="gap:6px"><span class="dot sm t-warn"></span><span class="word answer" style="font-size:12.5px">Never connected</span></span>
+          <span class="act" aria-label="Backup NAS options">
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+          </span>
+        </div>
+        <div class="li">
+          <span class="thumb"></span>
+          <span class="grow">
+            <span class="title">Port forward · Minecraft</span>
+            <span class="sub">25565 TCP → 10.6.0.9</span>
+          </span>
+          <span class="word answer tnum" style="font-size:12.5px">1.2 GB in</span>
+          <span class="act dotted" aria-label="Edit Minecraft forward">
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </span>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:10px">navigate = chevron · edit = pencil · two actions = menu · a dialog row never wears a chevron</p>
+      <p class="cap">row 4 keeps the byte total as a plain value, not a success pill</p>
+    </section>
+
+    <section class="panel t-dark dark">
+      <p class="eyebrow">Rows · the glyph is the verb</p>
+      <div class="list">
+        <div class="li">
+          <span class="thumb"></span>
+          <span class="grow">
+            <span class="title">Li's iPhone</span>
+            <span class="sub">lis-iphone · 10.6.0.2 · reaches your network</span>
+          </span>
+          <span class="row" style="gap:6px"><span class="dot sm t-ok"></span><span class="word answer" style="font-size:12.5px">Connected</span></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+        <div class="li">
+          <span class="thumb"></span>
+          <span class="grow">
+            <span class="title">Li's iPhone</span>
+            <span class="sub">lis-iphone · 10.6.0.2 · reaches your network</span>
+          </span>
+          <span class="row" style="gap:6px"><span class="dot sm t-ok"></span><span class="word answer" style="font-size:12.5px">Connected</span></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+          <span class="act hover" aria-label="Edit Li's iPhone">
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </span>
+        </div>
+        <div class="li">
+          <span class="thumb"></span>
+          <span class="grow">
+            <span class="title">Backup NAS</span>
+            <span class="sub">nas · 10.6.0.9 · sends everything home</span>
+          </span>
+          <span class="row" style="gap:6px"><span class="dot sm t-warn"></span><span class="word answer" style="font-size:12.5px">Never connected</span></span>
+          <span class="act" aria-label="Backup NAS options">
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+          </span>
+        </div>
+        <div class="li">
+          <span class="thumb"></span>
+          <span class="grow">
+            <span class="title">Port forward · Minecraft</span>
+            <span class="sub">25565 TCP → 10.6.0.9</span>
+          </span>
+          <span class="word answer tnum" style="font-size:12.5px">1.2 GB in</span>
+          <span class="act dotted" aria-label="Edit Minecraft forward">
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </span>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:10px">navigate = chevron · edit = pencil · two actions = menu · a dialog row never wears a chevron</p>
+      <p class="cap">row 4 keeps the byte total as a plain value, not a success pill</p>
+    </section>
+  </div>
+
+  <!-- ============ 4. APPLIED ============ -->
+  <div class="pair">
+    <section class="panel t-light">
+      <p class="eyebrow">Applied · WireGuard connection card, three states</p>
+      <div class="stack">
+        <div class="card">
+          <div class="snippet" style="padding:16px">
+            <div class="row">
+              <span class="title" style="font-weight:600">Connection settings</span>
+              <span class="pill ok">Running</span>
+              <span class="grow"></span>
+              <button class="btn secondary sm">Settings</button>
+              <div class="sw on"></div>
+            </div>
+            <p class="hint" style="margin-top:10px">Devices connect to <span class="mono">111.196.184.83</span> on UDP port 51820 and get addresses in <span class="mono">10.6.0.0/24</span>.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="snippet" style="padding:16px">
+            <div class="row">
+              <span class="title" style="font-weight:600">Connection settings</span>
+              <span class="pill off">Off</span>
+              <span class="grow"></span>
+              <button class="btn secondary sm">Settings</button>
+              <div class="sw"></div>
+            </div>
+            <p class="hint" style="margin-top:10px">Saved devices cannot connect while this is off.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="snippet" style="padding:16px">
+            <div class="row">
+              <span class="title" style="font-weight:600">Connection settings</span>
+              <span class="pill warn">Not yet applied</span>
+              <span class="grow"></span>
+              <button class="btn secondary sm">Settings</button>
+              <div class="sw on"></div>
+            </div>
+            <p class="hint" style="margin-top:10px">The tunnel is not up after a reboot. Putting it back does not disturb anyone connected.</p>
+            <div class="row" style="margin-top:10px;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px">
+              <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="color:var(--warning-foreground)"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              <span class="grow" style="font-size:12.5px">The router is not doing what these settings say.</span>
+              <button class="btn secondary sm">Put it back</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:10px">same card, three facts: off is neutral, drift is amber, broken is red — never the other way round</p>
+    </section>
+
+    <section class="panel t-dark dark">
+      <p class="eyebrow">Applied · WireGuard connection card, three states</p>
+      <div class="stack">
+        <div class="card">
+          <div class="snippet" style="padding:16px">
+            <div class="row">
+              <span class="title" style="font-weight:600">Connection settings</span>
+              <span class="pill ok">Running</span>
+              <span class="grow"></span>
+              <button class="btn secondary sm">Settings</button>
+              <div class="sw on"></div>
+            </div>
+            <p class="hint" style="margin-top:10px">Devices connect to <span class="mono">111.196.184.83</span> on UDP port 51820 and get addresses in <span class="mono">10.6.0.0/24</span>.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="snippet" style="padding:16px">
+            <div class="row">
+              <span class="title" style="font-weight:600">Connection settings</span>
+              <span class="pill off">Off</span>
+              <span class="grow"></span>
+              <button class="btn secondary sm">Settings</button>
+              <div class="sw"></div>
+            </div>
+            <p class="hint" style="margin-top:10px">Saved devices cannot connect while this is off.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="snippet" style="padding:16px">
+            <div class="row">
+              <span class="title" style="font-weight:600">Connection settings</span>
+              <span class="pill warn">Not yet applied</span>
+              <span class="grow"></span>
+              <button class="btn secondary sm">Settings</button>
+              <div class="sw on"></div>
+            </div>
+            <p class="hint" style="margin-top:10px">The tunnel is not up after a reboot. Putting it back does not disturb anyone connected.</p>
+            <div class="row" style="margin-top:10px;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px">
+              <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="color:var(--warning-foreground)"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              <span class="grow" style="font-size:12.5px">The router is not doing what these settings say.</span>
+              <button class="btn secondary sm">Put it back</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="cap" style="margin-top:10px">same card, three facts: off is neutral, drift is amber, broken is red — never the other way round</p>
+    </section>
+  </div>
+</body>
+</html>

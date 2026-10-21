@@ -317,10 +317,22 @@ List remaining errors with service names and wrapping text; keep the existing
 single-service edit dialog and save action.
 
 Use the shared Button, Input, Select, Textarea, Switch, Card and Dialog components.
-Regular controls are 36px high on desktop; mobile button/input/select targets
-are at least 44px high. Switch visuals are 44 × 24px with an expanded mobile hit
-area. Focus uses the primary ring and must remain visible. Hover and active
-changes use color; avoid positional movement.
+Regular controls are 36px high on desktop, `sm` is 32px, and mobile
+button/input/select targets are at least 44px high. Switch visuals are 44 × 24px
+with an expanded mobile hit area; `busy` keeps an applying switch at full
+contrast and `disabled` is reserved for a change the router will refuse. Focus
+uses the primary ring and must remain visible. Hover and active changes use color;
+avoid positional movement.
+
+State, switch placement, button rank and row glyphs follow the
+[control language contract](ui-control-language.md). Five tones are shared —
+`ok`, `warn`, `fault`, `off`, `unknown` — and a word's tone is fixed in
+`lib/state.ts`, never chosen per page. A state is drawn in one of three shapes:
+`StatusPill` for the subject of a card, `StatusInline` (dot and word) for an item
+in a list, and the status strip for a module's verdict. Measurements stay plain
+values; only a grade is a pill. A chevron means "this row leads somewhere", a
+pencil means "this row can be changed", an ellipsis opens a menu, and a rotating
+chevron expands in place.
 
 Inline editable fields keep the input, explanation and save action within the
 same 720px field area. Show saving, error and completion where the action occurs.
