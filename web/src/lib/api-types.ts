@@ -1013,6 +1013,49 @@ export interface GatewayStatus {
   as_of: string
 }
 
+/**
+ * One route as the kernel reports it — internal/gateway routeRowView.
+ *
+ * `default` is the route that matches every destination, carried separately
+ * because a destination of 0.0.0.0/0 is a fact about the table rather than
+ * about the prefix, and the card counts them.
+ */
+export interface RouteRow {
+  dst: string
+  default?: boolean
+  via?: string
+  dev?: string
+  metric?: number
+  kind?: string
+  proto?: string
+}
+
+/**
+ * One route table and who it belongs to — internal/gateway routeTableView.
+ *
+ * Owner separates the box's main table from the tables OLR writes, which is the
+ * distinction the whole page exists to keep: OLR does not squat the main table
+ * (design.md §3.4), and a view that listed both as "routes" would say it does.
+ */
+export interface RouteTable {
+  family: 4 | 6
+  table: number
+  name: string
+  owner: 'main' | 'exit' | 'other'
+  exit?: string
+  priority?: number
+  routes: RouteRow[]
+}
+
+/** GET /api/gateway/routes — internal/gateway routesView. */
+export interface GatewayRoutes {
+  /** False when the kernel could not be read at all; `error` says why. */
+  known: boolean
+  error?: string
+  tables: RouteTable[]
+  as_of: string
+}
+
 /** One device's traffic through one way out — internal/gateway usageView. */
 export interface Usage {
   address: string

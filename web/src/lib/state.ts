@@ -45,6 +45,7 @@ export const STATE = {
   'IPv6 enabled': 'ok',
   Tunnel: 'ok',
   'Via exit': 'ok',
+  'Default route': 'ok',
   'Valid for {days} days': 'ok',
 
   // Working, but somebody should look.
@@ -58,6 +59,7 @@ export const STATE = {
   'No cable': 'warn',
   'No address': 'warn',
   'Not configured': 'warn',
+  'No default route': 'warn',
   'No network': 'warn',
   'No route': 'warn',
   'Unknown exit': 'warn',
@@ -80,6 +82,7 @@ export const STATE = {
   'Not needed yet': 'off',
   Blocking: 'off',
   'No IPv6': 'off',
+  'No routes': 'off',
   'Not managed': 'off',
   'Nothing yet': 'off',
   'IPv6 disabled': 'off',

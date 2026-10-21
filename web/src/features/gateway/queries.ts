@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { GatewayApplyResult, GatewayLatency, GatewayPlan, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
+import type { GatewayApplyResult, GatewayLatency, GatewayPlan, GatewayRoutes, GatewayStatus, GatewayTraffic } from '@/lib/api-types'
 import type { GatewayConfig } from '@/lib/config-types'
 
 import { TRAFFIC_SAMPLE_SAVE_MS, writeTrafficSample } from './traffic-sample'
@@ -30,6 +30,21 @@ export const gatewayKeys = {
   config: ['gateway', 'config'] as const,
   status: ['gateway', 'status'] as const,
   traffic: ['gateway', 'traffic'] as const,
+  routes: ['gateway', 'routes'] as const,
+}
+
+/**
+ * The routing table, read from the kernel.
+ *
+ * Its own query because it answers a different question from /status: that one
+ * is about what OLR wrote and whether it stuck, this one is about every table
+ * on the box, including the ones nobody here wrote.
+ */
+export function useGatewayRoutes() {
+  return useQuery({
+    queryKey: gatewayKeys.routes,
+    queryFn: () => api.get<GatewayRoutes>('/api/gateway/routes'),
+  })
 }
 
 export function useGatewayConfig() {

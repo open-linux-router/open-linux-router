@@ -343,9 +343,9 @@ live beside the switches that change them.
 Below them are two stacks, IPv4 and IPv6, each naming the same six stages in the
 order traffic takes them: Upstream (address, next hop, and for IPv6 whether it
 is native, delegated or tunnelled), LAN (the subnets and how much of the pool is
-in use), the clients stage, Routing (whether this family's traffic gets out, and
-on IPv4 what it carries: NAT and the port forwards), Exit (direct, or which exit
-carries it — and for IPv6 whether an exit drops it, since there is no NAT to
+in use), the clients stage, Forwarding (whether this family's traffic gets out,
+and on IPv4 what it carries: NAT and the port forwards), Exit (direct, or which
+exit carries it — and for IPv6 whether an exit drops it, since there is no NAT to
 translate it) and DNS (the resolvers, and for IPv6 whether IPv6 name resolution
 is enabled). The reading order is shared; the card labels are not required to
 match. A card is named for what an operator came to change: DHCP on IPv4,
@@ -355,9 +355,19 @@ are the operator's own words, so the card does not coin a name for the family.
 Each card states its stage's answer and links to the one page that changes it; a
 missing stage is named in its card rather than hidden. The stacks are a view cut
 across the modules and hold no configuration of their own, so the same module
-appearing under both families is one object seen twice. Routing drift and the
-switches themselves remain at interfaces#forwarding; Overview reports a gateway
-fault. Usage has no separate page; traffic counting lives in routing details.
+appearing under both families is one object seen twice. Drift and every routing
+and forwarding switch remain at interfaces#forwarding; Overview reports a
+gateway fault. Usage has no separate page; traffic counting lives in routing
+details.
+
+Below the stacks is the routing table itself, one card per family: the route
+count, whether that family has a default route, and whether any table belongs to
+somebody else. It is not a seventh stage — every module in the stacks writes
+into this table, and the kernel consults it after all of them — so it gets its
+own block rather than a card in the flow. Its page is read-only and groups every
+route by table: the box's main table, each exit's own table, and any table a
+rule outside OLR points at. A table is not a setting, so the rows live there and
+the card carries only the counts.
 
 Open newly navigated pages at the top so their title and primary information are
 visible. Preserve section targeting for hash links and scroll for query-only changes.
@@ -408,12 +418,11 @@ IPv6 DNS card on Gateway reads IPv6 disabled, not AAAA filtered: dropping AAAA
 records is one way to reach that state, and the mechanism only answers the
 question for a reader who already knows the record type. The setting's own page
 may keep the mechanism's name, because there the operator is choosing it; a
-status that reports the outcome names the outcome. The Routing card follows the
-same rule: devices reach the internet or they do not, and which sysctl was
-written is not something the operator can see or act on. It is titled Routing
-rather than Forwarding because that is the name of the switch it reports —
-Gateway routing at interfaces#forwarding, the one control that takes every
-network off the internet — and because the page needs a card for that switch.
+status that reports the outcome names the outcome. The Forwarding card follows
+the same rule: devices reach the internet or they do not, and which sysctl was
+written is not something the operator can see or act on. The card's title stays
+the module's own word, because the switch it reports is the one in the Gateway
+routing card at interfaces#forwarding.
 
 Avoid repeating the title in a description, stating obvious click behavior or
 adding a generic next-step sentence. Use one short sentence when an explanation

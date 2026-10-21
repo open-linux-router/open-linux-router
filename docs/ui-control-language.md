@@ -111,10 +111,10 @@ Tone is fixed by the word. The dictionary lives in one file
 
 | Tone | Words |
 | --- | --- |
-| `ok` | Running, Connected, OK, Working, On, Up to date, Delegated, Advertising, Configured, IPv6 enabled, Tunnel, Via exit, Valid for {days} days |
-| `warn` | Needs attention, Not yet applied, Not up to date, Behind shared NAT, Renewal overdue, Not answering, Never connected, No cable, No address, Not configured, No network, No route, Unknown exit, Bypasses the exit, Partial, LAN offline |
+| `ok` | Running, Connected, OK, Working, On, Up to date, Delegated, Advertising, Configured, IPv6 enabled, Tunnel, Via exit, Default route, Valid for {days} days |
+| `warn` | Needs attention, Not yet applied, Not up to date, Behind shared NAT, Renewal overdue, Not answering, Never connected, No cable, No address, Not configured, No network, No route, No default route, Unknown exit, Bypasses the exit, Partial, LAN offline |
 | `fault` | Not running, Down, Expired, Not installed, Not set, Unreachable, Not found |
-| `off` | Off, Disabled, Not needed yet, Blocking, No IPv6, Not managed, Nothing yet, IPv6 disabled, Not in use, Direct, Loopback, Blocked |
+| `off` | Off, Disabled, Not needed yet, Blocking, No IPv6, No routes, Not managed, Nothing yet, IPv6 disabled, Not in use, Direct, Loopback, Blocked |
 | `unknown` | Checking…, Reading…, Applying…, Waiting, Unknown, Not checked, Unavailable, Not counted, Status unknown, Asking…, Updating |
 
 Domain words stay domain words: DHCP's "Devices disconnect" and DNS's are

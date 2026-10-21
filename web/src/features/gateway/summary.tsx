@@ -18,12 +18,13 @@ import { StatusInline } from '@/components/ui/status'
 import { RowChevron } from '@/components/ui/row-action'
 import { cn, formatRate } from '@/lib/utils'
 
+import { GatewayRoutesCards } from './routes-cards'
 import { GatewayStacks } from './stacks'
 
 /**
  * The gateway, on the page you land on.
  *
- * Two layers. The interfaces are the objects: what this box is plugged into,
+ * Three layers. The interfaces are the objects: what this box is plugged into,
  * each card opening that interface's own page. Below them the page is two
  * stacks, IPv4 and IPv6, each cut across the modules in the order a packet
  * meets them — upstream, LAN, DHCP, forwarding, exit, DNS — so "does IPv6
@@ -31,9 +32,14 @@ import { GatewayStacks } from './stacks'
  * which half. Every card links to the page that changes it and holds no
  * configuration of its own (features/gateway/stacks.tsx).
  *
- * There is no status strip and there are no switches. Routing's own state is a
- * detail of the routing settings, and the stacks report its writing rather than
- * offering to change it; Overview is where a gateway fault is reported.
+ * Last, the routing table itself: the tables the stacks' modules write into and
+ * the one table they leave alone (features/gateway/routes-cards.tsx). It is not
+ * a stage and not per module — the kernel consults it after all of them — so it
+ * is its own block rather than a seventh card in the flow.
+ *
+ * There is no status strip and there are no switches. Drift is a detail of the
+ * routing settings, and the page reports what was written rather than offering
+ * to change it; Overview is where a gateway fault is reported.
  */
 export function GatewaySummary() {
   useLocale()
@@ -49,6 +55,7 @@ export function GatewaySummary() {
     <div className="space-y-8">
       <InterfacesCard />
       <GatewayStacks />
+      <GatewayRoutesCards />
     </div>
   )
 }

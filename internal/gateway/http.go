@@ -192,6 +192,17 @@ func (h HTTP) Routes() []core.Route {
 			Handler: h.getStatus,
 		},
 
+		// The routing table itself. Read only — there is no editor behind this
+		// route and nothing here plans a change (§2.4: a static route is its own
+		// object, and this page reports the tables everyone else's routes are
+		// already in rather than becoming a second place to write them).
+		{
+			Method: "GET", Path: "/routes", Tool: "show routes",
+			Summary: "Show every route in every table: the main table, each exit's own table, " +
+				"and any table a rule outside olr points at.",
+			Handler: h.getRoutes,
+		},
+
 		// Per-device and per-exit bytes, read from the kernel on every request.
 		// Separate from /status because it is asked far more often and costs a
 		// walk of every device on the network.
@@ -674,6 +685,33 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	core.WriteJSON(w, http.StatusOK, viewStatus(st, warnings, now))
+}
+
+func (h HTTP) getRoutes(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+
+	cfg, err := h.Applier.Load()
+	if err != nil {
+		core.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	routes, err := h.Applier.Kernel.ReadRoutes(r.Context())
+	if err != nil {
+		// Degraded rather than fatal, the way getStatus reports a kernel it
+		// could not read: the configured exits still name tables worth knowing,
+		// and Known:false with the reason says which half is missing rather than
+		// claiming the box has no routes.
+		core.WriteJSON(w, http.StatusOK, routesView{
+			Known:  false,
+			Error:  err.Error(),
+			Tables: []routeTableView{},
+			AsOf:   now,
+		})
+		return
+	}
+
+	core.WriteJSON(w, http.StatusOK, viewRoutes(routes, cfg, now))
 }
 
 func (h HTTP) getTraffic(w http.ResponseWriter, r *http.Request) {

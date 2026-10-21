@@ -85,6 +85,14 @@ export const SECTIONS: Section[] = [
         blurb: '',
       },
       {
+        slug: 'routes',
+        get label() { return t('Routes') },
+        // Read-only, and named for the object rather than for a setting: the
+        // routing table is where every route already is, including the ones
+        // olr did not write and must not claim (design.md §3.4).
+        get blurb() { return t('The routing table: the box’s own table, each exit’s table, and the rules outside OLR.') },
+      },
+      {
         slug: 'dhcp',
         label: 'DHCP',
         get blurb() { return t('Define served networks, hand out addresses and reserve them for devices that need a fixed one.') },

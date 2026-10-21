@@ -13,7 +13,7 @@ OLR capabilities, and a calm, consistent interface. This record accompanies the
 | Group | Preserve member lists and batch controls; remove repeated MAC/direct-membership prose; keep overwrite and non-inheritance consequences. |
 | Device/group QoS | State that configuration is saved but not enforced; keep forms and shared group-cap semantics. |
 | Inspection | Keep the existing panel and results; confirm privacy and CA consequences before starting; disclose lengthy preparation/scope and viewer details; retain session stop time and diagnostics. |
-| Gateway | Interface cards in a wrapping grid with role, address and rates, each linking to the interface's own page, then two stacks — IPv4 and IPv6 — of six stage cards each (Upstream, LAN, DHCP, Routing, Exit, DNS, with SLAAC or DHCPv6 in place of DHCP on the IPv6 stack) that state the stage's answer and link to the one page that changes it. No status strip and no switches — routing drift and all routing/forwarding switches live at interfaces#forwarding, and Overview reports faults. |
+| Gateway | Interface cards in a wrapping grid with role, address and rates, each linking to the interface's own page, then two stacks — IPv4 and IPv6 — of six stage cards each (Upstream, LAN, DHCP, Forwarding, Exit, DNS, with SLAAC or DHCPv6 in place of DHCP on the IPv6 stack) that state the stage's answer and link to the one page that changes it, then the routing table as two cards that count routes and link to its read-only page. No status strip and no switches — routing drift and all routing/forwarding switches live at interfaces#forwarding, and Overview reports faults. |
 | Interfaces/routing and interface detail | Keep controls and all observed fields; carry link speed, every address, live rates, totals and the served DHCP range on the detail page, since the landing card no longer opens a dialog; shorten management and routing explanations without moving controls. |
 | Exits | Preserve list/edit forms; distinguish blocking, unknown and failed checks; remove repeated failure prose. |
 | Usage | Preserve measurement controls and counters; show a uniquely matched device name with its address; download precedes upload; disclose accounting limitations. |
@@ -120,20 +120,29 @@ forwarded it, and whether an exit dropped it were each in a different module,
 and finding them required knowing which module owned which half.
 
 Way out and Services are replaced by two stacks, IPv4 and IPv6, each cut across
-the modules in packet order: Upstream, LAN, DHCP, Routing, Exit, DNS, with the
-clients card reading SLAAC or DHCPv6 on the IPv6 stack. Each card states that
-stage's answer for that family and links to the one page that changes it, so the
-question "is IPv6 working, and where do I fix it" is answered without a module
-map. Missing stages are named in the card — no /64, nobody advertising, routing
-off — instead of being absent, because an absent row reads as "nothing to do"
-rather than "not configured". The clients card is titled for what an operator
-came to change: DHCP on IPv4 — the module's name and the word they arrive with —
-and the protocol running on IPv6: SLAAC, DHCPv6, or both when networks differ.
-Those are terms an operator already knows, and that card opens the address
-ranges that carry each network's advertisement mode. The Routing card is titled
-for the module's own switch rather than the kernel mechanism beneath it, and
-reports what that switch decides: devices reach the internet or they do not,
-with NAT and the port-forward count beside it on IPv4.
+the modules in packet order: Upstream, LAN, DHCP, Forwarding, Exit, DNS, with
+the clients card reading SLAAC or DHCPv6 on the IPv6 stack. Each card states
+that stage's answer for that family and links to the one page that changes it,
+so the question "is IPv6 working, and where do I fix it" is answered without a
+module map. Missing stages are named in the card — no /64, nobody advertising,
+forwarding off — instead of being absent, because an absent row reads as
+"nothing to do" rather than "not configured". The clients card is titled for
+what an operator came to change: DHCP on IPv4 — the module's name and the word
+they arrive with — and the protocol running on IPv6: SLAAC, DHCPv6, or both when
+networks differ. Those are terms an operator already knows, and that card opens
+the address ranges that carry each network's advertisement mode. The Forwarding
+card reports what its switch decides rather than where the sysctl was written:
+devices reach the internet or they do not, with NAT and the port-forward count
+beside it on IPv4.
+
+Below the stacks is the routing table, which is not a stage
+and not a module: every card above writes into it and the kernel consults it
+after all of them. Two cards count routes per family and say whether that family
+has a default route; their page lists every route grouped by table — the box's
+main table, each exit's own table with the rule priority that selects it, and
+any table a foreign rule points at — and is read-only, because a static route is
+its own object and a page reporting the table must not become a second place to
+write it.
 
 The stacks are a read model. Every card is a link: no draft, no plan, no apply
 of its own, so the same module appearing once per family is one object seen

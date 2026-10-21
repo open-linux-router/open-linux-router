@@ -34,6 +34,12 @@ func (unsupportedKernel) Traffic(context.Context) ([]Flow, error) {
 	return nil, ErrUnsupported
 }
 
+// ReadRoutes refuses too: an empty table would read as a router with no
+// routes, which is a claim rather than an absence of one.
+func (unsupportedKernel) ReadRoutes(context.Context) ([]KernelRoute, error) {
+	return nil, ErrUnsupported
+}
+
 // Apply refuses, rather than silently succeeding.
 func (unsupportedKernel) Apply(context.Context, Desired) ([]Step, error) {
 	return nil, ErrUnsupported

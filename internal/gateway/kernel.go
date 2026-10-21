@@ -23,7 +23,7 @@ var ErrUnsupported = errors.New("routing needs a Linux kernel with nftables and 
 
 // Kernel is the window onto what this module programs.
 //
-// Two methods and no more. Every decision — which prefix gets which mark, what
+// Reads and the one write. Every decision — which prefix gets which mark, what
 // happens to IPv6, whether a change is disruptive — is made above this line
 // against values, so an implementation of it has no policy in it at all.
 type Kernel interface {
@@ -40,6 +40,14 @@ type Kernel interface {
 	// watching. Folding them together would make every apply pay for a walk of
 	// every device on the network.
 	Traffic(ctx context.Context) ([]Flow, error)
+
+	// ReadRoutes reads the route table in full, every table and both families.
+	//
+	// Separate from Observe, which reads only the default route in each of our
+	// own tables — the subset drift detection compares. This is the whole
+	// table, for a page whose subject is the table itself, and it is why that
+	// page can show a route olr did not write without pretending to own it.
+	ReadRoutes(ctx context.Context) ([]KernelRoute, error)
 
 	// Apply programs the desired state, returning what it managed to do.
 	//
@@ -127,6 +135,11 @@ type StaticKernel struct {
 	// Flows is what Traffic returns.
 	Flows []Flow
 
+	// Routes is what ReadRoutes returns, and RoutesErr forces its failure
+	// path.
+	Routes    []KernelRoute
+	RoutesErr error
+
 	// Unknown makes Observe report that the kernel could not be read, which is
 	// what a non-Linux build and an unprivileged container both look like.
 	Unknown bool
@@ -168,6 +181,17 @@ func (k *StaticKernel) Traffic(context.Context) ([]Flow, error) {
 		return nil, ErrUnsupported
 	}
 	return append([]Flow(nil), k.Flows...), nil
+}
+
+// ReadRoutes implements Kernel.
+func (k *StaticKernel) ReadRoutes(context.Context) ([]KernelRoute, error) {
+	if k.RoutesErr != nil {
+		return nil, k.RoutesErr
+	}
+	if k.Unknown {
+		return nil, ErrUnsupported
+	}
+	return append([]KernelRoute(nil), k.Routes...), nil
 }
 
 // Apply implements Kernel.

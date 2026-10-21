@@ -40,6 +40,7 @@ import { GatewayInterfacesPage } from '@/routes/gateway/interfaces'
 import { TunnelBrokerPage } from '@/routes/gateway/tunnelbroker'
 import { GatewayInterfacePage } from '@/routes/gateway/interface'
 import { GatewayExitsPage } from '@/routes/gateway/exits'
+import { GatewayRoutesPage } from '@/routes/gateway/routes'
 import { FirewallPage } from '@/routes/firewall'
 import { FirewallRulesPage } from '@/routes/firewall-rules'
 import { GatewayUnmanagedPage } from '@/routes/gateway/unmanaged'
@@ -75,6 +76,7 @@ export function App() {
             <Route path="usage" element={<Navigate to="/gateway" replace />} />
             <Route path="ipv6" element={<Navigate to="/gateway/interfaces#forwarding" replace />} />
             <Route path="unmanaged" element={<GatewayUnmanagedPage />} />
+            <Route path="routes" element={<GatewayRoutesPage />} />
             {/* The section root is the section's own page. `details` was the
                 only address that rendered it, so it redirects here instead of
                 leaving two URLs for one page. */}

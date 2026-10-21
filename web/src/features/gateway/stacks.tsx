@@ -1,9 +1,9 @@
 import { t, useLocale } from '@/lib/i18n'
 import {
+  ArrowRightLeft,
   ArrowUpFromLine,
   MonitorSmartphone,
   Network,
-  Route,
   Search,
   Signpost,
   type LucideIcon,
@@ -29,7 +29,7 @@ type Family = 'v4' | 'v6'
  *
  * A normal operator asks "does IPv6 work, and where do I fix it", not "is dial
  * or dhcp configured". Each stack is that question answered in the order the
- * traffic takes: upstream, LAN addressing, DHCP, routing, which way out, and
+ * traffic takes: upstream, LAN addressing, DHCP, forwarding, which way out, and
  * name resolution. Every card names the one page that changes it.
  *
  * The clients stage is titled for what an operator came to change: DHCP on
@@ -38,13 +38,15 @@ type Family = 'v4' | 'v6'
  * terms network operators already use; a stage label of our own would be one
  * more thing to learn before the card could be used.
  *
- * The routing stage carries the module's own name for the same reason. The
- * switch at interfaces#forwarding is titled "Gateway routing", and it is what
- * this card reports: turning it off takes every network off the internet and
- * closes every port forward. Calling the card Forwarding named the kernel
- * mechanism instead — the one part of it the operator never touches — and left
- * the page with no card for the switch that decides whether the LAN gets out at
- * all.
+ * The forwarding stage is the one card named for a mechanism, and that is the
+ * word the module already uses: the switch it reports sits in the "Gateway
+ * routing" card at interfaces#forwarding, beside the NAT and the port forwards
+ * this card also counts. Its detail still answers for the network — devices get
+ * out or they do not — because a sysctl nobody can see is not an answer.
+ *
+ * The route table is next to this flow rather than in it (routes-cards.tsx):
+ * every module here writes into the table, and the kernel consults it after all
+ * of them, so a seventh stage card would claim it is one more module.
  *
  * The stacks hold no configuration of their own. A card is a link to the
  * module's own editor, not a second copy of it: one object, one plan, one apply
@@ -69,7 +71,7 @@ const STAGES: { key: string; hash?: string; Stage: (props: StageProps) => ReactN
   { key: 'upstream', Stage: UpstreamStage },
   { key: 'lan', Stage: LanStage },
   { key: 'dhcp', hash: 'dhcp', Stage: DhcpStage },
-  { key: 'routing', Stage: RoutingStage },
+  { key: 'forwarding', Stage: ForwardingStage },
   { key: 'exit', Stage: ExitStage },
   { key: 'dns', hash: 'dns', Stage: DnsStage },
 ]
@@ -265,7 +267,7 @@ function DhcpStage({ family, id }: StageProps) {
   return <StageCard id={id} title={title} icon={MonitorSmartphone} to="/gateway/dhcp/ranges" health={health} detail={detail} />
 }
 
-function RoutingStage({ family, id }: StageProps) {
+function ForwardingStage({ family, id }: StageProps) {
   useLocale()
   const gateway = useGatewayConfig()
   const config = gateway.data
@@ -282,11 +284,11 @@ function RoutingStage({ family, id }: StageProps) {
     detail = <Skeleton className="h-4 w-24" />
   } else if (family === 'v4') {
     health = config.enabled ? state('On') : state('LAN offline')
-    // The routing switch is this card's subject: it is the one control that
+    // The forwarding switch is this card's subject: it is the one control that
     // takes every network off the internet and closes every port forward. The
-    // detail says what that means for the network and what the routing carries
-    // — NAT, port forwards — which are the facts an operator checks here, and
-    // neither is anywhere else on this page.
+    // detail says what that means for the network and what the forwarding
+    // carries — NAT, port forwards — which are the facts an operator checks
+    // here, and neither is anywhere else on this page.
     detail = config.enabled
       ? [
         t('Devices behind this router reach the internet'),
@@ -296,7 +298,7 @@ function RoutingStage({ family, id }: StageProps) {
       : t('No device behind this router reaches the internet')
   } else if (!config.enabled) {
     health = state('Off')
-    detail = t('IPv6 cannot leave this router while routing is off')
+    detail = t('IPv6 cannot leave this router while forwarding is off')
   } else if (config.ipv6_forwarding === true) {
     health = state('On')
     detail = t('IPv6 from behind this router goes out')
@@ -310,7 +312,7 @@ function RoutingStage({ family, id }: StageProps) {
     detail = t('The system decides whether IPv6 is forwarded')
   }
 
-  return <StageCard id={id} title={t('Routing')} icon={Route} to="/gateway/interfaces#forwarding" health={health} detail={detail} />
+  return <StageCard id={id} title={t('Forwarding')} icon={ArrowRightLeft} to="/gateway/interfaces#forwarding" health={health} detail={detail} />
 }
 
 function ExitStage({ family, id }: StageProps) {

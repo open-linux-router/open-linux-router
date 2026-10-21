@@ -237,6 +237,22 @@ Two of the six most common requests — *"reach the office subnet"* and *"IoT ge
 no internet"* — turn out not to involve a proxy at all. The first is a static
 route; the second is the `blocked` exit.
 
+### 2.4.1 The table is reported, not owned
+
+All three objects end up in `ip route`, and none of them *is* the table. So the
+table is reported rather than configured: `GET /api/gateway/routes` reads every
+route in every table, and the Gateway page groups them by table — `main`, one
+table per exit with the rule priority that selects it, and any table a rule
+outside olr points at. It is read-only on purpose. A page that both showed the
+table and let you write rows into it would be the static-route editor wearing the
+table's name, and §2.4's argument is that one object answers one question.
+
+The read never decides what exists: a table the stored configuration has never
+heard of is shown and named by its number, because the box may still be running
+an exit that was deleted from the file, and a page that agreed with the file
+instead of the router would be reporting intent in the place an observation
+belongs (§4.5).
+
 ### 2.5 Staging
 
 The full ladder depends on devices and groups, and who owns the device inventory is
