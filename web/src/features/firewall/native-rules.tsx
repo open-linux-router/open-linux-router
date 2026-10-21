@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Heading } from '@/components/ui/heading'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -17,6 +18,7 @@ import {
 } from './native-model'
 
 export function NativeRules() {
+  useLocale()
   const client = useQueryClient()
   const query = useQuery({
     queryKey: ['firewall', 'ruleset'],
@@ -69,7 +71,7 @@ export function NativeRules() {
   if (!query.data)
     return (
       <section className="rounded-xl border p-4">
-        <Heading>nftables rules</Heading>
+        <Heading>{t('nftables rules')}</Heading>
         <p className="mt-2 text-sm text-muted-foreground">
           {query.error ? query.error.message : 'Reading the kernel ruleset…'}
         </p>
@@ -77,9 +79,7 @@ export function NativeRules() {
           variant="outline"
           className="mt-3"
           onClick={() => void query.refetch()}
-        >
-          Refresh
-        </Button>
+        >{t('Refresh')}</Button>
       </section>
     )
   const view = query.data
@@ -197,7 +197,7 @@ export function NativeRules() {
     <section className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Heading>nftables rules</Heading>
+          <Heading>{t('nftables rules')}</Heading>
           <p className="mt-1 text-sm text-muted-foreground">
             {view.native
               ? 'Native rules saved by you. Service changes do not regenerate this table.'
@@ -208,22 +208,17 @@ export function NativeRules() {
           variant="outline"
           onClick={edit}
           disabled={draft !== null || !!query.error}
-        >
-          Edit olr_filter
-        </Button>
+        >{t('Edit olr_filter')}</Button>
       </div>
       {query.error && (
-        <p role="alert" className="text-sm text-destructive">
-          Refresh failed: {query.error.message}. Showing the last successful
+        <p role="alert" className="text-sm text-destructive"> {t('Refresh failed:')} {query.error.message}. Showing the last successful
           read.
         </p>
       )}
 
       {draft !== null && (
         <div className="space-y-3 rounded-xl border p-4">
-          <label htmlFor="native-nft-json" className="text-sm font-medium">
-            Native nftables JSON — inet olr_filter
-          </label>
+          <label htmlFor="native-nft-json" className="text-sm font-medium"> {t('Native nftables JSON — inet olr_filter')} </label>
           <p className="text-sm text-muted-foreground">
             Edit rules, chains, sets and their order directly. This document
             persists across restarts. Other tables remain unchanged.
@@ -234,8 +229,7 @@ export function NativeRules() {
               className="space-y-2 rounded-lg border p-3"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="font-mono text-sm">
-                  Draft chain {String(chain.name)}
+                <h3 className="font-mono text-sm">{t('Draft chain')}{String(chain.name)}
                 </h3>
                 <Button
                   variant="outline"
@@ -263,9 +257,7 @@ export function NativeRules() {
                       text: nativeJSON(newRule, 2),
                     })
                   }}
-                >
-                  Add rule
-                </Button>
+                >{t('Add rule')}</Button>
               </div>
               {draftRules
                 .filter(({ rule }) => rule.chain === chain.name)
@@ -303,9 +295,7 @@ export function NativeRules() {
           ))}
           {ruleDraft && (
             <div className="space-y-2 rounded-lg border p-3">
-              <label htmlFor="native-rule-json" className="text-sm font-medium">
-                Edit native rule object
-              </label>
+              <label htmlFor="native-rule-json" className="text-sm font-medium">{t('Edit native rule object')}</label>
               <Textarea
                 id="native-rule-json"
                 spellCheck={false}
@@ -315,14 +305,12 @@ export function NativeRules() {
                   setRuleDraft({ ...ruleDraft, text: event.target.value })
                 }
               />
-              <Button onClick={saveRuleDraft}>Update draft rule</Button>
+              <Button onClick={saveRuleDraft}>{t('Update draft rule')}</Button>
               <Button
                 variant="outline"
                 className="ml-2"
                 onClick={() => setRuleDraft(null)}
-              >
-                Close rule editor
-              </Button>
+              >{t('Close rule editor')}</Button>
             </div>
           )}
           <Textarea
@@ -347,7 +335,7 @@ export function NativeRules() {
               onClick={() => check.mutate()}
               disabled={!!ruleDraft || check.isPending || apply.isPending}
             >
-              {check.isPending ? 'Checking…' : 'Validate and preview'}
+              {check.isPending ? t('Checking…') : 'Validate and preview'}
             </Button>
             <Button
               variant="outline"
@@ -358,14 +346,11 @@ export function NativeRules() {
                 setRuleDraft(null)
               }}
               disabled={apply.isPending || check.isPending}
-            >
-              Cancel
-            </Button>
+            >{t('Cancel')}</Button>
           </div>
           {plan && (
             <div className="space-y-3 rounded-lg bg-muted p-3">
-              <p className="text-sm">
-                nft validation passed.{' '}
+              <p className="text-sm">{t('nft validation passed.')}{' '}
                 {plan.empty
                   ? 'No kernel changes.'
                   : 'The table will be replaced atomically; rule counters restart.'}
@@ -380,7 +365,7 @@ export function NativeRules() {
                 disabled={!!ruleDraft || check.isPending || apply.isPending}
                 onClick={() => apply.mutate()}
               >
-                {apply.isPending ? 'Applying…' : 'Save and apply native rules'}
+                {apply.isPending ? t('Applying…') : 'Save and apply native rules'}
               </Button>
             </div>
           )}
@@ -448,9 +433,7 @@ export function NativeRules() {
               </div>
             ))}
           <details>
-            <summary className="cursor-pointer text-sm">
-              All table objects, including sets and counters
-            </summary>
+            <summary className="cursor-pointer text-sm">{t('All table objects, including sets and counters')}</summary>
             <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-all text-xs">
               {nativeJSON(
                 document.nftables.filter((entry) =>
@@ -467,14 +450,11 @@ export function NativeRules() {
         </div>
       ))}
       {!tables.length && (
-        <p className="text-sm text-muted-foreground">
-          No nftables tables are currently installed.
-        </p>
+        <p className="text-sm text-muted-foreground"> {t('No nftables tables are currently installed.')} </p>
       )}
 
       <details className="rounded-xl border p-4">
-        <summary className="cursor-pointer text-sm font-medium">
-          Rule flows · {flows.length} of {rules.length} rules can be shown
+        <summary className="cursor-pointer text-sm font-medium"> {t('Rule flows ·')} {flows.length} of {rules.length} rules can be shown
         </summary>
         <p className="mt-3 text-xs text-muted-foreground">
           Each ribbon references one kernel rule. Equal widths are schematic.

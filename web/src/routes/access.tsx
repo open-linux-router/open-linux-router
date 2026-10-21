@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Network } from 'lucide-react'
 
 import { Launcher, LauncherSection, LauncherTile } from '@/components/layout/launcher'
@@ -21,6 +22,7 @@ const MONOGRAMS: Record<string, { letter: string; hue: number }> = {
 }
 
 export function AccessPage() {
+  useLocale()
   const gateway = useGatewayConfig()
   const gatewayStatus = useGatewayStatus()
   const socksOut = useSocksOutConfig()
@@ -40,7 +42,7 @@ export function AccessPage() {
   return (
     <Launcher>
       {(['network', 'out', 'in'] as const).map(direction => (
-        <LauncherSection key={direction} id={direction} title={direction === 'network' ? 'Networking' : `Add a way ${direction}`}>
+        <LauncherSection key={direction} id={direction} title={direction === 'network' ? t('Networking') : direction === 'out' ? t('Add a way out') : t('Add a way in')}>
           {ACCESS_TECHNOLOGIES.filter(entry => entry.directions.includes(direction)).map(entry => (
             <TechnologyTile key={entry.id} entry={entry} kinds={connectionsFor(entry, direction)} summaries={summaries} />
           ))}

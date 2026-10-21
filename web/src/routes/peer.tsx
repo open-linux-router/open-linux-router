@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
@@ -52,6 +53,7 @@ import type { RemotePeer, RemoteStatus } from '@/lib/api-types'
  * the tunnel.
  */
 export function WireguardPeerPage() {
+  useLocale()
   const { name } = useParams()
   const status = useRemoteStatus()
   const traffic = useGatewayTraffic()
@@ -130,9 +132,9 @@ export function WireguardPeerPage() {
     }
   }
 
-  if (status.isPending) return <p className="py-16 text-sm text-muted-foreground">Loading device…</p>
+  if (status.isPending) return <p className="py-16 text-sm text-muted-foreground">{t('Loading device…')}</p>
   if (status.isError) return <State title="Could not load the tunnel" detail="Try again when the router is reachable." />
-  if (!peer) return <State title="Device not found" detail="No device by this name may dial in. It may have been renamed or removed on the tunnel page." />
+  if (!peer) return <State title={t('Device not found')} detail="No device by this name may dial in. It may have been renamed or removed on the tunnel page." />
 
   return (
     <div className="space-y-4 pb-12">
@@ -195,7 +197,7 @@ export function WireguardPeerPage() {
           setting somebody turned off. */}
       <section className="overflow-hidden rounded-xl border bg-card shadow-xs" aria-labelledby="peer-connections-title">
         <div className="flex h-18 items-center justify-between gap-3 px-4 sm:px-6">
-          <Heading id="peer-connections-title">Connections</Heading>
+          <Heading id="peer-connections-title">{t('Connections')}</Heading>
           <span className="text-sm text-muted-foreground" title="Inspection matches a device's MAC address before its traffic reaches the network, and traffic arriving over the tunnel has none.">
             Not supported
           </span>
@@ -205,15 +207,14 @@ export function WireguardPeerPage() {
       <Dialog open={choosing} onOpenChange={setChoosing}>
         <DialogContent className="max-h-[90svh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Device icon</DialogTitle>
-            <DialogDescription>
-              Choose an icon for {peer.name}. It changes nothing about what the device is or how it connects.
+            <DialogTitle>{t('Device icon')}</DialogTitle>
+            <DialogDescription> {t('Choose an icon for')} {peer.name}. It changes nothing about what the device is or how it connects.
             </DialogDescription>
           </DialogHeader>
           <CategoryPicker value={picture} onChange={setPicture} />
           <DialogFooter>
-            <Button variant="ghost" disabled={patch.isPending} onClick={() => setChoosing(false)}>Cancel</Button>
-            <Button disabled={patch.isPending} onClick={() => void savePicture()}>Save icon</Button>
+            <Button variant="ghost" disabled={patch.isPending} onClick={() => setChoosing(false)}>{t('Cancel')}</Button>
+            <Button disabled={patch.isPending} onClick={() => void savePicture()}>{t('Save icon')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -241,21 +242,22 @@ export function WireguardPeerPage() {
  * the router's clock when something is subtly wrong.
  */
 function Facts({ peer, status, services }: { peer: RemotePeer; status?: RemoteStatus; services: React.ReactNode }) {
+  useLocale()
   return <dl className="min-w-0 text-sm">
-    <DeviceSettingRow label="Name" title="The name the address bar and every command use">
+    <DeviceSettingRow label={t('Name')} title="The name the address bar and every command use">
       <TechnicalValue>{peer.name}</TechnicalValue>
     </DeviceSettingRow>
-    <DeviceSettingRow label="Address">
+    <DeviceSettingRow label={t('Address')}>
       {peer.address ? <TechnicalValue>{peer.address}</TechnicalValue> : '—'}
     </DeviceSettingRow>
-    <DeviceSettingRow label="Public key">
+    <DeviceSettingRow label={t('Public key')}>
       {peer.public_key ? <TechnicalValue>{peer.public_key}</TechnicalValue> : '—'}
     </DeviceSettingRow>
     <DeviceSettingRow label="Sends home">{routesLabel(peer.routes)}</DeviceSettingRow>
     <DeviceSettingRow label="Last heard" title="The last WireGuard handshake: the tunnel's own record of hearing from this device">
       {peer.last_handshake
         ? <time dateTime={peer.last_handshake}>{new Date(peer.last_handshake).toLocaleString()}</time>
-        : peer.unknown ? 'Unknown' : 'Never'}
+        : peer.unknown ? t('Unknown') : t('Never')}
     </DeviceSettingRow>
     {peer.endpoint && (
       <DeviceSettingRow label="Heard from"><TechnicalValue>{peer.endpoint}</TechnicalValue></DeviceSettingRow>
@@ -263,7 +265,7 @@ function Facts({ peer, status, services }: { peer: RemotePeer; status?: RemoteSt
     <DeviceSettingRow label="Way in">
       <TechnicalValue>WireGuard · {status?.interface ?? '—'} · {status?.subnet ?? '—'}</TechnicalValue>
     </DeviceSettingRow>
-    <DeviceSettingRow label="Services">{services}</DeviceSettingRow>
+    <DeviceSettingRow label={t('Services')}>{services}</DeviceSettingRow>
   </dl>
 }
 
@@ -279,15 +281,16 @@ function Facts({ peer, status, services }: { peer: RemotePeer; status?: RemoteSt
  * two screens answer the same question the same way (docs/ui-content-guide.md).
  */
 function Usage({ flow, usage, addresses, trafficFailed }: { flow: TrafficView; usage?: Flow; addresses: string[]; trafficFailed: boolean }) {
+  useLocale()
   return <div className="min-w-0">
     <dl className="text-sm">
-      <DeviceSettingRow label="Download">
+      <DeviceSettingRow label={t('Download')}>
         <MetricValue value={flow.rated && usage ? formatRate(Math.max(0, usage.downRate ?? 0)) : null} />
       </DeviceSettingRow>
-      <DeviceSettingRow label="Upload">
+      <DeviceSettingRow label={t('Upload')}>
         <MetricValue value={flow.rated && usage ? formatRate(Math.max(0, usage.upRate ?? 0)) : null} />
       </DeviceSettingRow>
-      <DeviceSettingRow label="Total">
+      <DeviceSettingRow label={t('Total')}>
         <ActivityTotal addresses={addresses} />
       </DeviceSettingRow>
     </dl>
@@ -314,10 +317,11 @@ function failureText(error: unknown): string {
 }
 
 function routesLabel(routes: RemotePeer['routes']): string {
-  return routes === 'everything' ? 'Everything the device does' : 'Only what is on my network'
+  return routes === 'everything' ? t('Everything the device does') : t('Only what is on my network')
 }
 
 function State({ title, detail }: { title: string; detail: string }) {
+  useLocale()
   return <div className="space-y-3 py-16 text-center">
     <Heading as="h1" size="lg">{title}</Heading>
     <p className="text-sm text-muted-foreground">{detail}</p>

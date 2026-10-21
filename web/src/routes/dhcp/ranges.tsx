@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 
@@ -11,6 +12,7 @@ import { useInterfaces } from '@/features/link/queries'
 import type { Pool } from '@/lib/config-types'
 
 export function DhcpRangesPage() {
+  useLocale()
   const { config, busy, change, applier, gate } = useDhcpEditor()
   const leases = useDhcpLeases()
   // Read to notice a range whose network has gone. Removing a network does not
@@ -47,8 +49,7 @@ export function DhcpRangesPage() {
             setOpen(true)
           }}
         >
-          <Plus className="size-4" aria-hidden /> Add
-        </Button>}>
+          <Plus className="size-4" aria-hidden />{t('Add')}</Button>}>
       <ApplyOutcome applier={applier} />
 
 

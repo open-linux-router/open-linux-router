@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useQueryClient } from '@tanstack/react-query'
 import { KeyRound } from 'lucide-react'
 import { useState } from 'react'
@@ -26,6 +27,7 @@ import { getToken, setToken } from '@/lib/api'
  * one.
  */
 export function TokenButton() {
+  useLocale()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState('')
@@ -56,14 +58,14 @@ export function TokenButton() {
     >
       <DialogTrigger
         render={
-          <Button variant="ghost" size="icon" aria-label="Set API token">
+          <Button variant="ghost" size="icon" aria-label={t('Set API token')}>
             <KeyRound className="size-4" aria-hidden />
           </Button>
         }
       />
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>API token</DialogTitle>
+          <DialogTitle>{t('API token')}</DialogTitle>
           <DialogDescription>
             Sent as a bearer token with every request. olrd writes it to
             <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">
@@ -75,7 +77,7 @@ export function TokenButton() {
         </DialogHeader>
 
         <div className="space-y-2">
-          <Label htmlFor="api-token">Token</Label>
+          <Label htmlFor="api-token">{t('Token')}</Label>
           <Input
             id="api-token"
             type="password"
@@ -88,10 +90,8 @@ export function TokenButton() {
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-          <Button onClick={save}>Save</Button>
+          <Button variant="ghost" onClick={() => setOpen(false)}>{t('Cancel')}</Button>
+          <Button onClick={save}>{t('Save')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

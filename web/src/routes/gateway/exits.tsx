@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 
@@ -10,6 +11,7 @@ import { gatewayChange, useGatewayStatus } from '@/features/gateway/queries'
 import type { Exit } from '@/lib/config-types'
 
 export function GatewayExitsPage() {
+  useLocale()
   const { config, change, applier, gate } = useGatewayEditor()
   const status = useGatewayStatus()
   const [adding, setAdding] = useState(false)
@@ -19,9 +21,7 @@ export function GatewayExitsPage() {
 
   return (
     <SubPage section="/access" slug="gateway" action={<Button size="sm" variant="outline" onClick={() => setAdding(true)}>
-          <Plus />
-          Add
-        </Button>}>
+          <Plus />{t('Add')}</Button>}>
       <ApplyOutcome applier={applier} />
 
 

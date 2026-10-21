@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -32,13 +33,13 @@ import type { Pool, PoolIPv4, RouterAdvertisementMode } from '@/lib/config-types
 // truncated into uselessness. The protocol name is not what an operator is
 // choosing between; what the devices end up doing is.
 const RA_OPTIONS: { value: Exclude<RouterAdvertisementMode, ''>; label: string; hint: string }[] = [
-  { value: 'off', label: 'Off', hint: 'No IPv6 on this network.' },
+  { value: 'off', get label() { return t('Off') }, get hint() { return t('No IPv6 on this network.') } },
   {
     value: 'slaac',
-    label: 'Automatic',
-    hint: 'Devices choose their own IPv6 address. Recommended.',
+    get label() { return t('Automatic') },
+    get hint() { return t('Devices choose their own IPv6 address. Recommended.') },
   },
-  { value: 'stateful', label: 'Managed', hint: 'The router hands out IPv6 addresses too.' },
+  { value: 'stateful', get label() { return t('Managed') }, get hint() { return t('The router hands out IPv6 addresses too.') } },
 ]
 
 const RA_LABEL = new Map(RA_OPTIONS.map((o) => [o.value as string, o.label]))
@@ -61,6 +62,7 @@ export function PoolDialog({
       which is why it lives here rather than as a second button on the row. */
   onRemove?: () => void
 }) {
+  useLocale()
   const [draft, setDraft] = useState<Pool>(initial ?? EMPTY)
   const editing = initial !== undefined
 
@@ -101,14 +103,12 @@ export function PoolDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{editing ? `Edit ${initial.network}` : 'Add addresses'}</DialogTitle>
-          <DialogDescription>
-            Configure IPv4 address allocation and IPv6 advertisements separately.
-          </DialogDescription>
+          <DialogDescription>{t('Configure IPv4 address allocation and IPv6 advertisements separately.')}</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="pool-network">Network</Label>
+            <Label htmlFor="pool-network">{t('Network')}</Label>
             {editing ? (
               <>
                 <Input id="pool-network" value={draft.network} disabled />
@@ -129,7 +129,7 @@ export function PoolDialog({
               <>
                 <Select value={draft.network} onValueChange={(name) => field('network', name ?? '')}>
                   <SelectTrigger id="pool-network" className="w-full">
-                    <SelectValue placeholder="Choose a network" />
+                    <SelectValue placeholder={t('Choose a network')} />
                   </SelectTrigger>
                   <SelectContent>
                     {networks.map((n) => (
@@ -163,11 +163,11 @@ export function PoolDialog({
               otherwise. */}
           <fieldset className="grid gap-3 rounded-lg border p-3">
             <div className="flex items-center justify-between">
-              <legend className="text-sm font-medium">IPv4 addresses</legend>
+              <legend className="text-sm font-medium">{t('IPv4 addresses')}</legend>
               <Switch
                 checked={draft.ipv4 !== undefined}
                 onCheckedChange={(on) => field('ipv4', on ? {} : undefined)}
-                aria-label="Hand out IPv4 addresses"
+                aria-label={t('Hand out IPv4 addresses')}
               />
             </div>
 
@@ -180,7 +180,7 @@ export function PoolDialog({
               <>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="grid gap-2">
-                    <Label htmlFor="pool-start">First address</Label>
+                    <Label htmlFor="pool-start">{t('First address')}</Label>
                     <Input
                       id="pool-start"
                       placeholder={chosen?.suggested_start ?? '192.168.1.100'}
@@ -189,7 +189,7 @@ export function PoolDialog({
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="pool-end">Last address</Label>
+                    <Label htmlFor="pool-end">{t('Last address')}</Label>
                     <Input
                       id="pool-end"
                       placeholder={chosen?.suggested_end ?? '192.168.1.200'}
@@ -245,12 +245,12 @@ export function PoolDialog({
             </p>
             {draft.ipv6 && (
               <div className="grid gap-2">
-                <Label htmlFor="pool-ra-mtu">MTU to advertise</Label>
+                <Label htmlFor="pool-ra-mtu">{t('MTU to advertise')}</Label>
                 <Input
                   id="pool-ra-mtu"
                   inputMode="numeric"
                   value={draft.ipv6.mtu ?? ''}
-                  placeholder="None — devices use their own"
+                  placeholder={t('None — devices use their own')}
                   onChange={(e) => {
                     const n = Number(e.target.value.trim())
                     field('ipv6', {
@@ -268,33 +268,31 @@ export function PoolDialog({
           </fieldset>
 
           <div className="grid gap-2">
-            <Label htmlFor="pool-lease">Lease time</Label>
+            <Label htmlFor="pool-lease">{t('Lease time')}</Label>
             <Input
               id="pool-lease"
               placeholder="12h"
               value={draft.lease_time ?? ''}
               onChange={(e) => field('lease_time', e.target.value || undefined)}
             />
-            <p className="text-xs text-muted-foreground">
-              Blank for the default. Units: s, m, h, d, w. Applies to both families.
-            </p>
+            <p className="text-xs text-muted-foreground">{t('Blank for the default. Units: s, m, h, d, w. Applies to both families.')}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label htmlFor="pool-gateway">Gateway</Label>
+              <Label htmlFor="pool-gateway">{t('Gateway')}</Label>
               <Input
                 id="pool-gateway"
-                placeholder="the router itself"
+                placeholder={t('the router itself')}
                 value={draft.gateway ?? ''}
                 onChange={(e) => field('gateway', e.target.value || undefined)}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="pool-dns">DNS servers</Label>
+              <Label htmlFor="pool-dns">{t('DNS servers')}</Label>
               <Input
                 id="pool-dns"
-                placeholder="the router itself"
+                placeholder={t('the router itself')}
                 value={(draft.dns ?? []).join(', ')}
                 onChange={(e) => field('dns', splitList(e.target.value))}
               />
@@ -317,12 +315,10 @@ export function PoolDialog({
             this network still provides the internet connection, put its address
             in both — otherwise devices will send their traffic and their name
             lookups here.
-            <br />
-            DNS servers are comma separated.
-          </p>
+            <br />{t('DNS servers are comma separated.')}</p>
 
           <div className="grid gap-2">
-            <Label htmlFor="pool-domain">Domain</Label>
+            <Label htmlFor="pool-domain">{t('Domain')}</Label>
             <Input
               id="pool-domain"
               placeholder="lan"
@@ -342,12 +338,9 @@ export function PoolDialog({
                 onOpenChange(false)
               }}
             >
-              <Trash2 className="size-4" aria-hidden /> Remove
-            </Button>
+              <Trash2 className="size-4" aria-hidden />{t('Remove')}</Button>
           )}
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
           <Button
             disabled={!complete}
             onClick={() => {
@@ -355,7 +348,7 @@ export function PoolDialog({
               onOpenChange(false)
             }}
           >
-            {editing ? 'Save' : 'Add'}
+            {editing ? t('Save') : t('Add')}
           </Button>
         </DialogFooter>
       </DialogContent>

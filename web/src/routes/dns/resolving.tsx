@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { SubPage } from '@/components/layout/sub-page'
 import { EditableField, SwitchField, splitList } from '@/components/ui/editable-field'
 import { Label } from '@/components/ui/label'
@@ -14,19 +15,20 @@ import type { UpstreamMode } from '@/lib/config-types'
 const MODE_OPTIONS: { value: Exclude<UpstreamMode, ''>; label: string; hint: string }[] = [
   {
     value: 'recurse',
-    label: 'Find answers itself',
-    hint: 'Resolves through the DNS hierarchy.',
+    get label() { return t('Find answers itself') },
+    get hint() { return t('Resolves through the DNS hierarchy.') },
   },
   {
     value: 'forward',
-    label: 'Ask another server',
-    hint: 'Forwards requests to the servers below.',
+    get label() { return t('Ask another server') },
+    get hint() { return t('Forwards requests to the servers below.') },
   },
 ]
 
 const MODE_LABEL = new Map(MODE_OPTIONS.map((o) => [o.value as string, o.label]))
 
 export function DnsResolvingPage() {
+  useLocale()
   const { config, busy, change, applier, gate } = useDnsEditor()
   if (!config) return gate
 
@@ -41,15 +43,15 @@ export function DnsResolvingPage() {
 
       <SwitchField
         id="dns-aaaa"
-        label="Resolve IPv6 addresses (AAAA)"
-        hint="When off, AAAA queries return no address. IPv4 lookups continue normally."
+        label={t('Resolve IPv6 addresses (AAAA)')}
+        hint={t('When off, AAAA queries return no address. IPv4 lookups continue normally.')}
         checked={!config.filter_aaaa}
         busy={busy}
         onChange={(enabled) => change({ ...config, filter_aaaa: !enabled })}
       />
 
       <div className="grid gap-2">
-        <Label htmlFor="dns-mode">Method</Label>
+        <Label htmlFor="dns-mode">{t('Method')}</Label>
         <Select
           value={upstream.mode || 'recurse'}
           onValueChange={(v) => set({ mode: v as UpstreamMode })}
@@ -76,18 +78,18 @@ export function DnsResolvingPage() {
         <div className="space-y-4">
           <EditableField
             id="dns-servers"
-            label="Servers"
+            label={t('Servers')}
             busy={busy}
             placeholder="1.1.1.1, 9.9.9.9"
             stored={(upstream.servers ?? []).join(', ')}
             onSave={(value) => set({ servers: splitList(value) })}
-            hint="Comma separated. A server without a port means 53, or 853 when encrypted."
+            hint={t('Comma separated. A server without a port means 53, or 853 when encrypted.')}
           />
 
           <SwitchField
             id="dns-tls"
-            label="Encrypt the connection"
-            hint="Use DNS over TLS to encrypt requests to the upstream servers."
+            label={t('Encrypt the connection')}
+            hint={t('Use DNS over TLS to encrypt requests to the upstream servers.')}
             checked={upstream.tls ?? false}
             busy={busy}
             onChange={(tls) => set({ tls })}
@@ -96,7 +98,7 @@ export function DnsResolvingPage() {
           {upstream.tls && (
             <EditableField
               id="dns-tls-name"
-              label="Certificate name"
+              label={t('Certificate name')}
               busy={busy}
               placeholder="cloudflare-dns.com"
               stored={upstream.tls_name ?? ''}

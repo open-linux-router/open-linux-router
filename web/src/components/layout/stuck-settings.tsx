@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 
@@ -27,11 +28,12 @@ export function StuckSettings({
   /** The page where what is wrong can be changed, when there is one. */
   fix?: { to: string; label: string }
 }) {
+  useLocale()
   if (!error) return null
   return (
     <Alert>
       <AlertTriangle className="text-warning-foreground" />
-      <AlertTitle>These settings cannot be put in force</AlertTitle>
+      <AlertTitle>{t('These settings cannot be put in force')}</AlertTitle>
       <AlertDescription className="space-y-2">
         <p>
           What is saved no longer checks out, so the running service is still on the last

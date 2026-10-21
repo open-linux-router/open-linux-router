@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Heading } from '@/components/ui/heading'
 import { Link } from 'react-router'
 
@@ -44,7 +45,7 @@ const web: Credit[] = [
   { name: 'Tailwind CSS & Vite plugin', url: 'https://tailwindcss.com/', use: 'Styling' },
   { name: 'Geist', url: 'https://vercel.com/font', use: 'Typography' },
   { name: 'Lucide', url: 'https://lucide.dev/', use: 'Icons' },
-  { name: 'Motion', url: 'https://motion.dev/', use: 'Topology animations' },
+  { get name() { return t('Motion') }, url: 'https://motion.dev/', use: 'Topology animations' },
   { name: '@paulmillr/qr', url: 'https://github.com/paulmillr/qr', use: 'Client QR codes' },
   { name: 'next-themes', url: 'https://github.com/pacocoursey/next-themes', use: 'Theme preference' },
   { name: 'Sonner', url: 'https://sonner.emilkowal.ski/', use: 'Notifications' },
@@ -57,6 +58,7 @@ const web: Credit[] = [
 ]
 
 function CreditSection({ title, items }: { title: string; items: Credit[] }) {
+  useLocale()
   return (
     <section className="space-y-4" aria-label={title}>
       <div>
@@ -75,17 +77,18 @@ function CreditSection({ title, items }: { title: string; items: Credit[] }) {
 }
 
 export function CreditsPage() {
+  useLocale()
   return (
     <div className="space-y-12 pb-12">
       <div className="space-y-3">
-        <Link to="/" className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">Back to Overview</Link>
-        <Heading as="h1" size="lg">Built on open work</Heading>
-        <p className="max-w-2xl text-muted-foreground">Thank you to the maintainers of the projects that make Open Linux Router possible.</p>
-        <p className="text-sm text-muted-foreground">Some backends are optional. Manifests contain full dependency and license information.</p>
+        <Link to="/" className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">{t('Back to Overview')}</Link>
+        <Heading as="h1" size="lg">{t('Built on open work')}</Heading>
+        <p className="max-w-2xl text-muted-foreground">{t('Thank you to the maintainers of the projects that make Open Linux Router possible.')}</p>
+        <p className="text-sm text-muted-foreground">{t('Some backends are optional. Manifests contain full dependency and license information.')}</p>
       </div>
-      <CreditSection title="Feature backends & data" items={backends} />
-      <CreditSection title="Go dependencies" items={go} />
-      <CreditSection title="Web dependencies & tooling" items={web} />
+      <CreditSection title={t('Feature backends & data')} items={backends} />
+      <CreditSection title={t('Go dependencies')} items={go} />
+      <CreditSection title={t('Web dependencies & tooling')} items={web} />
       <p className="text-sm text-muted-foreground">See <a className="underline underline-offset-4" href="https://github.com/open-linux-router/open-linux-router/blob/main/go.mod" target="_blank" rel="noreferrer">go.mod</a> and <a className="underline underline-offset-4" href="https://github.com/open-linux-router/open-linux-router/blob/main/web/package.json" target="_blank" rel="noreferrer">web/package.json</a> for the current dependency lists.</p>
     </div>
   )

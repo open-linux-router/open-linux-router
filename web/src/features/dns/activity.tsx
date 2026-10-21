@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Search, ShieldOff } from 'lucide-react'
 import { useState } from 'react'
 
@@ -48,6 +49,7 @@ export function ActivityCard({
   busy: boolean
   onChange: (next: DnsConfig) => void
 }) {
+  useLocale()
   const [view, setView] = useState<View>('queries')
   const [filter, setFilter] = useState('')
   const [blockedOnly, setBlockedOnly] = useState(false)
@@ -64,11 +66,9 @@ export function ActivityCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>DNS activity</CardTitle>
+        <CardTitle>{t('DNS activity')}</CardTitle>
         <CardAction className="flex items-center gap-2">
-          <Label htmlFor="dns-querylog" className="text-xs text-muted-foreground">
-            Keep a log
-          </Label>
+          <Label htmlFor="dns-querylog" className="text-xs text-muted-foreground"> {t('Keep a log')} </Label>
           <Switch
             id="dns-querylog"
             checked={config.query_log.enabled}
@@ -99,7 +99,7 @@ export function ActivityCard({
             />
             <Input
               aria-label={view === 'queries' ? 'Filter queries' : 'Filter addresses'}
-              placeholder="Filter by name or device"
+              placeholder={t('Filter by name or device')}
               className="h-9 pl-8"
               value={filter}
               onChange={(e) => {
@@ -125,9 +125,7 @@ export function ActivityCard({
                   : 'text-muted-foreground hover:bg-accent/50',
               )}
             >
-              <ShieldOff className="size-3.5" aria-hidden />
-              Blocked only
-            </button>
+              <ShieldOff className="size-3.5" aria-hidden />{t('Blocked only')}</button>
           )}
         </div>
 
@@ -167,9 +165,10 @@ function shownCount(view: View, queries?: QueryRow[], names?: NameRow[]) {
 /* -------------------------------------------------------------------------- */
 
 function Segmented({ value, onChange }: { value: View; onChange: (next: View) => void }) {
+  useLocale()
   const options: { value: View; label: string }[] = [
-    { value: 'queries', label: 'Queries' },
-    { value: 'names', label: 'Addresses seen' },
+    { value: 'queries', get label() { return t('Queries') } },
+    { value: 'names', get label() { return t('Addresses seen') } },
   ]
 
   // Buttons with aria-pressed rather than a tablist: there is no tab panel to
@@ -200,6 +199,7 @@ function Segmented({ value, onChange }: { value: View; onChange: (next: View) =>
 /* -------------------------------------------------------------------------- */
 
 function Counters({ stats, pending }: { stats?: DnsStats; pending: boolean }) {
+  useLocale()
   if (pending && !stats) {
     return (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -212,9 +212,9 @@ function Counters({ stats, pending }: { stats?: DnsStats; pending: boolean }) {
   if (!stats) return null
 
   const cells = [
-    { label: 'Looked up', value: stats.queries, tone: '' },
-    { label: 'Blocked', value: stats.blocked, tone: '' },
-    { label: 'No answer', value: stats.failed, tone: stats.failed > 0 ? 'text-warning-foreground' : '' },
+    { get label() { return t('Looked up') }, value: stats.queries, tone: '' },
+    { get label() { return t('Blocked') }, value: stats.blocked, tone: '' },
+    { get label() { return t('No answer') }, value: stats.failed, tone: stats.failed > 0 ? 'text-warning-foreground' : '' },
   ]
 
   return (
@@ -243,18 +243,16 @@ function Counters({ stats, pending }: { stats?: DnsStats; pending: boolean }) {
  * entries under load looks complete.
  */
 function Accounting({ stats, shown }: { stats?: DnsStats; shown: number }) {
+  useLocale()
   if (!stats) return null
   const truncated = stats.held > shown
 
   return (
     <div className="space-y-1 text-xs text-muted-foreground">
-      <p>
-        Counters since {new Date(stats.since).toLocaleString()} · Log: {stats.held.toLocaleString()} / {stats.capacity.toLocaleString()} entries
-        {truncated && ` · Latest ${shown.toLocaleString()} loaded`}
+      <p> {t('Counters since')} {new Date(stats.since).toLocaleString()} {t('· Log:')} {stats.held.toLocaleString()} / {stats.capacity.toLocaleString()} {t('entries')} {truncated && ` · Latest ${shown.toLocaleString()} loaded`}
       </p>
       {(stats.dropped > 0 || stats.unparsed > 0) && (
-        <p className="text-warning-foreground">
-          Not accounted for: {stats.dropped.toLocaleString()} observation
+        <p className="text-warning-foreground"> {t('Not accounted for:')} {stats.dropped.toLocaleString()} observation
           {stats.dropped === 1 ? '' : 's'} dropped under load,{' '}
           {stats.unparsed.toLocaleString()} response{stats.unparsed === 1 ? '' : 's'} that could not
           be read. Neither cost anybody an answer — both were passed through untouched — but both
@@ -275,6 +273,7 @@ function Accounting({ stats, shown }: { stats?: DnsStats; shown: number }) {
  * the other is the whole network unable to resolve.
  */
 function RelayError({ error }: { error: unknown }) {
+  useLocale()
   const unreachable = error instanceof ApiError && error.status === 503
 
   return (
@@ -292,6 +291,7 @@ function RelayError({ error }: { error: unknown }) {
 }
 
 function RowsSkeleton() {
+  useLocale()
   return (
     <div className="divide-y overflow-hidden rounded-xl border">
       {[0, 1, 2, 3, 4].map((i) => (
@@ -326,6 +326,7 @@ function QueryList({
   held: number
   onPageChange: (page: number) => void
 }) {
+  useLocale()
   const needle = filter.trim().toLowerCase()
   const shown = rows.filter(
     (q) =>
@@ -349,9 +350,9 @@ function QueryList({
       )
     }
     if (rows.length > 0) {
-      return <ListEmpty>Nothing matches that filter.</ListEmpty>
+      return <ListEmpty>{t('Nothing matches that filter.')}</ListEmpty>
     }
-    return <ListEmpty>Nothing has been looked up yet.</ListEmpty>
+    return <ListEmpty>{t('Nothing has been looked up yet.')}</ListEmpty>
   }
 
   const pages = Math.ceil(shown.length / PAGE_SIZE)
@@ -387,14 +388,13 @@ function QueryList({
         ))}
       </ul>
       {(pages > 1 || hasMore) && (
-        <nav aria-label="DNS query pages" className="flex items-center justify-between gap-3 text-sm">
+        <nav aria-label={t('DNS query pages')} className="flex items-center justify-between gap-3 text-sm">
           <span className="text-muted-foreground">
-            {needle || blockedOnly ? `${shown.length} matches · ` : ''}
-            Page {current + 1} of {Math.ceil((hasMore ? held : shown.length) / PAGE_SIZE)}
+            {needle || blockedOnly ? `${shown.length} matches · ` : ''} {t('Page')} {current + 1} of {Math.ceil((hasMore ? held : shown.length) / PAGE_SIZE)}
           </span>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" disabled={current === 0} onClick={() => onPageChange(current - 1)}>Previous</Button>
-            <Button variant="outline" size="sm" disabled={(current + 1) * PAGE_SIZE >= shown.length && !hasMore} onClick={() => onPageChange(current + 1)}>Next</Button>
+            <Button variant="outline" size="sm" disabled={(current + 1) * PAGE_SIZE >= shown.length && !hasMore} onClick={() => onPageChange(current + 1)}>{t('Next')}</Button>
           </div>
         </nav>
       )}
@@ -410,10 +410,10 @@ function QueryList({
  * rule behind it sends the operator hunting through every policy by hand.
  */
 function QueryResult({ query }: { query: QueryRow }) {
+  useLocale()
   if (query.blocked) {
     return (
-      <Badge variant="secondary" className="shrink-0">
-        Blocked{query.policy ? ` · ${query.policy}` : ''}
+      <Badge variant="secondary" className="shrink-0">{t('Blocked')}{query.policy ? ` · ${query.policy}` : ''}
       </Badge>
     )
   }
@@ -430,6 +430,7 @@ function QueryResult({ query }: { query: QueryRow }) {
 /* -------------------------------------------------------------------------- */
 
 function NameList({ rows, filter }: { rows: NameRow[]; filter: string }) {
+  useLocale()
   const needle = filter.trim().toLowerCase()
   const shown = rows.filter(
     (n) =>
@@ -442,7 +443,7 @@ function NameList({ rows, filter }: { rows: NameRow[]; filter: string }) {
   if (shown.length === 0) {
     return (
       <ListEmpty>
-        {rows.length > 0 ? 'Nothing matches that filter.' : 'No addresses observed yet.'}
+        {rows.length > 0 ? t('Nothing matches that filter.') : 'No addresses observed yet.'}
       </ListEmpty>
     )
   }

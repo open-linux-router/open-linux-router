@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -28,6 +29,7 @@ import type { Device, Reservation } from '@/lib/config-types'
  *   asks first (§5.3.3) even though it was started from a device.
  */
 export function useDeviceActions() {
+  useLocale()
   const identity = useDevicesConfig()
   const saveIdentity = useSaveDevice()
   const dhcpConfig = useDhcpConfig()
@@ -56,7 +58,7 @@ export function useDeviceActions() {
       !device.group
     try {
       await saveIdentity.mutateAsync({ device, forget: empty })
-      toast.success(empty ? 'Device forgotten' : 'Saved')
+      toast.success(empty ? 'Device forgotten' : t('Saved'))
     } catch (error) {
       if (error instanceof ApiError) {
         toast.error(error.message, {

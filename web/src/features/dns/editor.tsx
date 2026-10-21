@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle, Check, X } from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -27,6 +28,7 @@ import type { DnsConfig } from '@/lib/config-types'
  * dedupes the fetch itself, so this costs nothing beyond one shared shape.
  */
 export function useDnsEditor() {
+  useLocale()
   const config = useDnsConfig()
   const applier = useDnsApply()
 
@@ -42,7 +44,7 @@ export function useDnsEditor() {
     ) : config.isError ? (
       <Alert variant="destructive">
         <AlertTriangle />
-        <AlertTitle>Could not load the DNS settings</AlertTitle>
+        <AlertTitle>{t('Could not load the DNS settings')}</AlertTitle>
         <AlertDescription>{(config.error as Error).message}</AlertDescription>
       </Alert>
     ) : null,
@@ -58,26 +60,23 @@ export function useDnsEditor() {
  * able to ask for it where the operator is standing.
  */
 export function ApplyOutcome({ applier }: { applier: ReturnType<typeof useDnsApply> }) {
+  useLocale()
   return (
     <>
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />
-          <AlertTitle>Only part of the change went through</AlertTitle>
+          <AlertTitle>{t('Only part of the change went through')}</AlertTitle>
           <AlertDescription className="space-y-3">
-            <p>
-              The steps that finished have already taken effect and will not be
-              undone. Fixing the cause and applying again is safe — it picks up
-              where this left off.
-            </p>
-            <Disclosure summary="Which steps ran">
+            <p>{t('The steps that finished have already taken effect and will not be undone. Fixing the cause and applying again is safe — it picks up where this left off.')}</p>
+            <Disclosure summary={t('Which steps ran')}>
               <ul className="space-y-1 pt-1 font-mono text-xs">
                 {applier.failure.steps?.map((step) => (
                   <li key={step.description} className="flex gap-2">
                     {step.done ? (
-                      <Check className="mt-0.5 size-3.5 shrink-0 text-success-foreground" aria-label="done" />
+                      <Check className="mt-0.5 size-3.5 shrink-0 text-success-foreground" aria-label={t('done')} />
                     ) : (
-                      <X className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-label="failed" />
+                      <X className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-label={t('failed')} />
                     )}
                     <span>
                       {step.description}
@@ -87,9 +86,7 @@ export function ApplyOutcome({ applier }: { applier: ReturnType<typeof useDnsApp
                 ))}
               </ul>
             </Disclosure>
-            <Button size="sm" variant="outline" onClick={applier.dismissFailure}>
-              Dismiss
-            </Button>
+            <Button size="sm" variant="outline" onClick={applier.dismissFailure}>{t('Dismiss')}</Button>
           </AlertDescription>
         </Alert>
       )}
@@ -100,6 +97,7 @@ export function ApplyOutcome({ applier }: { applier: ReturnType<typeof useDnsApp
 }
 
 function ConfirmDialog({ applier }: { applier: ReturnType<typeof useDnsApply> }) {
+  useLocale()
   const pending = applier.confirming
 
   return (
@@ -107,9 +105,7 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useDnsApply> })
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="size-4 text-destructive" aria-hidden />
-            This will break the internet for everyone
-          </DialogTitle>
+            <AlertTriangle className="size-4 text-destructive" aria-hidden />{t('This will break the internet for everyone')}</DialogTitle>
           <DialogDescription>
             {pending && impactHint(pending.plan.impact)} Every other change
             applies the moment you make it — this one asks first.
@@ -122,7 +118,7 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useDnsApply> })
         {pending && (
           <div className="space-y-2">
             <PlanReasons plan={pending.plan} />
-            <Disclosure summary="Show exactly what will change">
+            <Disclosure summary={t('Show exactly what will change')}>
               <div className="max-h-[45vh] overflow-auto pt-2">
                 <PlanDiff plan={pending.plan} />
               </div>
@@ -131,12 +127,8 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useDnsApply> })
         )}
 
         <DialogFooter>
-          <Button variant="ghost" onClick={applier.cancel}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={applier.confirm}>
-            Apply anyway
-          </Button>
+          <Button variant="ghost" onClick={applier.cancel}>{t('Cancel')}</Button>
+          <Button variant="destructive" onClick={applier.confirm}>{t('Apply anyway')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -145,6 +137,7 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useDnsApply> })
 
 /** Skeletons match the height and rhythm of what replaces them. */
 function PageSkeleton() {
+  useLocale()
   return (
     <div className="space-y-6">
       <Skeleton className="h-24 w-full rounded-xl" />

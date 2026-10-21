@@ -1,8 +1,10 @@
+import { t, useLocale } from '@/lib/i18n'
 import { SubPage } from '@/components/layout/sub-page'
 import { EditableField } from '@/components/ui/editable-field'
 import { ApplyOutcome, useDhcpEditor } from '@/features/dhcp/editor'
 
 export function DhcpAdvancedPage() {
+  useLocale()
   const { config, busy, change, applier, gate } = useDhcpEditor()
   if (!config) return gate
 
@@ -12,12 +14,12 @@ export function DhcpAdvancedPage() {
 
       <EditableField
         id="dhcp-extra"
-        label="Custom dnsmasq configuration"
+        label={t('Custom dnsmasq configuration')}
         busy={busy}
         multiline
         stored={config.extra_dnsmasq_conf ?? ''}
         onSave={(value) => change({ ...config, extra_dnsmasq_conf: value || undefined })}
-        hint="OLR-managed directives cannot be overridden."
+        hint={t('OLR-managed directives cannot be overridden.')}
       />
     </SubPage>
   )

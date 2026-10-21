@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -60,6 +61,7 @@ export function CertificateDialog({
   domain?: string
   onSubmit: (fields: Partial<IngressConfig>) => void
 }) {
+  useLocale()
   const [provider, setProvider] = useState(initial.provider ?? '')
   const [token, setToken] = useState('')
   const [email, setEmail] = useState(initial.acme_email ?? '')
@@ -85,9 +87,8 @@ export function CertificateDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Certificate</DialogTitle>
-          <DialogDescription>
-            How olr proves {domain ? <span className="font-mono">{domain}</span> : 'your domain'} is
+          <DialogTitle>{t('Certificate')}</DialogTitle>
+          <DialogDescription> {t('How olr proves')} {domain ? <span className="font-mono">{domain}</span> : 'your domain'} is
             yours, so browsers trust every address you publish.
           </DialogDescription>
         </DialogHeader>
@@ -101,10 +102,10 @@ export function CertificateDialog({
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="cert-provider">Who hosts your DNS</Label>
+            <Label htmlFor="cert-provider">{t('Who hosts your DNS')}</Label>
             <Select value={provider || undefined} onValueChange={(v) => setProvider(v ?? '')}>
               <SelectTrigger id="cert-provider" disabled={!providers.data}>
-                <SelectValue placeholder={providers.data ? 'Choose a provider' : 'Unavailable'} />
+                <SelectValue placeholder={providers.data ? 'Choose a provider' : t('Unavailable')} />
               </SelectTrigger>
               <SelectContent>
                 {(providers.data?.providers ?? []).map((p) => (
@@ -120,7 +121,7 @@ export function CertificateDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="cert-token">API token</Label>
+            <Label htmlFor="cert-token">{t('API token')}</Label>
             <Input
               id="cert-token"
               type="password"
@@ -136,9 +137,9 @@ export function CertificateDialog({
             </p>
           </div>
 
-          <Disclosure summary="Expiry warnings">
+          <Disclosure summary={t('Expiry warnings')}>
             <div className="space-y-1.5">
-              <Label htmlFor="cert-email">Email address</Label>
+              <Label htmlFor="cert-email">{t('Email address')}</Label>
               <Input
                 id="cert-email"
                 type="email"
@@ -156,9 +157,7 @@ export function CertificateDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
           <Button
             onClick={() => {
               const cert: Certificate = { provider }
@@ -170,9 +169,7 @@ export function CertificateDialog({
               onSubmit({ certificate: cert })
               onOpenChange(false)
             }}
-          >
-            Save
-          </Button>
+          >{t('Save')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

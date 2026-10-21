@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import encodeQR from '@paulmillr/qr'
 import { Check, Copy, Download, QrCode } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -37,6 +38,7 @@ export function ClientConfigDialog({
   result: RemotePeerResult
   onClose: () => void
 }) {
+  useLocale()
   const config = result.client_config ?? ''
 
   return (
@@ -45,9 +47,7 @@ export function ClientConfigDialog({
         <DialogHeader>
           <DialogTitle>{result.name} is ready</DialogTitle>
           <DialogDescription>
-            {result.address ? `It will be ${result.address} on the tunnel. ` : ''}
-            Set it up on the device now.
-          </DialogDescription>
+            {result.address ? `It will be ${result.address} on the tunnel. ` : ''} {t('Set it up on the device now.')} </DialogDescription>
         </DialogHeader>
 
         {config ? (
@@ -56,7 +56,7 @@ export function ClientConfigDialog({
                 this without acting has lost the device, and the only honest
                 place to say so is before they have scrolled past it. */}
             <Alert>
-              <AlertTitle>This is shown once</AlertTitle>
+              <AlertTitle>{t('This is shown once')}</AlertTitle>
               <AlertDescription>
                 The key in it is not stored on the router, so this cannot be shown again. If you
                 lose it, remove {result.name} and add it back.
@@ -65,7 +65,7 @@ export function ClientConfigDialog({
 
             <QrPanel config={config} name={result.name} />
 
-            <Disclosure summary="Or copy the file">
+            <Disclosure summary={t('Or copy the file')}>
               <pre className="max-h-64 overflow-auto rounded-md bg-muted p-3 font-mono text-xs">
                 {config}
               </pre>
@@ -73,7 +73,7 @@ export function ClientConfigDialog({
 
             {result.next_steps?.length ? (
               <div className="space-y-1 text-sm text-muted-foreground">
-                <p>To reach it by name from home, run:</p>
+                <p>{t('To reach it by name from home, run:')}</p>
                 {result.next_steps.map((step) => (
                   <pre key={step} className="rounded-md bg-muted p-2 font-mono text-xs">
                     {step}
@@ -86,13 +86,13 @@ export function ClientConfigDialog({
           // The operator supplied the public key, so there is no private half
           // to write and no file to hand over. The note says why.
           <Alert>
-            <AlertTitle>No file to hand over</AlertTitle>
+            <AlertTitle>{t('No file to hand over')}</AlertTitle>
             <AlertDescription>{result.note}</AlertDescription>
           </Alert>
         )}
 
         <DialogFooter>
-          <Button onClick={onClose}>{config ? 'I have set it up' : 'Close'}</Button>
+          <Button onClick={onClose}>{config ? 'I have set it up' : t('Close')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -109,6 +109,7 @@ export function ClientConfigDialog({
  * by emailing it to themselves.
  */
 function QrPanel({ config, name }: { config: string; name: string }) {
+  useLocale()
   const [copied, setCopied] = useState(false)
 
   const svg = useMemo(() => {
@@ -156,28 +157,22 @@ function QrPanel({ config, name }: { config: string; name: string }) {
             role="img"
             aria-label={`Configuration for ${name} as a QR code`}
           />
-          <p className="text-xs text-muted-foreground">
-            Scan it with the WireGuard app on the device.
-          </p>
+          <p className="text-xs text-muted-foreground"> {t('Scan it with the WireGuard app on the device.')} </p>
         </div>
       ) : (
         <Alert>
           <QrCode />
-          <AlertDescription>
-            This configuration is too long for a QR code. Copy or download it instead.
-          </AlertDescription>
+          <AlertDescription> {t('This configuration is too long for a QR code. Copy or download it instead.')} </AlertDescription>
         </Alert>
       )}
 
       <div className="flex justify-center gap-2">
         <Button size="sm" variant="outline" onClick={copy}>
           {copied ? <Check /> : <Copy />}
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? t('Copied') : t('Copy')}
         </Button>
         <Button size="sm" variant="outline" onClick={download}>
-          <Download />
-          Download
-        </Button>
+          <Download />{t('Download')}</Button>
       </div>
     </div>
   )

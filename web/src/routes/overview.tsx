@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Heading } from '@/components/ui/heading'
 import { Meter, MetricPill } from '@/components/traffic-metrics'
 import { WorldTraffic } from '@/features/world-traffic/world-traffic'
@@ -76,6 +77,7 @@ import { cn, formatBytes, formatRate } from '@/lib/utils'
 export type OverviewPanel = 'map' | 'quality'
 
 export function OverviewPage({ panel }: { panel?: OverviewPanel }) {
+  useLocale()
   const devices = useDeviceList()
   const dhcp = useDhcpStatus()
   const dhcpConfig = useDhcpConfig()
@@ -132,7 +134,7 @@ export function OverviewPage({ panel }: { panel?: OverviewPanel }) {
         modules={[
           { name: 'DHCP', to: '/gateway/dhcp', data: dhcp.data, failed: dhcp.isError, observed: Boolean(dhcp.data?.service) && !dhcp.data?.service_error },
           { name: 'DNS', to: '/gateway/dns', data: dns.data, failed: dns.isError, observed: Boolean(serviceOf(dns.data, RELAY_UNIT)?.status) },
-          { name: 'Gateway', to: '/gateway', data: gateway.data, failed: gateway.isError, observed: Boolean(gateway.data?.known) },
+          { get name() { return t('Gateway') }, to: '/gateway', data: gateway.data, failed: gateway.isError, observed: Boolean(gateway.data?.known) },
         ]}
         faults={faults} known={known} idle={idle} failed={dhcp.isError || dns.isError || gateway.isError}
         latency={latency.data} exits={gatewayConfig.data?.enabled ? gatewayConfig.data.exits?.map((exit) => exit.name) ?? [] : []} latencyFailed={latency.isError} trafficFailed={traffic.isError}
@@ -157,7 +159,7 @@ export function OverviewPage({ panel }: { panel?: OverviewPanel }) {
         </Alert>
       ))}
 
-      <section aria-label="Your network" className="space-y-4 pt-2">
+      <section aria-label={t('Your network')} className="space-y-4 pt-2">
         <NetworkMap
           devices={devices.data?.devices ?? []}
           services={services}
@@ -228,7 +230,7 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
   if (gateway && !gateway.known) {
     out.push({
       key: 'gateway-unknown',
-      title: 'The gateway settings are saved but not in force',
+      get title() { return t('The gateway settings are saved but not in force') },
       detail:
         'Nothing on the gateway screen is actually running. On Linux this usually means the daemon lacks permission to change routing.',
       tone: 'bad',
@@ -241,7 +243,7 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
   if (dns?.enabled && relay?.status && !relay.status.active) {
     out.push({
       key: 'dns-down',
-      title: 'Nothing is answering DNS',
+      get title() { return t('Nothing is answering DNS') },
       detail:
         'DNS is on and the server is stopped. To the people using this network it looks like the internet is down.',
       tone: 'bad',
@@ -253,7 +255,7 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
   if (dhcp?.enabled && dhcp.service && !dhcp.service.active) {
     out.push({
       key: 'dhcp-down',
-      title: 'Addresses are not being handed out',
+      get title() { return t('Addresses are not being handed out') },
       detail:
         'DHCP is on and the server is stopped. Devices here keep their address until it expires; anything joining now gets none.',
       tone: 'bad',
@@ -275,7 +277,7 @@ function collectFaults(dhcp?: DhcpStatus, dns?: DnsStatus, gateway?: GatewayStat
     if (!service.status || service.status.enabled || !service.status.active) continue
     out.push({
       key: `boot-${service.unit}`,
-      title: 'DNS will not come back after a reboot',
+      get title() { return t('DNS will not come back after a reboot') },
       detail: `${service.unit} is running, but is not set to start at boot.`,
       tone: 'warn',
       to: '/gateway/dns',
@@ -364,22 +366,23 @@ function BandwidthLimitDialog({ direction, limits, onClose, onSave }: {
   onClose: () => void
   onSave: (limits: { down: number; up: number }) => void
 }) {
+  useLocale()
   const [value, setValue] = useState(direction && limits[direction] ? String(limits[direction]) : '')
   const valid = value.trim() === '' || (Number.isFinite(Number(value)) && Number(value) > 0)
   return <Dialog open={direction !== null} onOpenChange={(open) => { if (!open) onClose() }}>
     <DialogContent>
-      <DialogHeader><DialogTitle>{direction === 'down' ? 'Download' : 'Upload'} limit</DialogTitle>
-        <DialogDescription>Enter your plan speed to see utilization. Saved in this browser only.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>{direction === 'down' ? t('Download') : t('Upload')} limit</DialogTitle>
+        <DialogDescription>{t('Enter your plan speed to see utilization. Saved in this browser only.')}</DialogDescription></DialogHeader>
       <form onSubmit={(event) => {
         event.preventDefault()
         if (!direction || !valid) return
         onSave({ ...limits, [direction]: Number(value) })
         onClose()
       }} className="space-y-4">
-        <div className="space-y-2"><Label htmlFor="bandwidth-limit">Limit (Mbps)</Label>
+        <div className="space-y-2"><Label htmlFor="bandwidth-limit">{t('Limit (Mbps)')}</Label>
           <Input id="bandwidth-limit" autoFocus type="number" min="0.001" step="any" value={value} onChange={(event) => setValue(event.target.value)} />
         </div>
-        <DialogFooter><Button type="submit" disabled={!valid}>Save</Button></DialogFooter>
+        <DialogFooter><Button type="submit" disabled={!valid}>{t('Save')}</Button></DialogFooter>
       </form>
     </DialogContent>
   </Dialog>
@@ -387,10 +390,11 @@ function BandwidthLimitDialog({ direction, limits, onClose, onSave }: {
 
 
 function StatCard({ title, children, className, action, back, flipped = false }: { title: React.ReactNode; children: React.ReactNode; className?: string; action?: React.ReactNode; back?: React.ReactNode; flipped?: boolean }) {
+  useLocale()
   if (back) {
     const heading = <div className="flex h-6 shrink-0 items-center justify-between"><Heading size="sm">{title}</Heading>{action}</div>
     const face = 'col-start-1 row-start-1 flex min-w-0 flex-col gap-2 panel-surface p-3 sm:p-4 [backface-visibility:hidden] [-webkit-backface-visibility:hidden]'
-    return <section aria-label="Traffic" className="min-w-0 [perspective:1200px]">
+    return <section aria-label={t('Traffic')} className="min-w-0 [perspective:1200px]">
       <div className={cn('grid min-h-60 w-full transition-transform duration-600 ease-[cubic-bezier(0.22,1,0.36,1)] [transform-style:preserve-3d] lg:aspect-[4/3] motion-reduce:transition-none', flipped && '[transform:rotateY(180deg)]')}>
         <div inert={flipped} aria-hidden={flipped} className={cn(face, flipped && 'pointer-events-none')}>{heading}<div className="flex-1 space-y-2 [&_button]:flex-nowrap [&_button]:whitespace-nowrap">{children}</div></div>
         <div inert={!flipped} aria-hidden={!flipped} className={cn(face, '[transform:rotateY(180deg)]', !flipped && 'pointer-events-none')}>{heading}<div className="-mx-1.5 -mb-1.5 flex min-h-40 flex-1 sm:-mx-2 sm:-mb-2">{back}</div></div>
@@ -404,11 +408,13 @@ function StatCard({ title, children, className, action, back, flipped = false }:
 
 
 function CountryIcon({ code }: { code?: string }) {
+  useLocale()
   if (!code || !/^[a-z]{2}$/i.test(code)) return null
   return <span role="img" aria-label={code.toUpperCase()} className={`fi fi-${code.toLowerCase()} shrink-0 rounded-xs`} />
 }
 
 function StatusDetail({ title, summary, children }: { title: string; summary: React.ReactNode; children: React.ReactNode }) {
+  useLocale()
   const [open, setOpen] = useState(false)
   return <>
     <button type="button" aria-haspopup="dialog" onClick={() => setOpen(true)} className="flex min-h-11 w-full items-center gap-2 rounded-sm text-left text-sm font-semibold tabular-nums hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9">{summary}</button>
@@ -420,6 +426,7 @@ function StatusDetail({ title, summary, children }: { title: string; summary: Re
 }
 
 function PublicAddressRow({ addresses }: { addresses?: PublicAddresses }) {
+  useLocale()
   const [open, setOpen] = useState(false)
   const address = addresses?.ipv4
   const summary = [address?.city || address?.region || address?.country, address?.isp || address?.organization].filter(Boolean).join(', ')
@@ -429,18 +436,19 @@ function PublicAddressRow({ addresses }: { addresses?: PublicAddresses }) {
       <span className="flex w-4 shrink-0 items-center justify-center"><CountryIcon code={address?.country_code} /></span>
       <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold" title={summary || undefined}>{summary || (address?.ip ? 'Location unavailable' : '—')}</span>
     </button>
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Public network</DialogTitle><DialogDescription>{summary || 'Location unavailable'}</DialogDescription></DialogHeader><div className="space-y-1 py-2 text-sm text-muted-foreground">
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>{t('Public network')}</DialogTitle><DialogDescription>{summary || 'Location unavailable'}</DialogDescription></DialogHeader><div className="space-y-1 py-2 text-sm text-muted-foreground">
       <dl className="grid grid-cols-[max-content_minmax(0,1fr)] items-start gap-x-2 gap-y-2 [&_dd]:text-right">
         <div className="contents"><dt>IPv4</dt><dd className="break-all font-mono text-foreground">{address?.ip || 'Address unavailable'}</dd></div>
         {addresses?.ipv6?.ip && <div className="contents"><dt>IPv6</dt><dd className="break-all font-mono text-foreground">{addresses.ipv6.ip}</dd></div>}
         {address?.asn != null && address.asn > 0 && <div className="contents"><dt>ASN</dt><dd className="break-all font-mono text-foreground">AS{address.asn}</dd></div>}
-        {address?.asn_organization && <div className="contents"><dt>Org</dt><dd className="break-words text-foreground">{address.asn_organization}</dd></div>}
+        {address?.asn_organization && <div className="contents"><dt>{t('Org')}</dt><dd className="break-words text-foreground">{address.asn_organization}</dd></div>}
       </dl>
     </div></DialogContent></Dialog>
   </div>
 }
 
 function SiteIcon({ name, url, icon: iconChoice }: { name: string; url: string; icon?: string }) {
+  useLocale()
   const [autoIcon, setAutoIcon] = useState<string>()
   useEffect(() => {
     if (iconChoice?.startsWith('data:')) return
@@ -475,6 +483,7 @@ type DraftSite = MonitoredSite & { id: string }
 const DEFAULT_ROUTE = ' default'
 
 function LatencySitesDialog({ sites, exits, latency, onClose }: { sites: MonitoredSite[]; exits: string[]; latency?: GatewayLatency; onClose: () => void }) {
+  useLocale()
   const [target, setTarget] = useState(latency?.target_url || 'auto')
   const [targetChanged, setTargetChanged] = useState(false)
   const [draft, setDraft] = useState<DraftSite[]>(() => sites.map(({ name, url, exit, icon }) => ({ id: crypto.randomUUID(), name, url, exit, icon })))
@@ -529,33 +538,31 @@ function LatencySitesDialog({ sites, exits, latency, onClose }: { sites: Monitor
   const matches = search.trim() ? thesvgSlugs.filter((slug) => slug.includes(search.trim().toLowerCase())).slice(0, 32) : []
   return <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
     <DialogContent className="sm:max-w-2xl">
-      <DialogHeader><DialogTitle>Latency settings</DialogTitle><DialogDescription>
-        Measure HTTPS latency from this router.
-      </DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>{t('Latency settings')}</DialogTitle><DialogDescription> {t('Measure HTTPS latency from this router.')} </DialogDescription></DialogHeader>
       <div className="space-y-2">
-        <Label htmlFor="internet-latency-target">Internet target</Label>
+        <Label htmlFor="internet-latency-target">{t('Internet target')}</Label>
         <Select value={target} onValueChange={(value) => { setTarget(value ?? 'auto'); setTargetChanged(true) }}>
-          <SelectTrigger id="internet-latency-target" className="w-full"><SelectValue>{target === 'auto' ? 'Choose fastest once' : latency?.sites.find((site) => site.url === target)?.name}</SelectValue></SelectTrigger>
+          <SelectTrigger id="internet-latency-target" className="w-full"><SelectValue>{target === 'auto' ? t('Choose fastest once') : latency?.sites.find((site) => site.url === target)?.name}</SelectValue></SelectTrigger>
           <SelectContent>
-            <SelectItem value="auto">Choose fastest once</SelectItem>
+            <SelectItem value="auto">{t('Choose fastest once')}</SelectItem>
             {latency?.sites.map((site) => <SelectItem key={site.url} value={site.url}>{site.name}</SelectItem>)}
           </SelectContent>
         </Select>
-        <p className="text-sm text-muted-foreground">The chosen target stays fixed until you change it.</p>
+        <p className="text-sm text-muted-foreground">{t('The chosen target stays fixed until you change it.')}</p>
       </div>
-      <Label>Monitored sites</Label>
+      <Label>{t('Monitored sites')}</Label>
       <div className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
         {draft.map((site, i) => <div key={site.id} className="rounded-xl bg-muted/60 p-2 text-sm"
           onDragOver={(event: DragEvent<HTMLDivElement>) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); drop(i) }}>
           <div className="grid grid-cols-[44px_minmax(0,1fr)_44px_44px] items-center gap-2 sm:flex sm:flex-nowrap">
-            <span draggable onDragStart={() => setDragging(i)} onDragEnd={() => setDragging(null)} aria-label={`Drag ${site.name} to reorder`} className="hidden cursor-grab touch-none text-muted-foreground sm:block" title="Drag to reorder"><GripVertical className="size-4" /></span>
+            <span draggable onDragStart={() => setDragging(i)} onDragEnd={() => setDragging(null)} aria-label={`Drag ${site.name} to reorder`} className="hidden cursor-grab touch-none text-muted-foreground sm:block" title={t('Drag to reorder')}><GripVertical className="size-4" /></span>
             <Button variant="ghost" size="icon-sm" onClick={() => { setIconFor(i); setSearch(''); setIconError('') }} aria-label={`Change ${site.name} icon`}><SiteIcon name={site.name} url={site.url} icon={site.icon} /></Button>
             <div className="col-span-2 col-start-3 row-start-2 flex justify-end gap-2 sm:hidden"><Button variant="ghost" size="icon-sm" aria-label={`Move ${site.name} up`} disabled={i === 0} onClick={() => { const next = [...draft]; [next[i - 1], next[i]] = [next[i], next[i - 1]]; setDraft(next) }}>↑</Button><Button variant="ghost" size="icon-sm" aria-label={`Move ${site.name} down`} disabled={i === draft.length - 1} onClick={() => { const next = [...draft]; [next[i], next[i + 1]] = [next[i + 1], next[i]]; setDraft(next) }}>↓</Button></div>
             <Button variant="ghost" onClick={() => setEditing(editing === i ? null : i)} className="col-span-2 h-auto min-h-11 min-w-0 flex-1 justify-start px-0 whitespace-normal break-words text-left sm:min-h-9" title={site.url}>{site.name}</Button>
             <Select value={site.exit || DEFAULT_ROUTE} onValueChange={(value) => update(i, { exit: !value || value === DEFAULT_ROUTE ? undefined : value })}>
               <SelectTrigger size="sm" className="col-span-2 col-start-1 row-start-2 w-full min-w-0 sm:w-auto sm:max-w-32" aria-label={`Internet via, for ${site.name}`}><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value={DEFAULT_ROUTE}>Default</SelectItem>{exits.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
-                {site.exit && !exits.includes(site.exit) && <SelectItem value={site.exit}>{site.exit} (unavailable)</SelectItem>}
+              <SelectContent><SelectItem value={DEFAULT_ROUTE}>{t('Default')}</SelectItem>{exits.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+                {site.exit && !exits.includes(site.exit) && <SelectItem value={site.exit}>{site.exit} {t('(unavailable)')}</SelectItem>}
               </SelectContent>
             </Select>
             <Button variant="ghost" size="icon" aria-label={`Remove ${site.name}`} onClick={() => { setDraft(draft.filter((_, index) => index !== i)); setEditing(null); setIconFor(null) }}><Trash2 className="size-4" /></Button>
@@ -567,28 +574,28 @@ function LatencySitesDialog({ sites, exits, latency, onClose }: { sites: Monitor
         </div>)}
       </div>
       <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-        <Input className="min-w-24 flex-1 sm:w-24" aria-label="Site name" placeholder="Name" maxLength={40} value={name} onChange={(event) => setName(event.target.value)} />
+        <Input className="min-w-24 flex-1 sm:w-24" aria-label={t('Site name')} placeholder={t('Name')} maxLength={40} value={name} onChange={(event) => setName(event.target.value)} />
         <Input className="min-w-40 flex-[2] sm:w-52" aria-label="HTTPS URL" placeholder="https://example.com/" value={url} onChange={(event) => setUrl(event.target.value)} />
         <Select value={exit} onValueChange={(value) => setExit(value ?? DEFAULT_ROUTE)}>
-          <SelectTrigger className="w-28 shrink-0" aria-label="Internet via for new site"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value={DEFAULT_ROUTE}>Default</SelectItem>{exits.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>
+          <SelectTrigger className="w-28 shrink-0" aria-label={t('Internet via for new site')}><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value={DEFAULT_ROUTE}>{t('Default')}</SelectItem>{exits.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>
         </Select>
-        <Button variant="outline" onClick={add} disabled={!name.trim() || !url.startsWith('https://') || draft.length >= 12}>Add</Button>
+        <Button variant="outline" onClick={add} disabled={!name.trim() || !url.startsWith('https://') || draft.length >= 12}>{t('Add')}</Button>
       </div>
       {save.isError && <p role="alert" className="text-sm text-destructive">{save.error.message}</p>}
-      <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={save.isPending} onClick={() => save.mutate({ sites: draft.map(({ name, url, exit, icon }) => ({ name, url, exit, icon })), target: targetChanged ? (target === 'auto' ? '' : target) : undefined }, { onSuccess: onClose })}>Save</Button></DialogFooter>
+      <DialogFooter><Button variant="outline" onClick={onClose}>{t('Cancel')}</Button><Button disabled={save.isPending} onClick={() => save.mutate({ sites: draft.map(({ name, url, exit, icon }) => ({ name, url, exit, icon })), target: targetChanged ? (target === 'auto' ? '' : target) : undefined }, { onSuccess: onClose })}>{t('Save')}</Button></DialogFooter>
     </DialogContent>
     {iconFor != null && <Dialog open onOpenChange={(open) => { if (!open) setIconFor(null) }}>
-      <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Icon for {draft[iconFor]?.name}</DialogTitle><DialogDescription>Upload an image or search theSVG library. Auto uses the site favicon.</DialogDescription></DialogHeader>
-        <div className="flex gap-2"><Button variant="outline" onClick={() => { update(iconFor, { icon: undefined }); setIconFor(null) }}>Auto</Button>
-          <label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-sm focus-within:outline-2 focus-within:outline-ring sm:min-h-9">Upload image<input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => upload(event.target.files?.[0])} /></label></div>
-        <Input aria-label="Search theSVG icons" placeholder="Search theSVG (e.g. wechat)" value={search} onChange={(event) => setSearch(event.target.value)} />
+      <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{t('Icon for')} {draft[iconFor]?.name}</DialogTitle><DialogDescription>{t('Upload an image or search theSVG library. Auto uses the site favicon.')}</DialogDescription></DialogHeader>
+        <div className="flex gap-2"><Button variant="outline" onClick={() => { update(iconFor, { icon: undefined }); setIconFor(null) }}>{t('Auto')}</Button>
+          <label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-sm focus-within:outline-2 focus-within:outline-ring sm:min-h-9">{t('Upload image')}<input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => upload(event.target.files?.[0])} /></label></div>
+        <Input aria-label={t('Search theSVG icons')} placeholder={t('Search theSVG (e.g. wechat)')} value={search} onChange={(event) => setSearch(event.target.value)} />
         <div className="grid max-h-52 grid-cols-4 gap-2 overflow-y-auto">{matches.map((slug) => <button key={slug} type="button" className="flex min-w-0 flex-col items-center gap-1 rounded-lg border p-2 text-xs hover:bg-muted" title={slug}
           onClick={() => { update(iconFor, { icon: `thesvg:${slug}` }); setIconFor(null) }}>
           <img src={`https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${slug}/default.svg`} alt="" className="size-7" loading="lazy" />
           <span className="w-full truncate">{slug}</span></button>)}</div>
         {iconError && <p role="alert" className="text-sm text-destructive">{iconError}</p>}
-        <p className="text-xs text-muted-foreground">Icons by theSVG (MIT). Only the selected ID is saved.</p>
+        <p className="text-xs text-muted-foreground">{t('Icons by theSVG (MIT). Only the selected ID is saved.')}</p>
       </DialogContent>
     </Dialog>}
   </Dialog>
@@ -610,6 +617,7 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
   panel?: OverviewPanel
   onPanelChange: (panel?: OverviewPanel) => void
 }) {
+  useLocale()
   const [limits, setLimits] = useState(readLimits)
   const [editing, setEditing] = useState<Direction | null>(null)
   const [sitesOpen, setSitesOpen] = useState(false)
@@ -625,24 +633,24 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
     setLimits(next)
     try { localStorage.setItem(LIMITS_KEY, JSON.stringify(next)) } catch { /* private mode can disable storage */ }
   }
-  const title = failed ? 'Status unavailable' : !known ? 'Checking…' : faults.length ? 'Needs attention' : idle ? 'Not set up' : 'All systems OK'
+  const title = failed ? t('Status unavailable') : !known ? t('Checking…') : faults.length ? t('Needs attention') : idle ? 'Not set up' : 'All systems OK'
   const measured = !latencyFailed && latency?.state === 'ok' && latency.milliseconds != null
   const dnsMeasured = !latencyFailed && latency?.dns_milliseconds != null
   const latencyValue = measured ? formatLatency(latency.milliseconds!) : latency?.state === 'unreachable' ? 'No response' : '—'
-  const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? 'Unavailable' : '—'
+  const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? t('Unavailable') : '—'
   // Keep four columns for wide screens so values and units fit on one line.
   return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:gap-4">
-    <StatCard title="Status">
+    <StatCard title={t('Status')}>
       <div className="w-full space-y-1">
-        <StatusDetail title="System" summary={<>
+        <StatusDetail title={t('System')} summary={<>
             {host ? <CircleCheck aria-hidden className="size-4 shrink-0 text-success-foreground" /> : <CircleHelp aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
             <span className="min-w-0 flex-1">{host ? `Up ${uptime(host.uptime_seconds)}` : 'Uptime unavailable'}</span>
           </>}>
           <dl className="grid grid-cols-[max-content_minmax(0,1fr)_max-content_max-content] gap-x-1 gap-y-2 py-2 pl-6 text-xs tabular-nums">
             {[
               { label: 'CPU', used: host?.cpu_used_cores == null ? null : host.cpu_used_cores.toFixed(1), total: host ? `${host.cpu_cores} cores` : null },
-              { label: 'Memory', used: host ? formatBytes(host.memory_used_bytes) : null, total: host ? formatBytes(host.memory_total_bytes) : null },
-              { label: 'Disk', used: host?.disk_total_bytes ? formatBytes(host.disk_used_bytes!) : null, total: host?.disk_total_bytes ? formatBytes(host.disk_total_bytes) : null },
+              { get label() { return t('Memory') }, used: host ? formatBytes(host.memory_used_bytes) : null, total: host ? formatBytes(host.memory_total_bytes) : null },
+              { get label() { return t('Disk') }, used: host?.disk_total_bytes ? formatBytes(host.disk_used_bytes!) : null, total: host?.disk_total_bytes ? formatBytes(host.disk_total_bytes) : null },
             ].map(({ label, used, total }) => <div key={label} className="contents">
               <dt className="text-muted-foreground">{label}</dt>
               <dd className="col-span-3 grid grid-cols-subgrid text-right whitespace-nowrap">
@@ -651,17 +659,17 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
             </div>)}
           </dl>
         </StatusDetail>
-        <StatusDetail title="System health" summary={<>
+        <StatusDetail title={t('System health')} summary={<>
             {faults.length || failed ? <CircleAlert aria-hidden className="size-4 shrink-0 text-destructive" /> : known && !idle ? <CircleCheck aria-hidden className="size-4 shrink-0 text-success-foreground" /> : <CircleHelp aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
             <span className={cn('min-w-0 flex-1', (faults.length > 0 || failed) && 'text-destructive')}>{title}</span>
           </>}>
           <dl className="space-y-1 py-2 pl-6 text-xs">
             {modules.map((module) => {
               const issues = faults.filter((fault) => fault.to === module.to)
-              const status = module.failed ? 'Unavailable' : !module.data ? 'Checking…' : issues.length ? 'Needs attention' : !module.data.enabled ? 'Disabled' : !module.observed ? 'Unavailable' : 'OK'
+              const status = module.failed ? t('Unavailable') : !module.data ? t('Checking…') : issues.length ? t('Needs attention') : !module.data.enabled ? t('Disabled') : !module.observed ? t('Unavailable') : t('OK')
               return <div key={module.name} className="flex items-baseline justify-between gap-2 py-1">
                 <dt><Link to={module.to} className="text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring">{module.name}</Link></dt>
-                <dd className={cn('text-right', status === 'OK' ? 'text-success-foreground' : status === 'Needs attention' ? 'text-warning-foreground' : 'text-muted-foreground')}>{status}</dd>
+                <dd className={cn('text-right', status === t('OK') ? 'text-success-foreground' : status === t('Needs attention') ? 'text-warning-foreground' : 'text-muted-foreground')}>{status}</dd>
               </div>
             })}
           </dl>
@@ -669,22 +677,22 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
         <PublicAddressRow addresses={publicAddresses} />
       </div>
     </StatCard>
-    <StatCard title="Traffic" flipped={showMap} back={<WorldTraffic embedded expanded={panel === 'map'} onExpandedChange={(open) => onPanelChange(open ? 'map' : undefined)} origin={publicAddresses?.ipv4.ip ? publicAddresses.ipv4 : publicAddresses?.ipv6} />} action={<button type="button" onClick={flipTraffic} aria-label={showMap ? 'Show traffic statistics' : 'Show traffic map'} aria-pressed={showMap} title={showMap ? 'Show traffic statistics' : 'Show traffic map'} className={cn('relative inline-flex size-6 items-center justify-center rounded-sm text-muted-foreground before:absolute before:-inset-2.5 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring', showMap && 'bg-primary/10 text-primary')}><Map aria-hidden className="size-4" /></button>}>
+    <StatCard title={t('Traffic')} flipped={showMap} back={<WorldTraffic embedded expanded={panel === 'map'} onExpandedChange={(open) => onPanelChange(open ? 'map' : undefined)} origin={publicAddresses?.ipv4.ip ? publicAddresses.ipv4 : publicAddresses?.ipv6} />} action={<button type="button" onClick={flipTraffic} aria-label={showMap ? t('Show traffic statistics') : t('Show traffic map')} aria-pressed={showMap} title={showMap ? t('Show traffic statistics') : t('Show traffic map')} className={cn('relative inline-flex size-6 items-center justify-center rounded-sm text-muted-foreground before:absolute before:-inset-2.5 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring', showMap && 'bg-primary/10 text-primary')}><Map aria-hidden className="size-4" /></button>}>
       <div className="space-y-1">
-        <Meter label="Download" arrow="↓" onClick={() => setEditing('down')} current={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
+        <Meter label={t('Download')} arrow="↓" onClick={() => setEditing('down')} current={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.down ? (flows.total.downRate ?? 0) * 8 / (limits.down * 1_000_000) * 100 : undefined} />
-        <Meter label="Upload" arrow="↑" onClick={() => setEditing('up')} current={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
+        <Meter label={t('Upload')} arrow="↑" onClick={() => setEditing('up')} current={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
           percent={flows.rated && !trafficFailed && limits.up ? (flows.total.upRate ?? 0) * 8 / (limits.up * 1_000_000) * 100 : undefined} tone="amber" />
       </div>
       <div className="space-y-1 pt-1">
-        <MetricPill label="Download" value={flows.counting && !trafficFailed ? formatBytes(flows.total.down) : trafficFailed ? 'Unavailable' : '—'} valueRight />
-        <MetricPill label="Upload" value={flows.counting && !trafficFailed ? formatBytes(flows.total.up) : trafficFailed ? 'Unavailable' : '—'} valueRight />
+        <MetricPill label={t('Download')} value={flows.counting && !trafficFailed ? formatBytes(flows.total.down) : trafficFailed ? t('Unavailable') : '—'} valueRight />
+        <MetricPill label={t('Upload')} value={flows.counting && !trafficFailed ? formatBytes(flows.total.up) : trafficFailed ? t('Unavailable') : '—'} valueRight />
       </div>
     </StatCard>
-    <StatCard title={<button type="button" aria-haspopup="dialog" aria-label="Edit latency configuration" onClick={() => setSitesOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">Latency</button>} className={(latency?.custom?.length ?? 0) > 3 ? 'lg:aspect-auto' : undefined}>
+    <StatCard title={<button type="button" aria-haspopup="dialog" aria-label={t('Edit latency configuration')} onClick={() => setSitesOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">{t('Latency')}</button>} className={(latency?.custom?.length ?? 0) > 3 ? 'lg:aspect-auto' : undefined}>
       <div className="space-y-1">
-        <div title={latency?.target ? `Internet latency to ${latency.target}` : undefined}><MetricPill label="Internet" value={latencyValue} valueRight /></div>
-        <MetricPill label="DNS lookup" value={dnsMeasured ? formatLatency(latency.dns_milliseconds!) : '—'} valueRight />
+        <div title={latency?.target ? `Internet latency to ${latency.target}` : undefined}><MetricPill label={t('Internet')} value={latencyValue} valueRight /></div>
+        <MetricPill label={t('DNS lookup')} value={dnsMeasured ? formatLatency(latency.dns_milliseconds!) : '—'} valueRight />
       </div>
       <div className="pt-1">
         <div className="grid grid-cols-2 items-center gap-x-2 gap-y-1.5 sm:grid-cols-3">
@@ -695,7 +703,7 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
             return <span key={site.name} tabIndex={0} aria-label={description} title={description}
               className="inline-flex min-h-8 min-w-0 items-center gap-1.5 rounded-sm text-xs font-semibold tabular-nums text-foreground focus-visible:outline-2 focus-visible:outline-ring">
               <SiteIcon name={site.name} url={site.url} icon={site.icon} />
-              <span className="min-w-0 whitespace-nowrap">{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? 'Timeout' : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : formatLatency(ms)}</span>
+              <span className="min-w-0 whitespace-nowrap">{!measuredSite ? '—' : ms == null ? (site.error?.startsWith('HTTP ') ? site.error : site.error === 'Timed out' ? t('Timeout') : site.error === 'DNS lookup failed' ? 'DNS' : site.error === 'Gateway exit unavailable' ? 'Exit' : 'Failed') : formatLatency(ms)}</span>
             </span>
           })}
         </div>
@@ -725,6 +733,7 @@ function TrafficNote({
   failed: boolean
   flows: TrafficView
 }) {
+  useLocale()
   if ((!traffic && !failed) || flows.counting) return null
   return (
     <p className="flex items-start gap-2 text-xs text-muted-foreground">
@@ -733,9 +742,7 @@ function TrafficNote({
         {failed
           ? 'Traffic counts could not be read, so the lines do not show how busy each group is.'
           : 'Traffic is not being counted, so the lines do not show how busy each group is.'}{' '}
-        <Link to="/gateway/interfaces#gateway-stats" className="font-medium text-foreground underline-offset-4 hover:underline">
-          Traffic settings
-        </Link>
+        <Link to="/gateway/interfaces#gateway-stats" className="font-medium text-foreground underline-offset-4 hover:underline"> {t('Traffic settings')} </Link>
       </span>
     </p>
   )

@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
@@ -26,6 +27,7 @@ export const ingressKeys = {
 }
 
 export function useIngressConfig() {
+  useLocale()
   return useQuery({
     queryKey: ingressKeys.config,
     queryFn: () => api.get<IngressConfig>('/api/ingress/config'),
@@ -34,6 +36,7 @@ export function useIngressConfig() {
 }
 
 export function useIngressStatus() {
+  useLocale()
   return useQuery({
     queryKey: ingressKeys.status,
     queryFn: () => api.get<IngressStatus>('/api/ingress/status'),
@@ -56,6 +59,7 @@ export function useIngressStatus() {
  * attempts. The message that comes back is the one telling them how to get one.
  */
 export function useIngressProviders() {
+  useLocale()
   return useQuery({
     queryKey: ingressKeys.providers,
     queryFn: () => api.get<IngressProviders>('/api/ingress/providers'),
@@ -117,7 +121,7 @@ export const ingressChange = {
     method: 'PATCH',
     path: `${base}/config`,
     body: fields,
-    label: 'Saved',
+    get label() { return t('Saved') },
   }),
 }
 
@@ -130,6 +134,7 @@ export const ingressChange = {
  * other edit lands first time.
  */
 export function useApplyIngressChange() {
+  useLocale()
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -158,6 +163,7 @@ export function useApplyIngressChange() {
  * is intent the operator stored earlier.
  */
 export function useReapplyIngress() {
+  useLocale()
   const queryClient = useQueryClient()
 
   return useMutation({

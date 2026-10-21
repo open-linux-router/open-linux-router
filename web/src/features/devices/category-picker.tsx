@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Check } from 'lucide-react'
 import { useState } from 'react'
 
@@ -60,6 +61,7 @@ export function CategoryPicker({
   detected?: DeviceCategory
   onChange: (next: IconChoice) => void
 }) {
+  useLocale()
   const auto = value.category === '' && value.icon === ''
   const [search, setSearch] = useState('')
   const query = search.trim().toLowerCase()
@@ -81,18 +83,16 @@ export function CategoryPicker({
         )}
       >
         {auto && <Check className="size-4 shrink-0 text-primary" aria-hidden />}
-        <span className="min-w-0 flex-1 truncate">
-          Detect automatically
-          {detected ? (
+        <span className="min-w-0 flex-1 truncate">{t('Detect automatically')}{detected ? (
             <span className="text-muted-foreground"> — currently {categoryLabel(detected)}</span>
           ) : (
-            <span className="text-muted-foreground"> — nothing detected</span>
+            <span className="text-muted-foreground"> {t('— nothing detected')}</span>
           )}
         </span>
       </button>
 
       <div className="space-y-2">
-        <Input aria-label="Search theSVG icons" placeholder="Search theSVG (e.g. proxmox)" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <Input aria-label={t('Search theSVG icons')} placeholder={t('Search theSVG (e.g. proxmox)')} value={search} onChange={(event) => setSearch(event.target.value)} />
         {(query || selectedSlug) && <Section label="theSVG">
           {(query ? matches : [selectedSlug]).map((slug) => (
             <Tile key={slug} label={slug} selected={value.icon === `thesvg:${slug}`}
@@ -101,8 +101,8 @@ export function CategoryPicker({
             </Tile>
           ))}
         </Section>}
-        {query && matches.length === 0 && <p role="status" className="text-sm text-muted-foreground">No matching icons.</p>}
-        <p className="text-xs text-muted-foreground">Icons by theSVG (MIT). Only the selected ID is saved.</p>
+        {query && matches.length === 0 && <p role="status" className="text-sm text-muted-foreground">{t('No matching icons.')}</p>}
+        <p className="text-xs text-muted-foreground">{t('Icons by theSVG (MIT). Only the selected ID is saved.')}</p>
       </div>
 
       {CATEGORY_GROUPS.map((group) => (
@@ -130,7 +130,7 @@ export function CategoryPicker({
         </Section>
       ))}
 
-      <Section label="Brands">
+      <Section label={t('Brands')}>
         {BRAND_CHOICES.map((choice) => (
           <Tile
             key={choice.icon}
@@ -143,7 +143,7 @@ export function CategoryPicker({
         ))}
       </Section>
 
-      <Section label="Operating system">
+      <Section label={t('Operating system')}>
         {OS_KEYS.map((os) => (
           <Tile
             key={os}
@@ -160,6 +160,7 @@ export function CategoryPicker({
 }
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  useLocale()
   return (
     <div className="space-y-2">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
@@ -179,6 +180,7 @@ function Tile({
   onClick: () => void
   children: React.ReactNode
 }) {
+  useLocale()
   return (
     <button
       type="button"

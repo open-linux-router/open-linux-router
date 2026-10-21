@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import {
   ArrowDown,
   ArrowUp,
@@ -76,6 +77,7 @@ export interface NetworkInfo {
  * and the red says it is not answering.
  */
 export function RouterNode({ networks, traffic }: { networks: NetworkInfo[]; traffic: TrafficView }) {
+  useLocale()
   return (
     <div className="min-w-60 rounded-2xl border bg-card px-4 py-3 shadow-sm">
       <div className="flex items-center gap-3">
@@ -85,7 +87,7 @@ export function RouterNode({ networks, traffic }: { networks: NetworkInfo[]; tra
           <Router className="size-5" aria-hidden />
         </span>
         <div className="min-w-0">
-          <div className="text-sm font-semibold">This router</div>
+          <div className="text-sm font-semibold">{t('This router')}</div>
           {traffic.rated && <Rates flow={traffic.total} className="text-xs" neutral />}
         </div>
       </div>
@@ -95,7 +97,7 @@ export function RouterNode({ networks, traffic }: { networks: NetworkInfo[]; tra
           fine — the Networks page has it — but one that is down is the most
           urgent fact on the map, and stays. */}
       {networks.some((n) => n.down) && (
-        <ul className="mt-2.5 flex flex-wrap gap-1.5 border-t pt-2.5" aria-label="Networks that are down">
+        <ul className="mt-2.5 flex flex-wrap gap-1.5 border-t pt-2.5" aria-label={t('Networks that are down')}>
           {networks.filter((n) => n.down).map((n) => (
             <li key={n.name}>
               <NetworkChip network={n} />
@@ -108,6 +110,7 @@ export function RouterNode({ networks, traffic }: { networks: NetworkInfo[]; tra
 }
 
 function NetworkChip({ network: n }: { network: NetworkInfo }) {
+  useLocale()
   return (
     <span
       title={
@@ -156,6 +159,7 @@ function NetworkChip({ network: n }: { network: NetworkInfo }) {
  * bandwidth bar, which is why the band's lines stay the thin ones (band.ts).
  */
 export function DialInNode({ peer, iface, onOpen }: { peer: DialInPeer; iface: string; onOpen?: () => void }) {
+  useLocale()
   const state = dialInLabel(peer)
   const where = peer.endpoint ? `, last heard from ${peer.endpoint}` : ''
   const moved = peer.rxBytes || peer.txBytes
@@ -190,7 +194,7 @@ export function DialInNode({ peer, iface, onOpen }: { peer: DialInPeer; iface: s
         ) : (
           // The tunnel has not said: a peer that never connected has no address
           // observed, which is not the same as one without a configuration.
-          <span className="truncate text-[11px] leading-4 text-muted-foreground italic">no address</span>
+          <span className="truncate text-[11px] leading-4 text-muted-foreground italic">{t('no address')}</span>
         )}
       </span>
       <span className="w-16 shrink-0 text-right text-[11px] leading-4 text-muted-foreground">{state}</span>
@@ -209,10 +213,10 @@ export function DialInNode({ peer, iface, onOpen }: { peer: DialInPeer; iface: s
  */
 function dialInLabel(peer: DialInPeer): string {
   switch (peer.state) {
-    case 'connected': return 'Connected'
+    case 'connected': return t('Connected')
     case 'away': return peer.lastHandshake ? formatAgo(peer.lastHandshake) : 'Away'
-    case 'never': return 'Never connected'
-    case 'unknown': return 'Status unavailable'
+    case 'never': return t('Never connected')
+    case 'unknown': return t('Status unavailable')
   }
 }
 
@@ -255,6 +259,7 @@ export function GroupNode({
   /** Open a named group, or focus the unnamed device bucket. */
   onFocus: () => void
 }) {
+  useLocale()
   const bucket = group.name === undefined
 
   if (variant === 'chip') {
@@ -366,6 +371,7 @@ export function GroupNode({
  * take everything it carries — left out or greyed.
  */
 function GroupMenu({ group, groups, actions }: { group: MapGroup; groups: DevicesGroup[]; actions: MapActions }) {
+  useLocale()
   const name = group.name!
   const { onRenameGroup, onDeleteGroup, onMoveGroup, onCreateGroup } = actions
   if (!onRenameGroup && !onDeleteGroup && !onMoveGroup && !onCreateGroup) return null
@@ -391,24 +397,20 @@ function GroupMenu({ group, groups, actions }: { group: MapGroup; groups: Device
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
         <DropdownMenuItem render={<Link to={`/groups/${encodeURIComponent(name)}`} />}>
-          <Layers /> View group details
-        </DropdownMenuItem>
+          <Layers /> {t('View group details')} </DropdownMenuItem>
         <DropdownMenuSeparator />
         {onRenameGroup && (
           <DropdownMenuItem onClick={() => onRenameGroup(name)}>
-            <Pencil /> Rename
-          </DropdownMenuItem>
+            <Pencil /> {t('Rename')} </DropdownMenuItem>
         )}
         {onCreateGroup && depth < MAX_GROUP_DEPTH - 1 && (
           <DropdownMenuItem onClick={() => onCreateGroup(name)}>
-            <FolderPlus /> New group inside
-          </DropdownMenuItem>
+            <FolderPlus /> {t('New group inside')} </DropdownMenuItem>
         )}
         {onMoveGroup && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <FolderInput /> Move inside…
-            </DropdownMenuSubTrigger>
+              <FolderInput /> {t('Move inside…')} </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="min-w-44">
               <DropdownMenuRadioGroup
                 value={parent || ' top'}
@@ -417,7 +419,7 @@ function GroupMenu({ group, groups, actions }: { group: MapGroup; groups: Device
                   if (next !== parent) onMoveGroup(name, next)
                 }}
               >
-                <DropdownMenuRadioItem value=" top">Top level</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value=" top">{t('Top level')}</DropdownMenuRadioItem>
                 {choices.length > 0 && <DropdownMenuSeparator />}
                 {choices.map((c) => (
                   <DropdownMenuRadioItem
@@ -447,8 +449,7 @@ function GroupMenu({ group, groups, actions }: { group: MapGroup; groups: Device
                 })
               }
             >
-              <Trash2 /> Delete
-            </DropdownMenuItem>
+              <Trash2 /> {t('Delete')} </DropdownMenuItem>
           </>
         )}
       </DropdownMenuContent>
@@ -514,6 +515,7 @@ export function DeviceNode({
   busiest: number
   actions: MapActions
 }) {
+  useLocale()
   const { onSelect } = actions
   const name = device.name || device.mac
   const flow = traffic.flowOf(device)
@@ -641,6 +643,7 @@ function ServiceLinks({ services, domain, domainKnown = true, className, width, 
   inset?: number
   compact?: boolean
 }) {
+  useLocale()
   if (!services?.length) return null
   return (
     <span style={{ width, right: inset }} className={cn('flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden', compact ? 'h-full' : 'h-8', className)}>
@@ -721,6 +724,7 @@ function loadIcon(url: string): Promise<string | undefined> {
  * and an absent version means nothing is asked for yet.
  */
 export function ServiceIcon({ name, version, choice }: { name: string; version?: string; choice?: string }) {
+  useLocale()
   const [icon, setIcon] = useState<string>()
   useEffect(() => {
     if (choice || !version) return
@@ -751,6 +755,7 @@ function Shell({
   className: string
   children: React.ReactNode
 }) {
+  useLocale()
   return onClick ? (
     <button type="button" onClick={onClick} title={title} className={className}>
       {children}
@@ -764,9 +769,10 @@ function Shell({
 
 /** The second line of a detail node: the address, whole where it fits. */
 function Address({ device }: { device: DeviceRow }) {
+  useLocale()
   const address = device.fixed_ip ?? device.ips?.[0]
-  if (!device.seen) return <span className="truncate text-[11px] leading-4 text-muted-foreground italic">never seen</span>
-  if (!address) return <span className="text-[11px] leading-4 text-muted-foreground">no address</span>
+  if (!device.seen) return <span className="truncate text-[11px] leading-4 text-muted-foreground italic">{t('never seen')}</span>
+  if (!address) return <span className="text-[11px] leading-4 text-muted-foreground">{t('no address')}</span>
   return (
     <span
       className="flex min-w-0 items-center gap-1 text-muted-foreground"
@@ -774,7 +780,7 @@ function Address({ device }: { device: DeviceRow }) {
       // address is the one field nobody can guess the end of.
       title={device.fixed_ip ? `${address} (fixed)` : address}
     >
-      {device.fixed_ip && <Tag className="size-3 shrink-0" aria-label="fixed" />}
+      {device.fixed_ip && <Tag className="size-3 shrink-0" aria-label={t('fixed')} />}
       <span className="truncate font-mono text-[11px] leading-4">{address}</span>
     </span>
   )
@@ -802,6 +808,7 @@ function DeviceTraffic({
   rated: boolean
   counting: boolean
 }) {
+  useLocale()
   const moving = device.online && counting && flow && (!rated || (flow.downRate ?? 0) + (flow.upRate ?? 0) >= 1)
   if (!moving) return <Quiet device={device} />
   if (!rated) return <>{formatBytes(flow.down + flow.up)}</>
@@ -824,9 +831,10 @@ function DeviceActivity({ device, flow, rated, counting }: {
   rated: boolean
   counting: boolean
 }) {
+  useLocale()
   const moving = device.online && counting && flow && (!rated || (flow.downRate ?? 0) + (flow.upRate ?? 0) >= 1)
   if (!moving) return <Quiet device={device} />
-  if (!rated) return <span title={`${formatBytes(flow.down + flow.up)} transferred`}>active</span>
+  if (!rated) return <span title={`${formatBytes(flow.down + flow.up)} transferred`}>{t('active')}</span>
   const down = flow.downRate ?? 0
   const up = flow.upRate ?? 0
   const label = `Live speed: download ${formatRate(down)}, upload ${formatRate(up)}`
@@ -849,6 +857,7 @@ function DeviceActivity({ device, flow, rated, counting }: {
  * "we do not know" while the group list said "Offline" about the same device.
  */
 function Quiet({ device }: { device: DeviceRow }) {
+  useLocale()
   return <span className="text-muted-foreground/60" title={lastHeardTitle(device)}>{lastHeardLabel(device)}</span>
 }
 
@@ -881,6 +890,7 @@ export function MoreNode({
   devices?: number
   onToggle: () => void
 }) {
+  useLocale()
   const label = open ? 'Show fewer' : describeHidden(hidden, others)
   const Icon = open ? ChevronUp : ChevronDown
   if (variant === 'row') {
@@ -928,6 +938,7 @@ export function MoreNode({
  * the centre it just moved to.
  */
 export function PickNode({ groups, onFocus }: { groups: MapGroup[]; onFocus: (key: string) => void }) {
+  useLocale()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -965,6 +976,7 @@ export function NoteNode({
   filtering: boolean
   onCreateGroup?: (parent?: string) => void
 }) {
+  useLocale()
   if (note === 'hint') {
     return (
       <div className="flex size-full flex-col items-start justify-center gap-2 rounded-lg border border-dashed px-3.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:gap-4">
@@ -974,8 +986,7 @@ export function NoteNode({
         </p>
         {onCreateGroup && (
           <Button size="sm" variant="outline" className="shrink-0" onClick={() => onCreateGroup()}>
-            <Plus /> Create a group
-          </Button>
+            <Plus /> {t('Create a group')} </Button>
         )}
       </div>
     )
@@ -1002,6 +1013,7 @@ export function NoteNode({
  * anything that is not a fault. The stat tile above the map keeps them.
  */
 export function Rates({ flow, className, neutral }: { flow: Flow; className?: string; neutral?: boolean }) {
+  useLocale()
   return (
     <span className={cn('inline-flex shrink-0 items-center gap-2 tabular-nums', className)}>
       <span className="inline-flex items-center gap-0.5">

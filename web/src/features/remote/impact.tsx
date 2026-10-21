@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import {
   type ImpactLabels,
   ImpactBadge as Badge,
@@ -29,28 +30,29 @@ import { cn } from '@/lib/utils'
  */
 export const IMPACT: ImpactLabels = {
   none: {
-    label: 'No change',
-    hint: 'Nothing running changes.',
+    get label() { return t('No change') },
+    get hint() { return t('Nothing running changes.') },
     variant: 'secondary',
   },
   reload: {
-    label: 'Seamless',
+    get label() { return t('Seamless') },
     hint: 'Picked up without disturbing anyone already connected.',
     variant: 'success',
   },
   restart: {
-    label: 'Brief drop',
+    get label() { return t('Brief drop') },
     hint: 'Anyone connected right now is cut off and reconnects by themselves within a few seconds. Nothing has to be re-issued.',
     variant: 'warning',
   },
   disruptive: {
-    label: 'A device loses access',
+    get label() { return t('A device loses access') },
     hint: 'Either a device can no longer get in, or the configuration already on it stops working. Neither is fixed by trying again — the device has to be set up afresh.',
     variant: 'destructive',
   },
 }
 
 export function ImpactBadge({ impact, className }: { impact: Impact; className?: string }) {
+  useLocale()
   return <Badge impact={impact} labels={IMPACT} className={className} />
 }
 
@@ -71,6 +73,7 @@ export function impactHint(impact: Impact): string {
  * because there is no backend.
  */
 export function PlanReasons({ plan }: { plan: RemotePlan }) {
+  useLocale()
   if (!plan.reasons?.length) return null
 
   return (
@@ -96,6 +99,7 @@ export function PlanReasons({ plan }: { plan: RemotePlan }) {
  * canonical text `olr remote show --dry-run` prints.
  */
 export function PlanDiff({ plan }: { plan: RemotePlan }) {
+  useLocale()
   if (!plan.known) {
     // "Nothing to do" and "we could not look" are different answers and only
     // one of them is honest here (design.md §3.4).
@@ -106,7 +110,7 @@ export function PlanDiff({ plan }: { plan: RemotePlan }) {
     )
   }
   if (plan.empty) {
-    return <p className="text-sm text-muted-foreground">No changes.</p>
+    return <p className="text-sm text-muted-foreground">{t('No changes.')}</p>
   }
 
   return (

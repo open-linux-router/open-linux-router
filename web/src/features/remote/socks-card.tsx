@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Network, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -28,6 +29,7 @@ export function SocksCard({
   status?: SocksStatus
   applier: ReturnType<typeof useRemoteApply>
 }) {
+  useLocale()
   const [link, setLink] = useState<{ url: string; label?: string } | null>(null)
   const fetchLink = useSocksLink()
 
@@ -53,9 +55,7 @@ export function SocksCard({
             SOCKS5
             <ProxyBadge status={status} />
           </CardTitle>
-          <CardDescription>
-            Unencrypted internet proxy with authentication; no access to your home network.
-          </CardDescription>
+          <CardDescription>{t('Unencrypted internet proxy with authentication; no access to your home network.')}</CardDescription>
           <CardAction className="flex items-center gap-2">
             {enabled && !missing && (
               <Button
@@ -80,36 +80,31 @@ export function SocksCard({
           {missing ? (
             <Alert variant="destructive">
               <TriangleAlert />
-              <AlertTitle>No SOCKS5 server on this box</AlertTitle>
+              <AlertTitle>{t('No SOCKS5 server on this box')}</AlertTitle>
               <AlertDescription className="whitespace-pre-line font-mono text-xs">
                 {status?.binary_error}
               </AlertDescription>
             </Alert>
           ) : enabled ? (
-            <p>
-              Listening on TCP port <span className="font-mono">{status?.listen_port}</span>,{' '}
+            <p> {t('Listening on TCP port')} <span className="font-mono">{status?.listen_port}</span>,{' '}
               {status?.exposed
                 ? 'on every interface, including the internet.'
                 : 'inside WireGuard only. Connect over WireGuard first, then use this proxy.'}
             </p>
           ) : (
-            <p>
-              Starting generates a password. Listens on every interface; no VPN required.
-            </p>
+            <p>{t('Starting generates a password. Listens on every interface; no VPN required.')}</p>
           )}
 
           {enabled && status?.warning && (
             <Alert variant="destructive">
               <TriangleAlert />
-              <AlertTitle>Open to the internet, unencrypted</AlertTitle>
+              <AlertTitle>{t('Open to the internet, unencrypted')}</AlertTitle>
               <AlertDescription>{status.warning}</AlertDescription>
             </Alert>
           )}
 
           {enabled && !missing && !running && status?.service && (
-            <p className="text-destructive">
-              The configuration is stored, but the server is not running.
-            </p>
+            <p className="text-destructive"> {t('The configuration is stored, but the server is not running.')} </p>
           )}
 
           {status?.drifted && (

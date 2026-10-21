@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 
@@ -9,6 +10,7 @@ import { PolicyDialog } from '@/features/dns/policy-dialog'
 import type { Policy } from '@/lib/config-types'
 
 export function DnsBlockingPage() {
+  useLocale()
   const { config, busy, change, applier, gate } = useDnsEditor()
   const [editing, setEditing] = useState<Policy | undefined>(undefined)
   const [open, setOpen] = useState(false)
@@ -36,13 +38,12 @@ export function DnsBlockingPage() {
             setOpen(true)
           }}
         >
-          <Plus className="size-4" aria-hidden /> Add
-        </Button>}>
+          <Plus className="size-4" aria-hidden />{t('Add')}</Button>}>
       <ApplyOutcome applier={applier} />
 
 
       {policies.length === 0 ? (
-        <ListEmpty>No rules yet. Every device may look up anything.</ListEmpty>
+        <ListEmpty>{t('No rules yet. Every device may look up anything.')}</ListEmpty>
       ) : (
         <List>
           {policies.map((p) => (

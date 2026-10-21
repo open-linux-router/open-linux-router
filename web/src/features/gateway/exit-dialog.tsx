@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -33,17 +34,17 @@ const EMPTY: Exit = { name: '', slot: 0, via: { kind: 'next_hop' } }
 const FORMS: { value: ExitForm; label: string; hint: string }[] = [
   {
     value: 'next_hop',
-    label: 'Another box on your network',
+    get label() { return t('Another box on your network') },
     hint: 'Traffic is handed to a machine you already have — the modem, or a box running a proxy.',
   },
   {
     value: 'interface',
-    label: 'A connection on this router',
+    get label() { return t('A connection on this router') },
     hint: 'Traffic leaves through a device on this box, such as a VPN tunnel or a proxy.',
   },
   {
     value: 'blocked',
-    label: 'Nowhere — block it',
+    get label() { return t('Nowhere — block it') },
     hint: 'Traffic is refused. Apps fail straight away and say so, instead of hanging.',
   },
 ]
@@ -86,6 +87,7 @@ export function ExitDialog({
   /** Only supplied when editing. Removing is an edit to the thing you opened. */
   onRemove?: () => void
 }) {
+  useLocale()
   const [draft, setDraft] = useState<Exit>(initial ?? EMPTY)
   const editing = initial !== undefined
 
@@ -125,25 +127,23 @@ export function ExitDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{editing ? `Edit ${initial.name}` : 'Add a way out'}</DialogTitle>
-          <DialogDescription>
-            Choose where assigned devices send their traffic.
-          </DialogDescription>
+          <DialogTitle>{editing ? `Edit ${initial.name}` : t('Add a way out')}</DialogTitle>
+          <DialogDescription>{t('Choose where assigned devices send their traffic.')}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="exit-name">Name</Label>
+            <Label htmlFor="exit-name">{t('Name')}</Label>
             <Input
               id="exit-name"
               value={draft.name}
-              placeholder="Proxy"
+              placeholder={t('Proxy')}
               onChange={(e) => field('name', e.target.value)}
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="exit-form">Traffic goes to</Label>
+            <Label htmlFor="exit-form">{t('Traffic goes to')}</Label>
             <Select value={draft.via.kind} onValueChange={(v) => setForm(v as ExitForm)}>
               <SelectTrigger id="exit-form">
                 {/* Labelled, because the trigger otherwise shows the schema
@@ -166,15 +166,14 @@ export function ExitDialog({
 
           {draft.via.kind === 'next_hop' && (
             <div className="space-y-1.5">
-              <Label htmlFor="exit-hop">Its address</Label>
+              <Label htmlFor="exit-hop">{t('Its address')}</Label>
               <Input
                 id="exit-hop"
                 value={draft.via.next_hop ?? ''}
                 placeholder="192.168.1.50"
                 onChange={(e) => field('via', { ...draft.via, next_hop: e.target.value })}
               />
-              <p className="text-xs text-muted-foreground">
-                Its address on <em>your</em> network, not a public one — this router has to be able
+              <p className="text-xs text-muted-foreground"> {t('Its address on')} <em>your</em> network, not a public one — this router has to be able
                 to reach it directly.
               </p>
             </div>
@@ -182,7 +181,7 @@ export function ExitDialog({
 
           {draft.via.kind === 'interface' && (
             <div className="space-y-1.5">
-              <Label htmlFor="exit-iface">Which connection</Label>
+              <Label htmlFor="exit-iface">{t('Which connection')}</Label>
               <Input
                 id="exit-iface"
                 value={draft.via.interface ?? ''}
@@ -196,10 +195,10 @@ export function ExitDialog({
           )}
 
           {draft.via.kind !== 'blocked' && (
-            <Disclosure summary="DNS, health check, IPv6 and other details">
+            <Disclosure summary={t('DNS, health check, IPv6 and other details')}>
               <div className="space-y-4 pt-1">
                 <div className="space-y-1.5">
-                  <Label htmlFor="exit-dns-mode">DNS for devices using this way out</Label>
+                  <Label htmlFor="exit-dns-mode">{t('DNS for devices using this way out')}</Label>
                   <Select
                     value={draft.dns?.mode || 'olr'}
                     onValueChange={(mode) =>
@@ -210,24 +209,24 @@ export function ExitDialog({
                       <SelectValue>
                         {(mode: string) =>
                           mode === 'exit'
-                            ? 'This box’s DNS'
+                            ? t('This box’s DNS')
                             : mode === 'custom'
-                              ? 'A specified DNS server'
-                              : 'OLR’s DNS'
+                              ? t('A specified DNS server')
+                              : t('OLR’s DNS')
                         }
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="olr">OLR’s DNS</SelectItem>
+                      <SelectItem value="olr">{t('OLR’s DNS')}</SelectItem>
                       {draft.via.kind === 'next_hop' && (
-                        <SelectItem value="exit">This box’s DNS</SelectItem>
+                        <SelectItem value="exit">{t('This box’s DNS')}</SelectItem>
                       )}
-                      <SelectItem value="custom">A specified DNS server</SelectItem>
+                      <SelectItem value="custom">{t('A specified DNS server')}</SelectItem>
                     </SelectContent>
                   </Select>
                   {draft.dns?.mode === 'custom' && (
                     <Input
-                      aria-label="DNS server address and port"
+                      aria-label={t('DNS server address and port')}
                       value={draft.dns.server ?? ''}
                       placeholder="192.168.1.50:53"
                       onChange={(e) => field('dns', { mode: 'custom', server: e.target.value })}
@@ -239,7 +238,7 @@ export function ExitDialog({
                   </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="exit-probe">Check it is working by connecting to</Label>
+                  <Label htmlFor="exit-probe">{t('Check it is working by connecting to')}</Label>
                   <Input
                     id="exit-probe"
                     value={draft.probe?.target ?? ''}
@@ -259,7 +258,7 @@ export function ExitDialog({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="exit-failure">If it stops working</Label>
+                  <Label htmlFor="exit-failure">{t('If it stops working')}</Label>
                   <Select
                     value={draft.on_failure || 'block'}
                     onValueChange={(v) => field('on_failure', v as Exit['on_failure'])}
@@ -270,8 +269,8 @@ export function ExitDialog({
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="block">Stop the traffic</SelectItem>
-                      <SelectItem value="direct">Send it out normally instead</SelectItem>
+                      <SelectItem value="block">{t('Stop the traffic')}</SelectItem>
+                      <SelectItem value="direct">{t('Send it out normally instead')}</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
@@ -291,9 +290,9 @@ export function ExitDialog({
                       <SelectValue>{(v: string) => IPV6_LABEL[v] ?? IPV6_LABEL.block}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="block">Block it</SelectItem>
-                      <SelectItem value="via">Send it through this way out too</SelectItem>
-                      <SelectItem value="direct">Let it go out normally</SelectItem>
+                      <SelectItem value="block">{t('Block it')}</SelectItem>
+                      <SelectItem value="via">{t('Send it through this way out too')}</SelectItem>
+                      <SelectItem value="direct">{t('Let it go out normally')}</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
@@ -306,7 +305,7 @@ export function ExitDialog({
                 {draft.via.kind === 'next_hop' && (
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
-                      <Label htmlFor="exit-snat">Hide device addresses from it</Label>
+                      <Label htmlFor="exit-snat">{t('Hide device addresses from it')}</Label>
                       <p className="text-xs text-muted-foreground">
                         Makes replies come back through this router, so traffic is counted
                         correctly. Turn it off if the other box needs to see which device a
@@ -328,16 +327,12 @@ export function ExitDialog({
         <DialogFooter className="sm:justify-between">
           {onRemove ? (
             <Button variant="ghost" className="text-destructive" onClick={onRemove}>
-              <Trash2 />
-              Remove
-            </Button>
+              <Trash2 />{t('Remove')}</Button>
           ) : (
             <span />
           )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
             <Button
               disabled={!complete}
               onClick={() => {
@@ -345,7 +340,7 @@ export function ExitDialog({
                 onOpenChange(false)
               }}
             >
-              {editing ? 'Save' : 'Add'}
+              {editing ? t('Save') : t('Add')}
             </Button>
           </div>
         </DialogFooter>

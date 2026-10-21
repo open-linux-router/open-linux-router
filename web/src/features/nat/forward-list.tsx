@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Badge } from '@/components/ui/badge'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import type { ForwardStatus } from '@/lib/api-types'
@@ -13,11 +14,10 @@ export function ForwardList({
   status?: ForwardStatus[]
   onEdit: (forward: Forward) => void
 }) {
+  useLocale()
   if (forwards.length === 0) {
     return (
-      <ListEmpty>
-        No port forwards yet. Add a rule to publish a device port.
-      </ListEmpty>
+      <ListEmpty> {t('No port forwards yet. Add a rule to publish a device port.')} </ListEmpty>
     )
   }
 
@@ -50,8 +50,9 @@ export function ForwardList({
  * Collapsing them into a zero would send an operator to debug the wrong half.
  */
 function ArrivedBadge({ row }: { row: ForwardStatus }) {
-  if (!row.counted) return <Badge variant="secondary">Not counted</Badge>
-  if (row.packets === 0) return <Badge variant="secondary">Nothing yet</Badge>
+  useLocale()
+  if (!row.counted) return <Badge variant="secondary">{t('Not counted')}</Badge>
+  if (row.packets === 0) return <Badge variant="secondary">{t('Nothing yet')}</Badge>
   return <Badge variant="success">{formatBytes(row.bytes)} in</Badge>
 }
 

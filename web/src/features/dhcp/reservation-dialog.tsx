@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -45,6 +46,7 @@ export function ReservationDialog({
       which is why it lives here rather than as a second button on the row. */
   onRemove?: () => void
 }) {
+  useLocale()
   const [draft, setDraft] = useState<Reservation>(initial ?? EMPTY)
   const editing = initial !== undefined
 
@@ -65,15 +67,12 @@ export function ReservationDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit reserved address' : 'Reserve an address'}</DialogTitle>
-          <DialogDescription>
-            Always give this device the same address. Devices stay connected
-            while this is added.
-          </DialogDescription>
+          <DialogDescription>{t('Always give this device the same address. Devices stay connected while this is added.')}</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="res-mac">MAC address</Label>
+            <Label htmlFor="res-mac">{t('MAC address')}</Label>
             <Input
               id="res-mac"
               placeholder="aa:bb:cc:dd:ee:ff"
@@ -84,7 +83,7 @@ export function ReservationDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="res-ip">Address</Label>
+            <Label htmlFor="res-ip">{t('Address')}</Label>
             <Input
               id="res-ip"
               placeholder="192.168.1.50"
@@ -94,10 +93,10 @@ export function ReservationDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="res-hostname">Hostname</Label>
+            <Label htmlFor="res-hostname">{t('Hostname')}</Label>
             <Input
               id="res-hostname"
-              placeholder="optional"
+              placeholder={t('optional')}
               value={draft.hostname ?? ''}
               onChange={(e) => field('hostname', e.target.value || undefined)}
             />
@@ -114,12 +113,9 @@ export function ReservationDialog({
                 onOpenChange(false)
               }}
             >
-              <Trash2 className="size-4" aria-hidden /> Remove
-            </Button>
+              <Trash2 className="size-4" aria-hidden />{t('Remove')}</Button>
           )}
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
           <Button
             disabled={!complete}
             onClick={() => {
@@ -132,7 +128,7 @@ export function ReservationDialog({
               onOpenChange(false)
             }}
           >
-            {editing ? 'Save' : 'Add'}
+            {editing ? t('Save') : t('Add')}
           </Button>
         </DialogFooter>
       </DialogContent>

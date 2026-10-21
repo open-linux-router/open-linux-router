@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -28,6 +29,7 @@ import type { ForwardsApplyResult, ForwardsPlan } from '@/lib/api-types'
  * accepting exactly this traffic in a rule olr cannot evaluate.
  */
 export function useForwardsApply() {
+  useLocale()
   const apply = useApplyForwardsChange()
 
   /** A change the daemon held back because it would be disruptive. */
@@ -63,7 +65,7 @@ export function useForwardsApply() {
 
       if (plan && !plan.known) {
         toast.error('The kernel could not be read, so nothing was changed', {
-          description: 'On Linux this usually means olrd is missing CAP_NET_ADMIN.',
+          get description() { return t('On Linux this usually means olrd is missing CAP_NET_ADMIN.') },
         })
         return false
       }

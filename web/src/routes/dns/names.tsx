@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 
@@ -14,6 +15,7 @@ import type { Host } from '@/lib/config-types'
 const DEFAULT_LOCAL_DOMAIN = 'home.arpa'
 
 export function DnsNamesPage() {
+  useLocale()
   const { config, busy, change, applier, gate } = useDnsEditor()
   const [editing, setEditing] = useState<Host | undefined>(undefined)
   const [open, setOpen] = useState(false)
@@ -45,13 +47,12 @@ export function DnsNamesPage() {
             setOpen(true)
           }}
         >
-          <Plus className="size-4" aria-hidden /> Add
-        </Button>}>
+          <Plus className="size-4" aria-hidden />{t('Add')}</Button>}>
       <ApplyOutcome applier={applier} />
 
 
       {hosts.length === 0 ? (
-        <ListEmpty>No names yet. Devices here are reachable by address only.</ListEmpty>
+        <ListEmpty>{t('No names yet. Devices here are reachable by address only.')}</ListEmpty>
       ) : (
         <List>
           {hosts.map((h) => (
@@ -77,15 +78,15 @@ export function DnsNamesPage() {
 
       <EditableField
         id="dns-local-domain"
-        label="Published under"
+        label={t('Published under')}
         busy={busy}
         placeholder={DEFAULT_LOCAL_DOMAIN}
         stored={config.local_domain ?? ''}
-        hint={<>Suffix for local names. Default: <span className="font-mono">{DEFAULT_LOCAL_DOMAIN}</span>.</>}
+        hint={<>{t('Suffix for local names. Default:')}<span className="font-mono">{DEFAULT_LOCAL_DOMAIN}</span>.</>}
         onSave={(value) => change({ ...config, local_domain: value.trim() || undefined })}
       />
 
-      <Disclosure summary="About local domains">
+      <Disclosure summary={t('About local domains')}>
         <p className="text-sm text-muted-foreground">
           home.arpa is reserved for home networks. Bare names also resolve when DHCP advertises this suffix as the search domain.
         </p>

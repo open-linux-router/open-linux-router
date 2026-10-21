@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Heading } from '@/components/ui/heading'
 import { AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
@@ -38,6 +39,7 @@ import type { GatewayApplyResult, GatewayPlan } from '@/lib/api-types'
 
 /** Less common routing controls and the full interface inventory. */
 export function GatewayInterfacesPage() {
+  useLocale()
   const { config, busy, change, applier, gate } = useGatewayEditor()
   const status = useGatewayStatus()
   const dhcp = useDhcpConfig()
@@ -88,14 +90,14 @@ export function GatewayInterfacesPage() {
       {repairError && (
         <Alert variant="destructive">
           <AlertTriangle />
-          <AlertTitle>Could not {repairAttempted ? 'restore' : 'review'} saved routing settings</AlertTitle>
+          <AlertTitle>{t('Could not')}{repairAttempted ? 'restore' : 'review'} saved routing settings</AlertTitle>
           <AlertDescription className="space-y-2">
             <p>{repairError}</p>
             {repairFailure?.steps?.length ? (
-              <Disclosure summary="Which steps ran">
+              <Disclosure summary={t('Which steps ran')}>
                 <ul className="space-y-1 font-mono text-xs">
                   {repairFailure.steps.map((step, i) => (
-                    <li key={i}>{step.done ? 'done' : step.error ? 'failed' : 'skipped'} {step.description}{step.error ? ` — ${step.error}` : ''}</li>
+                    <li key={i}>{step.done ? t('done') : step.error ? t('failed') : 'skipped'} {step.description}{step.error ? ` — ${step.error}` : ''}</li>
                   ))}
                 </ul>
               </Disclosure>
@@ -108,7 +110,7 @@ export function GatewayInterfacesPage() {
       {status.data && !status.data.known && (
         <Alert>
           <AlertTriangle />
-          <AlertTitle>These settings are saved but not in force</AlertTitle>
+          <AlertTitle>{t('These settings are saved but not in force')}</AlertTitle>
           <AlertDescription>
             This router could not read its own network configuration, so nothing below is
             actually running. On Linux this usually means the daemon is missing permission to
@@ -120,7 +122,7 @@ export function GatewayInterfacesPage() {
       {status.data?.drifted && (
         <Alert>
           <AlertTriangle />
-          <AlertTitle>Saved routing settings do not match what is running</AlertTitle>
+          <AlertTitle>{t('Saved routing settings do not match what is running')}</AlertTitle>
           <AlertDescription className="space-y-2">
             <p>
               Some devices may be using a different internet route than the one shown here.
@@ -132,7 +134,7 @@ export function GatewayInterfacesPage() {
               disabled={preview.isPending || reapply.isPending}
               onClick={() => void reviewRepair()}
             >
-              {preview.isPending ? 'Checking…' : 'Review restore'}
+              {preview.isPending ? t('Checking…') : 'Review restore'}
             </Button>
           </AlertDescription>
         </Alert>
@@ -141,7 +143,7 @@ export function GatewayInterfacesPage() {
       <Dialog open={repairPlan !== null} onOpenChange={(open) => !open && !reapply.isPending && setRepairPlan(null)}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Restore saved routing settings?</DialogTitle>
+            <DialogTitle>{t('Restore saved routing settings?')}</DialogTitle>
             <DialogDescription>
               This applies the settings shown on this page to the router. It does not edit your saved settings.
               Routing may change again if another program manages it.
@@ -154,14 +156,14 @@ export function GatewayInterfacesPage() {
                 <span>{impactHint(repairPlan.impact)}</span>
               </div>
               {repairPlan.impact === 'disruptive' && (
-                <p className="text-sm font-medium text-destructive">You may lose access to this page. Make sure you can reconnect to the router before continuing.</p>
+                <p className="text-sm font-medium text-destructive">{t('You may lose access to this page. Make sure you can reconnect to the router before continuing.')}</p>
               )}
               <PlanReasons plan={repairPlan} />
-              <Disclosure summary="What would change"><PlanDiff plan={repairPlan} /></Disclosure>
+              <Disclosure summary={t('What would change')}><PlanDiff plan={repairPlan} /></Disclosure>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" disabled={reapply.isPending} onClick={() => setRepairPlan(null)}>Cancel</Button>
+            <Button variant="outline" disabled={reapply.isPending} onClick={() => setRepairPlan(null)}>{t('Cancel')}</Button>
             <Button disabled={reapply.isPending} onClick={() => void confirmRepair()}>
               {reapply.isPending ? 'Restoring…' : 'Restore saved settings'}
             </Button>
@@ -170,11 +172,11 @@ export function GatewayInterfacesPage() {
       </Dialog>
 
       <div className="space-y-3">
-        <Heading>All interfaces</Heading>
+        <Heading>{t('All interfaces')}</Heading>
         {links.problems.length > 0 && (
           <Alert>
             <AlertTriangle />
-            <AlertTitle>Interface findings</AlertTitle>
+            <AlertTitle>{t('Interface findings')}</AlertTitle>
             <AlertDescription>
               <ul className="space-y-1">
                 {links.problems.map((problem) => <li key={problem.path + problem.message}>{problem.message}</li>)}
@@ -183,28 +185,28 @@ export function GatewayInterfacesPage() {
           </Alert>
         )}
         <InterfacesCard dhcp={dhcp.data} />
-        <Heading>Internet uplink</Heading>
+        <Heading>{t('Internet uplink')}</Heading>
         <UplinkCard interfaces={links.interfaces} networks={links.networks} />
       </div>
         <div id="forwarding" className="grid gap-4 scroll-mt-20 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Gateway routing</CardTitle>
+              <CardTitle>{t('Gateway routing')}</CardTitle>
               <CardDescription>
                 Apply Gateway routing rules and enable IPv4 forwarding. Turning it off applies no
                 routes and closes every port forward; the machine&rsquo;s own forwarding setting is
                 left as it is.
               </CardDescription>
               <CardAction>
-                <Switch aria-label="Apply gateway routing and IPv4 forwarding" checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change(gatewayChange.settings({ enabled }))} />
+                <Switch aria-label={t('Apply gateway routing and IPv4 forwarding')} checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change(gatewayChange.settings({ enabled }))} />
               </CardAction>
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-sm font-medium">Internet via</p>
-              <p className="text-sm text-muted-foreground">Default for your networks. Override in interface details.</p>
+              <p className="text-sm font-medium">{t('Internet via')}</p>
+              <p className="text-sm text-muted-foreground">{t('Default for your networks. Override in interface details.')}</p>
               <Select value={config.default || DIRECT} disabled={busy} onValueChange={(v) => change(gatewayChange.settings({ default: !v || v === DIRECT ? '' : v }))}>
-                <SelectTrigger className="w-full" aria-label="Default internet route"><SelectValue>{(v: string) => v === DIRECT ? 'This router’s own connection' : v}</SelectValue></SelectTrigger>
-                <SelectContent><SelectItem value={DIRECT}>This router&rsquo;s own connection</SelectItem>{exits.map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="w-full" aria-label={t('Default internet route')}><SelectValue>{(v: string) => v === DIRECT ? t('This router’s own connection') : v}</SelectValue></SelectTrigger>
+                <SelectContent><SelectItem value={DIRECT}>{t('This router&rsquo;s own connection')}</SelectItem>{exits.map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
               </Select>
             </CardContent>
           </Card>
@@ -212,7 +214,7 @@ export function GatewayInterfacesPage() {
           <div className="rounded-xl border bg-card p-5">
             <SwitchField
               id="gateway-ipv6-forwarding"
-              label="Forward IPv6"
+              label={t('Forward IPv6')}
               hint={config.ipv6_forwarding === undefined
                 ? 'Not managed yet — this router’s IPv6 forwarding setting is left as it is. Switching on or off hands it to olr.'
                 : 'Lets IPv6 pass between networks and the internet. Turning it on may stop this router learning its own IPv6 route from upstream; you will be asked first if that applies.'}
@@ -220,14 +222,14 @@ export function GatewayInterfacesPage() {
               busy={busy}
               onChange={(on) => change(gatewayChange.settings({ ipv6_forwarding: on }))}
             />
-            {!config.enabled && <p className="mt-3 text-xs text-muted-foreground">Gateway routing is off, so this setting is saved but not applied.</p>}
+            {!config.enabled && <p className="mt-3 text-xs text-muted-foreground">{t('Gateway routing is off, so this setting is saved but not applied.')}</p>}
           </div>
         </div>
 
         <SwitchField
           id="gateway-stats"
-          label="Count device traffic"
-          hint="Counts forwarded traffic by device. Turning off clears the current counters."
+          label={t('Count device traffic')}
+          hint={t('Counts forwarded traffic by device. Turning off clears the current counters.')}
           checked={config.stats ?? true}
           busy={busy}
           onChange={stats => change(gatewayChange.settings({ stats }))}

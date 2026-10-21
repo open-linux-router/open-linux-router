@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
@@ -61,6 +62,7 @@ export function InterfacesCard({
   uplinkAction?: React.ReactNode
   footer?: React.ReactNode
 }) {
+  useLocale()
   const interfaces = useInterfaces()
   const config = useLinkConfig()
   const apply = useApplyLinkConfig()
@@ -160,7 +162,7 @@ export function InterfacesCard({
         {interfaces.isError && (
           <Alert variant="destructive">
             <AlertTriangle />
-            <AlertTitle>Could not read this machine's interfaces</AlertTitle>
+            <AlertTitle>{t('Could not read this machine\'s interfaces')}</AlertTitle>
             <AlertDescription>{(interfaces.error as Error).message}</AlertDescription>
           </Alert>
         )}
@@ -262,6 +264,7 @@ function InterfaceItem({
   /** Offered only on an interface no network or uplink owns. */
   onRemoveAddress?: (address: string) => void
 }) {
+  useLocale()
   const id = `adopt-${row.name}`
   const state = describeState(row)
   // IPv4 only: olr writes no IPv6 address, so it has none to take away.
@@ -292,8 +295,7 @@ function InterfaceItem({
                 disabled={busy}
                 className="text-muted-foreground underline underline-offset-4 hover:text-foreground disabled:opacity-50"
                 onClick={() => onRemoveAddress?.(address)}
-              >
-                Remove {address}
+              >{t('Remove')}{address}
               </button>
             ))}
           </div>
@@ -401,6 +403,7 @@ function ReleaseDialog({
   onCancel: () => void
   onConfirm: () => void
 }) {
+  useLocale()
   return (
     <Dialog open={row !== null} onOpenChange={(open) => !open && onCancel()}>
       <DialogContent>
@@ -426,12 +429,8 @@ function ReleaseDialog({
         </ul>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={onConfirm}>
-            Take it back anyway
-          </Button>
+          <Button variant="ghost" onClick={onCancel}>{t('Cancel')}</Button>
+          <Button variant="destructive" onClick={onConfirm}>{t('Take it back anyway')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -458,12 +457,12 @@ function RemoveAddressDialog({
   onCancel: () => void
   onConfirm: () => void
 }) {
+  useLocale()
   return (
     <Dialog open={target !== null} onOpenChange={(open) => !open && onCancel()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            Remove {target?.address} from {target?.iface}?
+          <DialogTitle>{t('Remove')}{target?.address} from {target?.iface}?
           </DialogTitle>
           <DialogDescription>
             No network and not the uplink accounts for this address, so nothing in olr will put
@@ -473,12 +472,8 @@ function RemoveAddressDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="ghost" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button variant="destructive" disabled={busy} onClick={onConfirm}>
-            Remove it
-          </Button>
+          <Button variant="ghost" onClick={onCancel}>{t('Cancel')}</Button>
+          <Button variant="destructive" disabled={busy} onClick={onConfirm}> {t('Remove it')} </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

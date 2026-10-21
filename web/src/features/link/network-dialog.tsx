@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -65,6 +66,7 @@ export function NetworkDialog({
   onSubmit: (network: Network) => void
   onRemove?: () => void
 }) {
+  useLocale()
   const [draft, setDraft] = useState<Network>(initial ?? EMPTY)
   const editing = initial !== undefined
   const member = draft.members[0] ?? ''
@@ -119,7 +121,7 @@ export function NetworkDialog({
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="net-name">Name</Label>
+              <Label htmlFor="net-name">{t('Name')}</Label>
               <Input
                 id="net-name"
                 value={draft.name}
@@ -138,10 +140,10 @@ export function NetworkDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="net-member">Interface</Label>
+              <Label htmlFor="net-member">{t('Interface')}</Label>
               <Select value={member} onValueChange={(v) => set({ members: v ? [v] : [] })}>
                 <SelectTrigger id="net-member" className="w-full">
-                  <SelectValue placeholder="Choose an interface" />
+                  <SelectValue placeholder={t('Choose an interface')} />
                 </SelectTrigger>
                 <SelectContent>
                   {available.map((i) => (
@@ -163,7 +165,7 @@ export function NetworkDialog({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="net-subnet">Subnet</Label>
+              <Label htmlFor="net-subnet">{t('Subnet')}</Label>
               <Input
                 id="net-subnet"
                 value={draft.ipv4?.subnet ?? ''}
@@ -173,7 +175,7 @@ export function NetworkDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="net-router">This router's address</Label>
+              <Label htmlFor="net-router">{t('This router\'s address')}</Label>
               <Input
                 id="net-router"
                 value={draft.ipv4?.router ?? ''}
@@ -214,7 +216,7 @@ export function NetworkDialog({
 
           {v6Mode === 'delegated' && (
             <div className="space-y-2">
-              <Label htmlFor="net-delegated">Which /64</Label>
+              <Label htmlFor="net-delegated">{t('Which /64')}</Label>
               <Input
                 id="net-delegated"
                 inputMode="numeric"
@@ -237,7 +239,7 @@ export function NetworkDialog({
           {v6Mode === 'static' && (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="net-subnet6">IPv6 subnet</Label>
+                <Label htmlFor="net-subnet6">{t('IPv6 subnet')}</Label>
                 <Input
                   id="net-subnet6"
                   value={draft.ipv6?.subnet ?? ''}
@@ -251,7 +253,7 @@ export function NetworkDialog({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="net-router6">This router&rsquo;s IPv6 address</Label>
+                <Label htmlFor="net-router6">{t('This router&rsquo;s IPv6 address')}</Label>
                 <Input
                   id="net-router6"
                   value={draft.ipv6?.router ?? ''}
@@ -275,15 +277,12 @@ export function NetworkDialog({
         <DialogFooter className="sm:justify-between">
           {onRemove ? (
             <Button variant="ghost" className="text-destructive" onClick={onRemove}>
-              <Trash2 className="size-4" aria-hidden /> Remove
-            </Button>
+              <Trash2 className="size-4" aria-hidden />{t('Remove')}</Button>
           ) : (
             <span />
           )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
             <Button
               disabled={!valid}
               onClick={() => {
@@ -297,7 +296,7 @@ export function NetworkDialog({
                 onSubmit({ ...draft, name: draft.name.trim(), ipv4, ipv6 })
               }}
             >
-              {editing ? 'Save' : 'Add'}
+              {editing ? t('Save') : t('Add')}
             </Button>
           </div>
         </DialogFooter>

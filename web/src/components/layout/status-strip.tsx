@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -59,6 +60,7 @@ export function StatusStrip({
   /** Anything that must be seen without opening a disclosure — faults, mostly. */
   children?: React.ReactNode
 }) {
+  useLocale()
   return (
     <Card>
       <CardContent className="space-y-4">
@@ -85,7 +87,7 @@ export function StatusStrip({
 
         {drifted && (
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="warning">Not yet applied</Badge>
+            <Badge variant="warning">{t('Not yet applied')}</Badge>
             <span className="text-sm text-muted-foreground">
               {driftNote ?? 'What is running is behind these settings.'}
             </span>
@@ -105,7 +107,7 @@ export function StatusStrip({
         {children}
 
         {details && (
-          <Disclosure summary="Technical details">
+          <Disclosure summary={t('Technical details')}>
             <dl className="space-y-1.5 pt-1 text-xs text-muted-foreground">{details}</dl>
           </Disclosure>
         )}
@@ -116,6 +118,7 @@ export function StatusStrip({
 
 /** One term and value inside a status strip's technical details. */
 export function StatusDetail({ term, children }: { term: string; children: React.ReactNode }) {
+  useLocale()
   return (
     <div className="flex gap-2">
       <dt className="shrink-0">{term}:</dt>

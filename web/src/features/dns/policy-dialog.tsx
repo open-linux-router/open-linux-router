@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -34,12 +35,12 @@ const RESPONSE_OPTIONS: {
 }[] = [
   {
     value: 'nxdomain',
-    label: "Say it doesn't exist",
+    get label() { return t('Say it doesn\'t exist') },
     hint: 'The honest answer. Devices cache it and stop asking. Recommended.',
   },
   {
     value: 'zero',
-    label: 'Send it nowhere',
+    get label() { return t('Send it nowhere') },
     hint: 'Fails instantly instead. Use when an app treats the first option as "no internet" and retries forever.',
   },
 ]
@@ -62,6 +63,7 @@ export function PolicyDialog({
   onSubmit: (policy: Policy) => void
   onRemove?: () => void
 }) {
+  useLocale()
   const [draft, setDraft] = useState<Policy>(initial ?? EMPTY)
   const editing = initial !== undefined
 
@@ -85,7 +87,7 @@ export function PolicyDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{editing ? 'Edit rule' : 'Add rule'}</DialogTitle>
+          <DialogTitle>{editing ? 'Edit rule' : t('Add rule')}</DialogTitle>
           <DialogDescription>
             What a set of devices is allowed to look up. Leave the devices box
             empty to make this the rule for everyone not covered by another.
@@ -94,7 +96,7 @@ export function PolicyDialog({
 
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="policy-name">Name</Label>
+            <Label htmlFor="policy-name">{t('Name')}</Label>
             <Input
               id="policy-name"
               placeholder="kids"
@@ -111,7 +113,7 @@ export function PolicyDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="policy-clients">Devices</Label>
+            <Label htmlFor="policy-clients">{t('Devices')}</Label>
             <Input
               id="policy-clients"
               placeholder="everyone not covered by another rule"
@@ -126,7 +128,7 @@ export function PolicyDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="policy-block">Blocked</Label>
+            <Label htmlFor="policy-block">{t('Blocked')}</Label>
             <Textarea
               id="policy-block"
               className="min-h-24 font-mono text-xs"
@@ -142,7 +144,7 @@ export function PolicyDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="policy-allow">Exceptions</Label>
+            <Label htmlFor="policy-allow">{t('Exceptions')}</Label>
             <Textarea
               id="policy-allow"
               className="min-h-16 font-mono text-xs"
@@ -158,7 +160,7 @@ export function PolicyDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="policy-response">When something is blocked</Label>
+            <Label htmlFor="policy-response">{t('When something is blocked')}</Label>
             <Select
               value={draft.response || 'nxdomain'}
               onValueChange={(v) => field('response', v as BlockedNameResponse)}
@@ -194,12 +196,9 @@ export function PolicyDialog({
                 onOpenChange(false)
               }}
             >
-              <Trash2 className="size-4" aria-hidden /> Remove
-            </Button>
+              <Trash2 className="size-4" aria-hidden />{t('Remove')}</Button>
           )}
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
           <Button
             disabled={!complete}
             onClick={() => {
@@ -207,7 +206,7 @@ export function PolicyDialog({
               onOpenChange(false)
             }}
           >
-            {editing ? 'Save' : 'Add'}
+            {editing ? t('Save') : t('Add')}
           </Button>
         </DialogFooter>
       </DialogContent>

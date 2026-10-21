@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Check, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 
@@ -31,6 +32,7 @@ import { cn } from '@/lib/utils'
  * rather than waiting for all three ticks.
  */
 export function FirstRun() {
+  useLocale()
   const interfaces = useInterfaces()
   const dhcp = useDhcpConfig()
   const dns = useDnsConfig()
@@ -54,10 +56,8 @@ export function FirstRun() {
       <ApplyOutcome applier={applier} />
 
       <CardHeader>
-        <CardTitle>Finish setting up</CardTitle>
-        <CardDescription>
-          Choose the services this router should provide.
-        </CardDescription>
+        <CardTitle>{t('Finish setting up')}</CardTitle>
+        <CardDescription>{t('Choose the services this router should provide.')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-1">
         {/* One step for both halves, because they are one page and neither is
@@ -68,7 +68,7 @@ export function FirstRun() {
         <Step
           n={1}
           done={adopted.length > 0 && networks.length > 0}
-          title="Configure an interface"
+          title={t('Configure an interface')}
           detail={
             adopted.length === 0
               ? 'Choose an interface, then configure its network.'
@@ -78,7 +78,7 @@ export function FirstRun() {
           }
           action={{
             to: adopted.length ? '/gateway/dhcp/details' : '/gateway/interfaces',
-            label: adopted.length && networks.length ? 'Change' : 'Set it up',
+            label: adopted.length && networks.length ? t('Change') : 'Set it up',
           }}
         />
         <Step
@@ -89,23 +89,23 @@ export function FirstRun() {
           // exists. Pointing somebody at it earlier sends them to an empty
           // select box.
           blocked={networks.length === 0}
-          title="Set up an address range"
+          title={t('Set up an address range')}
           // Not a one-click, unlike DNS below, and the reason is the trap
           // docs/install.md §4 spends two paragraphs on: the gateway and DNS a
           // range advertises default to *this* box, which is right when it is
           // your router and catastrophic when your old one still is. The form
           // asks; a button here could only guess.
           detail="Check the advertised gateway and DNS if another router is still serving this network."
-          action={{ to: '/gateway/dhcp/ranges', label: 'Set up a range' }}
+          action={{ to: '/gateway/dhcp/ranges', get label() { return t('Set up a range') } }}
         />
         <Step
           n={3}
           done={dns.data.enabled}
           blocked={adopted.length === 0}
-          title="Enable DNS"
+          title={t('Enable DNS')}
           detail="Resolve and log DNS requests through OLR."
           action={{
-            label: 'Turn on',
+            get label() { return t('Turn on') },
             // Safe as one click, where the range above is not: nothing uses
             // this resolver until something is pointed at it, and turning it on
             // now picks its own listen address (internal/dns derive.go).
@@ -134,6 +134,7 @@ function Step({
   detail: string
   action: { label: string; to?: string; onClick?: () => void; busy?: boolean }
 }) {
+  useLocale()
   return (
     <div className="flex items-start gap-3 py-2">
       <span

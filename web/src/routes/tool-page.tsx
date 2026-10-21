@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Activity, ArrowDown, ArrowUp, Copy, LoaderCircle, Radio, Route } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { PageHeading } from '@/components/layout/page-heading'
@@ -22,20 +23,20 @@ interface TestError {
 function explainFailure(err: unknown): TestError {
   const detail = err instanceof Error ? err.message : String(err)
   if (err instanceof ApiError && err.status === 409) {
-    return { title: 'A test is already running', guidance: 'Wait for it to finish before starting another.', detail }
+    return { get title() { return t('A test is already running') }, guidance: 'Wait for it to finish before starting another.', detail }
   }
   if (err instanceof ApiError && err.status === 401) {
-    return { title: 'Authentication required', guidance: 'Sign in to the router and try again.', detail }
+    return { get title() { return t('Authentication required') }, guidance: 'Sign in to the router and try again.', detail }
   }
   if (err instanceof ApiError && err.status === 503) {
     return {
-      title: 'Speed test unavailable',
+      get title() { return t('Speed test unavailable') },
       guidance: 'The router could not complete a test with the available servers. Check its internet connection, then try again later. This does not mean your network is down.',
       detail,
     }
   }
   return {
-    title: 'Could not reach the speed test',
+    get title() { return t('Could not reach the speed test') },
     guidance: 'Check that this page can still reach the router, then try again. Other router settings are unaffected.',
     detail,
   }
@@ -92,6 +93,7 @@ interface TraceResult {
 }
 
 function TraceView({ trace }: { trace: TraceResult }) {
+  useLocale()
   const [mapAvailable, setMapAvailable] = useState(false)
   const [checkingMap, setCheckingMap] = useState(!!trace.map_url)
 
@@ -119,17 +121,18 @@ function TraceView({ trace }: { trace: TraceResult }) {
   }, [trace.map_url])
 
   return <div className="mt-6" aria-live="polite">
-    {checkingMap && <p role="status" className="text-sm text-muted-foreground">Checking route map availability…</p>}
+    {checkingMap && <p role="status" className="text-sm text-muted-foreground">{t('Checking route map availability…')}</p>}
     {mapAvailable ? <div className="overflow-hidden rounded-xl border">
       <iframe title={`Route map to ${trace.target}`} src={trace.map_url} referrerPolicy="no-referrer" onError={() => setMapAvailable(false)} className="h-[60vh] min-h-[440px] w-full bg-white sm:h-[650px]" />
     </div> : !checkingMap && <>
-      {trace.map_url && <p className="mb-3 text-xs text-muted-foreground">Route map unavailable here. <a className="text-primary underline underline-offset-4" href={trace.map_url} target="_blank" rel="noopener noreferrer">Open it in a new tab ↗</a></p>}
+      {trace.map_url && <p className="mb-3 text-xs text-muted-foreground">{t('Route map unavailable here.')} <a className="text-primary underline underline-offset-4" href={trace.map_url} target="_blank" rel="noopener noreferrer">{t('Open it in a new tab ↗')}</a></p>}
       <pre className="overflow-x-auto rounded-xl border bg-muted/40 p-4 font-mono text-xs leading-relaxed select-text">{trace.output}</pre>
     </>}
   </div>
 }
 
 export function ToolPage({ tool }: { tool: ToolSlug }) {
+  useLocale()
   const definition = TOOL_DEFINITIONS.find(item => item.slug === tool)!
   const Content = { speedtest: SpeedTest, 'link-test': LinkTest, nat: NATTest, ping: PingTest, traceroute: TracerouteTest }[tool]
   return <div className="space-y-8">
@@ -139,6 +142,7 @@ export function ToolPage({ tool }: { tool: ToolSlug }) {
 }
 
 function SpeedTest() {
+  useLocale()
   const gateway = useGatewayConfig()
   const [exit, setExit] = useState('')
   const [serverID, setServerID] = useState('')
@@ -199,38 +203,38 @@ function SpeedTest() {
           </div>
           <div className="grid max-w-2xl gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="speed-exit">Way out</Label>
+              <Label htmlFor="speed-exit">{t('Way out')}</Label>
               <Select value={selectedExit || 'default'} onValueChange={(value) => { setExit(value === 'default' ? '' : value ?? ''); setServerID('') }} disabled={running || gateway.isPending}>
                 <SelectTrigger id="speed-exit" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">Router default route</SelectItem>
+                  <SelectItem value="default">{t('Router default route')}</SelectItem>
                   {exits.map((item) => <SelectItem key={item.name} value={item.name}>{item.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Applies to this test only.</p>
-              {exitUnavailable && <p className="text-xs text-destructive">This way out is no longer available. Choose another before testing.</p>}
-              {gateway.isError && <p className="text-xs text-destructive">Could not load ways out. The router default route is still available.</p>}
+              <p className="text-xs text-muted-foreground">{t('Applies to this test only.')}</p>
+              {exitUnavailable && <p className="text-xs text-destructive">{t('This way out is no longer available. Choose another before testing.')}</p>}
+              {gateway.isError && <p className="text-xs text-destructive">{t('Could not load ways out. The router default route is still available.')}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="speed-server">Test server</Label>
+              <Label htmlFor="speed-server">{t('Test server')}</Label>
               <Select value={selectedServer || 'auto'} onValueChange={(value) => setServerID(value === 'auto' ? '' : value ?? '')} disabled={running || servers.isPending}>
                 <SelectTrigger id="speed-server" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="auto">Automatic (first working server)</SelectItem>
+                  <SelectItem value="auto">{t('Automatic (first working server)')}</SelectItem>
                   {options.map((item) => <SelectItem key={item.id} value={item.id}>{item.sponsor} · {item.location} ({item.latency_ms.toFixed(0)} ms)</SelectItem>)}
                 </SelectContent>
               </Select>
-              {servers.isPending && <p className="text-xs text-muted-foreground">Finding reachable servers…</p>}
-              {serverUnavailable && <p className="text-xs text-destructive">Refresh the server list or choose another server before testing.</p>}
-              {servers.isError && <p className="text-xs text-destructive">Could not list servers: {servers.error.message}. Automatic selection is still available.</p>}
-              <p className="text-xs text-muted-foreground">Up to 20 reachable servers.</p>
+              {servers.isPending && <p className="text-xs text-muted-foreground">{t('Finding reachable servers…')}</p>}
+              {serverUnavailable && <p className="text-xs text-destructive">{t('Refresh the server list or choose another server before testing.')}</p>}
+              {servers.isError && <p className="text-xs text-destructive">{t('Could not list servers:')} {servers.error.message}. Automatic selection is still available.</p>}
+              <p className="text-xs text-muted-foreground">{t('Up to 20 reachable servers.')}</p>
             </div>
           </div>
           <Button onClick={run} disabled={running || gateway.isPending || exitUnavailable || serverUnavailable}>
             {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Activity aria-hidden />}
             {running ? 'Testing connection…' : result ? 'Run again' : 'Start speed test'}
           </Button>
-          {running && <p role="status" className="text-sm text-muted-foreground">Finding a server, then measuring ping, download and upload. This may take up to 90 seconds.</p>}
+          {running && <p role="status" className="text-sm text-muted-foreground">{t('Finding a server, then measuring ping, download and upload. This may take up to 90 seconds.')}</p>}
         </div>
       </div>
 
@@ -240,16 +244,16 @@ function SpeedTest() {
           <AlertDescription className="space-y-3">
             <p>{error.guidance}</p>
             <details className="text-foreground">
-              <summary className="cursor-pointer text-xs">Technical details</summary>
+              <summary className="cursor-pointer text-xs">{t('Technical details')}</summary>
               <p className="mt-2 break-words font-mono text-xs select-text">{error.detail}</p>
             </details>
             <div className="flex flex-wrap items-center gap-3">
               <Button variant="outline" size="sm" onClick={copyDiagnostics}>
-                <Copy aria-hidden />{copied ? 'Copied' : 'Copy diagnostics'}
+                <Copy aria-hidden />{copied ? t('Copied') : 'Copy diagnostics'}
               </Button>
-              <a className="text-xs underline underline-offset-4" href="https://github.com/open-linux-router/open-linux-router/issues/new" target="_blank" rel="noreferrer">Report an issue</a>
+              <a className="text-xs underline underline-offset-4" href="https://github.com/open-linux-router/open-linux-router/issues/new" target="_blank" rel="noreferrer">{t('Report an issue')}</a>
             </div>
-            {copyFailed && <p className="text-xs">Could not copy automatically. Select the technical details above to copy them.</p>}
+            {copyFailed && <p className="text-xs">{t('Could not copy automatically. Select the technical details above to copy them.')}</p>}
             <p className="text-xs">Nothing is sent automatically. Paste the diagnostics into an issue only if you choose to report it.</p>
           </AlertDescription>
         </Alert>
@@ -258,17 +262,18 @@ function SpeedTest() {
       {result && (
         <div className="space-y-4" aria-live="polite">
           <div className="grid gap-3 sm:grid-cols-3">
-            <Metric icon={Activity} label="Latency" value={result.latency_ms} unit="ms" detail={`Jitter ${result.jitter_ms.toFixed(1)} ms`} />
-            <Metric icon={ArrowDown} label="Download" value={result.download_mbps} unit="Mbps" />
-            <Metric icon={ArrowUp} label="Upload" value={result.upload_mbps} unit="Mbps" />
+            <Metric icon={Activity} label={t('Latency')} value={result.latency_ms} unit="ms" detail={`Jitter ${result.jitter_ms.toFixed(1)} ms`} />
+            <Metric icon={ArrowDown} label={t('Download')} value={result.download_mbps} unit="Mbps" />
+            <Metric icon={ArrowUp} label={t('Upload')} value={result.upload_mbps} unit="Mbps" />
           </div>
-          <p className="text-sm text-muted-foreground">Test server: {result.server} · {result.location} · Way out: {result.exit || 'Router default route'}</p>
+          <p className="text-sm text-muted-foreground">{t('Test server:')} {result.server} · {result.location} {t('· Way out:')} {result.exit || 'Router default route'}</p>
         </div>
       )}
   </div>
 }
 
 function LinkTest() {
+  useLocale()
   const lan = useQuery({
     queryKey: ['tools', 'lan-test'],
     queryFn: () => api.get<LANTest>('/api/tools/lan-test'),
@@ -317,17 +322,17 @@ function LinkTest() {
           </div>
         </div>
         <p className="mt-4 text-sm text-muted-foreground">Install iperf3 on both devices. OLR starts a temporary server on TCP 5201 for two minutes, or detects an existing iperf3 server without taking ownership of it. Anyone able to reach this address and port can connect during that time. A configured firewall may require a temporary TCP 5201 opening.</p>
-        {lan.isError && <Alert variant="destructive" className="mt-4"><AlertTitle>LAN addresses unavailable</AlertTitle><AlertDescription>{lan.error.message}</AlertDescription></Alert>}
+        {lan.isError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('LAN addresses unavailable')}</AlertTitle><AlertDescription>{lan.error.message}</AlertDescription></Alert>}
         {lan.data && <div className="mt-5 space-y-4">
           <div className="max-w-sm space-y-1.5">
-            <Label htmlFor="lan-address">Router LAN address</Label>
+            <Label htmlFor="lan-address">{t('Router LAN address')}</Label>
             <Select value={lan.data.address || selectedLAN} onValueChange={value => setLANAddress(value ?? '')} disabled={!!lan.data.address || lanBusy || !addresses.length}>
-              <SelectTrigger id="lan-address"><SelectValue placeholder="No configured LAN IPv4 address" /></SelectTrigger>
+              <SelectTrigger id="lan-address"><SelectValue placeholder={t('No configured LAN IPv4 address')} /></SelectTrigger>
               <SelectContent>{addresses.map(address => <SelectItem key={address} value={address}>{address}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           {conflict && !lan.data.address && <Alert variant="destructive"><AlertTitle>Port unavailable</AlertTitle><AlertDescription>{conflict}</AlertDescription></Alert>}
-          {external && !lan.data.address && <p role="status" className="text-sm text-muted-foreground">Existing iperf3 server: {external}. OLR did not start it and will not stop it.</p>}
+          {external && !lan.data.address && <p role="status" className="text-sm text-muted-foreground">{t('Existing iperf3 server:')} {external}. OLR did not start it and will not stop it.</p>}
           {(!external || lan.data.address) && <Button onClick={() => changeLAN(!lan.data?.address)} disabled={lanBusy || (!lan.data.address && (!selectedLAN || !!conflict))} variant={lan.data.address ? 'outline' : 'default'}>
             {lanBusy && <LoaderCircle className="animate-spin" aria-hidden />}
             {lan.data.address ? 'Stop server' : 'Start server'}
@@ -342,17 +347,18 @@ function LinkTest() {
               <p className="text-xs font-medium">{index === 0 ? 'Device → router' : 'Router → device'}</p>
               <div className="flex flex-wrap items-center gap-2">
                 <code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-background px-3 py-2 text-sm">{command}</code>
-                <Button variant="outline" size="sm" onClick={() => copyLAN(command)}><Copy aria-hidden />{lanCopied === command ? 'Copied' : 'Copy'}</Button>
+                <Button variant="outline" size="sm" onClick={() => copyLAN(command)}><Copy aria-hidden />{lanCopied === command ? t('Copied') : t('Copy')}</Button>
               </div>
             </div>)}
           </div>}
         </div>}
-        {lanError && <Alert variant="destructive" className="mt-4"><AlertTitle>Link test unavailable</AlertTitle><AlertDescription>{lanError}</AlertDescription></Alert>}
+        {lanError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('Link test unavailable')}</AlertTitle><AlertDescription>{lanError}</AlertDescription></Alert>}
       </section>
   </div>
 }
 
 function NATTest() {
+  useLocale()
   const [natResult, setNATResult] = useState<NATResult | null>(null)
   const [natRunning, setNATRunning] = useState(false)
   const [natError, setNATError] = useState<string | null>(null)
@@ -382,32 +388,33 @@ function NATTest() {
           {natRunning && <LoaderCircle className="animate-spin" aria-hidden />}
           {natRunning ? 'Testing…' : 'Run NAT test'}
         </Button>
-        {natError && <Alert variant="destructive" className="mt-5"><AlertTitle>NAT test unavailable</AlertTitle><AlertDescription className="break-words">{natError}</AlertDescription></Alert>}
+        {natError && <Alert variant="destructive" className="mt-5"><AlertTitle>{t('NAT test unavailable')}</AlertTitle><AlertDescription className="break-words">{natError}</AlertDescription></Alert>}
         {natResult && <div className="mt-5 space-y-4 text-sm" aria-live="polite">
           <div className="rounded-xl border bg-muted/40 p-4">
-            <p className="font-medium">What this test found</p>
-            <p className="mt-1 text-muted-foreground">The STUN server saw this router's UDP traffic as <span className="font-mono text-foreground">{natResult.mapped}</span>. This is the address and temporary port observed for this test, not proof that incoming connections can reach the router.</p>
+            <p className="font-medium">{t('What this test found')}</p>
+            <p className="mt-1 text-muted-foreground">{t('The STUN server saw this router\'s UDP traffic as')} <span className="font-mono text-foreground">{natResult.mapped}</span>. This is the address and temporary port observed for this test, not proof that incoming connections can reach the router.</p>
             {(natResult.mapping === 'not tested' || natResult.filtering === 'not tested') && <p className="mt-2 text-muted-foreground">The server did not provide enough usable replies to determine {natResult.mapping === 'not tested' && natResult.filtering === 'not tested' ? 'mapping or filtering' : natResult.mapping === 'not tested' ? 'mapping' : 'filtering'}. Your NAT behavior is unknown, not necessarily restrictive.</p>}
           </div>
           <dl className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border p-4">
-              <dt className="font-medium">Mapping</dt>
+              <dt className="font-medium">{t('Mapping')}</dt>
               <dd className="mt-1 font-mono text-sm">{natResult.mapping}</dd>
-              <p className="mt-2 text-xs text-muted-foreground">Whether the public UDP address and port change when this router contacts different destinations. {mappingExplanation(natResult.mapping)}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{t('Whether the public UDP address and port change when this router contacts different destinations.')} {mappingExplanation(natResult.mapping)}</p>
             </div>
             <div className="rounded-xl border p-4">
-              <dt className="font-medium">Filtering</dt>
+              <dt className="font-medium">{t('Filtering')}</dt>
               <dd className="mt-1 font-mono text-sm">{natResult.filtering}</dd>
-              <p className="mt-2 text-xs text-muted-foreground">Whether replies from another server IP or port get through. {filteringExplanation(natResult.filtering)}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{t('Whether replies from another server IP or port get through.')} {filteringExplanation(natResult.filtering)}</p>
             </div>
           </dl>
-          <p className="text-xs text-muted-foreground">STUN server: <span className="font-mono">{natResult.server}</span>. Results do not determine an Xbox or PlayStation NAT type.</p>
+          <p className="text-xs text-muted-foreground">{t('STUN server:')} <span className="font-mono">{natResult.server}</span>. Results do not determine an Xbox or PlayStation NAT type.</p>
         </div>}
       </section>
   </div>
 }
 
 function PingTest() {
+  useLocale()
   const [target, setTarget] = useState('1.1.1.1')
   const [pingResult, setPingResult] = useState<PingResult | null>(null)
   const [pingRunning, setPingRunning] = useState(false)
@@ -436,23 +443,21 @@ function PingTest() {
           </div>
         </div>
         <form onSubmit={runPing} className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
-          <label className="flex-1 space-y-2 text-sm font-medium" htmlFor="ping-target">
-            Hostname or IP address
-            <Input id="ping-target" value={target} onChange={event => setTarget(event.target.value)} placeholder="example.com or 192.168.1.1" maxLength={253} required disabled={pingRunning} />
+          <label className="flex-1 space-y-2 text-sm font-medium" htmlFor="ping-target"> {t('Hostname or IP address')} <Input id="ping-target" value={target} onChange={event => setTarget(event.target.value)} placeholder="example.com or 192.168.1.1" maxLength={253} required disabled={pingRunning} />
           </label>
           <Button type="submit" disabled={pingRunning || !target.trim()}>
             {pingRunning && <LoaderCircle className="animate-spin" aria-hidden />}
             {pingRunning ? 'Pinging…' : 'Run ping'}
           </Button>
         </form>
-        {pingRunning && <p role="status" className="mt-4 text-sm text-muted-foreground">Sending four probes. This may take up to 10 seconds.</p>}
+        {pingRunning && <p role="status" className="mt-4 text-sm text-muted-foreground">{t('Sending four probes. This may take up to 10 seconds.')}</p>}
         {pingError && <Alert variant="destructive" className="mt-5"><AlertTitle>Ping unavailable</AlertTitle><AlertDescription className="break-words">{pingError}</AlertDescription></Alert>}
         {pingResult && (
           <div className="mt-6 space-y-4" aria-live="polite">
             <p className="text-sm text-muted-foreground">{pingResult.target} resolved to <span className="font-mono text-foreground">{pingResult.address}</span></p>
             <div className="grid gap-3 sm:grid-cols-3">
-              <Metric surface="inset" icon={Radio} label="Packet loss" value={pingResult.loss_percent} unit="%" detail={`${pingResult.received} of ${pingResult.sent} replies`} />
-              <Metric surface="inset" icon={Activity} label="Average RTT" value={pingResult.received ? pingResult.avg_ms : null} unit="ms" detail={pingResult.received ? `Min ${pingResult.min_ms.toFixed(1)} · Max ${pingResult.max_ms.toFixed(1)} ms` : 'No replies received'} />
+              <Metric surface="inset" icon={Radio} label={t('Packet loss')} value={pingResult.loss_percent} unit="%" detail={`${pingResult.received} of ${pingResult.sent} replies`} />
+              <Metric surface="inset" icon={Activity} label={t('Average RTT')} value={pingResult.received ? pingResult.avg_ms : null} unit="ms" detail={pingResult.received ? `Min ${pingResult.min_ms.toFixed(1)} · Max ${pingResult.max_ms.toFixed(1)} ms` : 'No replies received'} />
               <div className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
                 {pingResult.received === 0 ? 'No replies. The destination may be unreachable or block ICMP.' : 'Replies received from the destination.'}
               </div>
@@ -464,6 +469,7 @@ function PingTest() {
 }
 
 function TracerouteTest() {
+  useLocale()
   const [target, setTarget] = useState('1.1.1.1')
   const [trace, setTrace] = useState<TraceResult | null>(null)
   const [traceRunning, setTraceRunning] = useState(false)
@@ -488,12 +494,12 @@ function TracerouteTest() {
       <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
         <div className="flex items-start gap-4">
           <div>
-            <p className="mt-1 text-sm text-muted-foreground">Follow the path from this router to a domain or IP address. Powered by NextTrace; sends network probes and may query its IP location service.</p>
+            <p className="mt-1 text-sm text-muted-foreground">{t('Follow the path from this router to a domain or IP address. Powered by NextTrace; sends network probes and may query its IP location service.')}</p>
           </div>
         </div>
         <form onSubmit={runTraceroute} className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="flex-1 space-y-2 text-sm font-medium" htmlFor="trace-target">
-            <span>Destination</span>
+            <span>{t('Destination')}</span>
             <Input id="trace-target" value={target} onChange={(event) => setTarget(event.target.value)} placeholder="example.com or 1.1.1.1" required maxLength={253} disabled={traceRunning} />
           </label>
           <Button type="submit" disabled={traceRunning || !target.trim()}>
@@ -502,7 +508,7 @@ function TracerouteTest() {
           </Button>
         </form>
         {traceRunning && <p role="status" className="mt-4 text-sm text-muted-foreground">Probing up to 20 hops. This may take up to 75 seconds.</p>}
-        {traceError && <Alert variant="destructive" className="mt-5"><AlertTitle>Traceroute unavailable</AlertTitle><AlertDescription className="break-words">{traceError}</AlertDescription></Alert>}
+        {traceError && <Alert variant="destructive" className="mt-5"><AlertTitle>{t('Traceroute unavailable')}</AlertTitle><AlertDescription className="break-words">{traceError}</AlertDescription></Alert>}
         {trace && <TraceView key={trace.map_url ?? trace.output} trace={trace} />}
       </section>
   </div>
@@ -515,6 +521,7 @@ function Metric({ icon: Icon, label, value, unit, detail, surface = 'panel' }: {
   detail?: string
   surface?: 'panel' | 'inset'
 }) {
+  useLocale()
   return (
     <div className={surface === 'inset' ? 'rounded-lg bg-muted/50 p-4' : 'panel-surface p-4 sm:p-6'}>
       <div className="flex items-center gap-2 text-sm text-muted-foreground"><Icon className="size-4" aria-hidden />{label}</div>

@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router'
@@ -33,6 +34,7 @@ import { cn, formatBytes, formatRate } from '@/lib/utils'
  * status page rather than as this section's own.
  */
 export function GatewaySummary() {
+  useLocale()
   const { hash } = useLocation()
 
   useEffect(() => {
@@ -74,6 +76,7 @@ interface Health {
 /* -------------------------------------------------------------------------- */
 
 function InterfacesCard() {
+  useLocale()
   const interfaces = useInterfaces()
   const uplink = useUplink()
   const dial = useDialStatus()
@@ -90,7 +93,7 @@ function InterfacesCard() {
     <>
       <Card id="interfaces" aria-labelledby="interfaces-heading" className="scroll-mt-20">
         <CardHeader>
-          <CardTitle id="interfaces-heading">Interfaces</CardTitle>
+          <CardTitle id="interfaces-heading">{t('Interfaces')}</CardTitle>
           <CardAction>
             <Link to="/gateway/interfaces" className={sectionLink}>
               Interfaces &amp; routing <ChevronRight className="size-3.5" aria-hidden />
@@ -106,14 +109,13 @@ function InterfacesCard() {
           {interfaces.isError && (
             <Alert variant="destructive">
               <AlertTriangle />
-              <AlertTitle>Could not load interfaces</AlertTitle>
+              <AlertTitle>{t('Could not load interfaces')}</AlertTitle>
               <AlertDescription>{interfaces.error.message}</AlertDescription>
             </Alert>
           )}
           {interfaces.isSuccess && rows.length === 0 && (
-            <ListEmpty>
-              No physical network interfaces found.{' '}
-              <Link to="/gateway/interfaces" className="underline underline-offset-4">Open interface settings</Link>
+            <ListEmpty> {t('No physical network interfaces found.')}{' '}
+              <Link to="/gateway/interfaces" className="underline underline-offset-4">{t('Open interface settings')}</Link>
             </ListEmpty>
           )}
           {rows.length > 0 && (
@@ -138,21 +140,21 @@ function InterfacesCard() {
           <DialogHeader>
             <DialogTitle>{selected}</DialogTitle>
             <DialogDescription>
-              {interfaces.isError ? 'Interface readings unavailable.'
+              {interfaces.isError ? t('Interface readings unavailable.')
                 : chosen ? `${connectionState(chosen, chosenRole)}${chosenRole ? ` · ${chosenRole}` : ''}`
                   : 'This interface is no longer present.'}
             </DialogDescription>
           </DialogHeader>
-          {interfaces.isError && <p className="text-sm text-destructive">Interface readings unavailable.</p>}
+          {interfaces.isError && <p className="text-sm text-destructive">{t('Interface readings unavailable.')}</p>}
           {chosen && (
             <dl className="divide-y text-sm">
-              <Detail label="Network" value={chosen.network ?? interfaces.data?.networks.find(n => n.members.includes(chosen.name))?.name ?? 'Not assigned'} />
-              <Detail label="Physical link" value={interfaces.isError ? 'Unavailable' : !chosen.present ? 'Not found' : !chosen.up ? 'Down' : chosen.running ? 'Detected' : 'Disconnected'} />
-              <Detail label="Link speed" value={interfaces.isError ? '—' : linkSpeed(chosen.speed_mbps)} />
+              <Detail label={t('Network')} value={chosen.network ?? interfaces.data?.networks.find(n => n.members.includes(chosen.name))?.name ?? 'Not assigned'} />
+              <Detail label={t('Physical link')} value={interfaces.isError ? t('Unavailable') : !chosen.present ? t('Not found') : !chosen.up ? t('Down') : chosen.running ? 'Detected' : t('Disconnected')} />
+              <Detail label={t('Link speed')} value={interfaces.isError ? '—' : linkSpeed(chosen.speed_mbps)} />
               <Detail label="MAC" value={chosen.mac ?? '—'} />
-              <Detail label="Addresses" value={chosen.prefixes?.join(', ') || 'Not assigned'} />
-              <Detail label="Receive total" value={!interfaces.isError && chosen.rx_bytes !== undefined ? formatBytes(chosen.rx_bytes) : '—'} />
-              <Detail label="Transmit total" value={!interfaces.isError && chosen.tx_bytes !== undefined ? formatBytes(chosen.tx_bytes) : '—'} />
+              <Detail label={t('Addresses')} value={chosen.prefixes?.join(', ') || 'Not assigned'} />
+              <Detail label={t('Receive total')} value={!interfaces.isError && chosen.rx_bytes !== undefined ? formatBytes(chosen.rx_bytes) : '—'} />
+              <Detail label={t('Transmit total')} value={!interfaces.isError && chosen.tx_bytes !== undefined ? formatBytes(chosen.tx_bytes) : '—'} />
             </dl>
           )}
           {chosen && !interfaces.isError && !chosen.speed_mbps && (
@@ -161,11 +163,9 @@ function InterfacesCard() {
               drivers, do not report it. Traffic rates are measured separately.
             </p>
           )}
-          <Link to={chosen ? `/gateway/interfaces/${encodeURIComponent(chosen.name)}` : '/gateway/interfaces'} className={detailLink}>
-            Interface settings <ChevronRight className="size-3.5" aria-hidden />
+          <Link to={chosen ? `/gateway/interfaces/${encodeURIComponent(chosen.name)}` : '/gateway/interfaces'} className={detailLink}> {t('Interface settings')} <ChevronRight className="size-3.5" aria-hidden />
           </Link>
-          <Link to="/gateway/interfaces" className={detailLink}>
-            All interfaces and routing <ChevronRight className="size-3.5" aria-hidden />
+          <Link to="/gateway/interfaces" className={detailLink}> {t('All interfaces and routing')} <ChevronRight className="size-3.5" aria-hidden />
           </Link>
         </DialogContent>
       </Dialog>
@@ -190,7 +190,8 @@ function InterfaceTile({ row, role, current, failed, onSelect }: {
   failed: boolean
   onSelect: () => void
 }) {
-  const state = failed ? 'Unavailable' : connectionState(row, role)
+  useLocale()
+  const state = failed ? t('Unavailable') : connectionState(row, role)
   const connected = state === 'Connected'
   const address = row.address || row.prefixes?.[0]?.split('/')[0]
   return (
@@ -218,7 +219,7 @@ function InterfaceTile({ row, role, current, failed, onSelect }: {
       <div className="mt-3 min-w-0 text-[0.8125rem] leading-5">
         {address
           ? <span className="block font-mono [overflow-wrap:anywhere]">{address}</span>
-          : <span className="block text-muted-foreground">No address</span>}
+          : <span className="block text-muted-foreground">{t('No address')}</span>}
       </div>
       <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 pt-3 text-sm font-medium tabular-nums">
         {failed ? <span className="text-muted-foreground">No readings</span>
@@ -237,6 +238,7 @@ function InterfaceTile({ row, role, current, failed, onSelect }: {
 /* -------------------------------------------------------------------------- */
 
 function WayOutCard() {
+  useLocale()
   const dial = useDialStatus()
   const status = useGatewayStatus()
   const foreign = status.data?.foreign?.length ?? 0
@@ -244,17 +246,17 @@ function WayOutCard() {
 
   return (
     <Card aria-labelledby="way-out-heading">
-      <CardHeader><CardTitle id="way-out-heading">Way out</CardTitle></CardHeader>
+      <CardHeader><CardTitle id="way-out-heading">{t('Way out')}</CardTitle></CardHeader>
       <CardContent>
         <dl>
           <RouteRow label="IPv4" routes={routes.filter(route => route.family === 4)} dial={dial} />
           <RouteRow label="IPv6" routes={routes.filter(route => route.family === 6)} dial={dial} />
           <PropertyRow label="Resolvers">
-            {dial.isError ? <span className="text-muted-foreground">Unavailable</span>
+            {dial.isError ? <span className="text-muted-foreground">{t('Unavailable')}</span>
               : !dial.data ? <span className="text-muted-foreground">Reading…</span>
                 : dial.data.resolvers?.length
                   ? <TechnicalValue>{dial.data.resolvers.join(', ')}</TechnicalValue>
-                  : <span className="text-muted-foreground">None</span>}
+                  : <span className="text-muted-foreground">{t('None')}</span>}
           </PropertyRow>
           {foreign > 0 && (
             <PropertyRow label="Other rules">
@@ -274,11 +276,12 @@ function RouteRow({ label, routes, dial }: {
   routes: DialStatus['default_routes']
   dial: ReturnType<typeof useDialStatus>
 }) {
+  useLocale()
   return (
     <PropertyRow label={label}>
-      {dial.isError ? <span className="text-muted-foreground">Unavailable</span>
+      {dial.isError ? <span className="text-muted-foreground">{t('Unavailable')}</span>
         : !dial.data ? <span className="text-muted-foreground">Reading…</span>
-          : routes.length === 0 ? <span className="text-muted-foreground">None</span>
+          : routes.length === 0 ? <span className="text-muted-foreground">{t('None')}</span>
             : (
               <span className="flex flex-col gap-1">
                 {routes.map((route, i) => (
@@ -298,6 +301,7 @@ function RouteRow({ label, routes, dial }: {
 /* -------------------------------------------------------------------------- */
 
 function ServicesCard() {
+  useLocale()
   const dhcp = useDhcpStatus()
   const leases = useDhcpLeases()
   const dns = useDnsStatus()
@@ -307,7 +311,7 @@ function ServicesCard() {
 
   return (
     <Card aria-labelledby="services-heading">
-      <CardHeader><CardTitle id="services-heading">Services</CardTitle></CardHeader>
+      <CardHeader><CardTitle id="services-heading">{t('Services')}</CardTitle></CardHeader>
       <CardContent className="px-0">
         <div className="divide-y">
           <ServiceRow
@@ -353,6 +357,7 @@ function ServiceRow({ id, kind, name, note, health, to }: {
   health: Health
   to: string
 }) {
+  useLocale()
   return (
     <Link
       id={id}
@@ -374,24 +379,24 @@ function ServiceRow({ id, kind, name, note, health, to }: {
 }
 
 function describeDhcp(dhcp: ReturnType<typeof useDhcpStatus>): Health {
-  if (dhcp.isError) return { label: 'Unavailable', tone: 'caution' }
+  if (dhcp.isError) return { get label() { return t('Unavailable') }, tone: 'caution' }
   if (!dhcp.data) return { label: 'Reading…', tone: 'quiet' }
-  if (!dhcp.data.enabled) return { label: 'Off', tone: 'quiet' }
-  if (dhcp.data.service_error) return { label: 'Unavailable', tone: 'caution' }
-  if (dhcp.data.drift_error || dhcp.data.blockers?.length) return { label: 'Needs attention', tone: 'caution' }
-  if (!dhcp.data.service?.active) return { label: 'Not running', tone: 'caution' }
-  return dhcp.data.drifted ? { label: 'Needs attention', tone: 'caution' } : { label: 'Running', tone: 'good' }
+  if (!dhcp.data.enabled) return { get label() { return t('Off') }, tone: 'quiet' }
+  if (dhcp.data.service_error) return { get label() { return t('Unavailable') }, tone: 'caution' }
+  if (dhcp.data.drift_error || dhcp.data.blockers?.length) return { get label() { return t('Needs attention') }, tone: 'caution' }
+  if (!dhcp.data.service?.active) return { get label() { return t('Not running') }, tone: 'caution' }
+  return dhcp.data.drifted ? { get label() { return t('Needs attention') }, tone: 'caution' } : { get label() { return t('Running') }, tone: 'good' }
 }
 
 function describeDns(dns: ReturnType<typeof useDnsStatus>): Health {
-  if (dns.isError) return { label: 'Unavailable', tone: 'caution' }
+  if (dns.isError) return { get label() { return t('Unavailable') }, tone: 'caution' }
   if (!dns.data) return { label: 'Reading…', tone: 'quiet' }
-  if (!dns.data.enabled) return { label: 'Off', tone: 'quiet' }
-  if (dns.data.services.some(service => service.error)) return { label: 'Unavailable', tone: 'caution' }
-  if (dns.data.drift_error || dns.data.blockers?.length) return { label: 'Needs attention', tone: 'caution' }
+  if (!dns.data.enabled) return { get label() { return t('Off') }, tone: 'quiet' }
+  if (dns.data.services.some(service => service.error)) return { get label() { return t('Unavailable') }, tone: 'caution' }
+  if (dns.data.drift_error || dns.data.blockers?.length) return { get label() { return t('Needs attention') }, tone: 'caution' }
   const running = dns.data.services.length > 0 && dns.data.services.every(service => service.status?.active)
-  if (!running) return { label: 'Not running', tone: 'caution' }
-  return dns.data.drifted ? { label: 'Needs attention', tone: 'caution' } : { label: 'Running', tone: 'good' }
+  if (!running) return { get label() { return t('Not running') }, tone: 'caution' }
+  return dns.data.drifted ? { get label() { return t('Needs attention') }, tone: 'caution' } : { get label() { return t('Running') }, tone: 'good' }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -400,6 +405,7 @@ const sectionLink = 'inline-flex min-h-11 items-center gap-1 text-sm font-medium
 const detailLink = 'inline-flex min-h-11 items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
 
 function Detail({ label, value }: { label: string; value: string }) {
+  useLocale()
   return <PropertyRow label={label} className="py-3">{label === 'MAC' || label === 'Addresses' ? <TechnicalValue>{value}</TechnicalValue> : value}</PropertyRow>
 }
 
@@ -416,10 +422,10 @@ function stateTone(state: string): keyof typeof tone {
 }
 
 function connectionState(row: InterfaceRow, role?: string) {
-  return !row.present ? 'Not found' : !row.up ? 'Down' : !row.running ? 'Disconnected'
-    : !role && !row.network && !row.address && !row.prefixes?.length ? 'Inactive' : 'Connected'
+  return !row.present ? t('Not found') : !row.up ? t('Down') : !row.running ? t('Disconnected')
+    : !role && !row.network && !row.address && !row.prefixes?.length ? 'Inactive' : t('Connected')
 }
 
 function linkSpeed(mbps?: number) {
-  return !mbps ? 'Unknown' : mbps >= 1000 ? `${mbps / 1000} Gbps` : `${mbps} Mbps`
+  return !mbps ? t('Unknown') : mbps >= 1000 ? `${mbps / 1000} Gbps` : `${mbps} Mbps`
 }

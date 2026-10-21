@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -57,6 +58,7 @@ export function PeerDialog({
   /** Only supplied when editing. Removing is an edit to the thing you opened. */
   onRemove?: () => void
 }) {
+  useLocale()
   const editing = initial !== undefined
   const [name, setName] = useState(initial?.name ?? '')
   const [label, setLabel] = useState(initial?.display_name ?? '')
@@ -90,7 +92,7 @@ export function PeerDialog({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="peer-name">Name</Label>
+            <Label htmlFor="peer-name">{t('Name')}</Label>
             <Input
               id="peer-name"
               value={name}
@@ -122,9 +124,9 @@ export function PeerDialog({
           <RouteChoice value={routes} onChange={setRoutes} editing={editing} />
 
           {!editing && (
-            <Disclosure summary="I generated the key on the device myself">
+            <Disclosure summary={t('I generated the key on the device myself')}>
               <div className="space-y-2">
-                <Label htmlFor="peer-key">Public key</Label>
+                <Label htmlFor="peer-key">{t('Public key')}</Label>
                 <Input
                   id="peer-key"
                   value={publicKey}
@@ -151,18 +153,14 @@ export function PeerDialog({
                 onRemove()
               }}
             >
-              <Trash2 />
-              Remove
-            </Button>
+              <Trash2 /> {t('Remove')} </Button>
           ) : (
             <span />
           )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)}> {t('Cancel')} </Button>
             <Button onClick={submit} disabled={!valid}>
-              {editing ? 'Save' : 'Add'}
+              {editing ? t('Save') : t('Add')}
             </Button>
           </div>
         </DialogFooter>
@@ -194,9 +192,10 @@ function RouteChoice({
   onChange: (v: string) => void
   editing: boolean
 }) {
+  useLocale()
   return (
     <div className="space-y-2">
-      <Label htmlFor="peer-routes">What it sends home</Label>
+      <Label htmlFor="peer-routes">{t('What it sends home')}</Label>
       {/* The component's value can be null when a selection is cleared, which
           this control never does — it has no empty option. Coalescing keeps the
           default rather than writing an empty string the daemon would read as
@@ -206,8 +205,8 @@ function RouteChoice({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="home">Only what is on my network</SelectItem>
-          <SelectItem value="everything">Everything the device does</SelectItem>
+          <SelectItem value="home">{t('Only what is on my network')}</SelectItem>
+          <SelectItem value="everything">{t('Everything the device does')}</SelectItem>
         </SelectContent>
       </Select>
       <p className="text-xs text-muted-foreground">

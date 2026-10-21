@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { TOOL_ARTWORK, TOOL_DEFINITIONS } from '@/features/tools/catalog'
 
 /**
@@ -40,7 +41,7 @@ export interface AdvancedGroup {
 export const ADVANCED_GROUPS: AdvancedGroup[] = [
   {
     id: 'system',
-    title: 'System',
+    get title() { return t('System') },
     hue: 250,
     tiles: [
       {
@@ -52,7 +53,7 @@ export const ADVANCED_GROUPS: AdvancedGroup[] = [
       },
       {
         slug: 'firewall',
-        name: 'Firewall',
+        get name() { return t('Firewall') },
         letter: 'F',
         description: 'Decide what may reach this router and the devices behind it.',
         to: '/firewall',
@@ -70,7 +71,7 @@ export const ADVANCED_GROUPS: AdvancedGroup[] = [
       },
       {
         slug: 'forwards',
-        name: 'Port forwarding',
+        get name() { return t('Port forwarding') },
         letter: 'P',
         artwork: '/feature-icons/port-forwarding.webp',
         description: 'Reach a service inside this network through an external port.',
@@ -81,7 +82,7 @@ export const ADVANCED_GROUPS: AdvancedGroup[] = [
   },
   {
     id: 'services',
-    title: 'Services',
+    get title() { return t('Services') },
     hue: 190,
     tiles: [
       {
@@ -95,7 +96,7 @@ export const ADVANCED_GROUPS: AdvancedGroup[] = [
       },
       {
         slug: 'ddns',
-        name: 'Dynamic DNS',
+        get name() { return t('Dynamic DNS') },
         letter: 'D',
         description: 'Keep a public name pointing at this changing address.',
         to: '/advanced/ddns',
@@ -103,7 +104,7 @@ export const ADVANCED_GROUPS: AdvancedGroup[] = [
       },
       {
         slug: 'iptv',
-        name: 'IPTV multicast',
+        get name() { return t('IPTV multicast') },
         letter: 'I',
         description: 'Receive the provider’s multicast TV streams on LAN devices.',
         to: '/advanced/iptv',

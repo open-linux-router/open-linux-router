@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle } from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -18,6 +19,7 @@ import { useGatewayApply } from '@/features/gateway/use-apply'
 
 /** As features/dns/editor.tsx, for gateway. */
 export function useGatewayEditor() {
+  useLocale()
   const config = useGatewayConfig()
   const applier = useGatewayApply()
 
@@ -37,7 +39,7 @@ export function useGatewayEditor() {
     ) : config.isError ? (
       <Alert variant="destructive">
         <AlertTriangle />
-        <AlertTitle>Could not load the gateway settings</AlertTitle>
+        <AlertTitle>{t('Could not load the gateway settings')}</AlertTitle>
         <AlertDescription>{(config.error as Error).message}</AlertDescription>
       </Alert>
     ) : null,
@@ -45,16 +47,17 @@ export function useGatewayEditor() {
 }
 
 export function ApplyOutcome({ applier }: { applier: ReturnType<typeof useGatewayApply> }) {
+  useLocale()
   return (
     <>
       {applier.blocked && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />
-          <AlertTitle>Something else is managing routing on this box</AlertTitle>
+          <AlertTitle>{t('Something else is managing routing on this box')}</AlertTitle>
           <AlertDescription className="space-y-3">
             <p>{applier.blocked.blocked}</p>
             {applier.blocked.foreign?.length ? (
-              <Disclosure summary="The rules we found">
+              <Disclosure summary={t('The rules we found')}>
                 <pre className="overflow-auto font-mono text-xs leading-relaxed">
                   {applier.blocked.foreign
                     .map(
@@ -64,9 +67,7 @@ export function ApplyOutcome({ applier }: { applier: ReturnType<typeof useGatewa
                 </pre>
               </Disclosure>
             ) : null}
-            <Button size="sm" variant="outline" onClick={applier.dismissBlocked}>
-              Dismiss
-            </Button>
+            <Button size="sm" variant="outline" onClick={applier.dismissBlocked}>{t('Dismiss')}</Button>
           </AlertDescription>
         </Alert>
       )}
@@ -74,13 +75,10 @@ export function ApplyOutcome({ applier }: { applier: ReturnType<typeof useGatewa
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />
-          <AlertTitle>Only part of the change went through</AlertTitle>
+          <AlertTitle>{t('Only part of the change went through')}</AlertTitle>
           <AlertDescription className="space-y-3">
-            <p>
-              The steps that finished have already taken effect and will not be undone. Fixing the
-              cause and applying again is safe — it picks up where this left off.
-            </p>
-            <Disclosure summary="Which steps ran">
+            <p>{t('The steps that finished have already taken effect and will not be undone. Fixing the cause and applying again is safe — it picks up where this left off.')}</p>
+            <Disclosure summary={t('Which steps ran')}>
               <ul className="space-y-1 font-mono text-xs">
                 {applier.failure.steps?.map((s, i) => (
                   <li key={i}>
@@ -90,9 +88,7 @@ export function ApplyOutcome({ applier }: { applier: ReturnType<typeof useGatewa
                 ))}
               </ul>
             </Disclosure>
-            <Button size="sm" variant="outline" onClick={applier.dismissFailure}>
-              Dismiss
-            </Button>
+            <Button size="sm" variant="outline" onClick={applier.dismissFailure}>{t('Dismiss')}</Button>
           </AlertDescription>
         </Alert>
       )}
@@ -111,6 +107,7 @@ export function ApplyOutcome({ applier }: { applier: ReturnType<typeof useGatewa
  * cannot recover from by clicking again.
  */
 function ConfirmDialog({ applier }: { applier: ReturnType<typeof useGatewayApply> }) {
+  useLocale()
   const held = applier.confirming
   if (!held) return null
 
@@ -118,27 +115,21 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useGatewayApply
     <Dialog open onOpenChange={(open) => !open && applier.cancel()}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            Apply this change?
-            <ImpactBadge impact={held.plan.impact} />
+          <DialogTitle className="flex items-center gap-2">{t('Apply this change?')}<ImpactBadge impact={held.plan.impact} />
           </DialogTitle>
           <DialogDescription>{impactHint(held.plan.impact)}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <PlanReasons plan={held.plan} />
-          <Disclosure summary="What would change">
+          <Disclosure summary={t('What would change')}>
             <PlanDiff plan={held.plan} />
           </Disclosure>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={applier.cancel}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={applier.confirm} disabled={applier.busy}>
-            Apply anyway
-          </Button>
+          <Button variant="outline" onClick={applier.cancel}>{t('Cancel')}</Button>
+          <Button variant="destructive" onClick={applier.confirm} disabled={applier.busy}>{t('Apply anyway')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -146,6 +137,7 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useGatewayApply
 }
 
 function PageSkeleton() {
+  useLocale()
   return (
     <div className="space-y-6">
       <Skeleton className="h-24 w-full rounded-xl" />

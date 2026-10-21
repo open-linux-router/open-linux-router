@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import encodeQR from '@paulmillr/qr'
 import { Check, Copy, QrCode } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -44,6 +45,7 @@ export function ProxyLinkDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  useLocale()
   const [copied, setCopied] = useState(false)
 
   const svg = useMemo(() => {
@@ -93,9 +95,7 @@ export function ProxyLinkDialog({
           ) : (
             <Alert>
               <QrCode />
-              <AlertDescription>
-                This link is too long for a QR code. Copy it instead.
-              </AlertDescription>
+              <AlertDescription> {t('This link is too long for a QR code. Copy it instead.')} </AlertDescription>
             </Alert>
           )}
 
@@ -109,11 +109,9 @@ export function ProxyLinkDialog({
         <DialogFooter className="sm:justify-between">
           <Button size="sm" variant="outline" onClick={copy}>
             {copied ? <Check /> : <Copy />}
-            {copied ? 'Copied' : 'Copy link'}
+            {copied ? t('Copied') : 'Copy link'}
           </Button>
-          <Button size="sm" onClick={() => onOpenChange(false)}>
-            Done
-          </Button>
+          <Button size="sm" onClick={() => onOpenChange(false)}>{t('Done')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

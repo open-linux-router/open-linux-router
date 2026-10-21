@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -54,6 +55,7 @@ export function GroupNameDialog({
   onOpenChange: (open: boolean) => void
   onSubmit: (name: string, parent: string) => Promise<void>
 }) {
+  useLocale()
   const [name, setName] = useState(from ?? '')
   const [parent, setParent] = useState(initialParent)
   const [error, setError] = useState<string | null>(null)
@@ -95,12 +97,12 @@ export function GroupNameDialog({
           </DialogHeader>
 
           <div className="grid gap-2">
-            <Label htmlFor="group-name">Name</Label>
+            <Label htmlFor="group-name">{t('Name')}</Label>
             <Input
               id="group-name"
               autoFocus
               value={name}
-              placeholder="Personal"
+              placeholder={t('Personal')}
               aria-invalid={Boolean(error) || tooLong}
               onChange={(e) => {
                 setName(e.target.value)
@@ -108,8 +110,7 @@ export function GroupNameDialog({
               }}
             />
             {tooLong ? (
-              <p className="text-xs text-destructive">
-                Keep it to {MAX_GROUP_NAME} characters or fewer.
+              <p className="text-xs text-destructive"> {t('Keep it to')} {MAX_GROUP_NAME} characters or fewer.
               </p>
             ) : error ? (
               <p className="text-xs text-destructive">{error}</p>
@@ -118,15 +119,15 @@ export function GroupNameDialog({
 
           {parents.length > 0 && (
             <div className="grid gap-2">
-              <Label htmlFor="group-parent">Inside</Label>
+              <Label htmlFor="group-parent">{t('Inside')}</Label>
               <Select value={parent || TOP} onValueChange={(v) => setParent(!v || v === TOP ? '' : v)}>
                 <SelectTrigger id="group-parent" className="w-full">
                   <SelectValue>
-                    {(value: string) => (value === TOP || !value ? 'Nothing — a top-level group' : value)}
+                    {(value: string) => (value === TOP || !value ? t('Nothing — a top-level group') : value)}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={TOP}>Nothing — a top-level group</SelectItem>
+                  <SelectItem value={TOP}>{t('Nothing — a top-level group')}</SelectItem>
                   {parents.map((g) => (
                     <SelectItem key={g.name} value={g.name}>
                       {/* Indented by depth, so a subgroup reads as one. */}
@@ -139,11 +140,9 @@ export function GroupNameDialog({
           )}
 
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
             <Button type="submit" disabled={busy || !trimmed || tooLong}>
-              {from === undefined ? 'Create group' : 'Rename'}
+              {from === undefined ? 'Create group' : t('Rename')}
             </Button>
           </DialogFooter>
         </form>

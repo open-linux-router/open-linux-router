@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -59,6 +60,7 @@ export function UplinkDialog({
   /** `replacing` names the network the chosen interface carries, which goes. */
   onSubmit: (uplink: Uplink, replacing?: string) => void
 }) {
+  useLocale()
   const [iface, setIface] = useState(initial?.interface ?? '')
   const [address, setAddress] = useState(initial?.address ?? '')
   const [gateway, setGateway] = useState(initial?.gateway ?? '')
@@ -128,10 +130,10 @@ export function UplinkDialog({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="uplink-interface">Interface</Label>
+            <Label htmlFor="uplink-interface">{t('Interface')}</Label>
             <Select value={iface} onValueChange={(v) => choose(v ?? '')}>
               <SelectTrigger id="uplink-interface" className="w-full">
-                <SelectValue placeholder="Choose the interface facing your modem" />
+                <SelectValue placeholder={t('Choose the interface facing your modem')} />
               </SelectTrigger>
               <SelectContent>
                 {available.map((i) => (
@@ -164,7 +166,7 @@ export function UplinkDialog({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="uplink-address">This router&rsquo;s address</Label>
+              <Label htmlFor="uplink-address">{t('This router&rsquo;s address')}</Label>
               <Input
                 id="uplink-address"
                 value={address}
@@ -178,7 +180,7 @@ export function UplinkDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="uplink-gateway">Gateway</Label>
+              <Label htmlFor="uplink-gateway">{t('Gateway')}</Label>
               <Input
                 id="uplink-gateway"
                 value={gateway}
@@ -192,7 +194,7 @@ export function UplinkDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="uplink-dns">Resolvers this router uses</Label>
+            <Label htmlFor="uplink-dns">{t('Resolvers this router uses')}</Label>
             <Input
               id="uplink-dns"
               value={dns}
@@ -247,7 +249,7 @@ export function UplinkDialog({
                   id="uplink-prefix-length"
                   inputMode="numeric"
                   value={prefixLength}
-                  placeholder="Whatever the ISP gives — often 56 or 60"
+                  placeholder={t('Whatever the ISP gives — often 56 or 60')}
                   onChange={(e) => setPrefixLength(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
@@ -265,20 +267,20 @@ export function UplinkDialog({
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="uplink-tunnel-server">Tunnel server</Label>
+                    <Label htmlFor="uplink-tunnel-server">{t('Tunnel server')}</Label>
                     <Input
                       id="uplink-tunnel-server"
                       value={tunnelServer}
-                      placeholder="Server IPv4 Address"
+                      placeholder={t('Server IPv4 Address')}
                       onChange={(e) => setTunnelServer(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="uplink-tunnel-address">This router&rsquo;s tunnel address</Label>
+                    <Label htmlFor="uplink-tunnel-address">{t('This router&rsquo;s tunnel address')}</Label>
                     <Input
                       id="uplink-tunnel-address"
                       value={tunnelAddress}
-                      placeholder="Client IPv6 Address, e.g. 2001:db8::2/64"
+                      placeholder={t('Client IPv6 Address, e.g. 2001:db8::2/64')}
                       onChange={(e) => setTunnelAddress(e.target.value)}
                     />
                   </div>
@@ -309,9 +311,7 @@ export function UplinkDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
           <Button
             disabled={!valid}
             onClick={() =>
@@ -328,7 +328,7 @@ export function UplinkDialog({
               )
             }
           >
-            {initial ? 'Save' : 'Set up'}
+            {initial ? t('Save') : 'Set up'}
           </Button>
         </DialogFooter>
       </DialogContent>

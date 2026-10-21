@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Tag, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -75,6 +76,7 @@ export function DeviceDetail({
   onExitChange?: (exit: string | null) => Promise<boolean>
   busy?: boolean
 }) {
+  useLocale()
   const [name, setName] = useState(device.name_origin === 'operator' ? device.name : '')
   const [look, setLook] = useState<IconChoice>(() => storedLook(device))
   const [notes, setNotes] = useState(device.notes ?? '')
@@ -122,7 +124,7 @@ export function DeviceDetail({
 
         <div className="grid gap-5">
           <div className="grid gap-2">
-            <Label htmlFor="device-name">Name</Label>
+            <Label htmlFor="device-name">{t('Name')}</Label>
             <Input
               id="device-name"
               value={name}
@@ -137,7 +139,7 @@ export function DeviceDetail({
           </div>
 
           <div className="grid gap-2">
-            <Label>Icon</Label>
+            <Label>{t('Icon')}</Label>
             <CategoryPicker value={look} detected={device.detected_category} onChange={setLook} />
           </div>
 
@@ -147,18 +149,18 @@ export function DeviceDetail({
               path is the map's own "Move to group", which is one click and
               says so. */}
           <div className="grid gap-2">
-            <Label htmlFor="device-group">Group</Label>
+            <Label htmlFor="device-group">{t('Group')}</Label>
             <Select
               value={group || NO_GROUP}
               onValueChange={(v) => setGroup(!v || v === NO_GROUP ? '' : v)}
             >
               <SelectTrigger id="device-group" className="w-full">
                 <SelectValue>
-                  {(value: string) => (value === NO_GROUP || !value ? 'None' : value)}
+                  {(value: string) => (value === NO_GROUP || !value ? t('None') : value)}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NO_GROUP}>None</SelectItem>
+                <SelectItem value={NO_GROUP}>{t('None')}</SelectItem>
                 {/* In tree order and indented by depth: a flat alphabetical
                     list would put Lab nowhere near the VMs it sits inside. */}
                 {groupOptions(groups).map((g) => (
@@ -176,13 +178,13 @@ export function DeviceDetail({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="device-notes">Notes</Label>
+            <Label htmlFor="device-notes">{t('Notes')}</Label>
             <Textarea
               id="device-notes"
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Where it lives, whose it is — anything you want to remember"
+              placeholder={t('Where it lives, whose it is — anything you want to remember')}
             />
           </div>
 
@@ -190,7 +192,7 @@ export function DeviceDetail({
 
           {gateway && onExitChange && (
             <div className="grid gap-2">
-              <Label htmlFor="device-exit">Internet via</Label>
+              <Label htmlFor="device-exit">{t('Internet via')}</Label>
               <Select
                 value={deviceExit}
                 disabled={gatewayBusy}
@@ -205,16 +207,16 @@ export function DeviceDetail({
                   <SelectValue>
                     {(value: string) =>
                       value === INHERIT_EXIT
-                        ? 'Follow the network setting'
+                        ? t('Follow the network setting')
                         : value === DIRECT_EXIT
-                          ? 'This router’s own connection'
+                          ? t('This router’s own connection')
                           : value
                     }
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={INHERIT_EXIT}>Follow the network setting</SelectItem>
-                  <SelectItem value={DIRECT_EXIT}>This router’s own connection</SelectItem>
+                  <SelectItem value={INHERIT_EXIT}>{t('Follow the network setting')}</SelectItem>
+                  <SelectItem value={DIRECT_EXIT}>{t('This router’s own connection')}</SelectItem>
                   {(gateway.exits ?? []).map((exit) => (
                     <SelectItem key={exit.name} value={exit.name}>
                       {exit.name}
@@ -228,8 +230,7 @@ export function DeviceDetail({
                 established connections normally keep their path.
               </p>
               {deviceExit === INHERIT_EXIT && (
-                <p className="text-xs text-muted-foreground">
-                  Currently follows {device.network || 'its network'}; check Internet via on the
+                <p className="text-xs text-muted-foreground"> {t('Currently follows')} {device.network || 'its network'}; check Internet via on the
                   Gateway page.
                 </p>
               )}
@@ -250,12 +251,9 @@ export function DeviceDetail({
                 onOpenChange(false)
               }}
             >
-              <Trash2 className="size-4" aria-hidden /> Forget
-            </Button>
+              <Trash2 className="size-4" aria-hidden /> {t('Forget')} </Button>
           )}
-          <Button variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
+          <Button variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}> {t('Cancel')} </Button>
           <Button
             disabled={busy}
             onClick={() => {
@@ -273,9 +271,7 @@ export function DeviceDetail({
               })
               onOpenChange(false)
             }}
-          >
-            Save
-          </Button>
+          > {t('Save')} </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -300,14 +296,13 @@ function storedLook(device: DeviceRow): IconChoice {
  * network change through a screen that otherwise cannot cause one.
  */
 function FixedAddress({ device, onEdit }: { device: DeviceRow; onEdit: () => void }) {
+  useLocale()
   return (
     <div className="rounded-lg border p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-sm font-medium">
-            <Tag className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-            Fixed address
-          </div>
+            <Tag className="size-3.5 shrink-0 text-muted-foreground" aria-hidden /> {t('Fixed address')} </div>
           <div className="mt-0.5 truncate text-[0.8rem] text-muted-foreground">
             {device.fixed_ip ? (
               <span className="font-mono">{device.fixed_ip}</span>
@@ -317,7 +312,7 @@ function FixedAddress({ device, onEdit }: { device: DeviceRow; onEdit: () => voi
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={onEdit}>
-          {device.fixed_ip ? 'Change' : 'Reserve'}
+          {device.fixed_ip ? t('Change') : 'Reserve'}
         </Button>
       </div>
     </div>
@@ -326,11 +321,12 @@ function FixedAddress({ device, onEdit }: { device: DeviceRow; onEdit: () => voi
 
 /** Everything read off the network. Read-only, and stamped by the caller. */
 function Observed({ device }: { device: DeviceRow }) {
+  useLocale()
   const rows: [string, React.ReactNode][] = []
 
   if (device.ips?.length) {
     rows.push([
-      device.ips.length > 1 ? 'Addresses' : 'Address',
+      device.ips.length > 1 ? t('Addresses') : t('Address'),
       <span key="ips" className="font-mono">
         {device.ips.join(', ')}
       </span>,
@@ -358,14 +354,12 @@ function Observed({ device }: { device: DeviceRow }) {
 
   if (rows.length === 0) {
     return (
-      <p className="text-[0.8rem] text-muted-foreground">
-        Nothing has been observed about this device yet.
-      </p>
+      <p className="text-[0.8rem] text-muted-foreground"> {t('Nothing has been observed about this device yet.')} </p>
     )
   }
 
   return (
-    <Disclosure summary="What the network says">
+    <Disclosure summary={t('What the network says')}>
       <dl className="grid gap-1.5 pt-1 text-[0.8rem]">
         {rows.map(([label, value], i) => (
           <div key={i} className="flex gap-3">

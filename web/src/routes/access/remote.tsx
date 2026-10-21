@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle, KeyRound, Pencil, Plus } from 'lucide-react'
 import { useState } from 'react'
 
@@ -47,6 +48,7 @@ import { WayMark } from '@/features/remote/way-mark'
 import type { ProxyPlan, RemotePeer, RemoteStatus } from '@/lib/api-types'
 
 export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
+  useLocale()
   const slug = way
   const config = useRemoteConfig()
   const status = useRemoteStatus()
@@ -63,7 +65,7 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
     return (
       <SubPage section="/access" slug={slug}><Alert variant="destructive">
         <AlertTriangle />
-        <AlertTitle>Could not load remote access</AlertTitle>
+        <AlertTitle>{t('Could not load remote access')}</AlertTitle>
         <AlertDescription>{(config.error as Error).message}</AlertDescription>
       </Alert></SubPage>
     )
@@ -76,18 +78,15 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
 
   return (
     <SubPage section="/access" slug={slug}>
-      {selectedStatus.isError && <Alert variant="destructive"><AlertTriangle /><AlertTitle>Status unavailable</AlertTitle><AlertDescription>{selectedStatus.error?.message}</AlertDescription></Alert>}
-      {selectedStatus.isPending && <p className="text-sm text-muted-foreground">Loading status…</p>}
+      {selectedStatus.isError && <Alert variant="destructive"><AlertTriangle /><AlertTitle>{t('Status unavailable')}</AlertTitle><AlertDescription>{selectedStatus.error?.message}</AlertDescription></Alert>}
+      {selectedStatus.isPending && <p className="text-sm text-muted-foreground">{t('Loading status…')}</p>}
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />
-          <AlertTitle>Only part of the change went through</AlertTitle>
+          <AlertTitle>{t('Only part of the change went through')}</AlertTitle>
           <AlertDescription className="space-y-3">
-            <p>
-              The steps that finished have already taken effect and will not be undone. Fixing the
-              cause and applying again is safe — it picks up where this left off.
-            </p>
-            <Disclosure summary="Which steps ran">
+            <p> {t('The steps that finished have already taken effect and will not be undone. Fixing the cause and applying again is safe — it picks up where this left off.')} </p>
+            <Disclosure summary={t('Which steps ran')}>
               <ul className="space-y-1 font-mono text-xs">
                 {applier.failure.steps?.map((s, i) => (
                   <li key={i}>
@@ -97,9 +96,7 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
                 ))}
               </ul>
             </Disclosure>
-            <Button size="sm" variant="outline" onClick={applier.dismissFailure}>
-              Dismiss
-            </Button>
+            <Button size="sm" variant="outline" onClick={applier.dismissFailure}> {t('Dismiss')} </Button>
           </AlertDescription>
         </Alert>
       )}
@@ -124,7 +121,7 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
       {status.data?.drifted && !status.data.interface_foreign && (
         <Alert>
           <AlertTriangle />
-          <AlertTitle>The router is not doing what these settings say</AlertTitle>
+          <AlertTitle>{t('The router is not doing what these settings say')}</AlertTitle>
           <AlertDescription className="space-y-3">
             <p>
               The tunnel is not set up the way it is configured — after a reboot, or because
@@ -135,9 +132,7 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
               variant="outline"
               disabled={reapply.isPending}
               onClick={() => reapply.mutate()}
-            >
-              Put it back
-            </Button>
+            > {t('Put it back')} </Button>
           </AlertDescription>
         </Alert>
       )}
@@ -163,15 +158,11 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>WireGuard devices</CardTitle>
-          <CardDescription>
-            Each device has its own key.
-          </CardDescription>
+          <CardTitle>{t('WireGuard devices')}</CardTitle>
+          <CardDescription> {t('Each device has its own key.')} </CardDescription>
           <CardAction>
             <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
-              <Plus />
-              Add
-            </Button>
+              <Plus /> {t('Add')} </Button>
           </CardAction>
         </CardHeader>
         <CardContent>
@@ -283,35 +274,28 @@ function dotFor(status?: RemoteStatus): string {
  * comparing against what their phone shows, actually needs.
  */
 function ReachCard({ status, onEdit }: { status?: RemoteStatus; onEdit: () => void }) {
+  useLocale()
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <WayMark way="wireguard" fallback={KeyRound} className="size-4" />
-          Connection settings
-          {status && !status.endpoint && <Badge variant="destructive">Not set</Badge>}
+          <WayMark way="wireguard" fallback={KeyRound} className="size-4" /> {t('Connection settings')} {status && !status.endpoint && <Badge variant="destructive">{t('Not set')}</Badge>}
         </CardTitle>
         <CardAction>
-          <Button size="sm" variant="outline" onClick={onEdit}>
-            Settings
-          </Button>
+          <Button size="sm" variant="outline" onClick={onEdit}> {t('Settings')} </Button>
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-1 text-sm text-muted-foreground">
         {status?.endpoint ? (
-          <p>
-            Devices connect to <span className="font-mono">{status.endpoint}</span> on UDP port{' '}
+          <p> {t('Devices connect to')} <span className="font-mono">{status.endpoint}</span> on UDP port{' '}
             {status.listen_port} and get addresses in{' '}
             <span className="font-mono">{status.subnet}</span>.
           </p>
         ) : (
-          <p>
-            Set a public address before generating device configurations.
-          </p>
+          <p> {t('Set a public address before generating device configurations.')} </p>
         )}
         {status?.public_key && (
-          <p className="truncate text-xs">
-            Public key <span className="font-mono">{status.public_key}</span>
+          <p className="truncate text-xs"> {t('Public key')} <span className="font-mono">{status.public_key}</span>
           </p>
         )}
       </CardContent>
@@ -326,6 +310,7 @@ function PeerList({
   peers: RemotePeer[]
   onEdit: (peer: RemotePeer) => void
 }) {
+  useLocale()
   if (peers.length === 0) {
     return (
       <ListEmpty>
@@ -376,6 +361,7 @@ function describePeer(p: RemotePeer): string {
  * working. Neither is undone by trying again.
  */
 function ConfirmDialog({ applier }: { applier: ReturnType<typeof useRemoteApply> }) {
+  useLocale()
   const held = applier.confirming
   if (!held) return null
 
@@ -383,9 +369,7 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useRemoteApply>
     <Dialog open onOpenChange={(open) => !open && applier.cancel()}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            Apply this change?
-            <ImpactBadge impact={held.plan.impact} />
+          <DialogTitle className="flex items-center gap-2"> {t('Apply this change?')} <ImpactBadge impact={held.plan.impact} />
           </DialogTitle>
           <DialogDescription>{impactHint(held.plan.impact)}</DialogDescription>
         </DialogHeader>
@@ -396,7 +380,7 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useRemoteApply>
           ) : (
             <>
               <PlanReasons plan={held.plan} />
-              <Disclosure summary="What would change">
+              <Disclosure summary={t('What would change')}>
                 <PlanDiff plan={held.plan} />
               </Disclosure>
             </>
@@ -404,12 +388,8 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useRemoteApply>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={applier.cancel}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={applier.confirm} disabled={applier.busy}>
-            Apply anyway
-          </Button>
+          <Button variant="outline" onClick={applier.cancel}> {t('Cancel')} </Button>
+          <Button variant="destructive" onClick={applier.confirm} disabled={applier.busy}> {t('Apply anyway')} </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -417,15 +397,14 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useRemoteApply>
 }
 
 function ProxyConfirmation({ plan }: { plan: ProxyPlan }) {
+  useLocale()
   return (
     <>
       {plan.reasons?.map((reason) => <p key={reason} className="text-sm">{reason}</p>)}
       {plan.password_generated && (
-        <p className="text-sm text-destructive">
-          A new password will be generated. Copy the new link after applying this change.
-        </p>
+        <p className="text-sm text-destructive"> {t('A new password will be generated. Copy the new link after applying this change.')} </p>
       )}
-      <Disclosure summary="What would change">
+      <Disclosure summary={t('What would change')}>
         <ul className="space-y-2 text-sm">
           {plan.changes.map((change) => (
             <li key={change.path}>
@@ -433,7 +412,7 @@ function ProxyConfirmation({ plan }: { plan: ProxyPlan }) {
               {!change.secret && change.diff && <pre className="overflow-x-auto text-xs">{change.diff}</pre>}
             </li>
           ))}
-          {plan.action !== 'none' && <li>Service: {plan.action}</li>}
+          {plan.action !== 'none' && <li>{t('Service:')} {plan.action}</li>}
         </ul>
       </Disclosure>
     </>
@@ -441,6 +420,7 @@ function ProxyConfirmation({ plan }: { plan: ProxyPlan }) {
 }
 
 function PageSkeleton() {
+  useLocale()
   return (
     <div className="space-y-6">
       <Skeleton className="h-8 w-40" />

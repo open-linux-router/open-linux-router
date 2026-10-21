@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import {
   AirVent,
   Bell,
@@ -541,19 +542,19 @@ export function categoryLabel(category: DeviceCategory): string {
  * detected category"), not a value to pick from a list.
  */
 export const CATEGORY_GROUPS: { label: string; categories: DeviceCategory[] }[] = [
-  { label: 'Personal', categories: ['phone', 'tablet', 'laptop', 'desktop', 'watch', 'ereader'] },
-  { label: 'Media', categories: ['tv', 'speaker', 'console'] },
+  { get label() { return t('Personal') }, categories: ['phone', 'tablet', 'laptop', 'desktop', 'watch', 'ereader'] },
+  { get label() { return t('Media') }, categories: ['tv', 'speaker', 'console'] },
   {
-    label: 'Home',
+    get label() { return t('Home') },
     categories: ['camera', 'doorbell', 'thermostat', 'sensor', 'plug', 'light', 'vacuum'],
   },
   {
-    label: 'Appliances',
+    get label() { return t('Appliances') },
     categories: ['airpurifier', 'waterpurifier', 'humidifier', 'aircon', 'airer', 'fridge', 'washer'],
   },
-  { label: 'Computing', categories: ['printer', 'nas', 'server', 'sbc'] },
-  { label: 'Network', categories: ['modem', 'router', 'accesspoint', 'switch', 'hub'] },
-  { label: 'Other', categories: ['unknown'] },
+  { get label() { return t('Computing') }, categories: ['printer', 'nas', 'server', 'sbc'] },
+  { get label() { return t('Network') }, categories: ['modem', 'router', 'accesspoint', 'switch', 'hub'] },
+  { get label() { return t('Other') }, categories: ['unknown'] },
 ]
 
 /**

@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AuthFrame } from '@/components/layout/auth-frame'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Router, TriangleAlert } from 'lucide-react'
@@ -21,6 +22,7 @@ import { api } from '@/lib/api'
  * offered with its consequence stated beside the button.
  */
 export function SetupScreen() {
+  useLocale()
   const queryClient = useQueryClient()
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
@@ -37,45 +39,39 @@ export function SetupScreen() {
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle as="h1" size="lg" className="flex items-center gap-2">
-            <Router className="size-4" aria-hidden />
-            Set up this router
-          </CardTitle>
-          <CardDescription>
-            Choose how administrators sign in before configuring the router.
-          </CardDescription>
+            <Router className="size-4" aria-hidden />{t('Set up this router')}</CardTitle>
+          <CardDescription>{t('Choose how administrators sign in before configuring the router.')}</CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-4">
           <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); claim.mutate(false) }}>
             <div className="space-y-2">
-              <Label htmlFor="setup-password">Administrator password</Label>
+              <Label htmlFor="setup-password">{t('Administrator password')}</Label>
               <Input id="setup-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={12} maxLength={1024} required disabled={claim.isPending} />
-              <p className="text-sm text-muted-foreground">Use at least 12 characters.</p>
+              <p className="text-sm text-muted-foreground">{t('Use at least 12 characters.')}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="setup-confirmation">Repeat password</Label>
+              <Label htmlFor="setup-confirmation">{t('Repeat password')}</Label>
               <Input id="setup-confirmation" type="password" autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required disabled={claim.isPending} />
             </div>
             <Button type="submit" className="h-11 w-full" disabled={claim.isPending || [...password].length < 12 || password !== confirmation}>
-              {claim.isPending ? 'Setting up…' : 'Set password and continue'}
+              {claim.isPending ? t('Setting up…') : t('Set password and continue')}
             </Button>
           </form>
           <div className="flex gap-3 rounded-md border border-warning/40 bg-warning/5 p-3">
             <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning-foreground" aria-hidden />
-            <p className="text-sm text-muted-foreground">
-              If you continue without a password, anyone who can reach this router can configure it.
-            </p>
+            <p className="text-sm text-muted-foreground">{t('If you continue without a password, anyone who can reach this router can configure it.')}</p>
           </div>
 
 
           {claim.error && (
             <p className="text-sm text-destructive" role="alert">
-              {claim.error instanceof Error ? claim.error.message : 'Could not set this router up.'}
+              {claim.error instanceof Error ? claim.error.message : t('Could not set this router up.')}
             </p>
           )}
 
           <Button variant="outline" className="h-11 w-full" onClick={() => claim.mutate(true)} disabled={claim.isPending}>
-            {claim.isPending ? 'Setting up…' : 'Continue without a password'}
+            {claim.isPending ? t('Setting up…') : t('Continue without a password')}
           </Button>
 
           <p className="text-xs text-muted-foreground">

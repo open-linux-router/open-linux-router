@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { sourceLabels, type TrafficFlow } from './traffic-model'
 
@@ -21,6 +22,7 @@ function lines(title: string, limit: number): string[] {
 /** Both outer rows are arrivals at one virtual OLR/firewall boundary.
  * Vertical position distinguishes origins; it does not imply forwarding. */
 export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
+  useLocale()
   const container = useRef<HTMLDivElement>(null)
   const [availableWidth, setAvailableWidth] = useState(900)
   useLayoutEffect(() => {
@@ -57,13 +59,13 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
     })
   })
   const color = (flow: TrafficFlow) => flow.verdict === 'allowed' ? 'var(--success-foreground)' : 'var(--warning-foreground)'
-  const detail = (flow: TrafficFlow) => `${sourceLabels[flow.source]} → OLR / Firewall\n${flow.category} · ${flow.verdict === 'allowed' ? 'Allowed' : 'Blocked'}\n${flow.packets.toLocaleString()} packets · ${flow.bytes.toLocaleString()} bytes\n${flow.descriptions.join('\n')}`
+  const detail = (flow: TrafficFlow) => `${sourceLabels[flow.source]} → OLR / Firewall\n${flow.category} · ${flow.verdict === 'allowed' ? t('Allowed') : t('Blocked')}\n${flow.packets.toLocaleString()} packets · ${flow.bytes.toLocaleString()} bytes\n${flow.descriptions.join('\n')}`
 
   return (
-    <div ref={container} className="mt-4 overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="region" aria-label="Firewall Sankey: external arrivals above OLR, LAN and local arrivals below OLR">
-      <svg width={width} height={height} role="img" aria-label="External traffic and LAN or local traffic both arrive at the central OLR firewall" className="text-foreground">
-        {outside.length > 0 && <text x={width / 2} y={24} fill="currentColor" fontSize={14} fontWeight={500} textAnchor="middle">From external networks</text>}
-        {inside.length > 0 && <text x={width / 2} y={height - 24} fill="currentColor" fontSize={14} fontWeight={500} textAnchor="middle">From LAN / trusted networks and this router</text>}
+    <div ref={container} className="mt-4 overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="region" aria-label={t('Firewall Sankey: external arrivals above OLR, LAN and local arrivals below OLR')}>
+      <svg width={width} height={height} role="img" aria-label={t('External traffic and LAN or local traffic both arrive at the central OLR firewall')} className="text-foreground">
+        {outside.length > 0 && <text x={width / 2} y={24} fill="currentColor" fontSize={14} fontWeight={500} textAnchor="middle">{t('From external networks')}</text>}
+        {inside.length > 0 && <text x={width / 2} y={height - 24} fill="currentColor" fontSize={14} fontWeight={500} textAnchor="middle">{t('From LAN / trusted networks and this router')}</text>}
         {nodes.map(node => {
           const x1 = node.x - node.width / 2
           const y1 = node.above ? node.y + barHeight : node.y
@@ -81,7 +83,7 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
           <rect x={centerLeft} y={centerY} width={centerWidth} height={centerHeight} rx={8} fill="var(--muted)" stroke="var(--transmit)">
             <title>{`OLR / Firewall\n${total.toLocaleString()} arriving packets across all sources`}</title>
           </rect>
-          <text x={width / 2} y={centerY + 29} fill="currentColor" fontSize={16} fontWeight={600} textAnchor="middle">OLR · Firewall</text>
+          <text x={width / 2} y={centerY + 29} fill="currentColor" fontSize={16} fontWeight={600} textAnchor="middle">{t('OLR · Firewall')}</text>
         </g>
         {nodes.map(node => {
           const title = lines(node.flow.category, Math.floor(labelWidth / 7))
@@ -93,7 +95,7 @@ export function VerticalSankey({ flows }: { flows: TrafficFlow[] }) {
               </rect>
               <text x={node.x} y={labelY} fill="currentColor" fontSize={13} textAnchor="middle">
                 {title.map((line, index) => <tspan key={index} x={node.x} dy={index ? 18 : 0}>{line}</tspan>)}
-                <tspan x={node.x} dy={18}>{node.flow.packets.toLocaleString()} packets</tspan>
+                <tspan x={node.x} dy={18}>{node.flow.packets.toLocaleString()} {t('packets')}</tspan>
               </text>
             </g>
           )

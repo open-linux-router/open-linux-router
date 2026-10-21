@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -68,6 +69,7 @@ export function ServiceDialog({
   /** Only supplied when editing. Removing is an edit to the thing you opened. */
   onRemove?: () => void
 }) {
+  useLocale()
   const empty = initialUpstream ? { ...EMPTY, upstream: initialUpstream } : EMPTY
   const [draft, setDraft] = useState<Service>(initial ?? empty)
   const [target, setTarget] = useState<string>(initial?.upstream.device ?? initialUpstream?.device ?? MANUAL)
@@ -128,14 +130,12 @@ export function ServiceDialog({
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{editing ? `Edit ${initial.name}` : 'Publish a service'}</DialogTitle>
-          <DialogDescription>
-            Publish a network service at an HTTPS domain.
-          </DialogDescription>
+          <DialogDescription> {t('Publish a network service at an HTTPS domain.')} </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="svc-name">Address</Label>
+            <Label htmlFor="svc-name">{t('Address')}</Label>
             <div className="flex items-center gap-1.5">
               <Input
                 id="svc-name"
@@ -153,8 +153,7 @@ export function ServiceDialog({
             </div>
             <p className="text-xs text-muted-foreground">
               {name ? (
-                <>
-                  It will answer at{' '}
+                <> {t('It will answer at')}{' '}
                   <span className="font-mono">
                     https://{name}.{domain ?? '…'}
                   </span>
@@ -166,14 +165,14 @@ export function ServiceDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="svc-target">Where it runs</Label>
+            <Label htmlFor="svc-target">{t('Where it runs')}</Label>
             <Select value={target} onValueChange={pickTarget}>
               <SelectTrigger id="svc-target">
                 {/* A render function, not the bare value: SelectValue shows what
                     it is given, and the sentinel is a string nobody should ever
                     read. Without this the trigger says "manual". */}
-                <SelectValue placeholder="Choose a device">
-                  {(v: string) => (v === MANUAL ? 'Somewhere else…' : all.find((d) => d.mac === v)?.name || v)}
+                <SelectValue placeholder={t('Choose a device')}>
+                  {(v: string) => (v === MANUAL ? t('Somewhere else…') : all.find((d) => d.mac === v)?.name || v)}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -182,7 +181,7 @@ export function ServiceDialog({
                     {d.name} — {d.fixed_ip}
                   </SelectItem>
                 ))}
-                <SelectItem value={MANUAL}>Somewhere else…</SelectItem>
+                <SelectItem value={MANUAL}>{t('Somewhere else…')}</SelectItem>
               </SelectContent>
             </Select>
             {target === MANUAL ? (
@@ -200,7 +199,7 @@ export function ServiceDialog({
 
           {target === MANUAL && (
             <div className="space-y-1.5">
-              <Label htmlFor="svc-host">Address or hostname</Label>
+              <Label htmlFor="svc-host">{t('Address or hostname')}</Label>
               <Input
                 id="svc-host"
                 value={draft.upstream.host ?? ''}
@@ -226,7 +225,7 @@ export function ServiceDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="svc-link-path">Page path (optional)</Label>
+            <Label htmlFor="svc-link-path">{t('Page path (optional)')}</Label>
             <Input id="svc-link-path" value={draft.link_path ?? ''} placeholder="/ui"
               autoComplete="off" onChange={(e) => setDraft((d) => ({ ...d, link_path: e.target.value }))} />
             <p className="text-xs text-muted-foreground">
@@ -248,9 +247,9 @@ export function ServiceDialog({
             </p>
           )}
 
-          <Disclosure summary="It only speaks https">
+          <Disclosure summary={t('It only speaks https')}>
             <div className="space-y-1.5">
-              <Label htmlFor="svc-scheme">How olr reaches it</Label>
+              <Label htmlFor="svc-scheme">{t('How olr reaches it')}</Label>
               <Select
                 value={draft.upstream.scheme || 'http'}
                 onValueChange={(v) => upstream('scheme', (v ?? 'http') as UpstreamScheme)}
@@ -273,7 +272,7 @@ export function ServiceDialog({
               </p>
             </div>
           </Disclosure>
-          <Disclosure summary="Upstream request headers">
+          <Disclosure summary={t('Upstream request headers')}>
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
                 Set or remove headers sent to this service. Browser response headers are unchanged.
@@ -283,7 +282,7 @@ export function ServiceDialog({
               {(draft.upstream.request_headers ?? []).map((header, index) => (
                 <div key={index} className="flex flex-wrap items-center gap-2">
                   <Input aria-label={`Header ${index + 1} name`} className="min-w-28 flex-1"
-                    placeholder="Host" value={header.name} onChange={(e) => {
+                    placeholder={t('Host')} value={header.name} onChange={(e) => {
                       const headers = [...(draft.upstream.request_headers ?? [])]
                       headers[index] = { ...header, name: e.target.value }
                       upstream('request_headers', headers)
@@ -300,8 +299,7 @@ export function ServiceDialog({
                       const headers = [...(draft.upstream.request_headers ?? [])]
                       headers[index] = { ...header, remove: e.target.checked, value: e.target.checked ? '' : header.value }
                       upstream('request_headers', headers)
-                    }} /> Remove
-                  </label>
+                    }} />{t('Remove')}</label>
                   <Button type="button" size="icon" variant="ghost" aria-label={`Delete header ${index + 1}`}
                     onClick={() => upstream('request_headers', (draft.upstream.request_headers ?? []).filter((_, i) => i !== index))}>
                     <Trash2 />
@@ -309,9 +307,7 @@ export function ServiceDialog({
                 </div>
               ))}
               <Button type="button" size="sm" variant="outline" onClick={() =>
-                upstream('request_headers', [...(draft.upstream.request_headers ?? []), { name: '', value: '' }])}>
-                Add header
-              </Button>
+                upstream('request_headers', [...(draft.upstream.request_headers ?? []), { name: '', value: '' }])}>{t('Add header')}</Button>
             </div>
           </Disclosure>
         </div>
@@ -319,16 +315,12 @@ export function ServiceDialog({
         <DialogFooter className="sm:justify-between">
           {onRemove ? (
             <Button variant="ghost" className="text-destructive" onClick={onRemove}>
-              <Trash2 />
-              Stop publishing
-            </Button>
+              <Trash2 />{t('Stop publishing')}</Button>
           ) : (
             <span />
           )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
             <Button
               disabled={!complete || saving}
               onClick={async () => {
@@ -354,7 +346,7 @@ export function ServiceDialog({
                 if (saved) onOpenChange(false)
               }}
             >
-              {editing ? 'Save' : 'Publish'}
+              {editing ? t('Save') : 'Publish'}
             </Button>
           </div>
         </DialogFooter>

@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle, Check, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
@@ -53,6 +54,7 @@ export function UplinkCard({
   networks: NetworkRow[]
   compact?: boolean
 }) {
+  useLocale()
   const editor = useUplinkEditor()
   const [open, setOpen] = useState(false)
 
@@ -61,7 +63,7 @@ export function UplinkCard({
     return (
       <Alert variant="destructive">
         <AlertTriangle />
-        <AlertTitle>Could not read the uplink</AlertTitle>
+        <AlertTitle>{t('Could not read the uplink')}</AlertTitle>
         <AlertDescription>{editor.error.message}</AlertDescription>
       </Alert>
     )
@@ -93,7 +95,7 @@ export function UplinkCard({
 
           <div className="flex gap-2">
             <Button size="sm" disabled={editor.busy} onClick={() => setOpen(true)}>
-              {uplink ? 'Change' : 'Set up'}
+              {uplink ? t('Change') : 'Set up'}
             </Button>
             {uplink && (
               <Button
@@ -101,9 +103,7 @@ export function UplinkCard({
                 variant="ghost"
                 disabled={editor.busy}
                 onClick={() => void editor.remove()}
-              >
-                Hand it back
-              </Button>
+              > {t('Hand it back')} </Button>
             )}
           </div>
           </CardContent>
@@ -132,6 +132,7 @@ export function UplinkCard({
 /* -------------------------------------------------------------------------- */
 
 function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
+  useLocale()
   const route = describeRoute(uplink)
   const leftovers = uplink.addresses?.filter((a) => a !== uplink.address) ?? []
   const addresses = useRemoveAddress()
@@ -174,8 +175,7 @@ function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
                 variant="outline"
                 disabled={addresses.busy}
                 onClick={() => void addresses.remove(uplink.interface, a)}
-              >
-                Remove {a}
+              >{t('Remove')}{a}
               </Button>
             ))}
           </div>
@@ -210,6 +210,7 @@ function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
  * through it — the same intent-beside-fact pairing as the route above.
  */
 function TunnelLine({ tunnel }: { tunnel: TunnelStatus }) {
+  useLocale()
   const using = tunnel.present && tunnel.up && tunnel.route_dev === tunnel.interface
   let state: string
   if (!tunnel.present) state = `${tunnel.interface} is missing.`
@@ -239,6 +240,7 @@ function DelegationLine({
   uplink: UplinkStatus
   delegation: DelegationStatus
 }) {
+  useLocale()
   const until = (t?: string) => (t ? new Date(t).toLocaleString() : '')
   return (
     <div className="space-y-1 text-sm">
@@ -246,8 +248,7 @@ function DelegationLine({
         IPv6 · {delegation.prefix ? `${delegation.prefix} delegated by the ISP` : 'no prefix yet'}
       </div>
       {delegation.prefix ? (
-        <p className="text-muted-foreground">
-          Renews {until(delegation.renews)}, expires {until(delegation.expires)}.
+        <p className="text-muted-foreground"> {t('Renews')} {until(delegation.renews)}, expires {until(delegation.expires)}.
         </p>
       ) : (
         <p className="text-warning-foreground">
@@ -267,14 +268,14 @@ function DelegationLine({
 }
 
 function ResolverLine({ uplink }: { uplink: UplinkStatus }) {
+  useLocale()
   const set = uplink.dns ?? []
   const through = uplink.resolving_through ?? []
   const owned = set.length > 0 && Boolean(uplink.address)
 
   if (owned && sameSet(set, through)) {
     return (
-      <p className="text-sm text-muted-foreground">
-        This router looks names up through {through.join(', ')}.
+      <p className="text-sm text-muted-foreground"> {t('This router looks names up through')} {through.join(', ')}.
       </p>
     )
   }
@@ -283,8 +284,7 @@ function ResolverLine({ uplink }: { uplink: UplinkStatus }) {
     // resolv.conf another program maintains; otherwise saving again puts
     // them back.
     return (
-      <p className="text-sm text-warning-foreground">
-        Set to {set.join(', ')}, but this router looks names up through{' '}
+      <p className="text-sm text-warning-foreground"> {t('Set to')} {set.join(', ')}, but this router looks names up through{' '}
         {through.length ? through.join(', ') : 'nothing at all'}.
       </p>
     )
@@ -299,8 +299,7 @@ function ResolverLine({ uplink }: { uplink: UplinkStatus }) {
     )
   }
   return (
-    <p className="text-sm text-muted-foreground">
-      This router looks names up through {through.join(', ')}, as your distribution set it.
+    <p className="text-sm text-muted-foreground"> {t('This router looks names up through')} {through.join(', ')}, as your distribution set it.
     </p>
   )
 }
@@ -385,12 +384,13 @@ function describeRoute(u: UplinkStatus): { line: string; dot: string; tone: stri
  * server attaches to the plan are the whole safety net.
  */
 function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useUplinkEditor> }) {
+  useLocale()
   const pending = editor.pending
   return (
     <Dialog open={pending !== null} onOpenChange={(o) => !o && editor.cancel()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>This changes how this router reaches the internet</DialogTitle>
+          <DialogTitle>{t('This changes how this router reaches the internet')}</DialogTitle>
           <DialogDescription>
             The default route is replaced as soon as you apply. If you are reaching this page
             from outside your own network, your connection goes with it.
@@ -404,19 +404,15 @@ function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useUplinkEdit
           </Alert>
         ))}
 
-        <Disclosure summary="What changes on the box">
+        <Disclosure summary={t('What changes on the box')}>
           <pre className="overflow-x-auto pt-1 font-mono text-xs">
             {pending?.plan.changes.map((c) => c.diff).join('')}
           </pre>
         </Disclosure>
 
         <DialogFooter>
-          <Button variant="outline" onClick={editor.cancel}>
-            Cancel
-          </Button>
-          <Button variant="destructive" disabled={editor.busy} onClick={editor.confirm}>
-            Apply anyway
-          </Button>
+          <Button variant="outline" onClick={editor.cancel}>{t('Cancel')}</Button>
+          <Button variant="destructive" disabled={editor.busy} onClick={editor.confirm}>{t('Apply anyway')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -426,25 +422,23 @@ function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useUplinkEdit
 /** An uplink change reaches the kernel and can land halfway; §5.2 gives it no
  * rollback, so what did happen has to be reported rather than swallowed. */
 function PartialApply({ editor }: { editor: ReturnType<typeof useUplinkEditor> }) {
+  useLocale()
   if (!editor.failure) return null
   return (
     <Alert variant="destructive" role="alert">
       <AlertTriangle />
-      <AlertTitle>Only part of the change went through</AlertTitle>
+      <AlertTitle>{t('Only part of the change went through')}</AlertTitle>
       <AlertDescription className="space-y-3">
-        <p>
-          The steps that finished have already taken effect and will not be undone. Fixing the
-          cause and applying again is safe — it picks up where this left off.
-        </p>
+        <p>{t('The steps that finished have already taken effect and will not be undone. Fixing the cause and applying again is safe — it picks up where this left off.')}</p>
         {editor.failure.error && <p>{editor.failure.error.message}</p>}
-        <Disclosure summary="Which steps ran">
+        <Disclosure summary={t('Which steps ran')}>
           <ul className="space-y-1 pt-1 font-mono text-xs">
             {editor.failure.steps?.map((step) => (
               <li key={step.description} className="flex gap-2">
                 {step.done ? (
-                  <Check className="mt-0.5 size-3.5 shrink-0 text-success-foreground" aria-label="done" />
+                  <Check className="mt-0.5 size-3.5 shrink-0 text-success-foreground" aria-label={t('done')} />
                 ) : (
-                  <X className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-label="failed" />
+                  <X className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-label={t('failed')} />
                 )}
                 <span>
                   {step.description}
@@ -454,9 +448,7 @@ function PartialApply({ editor }: { editor: ReturnType<typeof useUplinkEditor> }
             ))}
           </ul>
         </Disclosure>
-        <Button size="sm" variant="outline" onClick={editor.dismissFailure}>
-          Dismiss
-        </Button>
+        <Button size="sm" variant="outline" onClick={editor.dismissFailure}>{t('Dismiss')}</Button>
       </AlertDescription>
     </Alert>
   )

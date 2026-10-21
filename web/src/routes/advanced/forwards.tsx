@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Heading } from '@/components/ui/heading'
@@ -22,6 +23,7 @@ import type { Forward } from '@/lib/config-types'
  * forward looks right and does not work.
  */
 export function ForwardsPage() {
+  useLocale()
   const { config, busy, change, applier, gate } = useForwardsEditor()
   const status = useForwardsStatus()
 
@@ -39,7 +41,7 @@ export function ForwardsPage() {
       {status.data && !status.data.known && (
         <Alert>
           <AlertTriangle />
-          <AlertTitle>Forwarding status unknown</AlertTitle>
+          <AlertTitle>{t('Forwarding status unknown')}</AlertTitle>
           <AlertDescription>
             The router could not read its NAT rules. Saved configuration does not confirm which forwards are running.
           </AlertDescription>
@@ -48,8 +50,8 @@ export function ForwardsPage() {
 
       <StatusStrip
         headline={
-          status.isError ? 'Cannot read forwarding status' : status.isPending ? 'Checking forwarding status…' : !status.data?.known ? 'Forwarding status unknown' : !config.enabled
-            ? 'Off'
+          status.isError ? 'Cannot read forwarding status' : status.isPending ? 'Checking forwarding status…' : !status.data?.known ? t('Forwarding status unknown') : !config.enabled
+            ? t('Off')
             : forwards.length === 0
               ? 'Nothing is forwarded in'
               : `${forwards.length} configured forward${forwards.length === 1 ? '' : 's'}`
@@ -66,7 +68,7 @@ export function ForwardsPage() {
         }
         control={{
           id: 'gateway-enabled',
-          label: 'Apply this router\u2019s routing policy and port forwards',
+          get label() { return t('Apply this router’s routing policy and port forwards') },
           checked: config.enabled,
           busy,
           onChange: (enabled) => change(forwardsChange.settings({ enabled })),
@@ -77,11 +79,9 @@ export function ForwardsPage() {
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <Heading size="sm" className="px-1">Forwards</Heading>
+          <Heading size="sm" className="px-1">{t('Forwards')}</Heading>
           <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
-            <Plus />
-            Add
-          </Button>
+            <Plus />{t('Add')}</Button>
         </div>
 
         <ForwardList forwards={forwards} status={status.data?.forwards} onEdit={setEditing} />
@@ -90,10 +90,7 @@ export function ForwardsPage() {
           // Said once under the list rather than on every row: a small number
           // here is usually explained by a recent edit, and an operator reading
           // "never" wants to know that before they go and debug their ISP.
-          <p className="text-[0.8rem] text-muted-foreground">
-            Counts start again whenever a forward is added, changed or removed, and when the router
-            restarts.
-          </p>
+          <p className="text-[0.8rem] text-muted-foreground">{t('Counts start again whenever a forward is added, changed or removed, and when the router restarts.')}</p>
         )}
       </div>
 

@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Badge } from '@/components/ui/badge'
 import type { Impact, GatewayPlan } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
@@ -16,28 +17,29 @@ const IMPACT: Record<
   { label: string; hint: string; variant: 'secondary' | 'success' | 'warning' | 'destructive' }
 > = {
   none: {
-    label: 'No change',
-    hint: 'Nothing running changes.',
+    get label() { return t('No change') },
+    get hint() { return t('Nothing running changes.') },
     variant: 'secondary',
   },
   reload: {
-    label: 'Seamless',
-    hint: 'Connections that are already open keep the route they started on. Only new ones use the new setting.',
+    get label() { return t('Seamless') },
+    get hint() { return t('Connections that are already open keep the route they started on. Only new ones use the new setting.') },
     variant: 'success',
   },
   restart: {
-    label: 'Brief pause',
-    hint: 'Traffic pauses for a moment.',
+    get label() { return t('Brief pause') },
+    get hint() { return t('Traffic pauses for a moment.') },
     variant: 'warning',
   },
   disruptive: {
-    label: 'Connections break',
-    hint: 'Traffic changes path, so open connections have to be re-established.',
+    get label() { return t('Connections break') },
+    get hint() { return t('Traffic changes path, so open connections have to be re-established.') },
     variant: 'destructive',
   },
 }
 
 export function ImpactBadge({ impact, className }: { impact: Impact; className?: string }) {
+  useLocale()
   const meta = IMPACT[impact] ?? IMPACT.none
   return (
     <Badge variant={meta.variant} className={className}>
@@ -59,6 +61,7 @@ export function impactHint(impact: Impact): string {
  * Burying that behind the same fold as the evidence would hide the answer.
  */
 export function PlanReasons({ plan }: { plan: GatewayPlan }) {
+  useLocale()
   if (!plan.reasons?.length) return null
 
   return (
@@ -86,8 +89,9 @@ export function PlanReasons({ plan }: { plan: GatewayPlan }) {
  * thing debuggable.
  */
 export function PlanDiff({ plan }: { plan: GatewayPlan }) {
+  useLocale()
   if (plan.empty) {
-    return <p className="text-sm text-muted-foreground">No changes.</p>
+    return <p className="text-sm text-muted-foreground">{t('No changes.')}</p>
   }
 
   return (

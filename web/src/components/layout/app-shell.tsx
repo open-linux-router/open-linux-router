@@ -1,13 +1,16 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useLayoutEffect } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 
 import { Logo } from '@/components/layout/logo'
 import { SECTIONS, isOverviewPanel, sectionOf } from '@/components/layout/sections'
 import { ThemeToggle } from '@/components/layout/theme-toggle'
+import { LanguageToggle } from '@/components/layout/language-toggle'
 import { TokenButton } from '@/components/layout/token-button'
 import { cn } from '@/lib/utils'
 
 export function AppShell() {
+  useLocale()
   const { pathname, hash } = useLocation()
   const section = sectionOf(pathname)
   const landing = section && pathname === section.to
@@ -24,14 +27,14 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
-      <a href="#main-content" className="fixed top-2 left-4 z-50 rounded-lg bg-primary-fill px-4 py-3 text-primary-foreground -translate-y-24 focus:translate-y-0">Skip to content</a>
+      <a href="#main-content" className="fixed top-2 left-4 z-50 rounded-lg bg-primary-fill px-4 py-3 text-primary-foreground -translate-y-24 focus:translate-y-0">{t('Skip to content')}</a>
       <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-[80rem] items-center gap-2.5 px-4 sm:px-6 xl:px-8">
-          <Link to="/" className="inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-2 focus-visible:outline-ring" aria-label="Open Linux Router overview">
+          <Link to="/" className="inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-2 focus-visible:outline-ring" aria-label={t('Open Linux Router overview')}>
             <Logo className="size-5 shrink-0" aria-hidden />
             <span className="font-semibold tracking-tight">Open Linux Router</span>
           </Link>
-          <nav className="ml-6 hidden min-w-0 self-stretch lg:block" aria-label="Sections">
+          <nav className="ml-6 hidden min-w-0 self-stretch lg:block" aria-label={t('Sections')}>
             <ul className="flex h-full gap-1">
               {SECTIONS.filter(s => !s.nested).map(({ to, label, end }) => (
                 <li key={to} className="flex items-center">
@@ -50,7 +53,7 @@ export function AppShell() {
       </header>
       <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[80rem] flex-1 px-4 py-6 outline-none sm:px-6 sm:py-8 xl:px-8">
         <div className="min-w-0">
-          {landing && !section.nested && <h1 className="sr-only">{pathname === '/' ? 'Network overview' : section.label}</h1>}
+          {landing && !section.nested && <h1 className="sr-only">{pathname === '/' ? t('Network overview') : section.label}</h1>}
           <Outlet />
         </div>
       </main>
@@ -59,11 +62,12 @@ export function AppShell() {
           <span>© {new Date().getFullYear()} Open Linux Router</span>
           <span>{__APP_VERSION__}</span>
           <a href="https://github.com/open-linux-router/open-linux-router" target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center transition-colors duration-150 hover:text-foreground lg:items-end">GitHub</a>
-          <Link to="/credits" className="inline-flex min-h-11 items-center transition-colors duration-150 hover:text-foreground lg:items-end">Credits</Link>
+          <Link to="/credits" className="inline-flex min-h-11 items-center transition-colors duration-150 hover:text-foreground lg:items-end">{t('Credits')}</Link>
           <ThemeToggle />
+          <LanguageToggle />
         </div>
       </footer>
-      <nav aria-label="Sections" className="fixed inset-x-0 bottom-0 z-20 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
+      <nav aria-label={t('Sections')} className="fixed inset-x-0 bottom-0 z-20 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
         <ul className="grid grid-cols-5">
           {SECTIONS.filter(s => !s.nested).map(({ to, label, icon: Icon, end }) => (
             <li key={to} className="min-w-0">

@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 import { Heading } from '@/components/ui/heading'
@@ -13,10 +14,11 @@ export function PageHeading({ title, description, breadcrumbs, action, id }: {
   breadcrumbs?: { to: string; label: string }[]
   action?: React.ReactNode
 }) {
+  useLocale()
   return (
     <header className="space-y-3">
       {breadcrumbs && (
-        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+        <nav aria-label={t('Breadcrumb')} className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
           {breadcrumbs.map((item, index) => (
             <span key={item.to} className="inline-flex items-center gap-1">
               {index > 0 && <ChevronRight className="size-3.5" aria-hidden />}

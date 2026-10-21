@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Plus } from 'lucide-react'
 import { Link } from 'react-router'
 
@@ -34,6 +35,7 @@ export function DeviceServices({
   /** Where the add action goes, prefilled for this target. */
   add: string
 }) {
+  useLocale()
   const ingress = useIngressConfig()
   const status = useIngressStatus()
   const domain = status.data?.domain
@@ -42,9 +44,9 @@ export function DeviceServices({
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
       {ingress.isError ? (
-        <span className="text-destructive">Unavailable</span>
+        <span className="text-destructive">{t('Unavailable')}</span>
       ) : ingress.isPending ? (
-        <span className="text-muted-foreground">Loading…</span>
+        <span className="text-muted-foreground">{t('Loading…')}</span>
       ) : (
         services.map((service) => {
           // No version until the suffix that goes into it is known; the status
@@ -76,8 +78,8 @@ export function DeviceServices({
       )}
       <Link
         to={add}
-        aria-label="Add service for this device"
-        title="Add service"
+        aria-label={t('Add service for this device')}
+        title={t('Add service')}
         className="flex size-7 shrink-0 items-center justify-center rounded-md border transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
       >
         <Plus className="size-4" />
@@ -85,4 +87,3 @@ export function DeviceServices({
     </div>
   )
 }
-

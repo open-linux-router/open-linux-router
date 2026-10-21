@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
@@ -32,6 +33,7 @@ export const remoteKeys = {
 }
 
 export function useRemoteConfig() {
+  useLocale()
   return useQuery({
     queryKey: remoteKeys.config,
     queryFn: () => api.get<RemoteConfig>('/api/remote/config'),
@@ -40,6 +42,7 @@ export function useRemoteConfig() {
 }
 
 export function useRemoteStatus() {
+  useLocale()
   return useQuery({
     queryKey: remoteKeys.status,
     queryFn: () => api.get<RemoteStatus>('/api/remote/wireguard/status'),
@@ -51,6 +54,7 @@ export function useRemoteStatus() {
 
 /** Who is connected right now, and where each address is. */
 export function useRemoteClients(enabled = true) {
+  useLocale()
   return useQuery({
     queryKey: [...remoteKeys.status, 'clients'] as const,
     queryFn: () => api.get<RemoteClients>(`${base}/clients`),
@@ -60,6 +64,7 @@ export function useRemoteClients(enabled = true) {
 }
 
 export function useRemotePeers() {
+  useLocale()
   return useQuery({
     queryKey: remoteKeys.peers,
     queryFn: () => api.get<RemotePeers>('/api/remote/wireguard/peers'),
@@ -141,14 +146,14 @@ export const remoteChange = {
     method: 'PATCH',
     path: `${base}/wireguard/peers/${seg(name)}`,
     body: patch,
-    label: 'Saved',
+    get label() { return t('Saved') },
   }),
 
   settings: (fields: Record<string, unknown>): RemoteChangeRequest => ({
     method: 'PATCH',
     path: `${base}/wireguard/config`,
     body: fields,
-    label: 'Saved',
+    get label() { return t('Saved') },
   }),
   /**
    * The one field that is not the tunnel's.
@@ -163,7 +168,7 @@ export const remoteChange = {
     method: 'PATCH',
     path: `${base}/config`,
     body: { endpoint },
-    label: 'Saved',
+    get label() { return t('Saved') },
   }),
 }
 
@@ -175,6 +180,7 @@ export const remoteChange = {
  * be spent asking is only spent when the answer is "ask the operator".
  */
 export function useApplyRemoteChange() {
+  useLocale()
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -204,6 +210,7 @@ export function useApplyRemoteChange() {
  * stored earlier.
  */
 export function useReapplyRemote() {
+  useLocale()
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -222,6 +229,7 @@ export function useReapplyRemote() {
  * there is nothing to plan and nothing to confirm.
  */
 export function usePatchPeer() {
+  useLocale()
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -241,6 +249,7 @@ export function usePatchPeer() {
 
 
 export function useSocksStatus() {
+  useLocale()
   return useQuery({
     queryKey: [...remoteKeys.status, 'socks5'] as const,
     queryFn: () => api.get<SocksStatus>(`${base}/socks5/status`),
@@ -258,6 +267,7 @@ export const socksChange = {
 }
 
 export function useSocksLink() {
+  useLocale()
   return useMutation({
     mutationFn: () => api.get<ProxyLink>(`${base}/socks5/link`),
   })

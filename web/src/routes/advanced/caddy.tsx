@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle, ExternalLink, Plus, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
@@ -43,6 +44,7 @@ import type { IngressStatus } from '@/lib/api-types'
 import type { Service } from '@/lib/config-types'
 
 export function CaddyPage() {
+  useLocale()
   const config = useIngressConfig()
   const status = useIngressStatus()
   const applier = useIngressApply()
@@ -70,7 +72,7 @@ export function CaddyPage() {
     return (
       <SubPage section="/advanced" slug="caddy"><Alert variant="destructive">
         <AlertTriangle />
-        <AlertTitle>Could not load the published services</AlertTitle>
+        <AlertTitle>{t('Could not load the published services')}</AlertTitle>
         <AlertDescription>{(config.error as Error).message}</AlertDescription>
       </Alert></SubPage>
     )
@@ -86,9 +88,9 @@ export function CaddyPage() {
       {!!status.data?.problems?.length && (
         <Alert>
           <AlertTriangle />
-          <AlertTitle>Fix the remaining problems to apply your settings</AlertTitle>
+          <AlertTitle>{t('Fix the remaining problems to apply your settings')}</AlertTitle>
           <AlertDescription>
-            <p>Repairs can be saved one at a time. The proxy keeps its current configuration until all problems are fixed.</p>
+            <p>{t('Repairs can be saved one at a time. The proxy keeps its current configuration until all problems are fixed.')}</p>
             <ul className="list-disc pl-5">
               {status.data.problems.map((problem, i) => {
                 const index = /^services\[(\d+)\]/.exec(problem.path ?? '')?.[1]
@@ -102,13 +104,10 @@ export function CaddyPage() {
       {applier.failure && (
         <Alert variant="destructive" role="alert">
           <AlertTriangle />
-          <AlertTitle>Only part of the change went through</AlertTitle>
+          <AlertTitle>{t('Only part of the change went through')}</AlertTitle>
           <AlertDescription className="space-y-3">
-            <p>
-              The steps that finished have already taken effect and will not be undone. Fixing the
-              cause and applying again is safe — it picks up where this left off.
-            </p>
-            <Disclosure summary="Which steps ran">
+            <p> {t('The steps that finished have already taken effect and will not be undone. Fixing the cause and applying again is safe — it picks up where this left off.')} </p>
+            <Disclosure summary={t('Which steps ran')}>
               <ul className="space-y-1 font-mono text-xs">
                 {applier.failure.steps?.map((s, i) => (
                   <li key={i}>
@@ -118,9 +117,7 @@ export function CaddyPage() {
                 ))}
               </ul>
             </Disclosure>
-            <Button size="sm" variant="outline" onClick={applier.dismissFailure}>
-              Dismiss
-            </Button>
+            <Button size="sm" variant="outline" onClick={applier.dismissFailure}> {t('Dismiss')} </Button>
           </AlertDescription>
         </Alert>
       )}
@@ -135,7 +132,7 @@ export function CaddyPage() {
       {status.data?.certificate_warnings?.map((warning) => (
         <Alert key={warning}>
           <AlertTriangle />
-          <AlertTitle>Certificate</AlertTitle>
+          <AlertTitle>{t('Certificate')}</AlertTitle>
           <AlertDescription>{warning}</AlertDescription>
         </Alert>
       ))}
@@ -143,7 +140,7 @@ export function CaddyPage() {
       {status.data?.drifted && (
         <Alert>
           <AlertTriangle />
-          <AlertTitle>The router is not doing what these settings say</AlertTitle>
+          <AlertTitle>{t('The router is not doing what these settings say')}</AlertTitle>
           <AlertDescription className="space-y-3">
             <p>
               Something changed the proxy&rsquo;s configuration outside olr. Putting it back reloads
@@ -154,9 +151,7 @@ export function CaddyPage() {
               variant="outline"
               disabled={reapply.isPending}
               onClick={() => reapply.mutate()}
-            >
-              Put it back
-            </Button>
+            > {t('Put it back')} </Button>
           </AlertDescription>
         </Alert>
       )}
@@ -164,7 +159,7 @@ export function CaddyPage() {
       <StatusStrip
         headline={
           status.isError ? 'Cannot read service status' : status.isPending ? 'Checking service status…' : !current.enabled
-            ? 'Off'
+            ? t('Off')
             : services.length === 0
               ? 'Nothing published yet'
               : `${services.length} configured address${services.length === 1 ? '' : 'es'}`
@@ -185,7 +180,7 @@ export function CaddyPage() {
         }
         control={{
           id: 'ingress-enabled',
-          label: 'Serve these addresses',
+          get label() { return t('Serve these addresses') },
           checked: current.enabled,
           busy: applier.busy,
           onChange: (enabled) => change(ingressChange.settings({ enabled })),
@@ -200,7 +195,7 @@ export function CaddyPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Addresses</CardTitle>
+          <CardTitle>{t('Addresses')}</CardTitle>
           <CardDescription>
             {domain ? (
               <>
@@ -212,9 +207,7 @@ export function CaddyPage() {
           </CardDescription>
           <CardAction>
             <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
-              <Plus />
-              Add
-            </Button>
+              <Plus /> {t('Add')} </Button>
           </CardAction>
         </CardHeader>
         <CardContent>
@@ -286,27 +279,21 @@ function CertificateCard({
   enabled: boolean
   onEdit: () => void
 }) {
+  useLocale()
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <ShieldCheck className="size-4 text-muted-foreground" />
-          Certificate
-          {status && <CertBadge status={status} enabled={enabled} />}
+          <ShieldCheck className="size-4 text-muted-foreground" /> {t('Certificate')} {status && <CertBadge status={status} enabled={enabled} />}
         </CardTitle>
-        <CardDescription>
-          Covers all published addresses.
-        </CardDescription>
+        <CardDescription> {t('Covers all published addresses.')} </CardDescription>
         <CardAction>
-          <Button size="sm" variant="outline" onClick={onEdit}>
-            Settings
-          </Button>
+          <Button size="sm" variant="outline" onClick={onEdit}> {t('Settings')} </Button>
         </CardAction>
       </CardHeader>
       {status?.certificate.certificate && (
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Issued {new Date(status.certificate.certificate.issued_at).toLocaleDateString()}, renews
+          <p className="text-sm text-muted-foreground"> {t('Issued')} {new Date(status.certificate.certificate.issued_at).toLocaleDateString()}, renews
             itself automatically. Covers{' '}
             <span className="font-mono">{status.certificate.certificate.names.join(', ')}</span>.
           </p>
@@ -326,13 +313,14 @@ function CertificateCard({
  * the others would send somebody to look in the wrong place.
  */
 function CertBadge({ status, enabled }: { status: IngressStatus; enabled: boolean }) {
+  useLocale()
   const cert = status.certificate
-  if (!enabled) return <Badge variant="secondary">Not needed yet</Badge>
-  if (status.certificate_error) return <Badge variant="secondary">Unknown</Badge>
-  if (!cert.found) return <Badge variant="secondary">Waiting</Badge>
-  if ((cert.expires_in_days ?? 0) <= 0) return <Badge variant="destructive">Expired</Badge>
-  if (cert.renewal_overdue) return <Badge variant="destructive">Renewal overdue</Badge>
-  return <Badge variant="success">Valid for {cert.expires_in_days} days</Badge>
+  if (!enabled) return <Badge variant="secondary">{t('Not needed yet')}</Badge>
+  if (status.certificate_error) return <Badge variant="secondary">{t('Unknown')}</Badge>
+  if (!cert.found) return <Badge variant="secondary">{t('Waiting')}</Badge>
+  if ((cert.expires_in_days ?? 0) <= 0) return <Badge variant="destructive">{t('Expired')}</Badge>
+  if (cert.renewal_overdue) return <Badge variant="destructive">{t('Renewal overdue')}</Badge>
+  return <Badge variant="success">{t('Valid for')} {cert.expires_in_days} {t('days')}</Badge>
 }
 
 function ServiceList({
@@ -344,12 +332,11 @@ function ServiceList({
   status?: IngressStatus
   onEdit: (service: Service) => void
 }) {
+  useLocale()
   const devices = useDeviceList()
   if (services.length === 0) {
     return (
-      <ListEmpty>
-        No services published yet. Add a service and its target.
-      </ListEmpty>
+      <ListEmpty> {t('No services published yet. Add a service and its target.')} </ListEmpty>
     )
   }
 
@@ -407,6 +394,7 @@ function describeService(s: Service, deviceName?: string): string {
  * dropped connection, reloading does not fix it.
  */
 function ConfirmDialog({ applier }: { applier: ReturnType<typeof useIngressApply> }) {
+  useLocale()
   const held = applier.confirming
   if (!held) return null
 
@@ -414,27 +402,21 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useIngressApply
     <Dialog open onOpenChange={(open) => !open && applier.cancel()}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            Apply this change?
-            <ImpactBadge impact={held.plan.impact} />
+          <DialogTitle className="flex items-center gap-2"> {t('Apply this change?')} <ImpactBadge impact={held.plan.impact} />
           </DialogTitle>
           <DialogDescription>{impactHint(held.plan.impact)}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <PlanReasons plan={held.plan} />
-          <Disclosure summary="What would change">
+          <Disclosure summary={t('What would change')}>
             <PlanDiff plan={held.plan} />
           </Disclosure>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={applier.cancel}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={applier.confirm} disabled={applier.busy}>
-            Apply anyway
-          </Button>
+          <Button variant="outline" onClick={applier.cancel}> {t('Cancel')} </Button>
+          <Button variant="destructive" onClick={applier.confirm} disabled={applier.busy}> {t('Apply anyway')} </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -442,6 +424,7 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useIngressApply
 }
 
 function PageSkeleton() {
+  useLocale()
   return (
     <div className="space-y-6">
       <Skeleton className="h-8 w-40" />

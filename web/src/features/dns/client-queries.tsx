@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Search, X } from 'lucide-react'
 import { useLayoutEffect, useRef, useState } from 'react'
 
@@ -25,6 +26,7 @@ import { useDnsConfig, useDnsQueries } from '@/features/dns/queries'
  * different things to go and do.
  */
 export function ClientQueries({ addresses }: { addresses: string[] }) {
+  useLocale()
   const [inspection, setInspection] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [filter, setFilter] = useState('')
@@ -40,35 +42,35 @@ export function ClientQueries({ addresses }: { addresses: string[] }) {
     <CardHeader className="mx-4 flex h-18 flex-row items-center justify-between gap-3 rounded-none px-0 sm:mx-6">
       <CardTitle>DNS</CardTitle>
       <div className="flex items-center gap-3">
-        <label htmlFor="client-dns-inspection" className="sr-only text-sm sm:not-sr-only">Inspection</label>
+        <label htmlFor="client-dns-inspection" className="sr-only text-sm sm:not-sr-only">{t('Inspection')}</label>
         <Switch id="client-dns-inspection" checked={inspection} onCheckedChange={(checked) => { setInspection(checked); setSearchOpen(false); setFilter('') }} />
         {inspection && <Button ref={searchButton} className="order-last shrink-0" variant="ghost" size="icon" aria-label={searchOpen ? 'Close DNS search' : 'Search DNS queries'} aria-expanded={searchOpen} aria-controls="client-dns-search" onClick={() => { setSearchOpen(!searchOpen); setFilter(''); if (!searchOpen) requestAnimationFrame(() => searchInput.current?.focus()) }}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>}
       {inspection && <div id="client-dns-search" className={`overflow-hidden transition-[width,opacity] duration-200 motion-reduce:transition-none ${searchOpen ? 'w-28 opacity-100 sm:w-56' : 'w-0 opacity-0'}`} inert={!searchOpen}>
         <div className="overflow-hidden">
-          <Input ref={searchInput} id="client-dns-filter" aria-label="Filter DNS queries" className="w-full" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search queries" onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); setFilter(''); searchButton.current?.focus() } }} />
+          <Input ref={searchInput} id="client-dns-filter" aria-label={t('Filter DNS queries')} className="w-full" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('Search queries')} onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); setFilter(''); searchButton.current?.focus() } }} />
         </div>
       </div>}
       </div>
     </CardHeader>
     {inspection && <CardContent className="mx-4 space-y-4 border-t px-0 py-4 sm:mx-6 sm:py-6">
       {queries.isError ? (
-        <p className="text-sm text-muted-foreground">The DNS query log is unavailable. The resolver may be stopped.</p>
+        <p className="text-sm text-muted-foreground">{t('The DNS query log is unavailable. The resolver may be stopped.')}</p>
       ) : queries.isPending ? (
-        <p className="text-sm text-muted-foreground">Loading recent queries…</p>
+        <p className="text-sm text-muted-foreground">{t('Loading recent queries…')}</p>
       ) : config.isError ? (
-        <p role="alert" className="text-sm text-muted-foreground">The DNS query log configuration is unavailable.</p>
+        <p role="alert" className="text-sm text-muted-foreground">{t('The DNS query log configuration is unavailable.')}</p>
       ) : config.isPending ? (
-        <p className="text-sm text-muted-foreground">Loading DNS configuration…</p>
+        <p className="text-sm text-muted-foreground">{t('Loading DNS configuration…')}</p>
       ) : !config.data?.query_log.enabled ? (
-        <p className="text-sm text-muted-foreground">The DNS query log is off. Queries are answered but not kept.</p>
+        <p className="text-sm text-muted-foreground">{t('The DNS query log is off. Queries are answered but not kept.')}</p>
       ) : shown.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{matching.length ? 'Nothing matches that filter.' : 'No matching queries in the recent sample.'}</p>
+        <p className="text-sm text-muted-foreground">{matching.length ? t('Nothing matches that filter.') : 'No matching queries in the recent sample.'}</p>
       ) : (
         <div className="max-h-80 overflow-y-auto">
           {/* One line per query. A name or a CDN answer list wraps into four
               lines and the table scrolls sideways; each column owns its width
               instead and cuts what does not fit. */}
-          <Table aria-label="Recent DNS queries: time, record, type, answer" className="min-w-[36rem] table-fixed">
+          <Table aria-label={t('Recent DNS queries: time, record, type, answer')} className="min-w-[36rem] table-fixed">
             <colgroup>
               <col className="w-24" />
               <col className="w-[36%]" />
@@ -79,7 +81,7 @@ export function ClientQueries({ addresses }: { addresses: string[] }) {
               <TableCell><time dateTime={q.at} className="font-mono text-xs text-muted-foreground">{new Date(q.at).toLocaleTimeString()}</time></TableCell>
               <TableCell><span className="block truncate" title={q.name}>{q.name}</span></TableCell>
               <TableCell className="text-muted-foreground"><span className="block truncate">{q.type}</span></TableCell>
-              <TableCell>{q.blocked ? <Badge variant="secondary" className="max-w-full"><span className="min-w-0 truncate">Blocked{q.policy ? ` · ${q.policy}` : ''}</span></Badge> : q.rcode !== 'NOERROR' ? <Badge variant="warning">{q.rcode}</Badge> : q.answers?.length ? <DnsAnswers answers={q.answers} /> : <span className="text-xs text-muted-foreground">No answer</span>}</TableCell>
+              <TableCell>{q.blocked ? <Badge variant="secondary" className="max-w-full"><span className="min-w-0 truncate">{t('Blocked')}{q.policy ? ` · ${q.policy}` : ''}</span></Badge> : q.rcode !== 'NOERROR' ? <Badge variant="warning">{q.rcode}</Badge> : q.answers?.length ? <DnsAnswers answers={q.answers} /> : <span className="text-xs text-muted-foreground">{t('No answer')}</span>}</TableCell>
             </TableRow>)}</TableBody>
           </Table>
         </div>
@@ -100,6 +102,7 @@ export function ClientQueries({ addresses }: { addresses: string[] }) {
  * the same font so each address can be measured before anything is dropped.
  */
 function DnsAnswers({ answers }: { answers: string[] }) {
+  useLocale()
   const cell = useRef<HTMLSpanElement>(null)
   const mirror = useRef<HTMLSpanElement>(null)
   const [fit, setFit] = useState(answers.length)

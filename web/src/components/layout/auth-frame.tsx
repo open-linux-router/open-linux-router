@@ -1,4 +1,5 @@
 import { Logo } from '@/components/layout/logo'
+import { LanguageToggle } from '@/components/layout/language-toggle'
 
 export function AuthFrame({ children }: { children: React.ReactNode }) {
   return (
@@ -7,6 +8,7 @@ export function AuthFrame({ children }: { children: React.ReactNode }) {
         <Logo className="size-6" aria-hidden />Open Linux Router
       </div>
       {children}
+      <LanguageToggle />
     </main>
   )
 }

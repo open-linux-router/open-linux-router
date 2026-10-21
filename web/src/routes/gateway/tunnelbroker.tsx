@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
@@ -85,6 +86,7 @@ function fields(b: TunnelBroker): Draft {
 }
 
 export function TunnelBrokerPage() {
+  useLocale()
   const queryClient = useQueryClient()
   const config = useQuery({
     queryKey: ['dial', 'config'],
@@ -426,7 +428,7 @@ export function TunnelBrokerPage() {
     <div className="space-y-8">
       <h1 className="sr-only">Tunnel Broker</h1>
       <nav
-        aria-label="Tunnel Broker sections"
+        aria-label={t('Tunnel Broker sections')}
         className="sticky top-16 z-10 -mt-2 overflow-x-auto border-b bg-background/95 py-2 backdrop-blur-xl"
       >
         <ol className="flex min-w-max gap-2">
@@ -447,19 +449,16 @@ export function TunnelBrokerPage() {
         </ol>
       </nav>
       {config.error && (
-        <p role="alert">
-          Could not load saved tunnel: {config.error.message}{' '}
-          <Button variant="outline" onClick={() => void config.refetch()}>
-            Retry
-          </Button>
+        <p role="alert">{t('Could not load saved tunnel:')}{config.error.message}{' '}
+          <Button variant="outline" onClick={() => void config.refetch()}>{t('Retry')}</Button>
         </p>
       )}
-      {config.isPending && <p role="status">Loading saved tunnel…</p>}
-      <Section id="endpoint" title="1. IPv4 endpoint">
+      {config.isPending && <p role="status">{t('Loading saved tunnel…')}</p>}
+      <Section id="endpoint" title={t('1. IPv4 endpoint')}>
         <div className="flex flex-wrap items-center gap-4">
           <span className="break-all font-mono text-lg">
             {publicIP ||
-              (publicAddresses.isFetching ? 'Checking…' : 'Unavailable')}
+              (publicAddresses.isFetching ? t('Checking…') : t('Unavailable'))}
           </span>
           <Button
             variant="outline"
@@ -472,9 +471,7 @@ export function TunnelBrokerPage() {
                   throw new Error('No public IPv4 returned.')
               })
             }
-          >
-            Refresh
-          </Button>
+          >{t('Refresh')}</Button>
         </div>
         {publicAddresses.error && (
           <p role="alert">{publicAddresses.error.message}</p>
@@ -485,66 +482,51 @@ export function TunnelBrokerPage() {
             {u.interface} · {u.addresses?.join(', ') || 'No observed IPv4'}
           </p>
         )}
-        <p>
-          Allow IP protocol 41 from HE. Behind another router, forward protocol
-          41 to OLR.
-        </p>
-        <Disclosure summary="Upstream router requirements">
+        <p>{t('Allow IP protocol 41 from HE. Behind another router, forward protocol 41 to OLR.')}</p>
+        <Disclosure summary={t('Upstream router requirements')}>
           <div className="space-y-3 pt-3">
-            <p>
-              Use a reachable public IPv4. CGNAT requires ISP assistance.
-              TCP/UDP port 41 forwarding does not carry the tunnel.
-            </p>
+            <p>{t('Use a reachable public IPv4. CGNAT requires ISP assistance. TCP/UDP port 41 forwarding does not carry the tunnel.')}</p>
             <p>
               If using DMZ, keep OLR’s firewall enabled and administration
               private. HE may also require WAN ping during creation.
             </p>
-            <p>
-              This address is measured from the router; a browser VPN may show a
-              different one.
-            </p>
+            <p> {t('This address is measured from the router; a browser VPN may show a different one.')} </p>
           </div>
         </Disclosure>
       </Section>
-      <Section id="server" title="2. Server">
+      <Section id="server" title={t('2. Server')}>
         <p>
           {chosen
             ? `${chosen.name} · ${chosen.address}`
             : draft.server_ipv4 ||
               'Choose an HE server, or enter your existing tunnel below.'}
         </p>
-        <Disclosure summary="Compare servers">
+        <Disclosure summary={t('Compare servers')}>
           <div className="space-y-4 pt-3">
             <div className="flex flex-wrap gap-2">
               <Button
                 disabled={busy || !servers.data || !u}
                 onClick={() => void run(measure)}
-              >
-                Measure servers
-              </Button>
+              > {t('Measure servers')} </Button>
               {busy && (
                 <Button
                   variant="outline"
                   onClick={() => {
                     stop.current = true
                   }}
-                >
-                  Stop
-                </Button>
+                >{t('Stop')}</Button>
               )}
             </div>
-            <p>IPv4 ping from this router; this does not verify the tunnel.</p>
-            {ranked[0] && <p>Best measured: {ranked[0].name}</p>}
-            {servers.isPending && <p>Loading servers…</p>}
+            <p>{t('IPv4 ping from this router; this does not verify the tunnel.')}</p>
+            {ranked[0] && <p>{t('Best measured:')}{ranked[0].name}</p>}
+            {servers.isPending && <p>{t('Loading servers…')}</p>}
             {servers.error && (
               <p role="alert">
                 {servers.error.message}{' '}
                 <Button
                   variant="outline"
                   onClick={() => void servers.refetch()}
-                >
-                  Retry
-                </Button>
+                >{t('Retry')}</Button>
               </p>
             )}
             <div className="max-h-96 overflow-y-auto divide-y">
@@ -587,16 +569,14 @@ export function TunnelBrokerPage() {
           </div>
         </Disclosure>
       </Section>
-      <Section id="details" title="3. Tunnel details">
+      <Section id="details" title={t('3. Tunnel details')}>
         <p>
           <a
             className="text-primary underline"
             href="https://tunnelbroker.net/new_tunnel.php"
             target="_blank"
             rel="noreferrer"
-          >
-            Create a tunnel at HE
-          </a>
+          >{t('Create a tunnel at HE')}</a>
           , then copy its details here.
         </p>
         <div className="grid gap-4 md:grid-cols-2">
@@ -613,7 +593,7 @@ export function TunnelBrokerPage() {
             </div>
           ))}
           <div className="space-y-2">
-            <Label htmlFor="he-mtu">Tunnel MTU</Label>
+            <Label htmlFor="he-mtu">{t('Tunnel MTU')}</Label>
             <Input
               id="he-mtu"
               type="number"
@@ -625,11 +605,9 @@ export function TunnelBrokerPage() {
             />
           </div>
         </div>
-        <Disclosure summary="MTU and endpoint updates">
+        <Disclosure summary={t('MTU and endpoint updates')}>
           <div className="space-y-3 pt-3">
-            <p>
-              Use 1480 for a 1500-byte uplink, or 1472 for PPPoE. Minimum 1280.
-            </p>
+            <p>{t('Use 1480 for a 1500-byte uplink, or 1472 for PPPoE. Minimum 1280.')}</p>
             <p>
               If your public IPv4 changes, update HE’s Client IPv4. Domain DDNS
               does not update the tunnel endpoint.
@@ -651,7 +629,7 @@ export function TunnelBrokerPage() {
             : 'Saving leaves the tunnel off.'}
         </p>
       </Section>
-      <Section id="activation" title="4. Activation">
+      <Section id="activation" title={t('4. Activation')}>
         <p>
           {!saved
             ? 'Save the tunnel details first.'
@@ -669,14 +647,10 @@ export function TunnelBrokerPage() {
                   ? 'Saved · Off requested, runtime unavailable'
                   : 'Saved · Off'}
         </p>
-        <p>
-          HE addresses use the tunnel. Native IPv6 keeps its existing route and
-          uplink settings.
-        </p>
+        <p> {t('HE addresses use the tunnel. Native IPv6 keeps its existing route and uplink settings.')} </p>
         {status.error && <p role="alert">{status.error.message}</p>}
         {status.data?.native_default_dev && (
-          <p>
-            IPv6 default:{' '}
+          <p> {t('IPv6 default:')}{' '}
             <span className="font-mono">{status.data.native_default_dev}</span>
           </p>
         )}
@@ -694,67 +668,49 @@ export function TunnelBrokerPage() {
               variant="outline"
               disabled={disabled}
               onClick={() => void run(() => activate(false))}
-            >
-              Review deactivation
-            </Button>
+            > {t('Review deactivation')} </Button>
           )}
           <Button
             variant="outline"
             disabled={disabled || !saved?.enabled}
             onClick={() => void run(verify)}
-          >
-            Test tunnel
-          </Button>
+          >{t('Test tunnel')}</Button>
         </div>
         {!u && (
           <p>
-            <Link className="text-primary underline" to="/gateway/interfaces">
-              Configure an uplink
-            </Link>{' '}
+            <Link className="text-primary underline" to="/gateway/interfaces">{t('Configure an uplink')}</Link>{' '}
             before activation.
           </p>
         )}
         {saved?.enabled && (
-          <p className="text-warning-foreground">
-            Turning off HE interrupts networks using its prefixes. Their LAN
-            settings remain saved.
-          </p>
+          <p className="text-warning-foreground">{t('Turning off HE interrupts networks using its prefixes. Their LAN settings remain saved.')}</p>
         )}
         {preview && (
           <div className="space-y-3 rounded-lg border p-4">
             <PlanDetails plan={preview.plan} />
-            <p>
-              Network changes may interrupt connections. No automatic rollback.
-            </p>
+            <p> {t('Network changes may interrupt connections. No automatic rollback.')} </p>
             <div className="flex flex-wrap gap-2">
               <Button
                 disabled={busy}
                 onClick={() =>
                   void run(() => commit(preview.patch, preview.label))
                 }
-              >
-                Confirm changes
-              </Button>
+              >{t('Confirm changes')}</Button>
               <Button
                 variant="outline"
                 disabled={busy}
                 onClick={() => setPreview(null)}
-              >
-                Cancel
-              </Button>
+              >{t('Cancel')}</Button>
             </div>
           </div>
         )}
         <ApplySteps result={result} />
       </Section>
-      <Section id="networks" title="5. Networks">
-        <p>
-          Choose a /64 from your saved routed prefixes. Apply addressing,
-          advertisements, then forwarding.
-        </p>
+      <Section id="networks" title={t('5. Networks')}>
+        <p>{t('Choose a /64 from your saved routed prefixes. Apply addressing, advertisements, then forwarding.')}</p>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="he-network">Network</Label>
+            <Label htmlFor="he-network">{t('Network')}</Label>
             <Select
               value={network}
               onValueChange={(value) => {
@@ -763,7 +719,7 @@ export function TunnelBrokerPage() {
               }}
             >
               <SelectTrigger id="he-network" className="w-full">
-                <SelectValue placeholder="Choose a network" />
+                <SelectValue placeholder={t('Choose a network')} />
               </SelectTrigger>
               <SelectContent>
                 {links.data?.networks?.map((n) => (
@@ -790,11 +746,11 @@ export function TunnelBrokerPage() {
                 <SelectValue>
                   {subnet === saved?.routed_64
                     ? saved.routed_64
-                    : 'Choose / enter a /64'}
+                    : t('Choose / enter a /64')}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="custom">Choose / enter a /64</SelectItem>
+                <SelectItem value="custom">{t('Choose / enter a /64')}</SelectItem>
                 {saved?.routed_64 && (
                   <SelectItem value="routed">{saved.routed_64}</SelectItem>
                 )}
@@ -802,7 +758,7 @@ export function TunnelBrokerPage() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="he-subnet">LAN subnet</Label>
+            <Label htmlFor="he-subnet">{t('LAN subnet')}</Label>
             <Input
               id="he-subnet"
               value={subnet}
@@ -814,7 +770,7 @@ export function TunnelBrokerPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="he-router">Router IPv6 address</Label>
+            <Label htmlFor="he-router">{t('Router IPv6 address')}</Label>
             <Input
               id="he-router"
               value={router}
@@ -827,10 +783,7 @@ export function TunnelBrokerPage() {
           </div>
         </div>
         {links.error && <p role="alert">{links.error.message}</p>}
-        <p className="text-warning-foreground">
-          Applying replaces this LAN’s current IPv6 assignment. Advertisements
-          may start DHCP; forwarding may enable Gateway routing.
-        </p>
+        <p className="text-warning-foreground">{t('Applying replaces this LAN’s current IPv6 assignment. Advertisements may start DHCP; forwarding may enable Gateway routing.')}</p>
         <div className="flex flex-wrap gap-2">
           {[
             ['link', '1. Addressing'],
@@ -851,16 +804,13 @@ export function TunnelBrokerPage() {
           <div className="space-y-3 rounded-lg border p-4">
             <PlanDetails plan={networkChange.plan} />
             <div className="flex gap-2">
-              <Button disabled={busy} onClick={() => void run(applyNetwork)}>
-                Apply {networkChange.module} changes
+              <Button disabled={busy} onClick={() => void run(applyNetwork)}>{t('Apply')}{networkChange.module} changes
               </Button>
               <Button
                 variant="outline"
                 disabled={busy}
                 onClick={() => setNetworkChange(null)}
-              >
-                Cancel
-              </Button>
+              >{t('Cancel')}</Button>
             </div>
           </div>
         )}
@@ -871,9 +821,7 @@ export function TunnelBrokerPage() {
             href="https://test-ipv6.com/"
             target="_blank"
             rel="noreferrer"
-          >
-            Test IPv6 from a LAN client
-          </a>{' '}
+          >{t('Test IPv6 from a LAN client')}</a>{' '}
           after reconnecting it.
         </p>
       </Section>
@@ -913,6 +861,7 @@ function Section({
   title: string
   children: ReactNode
 }) {
+  useLocale()
   return (
     <section id={id} className="scroll-mt-36">
       <Card>
@@ -925,9 +874,10 @@ function Section({
   )
 }
 function PlanDetails({ plan }: { plan: Plan }) {
+  useLocale()
   return (
     <>
-      <p>Impact: {plan.impact}</p>
+      <p>{t('Impact:')} {plan.impact}</p>
       {plan.warnings?.map((w) => (
         <p
           key={w.path + w.message}
@@ -936,7 +886,7 @@ function PlanDetails({ plan }: { plan: Plan }) {
           {w.message}
         </p>
       ))}
-      <Disclosure summary="Change details">
+      <Disclosure summary={t('Change details')}>
         <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all pt-3 text-sm">
           {plan.changes?.map((c) => c.diff).join('\n') ||
             'No configuration changes.'}
@@ -946,6 +896,7 @@ function PlanDetails({ plan }: { plan: Plan }) {
   )
 }
 function ApplySteps({ result }: { result: DialApplyResult | null }) {
+  useLocale()
   if (!result) return null
   return (
     <div className="space-y-2">

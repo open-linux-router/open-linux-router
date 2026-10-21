@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import {
   type ImpactLabels,
   ImpactBadge as Badge,
@@ -24,28 +25,29 @@ export { PlanReasons } from '@/features/plan/plan-preview'
  */
 export const IMPACT: ImpactLabels = {
   none: {
-    label: 'No change',
-    hint: 'Nothing running changes.',
+    get label() { return t('No change') },
+    get hint() { return t('Nothing running changes.') },
     variant: 'secondary',
   },
   reload: {
-    label: 'Seamless',
+    get label() { return t('Seamless') },
     hint: 'Picked up without interrupting a single lookup.',
     variant: 'success',
   },
   restart: {
-    label: 'Unnoticed',
+    get label() { return t('Unnoticed') },
     hint: 'A lookup in flight is retried automatically. In practice nobody sees this.',
     variant: 'warning',
   },
   disruptive: {
-    label: 'Internet stops working',
+    get label() { return t('Internet stops working') },
     hint: 'Devices lose name resolution. Nothing will load until this is undone — it will not look like a DNS problem, it will look like the internet is down.',
     variant: 'destructive',
   },
 }
 
 export function ImpactBadge({ impact, className }: { impact: Impact; className?: string }) {
+  useLocale()
   return <Badge impact={impact} labels={IMPACT} className={className} />
 }
 
@@ -54,5 +56,6 @@ export function impactHint(impact: Impact): string {
 }
 
 export function PlanDiff({ plan }: { plan: PlanCore }) {
+  useLocale()
   return <Diff plan={plan} labels={IMPACT} />
 }

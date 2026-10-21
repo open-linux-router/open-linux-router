@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 
@@ -9,6 +10,7 @@ import { ReservationDialog } from '@/features/dhcp/reservation-dialog'
 import type { Reservation } from '@/lib/config-types'
 
 export function DhcpReservationsPage() {
+  useLocale()
   const { config, busy, change, applier, gate } = useDhcpEditor()
   const [editing, setEditing] = useState<Reservation | undefined>(undefined)
   const [open, setOpen] = useState(false)
@@ -37,13 +39,12 @@ export function DhcpReservationsPage() {
             setOpen(true)
           }}
         >
-          <Plus className="size-4" aria-hidden /> Add
-        </Button>}>
+          <Plus className="size-4" aria-hidden />{t('Add')}</Button>}>
       <ApplyOutcome applier={applier} />
 
 
       {reservations.length === 0 ? (
-        <ListEmpty>No reserved addresses.</ListEmpty>
+        <ListEmpty>{t('No reserved addresses.')}</ListEmpty>
       ) : (
         <List>
           {reservations.map((r) => (

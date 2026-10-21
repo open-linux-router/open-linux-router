@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Disclosure } from '@/components/ui/disclosure'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -14,8 +15,9 @@ export /**
  * number produces is "is this broken?".
  */
 function TrafficList({ traffic, enabled, devices = [] }: { traffic?: GatewayTraffic; enabled: boolean; devices?: DeviceRow[] }) {
+  useLocale()
   if (!enabled) {
-    return <ListEmpty>Counting is off, so nothing is being recorded.</ListEmpty>
+    return <ListEmpty>{t('Counting is off, so nothing is being recorded.')}</ListEmpty>
   }
   if (!traffic) {
     return <Skeleton className="h-24 w-full" />
@@ -65,7 +67,7 @@ function TrafficList({ traffic, enabled, devices = [] }: { traffic?: GatewayTraf
         </p>
       ) : null}
       {traffic.limits?.length ? (
-        <Disclosure summary="Accounting limits">
+        <Disclosure summary={t('Accounting limits')}>
           <div className="text-sm text-muted-foreground">
           <ul className="mt-1 space-y-1">
             {traffic.limits.map((l) => (

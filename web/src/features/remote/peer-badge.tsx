@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Badge } from '@/components/ui/badge'
 import type { RemotePeer } from '@/lib/api-types'
 
@@ -15,9 +16,10 @@ import type { RemotePeer } from '@/lib/api-types'
  * next.
  */
 export function PeerBadge({ peer }: { peer: RemotePeer }) {
-  if (peer.unknown) return <Badge variant="secondary">Unknown</Badge>
-  if (peer.online) return <Badge variant="success">Connected</Badge>
-  if (!peer.last_handshake) return <Badge variant="warning">Never connected</Badge>
+  useLocale()
+  if (peer.unknown) return <Badge variant="secondary">{t('Unknown')}</Badge>
+  if (peer.online) return <Badge variant="success">{t('Connected')}</Badge>
+  if (!peer.last_handshake) return <Badge variant="warning">{t('Never connected')}</Badge>
   return <Badge variant="secondary">{lastSeen(peer.last_handshake)}</Badge>
 }
 

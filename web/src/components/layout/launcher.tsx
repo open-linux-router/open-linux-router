@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Link } from 'react-router'
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -19,11 +20,13 @@ import { cn } from '@/lib/utils'
  * click opens a dialog.
  */
 export function Launcher({ children }: { children: React.ReactNode }) {
+  useLocale()
   return <div className="space-y-8">{children}</div>
 }
 
 /** One headed row of tiles. The id names the heading the tiles are labelled by. */
 export function LauncherSection({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+  useLocale()
   return (
     <section className="space-y-4" aria-labelledby={`launcher-${id}`}>
       <h2 id={`launcher-${id}`} className="text-2xl leading-8 font-semibold">{title}</h2>
@@ -78,6 +81,7 @@ export function LauncherTile({
   to?: string
   href?: string
 }) {
+  useLocale()
   const summary = notes?.[0]
   // A tile with an OLR page is integrated even when it has nothing live to
   // report; only a tile that leaves the app is an external setup.
@@ -110,7 +114,7 @@ export function LauncherTile({
         <p>{description}</p>
         {notes?.length
           ? notes.map((note, index) => <p key={index}>{note.text}</p>)
-          : external ? <p>Not integrated · External setup</p> : null}
+          : external ? <p>{t('Not integrated · External setup')}</p> : null}
       </TooltipContent>
     </Tooltip>
   )

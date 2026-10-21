@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Heading } from '@/components/ui/heading'
@@ -26,6 +27,7 @@ import type { Record as DdnsRecord } from '@/lib/config-types'
  * part of this page most worth reading whole.
  */
 export function DdnsPage() {
+  useLocale()
   const config = useDialConfig()
   const status = useDialStatus()
   const editor = useRecordEditor()
@@ -45,7 +47,7 @@ export function DdnsPage() {
       <SubPage section="/advanced" slug="ddns">
         <Alert variant="destructive">
           <AlertTriangle />
-          <AlertTitle>Could not load dynamic DNS</AlertTitle>
+          <AlertTitle>{t('Could not load dynamic DNS')}</AlertTitle>
           <AlertDescription>{(config.error as Error).message}</AlertDescription>
         </Alert>
       </SubPage>
@@ -93,17 +95,13 @@ export function DdnsPage() {
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <Heading size="sm" className="px-1">Names</Heading>
+          <Heading size="sm" className="px-1">{t('Names')}</Heading>
           <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
-            <Plus />
-            Add
-          </Button>
+            <Plus />{t('Add')}</Button>
         </div>
 
         {records.length === 0 ? (
-          <ListEmpty>
-            No names configured.
-          </ListEmpty>
+          <ListEmpty> {t('No names configured.')} </ListEmpty>
         ) : (
           <List>
             {records.map((r) => {
@@ -172,14 +170,15 @@ function describe(r: DdnsRecord, s?: RecordStatus): string {
 }
 
 function RecordBadge({ status: s }: { status?: RecordStatus }) {
-  if (!s) return <Badge variant="secondary">Unknown</Badge>
+  useLocale()
+  if (!s) return <Badge variant="secondary">{t('Unknown')}</Badge>
   if (s.problems?.length || s.check_error || s.publish_error)
-    return <Badge variant="warning">Not up to date</Badge>
-  if (s.cgnat) return <Badge variant="warning">Behind shared NAT</Badge>
-  if (!s.watched || !s.checked) return <Badge variant="secondary">Waiting</Badge>
+    return <Badge variant="warning">{t('Not up to date')}</Badge>
+  if (s.cgnat) return <Badge variant="warning">{t('Behind shared NAT')}</Badge>
+  if (!s.watched || !s.checked) return <Badge variant="secondary">{t('Waiting')}</Badge>
   if (s.address && s.published_address === s.address)
-    return <Badge variant="success">Up to date</Badge>
-  return <Badge variant="secondary">Updating</Badge>
+    return <Badge variant="success">{t('Up to date')}</Badge>
+  return <Badge variant="secondary">{t('Updating')}</Badge>
 }
 
 function hostOf(url?: string): string {

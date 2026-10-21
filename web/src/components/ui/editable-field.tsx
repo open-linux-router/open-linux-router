@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -36,6 +37,7 @@ export function EditableField({
   busy: boolean
   multiline?: boolean
 }) {
+  useLocale()
   const [draft, setDraft] = useState(stored)
 
   // Re-sync when the value changes underneath — after an apply lands, or when
@@ -71,12 +73,8 @@ export function EditableField({
       {hint && <p className="max-w-prose text-[0.8125rem] leading-relaxed text-muted-foreground">{hint}</p>}
       {dirty && (
         <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-          <Button variant="ghost" size="sm" onClick={() => setDraft(stored)}>
-            Revert
-          </Button>
-          <Button size="sm" disabled={busy} onClick={() => onSave(draft)}>
-            Save
-          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setDraft(stored)}> {t('Revert')} </Button>
+          <Button size="sm" disabled={busy} onClick={() => onSave(draft)}>{t('Save')}</Button>
         </div>
       )}
     </div>
@@ -112,6 +110,7 @@ export function SwitchField({
   busy: boolean
   onChange: (on: boolean) => void
 }) {
+  useLocale()
   return (
     <div className="panel-surface flex items-center gap-6 p-4 sm:p-6">
       <div className="min-w-0 flex-1">

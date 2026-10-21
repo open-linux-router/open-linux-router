@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 import { BlockerAlerts } from '@/components/layout/blockers'
@@ -20,6 +21,7 @@ import type { DnsConfig } from '@/lib/config-types'
 
 /** A compact overview; the full query log and diagnostics live in DNS details. */
 export function DnsContent() {
+  useLocale()
   const { config, busy, change, applier, gate } = useDnsEditor()
   const status = useDnsStatus()
   const queries = useDnsQueries()
@@ -34,7 +36,7 @@ export function DnsContent() {
     <div className="space-y-4">
       <ApplyOutcome applier={applier} />
       {nothingAdopted && (
-        <Alert><AlertTriangle /><AlertTitle>Choose an interface first</AlertTitle><AlertDescription>DNS needs an adopted interface. <Link to="/gateway#interfaces" className="underline underline-offset-4">Go to Interfaces</Link></AlertDescription></Alert>
+        <Alert><AlertTriangle /><AlertTitle>{t('Choose an interface first')}</AlertTitle><AlertDescription>{t('DNS needs an adopted interface.')}<Link to="/gateway#interfaces" className="underline underline-offset-4">{t('Go to Interfaces')}</Link></AlertDescription></Alert>
       )}
       <div className="rounded-xl border bg-card p-5 space-y-4">
         <div className="flex items-center gap-3">
@@ -43,35 +45,35 @@ export function DnsContent() {
             <p className="font-medium">{summary.headline}</p>
             <p className="text-sm text-muted-foreground">{summary.detail}</p>
           </div>
-          <Switch aria-label="Answer DNS for this network" checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change({ ...config, enabled })} />
+          <Switch aria-label={t('Answer DNS for this network')} checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change({ ...config, enabled })} />
         </div>
         <div className="grid gap-3 text-sm sm:grid-cols-2">
-          <p><span className="text-muted-foreground">Upstream</span><br />{summariseUpstream(config)}</p>
-          <p><span className="text-muted-foreground">Queries since restart</span><br />{stats ? `${stats.queries.toLocaleString()} looked up · ${stats.blocked.toLocaleString()} blocked` : queries.isError ? 'Unavailable' : 'Checking…'}</p>
+          <p><span className="text-muted-foreground">{t('Upstream')}</span><br />{summariseUpstream(config)}</p>
+          <p><span className="text-muted-foreground">{t('Queries since restart')}</span><br />{stats ? `${stats.queries.toLocaleString()} looked up · ${stats.blocked.toLocaleString()} blocked` : queries.isError ? t('Unavailable') : t('Checking…')}</p>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3 text-sm">
-          <label className="flex items-center gap-2">Keep a query log
-            <Switch checked={config.query_log.enabled} disabled={busy} onCheckedChange={(enabled) => change({ ...config, query_log: { ...config.query_log, enabled } })} />
+          <label className="flex items-center gap-2">{t('Keep a query log')} <Switch checked={config.query_log.enabled} disabled={busy} onCheckedChange={(enabled) => change({ ...config, query_log: { ...config.query_log, enabled } })} />
           </label>
-          <Link to="/gateway/dns/details" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">DNS activity and advanced settings <ChevronRight className="size-4" aria-hidden /></Link>
+          <Link to="/gateway/dns/details" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">{t('DNS activity and advanced settings')}<ChevronRight className="size-4" aria-hidden /></Link>
         </div>
         <SwitchField
           id="dns-summary-aaaa"
-          label="Resolve IPv6 addresses (AAAA)"
-          hint="When off, AAAA queries return no address. IPv4 lookups continue normally."
+          label={t('Resolve IPv6 addresses (AAAA)')}
+          hint={t('When off, AAAA queries return no address. IPv4 lookups continue normally.')}
           checked={!config.filter_aaaa}
           busy={busy}
           onChange={(enabled) => change({ ...config, filter_aaaa: !enabled })}
         />
       </div>
       {config.enabled && status.data?.drifted && (
-        <Alert><AlertTriangle /><AlertTitle>DNS settings differ from what is running</AlertTitle><AlertDescription><Link className="underline underline-offset-4" to="/gateway/dns/details">Review and repair DNS</Link></AlertDescription></Alert>
+        <Alert><AlertTriangle /><AlertTitle>{t('DNS settings differ from what is running')}</AlertTitle><AlertDescription><Link className="underline underline-offset-4" to="/gateway/dns/details">{t('Review and repair DNS')}</Link></AlertDescription></Alert>
       )}
     </div>
   )
 }
 
 export function DnsDetailsContent() {
+  useLocale()
   const { config, busy, change, applier, gate } = useDnsEditor()
   const status = useDnsStatus()
   const interfaces = useInterfaces()
@@ -92,8 +94,8 @@ export function DnsDetailsContent() {
 
       <SwitchField
         id="dns-details-aaaa"
-        label="Resolve IPv6 addresses (AAAA)"
-        hint="When off, AAAA queries return no address. IPv4 lookups continue normally."
+        label={t('Resolve IPv6 addresses (AAAA)')}
+        hint={t('When off, AAAA queries return no address. IPv4 lookups continue normally.')}
         checked={!config.filter_aaaa}
         busy={busy}
         onChange={(enabled) => change({ ...config, filter_aaaa: !enabled })}
@@ -102,7 +104,7 @@ export function DnsDetailsContent() {
       {nothingAdopted && (
         <Alert>
           <AlertTriangle />
-          <AlertTitle>This router has not been given an interface yet</AlertTitle>
+          <AlertTitle>{t('This router has not been given an interface yet')}</AlertTitle>
           <AlertDescription className="space-y-2">
             <p>
               DNS cannot answer anywhere until one of this machine's interfaces
@@ -111,9 +113,7 @@ export function DnsDetailsContent() {
             <Link
               to="/gateway#interfaces"
               className="inline-flex items-center gap-1 text-sm font-medium underline underline-offset-4"
-            >
-              Choose an interface
-              <ChevronRight className="size-3.5" aria-hidden />
+            >{t('Choose an interface')}<ChevronRight className="size-3.5" aria-hidden />
             </Link>
           </AlertDescription>
         </Alert>
@@ -142,7 +142,7 @@ export function DnsDetailsContent() {
           // "Nowhere yet" was right when this field had to be filled in; it
           // would now read as broken on a box that is working.
           { slug: 'listening', value: config.listen?.join(', ') || 'Every address' },
-          { slug: 'enforcement', value: config.hijack.enabled ? 'On' : 'Off' },
+          { slug: 'enforcement', value: config.hijack.enabled ? t('On') : t('Off') },
           { slug: 'advanced', value: config.extra_unbound_conf ? 'Customised' : undefined },
         ]}
       />
@@ -151,7 +151,7 @@ export function DnsDetailsContent() {
 }
 
 function describeCount(n: number | undefined, noun: string): string {
-  if (!n) return 'None'
+  if (!n) return t('None')
   return `${n} ${noun}${n === 1 ? '' : 's'}`
 }
 
@@ -173,6 +173,7 @@ function StatusCard({
   /** Runs the pending work from what is already stored. */
   onRepair: () => void
 }) {
+  useLocale()
   const summary = describeStatus(config, status, error)
 
   // Reported on its own line rather than folded into the headline: a unit that
@@ -207,7 +208,7 @@ function StatusCard({
       dot={summary.dot}
       control={{
         id: 'dns-enabled',
-        label: 'Answer DNS for this network',
+        get label() { return t('Answer DNS for this network') },
         checked: config.enabled,
         busy,
         onChange: (enabled) => onChange({ ...config, enabled }),
@@ -219,7 +220,7 @@ function StatusCard({
       // is one unstarted unit and an empty change list: the switch an operator
       // would reach for is already where they want it, and the only direction
       // it moves is the one that takes DNS away from the whole network.
-      driftAction={{ label: 'Apply now', busy, onClick: onRepair }}
+      driftAction={{ get label() { return t('Apply now') }, busy, onClick: onRepair }}
       details={
         <>
           {/* Both backends, separately. Averaging them would hide the thing
@@ -270,7 +271,7 @@ function StatusCard({
         error={config.enabled ? status?.drift_error : undefined}
         fix={
           status?.drift_error?.startsWith('listen')
-            ? { to: '/gateway/dns/listening', label: 'Listening' }
+            ? { to: '/gateway/dns/listening', get label() { return t('Listening') } }
             : undefined
         }
       />
@@ -280,7 +281,7 @@ function StatusCard({
       {notInstalled.length > 0 && (
         <Alert variant="destructive">
           <AlertTriangle />
-          <AlertTitle>DNS cannot start — a unit is missing</AlertTitle>
+          <AlertTitle>{t('DNS cannot start — a unit is missing')}</AlertTitle>
           <AlertDescription>
             {notInstalled.map((s) => (
               <p key={s.unit}>
@@ -299,7 +300,7 @@ function StatusCard({
       {notAtBoot.length > 0 && (
         <Alert className="border-warning/40 bg-warning/10 text-warning-foreground">
           <AlertTriangle />
-          <AlertTitle>DNS will not come back after a reboot</AlertTitle>
+          <AlertTitle>{t('DNS will not come back after a reboot')}</AlertTitle>
           <AlertDescription className="text-warning-foreground/90">
             {notAtBoot.map((s) => (
               <p key={s.unit}>

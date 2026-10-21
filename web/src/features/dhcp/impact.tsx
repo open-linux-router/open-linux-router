@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import {
   type ImpactLabels,
   ImpactBadge as Badge,
@@ -18,28 +19,29 @@ export { PlanReasons } from '@/features/plan/plan-preview'
  */
 export const IMPACT: ImpactLabels = {
   none: {
-    label: 'No change',
-    hint: 'Nothing running changes.',
+    get label() { return t('No change') },
+    get hint() { return t('Nothing running changes.') },
     variant: 'secondary',
   },
   reload: {
-    label: 'Seamless',
-    hint: 'Devices stay connected and notice nothing.',
+    get label() { return t('Seamless') },
+    get hint() { return t('Devices stay connected and notice nothing.') },
     variant: 'success',
   },
   restart: {
-    label: 'Brief pause',
-    hint: 'Address handling stops for a moment. Devices keep the addresses they already have.',
+    get label() { return t('Brief pause') },
+    get hint() { return t('Address handling stops for a moment. Devices keep the addresses they already have.') },
     variant: 'warning',
   },
   disruptive: {
-    label: 'Devices disconnect',
+    get label() { return t('Devices disconnect') },
     hint: 'Devices using an address from this router will lose it.',
     variant: 'destructive',
   },
 }
 
 export function ImpactBadge({ impact, className }: { impact: Impact; className?: string }) {
+  useLocale()
   return <Badge impact={impact} labels={IMPACT} className={className} />
 }
 
@@ -48,5 +50,6 @@ export function impactHint(impact: Impact): string {
 }
 
 export function PlanDiff({ plan }: { plan: PlanCore }) {
+  useLocale()
   return <Diff plan={plan} labels={IMPACT} />
 }

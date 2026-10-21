@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import type { ReactNode } from 'react'
 
 import { Heading } from '@/components/ui/heading'
@@ -47,6 +48,7 @@ export function DeviceHeader({
   /** A connection state, for a page that has evidence for one. */
   status?: ReactNode
 }) {
+  useLocale()
   return (
     <div className="relative flex min-h-20 items-center gap-4 border-b pb-4">
       {activity}
@@ -54,7 +56,7 @@ export function DeviceHeader({
         type="button"
         onClick={onPicture}
         disabled={pictureBusy}
-        aria-label="Change device icon"
+        aria-label={t('Change device icon')}
         className="relative shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         {picture}

@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -15,6 +16,7 @@ import { Label } from '@/components/ui/label'
 import { api } from '@/lib/api'
 
 export function SocksOutPage() {
+  useLocale()
   const client = useQueryClient()
   const config = useSocksOutConfig()
   const status = useSocksOutStatus()
@@ -33,30 +35,30 @@ export function SocksOutPage() {
 
   return (
     <SubPage section="/access" slug="socks5">
-      {config.isError && <Alert variant="destructive"><AlertTriangle /><AlertTitle>Could not load settings</AlertTitle><AlertDescription>{(config.error as Error).message}</AlertDescription></Alert>}
-      {error && <Alert variant="destructive"><AlertTriangle /><AlertTitle>Could not apply</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
-      {status.isError && <Alert><AlertTriangle /><AlertTitle>Could not read proxy status</AlertTitle><AlertDescription>{status.error.message}</AlertDescription></Alert>}
-      {status.data?.problem && <Alert><AlertTriangle /><AlertTitle>Backend needs attention</AlertTitle><AlertDescription>{status.data.problem}</AlertDescription></Alert>}
+      {config.isError && <Alert variant="destructive"><AlertTriangle /><AlertTitle>{t('Could not load settings')}</AlertTitle><AlertDescription>{(config.error as Error).message}</AlertDescription></Alert>}
+      {error && <Alert variant="destructive"><AlertTriangle /><AlertTitle>{t('Could not apply')}</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+      {status.isError && <Alert><AlertTriangle /><AlertTitle>{t('Could not read proxy status')}</AlertTitle><AlertDescription>{status.error.message}</AlertDescription></Alert>}
+      {status.data?.problem && <Alert><AlertTriangle /><AlertTitle>{t('Backend needs attention')}</AlertTitle><AlertDescription>{status.data.problem}</AlertDescription></Alert>}
       <Card>
         <CardHeader>
-          <CardTitle>Proxy connection</CardTitle>
+          <CardTitle>{t('Proxy connection')}</CardTitle>
           <CardDescription>{socksOutSummary(config, status).text}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="max-w-xl space-y-2">
-            <Label htmlFor="socks-out-proxy">SOCKS5 server</Label>
+            <Label htmlFor="socks-out-proxy">{t('SOCKS5 server')}</Label>
             <Input id="socks-out-proxy" disabled={config.isPending || config.isError || save.isPending} aria-describedby="socks-out-proxy-hint" value={draft ?? config.data?.proxy ?? ''} onChange={(e) => setDraft(e.target.value)} placeholder="socks5://192.0.2.10:1080" autoComplete="off" spellCheck={false} />
-            <p id="socks-out-proxy-hint" className="text-xs text-muted-foreground">IPv4 address and port only. Hostnames and authentication are not supported.</p>
+            <p id="socks-out-proxy-hint" className="text-xs text-muted-foreground">{t('IPv4 address and port only. Hostnames and authentication are not supported.')}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={save.isPending || config.isPending || config.isError || !(draft ?? config.data?.proxy)?.trim()} onClick={() => save.mutate({ enabled: true, proxy: (draft ?? config.data?.proxy)?.trim() })}>{save.isPending ? 'Applying…' : 'Save and start'}</Button>
-            {config.data?.enabled && <Button variant="outline" disabled={save.isPending || config.isError} onClick={() => save.mutate({ ...config.data, enabled: false })}>Stop</Button>}
+            <Button disabled={save.isPending || config.isPending || config.isError || !(draft ?? config.data?.proxy)?.trim()} onClick={() => save.mutate({ enabled: true, proxy: (draft ?? config.data?.proxy)?.trim() })}>{save.isPending ? t('Applying…') : 'Save and start'}</Button>
+            {config.data?.enabled && <Button variant="outline" disabled={save.isPending || config.isError} onClick={() => save.mutate({ ...config.data, enabled: false })}>{t('Stop')}</Button>}
           </div>
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Choose who uses it</CardTitle><CardDescription>Starting does not change device routes. Create a way out through <code>olrsocks0</code> and assign it to a network or device. IPv6 and backend failure block rather than bypass the proxy.</CardDescription></CardHeader>
-        <CardContent><Button variant="outline" nativeButton={false} render={<Link to="/access/gateway">Open gateways</Link>} /></CardContent>
+        <CardHeader><CardTitle>{t('Choose who uses it')}</CardTitle><CardDescription>Starting does not change device routes. Create a way out through <code>olrsocks0</code> and assign it to a network or device. IPv6 and backend failure block rather than bypass the proxy.</CardDescription></CardHeader>
+        <CardContent><Button variant="outline" nativeButton={false} render={<Link to="/access/gateway">{t('Open gateways')}</Link>} /></CardContent>
       </Card>
     </SubPage>
   )

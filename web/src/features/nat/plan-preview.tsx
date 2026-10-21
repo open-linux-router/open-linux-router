@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Badge } from '@/components/ui/badge'
 import type { ForwardsPlan, Impact } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
@@ -17,28 +18,29 @@ const IMPACT: Record<
   { label: string; hint: string; variant: 'secondary' | 'success' | 'warning' | 'destructive' }
 > = {
   none: {
-    label: 'No change',
-    hint: 'Nothing running changes.',
+    get label() { return t('No change') },
+    get hint() { return t('Nothing running changes.') },
     variant: 'secondary',
   },
   reload: {
-    label: 'Seamless',
-    hint: 'Connections that are already open are unaffected. Only new ones meet the new rules.',
+    get label() { return t('Seamless') },
+    get hint() { return t('Connections that are already open are unaffected. Only new ones meet the new rules.') },
     variant: 'success',
   },
   restart: {
-    label: 'Brief pause',
-    hint: 'Traffic pauses for a moment.',
+    get label() { return t('Brief pause') },
+    get hint() { return t('Traffic pauses for a moment.') },
     variant: 'warning',
   },
   disruptive: {
-    label: 'Connections break',
+    get label() { return t('Connections break') },
     hint: 'A forward that is carrying traffic is being taken away, so anything still connected through it stops working and has to reconnect.',
     variant: 'destructive',
   },
 }
 
 export function ImpactBadge({ impact, className }: { impact: Impact; className?: string }) {
+  useLocale()
   const meta = IMPACT[impact] ?? IMPACT.none
   return (
     <Badge variant={meta.variant} className={className}>
@@ -61,6 +63,7 @@ export function impactHint(impact: Impact): string {
  * behind the same fold as the evidence would hide the answer.
  */
 export function PlanReasons({ plan }: { plan: ForwardsPlan }) {
+  useLocale()
   if (!plan.reasons?.length) return null
 
   return (
@@ -88,8 +91,9 @@ export function PlanReasons({ plan }: { plan: ForwardsPlan }) {
  * makes the thing debuggable.
  */
 export function PlanDiff({ plan }: { plan: ForwardsPlan }) {
+  useLocale()
   if (plan.empty) {
-    return <p className="text-sm text-muted-foreground">No changes.</p>
+    return <p className="text-sm text-muted-foreground">{t('No changes.')}</p>
   }
 
   return (

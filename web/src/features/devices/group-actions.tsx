@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -46,6 +47,7 @@ export interface GroupDeletion {
  * lost — it moves up one level — and the confirmation says exactly where.
  */
 export function useGroupActions() {
+  useLocale()
   const config = useDevicesConfig()
   const create = useCreateDeviceGroup()
   const rename = useRenameDeviceGroup()
@@ -110,13 +112,11 @@ export function useGroupActions() {
         <Dialog open onOpenChange={(open) => !open && setDeleting(null)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Delete {deleting.name}?</DialogTitle>
+              <DialogTitle>{t('Delete')}{deleting.name}?</DialogTitle>
               <DialogDescription>{describeDeletion(deleting)}</DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setDeleting(null)}>
-                Cancel
-              </Button>
+              <Button variant="ghost" onClick={() => setDeleting(null)}>{t('Cancel')}</Button>
               <Button
                 variant="destructive"
                 disabled={remove.isPending}
@@ -129,9 +129,7 @@ export function useGroupActions() {
                     toastError(error)
                   }
                 }}
-              >
-                Delete group
-              </Button>
+              >{t('Delete group')}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

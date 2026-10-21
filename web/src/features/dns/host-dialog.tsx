@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -45,6 +46,7 @@ export function HostDialog({
   onSubmit: (host: Host) => void
   onRemove?: () => void
 }) {
+  useLocale()
   const [draft, setDraft] = useState<Host>(initial ?? EMPTY)
   const editing = initial !== undefined
 
@@ -80,14 +82,12 @@ export function HostDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit name' : 'Add name'}</DialogTitle>
-          <DialogDescription>
-            Resolve a local name to the specified addresses.
-          </DialogDescription>
+          <DialogDescription> {t('Resolve a local name to the specified addresses.')} </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="host-name">Name</Label>
+            <Label htmlFor="host-name">{t('Name')}</Label>
             <Input
               id="host-name"
               placeholder="sony-tv"
@@ -96,14 +96,12 @@ export function HostDialog({
             />
             <p className="text-xs text-muted-foreground">
               {name ? (
-                <>
-                  Reachable as{' '}
+                <> {t('Reachable as')}{' '}
                   <span className="font-mono">{qualify(name, domain)}</span> from
                   anywhere on this network.
                 </>
               ) : (
-                <>
-                  Letters, digits and hyphens. It is published under{' '}
+                <> {t('Letters, digits and hyphens. It is published under')}{' '}
                   <span className="font-mono">{domain}</span>.
                 </>
               )}
@@ -112,7 +110,7 @@ export function HostDialog({
 
           {suggestions.length > 0 && (
             <div className="grid gap-2">
-              <Label>Reserved devices</Label>
+              <Label>{t('Reserved devices')}</Label>
               <div className="flex flex-wrap gap-2">
                 {suggestions.map((r) => (
                   <Button
@@ -137,7 +135,7 @@ export function HostDialog({
           )}
 
           <div className="grid gap-2">
-            <Label htmlFor="host-addresses">Address</Label>
+            <Label htmlFor="host-addresses">{t('Address')}</Label>
             <Input
               id="host-addresses"
               placeholder="192.168.1.50"
@@ -164,12 +162,9 @@ export function HostDialog({
                 onOpenChange(false)
               }}
             >
-              <Trash2 className="size-4" aria-hidden /> Remove
-            </Button>
+              <Trash2 className="size-4" aria-hidden />{t('Remove')}</Button>
           )}
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
           <Button
             disabled={!complete}
             onClick={() => {
@@ -177,7 +172,7 @@ export function HostDialog({
               onOpenChange(false)
             }}
           >
-            {editing ? 'Save' : 'Add'}
+            {editing ? t('Save') : t('Add')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 
@@ -25,6 +26,7 @@ import type { DhcpConfig } from '@/lib/config-types'
  * page in the first place.
  */
 export function DhcpContent() {
+  useLocale()
   const { config, busy, change, applier, gate } = useDhcpEditor()
   const status = useDhcpStatus()
   const leases = useDhcpLeases()
@@ -39,7 +41,7 @@ export function DhcpContent() {
     <div className="space-y-4">
       <ApplyOutcome applier={applier} />
       {nothingAdopted && (
-        <Alert><AlertTriangle /><AlertTitle>Choose an interface first</AlertTitle><AlertDescription>DHCP needs an adopted interface. <Link to="/gateway#interfaces" className="underline underline-offset-4">Go to Interfaces</Link></AlertDescription></Alert>
+        <Alert><AlertTriangle /><AlertTitle>{t('Choose an interface first')}</AlertTitle><AlertDescription>{t('DHCP needs an adopted interface.')}<Link to="/gateway#interfaces" className="underline underline-offset-4">{t('Go to Interfaces')}</Link></AlertDescription></Alert>
       )}
       <div className="rounded-xl border bg-card p-5 space-y-4">
         <div className="flex items-center gap-3">
@@ -48,21 +50,22 @@ export function DhcpContent() {
             <p className="font-medium">{summary.headline}</p>
             <p className="text-sm text-muted-foreground">{config.enabled && active !== undefined && summary !== STUCK_SUMMARY ? `${active} devices with active leases` : summary.detail}</p>
           </div>
-          <Switch aria-label="Hand out addresses" checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change({ ...config, enabled })} />
+          <Switch aria-label={t('Hand out addresses')} checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change({ ...config, enabled })} />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-sm">
           <span className="text-muted-foreground">{config.pools?.length ?? 0} network{config.pools?.length === 1 ? '' : 's'} with address service</span>
-          <Link to="/gateway/dhcp/details" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">DHCP status and settings <ChevronRight className="size-4" aria-hidden /></Link>
+          <Link to="/gateway/dhcp/details" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">{t('DHCP status and settings')}<ChevronRight className="size-4" aria-hidden /></Link>
         </div>
       </div>
       {config.enabled && status.data?.drifted && (
-        <Alert><AlertTriangle /><AlertTitle>DHCP settings differ from what is running</AlertTitle><AlertDescription><Link className="underline underline-offset-4" to="/gateway/dhcp/details">Review and repair DHCP</Link></AlertDescription></Alert>
+        <Alert><AlertTriangle /><AlertTitle>{t('DHCP settings differ from what is running')}</AlertTitle><AlertDescription><Link className="underline underline-offset-4" to="/gateway/dhcp/details">{t('Review and repair DHCP')}</Link></AlertDescription></Alert>
       )}
     </div>
   )
 }
 
 export function DhcpDetailsContent() {
+  useLocale()
   const { config, busy, change, applier, gate } = useDhcpEditor()
   const status = useDhcpStatus()
   const leases = useDhcpLeases()
@@ -86,7 +89,7 @@ export function DhcpDetailsContent() {
       {nothingAdopted && (
         <Alert>
           <AlertTriangle />
-          <AlertTitle>This router has not been given an interface yet</AlertTitle>
+          <AlertTitle>{t('This router has not been given an interface yet')}</AlertTitle>
           <AlertDescription className="space-y-2">
             <p>
               Address ranges are refused until one of this machine's interfaces
@@ -96,9 +99,7 @@ export function DhcpDetailsContent() {
             <Link
               to="/gateway#interfaces"
               className="inline-flex items-center gap-1 text-sm font-medium underline underline-offset-4"
-            >
-              Choose an interface
-              <ChevronRight className="size-3.5" aria-hidden />
+            >{t('Choose an interface')}<ChevronRight className="size-3.5" aria-hidden />
             </Link>
           </AlertDescription>
         </Alert>
@@ -127,7 +128,7 @@ export function DhcpDetailsContent() {
             slug: 'reservations',
             value: config.reservations?.length
               ? `${config.reservations.length} device${config.reservations.length === 1 ? '' : 's'}`
-              : 'None',
+              : t('None'),
           },
           { slug: 'advanced', value: config.extra_dnsmasq_conf ? 'Customised' : undefined },
         ]}
@@ -156,6 +157,7 @@ function StatusCard({
   /** Runs the pending work from what is already stored. */
   onRepair: () => void
 }) {
+  useLocale()
   const summary = describeStatus(config, status, error)
 
   // Only while it is on: see the note in routes/overview.tsx.
@@ -173,7 +175,7 @@ function StatusCard({
       dot={summary.dot}
       control={{
         id: 'dhcp-enabled',
-        label: 'Hand out addresses',
+        get label() { return t('Hand out addresses') },
         checked: config.enabled,
         busy,
         onChange: (enabled) => onChange({ ...config, enabled }),
@@ -187,7 +189,7 @@ function StatusCard({
       // Without this the row is a diagnosis with no cure. A server that is
       // enabled and simply not running drifts with an empty change list, and
       // then there is no setting left on the page to save.
-      driftAction={{ label: 'Apply now', busy, onClick: onRepair }}
+      driftAction={{ get label() { return t('Apply now') }, busy, onClick: onRepair }}
       details={
         <>
           <StatusDetail term="Service">
@@ -230,7 +232,7 @@ function StatusCard({
 
       <StuckSettings
         error={config.enabled ? status?.drift_error : undefined}
-        fix={{ to: '/gateway/dhcp/ranges', label: 'Address ranges' }}
+        fix={{ to: '/gateway/dhcp/ranges', get label() { return t('Address ranges') } }}
       />
 
       {/* Usually the same dnsmasq the DNS page is complaining about: the

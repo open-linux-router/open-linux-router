@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Heading } from '@/components/ui/heading'
 import { AlertTriangle, Check, Plus, X } from 'lucide-react'
 import { useState } from 'react'
@@ -29,6 +30,7 @@ import type { Network } from '@/lib/config-types'
 
 /** Interfaces and the router's own way out, independent of served networks. */
 export function InterfacesContent() {
+  useLocale()
   const dhcp = useDhcpConfig()
   const links = useNetworkEditor()
   const gateway = useGatewayEditor()
@@ -39,16 +41,16 @@ export function InterfacesContent() {
       <InterfacesCard
         dhcp={dhcp.data}
         physicalOnly
-        uplinkAction={<span className="text-xs text-muted-foreground">Internet uplink</span>}
+        uplinkAction={<span className="text-xs text-muted-foreground">{t('Internet uplink')}</span>}
         footer={gateway.config && (
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <span className="font-medium">Internet via</span>
+            <span className="font-medium">{t('Internet via')}</span>
             <Select value={gateway.config.default || DIRECT} disabled={gateway.busy} onValueChange={(v) => gateway.change(gatewayChange.settings({ default: !v || v === DIRECT ? '' : v }))}>
-              <SelectTrigger className="w-full sm:w-72" aria-label="Default internet route"><SelectValue>{(v: string) => v === DIRECT ? 'This router’s own connection' : v}</SelectValue></SelectTrigger>
-              <SelectContent><SelectItem value={DIRECT}>This router&rsquo;s own connection</SelectItem>{exits.map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
+              <SelectTrigger className="w-full sm:w-72" aria-label={t('Default internet route')}><SelectValue>{(v: string) => v === DIRECT ? t('This router’s own connection') : v}</SelectValue></SelectTrigger>
+              <SelectContent><SelectItem value={DIRECT}>{t('This router&rsquo;s own connection')}</SelectItem>{exits.map((e) => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}</SelectContent>
             </Select>
             <UplinkCard compact interfaces={links.interfaces} networks={links.networks} />
-            {!gateway.config.enabled && <span className="text-xs text-muted-foreground">Gateway routing is off; this selection is saved only.</span>}
+            {!gateway.config.enabled && <span className="text-xs text-muted-foreground">{t('Gateway routing is off; this selection is saved only.')}</span>}
           </div>
         )}
       />
@@ -60,6 +62,7 @@ export function InterfacesContent() {
 
 /** A served subnet belongs beside the DHCP ranges that use it. */
 export function ServedNetworksContent() {
+  useLocale()
   const editor = useNetworkEditor()
   const [editing, setEditing] = useState<Network | undefined>(undefined)
   const [open, setOpen] = useState(false)
@@ -69,7 +72,7 @@ export function ServedNetworksContent() {
     return (
       <Alert variant="destructive">
         <AlertTriangle />
-        <AlertTitle>Could not load the networks</AlertTitle>
+        <AlertTitle>{t('Could not load the networks')}</AlertTitle>
         <AlertDescription>{editor.error.message}</AlertDescription>
       </Alert>
     )
@@ -95,10 +98,8 @@ export function ServedNetworksContent() {
       <section id="networks" className="space-y-3 scroll-mt-20">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
-            <Heading as="h3">Served networks</Heading>
-            <p className="max-w-prose text-sm text-muted-foreground">
-              Interface and subnet for each served network. Router addresses remain active when DHCP is off.
-            </p>
+            <Heading as="h3">{t('Served networks')}</Heading>
+            <p className="max-w-prose text-sm text-muted-foreground"> {t('Interface and subnet for each served network. Router addresses remain active when DHCP is off.')} </p>
           </div>
           <Button
             size="sm"
@@ -108,14 +109,11 @@ export function ServedNetworksContent() {
               setOpen(true)
             }}
           >
-            <Plus className="size-4" aria-hidden /> Add
-          </Button>
+            <Plus className="size-4" aria-hidden />{t('Add')}</Button>
         </div>
 
         {editor.networks.length === 0 ? (
-          <ListEmpty>
-            No networks yet. Add a network before configuring its DHCP range.
-          </ListEmpty>
+          <ListEmpty> {t('No networks yet. Add a network before configuring its DHCP range.')} </ListEmpty>
         ) : (
           <List>
             {editor.networks.map((n) => (
@@ -170,6 +168,7 @@ function subtitleOf(n: NetworkRow): string {
  * that is what is about to happen, and it is shown here verbatim.
  */
 export function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useNetworkEditor> }) {
+  useLocale()
   const pending = editor.pending
   const ipv6Addressing = pending?.plan.changes.some((change) => change.path.endsWith('.ipv6_auto'))
   return (
@@ -191,19 +190,15 @@ export function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useNet
           </Alert>
         ))}
 
-        <Disclosure summary="What changes on the box">
+        <Disclosure summary={t('What changes on the box')}>
           <pre className="overflow-x-auto pt-1 font-mono text-xs">
             {pending?.plan.changes.map((c) => c.diff).join('')}
           </pre>
         </Disclosure>
 
         <DialogFooter>
-          <Button variant="outline" onClick={editor.cancel}>
-            Cancel
-          </Button>
-          <Button variant="destructive" disabled={editor.busy} onClick={editor.confirm}>
-            Apply anyway
-          </Button>
+          <Button variant="outline" onClick={editor.cancel}>{t('Cancel')}</Button>
+          <Button variant="destructive" disabled={editor.busy} onClick={editor.confirm}>{t('Apply anyway')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -213,25 +208,23 @@ export function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useNet
 /** A network change reaches the kernel and can land halfway; §5.2 gives it no
  * rollback, so what did happen has to be reported rather than swallowed. */
 export function PartialApply({ editor }: { editor: ReturnType<typeof useNetworkEditor> }) {
+  useLocale()
   if (!editor.failure) return null
   return (
     <Alert variant="destructive" role="alert">
       <AlertTriangle />
-      <AlertTitle>Only part of the change went through</AlertTitle>
+      <AlertTitle>{t('Only part of the change went through')}</AlertTitle>
       <AlertDescription className="space-y-3">
-        <p>
-          The steps that finished have already taken effect and will not be undone. Fixing the
-          cause and applying again is safe — it picks up where this left off.
-        </p>
+        <p>{t('The steps that finished have already taken effect and will not be undone. Fixing the cause and applying again is safe — it picks up where this left off.')}</p>
         {editor.failure.error && <p>{editor.failure.error.message}</p>}
-        <Disclosure summary="Which steps ran">
+        <Disclosure summary={t('Which steps ran')}>
           <ul className="space-y-1 pt-1 font-mono text-xs">
             {editor.failure.steps?.map((step) => (
               <li key={step.description} className="flex gap-2">
                 {step.done ? (
-                  <Check className="mt-0.5 size-3.5 shrink-0 text-success-foreground" aria-label="done" />
+                  <Check className="mt-0.5 size-3.5 shrink-0 text-success-foreground" aria-label={t('done')} />
                 ) : (
-                  <X className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-label="failed" />
+                  <X className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-label={t('failed')} />
                 )}
                 <span>
                   {step.description}
@@ -241,15 +234,14 @@ export function PartialApply({ editor }: { editor: ReturnType<typeof useNetworkE
             ))}
           </ul>
         </Disclosure>
-        <Button size="sm" variant="outline" onClick={editor.dismissFailure}>
-          Dismiss
-        </Button>
+        <Button size="sm" variant="outline" onClick={editor.dismissFailure}>{t('Dismiss')}</Button>
       </AlertDescription>
     </Alert>
   )
 }
 
 function PageSkeleton() {
+  useLocale()
   return (
     <div className="space-y-6">
       <Skeleton className="h-8 w-40" />

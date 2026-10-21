@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AuthFrame } from '@/components/layout/auth-frame'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { KeyRound } from 'lucide-react'
@@ -26,6 +27,7 @@ import type { AccessView } from '@/lib/api'
  * collect them. Session expiry returns here without exposing cached pages.
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
+  useLocale()
   const queryClient = useQueryClient()
   const access = useQuery({
     queryKey: ['system', 'access'],
@@ -60,8 +62,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (access.error) {
     return <div className="mx-auto max-w-md space-y-4 p-6" role="alert">
-      <p>Could not reach the router: {access.error.message}</p>
-      <Button onClick={() => access.refetch()}>Try again</Button>
+      <p>{t('Could not reach the router:')}{access.error.message}</p>
+      <Button onClick={() => access.refetch()}>{t('Try again')}</Button>
     </div>
   }
   if (access.data?.token_required && !access.data.authenticated) return <TokenPrompt />
@@ -71,6 +73,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 }
 
 function PasswordPrompt() {
+  useLocale()
   const queryClient = useQueryClient()
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -91,17 +94,17 @@ function PasswordPrompt() {
   return <AuthFrame>
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle as="h1" size="lg">Sign in to this router</CardTitle>
-        <CardDescription>Enter the administrator password.</CardDescription>
+        <CardTitle as="h1" size="lg">{t('Sign in to this router')}</CardTitle>
+        <CardDescription>{t('Enter the administrator password.')}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t('Password')}</Label>
             <Input id="password" type="password" autoComplete="current-password" autoFocus value={password} onChange={(event) => setPassword(event.target.value)} disabled={busy} aria-describedby={error ? 'login-error' : undefined} />
           </div>
           {error && <p id="login-error" className="text-sm text-destructive" role="alert">{error}</p>}
-          <Button type="submit" className="h-11 w-full" disabled={busy || !password}>{busy ? 'Signing in…' : 'Sign in'}</Button>
+          <Button type="submit" className="h-11 w-full" disabled={busy || !password}>{busy ? t('Signing in…') : t('Sign in')}</Button>
         </form>
       </CardContent>
     </Card>
@@ -109,6 +112,7 @@ function PasswordPrompt() {
 }
 
 function TokenPrompt() {
+  useLocale()
   const queryClient = useQueryClient()
   const [value, setValue] = useState('')
 
@@ -123,9 +127,7 @@ function TokenPrompt() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle as="h1" size="lg" className="flex items-center gap-2">
-            <KeyRound className="size-4" aria-hidden />
-            API token required
-          </CardTitle>
+            <KeyRound className="size-4" aria-hidden />{t('API token required')}</CardTitle>
           <CardDescription>
             olrd generated a token on first start. Read it on the router with{' '}
             <code className="rounded bg-muted px-1 py-0.5 text-xs">
@@ -137,7 +139,7 @@ function TokenPrompt() {
         <CardContent>
           <form onSubmit={submit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="token">Token</Label>
+              <Label htmlFor="token">{t('Token')}</Label>
               <Input
                 id="token"
                 type="password"
@@ -148,9 +150,7 @@ function TokenPrompt() {
                 onChange={(e) => setValue(e.target.value)}
               />
             </div>
-            <Button type="submit" className="w-full" disabled={!value.trim()}>
-              Continue
-            </Button>
+            <Button type="submit" className="w-full" disabled={!value.trim()}>{t('Continue')}</Button>
           </form>
         </CardContent>
       </Card>

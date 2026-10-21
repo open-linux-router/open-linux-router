@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Heading } from '@/components/ui/heading'
 import { TechnicalValue } from '@/components/ui/property-row'
 import { ArrowUpRight, Pencil } from 'lucide-react'
@@ -22,6 +23,7 @@ import { ConfirmDisruptive, PartialApply } from '@/routes/gateway/networks'
 import type { Network } from '@/lib/config-types'
 
 export function GatewayInterfacePage() {
+  useLocale()
   const { name } = useParams()
   const editor = useNetworkEditor()
   const gateway = useGatewayEditor()
@@ -37,9 +39,9 @@ export function GatewayInterfacePage() {
   const assignment = gateway.config?.interfaces?.find((item) => item.interface === name)
   const observed = status.data?.assignments?.find((item) => item.interface === name)
 
-  if (editor.isPending) return <p className="py-16 text-sm text-muted-foreground">Loading interface…</p>
-  if (editor.error) return <State title="Could not load interface" detail={editor.error.message} />
-  if (!row) return <State title="Interface not found" detail="It may have been removed from this machine." />
+  if (editor.isPending) return <p className="py-16 text-sm text-muted-foreground">{t('Loading interface…')}</p>
+  if (editor.error) return <State title={t('Could not load interface')} detail={editor.error.message} />
+  if (!row) return <State title={t('Interface not found')} detail="It may have been removed from this machine." />
 
   const state = interfaceState(row)
   function save(next: Network) {
@@ -52,28 +54,28 @@ export function GatewayInterfacePage() {
       <InterfaceVisual row={row} uplink={isUplink} />
       <div className="min-w-0 flex-1">
         <Heading as="h1" size="lg" className="font-mono">{row.name}</Heading>
-        <p className="text-sm text-muted-foreground">{isUplink ? 'Internet uplink' : network ? `${network.name} network` : row.loopback ? 'Local interface' : 'Network interface'}</p>
+        <p className="text-sm text-muted-foreground">{isUplink ? t('Internet uplink') : network ? `${network.name} network` : row.loopback ? 'Local interface' : 'Network interface'}</p>
       </div>
       <span className={`text-sm font-medium ${state.tone}`}>{state.label}</span>
     </header>
 
     <div className="grid gap-4 sm:grid-cols-3">
-      <Fact label="Link" value={row.present ? row.up ? row.running ? 'Up · carrier detected' : 'Up · no carrier' : 'Down' : 'Not present'} />
-      <Fact label="Address" value={row.prefixes?.join(', ') || 'None'} mono />
-      <Fact label="Hardware address" value={row.mac || 'Unavailable'} mono />
+      <Fact label={t('Link')} value={row.present ? row.up ? row.running ? 'Up · carrier detected' : 'Up · no carrier' : t('Down') : 'Not present'} />
+      <Fact label={t('Address')} value={row.prefixes?.join(', ') || 'None'} mono />
+      <Fact label={t('Hardware address')} value={row.mac || 'Unavailable'} mono />
     </div>
 
     <section className="space-y-2">
-      <Heading>Management</Heading>
-      <p className="text-sm text-muted-foreground">Allow OLR to configure this interface. Enabling management alone does not change its address.</p>
+      <Heading>{t('Management')}</Heading>
+      <p className="text-sm text-muted-foreground">{t('Allow OLR to configure this interface. Enabling management alone does not change its address.')}</p>
       <InterfacesCard dhcp={dhcp.data} only={row.name} />
     </section>
 
     {!row.loopback && editor.config && <section className="space-y-3">
-      <Heading>IPv6 addressing</Heading>
+      <Heading>{t('IPv6 addressing')}</Heading>
         <SwitchField
           id="interface-ipv6-auto"
-          label="Automatically obtain IPv6 addresses"
+          label={t('Automatically obtain IPv6 addresses')}
           checked={editor.config.ipv6_auto?.[row.name] !== false}
           busy={editor.busy || !row.adopted || !row.present}
           hint={editor.config.ipv6_auto?.[row.name] === undefined
@@ -81,14 +83,14 @@ export function GatewayInterfacePage() {
             : 'Controls SLAAC and DHCPv6 address acquisition. Static addresses stay configured; existing dynamic addresses may remain until their leases expire.'}
           onChange={(enabled) => editor.submit({ ...editor.config!, ipv6_auto: { ...editor.config!.ipv6_auto, [row.name]: enabled } })}
         />
-        {!row.adopted && <p className="text-sm text-muted-foreground">Allow OLR to manage this interface first.</p>}
+        {!row.adopted && <p className="text-sm text-muted-foreground">{t('Allow OLR to manage this interface first.')}</p>}
     </section>}
 
-    {isUplink ? <section className="space-y-2"><Heading>Internet uplink</Heading><UplinkCard interfaces={editor.interfaces} networks={editor.networks} /></section> : (
+    {isUplink ? <section className="space-y-2"><Heading>{t('Internet uplink')}</Heading><UplinkCard interfaces={editor.interfaces} networks={editor.networks} /></section> : (
       <Card>
-        <CardHeader><CardTitle>Network</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t('Network')}</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          {network ? <div className="space-y-1 text-sm"><p className="font-medium">{network.name}</p><p className="text-muted-foreground">{network.subnet || 'No IPv4 subnet'}{network.router ? ` · Router ${network.router}` : ''}</p>{network.subnet6 && <p className="text-muted-foreground">IPv6 {network.subnet6}</p>}</div> : <p className="text-sm text-muted-foreground">No network is configured on this interface.</p>}
+          {network ? <div className="space-y-1 text-sm"><p className="font-medium">{network.name}</p><p className="text-muted-foreground">{network.subnet || 'No IPv4 subnet'}{network.router ? ` · Router ${network.router}` : ''}</p>{network.subnet6 && <p className="text-muted-foreground">IPv6 {network.subnet6}</p>}</div> : <p className="text-sm text-muted-foreground">{t('No network is configured on this interface.')}</p>}
           {!row.loopback && <Button size="sm" variant="outline" disabled={!row.adopted || editor.busy} onClick={() => setEditing(true)}><Pencil className="size-4" aria-hidden /> {network ? 'Edit network' : 'Add network'}</Button>}
           {!row.adopted && !row.loopback && <p className="text-xs text-muted-foreground">Give this interface to the router first to configure a network.</p>}
         </CardContent>
@@ -96,7 +98,7 @@ export function GatewayInterfacePage() {
     )}
 
     {network && gateway.config && <Card>
-      <CardHeader><CardTitle>Internet via</CardTitle></CardHeader>
+      <CardHeader><CardTitle>{t('Internet via')}</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">{observed?.reason || (assignment ? 'Interface override' : 'Following the Gateway default.')}</p>
         <Select value={assignment ? assignment.exit || DIRECT : INHERIT} disabled={gateway.busy} onValueChange={(value) => {
@@ -104,10 +106,10 @@ export function GatewayInterfacePage() {
             if (assignment) gateway.change(gatewayChange.removeAssignment(row.name))
           } else gateway.change(gatewayChange.assign(row.name, value === DIRECT ? '' : value))
         }}>
-          <SelectTrigger className="w-full sm:w-80" aria-label={`Internet via for ${row.name}`}><SelectValue>{(value: string) => value === INHERIT ? `Follow Gateway default (${gateway.config?.default || 'router connection'})` : value === DIRECT ? 'This router’s own connection' : value}</SelectValue></SelectTrigger>
-          <SelectContent><SelectItem value={INHERIT}>Follow Gateway default</SelectItem><SelectItem value={DIRECT}>This router&rsquo;s own connection</SelectItem>{gateway.config.exits?.map((exit) => <SelectItem key={exit.name} value={exit.name}>{exit.name}</SelectItem>)}</SelectContent>
+          <SelectTrigger className="w-full sm:w-80" aria-label={`Internet via for ${row.name}`}><SelectValue>{(value: string) => value === INHERIT ? `Follow Gateway default (${gateway.config?.default || 'router connection'})` : value === DIRECT ? t('This router’s own connection') : value}</SelectValue></SelectTrigger>
+          <SelectContent><SelectItem value={INHERIT}>{t('Follow Gateway default')}</SelectItem><SelectItem value={DIRECT}>{t('This router&rsquo;s own connection')}</SelectItem>{gateway.config.exits?.map((exit) => <SelectItem key={exit.name} value={exit.name}>{exit.name}</SelectItem>)}</SelectContent>
         </Select>
-        {!gateway.config.enabled && <p className="text-xs text-muted-foreground">Gateway rules are currently off.</p>}
+        {!gateway.config.enabled && <p className="text-xs text-muted-foreground">{t('Gateway rules are currently off.')}</p>}
       </CardContent>
     </Card>}
     {gateway.gate}
@@ -115,14 +117,16 @@ export function GatewayInterfacePage() {
     <PartialApply editor={editor} />
     {editing && <NetworkDialog key={initial?.name ?? row.name} open={editing} onOpenChange={setEditing} initial={initial} interfaces={editor.interfaces.filter((item) => item.name === row.name)} taken={new Set(stored.flatMap((item) => item.members))} onSubmit={save} onRemove={initial ? () => { editor.save(stored.filter((item) => item.name !== initial.name)); setEditing(false) } : undefined} />}
     <ConfirmDisruptive editor={editor} />
-    <Link to="/gateway/dhcp/details" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">Served networks <ArrowUpRight className="size-4" aria-hidden /></Link>
+    <Link to="/gateway/dhcp/details" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">{t('Served networks')} <ArrowUpRight className="size-4" aria-hidden /></Link>
   </div>
 }
 
 function Fact({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  useLocale()
   return <div className="panel-surface min-w-0 p-4 sm:p-6"><p className="text-sm text-muted-foreground">{label}</p><div className="mt-1 text-sm">{mono ? <TechnicalValue>{value}</TechnicalValue> : value}</div></div>
 }
 
 function State({ title, detail }: { title: string; detail: string }) {
-  return <div className="space-y-3 py-16 text-center"><Heading as="h1" size="lg">{title}</Heading><p className="text-sm text-muted-foreground">{detail}</p><Button variant="outline" nativeButton={false} render={<Link to="/gateway">Back to Gateway</Link>} /></div>
+  useLocale()
+  return <div className="space-y-3 py-16 text-center"><Heading as="h1" size="lg">{title}</Heading><p className="text-sm text-muted-foreground">{detail}</p><Button variant="outline" nativeButton={false} render={<Link to="/gateway">{t('Back to Gateway')}</Link>} /></div>
 }

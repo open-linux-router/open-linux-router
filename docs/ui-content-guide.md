@@ -333,6 +333,25 @@ data, stale measurements and test scope must not disappear as part of simplifica
 Secondary diagnostics and raw technical evidence can be disclosed separately
 with clear labels.
 
+## Languages and shared terminology
+
+The UI supports English and Simplified Chinese. Keep English source messages
+and their Chinese translations together through `t()` and
+`web/src/lib/locales/zh-CN.ts`; reuse messages rather than inventing synonyms.
+Use 网关 for Gateway, 出口 for Uplink / Way out, 接入 for Access, 地址池 for
+Address ranges and 地址预留 for Reserved addresses. Translate status and actions
+without changing protocol identifiers, addresses, commands, user names or API data.
+Keep technical backend errors verbatim so operators can diagnose them.
+
+Language selection is browser-local, persists across reloads and synchronizes
+between tabs. On first visit, use Chinese for a Chinese browser preference and
+English otherwise; unsupported languages fall back to English. Switching languages
+updates the document language and visible controls without resetting forms or
+restarting queries. Keep the switch available before login and initial setup.
+New messages without a translation fall back to English. Translate complete
+sentences with named placeholders when values are embedded; do not assemble new
+sentences from translated fragments. Keep state decisions independent of copy.
+
 ## Naming and writing
 
 Use familiar tool names and concise task labels. Keep distinctions in the name
@@ -345,8 +364,8 @@ adding a generic next-step sentence. Use one short sentence when an explanation
 is necessary. Keep essential text readable; reducing font size is not a remedy
 for excessive content.
 
-Keep the footer to the product copyright, version, GitHub, Credits and an icon-only
-theme control. On desktop, bottom-align the visible content with 12px bottom padding.
+Keep the footer to the product copyright, version, GitHub, Credits, language switch
+and an icon-only theme control. On desktop, bottom-align the visible content with 12px bottom padding.
 Describe the current and next theme in its accessible label and tooltip.
 
 ## Capability and richness

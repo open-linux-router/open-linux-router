@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -27,6 +28,7 @@ import type { GatewayApplyResult, GatewayPlan } from '@/lib/api-types'
  * amount of clicking again will fix.
  */
 export function useGatewayApply() {
+  useLocale()
   const apply = useApplyGatewayChange()
 
   /** A change the daemon held back because it would be disruptive. */
@@ -73,7 +75,7 @@ export function useGatewayApply() {
 
       if (plan && !plan.known) {
         toast.error('The kernel could not be read, so nothing was changed', {
-          description: 'On Linux this usually means olrd is missing CAP_NET_ADMIN.',
+          get description() { return t('On Linux this usually means olrd is missing CAP_NET_ADMIN.') },
         })
         return false
       }

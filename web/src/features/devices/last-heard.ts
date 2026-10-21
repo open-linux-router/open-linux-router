@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import type { DeviceRow } from '@/lib/api-types'
 import { formatAgo } from '@/lib/utils'
 
@@ -29,7 +30,7 @@ export function lastHeardLabel(device: DeviceRow): string {
   // Seen but never confirmed answering: a lease lists it and the neighbour table
   // has not. Not the same as never seen, and not a time — so a dash, which
   // claims nothing.
-  return device.seen ? '—' : 'never seen'
+  return device.seen ? '—' : t('never seen')
 }
 
 /** The full sentence, for a tooltip or a dialog: what "—" and "never seen" mean. */

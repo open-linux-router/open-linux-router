@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -32,6 +33,7 @@ export function BlockerAlerts({
   module: string
   blockers?: Blocker[]
 }) {
+  useLocale()
   const fix = useFixBlocker(module)
 
   if (!blockers?.length) return null
@@ -104,13 +106,14 @@ export function BlockerAlerts({
  * spinner until it answers.
  */
 function useFixBlocker(module: string) {
+  useLocale()
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (id: string) =>
       api.post<FixResult>(`/api/${module}/blockers/fix`, { ids: [id] }),
     onSuccess: () => {
-      toast.success('Done')
+      toast.success(t('Done'))
     },
     onError: (error) => {
       // §5.3.2 has no rollback, so a half-finished fix left the box somewhere.

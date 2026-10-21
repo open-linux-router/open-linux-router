@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
@@ -15,6 +16,7 @@ import type { FirewallApplyResult } from '@/lib/api-types'
 
 /** Firewall arrivals and status; native inspection and editing live on Rules. */
 export function FirewallPage() {
+  useLocale()
   const status = useFirewallStatus()
   const set = useSetFirewall()
   const reapply = useReapplyFirewall()
@@ -51,13 +53,13 @@ export function FirewallPage() {
         {status.error ? (
           <Alert variant="destructive">
             <AlertTriangle />
-            <AlertTitle>Cannot reach the router</AlertTitle>
+            <AlertTitle>{t('Cannot reach the router')}</AlertTitle>
             <AlertDescription>{status.error.message}</AlertDescription>
           </Alert>
         ) : (
           <Skeleton className="h-24 w-full" />
         )}
-        <Button variant="outline" nativeButton={false} render={<Link to="/firewall/rules" />}>Rules</Button>
+        <Button variant="outline" nativeButton={false} render={<Link to="/firewall/rules" />}>{t('Rules')}</Button>
       </div>
     )
   }
@@ -72,7 +74,7 @@ export function FirewallPage() {
         dot={summary.dot}
         control={{
           id: 'firewall-enabled',
-          label: 'Firewall',
+          get label() { return t('Firewall') },
           checked: st.enabled,
           busy: set.isPending,
           onChange: (on) => void send(on),
@@ -80,7 +82,7 @@ export function FirewallPage() {
         drifted={st.enabled && st.drifted}
         driftNote="The kernel does not hold the firewall's rules — something removed them, or an earlier change stopped halfway."
         driftAction={{
-          label: 'Put them back',
+          get label() { return t('Put them back') },
           busy: reapply.isPending,
           onClick: () => reapply.mutate(),
         }}
@@ -89,13 +91,11 @@ export function FirewallPage() {
       {lockout && (
         <Alert variant="destructive">
           <AlertTriangle />
-          <AlertTitle>This would cut you off</AlertTitle>
+          <AlertTitle>{t('This would cut you off')}</AlertTitle>
           <AlertDescription className="space-y-3">
             <p>{lockout}</p>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => setLockout(null)}>
-                Cancel
-              </Button>
+              <Button size="sm" variant="outline" onClick={() => setLockout(null)}>{t('Cancel')}</Button>
               <Button
                 size="sm"
                 variant="destructive"
@@ -118,7 +118,7 @@ export function FirewallPage() {
       )}
 
       <TrafficPermissions status={st} />
-      <Button variant="outline" nativeButton={false} render={<Link to="/firewall/rules" />}>Rules</Button>
+      <Button variant="outline" nativeButton={false} render={<Link to="/firewall/rules" />}>{t('Rules')}</Button>
     </div>
   )
 }

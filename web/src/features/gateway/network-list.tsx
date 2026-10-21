@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { ListEmpty } from '@/components/ui/list'
 import {
   Select,
@@ -42,6 +43,7 @@ function NetworkList({
   busy: boolean
   onChange: (change: GatewayChange) => void
 }) {
+  useLocale()
   const assignments = config.interfaces ?? []
   const exits = config.exits ?? []
 
@@ -89,7 +91,7 @@ function NetworkList({
           >
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium">{network}</div>
-              <div className="truncate text-xs text-muted-foreground">On {iface}</div>
+              <div className="truncate text-xs text-muted-foreground">{t('On')}{iface}</div>
               <div className="truncate text-[0.8rem] text-muted-foreground">
                 {describeAssignment(current ? row : undefined, effective, Boolean(assignment?.exit))}
               </div>
@@ -108,7 +110,7 @@ function NetworkList({
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={INHERIT}>Follow the setting above</SelectItem>
+                <SelectItem value={INHERIT}>{t('Follow the setting above')}</SelectItem>
                 {exits.map((e) => (
                   <SelectItem key={e.name} value={e.name}>
                     {e.name}

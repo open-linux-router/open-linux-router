@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useState } from 'react'
 import { Link } from 'react-router'
 
@@ -42,6 +43,7 @@ export function SettingsDialog({
   onSubmit: (endpoint: string, wireguard: Record<string, unknown>) => void
   endpointOnly?: boolean
 }) {
+  useLocale()
   const [endpoint, setEndpoint] = useState(initial?.endpoint ?? '')
   const [subnet, setSubnet] = useState(initial?.wireguard.subnet ?? '')
   const [port, setPort] = useState(String(initial?.wireguard.listen_port ?? ''))
@@ -64,7 +66,7 @@ export function SettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{endpointOnly ? 'Public address' : 'WireGuard settings'}</DialogTitle>
+          <DialogTitle>{endpointOnly ? t('Public address') : 'WireGuard settings'}</DialogTitle>
           <DialogDescription>
             {endpointOnly ? 'Shared by WireGuard and SOCKS5 client configurations.' : 'Every device’s configuration is generated from these.'}
           </DialogDescription>
@@ -72,7 +74,7 @@ export function SettingsDialog({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="remote-endpoint">Public address</Label>
+            <Label htmlFor="remote-endpoint">{t('Public address')}</Label>
             <Input
               id="remote-endpoint"
               value={endpoint}
@@ -83,17 +85,15 @@ export function SettingsDialog({
             <p className="text-xs text-muted-foreground">
               The name or address your devices dial from outside. If a name already follows this
               router&rsquo;s address, use it — keeping one current is what{' '}
-              <Link to="/advanced/ddns" className="underline underline-offset-2">
-                Dynamic DNS
-              </Link>{' '}
+              <Link to="/advanced/ddns" className="underline underline-offset-2">{t('Dynamic DNS')}</Link>{' '}
               is for. It is shared by every way in, so give the host alone.
             </p>
           </div>
 
-          {!endpointOnly && <Disclosure summary="Advanced">
+          {!endpointOnly && <Disclosure summary={t('Advanced')}>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="remote-port">Port</Label>
+                <Label htmlFor="remote-port">{t('Port')}</Label>
                 <Input
                   id="remote-port"
                   value={port}
@@ -101,13 +101,11 @@ export function SettingsDialog({
                   placeholder="51820"
                   onChange={(e) => setPort(e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground">
-                  UDP. This is the port to forward to this router if it sits behind another one.
-                </p>
+                <p className="text-xs text-muted-foreground"> {t('UDP. This is the port to forward to this router if it sits behind another one.')} </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="remote-subnet">Dial-in network</Label>
+                <Label htmlFor="remote-subnet">{t('Dial-in network')}</Label>
                 <Input
                   id="remote-subnet"
                   value={subnet}
@@ -125,12 +123,8 @@ export function SettingsDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={submit} disabled={endpoint.trim() === ''}>
-            Save
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
+          <Button onClick={submit} disabled={endpoint.trim() === ''}>{t('Save')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

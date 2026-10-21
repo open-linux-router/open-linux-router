@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Badge } from '@/components/ui/badge'
 import type { Impact, PlanCore } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
@@ -45,6 +46,7 @@ export function ImpactBadge({
   labels: ImpactLabels
   className?: string
 }) {
+  useLocale()
   const meta = entry(labels, impact)
   return (
     <Badge variant={meta.variant} className={className}>
@@ -66,6 +68,7 @@ export function impactHint(labels: ImpactLabels, impact: Impact): string {
  * evidence.
  */
 export function PlanReasons({ plan }: { plan: PlanCore }) {
+  useLocale()
   if (!plan.reasons?.length) return null
 
   return (
@@ -93,8 +96,9 @@ export function PlanReasons({ plan }: { plan: PlanCore }) {
  * between an operator and their answer.
  */
 export function PlanDiff({ plan, labels }: { plan: PlanCore; labels: ImpactLabels }) {
+  useLocale()
   if (plan.empty) {
-    return <p className="text-sm text-muted-foreground">No changes.</p>
+    return <p className="text-sm text-muted-foreground">{t('No changes.')}</p>
   }
 
   return (

@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router'
 import { Heading } from '@/components/ui/heading'
 
@@ -45,6 +46,7 @@ import { GatewayUnmanagedPage } from '@/routes/gateway/unmanaged'
 import { CreditsPage } from '@/routes/credits'
 
 export function App() {
+  useLocale()
   return (
     <AuthGate>
       <ConnectivityRecovery />
@@ -154,23 +156,26 @@ export function App() {
 }
 
 function NotFound() {
+  useLocale()
   return (
     <div className="space-y-3 py-16 text-center">
-      <Heading as="h1" size="lg">Page not found</Heading>
+      <Heading as="h1" size="lg">{t('Page not found')}</Heading>
       {/* An error page with no way out is a dead end, which on a phone means
           reaching for the URL bar. */}
-      <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/">Go to Overview</Link>} />
+      <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/">{t('Go to Overview')}</Link>} />
     </div>
   )
 }
 
 function LegacySectionRedirect() {
+  useLocale()
   const { pathname, search, hash } = useLocation()
   return <Navigate to={`/gateway${pathname}${search}${hash}`} replace />
 }
 
 /** Carries a query string and fragment across an address that moved. */
 function RedirectWithState({ to }: { to: string }) {
+  useLocale()
   const { search, hash } = useLocation()
   return <Navigate to={`${to}${search}${hash}`} replace />
 }

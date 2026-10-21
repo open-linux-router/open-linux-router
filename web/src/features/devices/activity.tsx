@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useLayoutEffect, useRef, useState } from 'react'
 
 import { MetricValue } from '@/components/ui/metric-value'
@@ -27,6 +28,7 @@ export function ActivityTotal({ addresses }: { addresses: string[] }) {
 const fills = ['bg-[var(--activity-empty)]', 'bg-[var(--activity-low)]', 'bg-[var(--activity-green-low)]', 'bg-[var(--activity-medium)]', 'bg-[var(--activity-high)]', 'bg-[var(--activity-peak)]']
 
 export function DeviceActivity({ addresses, downRate, upRate }: { addresses: string[]; downRate?: number; upRate?: number }) {
+  useLocale()
   const rate = Math.max(0, downRate ?? 0) + Math.max(0, upRate ?? 0)
   // Keep the breathing shape readable even at high rates (100 MiB/s and above).
   const breathDuration = Number.isFinite(rate) && rate > 0
@@ -119,7 +121,7 @@ export function DeviceActivity({ addresses, downRate, upRate }: { addresses: str
     const total = bytes ? bytes.up + bytes.down : 0
     const level = activityLevel(total, thresholds)
     const time = `${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')} ${hour}:00-${hour + 4}:00`
-    const detail = history.isPending ? 'Loading' : history.isError ? 'Unavailable' : !bytes ? 'No data' : `↓ ${formatBytes(bytes.down)} · ↑ ${formatBytes(bytes.up)}`
+    const detail = history.isPending ? 'Loading' : history.isError ? t('Unavailable') : !bytes ? t('No data') : `↓ ${formatBytes(bytes.down)} · ↑ ${formatBytes(bytes.up)}`
     return <Tooltip key={i}>
       <TooltipTrigger delay={0} aria-label={`${time}: ${detail}`} className={`h-full w-full min-h-0 min-w-0 rounded-[3px] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${fills[level]} ${end > now ? 'device-activity-current' : ''}`} />
       <TooltipContent className="flex-col items-start animate-none!"><span>{time}</span><span>{detail}</span></TooltipContent>

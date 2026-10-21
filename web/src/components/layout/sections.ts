@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { Activity, ArrowLeftRight, Shield, SlidersHorizontal, Waypoints, Wifi, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -67,39 +68,39 @@ export interface Section {
 export const SECTIONS: Section[] = [
   {
     to: '/',
-    label: 'Overview',
+    get label() { return t('Overview') },
     icon: Activity,
     end: true,
     groups: [],
   },
   {
     to: '/gateway',
-    label: 'Gateway',
+    get label() { return t('Gateway') },
     icon: Waypoints,
     end: false,
     groups: [
       {
         slug: 'interfaces',
-        label: 'Interfaces & routing',
+        get label() { return t('Interfaces & routing') },
         blurb: '',
       },
       {
         slug: 'dhcp',
         label: 'DHCP',
-        blurb: 'Define served networks, hand out addresses and reserve them for devices that need a fixed one.',
+        get blurb() { return t('Define served networks, hand out addresses and reserve them for devices that need a fixed one.') },
       },
       {
         slug: 'dns',
         label: 'DNS',
-        blurb: 'Resolve names, manage local names and control what devices can look up.',
+        get blurb() { return t('Resolve names, manage local names and control what devices can look up.') },
       },
       {
         slug: 'unmanaged',
-        label: 'External routing rules',
+        get label() { return t('External routing rules') },
         // design.md §3.4: pretending we are the only actor is a bug. Somebody
         // else's rules are shown so a hand-rolled setup is legible rather than
         // mysterious.
-        blurb: 'Read-only rules outside OLR management.',
+        get blurb() { return t('Read-only rules outside OLR management.') },
       },
     ],
   },
@@ -113,22 +114,19 @@ export const SECTIONS: Section[] = [
       { slug: 'details', label: 'DHCP', blurb: '' },
       {
         slug: 'ranges',
-        label: 'Address ranges',
-        blurb:
-          'Addresses handed out on each network.',
+        get label() { return t('Address ranges') },
+        get blurb() { return t('Addresses handed out on each network.') },
       },
       {
         slug: 'reservations',
-        label: 'Reserved addresses',
-        blurb:
-          'Fixed DHCP addresses for selected devices.',
+        get label() { return t('Reserved addresses') },
+        get blurb() { return t('Fixed DHCP addresses for selected devices.') },
       },
       // Interface adoption stays under Gateway / Interfaces; served networks are beside DHCP.
       {
         slug: 'advanced',
-        label: 'Advanced',
-        blurb:
-          'Custom dnsmasq settings. OLR-managed directives cannot be overridden.',
+        get label() { return t('Advanced') },
+        get blurb() { return t('Custom dnsmasq settings. OLR-managed directives cannot be overridden.') },
       },
     ],
   },
@@ -142,35 +140,32 @@ export const SECTIONS: Section[] = [
       { slug: 'details', label: 'DNS', blurb: '' },
       {
         slug: 'blocking',
-        label: 'Blocking',
-        blurb:
-          'DNS blocking rules for selected devices and networks.',
+        get label() { return t('Blocking') },
+        get blurb() { return t('DNS blocking rules for selected devices and networks.') },
       },
       {
         slug: 'names',
-        label: 'Local names',
-        blurb:
-          'Names resolved locally by this router.',
+        get label() { return t('Local names') },
+        get blurb() { return t('Names resolved locally by this router.') },
       },
       {
         slug: 'resolving',
-        label: 'Upstream DNS',
+        get label() { return t('Upstream DNS') },
         blurb: '',
       },
       {
         slug: 'listening',
-        label: 'DNS listening',
+        get label() { return t('DNS listening') },
         blurb: '',
       },
       {
         slug: 'enforcement',
-        label: 'DNS enforcement',
-        blurb:
-          'Redirect external DNS requests on selected networks.',
+        get label() { return t('DNS enforcement') },
+        get blurb() { return t('Redirect external DNS requests on selected networks.') },
       },
       {
         slug: 'advanced',
-        label: 'Advanced',
+        get label() { return t('Advanced') },
         blurb:
           '',
       },
@@ -178,14 +173,14 @@ export const SECTIONS: Section[] = [
   },
   {
     to: '/wireless',
-    label: 'Wireless',
+    get label() { return t('Wireless') },
     icon: Wifi,
     end: false,
     groups: [],
   },
   {
     to: '/firewall',
-    label: 'Firewall',
+    get label() { return t('Firewall') },
     icon: Shield,
     nested: true,
     navTo: '/advanced',
@@ -194,24 +189,24 @@ export const SECTIONS: Section[] = [
   },
   {
     to: '/access',
-    label: 'Access',
+    get label() { return t('Access') },
     icon: ArrowLeftRight,
     end: false,
     groups: [
-      { slug: 'gateway', label: 'Gateway', blurb: 'Use another gateway or an existing VPN interface.' },
+      { slug: 'gateway', get label() { return t('Gateway') }, get blurb() { return t('Use another gateway or an existing VPN interface.') } },
       { slug: 'tunnelbroker', label: 'Tunnel Broker', blurb: '' },
       { slug: 'wireguard', label: 'WireGuard', blurb: '' },
-      { slug: 'socks-server', label: 'SOCKS5 server', blurb: '' },
+      { slug: 'socks-server', get label() { return t('SOCKS5 server') }, blurb: '' },
       {
         slug: 'socks5',
-        label: 'External SOCKS5 proxy',
+        get label() { return t('External SOCKS5 proxy') },
         blurb: '',
       },
     ],
   },
   {
     to: '/tools',
-    label: 'Tools',
+    get label() { return t('Tools') },
     icon: Wrench,
     nested: true,
     navTo: '/advanced',
@@ -220,31 +215,31 @@ export const SECTIONS: Section[] = [
   },
   {
     to: '/advanced',
-    label: 'Advanced',
+    get label() { return t('Advanced') },
     icon: SlidersHorizontal,
     end: false,
     // Only the labels and explanations: the directory's own page decides which
     // group each feature belongs to and whether it gets a tile at all.
     groups: [
-      { slug: 'firewall', label: 'Firewall', blurb: '' },
+      { slug: 'firewall', get label() { return t('Firewall') }, blurb: '' },
       {
         slug: 'access',
-        label: 'Administrator access',
+        get label() { return t('Administrator access') },
         blurb: 'Who may configure this router, and how they sign in.',
       },
       {
         // Reached from port forwarding when foreign filtering exists.
         slug: 'forwards',
-        label: 'Port forwarding',
-        blurb: 'Forwarding a port also grants its firewall permission.',
+        get label() { return t('Port forwarding') },
+        get blurb() { return t('Forwarding a port also grants its firewall permission.') },
       },
       {
         slug: 'filtering',
-        label: 'External filtering',
-        blurb: 'Read-only forwarding policies outside OLR management.',
+        get label() { return t('External filtering') },
+        get blurb() { return t('Read-only forwarding policies outside OLR management.') },
       },
-      { slug: 'ddns', label: 'Dynamic DNS', blurb: '' },
-      { slug: 'iptv', label: 'IPTV multicast', blurb: '' },
+      { slug: 'ddns', get label() { return t('Dynamic DNS') }, blurb: '' },
+      { slug: 'iptv', get label() { return t('IPTV multicast') }, blurb: '' },
       {
         slug: 'caddy',
         label: 'Caddy',

@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Heading } from '@/components/ui/heading'
 import { MetricValue } from '@/components/ui/metric-value'
 import { FolderTree, Network } from 'lucide-react'
@@ -24,6 +25,7 @@ const FOLLOW = ' follow'
 const DIRECT = ' direct'
 
 export function GroupPage() {
+  useLocale()
   const { name = '' } = useParams()
   const identity = useDevicesConfig()
   const devices = useDeviceList()
@@ -42,9 +44,9 @@ export function GroupPage() {
   const direct = members.filter((d) => d.group === name).length
   const children = groupOptions(groups).filter((g) => g.parent === name)
 
-  if (identity.isPending || devices.isPending) return <p className="py-16 text-sm text-muted-foreground">Loading group…</p>
-  if (identity.isError || devices.isError) return <State title="Could not load this group" />
-  if (!group) return <State title="Group not found" />
+  if (identity.isPending || devices.isPending) return <p className="py-16 text-sm text-muted-foreground">{t('Loading group…')}</p>
+  if (identity.isError || devices.isError) return <State title={t('Could not load this group')} />
+  if (!group) return <State title={t('Group not found')} />
 
   async function applyCurrentMembers() {
     if (!confirming) return
@@ -71,7 +73,7 @@ export function GroupPage() {
         if (active === applied || priority === 'normal') toast.success(`Priority applied to ${applied} devices`)
         else toast.warning(`Priority saved for ${applied} devices`, { description: `${active} active; remaining devices are waiting for their LAN interface.` })
       }
-      if (applied < members.length) toast.warning(`Stopped after ${applied} of ${members.length} devices`, { description: 'Review the remaining devices before trying again.' })
+      if (applied < members.length) toast.warning(`Stopped after ${applied} of ${members.length} devices`, { get description() { return t('Review the remaining devices before trying again.') } })
     } catch (error) {
       toast.error(`Stopped after ${applied} of ${members.length} devices`, { description: String(error) })
     } finally {
@@ -87,46 +89,47 @@ export function GroupPage() {
       </header>
       <div className="mt-4 grid gap-y-8 lg:grid-cols-2 lg:gap-x-16">
         <dl className="min-w-0">
-          <DeviceSettingRow label="Parent">{group.parent ? <Link className="inline-flex min-h-11 max-w-full items-center rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9" to={`/groups/${encodeURIComponent(group.parent)}`}><Badge variant="secondary" className="whitespace-normal break-words">{group.parent}</Badge></Link> : 'Top-level group'}</DeviceSettingRow>
-          <DeviceSettingRow label="Devices"><MetricValue value={members.length} /></DeviceSettingRow>
-          <DeviceSettingRow label="Directly here"><MetricValue value={direct} /></DeviceSettingRow>
-          <DeviceSettingRow label="Subgroups">{children.length ? <div className="flex flex-wrap justify-end gap-2">{children.map((child) => <Link key={child.name} className="inline-flex min-h-11 max-w-full items-center rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9" to={`/groups/${encodeURIComponent(child.name)}`}><Badge variant="secondary" className="whitespace-normal break-words">{child.name}</Badge></Link>)}</div> : 'None'}</DeviceSettingRow>
+          <DeviceSettingRow label={t('Parent')}>{group.parent ? <Link className="inline-flex min-h-11 max-w-full items-center rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9" to={`/groups/${encodeURIComponent(group.parent)}`}><Badge variant="secondary" className="whitespace-normal break-words">{group.parent}</Badge></Link> : 'Top-level group'}</DeviceSettingRow>
+          <DeviceSettingRow label={t('Devices')}><MetricValue value={members.length} /></DeviceSettingRow>
+          <DeviceSettingRow label={t('Directly here')}><MetricValue value={direct} /></DeviceSettingRow>
+          <DeviceSettingRow label={t('Subgroups')}>{children.length ? <div className="flex flex-wrap justify-end gap-2">{children.map((child) => <Link key={child.name} className="inline-flex min-h-11 max-w-full items-center rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:min-h-9" to={`/groups/${encodeURIComponent(child.name)}`}><Badge variant="secondary" className="whitespace-normal break-words">{child.name}</Badge></Link>)}</div> : t('None')}</DeviceSettingRow>
         </dl>
         <div className="min-w-0 space-y-4">
           <dl>
-            <DeviceSettingRow label="Uplink">
-              <div role="group" aria-label="Uplink for current devices" className="inline-flex max-w-full flex-wrap justify-end rounded-lg bg-muted p-0.5">
-                {[{ value: FOLLOW, label: 'Default' }, { value: DIRECT, label: 'This router' }, ...(gateway.data?.exits ?? []).map((e) => ({ value: e.name, label: e.name }))].map((option) => <Button key={option.value} size="sm" className="h-11 max-w-full whitespace-normal break-words px-2 sm:h-7" variant={exit === option.value ? 'outline' : 'ghost'} aria-pressed={exit === option.value} disabled={!gateway.data || working} onClick={() => setExit(option.value)}>{option.label}</Button>)}
+            <DeviceSettingRow label={t('Uplink')}>
+              <div role="group" aria-label={t('Uplink for current devices')} className="inline-flex max-w-full flex-wrap justify-end rounded-lg bg-muted p-0.5">
+                {[{ value: FOLLOW, get label() { return t('Default') } }, { value: DIRECT, get label() { return t('This router') } }, ...(gateway.data?.exits ?? []).map((e) => ({ value: e.name, label: e.name }))].map((option) => <Button key={option.value} size="sm" className="h-11 max-w-full whitespace-normal break-words px-2 sm:h-7" variant={exit === option.value ? 'outline' : 'ghost'} aria-pressed={exit === option.value} disabled={!gateway.data || working} onClick={() => setExit(option.value)}>{option.label}</Button>)}
               </div>
             </DeviceSettingRow>
-            <DeviceSettingRow label="Priority">
+            <DeviceSettingRow label={t('Priority')}>
               <div role="group" aria-label="Priority for current devices" className="inline-flex max-w-full flex-wrap justify-end rounded-lg bg-muted p-0.5">
                 {(['high', 'normal', 'low'] as const).map((value) => <Button key={value} size="sm" className="h-11 px-2 capitalize sm:h-7" variant={priority === value ? 'outline' : 'ghost'} aria-pressed={priority === value} disabled={!qos.data || working} onClick={() => setPriority(value)}>{value}</Button>)}
               </div>
             </DeviceSettingRow>
           </dl>
-          <p className="text-sm text-muted-foreground">Apply to {members.length} current devices, including subgroups. Existing choices are replaced; future members do not inherit these settings. Default follows each device’s network.</p>
+          <p className="text-sm text-muted-foreground">{t('Apply to')} {members.length} current devices, including subgroups. Existing choices are replaced; future members do not inherit these settings. Default follows each device’s network.</p>
           <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="outline" disabled={!members.length || !gateway.data || working} onClick={() => setConfirming('exit')}>Apply uplink</Button>
-            <Button variant="outline" disabled={!members.length || !qos.data || working} onClick={() => setConfirming('priority')}>Save priority</Button>
+            <Button variant="outline" disabled={!members.length || !gateway.data || working} onClick={() => setConfirming('exit')}>{t('Apply uplink')}</Button>
+            <Button variant="outline" disabled={!members.length || !qos.data || working} onClick={() => setConfirming('priority')}>{t('Save priority')}</Button>
           </div>
           <p className="text-sm text-muted-foreground">Priority is saved but not enforced in this build. Individual speed limits are preserved; edit them in device details.</p>
-          {gateway.isError && <p role="alert" className="text-sm text-destructive">Gateway settings are unavailable.</p>}
-          {qos.isError && <p role="alert" className="text-sm text-destructive">QoS settings are unavailable.</p>}
+          {gateway.isError && <p role="alert" className="text-sm text-destructive">{t('Gateway settings are unavailable.')}</p>}
+          {qos.isError && <p role="alert" className="text-sm text-destructive">{t('QoS settings are unavailable.')}</p>}
           <GatewayOutcome applier={gatewayApply} />
         </div>
       </div>
     </Card>
 
-    <Card><CardHeader><CardTitle>Devices in this group</CardTitle></CardHeader><CardContent className="space-y-4">
-      <p className="text-sm text-muted-foreground">Includes devices in subgroups.</p>
-      {members.length ? <List>{members.map((device) => <ListRow key={device.mac} to={`/devices/${encodeURIComponent(device.mac)}`} title={device.name || device.mac} subtitle={`${device.group === name ? device.network || 'Network unknown' : `${device.group} · ${device.network || 'Network unknown'}`}`} leading={<DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor} vendorKey={device.vendor_key} />} trailing={<span className="text-xs tabular-nums text-muted-foreground" title={lastHeardTitle(device)}>{lastHeardLabel(device)}</span>} />)}</List> : <ListEmpty>No devices in this group or its subgroups yet.</ListEmpty>}
+    <Card><CardHeader><CardTitle>{t('Devices in this group')}</CardTitle></CardHeader><CardContent className="space-y-4">
+      <p className="text-sm text-muted-foreground">{t('Includes devices in subgroups.')}</p>
+      {members.length ? <List>{members.map((device) => <ListRow key={device.mac} to={`/devices/${encodeURIComponent(device.mac)}`} title={device.name || device.mac} subtitle={`${device.group === name ? device.network || 'Network unknown' : `${device.group} · ${device.network || 'Network unknown'}`}`} leading={<DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor} vendorKey={device.vendor_key} />} trailing={<span className="text-xs tabular-nums text-muted-foreground" title={lastHeardTitle(device)}>{lastHeardLabel(device)}</span>} />)}</List> : <ListEmpty>{t('No devices in this group or its subgroups yet.')}</ListEmpty>}
     </CardContent></Card>
 
-    <Dialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}><DialogContent><DialogHeader><DialogTitle>Change {members.length} current devices?</DialogTitle><DialogDescription>{confirming === 'exit' ? 'Their existing Internet via overrides will be changed. Traffic may take a different path; established connections normally keep theirs.' : 'Their priorities will apply to traffic crossing this router. Queue updates may briefly interrupt queued packets.'} New members will not inherit this setting.</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setConfirming(null)}>Cancel</Button><Button onClick={() => void applyCurrentMembers()}>Continue</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}><DialogContent><DialogHeader><DialogTitle>{t('Change')} {members.length} current devices?</DialogTitle><DialogDescription>{confirming === 'exit' ? 'Their existing Internet via overrides will be changed. Traffic may take a different path; established connections normally keep theirs.' : 'Their priorities will apply to traffic crossing this router. Queue updates may briefly interrupt queued packets.'} {t('New members will not inherit this setting.')}</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setConfirming(null)}>{t('Cancel')}</Button><Button onClick={() => void applyCurrentMembers()}>{t('Continue')}</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }
 
 function State({ title }: { title: string }) {
-  return <div className="space-y-3 py-16 text-center"><Network className="mx-auto size-8 text-muted-foreground" aria-hidden /><Heading as="h1" size="lg">{title}</Heading><Button variant="outline" nativeButton={false} render={<Link to="/">Back to overview</Link>} /></div>
+  useLocale()
+  return <div className="space-y-3 py-16 text-center"><Network className="mx-auto size-8 text-muted-foreground" aria-hidden /><Heading as="h1" size="lg">{title}</Heading><Button variant="outline" nativeButton={false} render={<Link to="/">{t('Back to overview')}</Link>} /></div>
 }

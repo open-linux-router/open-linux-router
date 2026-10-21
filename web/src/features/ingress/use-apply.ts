@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -27,6 +28,7 @@ import type { IngressApplyResult, IngressPlan } from '@/lib/api-types'
  * breaking the proxy leaves a way back in.
  */
 export function useIngressApply() {
+  useLocale()
   const apply = useApplyIngressChange()
 
   /** A change the daemon held back because it would be disruptive. */
@@ -44,7 +46,7 @@ export function useIngressApply() {
       const result = await apply.mutateAsync({ change, confirm })
       if (result.pending) {
         toast.warning('Saved; more repairs needed', {
-          description: 'The proxy keeps its current configuration. Fix the remaining problems to apply all repairs.',
+          get description() { return t('The proxy keeps its current configuration. Fix the remaining problems to apply all repairs.') },
         })
       } else {
         toast.success(result.plan.empty ? 'Nothing to change' : change.label)

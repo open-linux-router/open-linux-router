@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import {
   type ImpactLabels,
   ImpactBadge as Badge,
@@ -31,28 +32,29 @@ export { PlanReasons } from '@/features/plan/plan-preview'
  */
 export const IMPACT: ImpactLabels = {
   none: {
-    label: 'No change',
-    hint: 'Nothing running changes.',
+    get label() { return t('No change') },
+    get hint() { return t('Nothing running changes.') },
     variant: 'secondary',
   },
   reload: {
-    label: 'Seamless',
+    get label() { return t('Seamless') },
     hint: 'Picked up without dropping a single connection. Anything open right now finishes normally.',
     variant: 'success',
   },
   restart: {
-    label: 'Connections drop',
-    hint: 'The proxy has to restart to pick up the new credential, so every connection through it is cut. Pages reload; uploads and calls do not.',
+    get label() { return t('Connections drop') },
+    get hint() { return t('The proxy has to restart to pick up the new credential, so every connection through it is cut. Pages reload; uploads and calls do not.') },
     variant: 'warning',
   },
   disruptive: {
-    label: 'An address stops working',
+    get label() { return t('An address stops working') },
     hint: 'A published name will stop answering. Anyone with it open loses it, and reloading will not help.',
     variant: 'destructive',
   },
 }
 
 export function ImpactBadge({ impact, className }: { impact: Impact; className?: string }) {
+  useLocale()
   return <Badge impact={impact} labels={IMPACT} className={className} />
 }
 
@@ -61,5 +63,6 @@ export function impactHint(impact: Impact): string {
 }
 
 export function PlanDiff({ plan }: { plan: PlanCore }) {
+  useLocale()
   return <Diff plan={plan} labels={IMPACT} />
 }

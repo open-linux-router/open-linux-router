@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/lib/i18n'
 import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -44,9 +45,9 @@ const PROVIDERS: {
   token?: string
 }[] = [
   { value: 'cloudflare', label: 'Cloudflare', token: 'API token' },
-  { value: 'alidns', label: 'Alibaba Cloud DNS', keyId: 'AccessKey ID', token: 'AccessKey Secret' },
-  { value: 'tencentcloud', label: 'Tencent Cloud DNSPod', keyId: 'SecretId', token: 'SecretKey' },
-  { value: 'callback', label: 'Another service, by URL' },
+  { value: 'alidns', get label() { return t('Alibaba Cloud DNS') }, keyId: 'AccessKey ID', token: 'AccessKey Secret' },
+  { value: 'tencentcloud', get label() { return t('Tencent Cloud DNSPod') }, keyId: 'SecretId', token: 'SecretKey' },
+  { value: 'callback', get label() { return t('Another service, by URL') } },
 ]
 
 export function providerLabel(name: string) {
@@ -94,6 +95,7 @@ export function RecordDialog({
   onSubmit: (record: DdnsRecord) => void
   onRemove?: () => void
 }) {
+  useLocale()
   const start = initial ?? { ...EMPTY, interface: uplink }
   const [draft, setDraft] = useState<DdnsRecord>(start)
   const editing = initial !== undefined
@@ -148,14 +150,12 @@ export function RecordDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{editing ? `Edit ${initial.name}` : 'Keep a name current'}</DialogTitle>
-          <DialogDescription>
-            Update a public DNS name when this router&rsquo;s address changes.
-          </DialogDescription>
+          <DialogDescription> {t('Update a public DNS name when this router&rsquo;s address changes.')} </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="ddns-name">Name</Label>
+            <Label htmlFor="ddns-name">{t('Name')}</Label>
             <Input
               id="ddns-name"
               value={draft.name}
@@ -165,14 +165,12 @@ export function RecordDialog({
               onChange={(e) => set('name', e.target.value)}
             />
             {editing && (
-              <p className="text-xs text-muted-foreground">
-                To use a different name, remove this one and add it again.
-              </p>
+              <p className="text-xs text-muted-foreground"> {t('To use a different name, remove this one and add it again.')} </p>
             )}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="ddns-provider">Where the name is hosted</Label>
+            <Label htmlFor="ddns-provider">{t('Where the name is hosted')}</Label>
             <Select
               value={draft.provider}
               onValueChange={(v) => v && pickProvider(v as DNSProvider)}
@@ -199,7 +197,7 @@ export function RecordDialog({
             <SecretField
               key="callback"
               id="ddns-callback"
-              label="Update URL"
+              label={t('Update URL')}
               value={draft.callback_url}
               placeholder="https://www.duckdns.org/update?domains=home&token=…&ip=#{ip}"
               hint={
@@ -237,7 +235,7 @@ export function RecordDialog({
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="ddns-source">Where the address comes from</Label>
+            <Label htmlFor="ddns-source">{t('Where the address comes from')}</Label>
             <Select
               value={draft.source || null}
               onValueChange={(v) =>
@@ -252,15 +250,15 @@ export function RecordDialog({
               }
             >
               <SelectTrigger id="ddns-source">
-                <SelectValue placeholder="Choose">
+                <SelectValue placeholder={t('Choose')}>
                   {(v: string) =>
-                    v === 'reflector' ? 'Ask a website what it sees' : 'This router’s interface'
+                    v === 'reflector' ? t('Ask a website what it sees') : 'This router’s interface'
                   }
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="interface">This router&rsquo;s interface</SelectItem>
-                <SelectItem value="reflector">Ask a website what it sees</SelectItem>
+                <SelectItem value="interface">{t('This router&rsquo;s interface')}</SelectItem>
+                <SelectItem value="reflector">{t('Ask a website what it sees')}</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
@@ -274,7 +272,7 @@ export function RecordDialog({
 
           {reflector && (
             <div className="space-y-1.5">
-              <Label htmlFor="ddns-reflector">Website to ask</Label>
+              <Label htmlFor="ddns-reflector">{t('Website to ask')}</Label>
               <Input
                 id="ddns-reflector"
                 value={draft.reflector_url ?? ''}
@@ -297,7 +295,7 @@ export function RecordDialog({
             />
           )}
 
-          <Disclosure summary="More options">
+          <Disclosure summary={t('More options')}>
             <div className="space-y-4">
               {reflector && (
                 <InterfacePicker
@@ -308,11 +306,11 @@ export function RecordDialog({
                 />
               )}
               <div className="space-y-1.5">
-                <Label htmlFor="ddns-zone">Zone</Label>
+                <Label htmlFor="ddns-zone">{t('Zone')}</Label>
                 <Input
                   id="ddns-zone"
                   value={draft.zone ?? ''}
-                  placeholder="Worked out from the name"
+                  placeholder={t('Worked out from the name')}
                   autoComplete="off"
                   onChange={(e) => set('zone', e.target.value.trim() || undefined)}
                 />
@@ -323,7 +321,7 @@ export function RecordDialog({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="ddns-interval">Check every</Label>
+                  <Label htmlFor="ddns-interval">{t('Check every')}</Label>
                   <Input
                     id="ddns-interval"
                     value={draft.interval ?? ''}
@@ -333,7 +331,7 @@ export function RecordDialog({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="ddns-ttl">TTL (seconds)</Label>
+                  <Label htmlFor="ddns-ttl">{t('TTL (seconds)')}</Label>
                   <Input
                     id="ddns-ttl"
                     inputMode="numeric"
@@ -352,16 +350,12 @@ export function RecordDialog({
         <DialogFooter className="sm:justify-between">
           {onRemove ? (
             <Button variant="ghost" className="text-destructive" onClick={onRemove}>
-              <Trash2 />
-              Stop keeping it current
-            </Button>
+              <Trash2 />{t('Stop keeping it current')}</Button>
           ) : (
             <span />
           )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
             <Button
               disabled={!complete}
               onClick={() => {
@@ -369,7 +363,7 @@ export function RecordDialog({
                 onOpenChange(false)
               }}
             >
-              {editing ? 'Save' : 'Add'}
+              {editing ? t('Save') : t('Add')}
             </Button>
           </div>
         </DialogFooter>
@@ -402,6 +396,7 @@ function SecretField({
   hint: React.ReactNode
   onChange: (value: string | undefined) => void
 }) {
+  useLocale()
   const [saved] = useState(value === MASK)
   const shown = value === MASK ? '' : (value ?? '')
 
@@ -432,6 +427,7 @@ function InterfacePicker({
   optional?: boolean
   onChange: (value: string | undefined) => void
 }) {
+  useLocale()
   // A saved interface that is no longer adopted still has to show, or the
   // select would render blank and the operator could not see what is wrong.
   const options = value && !interfaces.includes(value) ? [value, ...interfaces] : interfaces
@@ -447,12 +443,12 @@ function InterfacePicker({
         onValueChange={(v) => onChange(!v || v === ANY ? undefined : v)}
       >
         <SelectTrigger id="ddns-interface">
-          <SelectValue placeholder="Choose an interface">
-            {(v: string) => (v === ANY ? 'Whichever way out is in use' : v)}
+          <SelectValue placeholder={t('Choose an interface')}>
+            {(v: string) => (v === ANY ? t('Whichever way out is in use') : v)}
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
-          {optional && <SelectItem value={ANY}>Whichever way out is in use</SelectItem>}
+          {optional && <SelectItem value={ANY}>{t('Whichever way out is in use')}</SelectItem>}
           {options.map((name) => (
             <SelectItem key={name} value={name}>
               {name}
