@@ -343,7 +343,7 @@ live beside the switches that change them.
 Below them are two stacks, IPv4 and IPv6, each naming the same six stages in the
 order traffic takes them: Upstream (address, next hop, and for IPv6 whether it
 is native, delegated or tunnelled), LAN (the subnets and how much of the pool is
-in use), the clients stage, Forwarding (whether the kernel forwards this family),
+in use), the clients stage, Forwarding (whether this family's traffic gets out),
 Exit (direct, or which exit carries it — and for IPv6 whether an exit drops it,
 since there is no NAT to translate it) and DNS (the resolvers, and for IPv6
 whether IPv6 name resolution is enabled). The reading order is shared; the card
@@ -408,7 +408,9 @@ IPv6 DNS card on Gateway reads IPv6 disabled, not AAAA filtered: dropping AAAA
 records is one way to reach that state, and the mechanism only answers the
 question for a reader who already knows the record type. The setting's own page
 may keep the mechanism's name, because there the operator is choosing it; a
-status that reports the outcome names the outcome.
+status that reports the outcome names the outcome. The Forwarding card follows
+the same rule: devices reach the internet or they do not, and which sysctl was
+written is not something the operator can see or act on.
 
 Avoid repeating the title in a description, stating obvious click behavior or
 adding a generic next-step sentence. Use one short sentence when an explanation

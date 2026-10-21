@@ -272,21 +272,27 @@ function ForwardingStage({ family, id }: StageProps) {
     detail = <Skeleton className="h-4 w-24" />
   } else if (family === 'v4') {
     health = gateway.data.enabled ? { label: t('On'), tone: 'good' } : { label: t('Off'), tone: 'caution' }
+    // The detail says what the switch does for the network, not where the
+    // value was written. "IPv4 forwarding is written" reports the sysctl, which
+    // the operator cannot act on and cannot see: on is that devices get out,
+    // off is that none do.
     detail = gateway.data.enabled
-      ? t('IPv4 forwarding is written')
+      ? t('Devices behind this router reach the internet')
       : t('No device behind this router reaches the internet')
   } else if (!gateway.data.enabled) {
     health = { label: t('Off'), tone: 'caution' }
     detail = t('Nothing is applied while gateway routing is off')
   } else if (gateway.data.ipv6_forwarding === true) {
     health = { label: t('On'), tone: 'good' }
-    detail = t('IPv6 forwarding is written')
+    detail = t('IPv6 from behind this router goes out')
   } else if (gateway.data.ipv6_forwarding === false) {
     health = { label: t('Off'), tone: 'caution' }
     detail = t('IPv6 stops at this router')
   } else {
+    // Unmanaged forwarding is not an answer about traffic at all, so the card
+    // says who decides rather than borrowing a state it cannot observe.
     health = { label: t('Not managed'), tone: 'quiet' }
-    detail = t('This machine’s own setting is left alone')
+    detail = t('The system decides whether IPv6 is forwarded')
   }
 
   return <StageCard id={id} title={t('Forwarding')} icon={ArrowRightLeft} to="/gateway/interfaces#forwarding" health={health} detail={detail} />
