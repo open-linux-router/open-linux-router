@@ -63,6 +63,15 @@ const scaledWidth = (base: number) => ['interpolate', ['linear'], ['zoom'], 1, b
 // short arc carries the same proportion of light as a long one.
 const glowTail = 4
 const glowSeconds = 8000
+// A snapshot lands every two seconds, so locations enter and leave in batches.
+// Staggering those fades across the gap keeps a batch from stepping the whole
+// map at one instant. This is a rendering choice, not a claim about the
+// connections, and it is bounded so even a large batch settles before the next
+// snapshot. One changed location still moves immediately.
+const staggerGap = (count: number) => count < 2 ? 0 : Math.min(200, 1400 / (count - 1))
+// Even spacing beats random offsets: a batch where every hash clustered near
+// zero would still land at once. The hash only decides who goes first.
+const staggerOrder = (keys: string[]) => keys.slice().sort((a, b) => hashOf(a) - hashOf(b))
 // Zoom may only appear as the input of a top-level step/interpolate expression.
 // Layout expressions are evaluated at integer zooms; use integer thresholds
 // for regions and cities so names don't wait for the final zoom level.
@@ -82,6 +91,13 @@ function arc(from: Position, to: Position, offset: number): Position[] {
     const t = i / 48
     return [from[0] + (end - from[0]) * t, Math.max(-78, Math.min(78, from[1] + (to[1] - from[1]) * t + Math.sin(Math.PI * t) * bend))]
   })
+}
+// A stable 0–1 value per location, used for the highlight's starting phase and
+// for its place in a staggered batch.
+function hashOf(key: string) {
+  let hash = 0
+  for (const char of key) hash = (hash * 131 + char.charCodeAt(0)) >>> 0
+  return hash / 4294967296
 }
 // A window of the arc around the travelling head, in travel order so the head
 // always comes last. Its endpoints are interpolated, keeping the window the
@@ -225,8 +241,11 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     if (!instance || !ready) return
     const set = (id: string, features: GeoJSON.Feature[]) => (instance.getSource(id) as GeoJSONSource).setData({ type: 'FeatureCollection', features })
     // Keep identity and phase independent of snapshot order and rank changes.
-    const visible = new Map<string, { target: FlowTarget; opacity: number; glide: number }>()
+    const visible = new Map<string, { target: FlowTarget; opacity: number; glide: number; jitter: number; wait: number; leaving: boolean }>()
     const reduced = matchMedia('(prefers-reduced-motion: reduce)')
+    // Diffing against the previous snapshot, once per snapshot, is what lets a
+    // batch share one stagger window. null forces the first frame to diff.
+    let generation: Map<string, FlowTarget> | null = null
     let previous = performance.now(), lastDraw = 0, frame = 0
     const animate = (now: number) => {
       frame = requestAnimationFrame(animate)
@@ -236,20 +255,36 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       previous = now
       lastDraw = now
       const blend = reduced.matches ? 1 : 1 - Math.exp(-elapsed / 450)
-      for (const [key, target] of targets.current) {
-        const existing = visible.get(key)
-        if (existing) existing.target = target
-        else {
-          // One hash: the highlights should not all leave the router together.
-          let hash = 0
-          for (const char of key) hash = (hash * 131 + char.charCodeAt(0)) >>> 0
-          visible.set(key, { target, opacity: 0, glide: hash / 4294967296 })
+      if (targets.current !== generation) {
+        const next = targets.current
+        const entering: string[] = [], leaving: string[] = []
+        for (const [key, visual] of visible) {
+          const target = next.get(key)
+          if (target) { visual.target = target; continue }
+          if (!visual.leaving) leaving.push(key)
         }
+        for (const key of next.keys()) if (!visible.has(key)) entering.push(key)
+        const enterGap = reduced.matches ? 0 : staggerGap(entering.length)
+        const leaveGap = reduced.matches ? 0 : staggerGap(leaving.length)
+        staggerOrder(entering).forEach((key, index) => {
+          const jitter = hashOf(key)
+          visible.set(key, { target: next.get(key)!, opacity: 0, glide: jitter, jitter, wait: index * enterGap, leaving: false })
+        })
+        staggerOrder(leaving).forEach((key, index) => {
+          const visual = visible.get(key)!
+          visual.leaving = true
+          visual.wait = index * leaveGap
+        })
+        generation = next
       }
       const lines: GeoJSON.Feature[] = [], glows: GeoJSON.Feature[] = []
       for (const [key, visual] of visible) {
         const active = targets.current.has(key)
-        visual.opacity += ((active ? 1 : 0) - visual.opacity) * blend
+        // A location that comes back mid-fade resumes immediately instead of
+        // waiting out the delay it was given on the way out.
+        if (active && visual.leaving) { visual.leaving = false; visual.wait = 0 }
+        if (visual.wait > 0) visual.wait = Math.max(0, visual.wait - elapsed)
+        else visual.opacity += ((active ? 1 : 0) - visual.opacity) * blend
         if (!active && visual.opacity < 0.01) { visible.delete(key); continue }
         const path = visual.target
         // Presence is the only thing that changes a line. It fades in when its

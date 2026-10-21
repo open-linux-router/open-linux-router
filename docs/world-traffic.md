@@ -82,6 +82,11 @@ soft streak where a bead used to be a speck.
 Reduced motion drops the highlight and interpolation. The UI polls every two
 seconds and keeps each IP's highlight phase independent of ranking. Paths fade
 in and out with a 450ms exponential time constant (about two seconds to settle).
+A snapshot can add or drop several locations at once, so those fades start 200ms
+apart — capped at 1.4 seconds across a batch, ordered by a stable hash — and the
+change reads as a sequence instead of a step. The staggering is presentation
+only: a location is in or out of the window at the moment its snapshot says so,
+fades are the same length either way, and a lone change still starts at once.
 Visual updates render at up to 30fps, and hidden tabs pause them. The highlight
 stays within amber and warm light, so amber is the only hue the map adds. There
 are no endpoint dots: the arcs carry the whole reading, and the hub is where
