@@ -300,13 +300,18 @@ scope, replacement behavior and the priority enforcement caveat beside the
 explicit apply actions; selected values are batch choices, not observed shared
 settings. List member devices below the summary.
 
-Gateway groups physical interface cards inside an Interfaces panel, with observed
-default gateways and host DNS on the right at desktop widths. Keep all physical
-interfaces in one row and show current rates without history charts. Keep IPv4 and IPv6
-forwarding controls and the routing details link in that summary; stack it below
-interfaces on smaller screens. IPv4 also controls Gateway routing and leaves
-system forwarding unchanged when off; IPv6 intent is unapplied when routing is
-off. Usage has no separate page; traffic counting lives in routing details.
+Gateway opens with the shared status strip, whose switch is the module itself:
+routing and NAT for the networks behind this router. Say what turning it off
+also closes (port forwards) before the click, and link to the forwarding
+settings rather than repeating their switches. Below it, physical interface
+cards carry name, role, link state, address and current rates without history
+charts; the dialog owns link speed, MAC, addresses and totals. Way out states the
+observed IPv4/IPv6 default routes and the resolvers this router uses, read-only.
+Services states DHCP and DNS with their state and their counters (active leases,
+queries since restart). The IPv4 and IPv6 forwarding switches live at
+interfaces#forwarding; IPv4 also controls Gateway routing and leaves system
+forwarding unchanged when off; IPv6 intent is unapplied when routing is off.
+Usage has no separate page; traffic counting lives in routing details.
 
 Open newly navigated pages at the top so their title and primary information are
 visible. Preserve section targeting for hash links and scroll for query-only changes.

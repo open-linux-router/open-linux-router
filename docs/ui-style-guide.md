@@ -159,10 +159,18 @@ clear of both bars and scroll the navigation locally on narrow screens. The
 page title is accessible but visually hidden; avoid a repeated introductory
 heading above the step navigation.
 
-Gateway's Interfaces panel keeps physical interface cards in one horizontal row,
-with a right-side routing summary from 1024px. Scroll the interface row locally
-when needed; below desktop, stack the summary beneath it. Interface cards show
-current rates without traffic charts, with wrapping addresses and 16px padding.
+Gateway lands on the shared status strip. Its one switch is the module itself —
+routing and NAT for the networks behind this router — and the note under it says
+what turning it off also closes. The Interfaces panel follows, with physical
+cards wrapping three across from 1024px, two from 640px and one on phones. There
+is no right-side summary column, because the facts it held are panels of their
+own below: Way out (observed IPv4/IPv6 default routes and the resolvers this
+router uses) and Services (DHCP and DNS with their state and counters).
+Interface cards show name, role, link state, address and current rates without
+traffic charts, with wrapping addresses and 16px padding; link speed, MAC and
+totals stay in the card's dialog. IPv4 and IPv6 forwarding are not switches on
+this page: they belong with the routing settings at `interfaces#forwarding`,
+where their effect can be explained, and the Interfaces heading links there.
 
 The shell has a 1280px maximum width, a 64px header and horizontal gutters of
 16px on phones, 24px from 640px, and 32px from 1280px. Content starts with

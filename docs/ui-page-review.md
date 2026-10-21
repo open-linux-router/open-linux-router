@@ -12,7 +12,7 @@ OLR capabilities, and a calm, consistent interface. This record accompanies the
 | Group | Preserve member lists and batch controls; remove repeated MAC/direct-membership prose; keep overwrite and non-inheritance consequences. |
 | Device/group QoS | State that configuration is saved but not enforced; keep forms and shared group-cap semantics. |
 | Inspection | Keep the existing panel and results; confirm privacy and CA consequences before starting; disclose lengthy preparation/scope and viewer details; retain session stop time and diagnostics. |
-| Gateway | Preserve cards, charts and section structure; shared headings remove generic introductions. |
+| Gateway | Shared status strip first, with the module switch, drift and unreadable-kernel states; interface cards in a wrapping grid with role, address and rates; Way out and Services panels; forwarding switches moved to Interfaces & routing. |
 | Interfaces/routing and interface detail | Keep controls and all observed fields; shorten management and routing explanations without moving controls. |
 | Exits | Preserve list/edit forms; distinguish blocking, unknown and failed checks; remove repeated failure prose. |
 | Usage | Preserve measurement controls and counters; show a uniquely matched device name with its address; download precedes upload; disclose accounting limitations. |
@@ -62,3 +62,29 @@ Existing device imagery and useful monitoring/data space are preserved.
 Validated with Node 24 web lint/build/tests and Go 1.27 Linux vet/tests. Lint has
 existing warnings; production build retains the existing bundle-size warning.
 The environment lacks make, so the Go commands behind make check were run directly.
+
+## Gateway landing review — 2026-10-21
+
+The page was the one section landing that did not start with the shared status
+strip, and it read as unfinished for structural reasons rather than colour: two
+levels of border around the interface cards, a right-hand column 120px taller
+than what it summarised (leaving an empty band inside the panel), a second set
+of section headings indented 68px behind the first, 660px service cards holding
+200px of content, three wordings of "Details", and forwarding switches beside
+live data with their consequences in a tooltip.
+
+Corrections: the strip owns the module switch and says that turning it off also
+closes forwarded ports; IPv4/IPv6 forwarding moved to Interfaces & routing,
+where their hints have room. Interface cards lost the 9px role text and the two
+3px squares drawn on the shared glyph — the role is now a badge beside the name,
+and the card carries name, state, address and rates only. The interface grid
+wraps instead of scrolling locally, so a fourth NIC is not hidden at the edge.
+Way out and Services are panels of their own, so every block on the page is a
+Card with the same title contract, and the DHCP/DNS rows are links with their
+state on the right.
+
+Validated against fixture data at 1440×1000, 1024×1000, 768×1200 and 390×1200
+in both themes, plus the off, drifted, unreadable-kernel and unavailable-service
+states and the interface dialog. No browser exceptions, page-wide overflow or
+horizontal scroll at 375px. Hash targets `#interfaces`, `#dhcp` and `#dns`
+still scroll. Mocked browser checks validate presentation, not live networking.

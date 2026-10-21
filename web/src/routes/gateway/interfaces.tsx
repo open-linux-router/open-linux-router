@@ -191,8 +191,9 @@ export function GatewayInterfacesPage() {
             <CardHeader>
               <CardTitle>Gateway routing</CardTitle>
               <CardDescription>
-                Apply Gateway routing rules and enable IPv4 forwarding. When off, olr does not
-                apply routing or change the machine&rsquo;s forwarding setting.
+                Apply Gateway routing rules and enable IPv4 forwarding. Turning it off applies no
+                routes and closes every port forward; the machine&rsquo;s own forwarding setting is
+                left as it is.
               </CardDescription>
               <CardAction>
                 <Switch aria-label="Apply gateway routing and IPv4 forwarding" checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change(gatewayChange.settings({ enabled }))} />
