@@ -346,19 +346,18 @@ is native, delegated or tunnelled), LAN (the subnets and how much of the pool is
 in use), the clients stage, Forwarding (whether the kernel forwards this family),
 Exit (direct, or which exit carries it — and for IPv6 whether an exit drops it,
 since there is no NAT to translate it) and DNS (the resolvers, and for IPv6
-whether AAAA answers are filtered). The reading order is shared; the card labels
-are not required to match. A card is named for what an operator came to change:
-DHCP on IPv4, because that is the module's name and the word they arrive with;
-on IPv6, the protocol that is running — SLAAC, DHCPv6, or both when networks
-differ. Those are the operator's own words, so the card does not coin a name for
-the family. Each
-card states its stage's answer and links to the one page that changes it; a
-missing stage is named in its card rather than hidden. The stacks are a view cut
-across the modules and hold no configuration of their own, so the same module
-appearing under both families is one object seen twice. Routing's on/off state,
-drift and every routing and forwarding switch remain at interfaces#forwarding;
-Overview reports a gateway fault. Usage has no separate page; traffic counting
-lives in routing details.
+whether IPv6 name resolution is enabled). The reading order is shared; the card
+labels are not required to match. A card is named for what an operator came to
+change: DHCP on IPv4, because that is the module's name and the word they arrive
+with; on IPv6, the protocol that is running — SLAAC, DHCPv6, or both when
+networks differ. Those are the operator's own words, so the card does not coin a
+name for the family. Each card states its stage's answer and links to the one
+page that changes it; a missing stage is named in its card rather than hidden.
+The stacks are a view cut across the modules and hold no configuration of their
+own, so the same module appearing under both families is one object seen twice.
+Routing's on/off state, drift and every routing and forwarding switch remain at
+interfaces#forwarding; Overview reports a gateway fault. Usage has no separate
+page; traffic counting lives in routing details.
 
 Open newly navigated pages at the top so their title and primary information are
 visible. Preserve section targeting for hash links and scroll for query-only changes.
@@ -403,6 +402,13 @@ Use familiar tool names and concise task labels. Keep distinctions in the name
 when they help selection: Internet speed test and LAN link test identify different
 measurement boundaries. Preserve established names such as Ping, NAT test and
 Traceroute. Do not invent broad category labels for a single item.
+
+Name a state for what it means for the user, not for how it is carried out. The
+IPv6 DNS card on Gateway reads IPv6 disabled, not AAAA filtered: dropping AAAA
+records is one way to reach that state, and the mechanism only answers the
+question for a reader who already knows the record type. The setting's own page
+may keep the mechanism's name, because there the operator is choosing it; a
+status that reports the outcome names the outcome.
 
 Avoid repeating the title in a description, stating obvious click behavior or
 adding a generic next-step sentence. Use one short sentence when an explanation

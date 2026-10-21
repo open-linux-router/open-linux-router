@@ -368,6 +368,13 @@ function DnsStage({ family, id }: StageProps) {
     // The AAAA switch leads the DNS page, so the IPv6 card opens the section
     // rather than the upstream page it used to point at: the question is DNS's
     // answer for this family, not which server gives it.
+    //
+    // The label states the intent — IPv6 name resolution is enabled or not —
+    // rather than the mechanism that carries it out. `filter_aaaa` is one way
+    // to turn it off, and a card that reports "AAAA filtered" asks the
+    // operator to know the record type and to translate the mechanism back
+    // into the thing they set before they can answer "is IPv6 off?". The
+    // config has one switch, so the card says what that switch means.
     if (dnsConfig.isError) {
       health = { label: t('Unavailable'), tone: 'caution' }
       detail = t('DNS settings unavailable')
@@ -375,10 +382,10 @@ function DnsStage({ family, id }: StageProps) {
       health = { label: t('Reading…'), tone: 'quiet' }
       detail = <Skeleton className="h-4 w-28" />
     } else if (dnsConfig.data.filter_aaaa) {
-      health = { label: t('AAAA filtered'), tone: 'caution' }
+      health = { label: t('IPv6 disabled'), tone: 'caution' }
       detail = t('IPv6 lookups return nothing')
     } else {
-      health = { label: t('AAAA answered'), tone: 'good' }
+      health = { label: t('IPv6 enabled'), tone: 'good' }
       detail = t('Clients can resolve IPv6')
     }
   }
