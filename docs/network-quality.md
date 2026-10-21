@@ -384,7 +384,11 @@ results, then explicitly normalize the remaining weights within categories and
 across categories. Show effective weights and point contributions in details.
 An unmeasured Wi-Fi category remains a dash while the measured categories share
 100 points. A ready total means the current assessment is scored, not that the
-entire planned test catalog has been implemented or measured.
+entire planned test catalog has been implemented or measured. The UI groups the
+same reference score into presentation labels — Excellent 90–100, Good 75–89,
+Fair 60–74 and Poor below 60 — without changing normalization. Missing,
+cancelled, timed-out and expired results show a dash and no label rather than a
+number.
 
 For an alternative-path maximum, choose the higher normalized measured score
 and retain its path evidence. Never treat an unknown alternative as a confirmed

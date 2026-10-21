@@ -63,10 +63,14 @@ hidden page title. Detail and operation pages keep their identifying titles.
   categories and components. Missing tests never reduce the score; measured
   failures still count. Show the measured scope, effective weights and earned
   contributions in details. Clicking Quality, its chart or
-  Test opens the fullscreen assessment view with run/cancel, an optional
-  bandwidth test, freshness, category contributions and raw service/NAT
-  evidence. The view has its own /quality address. Keep bandwidth cost and
-  router-default-route scope beside the run action. Snapshot reads never start
+  Test opens the fullscreen assessment view. It leads with the overall score and
+  one display grade, then one row per category with score, bar and measured
+  scope; opening a row shows its point contribution and components. Unmeasured
+  categories are excluded from the total. Raw service and NAT evidence and the
+  scoring explanation stay in collapsed Measurement details. Keep run/cancel,
+  the optional bandwidth test, freshness and the bandwidth test's data cost at
+  the result panel, and keep router-default-route scope beside them.
+  The view has its own /quality address. Snapshot reads never start
   tests. Clicking the Latency title opens
   latency settings, without a separate plus button. The dialog starts with an
   Internet target selector: a named provider or “Choose fastest once”. The
@@ -112,7 +116,12 @@ hidden page title. Detail and operation pages keep their identifying titles.
 
 Quality assessments run on demand from the fullscreen assessment view opened by
 the card heading or chart. Measured scores do not expire; results remain until
-another assessment and survive daemon and router restarts.
+another assessment and survive daemon and router restarts. The result view
+labels the same reference score Excellent 90–100, Good 75–89, Fair 60–74 or Poor
+below 60; the label is presentation, not another calculation. Not tested,
+cancelled, timed-out and unscored states replace the number with a dash, and a
+running assessment shows progress there instead; each carries one sentence
+saying what happened and what to do next. Missing data is never shown as zero.
 
 World traffic combines IPs at the same remote coordinates into one map connection.
 Line width represents that connection's combined upload and download relative

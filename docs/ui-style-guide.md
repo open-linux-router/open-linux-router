@@ -376,10 +376,15 @@ axes have points; missing/stale axes show dashes and prevent a filled polygon,
 except Wireless, which defaults to 80 for display. Omit the title-right total
 and below-plot scope caption; retain Test aligned right. The heading, plot and Test action open the shared
 fullscreen assessment view: the content scrolls in a centred reading column, with
-one floating close control at top right and no other chrome. Category
-disclosures show score, measured scope,
-normalized weight and point contributions, with raw evidence below. Keep long
-errors and addresses wrapping inside the view.
+one floating close control at top right and no other chrome. Lead that view with
+one result panel: a score ring whose number and colour follow the overall score,
+the display grade beside it, and the run action in the panel footer next to the
+bandwidth switch and its duration and data hint. One category panel follows,
+each row showing the 0–100 score, a score bar and measured scope; opening a row
+shows its point contribution and components. Reference transfer is two muted
+value tiles. Scoring formulas, per-service samples and NAT observations sit in
+collapsed Measurement details disclosures, so raw evidence never pushes the
+result below the fold. Keep long errors and addresses wrapping inside the view.
 Accessible chart descriptions identify partial and missing measurements.
 Uptime is
 the first plain disclosure row in Status, above system health. Both rows use
