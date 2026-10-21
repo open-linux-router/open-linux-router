@@ -38,17 +38,19 @@ application shell. Match shell width/gutters, wrap actions on phones, and retain
 visible errors and remaining confirmation time on every page and after reload.
 
 World traffic is the one map where hue belongs to data rather than to status.
-Each location gets one translucent amber arc, and the fullscreen view adds one
-neutral moving dot. Amber sits outside the country palette, so traffic reads as
-an overlay on geography; the arc fades in at the router, its width steps with
-that location's share of the busiest flow (four whole-pixel levels at one
-shared opacity), and a blurred halo underneath
-accumulates where arcs bunch up so busy junctions read as light rather than as
-spaghetti. The dot travels out and back in four seconds each way: motion, not
-colour, carries the direction, and the neutral particle leaves amber as the
-map's only hue. There
+Every location gets one translucent amber arc of the same 2px weight, and every
+arc breathes on its own clock, so the overlay keeps moving without any two
+locations pulsing together. Amber sits outside the country palette, so traffic
+reads as an overlay on geography; the arc fades in at the router, and a blurred
+halo underneath accumulates where arcs bunch up so busy junctions read as light
+rather than as spaghetti. Volume travels as tempo, not thickness: a busier
+location breathes faster (5.6s down to 2.4s) and the breath dips to a quiet
+trough, so a fade reads as the arc arriving or leaving. One soft warm highlight
+rides each arc out and back, four seconds each way, drawn as a short blurred
+stroke with a feathered tail and faded ends: motion, not colour, carries the
+direction, and the pale warm light keeps amber as the map's only hue. There
 are no endpoint dots — nearby destinations would turn them into a cluster of
-specks at the hub, and the converging arcs already mark both ends. The halo is
+specks at the hub, and the converging arcs already mark both ends. The glow is
 a map effect only; it does not introduce glow elsewhere.
 
 Use semantic Tailwind tokens from `web/src/index.css`, never page-local gray or
@@ -398,19 +400,20 @@ closes it and restores focus to the preview. Both fullscreen views are page
 states with addresses of their own, /map and /quality, so a shared link or a
 bookmark lands on the open view; Back and the close control return to Overview.
 On phones each card uses the full column. Its local MapLibre map draws one amber
-arc per remote location, with width relative to the busiest plotted location in
-four steps and one shared opacity; the arcs thin as the map zooms in, so a regional view is
-not buried under globe-width ribbons. The card preview shows the arcs alone, without endpoint dots or
-particles: at thumbnail size any dot is a speck, and nearby destinations turn a
-cluster of them into noise. The fullscreen map animates neutral particles that
-indicate observed traffic direction and stop for reduced motion. Keep particle
-phases stable across ranking updates; ease line widths and fade
-arriving/departing arcs with a 450ms exponential time constant. Fade particles
-at path ends. Reduced motion disables both particles and interpolation; hidden
-tabs pause updates. Arcs use valid returned coordinates without country-center
-fallbacks; omit locations without coordinates. Draw flows between different
-locations even within one country. The details dialog supplies city/country,
-rates and ip.sb attribution without crowding the map.
+arc per remote location at a single 2px weight, breathing at a tempo set by that
+location's share of the busiest plotted flow; the arcs thin as the map zooms in,
+so a regional view is not buried under globe-width ribbons. Card preview and
+fullscreen map show the same highlight: a short blurred warm stroke that travels
+out and back along each arc, four seconds each way, with a feathered tail and
+faded ends, so the light never lands at the hub or on a destination. It carries
+direction and stops for reduced motion. Keep breath and highlight phases stable
+across ranking updates; ease the breath tempo with a 350ms exponential time
+constant and fade arriving/departing arcs with a 450ms one. Reduced motion
+freezes the breath at full strength and drops the highlight and interpolation;
+hidden tabs pause updates. Arcs use valid returned coordinates without
+country-center fallbacks; omit locations without coordinates. Draw flows between
+different locations even within one country. The details dialog supplies
+city/country, rates and ip.sb attribution without crowding the map.
 
 Overview group headers navigate directly to group details at every screen size;
 do not expand or focus named groups in place.

@@ -57,30 +57,34 @@ the separate nftables interface/device totals.
 
 Blue indicates download and teal upload in the details list. The map itself
 uses one amber hue for every arc, deliberately outside the teal-green-blue
-country palette, so colour marks traffic as a category and width alone carries
-its size; the moving particle is neutral, and its out-and-back motion
-shows both directions without spending another colour. A blurred amber halo
+country palette, so colour marks traffic as a category and tempo carries its
+size: every arc is 2px, and a busier location breathes faster. Breathing is a
+long fade to a quiet trough, a short hold and a shorter return, with zero
+endpoint slopes, matching the device activity block's shape; the trough is deep
+enough that a dip reads as the arc arriving or leaving. A blurred amber halo
 sits under each arc; because arcs composite per feature, the halo accumulates
 where they bunch up — around the router and along busy corridors — and
-concentration reads as light. Width is relative to the busiest plotted
-location, not to an absolute rate, and it falls into four steps — at least half
-of the busiest flow, at least fifteen percent, at least three percent, and the
-rest. A few widths can be grouped at a glance; a continuous ramp reads as noise
-across dozens of arcs. Every arc shares one opacity, so width is the only
-variable the eye compares, and every arc stays translucent so overlaps still
-build up instead of replacing each other. Widths are whole screen pixels at the
-world view and thin with zoom, so a country-sized view is not covered by
-ribbons meant for a globe.
-Reduced motion disables particles and interpolation. The UI polls every two
-seconds, but keeps each IP's particle phase independent of ranking. Paths fade
-in and out with a 450ms exponential time constant (about two seconds to
-settle); widths ease toward new measured rates on the same timeline.
-Particles fade at path ends and render at up to 30fps. Hidden tabs
-pause visual updates. Particles use the neutral text scale, so amber is the
-only hue the map adds. There are no endpoint dots: lines carry the whole
-reading, and the hub is where they converge. The embedded card preview draws
-the arcs alone; particles belong to the fullscreen view, where a bead has
-room to read as a bead instead of a speck.
+concentration reads as light. Breath length is relative to the busiest plotted
+location, not to an absolute rate, and it maps logarithmically from 5.6 seconds
+for a quiet flow to 2.4 seconds at the peak, so modest flows still differ
+visibly. Every arc stays translucent so overlaps build up instead of replacing
+each other. Width is a single 2px at the world view and thins with zoom, so a
+country-sized view is not covered by ribbons meant for a globe.
+One soft highlight rides each arc: a short stretch of the path drawn as two
+blurred strokes with a tail-to-head gradient, pale warm light rather than white
+so it lifts the amber without becoming a second hue. It travels out and back in
+four seconds each way, fades near both ends and dims with its arc's breath, so
+the light never floats on a line that has already left. Both views draw it; the
+card preview has room for a soft streak where a bead used to be a speck.
+Reduced motion freezes the breath at full strength and drops the highlight and
+interpolation. The UI polls every two seconds, but keeps each IP's breath and
+highlight phases independent of ranking. Paths fade in and out with a 450ms
+exponential time constant (about two seconds to settle), and the breath tempo
+eases toward new measured rates with a 350ms one, preserving phase. Visual
+updates render at up to 30fps, and hidden tabs pause them. The highlight stays
+within amber and warm light, so amber is the only hue the map adds. There are
+no endpoint dots: the arcs carry the whole reading, and the hub is where they
+converge.
 This interpolation visualizes sampled activity; it is not a packet trace.
 Different returned locations within one country can have an arc; a location at
 the router's own coordinates gets no arc. The details dialog
