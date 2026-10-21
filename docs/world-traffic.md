@@ -65,7 +65,9 @@ where they bunch up — around the router and along busy corridors — and
 concentration reads as light. Width and opacity are relative to the busiest
 plotted location, not to an absolute rate: square-root scaling keeps a
 one-percent flow visible while the busiest one still stands out, and every arc
-stays translucent so overlaps build up instead of replacing each other.
+stays translucent so overlaps build up instead of replacing each other. Widths
+are screen pixels at the world view and thin with zoom, so a country-sized view
+is not covered by ribbons meant for a globe.
 Reduced motion disables particles and interpolation. The UI polls every two
 seconds, but keeps each IP's particle phase independent of ranking. Paths fade
 in and out with a 450ms exponential time constant (about two seconds to

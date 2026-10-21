@@ -36,6 +36,11 @@ const flowGradient = (dark: boolean, halo: boolean) => {
   const color = flowColor(dark, halo)
   return ['interpolate', ['linear'], ['line-progress'], 0, transparent(color), 0.15, color, 1, color] as ExpressionSpecification
 }
+// Widths are screen pixels at the world view. Zooming into a region thins the
+// arcs, so a country-sized view is not covered by ribbons meant for a globe.
+// Zoom may only be the input of a top-level interpolate, so the scale wraps
+// the data width instead of multiplying it.
+const scaledWidth = (base: ExpressionSpecification) => ['interpolate', ['linear'], ['zoom'], 1, base, 3, ['*', base, 0.9], 4.5, ['*', base, 0.7], 6, ['*', base, 0.55]] as ExpressionSpecification
 // Zoom may only appear as the input of a top-level step/interpolate expression.
 // Layout expressions are evaluated at integer zooms; use integer thresholds
 // for regions and cities so names don't wait for the final zoom level.
@@ -103,15 +108,15 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       // per feature, so where arcs bunch up — at the router, or along a busy
       // corridor — the halo accumulates into light and the ribbon deepens.
       instance.addLayer({ id: 'flow-halo', type: 'line', source: 'flows', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: {
-        'line-width': ['+', ['*', ['get', 'width'], 2.2], 4],
-        'line-blur': ['+', ['*', ['get', 'width'], 0.9], 2.5],
-        'line-opacity': ['*', ['*', ['get', 'strength'], ['get', 'opacity']], 0.38],
+        'line-width': scaledWidth(['+', ['*', ['get', 'width'], 1.8], 3]),
+        'line-blur': scaledWidth(['+', ['*', ['get', 'width'], 0.8], 2]),
+        'line-opacity': ['*', ['*', ['get', 'strength'], ['get', 'opacity']], 0.32],
       } })
       instance.addLayer({ id: 'flows', type: 'line', source: 'flows', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: {
-        'line-width': ['get', 'width'],
+        'line-width': scaledWidth(['get', 'width']),
         'line-opacity': ['*', ['get', 'strength'], ['get', 'opacity']],
       } })
-      instance.addLayer({ id: 'dots', type: 'circle', source: 'dots', paint: { 'circle-radius': ['+', 0.9, ['*', ['get', 'width'], 0.2]], 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'] } })
+      instance.addLayer({ id: 'dots', type: 'circle', source: 'dots', paint: { 'circle-radius': ['+', 0.85, ['*', ['get', 'width'], 0.18]], 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'] } })
       fit()
       setReady(true)
     })
@@ -162,8 +167,8 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       // still stands out. The square root keeps small flows visible instead
       // of collapsing them into hairlines beside a dominant one.
       const weight = Math.sqrt(total / Math.max(1, peak))
-      const width = 1.2 + 5.4 * weight
-      const strength = 0.3 + 0.42 * weight
+      const width = 0.9 + 3.1 * weight
+      const strength = 0.25 + 0.38 * weight
       const coordinates = arc(start, end, 0)
       next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: { width, strength }, geometry: { type: 'LineString', coordinates } }, coordinates })
     }

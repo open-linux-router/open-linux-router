@@ -387,7 +387,8 @@ states with addresses of their own, /map and /quality, so a shared link or a
 bookmark lands on the open view; Back and the close control return to Overview.
 On phones each card uses the full column. Its local MapLibre map draws one amber
 arc per remote location, with width and opacity relative to the busiest plotted
-location. The card preview shows the arcs alone, without endpoint dots or
+location; the arcs thin as the map zooms in, so a regional view is not buried
+under globe-width ribbons. The card preview shows the arcs alone, without endpoint dots or
 particles: at thumbnail size any dot is a speck, and nearby destinations turn a
 cluster of them into noise. The fullscreen map animates neutral particles that
 indicate observed traffic direction and stop for reduced motion. Keep particle
