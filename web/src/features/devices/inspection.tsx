@@ -68,11 +68,14 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <div>
           <Heading id="inspection-title">{t('Connections')}</Heading>
         </div>
+        {/* The label and switch come last, so their trailing edge is pinned to
+            the card's right edge: the setup gear and the pending note join them
+            from the left without moving the control the operator came for. */}
         <div className="flex flex-wrap items-center justify-end gap-3">
+          {status.isPending && <span className="text-xs text-muted-foreground">{t('Checking…')}</span>}
+          {mine && <Button variant="ghost" size="icon" aria-label={t('Inspection setup')} title={t('Inspection setup')} onClick={() => setShowSetup(true)}><Settings className="size-5" /></Button>}
           <label htmlFor="device-inspection" className="text-sm">{t('Inspection')}</label>
           <Switch id="device-inspection" checked={Boolean(mine)} disabled={start.isPending || stop.isPending || status.isPending || status.isError || Boolean(active && !mine) || (!mine && (ipv4.length === 0 || ipv4.length > 8))} onCheckedChange={(checked) => { if (checked) start.mutate(); else stop.mutate() }} />
-          {mine && <Button variant="ghost" size="icon" aria-label={t('Inspection setup')} title={t('Inspection setup')} onClick={() => setShowSetup(true)}><Settings className="size-5" /></Button>}
-          {status.isPending && <span className="text-xs text-muted-foreground">{t('Checking…')}</span>}
         </div>
       </div>
     </div>

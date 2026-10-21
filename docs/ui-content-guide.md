@@ -259,15 +259,17 @@ Preserve diagnostic scope: router-originated tests do not measure a downstream d
 The Inspection switch starts and stops the session directly, without confirmation.
 Explain credentials, certificate trust and cleanup in the setup guide.
 Device Connections keeps Inspection and its switch in the title bar, with a
-setup gear icon while active; keep the QR code and guide link inside the setup
+setup gear icon to the left of the label while active; keep the QR code and guide link inside the setup
 dialog. Show the mitmproxy viewer directly, without duplicate request lists, diagnostics or a
 disclosure. Certificate installation, trust and cleanup belong
 in the public five-step setup guide, with the certificate download at step two.
 Device DNS defaults to hidden records with an Inspection switch in its title bar.
 Enabling it polls and displays Time, Record, Type and right-aligned Answer values
-without a visible header row. An accessible search icon reveals a compact filter
-beside the switch in the title row; closing clears the filter. Both inspection
-panels keep their title bars fixed and expand content downward.
+without a visible header row. An accessible search icon sits to the left of
+Inspection and reveals a compact filter that opens to the left of itself;
+closing clears the filter. Both inspection panels keep their title bars fixed
+and expand content downward, and their Inspection label and switch keep their
+place at the trailing edge as those controls appear.
 DNS and Connections title bars show dividers only while their inspection is active.
 Do not promise encrypted DNS blocking beyond the supported protocol and port.
 

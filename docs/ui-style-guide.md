@@ -340,7 +340,8 @@ desktop identity/settings and traffic halves with a 64px gutter; stack them with
 32px spacing below desktop.
 Never style a pending or failed read as a disabled service.
 Active device inspection displays the embedded mitmproxy viewer directly below
-the Connections divider. Keep its setup gear icon beside the title-bar switch;
+the Connections divider. Keep its setup gear icon to the left of the title-bar
+Inspection label;
 the QR code and setup guide link belong in the setup dialog, not in the title bar.
 DNS and Connections use matching, vertically centered 72px title bars whose
 height stays fixed during inspection. Content expands below the title bar,
@@ -348,9 +349,11 @@ with a divider only while active; disable scroll anchoring on both panels.
 Reserve the document scrollbar gutter to prevent horizontal movement.
 DNS inspection defaults off and uses the shared table without a visible header,
 with Time, Record, Type and right-aligned Answer columns.
-Its search icon reveals a compact filter in the same title row, moving the
-inspection controls left with a 200ms width/opacity transition that honors
-reduced motion. Keep long records and answers readable.
+Its search icon reveals a compact filter in the same title row, opening to the
+left of that icon with a 200ms width/opacity transition that honors reduced
+motion. The Inspection label and switch stay pinned to the right edge, so
+turning inspection on or opening the filter adds controls to their left instead
+of moving them. Keep long records and answers readable.
 
 List rows have a minimum height of 64px. On phones, trailing values reflow below
 the title instead of disappearing. Technical values and important descriptions
