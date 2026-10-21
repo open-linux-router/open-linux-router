@@ -359,7 +359,6 @@ export const zhCN: Record<string, string> = {
   '· Way out:': '· 出口：',
   '· unavailable': '· 不可用',
   '— nothing detected': '— 未检测到',
-  'Language': '语言',
   'Overview': '概览',
   'Gateway': '网关',
   'Wireless': '无线',

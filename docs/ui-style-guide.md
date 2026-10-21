@@ -495,10 +495,12 @@ The desktop footer bottom-aligns its text and theme icon with 12px bottom paddin
 keeping the visible content close to the viewport edge while retaining 44px link
 and control hit targets. The footer theme control is a single icon. Clicking cycles
 auto, light and dark; its accessible label and tooltip name the current and next theme.
-The adjacent language control shows a Languages icon and the destination language
-in its native writing (中文 / English). Retain a 44px hit target and visible keyboard
-focus. Place the same control below the sign-in and initial-setup forms. Language
-changes preserve layout, current navigation and in-progress form values.
+The adjacent language control shows a 14px Languages icon and the destination
+language in its native writing (中文 / English) and nothing else: footer text size
+and weight, no separate "Language" label, and no filled hover background, so it
+reads as footer text rather than as a button. Retain a 44px hit target and visible
+keyboard focus. Place the same control below the sign-in and initial-setup forms.
+Language changes preserve layout, current navigation and in-progress form values.
 
 Use 150–200ms color/opacity transitions. Motion should explain a state change;
 no ambient animation except observed world traffic and the current device-activity block's traffic indicator.
