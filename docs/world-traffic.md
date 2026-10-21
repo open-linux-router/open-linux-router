@@ -63,11 +63,13 @@ shows both directions without spending another colour. A blurred amber halo
 sits under each arc; because arcs composite per feature, the halo accumulates
 where they bunch up — around the router and along busy corridors — and
 concentration reads as light. Width and opacity are relative to the busiest
-plotted location, not to an absolute rate: square-root scaling keeps a
-one-percent flow visible while the busiest one still stands out, and every arc
-stays translucent so overlaps build up instead of replacing each other. Widths
-are screen pixels at the world view and thin with zoom, so a country-sized view
-is not covered by ribbons meant for a globe.
+plotted location, not to an absolute rate, and they fall into four steps — at
+least half of the busiest flow, at least fifteen percent, at least three
+percent, and the rest. A few widths can be grouped at a glance; a continuous
+ramp reads as noise across dozens of arcs. Every arc stays translucent so
+overlaps build up instead of replacing each other. Widths are screen pixels at
+the world view and thin with zoom, so a country-sized view is not covered by
+ribbons meant for a globe.
 Reduced motion disables particles and interpolation. The UI polls every two
 seconds, but keeps each IP's particle phase independent of ranking. Paths fade
 in and out with a 450ms exponential time constant (about two seconds to

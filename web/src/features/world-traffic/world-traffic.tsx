@@ -41,6 +41,16 @@ const flowGradient = (dark: boolean, halo: boolean) => {
 // Zoom may only be the input of a top-level interpolate, so the scale wraps
 // the data width instead of multiplying it.
 const scaledWidth = (base: ExpressionSpecification) => ['interpolate', ['linear'], ['zoom'], 1, base, 3, ['*', base, 0.9], 4.5, ['*', base, 0.7], 6, ['*', base, 0.55]] as ExpressionSpecification
+// Four steps rather than a continuous ramp: with dozens of arcs a smooth range
+// reads as noise, while a few widths can be grouped at a glance. A step is
+// keyed to the location's share of the busiest plotted flow.
+const flowSteps = [
+  { share: 0.5, width: 4, strength: 0.64 },
+  { share: 0.15, width: 2.9, strength: 0.54 },
+  { share: 0.03, width: 2, strength: 0.44 },
+  { share: 0, width: 1.2, strength: 0.34 },
+] as const
+const flowStep = (share: number) => flowSteps.find(step => share >= step.share) ?? flowSteps[flowSteps.length - 1]
 // Zoom may only appear as the input of a top-level step/interpolate expression.
 // Layout expressions are evaluated at integer zooms; use integer thresholds
 // for regions and cities so names don't wait for the final zoom level.
@@ -163,12 +173,8 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       const total = peer.download + peer.upload
       if (total <= 0) continue
       // Width and translucency are relative to the busiest flow, not to an
-      // absolute byte rate: a quiet router still reads, and one heavy flow
-      // still stands out. The square root keeps small flows visible instead
-      // of collapsing them into hairlines beside a dominant one.
-      const weight = Math.sqrt(total / Math.max(1, peak))
-      const width = 0.9 + 3.1 * weight
-      const strength = 0.25 + 0.38 * weight
+      // absolute byte rate, and they move in steps rather than continuously.
+      const { width, strength } = flowStep(total / Math.max(1, peak))
       const coordinates = arc(start, end, 0)
       next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: { width, strength }, geometry: { type: 'LineString', coordinates } }, coordinates })
     }
