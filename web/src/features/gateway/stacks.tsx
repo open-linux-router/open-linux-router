@@ -18,7 +18,6 @@ import { useDialStatus, useUplink } from '@/features/dial/queries'
 import { useDnsConfig, useDnsStatus } from '@/features/dns/queries'
 import { useGatewayConfig } from '@/features/gateway/queries'
 import { useInterfaces } from '@/features/link/queries'
-import type { RouterAdvertisementMode } from '@/lib/config-types'
 import { cn } from '@/lib/utils'
 
 import { dot, tone, type Health } from './status-tone'
@@ -35,9 +34,9 @@ type Family = 'v4' | 'v6'
  *
  * The clients stage is titled for what an operator came to change: DHCP on
  * IPv4 — the module's own name and the word they arrive with (design.md §4.2) —
- * and IPv6 addressing on IPv6, because that family is not one protocol. Router
- * advertisement carries SLAAC, and DHCPv6 is one mode inside it; the detail
- * line says which one is running.
+ * and the protocol actually running on IPv6, SLAAC or DHCPv6. Those are the
+ * terms network operators already use; a stage label of our own would be one
+ * more thing to learn before the card could be used.
  *
  * The stacks hold no configuration of their own. A card is a link to the
  * module's own editor, not a second copy of it: one object, one plan, one apply
@@ -225,11 +224,16 @@ function DhcpStage({ family, id }: StageProps) {
   }
 
   // IPv6 clients are configured by router advertisement, not by a lease: the
-  // mode and MTU live on the pool, the prefix comes from the network. It is not
-  // one protocol — SLAAC, or stateful DHCPv6 — so the card is titled for the
-  // addressing rather than for DHCP, and names the running mode in its detail.
+  // mode and MTU live on the pool, the prefix comes from the network. The card
+  // is named for the protocol that is running — SLAAC or DHCPv6 — because that
+  // is what an operator knows; "clients" or a coined pair name would only send
+  // them to the documentation to find out what it meant.
   const pools = (dhcpConfig.data?.pools ?? []).filter(pool => (pool.ipv6?.mode ?? 'off') !== 'off')
   const total = networks.length || pools.length
+  const modes = new Set(pools.map(pool => pool.ipv6?.mode))
+  const title = modes.has('stateful')
+    ? (modes.has('slaac') ? t('SLAAC, DHCPv6') : t('DHCPv6'))
+    : t('SLAAC')
 
   if (dhcpConfig.isError) {
     health = { label: t('Unavailable'), tone: 'caution' }
@@ -245,13 +249,12 @@ function DhcpStage({ family, id }: StageProps) {
     health = lan6 ? { label: t('Not configured'), tone: 'caution' } : { label: t('No IPv6'), tone: 'quiet' }
     detail = lan6 ? t('No network advertises IPv6') : t('No network has an IPv6 subnet')
   } else {
-    const modes = [...new Set(pools.map(pool => pool.ipv6?.mode))].map(mode => advertisementMode(mode))
     const mtu = pools.find(pool => pool.ipv6?.mtu)?.ipv6?.mtu
     health = { label: t('Advertising'), tone: 'good' }
-    detail = `${modes.join(', ')} · ${t('{advertising} of {total} networks', { advertising: pools.length, total })}${mtu ? ` · MTU ${mtu}` : ''}`
+    detail = `${t('{advertising} of {total} networks', { advertising: pools.length, total })}${mtu ? ` · MTU ${mtu}` : ''}`
   }
 
-  return <StageCard id={id} title={t('IPv6 addressing')} icon={MonitorSmartphone} to="/gateway/dhcp/ranges" health={health} detail={detail} />
+  return <StageCard id={id} title={title} icon={MonitorSmartphone} to="/gateway/dhcp/ranges" health={health} detail={detail} />
 }
 
 function ForwardingStage({ family, id }: StageProps) {
@@ -439,8 +442,4 @@ function dnsHealth(dns: ReturnType<typeof useDnsStatus>): Health {
   const running = dns.data.services.length > 0 && dns.data.services.every(service => service.status?.active)
   if (!running) return { label: t('Not running'), tone: 'caution' }
   return dns.data.drifted ? { label: t('Needs attention'), tone: 'caution' } : { label: t('Running'), tone: 'good' }
-}
-
-function advertisementMode(mode?: RouterAdvertisementMode) {
-  return mode === 'stateful' ? t('DHCPv6 stateful') : t('SLAAC')
 }

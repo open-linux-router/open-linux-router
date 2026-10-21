@@ -345,8 +345,9 @@ Exit (direct, or which exit carries it — and for IPv6 whether an exit drops it
 since there is no NAT to translate it) and DNS (the resolvers, and for IPv6
 whether AAAA answers are filtered). The clients stage is titled for what an
 operator came to change: DHCP on IPv4, because that is the module's name and the
-word they arrive with; IPv6 addressing on IPv6, because router advertisement
-carries SLAAC and DHCPv6 is one mode inside it, named in the card. Each
+word they arrive with; on IPv6, the protocol that is running — SLAAC, DHCPv6, or
+both when networks differ. Those are the operator's own words, so the card does
+not coin a name for the family. Each
 card states its stage's answer and links to the one page that changes it; a
 missing stage is named in its card rather than hidden. The stacks are a view cut
 across the modules and hold no configuration of their own, so the same module
