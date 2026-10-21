@@ -507,18 +507,18 @@ Account for the device safe area and bottom navigation when laying out content
 and the footer. At 375px, keep labels, statuses, addresses and action buttons
 usable. Monitoring statistics use two columns on phones.
 
-The desktop footer bottom-aligns its text and theme icon with 12px bottom padding,
-keeping the visible content close to the viewport edge while retaining 44px link
-and control hit targets. Its items keep one visible 16px gap: a control's hit
-target is wider than the icon or label it draws, so the footer cancels that inset
-rather than letting the theme and language controls sit in visibly wider intervals
-than the text, and the two controls wrap together so the language control is never
-left alone on its own line. The footer theme control is a single icon. Clicking cycles
-auto, light and dark; its accessible label and tooltip name the current and next theme.
-The adjacent language control shows a 14px Languages icon and the destination
-language in its native writing (中文 / English) and nothing else: footer text size
-and weight, no separate "Language" label, and no filled hover background, so it
-reads as footer text rather than as a button. Retain a 44px hit target and visible
+The desktop footer bottom-aligns its text and icons with 12px bottom padding,
+keeping the visible content close to the viewport edge. Its items run in one order —
+copyright, Credits, version, then the three controls — with one visible 16px gap
+throughout: each control spends 8px of side padding on a 44px-high hit target, so
+the footer cancels that padding rather than letting the controls sit in visibly
+wider intervals than the text, and the three controls wrap together so none of them
+is ever left alone on its own line. The repository link is GitHub's mark alone and
+the theme control a single icon; clicking the theme cycles auto, light and dark, and
+both name themselves in their accessible label and tooltip. The language control
+shows only the destination language in its native writing (中文 / English): footer
+text size and weight, no icon, no separate "Language" label, and no filled hover
+background, so it reads as footer text rather than as a button, with visible
 keyboard focus. Place the same control below the sign-in and initial-setup forms.
 Language changes preserve layout, current navigation and in-progress form values.
 
