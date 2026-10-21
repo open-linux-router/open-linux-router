@@ -1,10 +1,10 @@
 import { t, useLocale } from '@/lib/i18n'
 import {
-  ArrowRightLeft,
   ArrowUpFromLine,
   ChevronRight,
   MonitorSmartphone,
   Network,
+  Route,
   Search,
   Signpost,
   type LucideIcon,
@@ -29,7 +29,7 @@ type Family = 'v4' | 'v6'
  *
  * A normal operator asks "does IPv6 work, and where do I fix it", not "is dial
  * or dhcp configured". Each stack is that question answered in the order the
- * traffic takes: upstream, LAN addressing, DHCP, forwarding, which way out, and
+ * traffic takes: upstream, LAN addressing, DHCP, routing, which way out, and
  * name resolution. Every card names the one page that changes it.
  *
  * The clients stage is titled for what an operator came to change: DHCP on
@@ -37,6 +37,14 @@ type Family = 'v4' | 'v6'
  * and the protocol actually running on IPv6, SLAAC or DHCPv6. Those are the
  * terms network operators already use; a stage label of our own would be one
  * more thing to learn before the card could be used.
+ *
+ * The routing stage carries the module's own name for the same reason. The
+ * switch at interfaces#forwarding is titled "Gateway routing", and it is what
+ * this card reports: turning it off takes every network off the internet and
+ * closes every port forward. Calling the card Forwarding named the kernel
+ * mechanism instead — the one part of it the operator never touches — and left
+ * the page with no card for the switch that decides whether the LAN gets out at
+ * all.
  *
  * The stacks hold no configuration of their own. A card is a link to the
  * module's own editor, not a second copy of it: one object, one plan, one apply
@@ -61,7 +69,7 @@ const STAGES: { key: string; hash?: string; Stage: (props: StageProps) => ReactN
   { key: 'upstream', Stage: UpstreamStage },
   { key: 'lan', Stage: LanStage },
   { key: 'dhcp', hash: 'dhcp', Stage: DhcpStage },
-  { key: 'forwarding', Stage: ForwardingStage },
+  { key: 'routing', Stage: RoutingStage },
   { key: 'exit', Stage: ExitStage },
   { key: 'dns', hash: 'dns', Stage: DnsStage },
 ]
@@ -257,9 +265,11 @@ function DhcpStage({ family, id }: StageProps) {
   return <StageCard id={id} title={title} icon={MonitorSmartphone} to="/gateway/dhcp/ranges" health={health} detail={detail} />
 }
 
-function ForwardingStage({ family, id }: StageProps) {
+function RoutingStage({ family, id }: StageProps) {
   useLocale()
   const gateway = useGatewayConfig()
+  const config = gateway.data
+  const forwards = config?.forwards?.length ?? 0
 
   let health: Health
   let detail: ReactNode
@@ -267,25 +277,30 @@ function ForwardingStage({ family, id }: StageProps) {
   if (gateway.isError) {
     health = { label: t('Unavailable'), tone: 'caution' }
     detail = t('Gateway settings unavailable')
-  } else if (gateway.isPending) {
+  } else if (gateway.isPending || !config) {
     health = { label: t('Reading…'), tone: 'quiet' }
     detail = <Skeleton className="h-4 w-24" />
   } else if (family === 'v4') {
-    health = gateway.data.enabled ? { label: t('On'), tone: 'good' } : { label: t('Off'), tone: 'caution' }
-    // The detail says what the switch does for the network, not where the
-    // value was written. "IPv4 forwarding is written" reports the sysctl, which
-    // the operator cannot act on and cannot see: on is that devices get out,
-    // off is that none do.
-    detail = gateway.data.enabled
-      ? t('Devices behind this router reach the internet')
+    health = config.enabled ? { label: t('On'), tone: 'good' } : { label: t('Off'), tone: 'caution' }
+    // The routing switch is this card's subject: it is the one control that
+    // takes every network off the internet and closes every port forward. The
+    // detail says what that means for the network and what the routing carries
+    // — NAT, port forwards — which are the facts an operator checks here, and
+    // neither is anywhere else on this page.
+    detail = config.enabled
+      ? [
+        t('Devices behind this router reach the internet'),
+        config.snat ? t('NAT on') : t('NAT off'),
+        forwards > 0 ? t('{count} port forwards', { count: forwards }) : null,
+      ].filter(Boolean).join(' · ')
       : t('No device behind this router reaches the internet')
-  } else if (!gateway.data.enabled) {
+  } else if (!config.enabled) {
     health = { label: t('Off'), tone: 'caution' }
-    detail = t('Nothing is applied while gateway routing is off')
-  } else if (gateway.data.ipv6_forwarding === true) {
+    detail = t('IPv6 cannot leave this router while routing is off')
+  } else if (config.ipv6_forwarding === true) {
     health = { label: t('On'), tone: 'good' }
     detail = t('IPv6 from behind this router goes out')
-  } else if (gateway.data.ipv6_forwarding === false) {
+  } else if (config.ipv6_forwarding === false) {
     health = { label: t('Off'), tone: 'caution' }
     detail = t('IPv6 stops at this router')
   } else {
@@ -295,7 +310,7 @@ function ForwardingStage({ family, id }: StageProps) {
     detail = t('The system decides whether IPv6 is forwarded')
   }
 
-  return <StageCard id={id} title={t('Forwarding')} icon={ArrowRightLeft} to="/gateway/interfaces#forwarding" health={health} detail={detail} />
+  return <StageCard id={id} title={t('Routing')} icon={Route} to="/gateway/interfaces#forwarding" health={health} detail={detail} />
 }
 
 function ExitStage({ family, id }: StageProps) {
