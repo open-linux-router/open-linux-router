@@ -81,12 +81,15 @@ hub or on a destination. Both views draw it; the card preview has room for a
 soft streak where a bead used to be a speck.
 Reduced motion drops the highlight and interpolation. The UI polls every two
 seconds and keeps each IP's highlight phase independent of ranking. Paths fade
-in and out with a 450ms exponential time constant (about two seconds to settle).
-A snapshot can add or drop several locations at once, so those fades start 200ms
-apart — capped at 1.4 seconds across a batch, ordered by a stable hash — and the
-change reads as a sequence instead of a step. The staggering is presentation
-only: a location is in or out of the window at the moment its snapshot says so,
-fades are the same length either way, and a lone change still starts at once.
+in and out over a fixed 450ms eased curve, so a fade always finishes.
+A snapshot can add or drop several locations at once, so those fades are spread
+across a window that closes before the next snapshot: each location owns a slot
+in the window and starts at a random point inside it, which keeps the gaps
+irregular instead of a metronome. The window is capped at 1.35 seconds (the two
+second poll minus the fade and a margin), so even a full batch has settled
+before the next one arrives, and a lone change still starts at once. The
+staggering is presentation only: a location is in or out of the window at the
+moment its snapshot says so, and every fade is the same length either way.
 Visual updates render at up to 30fps, and hidden tabs pause them. The highlight
 stays within amber and warm light, so amber is the only hue the map adds. There
 are no endpoint dots: the arcs carry the whole reading, and the hub is where

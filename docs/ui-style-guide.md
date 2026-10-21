@@ -424,12 +424,13 @@ show the same highlight: a short blurred warm stroke that travels out and back
 along each arc, four seconds each way, with a feathered tail and faded ends, so
 the light never lands at the hub or on a destination. It carries direction and
 stops for reduced motion. Keep highlight phases stable across ranking updates
-and fade arriving/departing arcs with a 450ms exponential time constant. When a
-snapshot brings or drops several locations at once, start those fades 200ms
-apart (capped at 1.4s for the batch, in a stable hash order) so the change reads
-as a sequence rather than one step; a lone change still fades immediately.
-Reduced motion drops the highlight, the stagger and interpolation; hidden tabs
-pause updates. Arcs use valid returned coordinates without
+and fade arriving/departing arcs over a fixed 450ms eased curve, which always
+completes. When a snapshot brings or drops several locations at once, give each
+one a slot in a window that ends before the next snapshot and jitter it inside
+that slot, so the batch reads as an irregular sequence rather than a step or a
+metronome; a lone change still fades immediately, and the whole batch has
+settled by the time the next poll lands. Reduced motion drops the highlight, the
+stagger and interpolation; hidden tabs pause updates. Arcs use valid returned coordinates without
 country-center fallbacks; omit locations without coordinates. Draw flows between
 different locations even within one country. The details dialog supplies
 city/country, rates and ip.sb attribution without crowding the map.

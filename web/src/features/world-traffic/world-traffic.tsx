@@ -66,11 +66,20 @@ const glowSeconds = 8000
 // A snapshot lands every two seconds, so locations enter and leave in batches.
 // Staggering those fades across the gap keeps a batch from stepping the whole
 // map at one instant. This is a rendering choice, not a claim about the
-// connections, and it is bounded so even a large batch settles before the next
-// snapshot. One changed location still moves immediately.
-const staggerGap = (count: number) => count < 2 ? 0 : Math.min(200, 1400 / (count - 1))
-// Even spacing beats random offsets: a batch where every hash clustered near
-// zero would still land at once. The hash only decides who goes first.
+// connections.
+const pollMs = 2000
+// Presence fades over a fixed span rather than easing forever, so a batch can be
+// guaranteed to settle before the next snapshot: the last fade starts inside
+// this window and the fade itself is the remainder of the poll.
+const fadeMs = 450
+const marginMs = 200
+const settleMs = pollMs - fadeMs - marginMs
+const ease = (t: number) => 0.5 - 0.5 * Math.cos(Math.PI * t)
+const staggerWindow = (count: number) => count < 2 ? 0 : Math.min(settleMs, count * 220)
+// Each location owns a slot in the window and jitters inside it, so the gaps
+// look irregular without ever bunching the batch into one instant.
+const staggerOffset = (index: number, count: number, window: number, jitter: number) => window * (index + 0.25 + 0.5 * jitter) / count
+// The hash only decides who goes first; it is stable across snapshots.
 const staggerOrder = (keys: string[]) => keys.slice().sort((a, b) => hashOf(a) - hashOf(b))
 // Zoom may only appear as the input of a top-level step/interpolate expression.
 // Layout expressions are evaluated at integer zooms; use integer thresholds
@@ -241,7 +250,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     if (!instance || !ready) return
     const set = (id: string, features: GeoJSON.Feature[]) => (instance.getSource(id) as GeoJSONSource).setData({ type: 'FeatureCollection', features })
     // Keep identity and phase independent of snapshot order and rank changes.
-    const visible = new Map<string, { target: FlowTarget; opacity: number; glide: number; jitter: number; wait: number; leaving: boolean }>()
+    const visible = new Map<string, { target: FlowTarget; opacity: number; glide: number; jitter: number; wait: number; from: number; to: number; fade: number; leaving: boolean }>()
     const reduced = matchMedia('(prefers-reduced-motion: reduce)')
     // Diffing against the previous snapshot, once per snapshot, is what lets a
     // batch share one stagger window. null forces the first frame to diff.
@@ -254,7 +263,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       const elapsed = Math.min(64, now - previous)
       previous = now
       lastDraw = now
-      const blend = reduced.matches ? 1 : 1 - Math.exp(-elapsed / 450)
+      const fade = reduced.matches ? 0 : fadeMs
       if (targets.current !== generation) {
         const next = targets.current
         const entering: string[] = [], leaving: string[] = []
@@ -264,28 +273,42 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
           if (!visual.leaving) leaving.push(key)
         }
         for (const key of next.keys()) if (!visible.has(key)) entering.push(key)
-        const enterGap = reduced.matches ? 0 : staggerGap(entering.length)
-        const leaveGap = reduced.matches ? 0 : staggerGap(leaving.length)
+        const enterWindow = reduced.matches ? 0 : staggerWindow(entering.length)
+        const leaveWindow = reduced.matches ? 0 : staggerWindow(leaving.length)
         staggerOrder(entering).forEach((key, index) => {
           const jitter = hashOf(key)
-          visible.set(key, { target: next.get(key)!, opacity: 0, glide: jitter, jitter, wait: index * enterGap, leaving: false })
+          const wait = staggerOffset(index, entering.length, enterWindow, jitter)
+          visible.set(key, { target: next.get(key)!, opacity: 0, glide: jitter, jitter, wait, from: 0, to: 1, fade: 0, leaving: false })
         })
         staggerOrder(leaving).forEach((key, index) => {
           const visual = visible.get(key)!
           visual.leaving = true
-          visual.wait = index * leaveGap
+          visual.wait = staggerOffset(index, leaving.length, leaveWindow, visual.jitter)
+          visual.from = visual.opacity
+          visual.to = 0
+          visual.fade = 0
         })
         generation = next
       }
       const lines: GeoJSON.Feature[] = [], glows: GeoJSON.Feature[] = []
       for (const [key, visual] of visible) {
         const active = targets.current.has(key)
-        // A location that comes back mid-fade resumes immediately instead of
-        // waiting out the delay it was given on the way out.
-        if (active && visual.leaving) { visual.leaving = false; visual.wait = 0 }
+        const want = active ? 1 : 0
+        // A location can leave while it is still arriving, or come back before
+        // its fade has finished: restart from wherever the line stands.
+        if (want !== visual.to) {
+          visual.from = visual.opacity
+          visual.to = want
+          visual.fade = 0
+          visual.wait = 0
+          visual.leaving = !active
+        }
         if (visual.wait > 0) visual.wait = Math.max(0, visual.wait - elapsed)
-        else visual.opacity += ((active ? 1 : 0) - visual.opacity) * blend
-        if (!active && visual.opacity < 0.01) { visible.delete(key); continue }
+        else if (visual.fade < 1) {
+          visual.fade = Math.min(1, visual.fade + elapsed / Math.max(1, fade))
+          visual.opacity = visual.from + (visual.to - visual.from) * ease(visual.fade)
+        }
+        if (!active && visual.fade >= 1) { visible.delete(key); continue }
         const path = visual.target
         // Presence is the only thing that changes a line. It fades in when its
         // location starts reporting traffic and out when the location leaves
@@ -334,7 +357,7 @@ export function WorldTraffic({ origin, embedded = false, expanded, onExpandedCha
   const setFullscreen = onExpandedChange ?? setOwnExpanded
   const preview = useRef<HTMLButtonElement>(null)
   const { resolvedTheme } = useTheme()
-  const query = useQuery({ queryKey: ['gateway', 'world-traffic'], queryFn: () => api.get<Snapshot>('/api/gateway/world-traffic'), refetchInterval: 2000 })
+  const query = useQuery({ queryKey: ['gateway', 'world-traffic'], queryFn: () => api.get<Snapshot>('/api/gateway/world-traffic'), refetchInterval: pollMs })
   const data = query.data
   const stale = data?.as_of && Date.now() - Date.parse(data.as_of) > 10000
   const ready = !query.isError && !stale && data?.state === 'ready'
