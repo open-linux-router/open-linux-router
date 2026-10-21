@@ -54,11 +54,11 @@ export function DhcpContent() {
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-sm">
           <span className="text-muted-foreground">{config.pools?.length ?? 0} network{config.pools?.length === 1 ? '' : 's'} with address service</span>
-          <Link to="/gateway/dhcp/details" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">{t('DHCP status and settings')}<ChevronRight className="size-4" aria-hidden /></Link>
+          <Link to="/gateway/dhcp" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">{t('DHCP status and settings')}<ChevronRight className="size-4" aria-hidden /></Link>
         </div>
       </div>
       {config.enabled && status.data?.drifted && (
-        <Alert><AlertTriangle /><AlertTitle>{t('DHCP settings differ from what is running')}</AlertTitle><AlertDescription><Link className="underline underline-offset-4" to="/gateway/dhcp/details">{t('Review and repair DHCP')}</Link></AlertDescription></Alert>
+        <Alert><AlertTriangle /><AlertTitle>{t('DHCP settings differ from what is running')}</AlertTitle><AlertDescription><Link className="underline underline-offset-4" to="/gateway/dhcp">{t('Review and repair DHCP')}</Link></AlertDescription></Alert>
       )}
     </div>
   )

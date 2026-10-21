@@ -54,7 +54,7 @@ export function DnsContent() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3 text-sm">
           <label className="flex items-center gap-2">{t('Keep a query log')} <Switch checked={config.query_log.enabled} disabled={busy} onCheckedChange={(enabled) => change({ ...config, query_log: { ...config.query_log, enabled } })} />
           </label>
-          <Link to="/gateway/dns/details" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">{t('DNS activity and advanced settings')}<ChevronRight className="size-4" aria-hidden /></Link>
+          <Link to="/gateway/dns" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">{t('DNS activity and advanced settings')}<ChevronRight className="size-4" aria-hidden /></Link>
         </div>
         <SwitchField
           id="dns-summary-aaaa"
@@ -66,7 +66,7 @@ export function DnsContent() {
         />
       </div>
       {config.enabled && status.data?.drifted && (
-        <Alert><AlertTriangle /><AlertTitle>{t('DNS settings differ from what is running')}</AlertTitle><AlertDescription><Link className="underline underline-offset-4" to="/gateway/dns/details">{t('Review and repair DNS')}</Link></AlertDescription></Alert>
+        <Alert><AlertTriangle /><AlertTitle>{t('DNS settings differ from what is running')}</AlertTitle><AlertDescription><Link className="underline underline-offset-4" to="/gateway/dns">{t('Review and repair DNS')}</Link></AlertDescription></Alert>
       )}
     </div>
   )

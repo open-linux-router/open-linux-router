@@ -340,12 +340,13 @@ live beside the switches that change them.
 Below them are two stacks, IPv4 and IPv6, each naming the same six stages in the
 order traffic takes them: Upstream (address, next hop, and for IPv6 whether it
 is native, delegated or tunnelled), LAN (the subnets and how much of the pool is
-in use), DHCP (leases for IPv4, router advertisement for IPv6 — the card keeps
-the module's name because that is what an operator looks for, and the detail
-names the mechanism), Forwarding
-(whether the kernel forwards this family), Exit (direct, or which exit carries
-it — and for IPv6 whether an exit drops it, since there is no NAT to translate
-it) and DNS (the resolvers, and for IPv6 whether AAAA answers are filtered). Each
+in use), the clients stage, Forwarding (whether the kernel forwards this family),
+Exit (direct, or which exit carries it — and for IPv6 whether an exit drops it,
+since there is no NAT to translate it) and DNS (the resolvers, and for IPv6
+whether AAAA answers are filtered). The clients stage is titled for what an
+operator came to change: DHCP on IPv4, because that is the module's name and the
+word they arrive with; IPv6 addressing on IPv6, because router advertisement
+carries SLAAC and DHCPv6 is one mode inside it, named in the card. Each
 card states its stage's answer and links to the one page that changes it; a
 missing stage is named in its card rather than hidden. The stacks are a view cut
 across the modules and hold no configuration of their own, so the same module

@@ -624,15 +624,16 @@ says so as a warning; it never writes the other module's half (decided
 **A family-wide *view* is not a family-wide setting.** The Gateway landing page
 shows two stacks, IPv4 and IPv6, each listing the same six stages —
 upstream, LAN, DHCP, forwarding, exit, DNS — with that family's answer at
-each one. The clients stage carries the module's name in both stacks for the
-same reason the module keeps it (§4.2): an operator arrives looking for DHCP,
-and the IPv6 card's detail line says whether the mechanism there is SLAAC or
-DHCPv6. Each card opens the page that changes its family's half — for IPv4 the
-DHCP page, for IPv6 the address ranges that carry each network's advertisement
-mode. This is deliberately the opposite of the wizard above: a stack card
-renders another module's state and links to that module's own editor, so the
-stacks hold no configuration, produce no plan and apply nothing. The test is
-mechanical — if a card needed a control it would have to reuse that module's
+each one. The clients stage is titled for what an operator came to change: DHCP
+on IPv4, the module's own name and the word they arrive with (§4.2), and IPv6
+addressing on IPv6, because that family is not one protocol — router
+advertisement carries SLAAC, and DHCPv6 is a mode inside it, named in the card's
+detail line. Each card opens the page that changes its family's half — the IPv4
+card the DHCP page, the IPv6 card the address ranges that carry each network's
+advertisement mode. This is deliberately the opposite of the wizard above: a
+stack card renders another module's state and links to that module's own editor,
+so the stacks hold no configuration, produce no plan and apply nothing. The test
+is mechanical — if a card needed a control it would have to reuse that module's
 editor rather than grow one, and if it needed a draft of its own it would be a
 second owner and would not be allowed. The rule stays where a setting lives;
 the stacks decide only how it is found (decided 2026-10-21).

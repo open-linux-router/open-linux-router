@@ -157,7 +157,7 @@ export function GatewayInterfacePage() {
     <PartialApply editor={editor} />
     {editing && <NetworkDialog key={initial?.name ?? row.name} open={editing} onOpenChange={setEditing} initial={initial} interfaces={editor.interfaces.filter((item) => item.name === row.name)} taken={new Set(stored.flatMap((item) => item.members))} onSubmit={save} onRemove={initial ? () => { editor.save(stored.filter((item) => item.name !== initial.name)); setEditing(false) } : undefined} />}
     <ConfirmDisruptive editor={editor} />
-    <Link to="/gateway/dhcp/details" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">{t('Served networks')} <ArrowUpRight className="size-4" aria-hidden /></Link>
+    <Link to="/gateway/dhcp" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">{t('Served networks')} <ArrowUpRight className="size-4" aria-hidden /></Link>
   </div>
 }
 

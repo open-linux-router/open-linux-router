@@ -70,23 +70,27 @@ export function App() {
             <Route path="interfaces" element={<GatewayInterfacesPage />} />
             <Route path="tunnelbroker" element={<RedirectWithState to="/access/tunnelbroker" />} />
             <Route path="interfaces/:name" element={<GatewayInterfacePage />} />
-            <Route path="networks" element={<Navigate to="/gateway/dhcp/details" replace />} />
+            <Route path="networks" element={<Navigate to="/gateway/dhcp" replace />} />
             <Route path="exits" element={<RedirectWithState to="/access/gateway" />} />
             <Route path="usage" element={<Navigate to="/gateway" replace />} />
             <Route path="ipv6" element={<Navigate to="/gateway/interfaces#forwarding" replace />} />
             <Route path="unmanaged" element={<GatewayUnmanagedPage />} />
+            {/* The section root is the section's own page. `details` was the
+                only address that rendered it, so it redirects here instead of
+                leaving two URLs for one page. */}
             <Route path="dhcp">
-              <Route path="details" element={<DhcpDetailsPage />} />
-              <Route index element={<Navigate to="/gateway#dhcp" replace />} />
+              <Route index element={<DhcpDetailsPage />} />
+              <Route path="details" element={<RedirectWithState to="/gateway/dhcp" />} />
               <Route path="ranges" element={<DhcpRangesPage />} />
               <Route path="reservations" element={<DhcpReservationsPage />} />
               <Route path="advanced" element={<DhcpAdvancedPage />} />
             </Route>
 
-            {/* Detailed settings remain nested; the status and activity are on Gateway. */}
+            {/* Detailed settings remain nested; the module's own page is where
+                its status and the way into each setting lives. */}
             <Route path="dns">
-              <Route path="details" element={<DnsDetailsPage />} />
-              <Route index element={<Navigate to="/gateway#dns" replace />} />
+              <Route index element={<DnsDetailsPage />} />
+              <Route path="details" element={<RedirectWithState to="/gateway/dns" />} />
               <Route path="blocking" element={<DnsBlockingPage />} />
               <Route path="names" element={<DnsNamesPage />} />
               <Route path="resolving" element={<DnsResolvingPage />} />
