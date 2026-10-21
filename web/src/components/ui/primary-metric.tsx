@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 
 import { MetricValue } from '@/components/ui/metric-value'
+import { textClass } from '@/components/ui/status'
+import type { Tone } from '@/lib/state'
 import { cn } from '@/lib/utils'
 
 /**
@@ -22,15 +24,14 @@ export function PrimaryMetric({ value, unit, note, icon, size = 'lg', tone, onCl
   note?: ReactNode
   icon?: ReactNode
   size?: 'md' | 'lg'
-  tone?: 'success' | 'warning' | 'destructive'
+  /** A verdict in words: the tone it is drawn in comes from `lib/state`. */
+  tone?: Tone
   onClick?: () => void
   ariaLabel?: string
   title?: string
   className?: string
 }) {
-  const toneClass = tone === 'success'
-    ? 'text-success-foreground'
-    : tone === 'warning' ? 'text-warning-foreground' : tone === 'destructive' ? 'text-destructive' : undefined
+  const toneClass = tone ? textClass(tone) : undefined
 
   const body = <>
     <span className="flex min-w-0 items-center gap-2">

@@ -1,7 +1,6 @@
 import { t, useLocale } from '@/lib/i18n'
 import {
   ArrowUpFromLine,
-  ChevronRight,
   MonitorSmartphone,
   Network,
   Route,
@@ -18,9 +17,10 @@ import { useDialStatus, useUplink } from '@/features/dial/queries'
 import { useDnsConfig, useDnsStatus } from '@/features/dns/queries'
 import { useGatewayConfig } from '@/features/gateway/queries'
 import { useInterfaces } from '@/features/link/queries'
+import { RowChevron } from '@/components/ui/row-action'
 import { cn } from '@/lib/utils'
-
-import { dot, tone, type Health } from './status-tone'
+import { state, type Health } from '@/lib/state'
+import { StatusInline } from '@/components/ui/status'
 
 type Family = 'v4' | 'v6'
 
@@ -116,40 +116,40 @@ function UpstreamStage({ family, id }: StageProps) {
   let to = '/gateway/interfaces'
 
   if (uplink.isError || dial.isError) {
-    health = { label: t('Unavailable'), tone: 'caution' }
+    health = state('Unavailable')
     detail = t('Route readings unavailable')
   } else if (uplink.isPending || dial.isPending) {
-    health = { label: t('Reading…'), tone: 'quiet' }
+    health = state('Reading…')
     detail = <Skeleton className="h-4 w-32" />
   } else if (family === 'v4') {
     const address = owned?.address ?? route?.addresses?.[0]
     const hop = owned?.gateway ?? route?.via
     const silent = (owned?.gateway_state ?? route?.gateway_state ?? routes[0]?.gateway_state) === 'silent'
-    health = silent ? { label: t('Not answering'), tone: 'caution' }
-      : route || routes.length ? { label: t('Connected'), tone: 'good' }
-        : { label: t('No route'), tone: 'caution' }
+    health = silent ? state('Not answering')
+      : route || routes.length ? state('Connected')
+        : state('No route')
     detail = address && hop && wan ? `${address} · ${hop} via ${wan}`
       : address ? address
         : hop && wan ? `${hop} via ${wan}`
           : wan ?? t('No internet route')
   } else if (owned?.delegation) {
     const prefix = owned.delegation.prefix
-    health = prefix ? { label: t('Delegated'), tone: 'good' } : { label: t('Asking…'), tone: 'quiet' }
+    health = prefix ? state('Delegated') : state('Asking…')
     detail = prefix ?? owned.delegation.error ?? t('Asking the ISP for a prefix')
   } else if (owned?.tunnel) {
     const tunnel = owned.tunnel
     const carrying = tunnel.present && tunnel.up && tunnel.route_dev === tunnel.interface
-    health = carrying ? { label: t('Tunnel'), tone: 'good' } : { label: t('Not in use'), tone: 'caution' }
+    health = carrying ? state('Tunnel') : state('Not in use')
     detail = `6in4 · ${tunnel.address}`
     to = '/access/tunnelbroker'
   } else if (routes.length) {
     const via = routes[0].via
     health = routes[0].gateway_state === 'silent'
-      ? { label: t('Not answering'), tone: 'caution' }
-      : { label: t('Connected'), tone: 'good' }
+      ? state('Not answering')
+      : state('Connected')
     detail = wan6 ?? (via ? `${via} via ${routes[0].dev}` : `${routes[0].dev}`)
   } else {
-    health = { label: t('No IPv6'), tone: 'quiet' }
+    health = state('No IPv6')
     detail = t('No IPv6 default route')
   }
 
@@ -173,30 +173,30 @@ function LanStage({ family, id }: StageProps) {
   let detail: ReactNode
 
   if (interfaces.isError) {
-    health = { label: t('Unavailable'), tone: 'caution' }
+    health = state('Unavailable')
     detail = t('Network settings unavailable')
   } else if (interfaces.isPending) {
-    health = { label: t('Reading…'), tone: 'quiet' }
+    health = state('Reading…')
     detail = <Skeleton className="h-4 w-32" />
   } else if (family === 'v4') {
     if (!primary) {
-      health = { label: t('No network'), tone: 'caution' }
+      health = state('No network')
       detail = t('No IPv4 network is configured')
     } else {
       const used = leases.data?.usage?.find(entry => entry.network === primary.name)
-      health = { label: t('Configured'), tone: 'good' }
+      health = state('Configured')
       detail = `${primary.subnet}${v4.length > 1 ? ` +${v4.length - 1}` : ''}${used
         ? ` · ${t('{active} of {size} in use', { active: used.active, size: used.size })}`
         : ''}`
     }
   } else if (primary) {
-    health = { label: t('Configured'), tone: 'good' }
+    health = state('Configured')
     detail = `${primary.subnet6}${v6.length > 1 ? ` +${v6.length - 1}` : ''}`
   } else if (waiting.length > 0) {
-    health = { label: t('Not configured'), tone: 'quiet' }
+    health = state('Waiting')
     detail = t('Delegated networks have no /64 yet')
   } else {
-    health = { label: t('No IPv6'), tone: 'quiet' }
+    health = state('No IPv6')
     detail = t('No network has an IPv6 subnet')
   }
 
@@ -244,21 +244,21 @@ function DhcpStage({ family, id }: StageProps) {
     : t('SLAAC')
 
   if (dhcpConfig.isError) {
-    health = { label: t('Unavailable'), tone: 'caution' }
+    health = state('Unavailable')
     detail = t('Advertisement settings unavailable')
   } else if (dhcpConfig.isPending) {
-    health = { label: t('Reading…'), tone: 'quiet' }
+    health = state('Reading…')
     detail = <Skeleton className="h-4 w-32" />
   } else if (dhcp.data && !dhcp.data.enabled) {
-    health = { label: t('Off'), tone: 'quiet' }
+    health = state('Off')
     detail = t('Nothing is advertised while DHCP is off')
   } else if (pools.length === 0) {
     const lan6 = networks.some(network => network.subnet6)
-    health = lan6 ? { label: t('Not configured'), tone: 'caution' } : { label: t('No IPv6'), tone: 'quiet' }
+    health = lan6 ? state('Not configured') : state('No IPv6')
     detail = lan6 ? t('No network advertises IPv6') : t('No network has an IPv6 subnet')
   } else {
     const mtu = pools.find(pool => pool.ipv6?.mtu)?.ipv6?.mtu
-    health = { label: t('Advertising'), tone: 'good' }
+    health = state('Advertising')
     detail = `${t('{advertising} of {total} networks', { advertising: pools.length, total })}${mtu ? ` · MTU ${mtu}` : ''}`
   }
 
@@ -275,13 +275,13 @@ function RoutingStage({ family, id }: StageProps) {
   let detail: ReactNode
 
   if (gateway.isError) {
-    health = { label: t('Unavailable'), tone: 'caution' }
+    health = state('Unavailable')
     detail = t('Gateway settings unavailable')
   } else if (gateway.isPending || !config) {
-    health = { label: t('Reading…'), tone: 'quiet' }
+    health = state('Reading…')
     detail = <Skeleton className="h-4 w-24" />
   } else if (family === 'v4') {
-    health = config.enabled ? { label: t('On'), tone: 'good' } : { label: t('Off'), tone: 'caution' }
+    health = config.enabled ? state('On') : state('LAN offline')
     // The routing switch is this card's subject: it is the one control that
     // takes every network off the internet and closes every port forward. The
     // detail says what that means for the network and what the routing carries
@@ -295,18 +295,18 @@ function RoutingStage({ family, id }: StageProps) {
       ].filter(Boolean).join(' · ')
       : t('No device behind this router reaches the internet')
   } else if (!config.enabled) {
-    health = { label: t('Off'), tone: 'caution' }
+    health = state('Off')
     detail = t('IPv6 cannot leave this router while routing is off')
   } else if (config.ipv6_forwarding === true) {
-    health = { label: t('On'), tone: 'good' }
+    health = state('On')
     detail = t('IPv6 from behind this router goes out')
   } else if (config.ipv6_forwarding === false) {
-    health = { label: t('Off'), tone: 'caution' }
+    health = state('Off')
     detail = t('IPv6 stops at this router')
   } else {
     // Unmanaged forwarding is not an answer about traffic at all, so the card
     // says who decides rather than borrowing a state it cannot observe.
-    health = { label: t('Not managed'), tone: 'quiet' }
+    health = state('Not managed')
     detail = t('The system decides whether IPv6 is forwarded')
   }
 
@@ -328,20 +328,20 @@ function ExitStage({ family, id }: StageProps) {
   let to = '/gateway/interfaces#forwarding'
 
   if (gateway.isError) {
-    health = { label: t('Unavailable'), tone: 'caution' }
+    health = state('Unavailable')
     detail = t('Gateway settings unavailable')
   } else if (gateway.isPending || !config) {
-    health = { label: t('Reading…'), tone: 'quiet' }
+    health = state('Reading…')
     detail = <Skeleton className="h-4 w-28" />
   } else if (family === 'v4') {
     if (config.default && !chosen) {
-      health = { label: t('Unknown exit'), tone: 'caution' }
+      health = state('Unknown exit')
       detail = config.default
     } else if (chosen) {
-      health = { label: t('Via exit'), tone: 'good' }
+      health = state('Via exit')
       detail = `${chosen.name} · ${nat}${overrideNote}`
     } else {
-      health = { label: t('Direct'), tone: 'quiet' }
+      health = state('Direct')
       detail = `${t('This router’s own connection')} · ${nat}${overrideNote}`
     }
   } else {
@@ -350,19 +350,19 @@ function ExitStage({ family, id }: StageProps) {
     // it carries the traffic or drops it. `direct` is the leak: v6 leaves the
     // ordinary way while v4 goes through the exit.
     if (!exits.length) {
-      health = { label: t('Direct'), tone: 'quiet' }
+      health = state('Direct')
       detail = t('No NAT · IPv6 is not translated')
     } else if (!chosen) {
-      health = { label: t('Direct'), tone: 'quiet' }
+      health = state('Direct')
       detail = `${t('No default exit')} · ${exits.length} ${t('exits')}`
     } else if (chosen.ipv6 === 'via') {
-      health = { label: t('Via exit'), tone: 'good' }
+      health = state('Via exit')
       detail = t('{name} carries IPv6', { name: chosen.name })
     } else if (chosen.ipv6 === 'direct') {
-      health = { label: t('Direct'), tone: 'caution' }
+      health = state('Bypasses the exit')
       detail = t('{name} sends IPv6 around it', { name: chosen.name })
     } else {
-      health = { label: t('Blocked'), tone: 'caution' }
+      health = state('Blocked')
       detail = t('{name} blocks IPv6', { name: chosen.name })
     }
   }
@@ -397,16 +397,16 @@ function DnsStage({ family, id }: StageProps) {
     // into the thing they set before they can answer "is IPv6 off?". The
     // config has one switch, so the card says what that switch means.
     if (dnsConfig.isError) {
-      health = { label: t('Unavailable'), tone: 'caution' }
+      health = state('Unavailable')
       detail = t('DNS settings unavailable')
     } else if (dnsConfig.isPending) {
-      health = { label: t('Reading…'), tone: 'quiet' }
+      health = state('Reading…')
       detail = <Skeleton className="h-4 w-28" />
     } else if (dnsConfig.data.filter_aaaa) {
-      health = { label: t('IPv6 disabled'), tone: 'caution' }
+      health = state('IPv6 disabled')
       detail = t('IPv6 lookups return nothing')
     } else {
-      health = { label: t('IPv6 enabled'), tone: 'good' }
+      health = state('IPv6 enabled')
       detail = t('Clients can resolve IPv6')
     }
   }
@@ -439,12 +439,9 @@ function StageCard({ id, title, icon: Icon, to, health, detail }: {
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-semibold">{title}</span>
-          <ChevronRight className="ml-auto size-4 shrink-0 text-muted-foreground/60" aria-hidden />
+          <RowChevron className="ml-auto" />
         </div>
-        <span className={cn('mt-0.5 flex items-center gap-1.5 text-[0.8125rem] font-medium', tone[health.tone])}>
-          <span className={cn('size-1.5 shrink-0 rounded-full', dot[health.tone])} aria-hidden />
-          {health.label}
-        </span>
+        <StatusInline tone={health.tone} className="mt-0.5">{health.label}</StatusInline>
         <div className="mt-1 text-[0.8125rem] leading-5 text-muted-foreground [overflow-wrap:anywhere]">{detail}</div>
       </div>
     </Link>
@@ -454,22 +451,22 @@ function StageCard({ id, title, icon: Icon, to, health, detail }: {
 /* -------------------------------------------------------------------------- */
 
 function dhcpHealth(dhcp: ReturnType<typeof useDhcpStatus>): Health {
-  if (dhcp.isError) return { label: t('Unavailable'), tone: 'caution' }
-  if (!dhcp.data) return { label: t('Reading…'), tone: 'quiet' }
-  if (!dhcp.data.enabled) return { label: t('Off'), tone: 'quiet' }
-  if (dhcp.data.service_error) return { label: t('Unavailable'), tone: 'caution' }
-  if (dhcp.data.drift_error || dhcp.data.blockers?.length) return { label: t('Needs attention'), tone: 'caution' }
-  if (!dhcp.data.service?.active) return { label: t('Not running'), tone: 'caution' }
-  return dhcp.data.drifted ? { label: t('Needs attention'), tone: 'caution' } : { label: t('Running'), tone: 'good' }
+  if (dhcp.isError) return state('Unavailable')
+  if (!dhcp.data) return state('Reading…')
+  if (!dhcp.data.enabled) return state('Off')
+  if (dhcp.data.service_error) return state('Unavailable')
+  if (dhcp.data.drift_error || dhcp.data.blockers?.length) return state('Needs attention')
+  if (!dhcp.data.service?.active) return state('Not running')
+  return dhcp.data.drifted ? state('Needs attention') : state('Running')
 }
 
 function dnsHealth(dns: ReturnType<typeof useDnsStatus>): Health {
-  if (dns.isError) return { label: t('Unavailable'), tone: 'caution' }
-  if (!dns.data) return { label: t('Reading…'), tone: 'quiet' }
-  if (!dns.data.enabled) return { label: t('Off'), tone: 'quiet' }
-  if (dns.data.services.some(service => service.error)) return { label: t('Unavailable'), tone: 'caution' }
-  if (dns.data.drift_error || dns.data.blockers?.length) return { label: t('Needs attention'), tone: 'caution' }
+  if (dns.isError) return state('Unavailable')
+  if (!dns.data) return state('Reading…')
+  if (!dns.data.enabled) return state('Off')
+  if (dns.data.services.some(service => service.error)) return state('Unavailable')
+  if (dns.data.drift_error || dns.data.blockers?.length) return state('Needs attention')
   const running = dns.data.services.length > 0 && dns.data.services.every(service => service.status?.active)
-  if (!running) return { label: t('Not running'), tone: 'caution' }
-  return dns.data.drifted ? { label: t('Needs attention'), tone: 'caution' } : { label: t('Running'), tone: 'good' }
+  if (!running) return state('Not running')
+  return dns.data.drifted ? state('Needs attention') : state('Running')
 }

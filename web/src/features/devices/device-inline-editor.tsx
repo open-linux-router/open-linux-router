@@ -155,7 +155,7 @@ export function DeviceInlineEditor({ device, traffic, activity, services, total 
         <DialogHeader><DialogTitle>{t('IP address')}</DialogTitle><DialogDescription>{t('Address settings for')} {device.name || device.mac}.</DialogDescription></DialogHeader>
         <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (!dhcpApplier.busy && (!fixed || ip.trim())) void saveReservation() }}>
           <div className="space-y-2"><label htmlFor="device-ip" className="text-sm font-medium">{t('IP address')}</label><Input id="device-ip" autoFocus value={ip} disabled={dhcpApplier.busy} onChange={(e) => { setIp(e.target.value); setFixed(true) }} placeholder="192.168.1.50" /></div>
-          <div className="flex items-center justify-between gap-3"><label htmlFor="device-fixed" className="text-sm font-medium">{t('Fixed IP address')}</label><Switch id="device-fixed" checked={fixed} disabled={dhcpApplier.busy} onCheckedChange={setFixed} /></div>
+          <div className="flex items-center justify-between gap-3"><label htmlFor="device-fixed" className="text-sm font-medium">{t('Fixed IP address')}</label><Switch id="device-fixed" checked={fixed} busy={dhcpApplier.busy} onCheckedChange={setFixed} /></div>
           <DialogFooter><Button type="button" variant="ghost" disabled={dhcpApplier.busy} onClick={() => setEditing(null)}>{t('Cancel')}</Button><Button type="submit" disabled={(fixed && !ip.trim()) || !dhcp.data || dhcpApplier.busy}>{t('Save')}</Button></DialogFooter>
         </form>
       </DialogContent>

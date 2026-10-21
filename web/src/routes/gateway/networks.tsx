@@ -122,6 +122,7 @@ export function ServedNetworksContent() {
                 title={n.name}
                 subtitle={subtitleOf(n)}
                 trailing={n.members.join(', ') || 'no interface'}
+                editLabel={`${t('Edit')} ${n.name}`}
                 onSelect={() => {
                   setEditing(stored.find((s) => s.name === n.name))
                   setOpen(true)
@@ -197,8 +198,8 @@ export function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useNet
         </Disclosure>
 
         <DialogFooter>
-          <Button variant="outline" onClick={editor.cancel}>{t('Cancel')}</Button>
-          <Button variant="destructive" disabled={editor.busy} onClick={editor.confirm}>{t('Apply anyway')}</Button>
+          <Button variant="ghost" onClick={editor.cancel}>{t('Cancel')}</Button>
+          <Button disabled={editor.busy} onClick={editor.confirm}>{t('Apply anyway')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

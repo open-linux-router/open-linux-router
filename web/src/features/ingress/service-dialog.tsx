@@ -316,13 +316,13 @@ export function ServiceDialog({
 
         <DialogFooter className="sm:justify-between">
           {onRemove ? (
-            <Button variant="ghost" className="text-destructive" onClick={onRemove}>
+            <Button variant="destructive" onClick={onRemove}>
               <Trash2 />{t('Stop publishing')}</Button>
           ) : (
             <span />
           )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
             <Button
               disabled={!complete || saving}
               onClick={async () => {

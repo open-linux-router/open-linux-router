@@ -6,5 +6,5 @@
 export const STUCK_SUMMARY = {
   headline: 'Running on old settings',
   detail: 'What is saved cannot be put in force — see below.',
-  dot: 'bg-warning',
+  tone: 'warn' as const,
 }

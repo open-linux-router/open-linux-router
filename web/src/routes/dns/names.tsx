@@ -63,6 +63,7 @@ export function DnsNamesPage() {
               // string somebody is about to type into a browser.
               title={qualify(h.name, domain)}
               subtitle={h.addresses.join(', ')}
+              editLabel={`${t('Edit')} ${qualify(h.name, domain)}`}
               onSelect={
                 busy
                   ? undefined

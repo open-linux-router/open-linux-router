@@ -1,5 +1,5 @@
 import { t, useLocale } from '@/lib/i18n'
-import { Badge } from '@/components/ui/badge'
+import { StatusInline } from '@/components/ui/status'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import type { ForwardStatus } from '@/lib/api-types'
 import type { Forward } from '@/lib/config-types'
@@ -32,6 +32,7 @@ export function ForwardList({
             subtitle={describeForward(f)}
             wrap
             trailing={row ? <ArrivedBadge row={row} /> : undefined}
+            editLabel={`${t('Edit')} ${f.name}`}
             onSelect={() => onEdit(f)}
           />
         )
@@ -51,9 +52,11 @@ export function ForwardList({
  */
 function ArrivedBadge({ row }: { row: ForwardStatus }) {
   useLocale()
-  if (!row.counted) return <Badge variant="secondary">{t('Not counted')}</Badge>
-  if (row.packets === 0) return <Badge variant="secondary">{t('Nothing yet')}</Badge>
-  return <Badge variant="success">{formatBytes(row.bytes)} in</Badge>
+  // "Not counted" is an answer we do not have; "nothing yet" and a byte total
+  // are facts. Only the first is a status, so only it gets a dot.
+  if (!row.counted) return <StatusInline tone="unknown">{t('Not counted')}</StatusInline>
+  if (row.packets === 0) return <span className="text-muted-foreground">{t('Nothing yet')}</span>
+  return <span className="tabular-nums">{formatBytes(row.bytes)} in</span>
 }
 
 /** The schema word for `both` is not a label; the other two already are. */

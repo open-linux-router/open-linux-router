@@ -102,6 +102,7 @@ export function SwitchField({
   checked,
   busy,
   onChange,
+  variant = 'panel',
 }: {
   id: string
   label: string
@@ -109,10 +110,18 @@ export function SwitchField({
   checked: boolean
   busy: boolean
   onChange: (on: boolean) => void
+  /**
+   * `panel` is a setting that owns a surface of its own. `inline` sits on a
+   * line inside a card that already has one, and keeps the label next to the
+   * switch instead of putting the switch alone at the edge.
+   */
+  variant?: 'panel' | 'inline'
 }) {
   useLocale()
   return (
-    <div className="panel-surface flex items-center gap-6 p-4 sm:p-6">
+    <div className={variant === 'panel'
+      ? 'panel-surface flex items-center gap-6 p-4 sm:p-6'
+      : 'flex min-h-11 min-w-0 flex-1 items-center gap-6'}>
       <div className="min-w-0 flex-1">
         <Label htmlFor={id} className="text-sm font-medium">{label}</Label>
         <p className="max-w-prose text-xs text-muted-foreground">{hint}</p>
@@ -121,7 +130,7 @@ export function SwitchField({
         id={id}
         aria-label={label}
         checked={checked}
-        disabled={busy}
+        busy={busy}
         onCheckedChange={onChange}
       />
     </div>

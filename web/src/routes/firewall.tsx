@@ -71,7 +71,7 @@ export function FirewallPage() {
       <StatusStrip
         headline={summary.headline}
         detail={summary.detail}
-        dot={summary.dot}
+        tone={summary.tone}
         control={{
           id: 'firewall-enabled',
           get label() { return t('Firewall') },
@@ -95,10 +95,9 @@ export function FirewallPage() {
           <AlertDescription className="space-y-3">
             <p>{lockout}</p>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => setLockout(null)}>{t('Cancel')}</Button>
+              <Button size="sm" variant="ghost" onClick={() => setLockout(null)}>{t('Cancel')}</Button>
               <Button
                 size="sm"
-                variant="destructive"
                 disabled={set.isPending}
                 onClick={() => void send(pendingEnabled, true)}
               >

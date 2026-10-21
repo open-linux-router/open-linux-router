@@ -1,4 +1,5 @@
 import { t, useLocale } from '@/lib/i18n'
+import { StatusInline } from '@/components/ui/status'
 import { Plus } from 'lucide-react'
 import { Link } from 'react-router'
 
@@ -44,7 +45,7 @@ export function DeviceServices({
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
       {ingress.isError ? (
-        <span className="text-destructive">{t('Unavailable')}</span>
+        <StatusInline tone="unknown">{t('Unavailable')}</StatusInline>
       ) : ingress.isPending ? (
         <span className="text-muted-foreground">{t('Loading…')}</span>
       ) : (

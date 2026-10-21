@@ -61,6 +61,7 @@ export function DnsBlockingPage() {
                   ? ` · ${p.allow.length} exception${p.allow.length === 1 ? '' : 's'}`
                   : ''
               }`}
+              editLabel={`${t('Edit')} ${p.name}`}
               onSelect={
                 busy
                   ? undefined

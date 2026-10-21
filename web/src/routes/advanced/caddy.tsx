@@ -7,7 +7,8 @@ import { useDeviceList } from '@/features/devices/queries'
 import { StatusStrip } from '@/components/layout/status-strip'
 import { SubPage } from '@/components/layout/sub-page'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+import { StatusPill } from '@/components/ui/status'
+import { state } from '@/lib/state'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -169,14 +170,14 @@ export function CaddyPage() {
             ? 'Services require their own authentication.'
             : 'These addresses are saved but switched off, so none of them answers.'
         }
-        dot={
-          status.isError || status.isPending ? 'bg-muted-foreground/40' : !current.enabled
-            ? 'bg-muted-foreground/40'
+        tone={
+          status.isError ? 'fault' : status.isPending ? 'unknown' : !current.enabled
+            ? 'off'
             : status.data?.problems?.length
-              ? 'bg-warning'
+              ? 'warn'
               : status.data?.binary_error
-              ? 'bg-destructive'
-              : 'bg-success'
+                ? 'fault'
+                : 'ok'
         }
         control={{
           id: 'ingress-enabled',
@@ -206,7 +207,7 @@ export function CaddyPage() {
             )}
           </CardDescription>
           <CardAction>
-            <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+            <Button size="sm" onClick={() => setAdding(true)}>
               <Plus /> {t('Add')} </Button>
           </CardAction>
         </CardHeader>
@@ -284,7 +285,7 @@ function CertificateCard({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <ShieldCheck className="size-4 text-muted-foreground" /> {t('Certificate')} {status && <CertBadge status={status} enabled={enabled} />}
+          <ShieldCheck className="size-4 text-muted-foreground" /> {t('Certificate')} {status && <CertState status={status} enabled={enabled} />}
         </CardTitle>
         <CardDescription> {t('Covers all published addresses.')} </CardDescription>
         <CardAction>
@@ -312,15 +313,18 @@ function CertificateCard({
  * and has been quietly failing to renew for weeks. Collapsing any of these into
  * the others would send somebody to look in the wrong place.
  */
-function CertBadge({ status, enabled }: { status: IngressStatus; enabled: boolean }) {
+function CertState({ status, enabled }: { status: IngressStatus; enabled: boolean }) {
   useLocale()
   const cert = status.certificate
-  if (!enabled) return <Badge variant="secondary">{t('Not needed yet')}</Badge>
-  if (status.certificate_error) return <Badge variant="secondary">{t('Unknown')}</Badge>
-  if (!cert.found) return <Badge variant="secondary">{t('Waiting')}</Badge>
-  if ((cert.expires_in_days ?? 0) <= 0) return <Badge variant="destructive">{t('Expired')}</Badge>
-  if (cert.renewal_overdue) return <Badge variant="destructive">{t('Renewal overdue')}</Badge>
-  return <Badge variant="success">{t('Valid for')} {cert.expires_in_days} {t('days')}</Badge>
+  // Expired is broken; overdue is still serving and will stop serving, which is
+  // a different colour and a different job for whoever reads it.
+  const health = !enabled ? state('Not needed yet')
+    : status.certificate_error ? state('Unknown')
+      : !cert.found ? state('Waiting')
+        : (cert.expires_in_days ?? 0) <= 0 ? state('Expired')
+          : cert.renewal_overdue ? state('Renewal overdue')
+            : state('Valid for {days} days', { days: cert.expires_in_days ?? 0 })
+  return <StatusPill tone={health.tone}>{health.label}</StatusPill>
 }
 
 function ServiceList({
@@ -371,6 +375,7 @@ function ServiceList({
                 </Button>
               ) : undefined
             }
+            editLabel={`${t('Edit')} ${s.name}`}
             onSelect={() => onEdit(s)}
           />
         )
@@ -415,8 +420,8 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useIngressApply
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={applier.cancel}> {t('Cancel')} </Button>
-          <Button variant="destructive" onClick={applier.confirm} disabled={applier.busy}> {t('Apply anyway')} </Button>
+          <Button variant="ghost" onClick={applier.cancel}> {t('Cancel')}</Button>
+          <Button onClick={applier.confirm} disabled={applier.busy}> {t('Apply anyway')} </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

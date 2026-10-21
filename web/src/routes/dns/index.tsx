@@ -8,7 +8,6 @@ import { StuckSettings } from '@/components/layout/stuck-settings'
 import { STUCK_SUMMARY } from '@/components/layout/stuck-summary'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Disclosure } from '@/components/ui/disclosure'
-import { Switch } from '@/components/ui/switch'
 import { SwitchField } from '@/components/ui/editable-field'
 import { ActivityCard } from '@/features/dns/activity'
 import { PlanDiff } from '@/features/dns/impact'
@@ -17,6 +16,7 @@ import { useDnsQueries, useDnsStatus } from '@/features/dns/queries'
 import { RELAY_UNIT, RESOLVER_UNIT, UnitLabel, serviceOf, unitLabel } from '@/features/dns/units'
 import { useInterfaces } from '@/features/link/queries'
 import type { DnsStatus } from '@/lib/api-types'
+import type { Tone } from '@/lib/state'
 import type { DnsConfig } from '@/lib/config-types'
 
 /** A compact overview; the full query log and diagnostics live in DNS details. */
@@ -39,21 +39,33 @@ export function DnsContent() {
         <Alert><AlertTriangle /><AlertTitle>{t('Choose an interface first')}</AlertTitle><AlertDescription>{t('DNS needs an adopted interface.')}<Link to="/gateway#interfaces" className="underline underline-offset-4">{t('Go to Interfaces')}</Link></AlertDescription></Alert>
       )}
       <div className="rounded-xl border bg-card p-5 space-y-4">
-        <div className="flex items-center gap-3">
-          <span className={`size-2.5 shrink-0 rounded-full ${summary.dot}`} aria-hidden />
-          <div className="min-w-0 flex-1">
-            <p className="font-medium">{summary.headline}</p>
-            <p className="text-sm text-muted-foreground">{summary.detail}</p>
-          </div>
-          <Switch aria-label={t('Answer DNS for this network')} checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change({ ...config, enabled })} />
-        </div>
+        <StatusStrip
+          density="compact"
+          tone={summary.tone}
+          headline={summary.headline}
+          detail={summary.detail}
+          control={{
+            id: 'dns-enabled-quick',
+            get label() { return t('Answer DNS for this network') },
+            checked: config.enabled,
+            busy,
+            onChange: (enabled) => change({ ...config, enabled }),
+          }}
+        />
         <div className="grid gap-3 text-sm sm:grid-cols-2">
           <p><span className="text-muted-foreground">{t('Upstream')}</span><br />{summariseUpstream(config)}</p>
           <p><span className="text-muted-foreground">{t('Queries since restart')}</span><br />{stats ? `${stats.queries.toLocaleString()} looked up · ${stats.blocked.toLocaleString()} blocked` : queries.isError ? t('Unavailable') : t('Checking…')}</p>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3 text-sm">
-          <label className="flex items-center gap-2">{t('Keep a query log')} <Switch checked={config.query_log.enabled} disabled={busy} onCheckedChange={(enabled) => change({ ...config, query_log: { ...config.query_log, enabled } })} />
-          </label>
+          <SwitchField
+            variant="inline"
+            id="dns-query-log"
+            label={t('Keep a query log')}
+            hint={t('Records the names each device asks for. Kept in memory and dropped on restart.')}
+            checked={config.query_log.enabled}
+            busy={busy}
+            onChange={(enabled) => change({ ...config, query_log: { ...config.query_log, enabled } })}
+          />
           <Link to="/gateway/dns" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">{t('DNS activity and advanced settings')}<ChevronRight className="size-4" aria-hidden /></Link>
         </div>
         <SwitchField
@@ -205,7 +217,7 @@ function StatusCard({
     <StatusStrip
       headline={summary.headline}
       detail={summary.detail}
-      dot={summary.dot}
+      tone={summary.tone}
       control={{
         id: 'dns-enabled',
         get label() { return t('Answer DNS for this network') },
@@ -355,22 +367,22 @@ function describeStatus(
   config: DnsConfig,
   status: DnsStatus | undefined,
   error: Error | null,
-): { headline: string; detail: string; dot: string } {
+): { headline: string; detail: string; tone: Tone } {
   if (error) {
-    return { headline: 'Cannot reach the router', detail: error.message, dot: 'bg-destructive' }
+    return { headline: 'Cannot reach the router', detail: error.message, tone: 'fault' }
   }
   if (!status) {
     return {
       headline: 'Checking…',
       detail: 'Reading the current state.',
-      dot: 'bg-muted-foreground/40',
+      tone: 'unknown',
     }
   }
   if (!config.enabled) {
     return {
       headline: 'Off',
       detail: 'Devices cannot look up names through this router.',
-      dot: 'bg-muted-foreground/40',
+      tone: 'off',
     }
   }
 
@@ -381,14 +393,14 @@ function describeStatus(
     return {
       headline: 'Status unknown',
       detail: relay?.error ?? resolver?.error ?? 'The router could not read the service state.',
-      dot: 'bg-warning',
+      tone: 'unknown',
     }
   }
   if (relay?.status && !relay.status.active) {
     return {
       headline: 'Not answering',
       detail: 'Turned on, but nothing is serving DNS. Devices cannot look up names.',
-      dot: 'bg-destructive',
+      tone: 'fault',
     }
   }
   if (resolver?.status && !resolver.status.active) {
@@ -396,14 +408,14 @@ function describeStatus(
       headline: 'Answering, but nothing is resolving',
       detail:
         'Devices reach this router, but it cannot look anything up behind the scenes. Lookups will fail.',
-      dot: 'bg-destructive',
+      tone: 'fault',
     }
   }
   if (status.drift_error) return STUCK_SUMMARY
   return {
     headline: 'Answering queries',
     detail: describeUpstream(config),
-    dot: 'bg-success',
+    tone: 'ok',
   }
 }
 

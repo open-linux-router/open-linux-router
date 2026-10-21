@@ -697,7 +697,7 @@ export function TunnelBrokerPage() {
                 }
               >{t('Confirm changes')}</Button>
               <Button
-                variant="outline"
+                variant="ghost"
                 disabled={busy}
                 onClick={() => setPreview(null)}
               >{t('Cancel')}</Button>
@@ -807,7 +807,7 @@ export function TunnelBrokerPage() {
               <Button disabled={busy} onClick={() => void run(applyNetwork)}>{t('Apply')}{networkChange.module} changes
               </Button>
               <Button
-                variant="outline"
+                variant="ghost"
                 disabled={busy}
                 onClick={() => setNetworkChange(null)}
               >{t('Cancel')}</Button>

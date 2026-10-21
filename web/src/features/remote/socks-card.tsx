@@ -70,7 +70,7 @@ export function SocksCard({
             <Switch
               checked={enabled}
               onCheckedChange={(next) => applier.submit(socksChange.enabled(next))}
-              disabled={applier.busy}
+              busy={applier.busy}
               aria-label="SOCKS5"
             />
           </CardAction>

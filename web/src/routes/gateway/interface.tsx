@@ -1,6 +1,7 @@
 import { t, useLocale } from '@/lib/i18n'
 import { Heading } from '@/components/ui/heading'
 import { TechnicalValue } from '@/components/ui/property-row'
+import { StatusInline } from '@/components/ui/status'
 import { ArrowUpRight, Pencil } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
@@ -76,7 +77,7 @@ export function GatewayInterfacePage() {
         <Heading as="h1" size="lg" className="font-mono">{row.name}</Heading>
         <p className="text-sm text-muted-foreground">{isUplink ? t('Internet uplink') : network ? `${network.name} network` : row.loopback ? 'Local interface' : 'Network interface'}</p>
       </div>
-      <span className={`text-sm font-medium ${state.tone}`}>{state.label}</span>
+      <StatusInline tone={state.tone} className="text-sm">{state.label}</StatusInline>
     </header>
 
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

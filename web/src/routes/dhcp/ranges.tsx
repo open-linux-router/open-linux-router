@@ -74,6 +74,7 @@ export function DhcpRangesPage() {
                   )
                 }
                 trailing={u ? `${u.active} of ${u.size} in use` : undefined}
+                editLabel={`${t('Edit')} ${pool.network}`}
                 onSelect={
                   busy
                     ? undefined

@@ -52,6 +52,7 @@ export function DhcpReservationsPage() {
               key={r.mac}
               title={r.hostname ?? r.ip}
               subtitle={r.hostname ? `${r.ip} · ${r.mac}` : r.mac}
+              editLabel={`${t('Edit')} ${r.hostname ?? r.ip}`}
               onSelect={
                 busy
                   ? undefined

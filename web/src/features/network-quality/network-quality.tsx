@@ -3,7 +3,6 @@ import { useRef, useState } from 'react'
 import { ChevronRight, CircleHelp, LoaderCircle, RotateCw, X } from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Heading } from '@/components/ui/heading'
@@ -11,6 +10,7 @@ import { MetricValue } from '@/components/ui/metric-value'
 import { PropertyRow, TechnicalValue } from '@/components/ui/property-row'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { StatusPill } from '@/components/ui/status'
 import { cn } from '@/lib/utils'
 import { categoryEvidence, serviceEvidence, type CategoryEvidence, type ServiceEvidence } from './measurements'
 import { useNetworkQuality, useQualityAction } from './queries'
@@ -32,11 +32,14 @@ function polygon(score: number) {
 
 const points = (value: number) => Number(value.toFixed(1)).toString()
 
-type Tone = 'success' | 'warning' | 'destructive'
+type GradeTone = 'success' | 'warning' | 'destructive'
+
+/** The grade bands are a judgement, so they wear the status pill. */
+const gradeStatusTone = { success: 'ok', warning: 'warn', destructive: 'fault' } as const
 
 // Display bands only: they name the same 0–100 reference score and never change
 // the calculation in docs/network-quality.md.
-const grades: { min: number; label: string; range: string; variant: Tone }[] = [
+const grades: { min: number; label: string; range: string; variant: GradeTone }[] = [
   { min: 90, label: 'Excellent', range: '90–100', variant: 'success' },
   { min: 75, label: 'Good', range: '75–89', variant: 'success' },
   { min: 60, label: 'Fair', range: '60–74', variant: 'warning' },
@@ -49,13 +52,13 @@ function gradeFor(score: number) {
 
 // The ring and the bars carry the grade; the score itself stays foreground so a
 // page of amber scores does not read as a page of warnings.
-const toneStroke: Record<Tone, string> = {
+const toneStroke: Record<GradeTone, string> = {
   success: 'text-success',
   warning: 'text-warning',
   destructive: 'text-destructive',
 }
 
-const toneFill: Record<Tone, string> = {
+const toneFill: Record<GradeTone, string> = {
   success: 'bg-success',
   warning: 'bg-warning',
   destructive: 'bg-destructive',
@@ -299,7 +302,7 @@ function Hint({ label, children }: { label: string; children: React.ReactNode })
 
 function ScorePanel({ score, grade, measured, total, coverage, copy, busy }: {
   score: number | null
-  grade: { label: string; range: string; variant: Tone } | null
+  grade: { label: string; range: string; variant: GradeTone } | null
   measured: number
   total: number
   coverage: number
@@ -313,7 +316,7 @@ function ScorePanel({ score, grade, measured, total, coverage, copy, busy }: {
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <Heading as="h2" size="sm" id="quality-result" className="text-muted-foreground">{t('Overall score')}</Heading>
-          {grade && <Badge variant={grade.variant}>{t(grade.label)}</Badge>}
+          {grade && <StatusPill tone={gradeStatusTone[grade.variant]}>{t(grade.label)}</StatusPill>}
         </div>
         {score != null
           ? <>

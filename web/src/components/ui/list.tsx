@@ -1,6 +1,7 @@
-import { ChevronRight } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { Link } from 'react-router'
 
+import { RowAction, RowChevron } from '@/components/ui/row-action'
 import { cn } from '@/lib/utils'
 
 function List({ className, ...props }: React.ComponentProps<'ul'>) {
@@ -8,13 +9,19 @@ function List({ className, ...props }: React.ComponentProps<'ul'>) {
 }
 
 /** Values reflow below the title on phones. Actions stay outside the row link/button. */
-function ListRow({ title, subtitle, leading, trailing, trailingTone = 'muted', action, onSelect, to, wrap = false, className, ...props }: Omit<React.ComponentProps<'li'>, 'title' | 'onSelect'> & {
+function ListRow({ title, subtitle, leading, trailing, trailingTone = 'muted', action, editLabel, onSelect, to, wrap = false, className, ...props }: Omit<React.ComponentProps<'li'>, 'title' | 'onSelect'> & {
   title: React.ReactNode
   subtitle?: React.ReactNode
   leading?: React.ReactNode
   trailing?: React.ReactNode
   trailingTone?: 'muted' | 'value'
   action?: React.ReactNode
+  /**
+   * The accessible name for the row's edit affordance. A row that opens an
+   * editor wears a pencil rather than the navigation chevron, so the glyphs in
+   * a list only ever mean one thing each.
+   */
+  editLabel?: string
   onSelect?: () => void
   to?: string
   wrap?: boolean
@@ -33,13 +40,19 @@ function ListRow({ title, subtitle, leading, trailing, trailingTone = 'muted', a
     </div>
   </>
   const interactive = 'flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-accent/60 active:bg-accent focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring sm:px-5'
-  const chevron = <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+  // The chevron means "this row leads somewhere". A row that opens an editor
+  // says so with a pencil instead, so the same glyph never means two verbs.
   return (
     <li data-slot="list-row" className={cn('flex items-center bg-card', className)} {...props}>
-      {to ? <Link to={to} className={interactive}>{body}{chevron}</Link>
-        : onSelect ? <button type="button" onClick={onSelect} className={interactive}>{body}{chevron}</button>
+      {to ? <Link to={to} className={interactive}>{body}<RowChevron /></Link>
+        : onSelect ? <button type="button" onClick={onSelect} className={interactive}>{body}</button>
           : <div className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-3 sm:px-5">{body}</div>}
-      {action && <div className="shrink-0 pr-3">{action}</div>}
+      {(action || (editLabel && onSelect)) && (
+        <div className="flex shrink-0 items-center gap-1 pr-3">
+          {editLabel && onSelect && <RowAction icon={Pencil} label={editLabel} onClick={onSelect} />}
+          {action}
+        </div>
+      )}
     </li>
   )
 }

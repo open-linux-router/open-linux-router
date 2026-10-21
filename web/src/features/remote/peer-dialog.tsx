@@ -158,7 +158,7 @@ export function PeerDialog({
             <span />
           )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}> {t('Cancel')} </Button>
+            <Button variant="ghost" onClick={() => onOpenChange(false)}> {t('Cancel')} </Button>
             <Button onClick={submit} disabled={!valid}>
               {editing ? t('Save') : t('Add')}
             </Button>

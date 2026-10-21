@@ -114,7 +114,7 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useDhcpApply> }
               disruptive one. The per-file badges inside the diff still earn
               their place, because a change can span files of mixed impact. */}
           <Button variant="ghost" onClick={applier.cancel}>{t('Cancel')}</Button>
-          <Button variant="destructive" onClick={applier.confirm}>{t('Apply anyway')}</Button>
+          <Button onClick={applier.confirm}>{t('Apply anyway')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

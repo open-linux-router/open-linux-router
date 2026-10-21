@@ -8,13 +8,13 @@ import { StatusDetail, StatusStrip } from '@/components/layout/status-strip'
 import { StuckSettings } from '@/components/layout/stuck-settings'
 import { STUCK_SUMMARY } from '@/components/layout/stuck-summary'
 import { Disclosure } from '@/components/ui/disclosure'
-import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ApplyOutcome, useDhcpEditor } from '@/features/dhcp/editor'
 import { PlanDiff } from '@/features/dhcp/impact'
 import { useDhcpLeases, useDhcpStatus } from '@/features/dhcp/queries'
 import { useInterfaces } from '@/features/link/queries'
 import type { DhcpStatus } from '@/lib/api-types'
+import type { Tone } from '@/lib/state'
 import type { DhcpConfig } from '@/lib/config-types'
 
 /**
@@ -44,14 +44,19 @@ export function DhcpContent() {
         <Alert><AlertTriangle /><AlertTitle>{t('Choose an interface first')}</AlertTitle><AlertDescription>{t('DHCP needs an adopted interface.')}<Link to="/gateway#interfaces" className="underline underline-offset-4">{t('Go to Interfaces')}</Link></AlertDescription></Alert>
       )}
       <div className="rounded-xl border bg-card p-5 space-y-4">
-        <div className="flex items-center gap-3">
-          <span className={`size-2.5 shrink-0 rounded-full ${summary.dot}`} aria-hidden />
-          <div className="min-w-0 flex-1">
-            <p className="font-medium">{summary.headline}</p>
-            <p className="text-sm text-muted-foreground">{config.enabled && active !== undefined && summary !== STUCK_SUMMARY ? `${active} devices with active leases` : summary.detail}</p>
-          </div>
-          <Switch aria-label={t('Hand out addresses')} checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change({ ...config, enabled })} />
-        </div>
+        <StatusStrip
+          density="compact"
+          tone={summary.tone}
+          headline={summary.headline}
+          detail={config.enabled && active !== undefined && summary !== STUCK_SUMMARY ? `${active} devices with active leases` : summary.detail}
+          control={{
+            id: 'dhcp-enabled-quick',
+            get label() { return t('Hand out addresses') },
+            checked: config.enabled,
+            busy,
+            onChange: (enabled) => change({ ...config, enabled }),
+          }}
+        />
         <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-sm">
           <span className="text-muted-foreground">{config.pools?.length ?? 0} network{config.pools?.length === 1 ? '' : 's'} with address service</span>
           <Link to="/gateway/dhcp" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">{t('DHCP status and settings')}<ChevronRight className="size-4" aria-hidden /></Link>
@@ -172,7 +177,7 @@ function StatusCard({
           ? `${connected} device${connected === 1 ? '' : 's'} connected`
           : summary.detail
       }
-      dot={summary.dot}
+      tone={summary.tone}
       control={{
         id: 'dhcp-enabled',
         get label() { return t('Hand out addresses') },
@@ -255,29 +260,29 @@ function describeStatus(
   config: DhcpConfig,
   status: DhcpStatus | undefined,
   error: Error | null,
-): { headline: string; detail: string; dot: string } {
+): { headline: string; detail: string; tone: Tone } {
   if (error) {
-    return { headline: 'Cannot reach the router', detail: error.message, dot: 'bg-destructive' }
+    return { headline: 'Cannot reach the router', detail: error.message, tone: 'fault' }
   }
   if (!status) {
     return {
       headline: 'Checking…',
       detail: 'Reading the current state.',
-      dot: 'bg-muted-foreground/40',
+      tone: 'unknown',
     }
   }
   if (!config.enabled) {
     return {
       headline: 'Off',
       detail: 'Devices will not get an address from this router.',
-      dot: 'bg-muted-foreground/40',
+      tone: 'off',
     }
   }
   if (!status.service) {
     return {
       headline: 'Status unknown',
       detail: status.service_error ?? 'The router could not read the service state.',
-      dot: 'bg-warning',
+      tone: 'unknown',
     }
   }
   // Running, but on what it was given before: see StuckSettings. A green
@@ -285,10 +290,10 @@ function describeStatus(
   // handing them out on a network that no longer existed.
   if (status.service.active && status.drift_error) return STUCK_SUMMARY
   return status.service.active
-    ? { headline: 'Handing out addresses', detail: 'Working normally.', dot: 'bg-success' }
+    ? { headline: 'Handing out addresses', detail: 'Working normally.', tone: 'ok' }
     : {
         headline: 'Not running',
         detail: 'Turned on, but the service is stopped.',
-        dot: 'bg-destructive',
+        tone: 'fault',
       }
 }

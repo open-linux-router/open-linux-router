@@ -128,7 +128,7 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useDnsApply> })
 
         <DialogFooter>
           <Button variant="ghost" onClick={applier.cancel}>{t('Cancel')}</Button>
-          <Button variant="destructive" onClick={applier.confirm}>{t('Apply anyway')}</Button>
+          <Button onClick={applier.confirm}>{t('Apply anyway')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

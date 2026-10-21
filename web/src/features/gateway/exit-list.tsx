@@ -1,5 +1,6 @@
 import { t, useLocale } from '@/lib/i18n'
-import { Badge } from '@/components/ui/badge'
+import { StatusInline } from '@/components/ui/status'
+import { state } from '@/lib/state'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import type { ExitStatus } from '@/lib/api-types'
 import type { Exit } from '@/lib/config-types'
@@ -34,7 +35,8 @@ export function ExitList({
             title={e.name}
             subtitle={describeExit(e, row)}
             wrap
-            trailing={e.via.kind === 'blocked' ? <Badge variant="secondary">{t('Blocking')}</Badge> : row ? <HealthBadge row={row} /> : <Badge variant="secondary">{t('Status unknown')}</Badge>}
+            trailing={e.via.kind === 'blocked' ? <StatusInline tone="off">{t('Blocking')}</StatusInline> : row ? <ExitState row={row} /> : <StatusInline tone="unknown">{t('Status unknown')}</StatusInline>}
+            editLabel={`${t('Edit')} ${e.name}`}
             onSelect={() => onEdit(e)}
           />
         )
@@ -43,12 +45,12 @@ export function ExitList({
   )
 }
 
-function HealthBadge({ row }: { row: ExitStatus }) {
+function ExitState({ row }: { row: ExitStatus }) {
   useLocale()
   // "Not checked" rather than "up": claiming health nobody measured is exactly
   // where design.md §5.6 says faults go to hide.
-  if (!row.probed) return <Badge variant="secondary">{t('Not checked')}</Badge>
-  return row.up ? <Badge variant="success">{t('Working')}</Badge> : <Badge variant="destructive">{t('Down')}</Badge>
+  const health = !row.probed ? state('Not checked') : state(row.up ? 'Working' : 'Down')
+  return <StatusInline tone={health.tone}>{health.label}</StatusInline>
 }
 
 function describeExit(e: Exit, row?: ExitStatus): string {

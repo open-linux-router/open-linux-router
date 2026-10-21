@@ -6,7 +6,8 @@ import { Heading } from '@/components/ui/heading'
 import { StatusStrip } from '@/components/layout/status-strip'
 import { SubPage } from '@/components/layout/sub-page'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+import { StatusInline } from '@/components/ui/status'
+import { state } from '@/lib/state'
 import { Button } from '@/components/ui/button'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -76,12 +77,14 @@ export function DdnsPage() {
             ? 'Add a name you own and this router will keep it pointing at your address.'
             : 'Updates when the observed public address changes.'
         }
-        dot={
-          status.isError || status.isPending || records.some((r) => !states.has(r.name)) ? 'bg-muted-foreground/40' : records.length === 0
-            ? 'bg-muted-foreground/40'
-            : failing.length > 0
-              ? 'bg-warning'
-              : 'bg-success'
+        tone={
+          status.isError ? 'fault' : status.isPending || records.some((r) => !states.has(r.name))
+            ? 'unknown'
+            : records.length === 0
+              ? 'off'
+              : failing.length > 0
+                ? 'warn'
+                : 'ok'
         }
       />
 
@@ -96,7 +99,7 @@ export function DdnsPage() {
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <Heading size="sm" className="px-1">{t('Names')}</Heading>
-          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+          <Button size="sm" onClick={() => setAdding(true)}>
             <Plus />{t('Add')}</Button>
         </div>
 
@@ -112,7 +115,8 @@ export function DdnsPage() {
                   title={r.name}
                   wrap
                   subtitle={describe(r, s)}
-                  trailing={<RecordBadge status={status.isError ? undefined : s} />}
+                  trailing={<RecordState status={status.isError ? undefined : s} />}
+                  editLabel={`${t('Edit')} ${r.name}`}
                   onSelect={() => setEditing(r)}
                 />
               )
@@ -169,16 +173,15 @@ function describe(r: DdnsRecord, s?: RecordStatus): string {
   return `${where} · published ${s.published_address} ${when(s.published!)}`
 }
 
-function RecordBadge({ status: s }: { status?: RecordStatus }) {
+function RecordState({ status: s }: { status?: RecordStatus }) {
   useLocale()
-  if (!s) return <Badge variant="secondary">{t('Unknown')}</Badge>
-  if (s.problems?.length || s.check_error || s.publish_error)
-    return <Badge variant="warning">{t('Not up to date')}</Badge>
-  if (s.cgnat) return <Badge variant="warning">{t('Behind shared NAT')}</Badge>
-  if (!s.watched || !s.checked) return <Badge variant="secondary">{t('Waiting')}</Badge>
-  if (s.address && s.published_address === s.address)
-    return <Badge variant="success">{t('Up to date')}</Badge>
-  return <Badge variant="secondary">{t('Updating')}</Badge>
+  const health = !s ? state('Unknown')
+    : s.problems?.length || s.check_error || s.publish_error ? state('Not up to date')
+      : s.cgnat ? state('Behind shared NAT')
+        : !s.watched || !s.checked ? state('Waiting')
+          : s.address && s.published_address === s.address ? state('Up to date')
+            : state('Updating')
+  return <StatusInline tone={health.tone}>{health.label}</StatusInline>
 }
 
 function hostOf(url?: string): string {

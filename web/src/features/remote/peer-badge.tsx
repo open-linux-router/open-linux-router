@@ -1,9 +1,11 @@
-import { t, useLocale } from '@/lib/i18n'
-import { Badge } from '@/components/ui/badge'
+import { useLocale } from '@/lib/i18n'
+
+import { StatusInline } from '@/components/ui/status'
+import { elapsed, peerHealth } from '@/lib/state'
 import type { RemotePeer } from '@/lib/api-types'
 
 /**
- * Four states, not two, and the one that matters is "never connected".
+ * Four answers, not two, and the one that matters is "never connected".
  *
  * A device that has *never* connected almost always means the configuration was
  * never imported, or the port is not reachable from outside — a setup problem
@@ -13,20 +15,17 @@ import type { RemotePeer } from '@/lib/api-types'
  *
  * Shared by the device list on the tunnel page and the device's own page, so
  * that one peer cannot read as "Connected" on one screen and "offline" on the
- * next.
+ * next. A last-seen time is a fact rather than a state, so it is plain text with
+ * no dot — the row is not claiming health, only recency.
  */
-export function PeerBadge({ peer }: { peer: RemotePeer }) {
+export function PeerStatus({ peer }: { peer: RemotePeer }) {
   useLocale()
-  if (peer.unknown) return <Badge variant="secondary">{t('Unknown')}</Badge>
-  if (peer.online) return <Badge variant="success">{t('Connected')}</Badge>
-  if (!peer.last_handshake) return <Badge variant="warning">{t('Never connected')}</Badge>
-  return <Badge variant="secondary">{lastSeen(peer.last_handshake)}</Badge>
+  if (!peer.unknown && !peer.online && peer.last_handshake) {
+    return <span className="text-[0.8125rem] text-muted-foreground tabular-nums">{elapsed(peer.last_handshake)}</span>
+  }
+  const health = peerHealth({ unknown: peer.unknown, online: peer.online, lastHandshake: peer.last_handshake })
+  return <StatusInline tone={health.tone}>{health.label}</StatusInline>
 }
 
-function lastSeen(iso: string): string {
-  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60_000)
-  if (minutes < 60) return `${minutes} min ago`
-  const hours = Math.round(minutes / 60)
-  if (hours < 48) return `${hours}h ago`
-  return `${Math.round(hours / 24)}d ago`
-}
+/** Kept for the call sites that read as a badge; it is an inline state now. */
+export const PeerBadge = PeerStatus

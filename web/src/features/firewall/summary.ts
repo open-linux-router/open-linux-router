@@ -1,4 +1,5 @@
 import type { FirewallStatus } from '@/lib/api-types'
+import type { Tone } from '@/lib/state'
 
 /**
  * What the firewall is doing, in the two registers the interface needs it.
@@ -12,31 +13,31 @@ import type { FirewallStatus } from '@/lib/api-types'
 export function firewallSummary(st: FirewallStatus): {
   headline: string
   detail: string
-  dot: string
+  tone: Tone
 } {
   if (!st.enabled) {
     return {
       headline: 'Off',
       detail:
         'Anything that can reach this router may connect to it, and to devices with public IPv6 addresses.',
-      dot: 'bg-muted-foreground/40',
+      tone: 'off',
     }
   }
   if (!st.known) {
     return {
       headline: 'Status unknown',
       detail: st.problem ?? 'The router could not read its own firewall rules.',
-      dot: 'bg-warning',
+      tone: 'warn',
     }
   }
   if (st.native) {
-    return { headline: st.problem ? 'Native rules not verified' : st.drifted ? 'Native rules changed' : 'On — native nftables rules', detail: st.problem ?? (st.drifted ? 'The kernel table differs from the saved native rules.' : 'The saved native table is in force. Review its chains and policies on the Rules page.'), dot: st.problem || st.drifted ? 'bg-warning' : 'bg-success' }
+    return { headline: st.problem ? 'Native rules not verified' : st.drifted ? 'Native rules changed' : 'On — native nftables rules', detail: st.problem ?? (st.drifted ? 'The kernel table differs from the saved native rules.' : 'The saved native table is in force. Review its chains and policies on the Rules page.'), tone: st.problem || st.drifted ? 'warn' : 'ok' }
   }
   if (st.drifted || st.problem) {
     return {
       headline: 'Rules not verified',
       detail: 'The stored setting is on, but the configured protection could not be verified.',
-      dot: 'bg-warning',
+      tone: 'warn',
     }
   }
   const blocked = st.blocked_input + st.blocked_forward
@@ -46,7 +47,7 @@ export function firewallSummary(st: FirewallStatus): {
       blocked > 0
         ? `${blocked.toLocaleString()} packets from outside turned away since the rules were last written.`
         : 'Connections from outside are blocked unless something here asked for them.',
-    dot: 'bg-success',
+    tone: 'ok',
   }
 }
 

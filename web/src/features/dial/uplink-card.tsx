@@ -27,7 +27,8 @@ import type {
   TunnelStatus,
   UplinkStatus,
 } from '@/lib/api-types'
-import { cn } from '@/lib/utils'
+import { StatusDot } from '@/components/ui/status'
+import type { Tone } from '@/lib/state'
 
 /**
  * How this router itself reaches the internet.
@@ -140,7 +141,7 @@ function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
   return (
     <div className="space-y-3">
       <div className="flex items-start gap-3">
-        <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', route.dot)} aria-hidden />
+        <StatusDot tone={route.tone} size="md" className="mt-1.5" />
         <div className="min-w-0 space-y-1">
           <div className="font-mono text-sm font-medium">
             {uplink.interface}
@@ -151,7 +152,7 @@ function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
               ? `Everything else goes to ${uplink.gateway}.`
               : 'olr owns this interface and writes no address or route on it.'}
           </p>
-          <p className={cn('text-sm', route.tone)}>{route.line}</p>
+          <p className="text-sm text-muted-foreground">{route.line}</p>
         </div>
       </div>
 
@@ -317,37 +318,33 @@ function sameSet(a: string[], b: string[]): boolean {
  * carries nothing. That last one showed green until the neighbour table was
  * read, on the box that had it.
  */
-function describeRoute(u: UplinkStatus): { line: string; dot: string; tone: string } {
+function describeRoute(u: UplinkStatus): { line: string; tone: Tone } {
   if (!u.present) {
     return {
       line: 'This machine has no interface with that name.',
-      dot: 'bg-destructive',
-      tone: 'text-destructive',
+      tone: 'fault',
     }
   }
   if (!u.route_via) {
     return {
       line: 'This router has no default route — it cannot reach the internet.',
-      dot: 'bg-destructive',
-      tone: 'text-destructive',
+      tone: 'fault',
     }
   }
   if (!u.gateway) {
     return {
       line: `The default route goes via ${u.route_via} on ${u.route_dev ?? '?'}, which olr did not configure.`,
-      dot: 'bg-muted-foreground/40',
-      tone: 'text-muted-foreground',
+      tone: 'off',
     }
   }
   if (u.route_via !== u.gateway || u.route_dev !== u.interface) {
     return {
       line: `The default route actually goes via ${u.route_via} on ${u.route_dev ?? '?'} — not what is set above. Save again to re-apply it.`,
-      dot: 'bg-warning',
-      tone: 'text-warning-foreground',
+      tone: 'warn',
     }
   }
   if (!u.up) {
-    return { line: `${u.interface} is down.`, dot: 'bg-warning', tone: 'text-warning-foreground' }
+    return { line: `${u.interface} is down.`, tone: 'warn' }
   }
   // The route matches what was set; whether anything is on the other end of
   // it is a separate fact, and the one that decides whether the box is online.
@@ -357,21 +354,18 @@ function describeRoute(u: UplinkStatus): { line: string; dot: string; tone: stri
       line: u.gateway_seen_on
         ? `${u.gateway} is not answering on ${u.interface}. It answers on ${u.gateway_seen_on} — that is the interface facing it, so change the uplink to ${u.gateway_seen_on}.`
         : `${u.gateway} is not answering on ${u.interface}. Check the cable, and that ${u.interface} is the interface facing your modem.`,
-      dot: 'bg-destructive',
-      tone: 'text-destructive',
+      tone: 'fault',
     }
   }
   if (u.gateway_state !== 'answers') {
     return {
       line: `The default route goes via ${u.route_via} on ${u.route_dev}, as set. Nothing has tried to reach ${u.route_via} yet, so whether it answers is not known.`,
-      dot: 'bg-muted-foreground/40',
-      tone: 'text-muted-foreground',
+      tone: 'unknown',
     }
   }
   return {
     line: `The default route goes via ${u.route_via} on ${u.route_dev}, as set, and ${u.route_via} answers.`,
-    dot: 'bg-success',
-    tone: 'text-muted-foreground',
+    tone: 'ok',
   }
 }
 
@@ -411,8 +405,8 @@ function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useUplinkEdit
         </Disclosure>
 
         <DialogFooter>
-          <Button variant="outline" onClick={editor.cancel}>{t('Cancel')}</Button>
-          <Button variant="destructive" disabled={editor.busy} onClick={editor.confirm}>{t('Apply anyway')}</Button>
+          <Button variant="ghost" onClick={editor.cancel}>{t('Cancel')}</Button>
+          <Button disabled={editor.busy} onClick={editor.confirm}>{t('Apply anyway')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -20,16 +20,19 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
+        // 36px desktop. A phone gets the 44px target from `min-h` rather than
+        // from a second height, so the control keeps one rank everywhere.
         default:
-          "h-9 gap-2 px-3.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+          "h-9 min-h-11 gap-2 px-3.5 sm:min-h-0 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-9 gap-1.5 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        // 32px desktop: the small control that used to be 36px with smaller text.
+        sm: "h-8 min-h-11 gap-1.5 px-3 text-[0.8125rem] sm:min-h-0 in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-11 gap-2 px-4 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         icon: "size-9 min-w-11 sm:min-w-0",
         "icon-xs":
           "size-6 min-w-11 rounded-[min(var(--radius-md),10px)] sm:min-w-0 in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
         "icon-sm":
-          "size-9 min-w-11 rounded-[min(var(--radius-md),12px)] sm:min-w-0 in-data-[slot=button-group]:rounded-lg",
+          "size-8 min-w-11 sm:min-w-0 in-data-[slot=button-group]:rounded-lg",
         "icon-lg": "size-11",
       },
     },

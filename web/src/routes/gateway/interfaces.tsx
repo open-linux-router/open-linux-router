@@ -163,7 +163,7 @@ export function GatewayInterfacesPage() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" disabled={reapply.isPending} onClick={() => setRepairPlan(null)}>{t('Cancel')}</Button>
+            <Button variant="ghost" disabled={reapply.isPending} onClick={() => setRepairPlan(null)}>{t('Cancel')}</Button>
             <Button disabled={reapply.isPending} onClick={() => void confirmRepair()}>
               {reapply.isPending ? 'Restoring…' : 'Restore saved settings'}
             </Button>
@@ -198,7 +198,7 @@ export function GatewayInterfacesPage() {
                 left as it is.
               </CardDescription>
               <CardAction>
-                <Switch aria-label={t('Apply gateway routing and IPv4 forwarding')} checked={config.enabled} disabled={busy} onCheckedChange={(enabled) => change(gatewayChange.settings({ enabled }))} />
+                <Switch aria-label={t('Apply gateway routing and IPv4 forwarding')} checked={config.enabled} busy={busy} onCheckedChange={(enabled) => change(gatewayChange.settings({ enabled }))} />
               </CardAction>
             </CardHeader>
             <CardContent className="space-y-3">

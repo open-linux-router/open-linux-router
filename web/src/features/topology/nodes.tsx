@@ -7,7 +7,6 @@ import {
   FolderInput,
   FolderPlus,
   Layers,
-  MoreHorizontal,
   Pencil,
   Plus,
   Router,
@@ -19,6 +18,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 
 import { Button } from '@/components/ui/button'
+import { RowMenu } from '@/components/ui/row-action'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -408,20 +408,7 @@ function GroupMenu({ group, groups, actions }: { group: MapGroup; groups: Device
   const depth = groupOptions(groups).find((g) => g.name === name)?.depth ?? 0
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="relative text-muted-foreground"
-            aria-label={`${group.title} options`}
-          />
-        }
-      >
-        <MoreHorizontal />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
+    <RowMenu label={`${group.title} options`}>
         <DropdownMenuItem render={<Link to={`/groups/${encodeURIComponent(name)}`} />}>
           <Layers /> {t('View group details')} </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -478,8 +465,7 @@ function GroupMenu({ group, groups, actions }: { group: MapGroup; groups: Device
               <Trash2 /> {t('Delete')} </DropdownMenuItem>
           </>
         )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    </RowMenu>
   )
 }
 

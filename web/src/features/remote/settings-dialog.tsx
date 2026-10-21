@@ -123,7 +123,7 @@ export function SettingsDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
           <Button onClick={submit} disabled={endpoint.trim() === ''}>{t('Save')}</Button>
         </DialogFooter>
       </DialogContent>

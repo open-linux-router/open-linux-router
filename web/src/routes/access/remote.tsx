@@ -5,7 +5,9 @@ import { useState } from 'react'
 import { BlockerAlerts } from '@/components/layout/blockers'
 import { SubPage } from '@/components/layout/sub-page'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+import { RowAction } from '@/components/ui/row-action'
+import { StatusPill } from '@/components/ui/status'
+import { state } from '@/lib/state'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -142,7 +144,7 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
           <CardTitle>{t('WireGuard devices')}</CardTitle>
           <CardDescription> {t('Each device has its own key.')} </CardDescription>
           <CardAction>
-            <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+            <Button size="sm" onClick={() => setAdding(true)}>
               <Plus /> {t('Add')} </Button>
           </CardAction>
         </CardHeader>
@@ -258,17 +260,17 @@ function ConnectionCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex min-w-0 flex-wrap items-center gap-2">
+        <CardTitle id="remote-connection-title" className="flex min-w-0 flex-wrap items-center gap-2">
           <WayMark way="wireguard" fallback={KeyRound} className="size-4" />
           {t('Connection settings')}
           <TunnelState status={status} enabled={enabled} />
-          {status && !status.endpoint && <Badge variant="destructive">{t('Not set')}</Badge>}
+          {status && !status.endpoint && <StatusPill tone="fault">{t('Not set')}</StatusPill>}
         </CardTitle>
         <CardAction className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={onEdit}> {t('Settings')} </Button>
           <Switch
             id="remote-enabled"
-            aria-label="WireGuard"
+            aria-labelledby="remote-connection-title"
             checked={enabled}
             disabled={busy}
             onCheckedChange={onChange}
@@ -306,12 +308,11 @@ function ConnectionCard({
  */
 function TunnelState({ status, enabled }: { status?: RemoteStatus; enabled: boolean }) {
   useLocale()
-  if (!enabled) return <Badge variant="secondary">{t('Off')}</Badge>
-  if (!status || !status.kernel_known) return <Badge variant="secondary">{t('Unknown')}</Badge>
-  if (status.interface_present && status.interface_up && !status.interface_foreign) {
-    return <Badge variant="success">{t('Running')}</Badge>
-  }
-  return <Badge variant="destructive">{t('Not running')}</Badge>
+  const health = !enabled ? state('Off')
+    : !status || !status.kernel_known ? state('Unknown')
+      : status.interface_present && status.interface_up && !status.interface_foreign ? state('Running')
+        : state('Not running')
+  return <StatusPill tone={health.tone}>{health.label}</StatusPill>
 }
 
 function PeerList({
@@ -343,11 +344,7 @@ function PeerList({
           title={p.display_name || p.name}
           subtitle={describePeer(p)}
           trailing={<PeerBadge peer={p} />}
-          action={
-            <Button variant="ghost" size="icon" className="text-muted-foreground" aria-label={`Edit ${p.name}`} title="Edit device" onClick={() => onEdit(p)}>
-              <Pencil />
-            </Button>
-          }
+          action={<RowAction icon={Pencil} label={`${t('Edit')} ${p.display_name || p.name}`} onClick={() => onEdit(p)} />}
         />
       ))}
     </List>

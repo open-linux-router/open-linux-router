@@ -30,7 +30,8 @@ import {
 import { ApiError } from '@/lib/api'
 import type { NetworkRow, InterfaceRow } from '@/lib/api-types'
 import type { DhcpConfig, Pool } from '@/lib/config-types'
-import { cn } from '@/lib/utils'
+import { state, type Health } from '@/lib/state'
+import { StatusInline } from '@/components/ui/status'
 
 /**
  * Which interfaces this router has been given.
@@ -272,16 +273,11 @@ function InterfaceItem({
 
   return (
     <li className="flex min-h-14 items-center gap-3 bg-card px-4 py-2.5">
-      <span
-        className={cn('size-2 shrink-0 rounded-full', state.dot)}
-        aria-hidden
-      />
-
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <span className="truncate font-mono text-sm font-medium">{row.name}</span>
           {role && <Badge variant="secondary">{role}</Badge>}
-          {state.badge && <Badge variant={state.badgeVariant}>{state.badge}</Badge>}
+          <StatusInline tone={state.tone}>{state.label}</StatusInline>
         </div>
         <div className="font-mono text-[0.8125rem] leading-5 text-foreground [overflow-wrap:anywhere]">
           {row.prefixes?.length ? row.prefixes.join(' · ') : state.detail}
@@ -320,7 +316,7 @@ function InterfaceItem({
         // Loopback has no clients on it and nothing olr can usefully serve
         // there, so the server refuses it. Disabling the control says the same
         // thing without making the operator find out by being rejected.
-        disabled={busy || row.loopback}
+        busy={busy} disabled={row.loopback}
         onCheckedChange={onToggle}
       />
     </li>
@@ -332,43 +328,23 @@ function InterfaceItem({
  * differently. "Up" alone cannot say "up with no cable in it", which is the most
  * common reason a freshly configured DHCP server appears to do nothing.
  */
-function describeState(row: InterfaceRow): {
-  dot: string
-  detail: string
-  badge?: string
-  badgeVariant?: 'default' | 'warning' | 'destructive' | 'secondary'
-} {
+function describeState(row: InterfaceRow): Health & { detail: string } {
   if (!row.present) {
-    return {
-      dot: 'bg-destructive',
-      detail: 'This machine has no interface with this name.',
-      badge: 'Not found',
-      badgeVariant: 'destructive',
-    }
+    return { ...state('Not found'), detail: 'This machine has no interface with this name.' }
   }
   if (row.loopback) {
-    return { dot: 'bg-muted-foreground/40', detail: 'The machine talking to itself.' }
+    return { ...state('Loopback'), detail: 'The machine talking to itself.' }
   }
   if (!row.up) {
-    return { dot: 'bg-muted-foreground/40', detail: 'Down.', badge: 'Down', badgeVariant: 'secondary' }
+    return { ...state('Down'), detail: 'Down.' }
   }
   if (!row.running) {
-    return {
-      dot: 'bg-warning',
-      detail: 'Up, but nothing is plugged in.',
-      badge: 'No cable',
-      badgeVariant: 'warning',
-    }
+    return { ...state('No cable'), detail: 'Up, but nothing is plugged in.' }
   }
   if (!row.prefixes?.length) {
-    return {
-      dot: 'bg-warning',
-      detail: 'No address. Give it one before serving a range here.',
-      badge: 'No address',
-      badgeVariant: 'warning',
-    }
+    return { ...state('No address'), detail: 'No address. Give it one before serving a range here.' }
   }
-  return { dot: 'bg-success', detail: 'Connected.' }
+  return { ...state('Connected'), detail: 'Connected.' }
 }
 
 /**
@@ -430,7 +406,7 @@ function ReleaseDialog({
 
         <DialogFooter>
           <Button variant="ghost" onClick={onCancel}>{t('Cancel')}</Button>
-          <Button variant="destructive" onClick={onConfirm}>{t('Take it back anyway')}</Button>
+          <Button onClick={onConfirm}>{t('Take it back anyway')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

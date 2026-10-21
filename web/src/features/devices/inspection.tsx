@@ -75,7 +75,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
           {status.isPending && <span className="text-xs text-muted-foreground">{t('Checking…')}</span>}
           {mine && <Button variant="ghost" size="icon" aria-label={t('Inspection setup')} title={t('Inspection setup')} onClick={() => setShowSetup(true)}><Settings className="size-5" /></Button>}
           <label htmlFor="device-inspection" className="text-sm">{t('Inspection')}</label>
-          <Switch id="device-inspection" checked={Boolean(mine)} disabled={start.isPending || stop.isPending || status.isPending || status.isError || Boolean(active && !mine) || (!mine && (ipv4.length === 0 || ipv4.length > 8))} onCheckedChange={(checked) => { if (checked) start.mutate(); else stop.mutate() }} />
+          <Switch id="device-inspection" checked={Boolean(mine)} busy={start.isPending || stop.isPending} disabled={status.isPending || status.isError || Boolean(active && !mine) || (!mine && (ipv4.length === 0 || ipv4.length > 8))} onCheckedChange={(checked) => { if (checked) start.mutate(); else stop.mutate() }} />
         </div>
       </div>
     </div>

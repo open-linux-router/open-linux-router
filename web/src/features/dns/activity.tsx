@@ -72,7 +72,7 @@ export function ActivityCard({
           <Switch
             id="dns-querylog"
             checked={config.query_log.enabled}
-            disabled={busy}
+            busy={busy}
             onCheckedChange={(enabled) =>
               onChange({ ...config, query_log: { ...config.query_log, enabled } })
             }

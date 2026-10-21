@@ -20,7 +20,7 @@ export function GatewayExitsPage() {
   if (!config) return gate
 
   return (
-    <SubPage section="/access" slug="gateway" action={<Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+    <SubPage section="/access" slug="gateway" action={<Button size="sm" onClick={() => setAdding(true)}>
           <Plus />{t('Add')}</Button>}>
       <ApplyOutcome applier={applier} />
 

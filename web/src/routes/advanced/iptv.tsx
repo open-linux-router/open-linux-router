@@ -93,7 +93,7 @@ export function IptvPage() {
       <StatusStrip
         headline={status.isPending ? 'Checking IPTV status…' : status.isError ? 'Cannot read IPTV status' : status.data?.enabled ? service?.active ? 'IGMP proxy running' : 'IPTV needs attention' : 'IPTV is off'}
         detail={status.isPending ? 'Waiting for the router.' : status.isError ? status.error.message : status.data?.enabled ? service?.active ? 'The proxy is running; this does not confirm a viewer has joined or that playback works.' : 'The proxy is not running; check the problem below.' : 'Nothing is sent from the IPTV interface to your LAN.'}
-        dot={status.isPending ? 'bg-muted-foreground/40' : status.isError ? 'bg-warning' : status.data?.enabled ? service?.active ? 'bg-success' : 'bg-warning' : 'bg-muted-foreground/40'}
+        tone={status.isPending ? 'unknown' : status.isError ? 'fault' : status.data?.enabled ? service?.active ? 'ok' : 'warn' : 'off'}
       />
       {links.isError && <Alert variant="destructive"><AlertTriangle /><AlertTitle>{t('Cannot list interfaces')}</AlertTitle><AlertDescription>{links.error.message}</AlertDescription></Alert>}
       {status.data?.problem && <Alert variant="destructive"><AlertTriangle /><AlertTitle>{t('Cannot forward IPTV')}</AlertTitle><AlertDescription>{status.data.problem}</AlertDescription></Alert>}
@@ -136,7 +136,7 @@ export function IptvPage() {
       {preview && <section className="space-y-4 rounded-xl border border-primary/30 bg-primary/5 p-5 sm:p-6">
         <div><Heading>{t('Review before applying')}</Heading><p className="text-sm text-muted-foreground">{preview.plan.empty ? 'No service changes; the selected settings will still be saved.' : `Impact: ${preview.plan.impact}`}</p></div>
         <ul className="list-inside list-disc space-y-1 text-sm">{(preview.plan.changes ?? []).map((change) => <li key={change}>{change}</li>)}</ul>
-        <div className="flex gap-2"><Button disabled={apply.isPending} onClick={() => void save(preview.config)}>{preview.config.enabled ? 'Enable IPTV' : 'Turn off IPTV'}</Button><Button variant="outline" onClick={() => setPreview(null)}>{t('Cancel')}</Button></div>
+        <div className="flex gap-2"><Button disabled={apply.isPending} onClick={() => void save(preview.config)}>{preview.config.enabled ? 'Enable IPTV' : 'Turn off IPTV'}</Button><Button variant="ghost" onClick={() => setPreview(null)}>{t('Cancel')}</Button></div>
       </section>}
     </SubPage>
   )

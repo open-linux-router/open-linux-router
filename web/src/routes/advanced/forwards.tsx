@@ -61,10 +61,10 @@ export function ForwardsPage() {
             ? 'Maps router ports to devices. Upstream NAT and firewall rules may still prevent access.'
             : 'The Gateway module is switched off, so nothing from outside is reaching a device here. That one switch also stops this router\u2019s routing policy.'
         }
-        dot={
-          status.isError || status.isPending || !status.data?.known ? 'bg-muted-foreground/40' : !config.enabled
-            ? 'bg-muted-foreground/40'
-            : 'bg-success'
+        tone={
+          status.isError ? 'fault' : status.isPending || !status.data?.known ? 'unknown' : !config.enabled
+            ? 'off'
+            : 'ok'
         }
         control={{
           id: 'gateway-enabled',
@@ -80,7 +80,7 @@ export function ForwardsPage() {
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <Heading size="sm" className="px-1">{t('Forwards')}</Heading>
-          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+          <Button size="sm" onClick={() => setAdding(true)}>
             <Plus />{t('Add')}</Button>
         </div>
 

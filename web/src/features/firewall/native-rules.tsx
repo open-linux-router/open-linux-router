@@ -338,7 +338,7 @@ export function NativeRules() {
               {check.isPending ? t('Checking…') : 'Validate and preview'}
             </Button>
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={() => {
                 setDraft(null)
                 setPlan(null)

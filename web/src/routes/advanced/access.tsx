@@ -50,7 +50,7 @@ export function AdministratorAccessPage() {
             <p className="text-sm">{t('Anyone who can reach this router will be able to configure it. Remove the password?')}</p>
             <div className="flex gap-3">
               <Button variant="destructive" className="h-11" onClick={() => save.mutate(true)} disabled={save.isPending}>{t('Remove password')}</Button>
-              <Button variant="outline" className="h-11" onClick={() => setRemoving(false)} disabled={save.isPending}>{t('Cancel')}</Button>
+              <Button variant="ghost" className="h-11" onClick={() => setRemoving(false)} disabled={save.isPending}>{t('Cancel')}</Button>
             </div>
           </div>}
         </>}

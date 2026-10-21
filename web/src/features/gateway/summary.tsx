@@ -13,10 +13,12 @@ import { useInterfaceTraffic, type RateSample } from '@/features/link/interface-
 import { NetworkIcon } from '@/features/link/network-icon'
 import { useInterfaces } from '@/features/link/queries'
 import type { InterfaceList, InterfaceRow } from '@/lib/api-types'
+import { linkHealth, state, type Health } from '@/lib/state'
+import { StatusInline } from '@/components/ui/status'
+import { RowChevron } from '@/components/ui/row-action'
 import { cn, formatRate } from '@/lib/utils'
 
 import { GatewayStacks } from './stacks'
-import { tone } from './status-tone'
 
 /**
  * The gateway, on the page you land on.
@@ -134,17 +136,16 @@ function InterfaceTile({ row, role, current, failed }: {
   failed: boolean
 }) {
   useLocale()
-  // The state stays a key and is translated where it is drawn: comparing the
-  // translated label to decide whether the link is carrying traffic breaks the
-  // moment the locale changes, and reads as "no traffic" on a busy interface.
-  const state: ConnectionState | 'Unavailable' = failed ? 'Unavailable' : connectionState(row, role)
-  const connected = state === 'Connected'
-  const label = t(state)
+  // The tone decides whether the link is carrying traffic; the translated label
+  // only ever reaches a reader. Comparing labels would break on a locale change
+  // and read as "no traffic" on a busy interface.
+  const health: Health = failed ? state('Unavailable') : linkHealth(row)
+  const connected = health.tone === 'ok'
   const address = row.address || row.prefixes?.[0]?.split('/')[0]
   return (
     <Link
       to={`/gateway/interfaces/${encodeURIComponent(row.name)}`}
-      aria-label={`${row.name}${role ? `, ${role}` : ''}: ${label}${address ? `, ${address}` : ''}. ${t('Details')}`}
+      aria-label={`${row.name}${role ? `, ${role}` : ''}: ${health.label}${address ? `, ${address}` : ''}. ${t('Details')}`}
       className="flex h-full min-w-0 flex-col rounded-xl bg-muted p-4 transition-colors duration-150 hover:bg-accent active:bg-accent/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       <div className="flex items-start gap-3">
@@ -158,9 +159,9 @@ function InterfaceTile({ row, role, current, failed }: {
               </span>
             )}
           </div>
-          <span className={cn('mt-0.5 block truncate text-[0.8125rem]', tone[stateTone(state)])}>{label}</span>
+          <StatusInline tone={health.tone} className="mt-0.5">{health.label}</StatusInline>
         </div>
-        <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground/50" aria-hidden />
+        <RowChevron className="mt-1" />
       </div>
       <div className="mt-3 min-w-0 text-[0.8125rem] leading-5">
         {address
@@ -189,19 +190,4 @@ function roleOf(row: InterfaceRow, wan: string | undefined, data?: InterfaceList
   if (row.name === wan) return 'WAN'
   if (row.network || data?.networks.some(network => network.members.includes(row.name))) return 'LAN'
   return undefined
-}
-
-function stateTone(state: ConnectionState | 'Unavailable'): keyof typeof tone {
-  if (state === 'Connected') return 'good'
-  if (state === 'Not found' || state === 'Unavailable') return 'caution'
-  return 'quiet'
-}
-
-/** The words are keys, translated where they are drawn; the state decision
- *  never reads a label. */
-type ConnectionState = 'Connected' | 'Disconnected' | 'Down' | 'Not found' | 'Inactive'
-
-function connectionState(row: InterfaceRow, role?: string): ConnectionState {
-  return !row.present ? 'Not found' : !row.up ? 'Down' : !row.running ? 'Disconnected'
-    : !role && !row.network && !row.address && !row.prefixes?.length ? 'Inactive' : 'Connected'
 }

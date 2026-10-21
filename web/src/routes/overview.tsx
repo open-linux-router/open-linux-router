@@ -2,6 +2,9 @@ import { t, useLocale } from '@/lib/i18n'
 import { Heading } from '@/components/ui/heading'
 import { MetricPill } from '@/components/traffic-metrics'
 import { MetricValue } from '@/components/ui/metric-value'
+import { RowAction } from '@/components/ui/row-action'
+import { StatusInline } from '@/components/ui/status'
+import { state } from '@/lib/state'
 import { PrimaryMetric } from '@/components/ui/primary-metric'
 import { WorldTraffic } from '@/features/world-traffic/world-traffic'
 import { NetworkQuality } from '@/features/network-quality/network-quality'
@@ -612,7 +615,7 @@ function LatencySitesDialog({ sites, exits, latency, onClose }: { sites: Monitor
           <div className="grid grid-cols-[44px_minmax(0,1fr)_44px_44px] items-center gap-2 sm:flex sm:flex-nowrap">
             <span draggable onDragStart={() => setDragging(i)} onDragEnd={() => setDragging(null)} aria-label={`Drag ${site.name} to reorder`} className="hidden cursor-grab touch-none text-muted-foreground sm:block" title={t('Drag to reorder')}><GripVertical className="size-4" /></span>
             <Button variant="ghost" size="icon-sm" onClick={() => { setIconFor(i); setSearch(''); setIconError('') }} aria-label={`Change ${site.name} icon`}><SiteIcon name={site.name} url={site.url} icon={site.icon} /></Button>
-            <div className="col-span-2 col-start-3 row-start-2 flex justify-end gap-2 sm:hidden"><Button variant="ghost" size="icon-sm" aria-label={`Move ${site.name} up`} disabled={i === 0} onClick={() => { const next = [...draft]; [next[i - 1], next[i]] = [next[i], next[i - 1]]; setDraft(next) }}>↑</Button><Button variant="ghost" size="icon-sm" aria-label={`Move ${site.name} down`} disabled={i === draft.length - 1} onClick={() => { const next = [...draft]; [next[i], next[i + 1]] = [next[i + 1], next[i]]; setDraft(next) }}>↓</Button></div>
+            <div className="col-span-2 col-start-3 row-start-2 flex justify-end gap-2 sm:hidden"><Button variant="ghost" size="icon-sm" aria-label={`Move ${site.name} up`} title={`${t('Move up')}`} disabled={i === 0} onClick={() => { const next = [...draft]; [next[i - 1], next[i]] = [next[i], next[i - 1]]; setDraft(next) }}><ArrowUp aria-hidden /></Button><Button variant="ghost" size="icon-sm" aria-label={`Move ${site.name} down`} title={`${t('Move down')}`} disabled={i === draft.length - 1} onClick={() => { const next = [...draft]; [next[i], next[i + 1]] = [next[i + 1], next[i]]; setDraft(next) }}><ArrowDown aria-hidden /></Button></div>
             <Button variant="ghost" onClick={() => setEditing(editing === i ? null : i)} className="col-span-2 h-auto min-h-11 min-w-0 flex-1 justify-start px-0 whitespace-normal break-words text-left sm:min-h-9" title={site.url}>{site.name}</Button>
             <Select value={site.exit || DEFAULT_ROUTE} onValueChange={(value) => update(i, { exit: !value || value === DEFAULT_ROUTE ? undefined : value })}>
               <SelectTrigger size="sm" className="col-span-2 col-start-1 row-start-2 w-full min-w-0 sm:w-auto sm:max-w-32" aria-label={`Internet via, for ${site.name}`}><SelectValue /></SelectTrigger>
@@ -620,7 +623,7 @@ function LatencySitesDialog({ sites, exits, latency, onClose }: { sites: Monitor
                 {site.exit && !exits.includes(site.exit) && <SelectItem value={site.exit}>{site.exit} {t('(unavailable)')}</SelectItem>}
               </SelectContent>
             </Select>
-            <Button variant="ghost" size="icon" aria-label={`Remove ${site.name}`} onClick={() => { setDraft(draft.filter((_, index) => index !== i)); setEditing(null); setIconFor(null) }}><Trash2 className="size-4" /></Button>
+            <RowAction icon={Trash2} label={`${t('Remove')} ${site.name}`} destructive onClick={() => { setDraft(draft.filter((_, index) => index !== i)); setEditing(null); setIconFor(null) }} />
           </div>
           {editing === i && <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_2fr]">
             <Input aria-label={`Name for ${site.name}`} value={site.name} maxLength={40} onChange={(event) => update(i, { name: event.target.value })} />
@@ -638,7 +641,7 @@ function LatencySitesDialog({ sites, exits, latency, onClose }: { sites: Monitor
         <Button variant="outline" onClick={add} disabled={!name.trim() || !url.startsWith('https://') || draft.length >= 12}>{t('Add')}</Button>
       </div>
       {save.isError && <p role="alert" className="text-sm text-destructive">{save.error.message}</p>}
-      <DialogFooter><Button variant="outline" onClick={onClose}>{t('Cancel')}</Button><Button disabled={save.isPending} onClick={() => save.mutate({ sites: draft.map(({ name, url, exit, icon }) => ({ name, url, exit, icon })), target: targetChanged ? (target === 'auto' ? '' : target) : undefined }, { onSuccess: onClose })}>{t('Save')}</Button></DialogFooter>
+      <DialogFooter><Button variant="ghost" onClick={onClose}>{t('Cancel')}</Button><Button disabled={save.isPending} onClick={() => save.mutate({ sites: draft.map(({ name, url, exit, icon }) => ({ name, url, exit, icon })), target: targetChanged ? (target === 'auto' ? '' : target) : undefined }, { onSuccess: onClose })}>{t('Save')}</Button></DialogFooter>
     </DialogContent>
     {iconFor != null && <Dialog open onOpenChange={(open) => { if (!open) setIconFor(null) }}>
       <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{t('Icon for')} {draft[iconFor]?.name}</DialogTitle><DialogDescription>{t('Upload an image or search theSVG library. Auto uses the site favicon.')}</DialogDescription></DialogHeader>
@@ -706,7 +709,7 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
             for anyone reading with a screen reader. */}
         <PrimaryMetric
           size="md"
-          tone={alarming ? 'destructive' : known && !idle ? 'success' : undefined}
+          tone={alarming ? 'fault' : known && !idle ? 'ok' : undefined}
           icon={alarming
             ? <CircleAlert aria-hidden className="size-4 text-destructive" />
             : known && !idle ? <CircleCheck aria-hidden className="size-4 text-success-foreground" /> : <CircleHelp aria-hidden className="size-4 text-muted-foreground" />}
@@ -744,10 +747,10 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
           <dl className="space-y-1 py-2 text-xs">
             {modules.map((module) => {
               const issues = faults.filter((fault) => fault.to === module.to)
-              const status = module.failed ? t('Unavailable') : !module.data ? t('Checking…') : issues.length ? t('Needs attention') : !module.data.enabled ? t('Disabled') : !module.observed ? t('Unavailable') : t('OK')
+              const health = module.failed ? state('Unavailable') : !module.data ? state('Checking…') : issues.length ? state('Needs attention') : !module.data.enabled ? state('Disabled') : !module.observed ? state('Unavailable') : state('OK')
               return <div key={module.name} className="flex items-baseline justify-between gap-2 py-1">
                 <dt><Link to={module.to} className="text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring">{module.name}</Link></dt>
-                <dd className={cn('text-right', status === t('OK') ? 'text-success-foreground' : status === t('Needs attention') ? 'text-warning-foreground' : 'text-muted-foreground')}>{status}</dd>
+                <dd className="text-right"><StatusInline tone={health.tone} emphasis="dense">{health.label}</StatusInline></dd>
               </div>
             })}
           </dl>
