@@ -300,18 +300,16 @@ scope, replacement behavior and the priority enforcement caveat beside the
 explicit apply actions; selected values are batch choices, not observed shared
 settings. List member devices below the summary.
 
-Gateway opens with the shared status strip, read-only: state, drift and the
-unreadable-kernel answer only. No switch, and no second link — the Interfaces
-heading directly below already opens the page that carries the routing and
-forwarding switches. Turning routing off takes every network behind the router
-off the internet and closes forwarded ports, so that action belongs beside its
-consequences on the settings page, not under a glance. Below it, physical interface
+Gateway is objects only: the interfaces this router is plugged into, its way
+out, and the services it runs. It has no status strip and no switches — routing's
+on/off state, drift and every routing and forwarding switch belong to the
+routing settings at interfaces#forwarding, beside the sentences that say what
+turning them off closes. Overview reports a gateway fault. Physical interface
 cards carry name, role, link state, address and current rates without history
 charts; the dialog owns link speed, MAC, addresses and totals. Way out states the
 observed IPv4/IPv6 default routes and the resolvers this router uses, read-only.
 Services states DHCP and DNS with their state and their counters (active leases,
-queries since restart). The IPv4 and IPv6 forwarding switches live at
-interfaces#forwarding; IPv4 also controls Gateway routing and leaves system
+queries since restart). IPv4 also controls Gateway routing and leaves system
 forwarding unchanged when off; IPv6 intent is unapplied when routing is off.
 Usage has no separate page; traffic counting lives in routing details.
 

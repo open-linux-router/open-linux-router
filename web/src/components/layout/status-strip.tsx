@@ -8,10 +8,12 @@ import { Switch } from '@/components/ui/switch'
 /**
  * Is this working, and can I turn it off.
  *
- * The first thing on every section's landing page, and — with the live list
- * under it — very often the only thing an operator came for. It was written
- * three times before this (dhcp, dns and gateway each had their own), which is
- * three places for a dot colour or a disclosure to go its own way.
+ * The first thing on a section's landing page that has a module switch, and —
+ * with the live list under it — often the only thing an operator came for. It
+ * was written three times before this (dhcp, dns and gateway each had their
+ * own), which is three places for a dot colour or a disclosure to go its own
+ * way. Gateway now has none: its routing state and switches belong to the
+ * routing settings, and its landing page is the objects.
  *
  * Three states and not two: "we could not tell" is a real answer (design.md
  * §5.4), and flattening it into "stopped" puts a red dot on a working router.

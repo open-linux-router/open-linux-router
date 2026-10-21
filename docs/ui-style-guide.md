@@ -159,18 +159,17 @@ clear of both bars and scroll the navigation locally on narrow screens. The
 page title is accessible but visually hidden; avoid a repeated introductory
 heading above the step navigation.
 
-Gateway lands on the shared status strip, read-only: routing is not something a
-visit flips on and off, so the strip reports the state and offers neither a
-switch nor a second settings link. The Interfaces panel follows, with physical
-cards wrapping three across from 1024px, two from 640px and one on phones. There
-is no right-side summary column, because the facts it held are panels of their
-own below: Way out (observed IPv4/IPv6 default routes and the resolvers this
-router uses) and Services (DHCP and DNS with their state and counters).
-Interface cards show name, role, link state, address and current rates without
-traffic charts, with wrapping addresses and 16px padding; link speed, MAC and
-totals stay in the card's dialog. IPv4 and IPv6 forwarding are not switches on
-this page: they belong with the routing settings at `interfaces#forwarding`,
-where their effect can be explained, and the Interfaces heading links there.
+Gateway has no status strip: its objects are the page. Physical interface cards
+wrap three across from 1024px, two from 640px and one on phones. There is no
+right-side summary column, because the facts it held are panels of their own
+below: Way out (observed IPv4/IPv6 default routes and the resolvers this router
+uses) and Services (DHCP and DNS with their state and counters). Interface cards
+show name, role, link state, address and current rates without traffic charts,
+with wrapping addresses and 16px padding; link speed, MAC and totals stay in the
+card's dialog. Routing state, drift and every routing and forwarding switch
+live at `interfaces#forwarding`, beside the sentences that say what turning them
+off closes; the Interfaces heading is this page's single settings entry, and
+Overview is where a gateway fault is reported.
 
 The shell has a 1280px maximum width, a 64px header and horizontal gutters of
 16px on phones, 24px from 640px, and 32px from 1280px. Content starts with

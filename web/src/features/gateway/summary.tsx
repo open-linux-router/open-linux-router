@@ -1,8 +1,7 @@
 import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { Link, useLocation } from 'react-router'
 
-import { StatusDetail, StatusStrip } from '@/components/layout/status-strip'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -13,71 +12,41 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useDhcpLeases, useDhcpStatus } from '@/features/dhcp/queries'
 import { useDialStatus, useUplink } from '@/features/dial/queries'
 import { useDnsStatus } from '@/features/dns/queries'
-import { useGatewayConfig, useGatewayStatus } from '@/features/gateway/queries'
+import { useGatewayStatus } from '@/features/gateway/queries'
 import { useInterfaceTraffic, type RateSample } from '@/features/link/interface-traffic'
 import { NetworkIcon } from '@/features/link/network-icon'
 import { useInterfaces } from '@/features/link/queries'
-import type { DialStatus, GatewayStatus, InterfaceList, InterfaceRow } from '@/lib/api-types'
+import type { DialStatus, InterfaceList, InterfaceRow } from '@/lib/api-types'
 import { cn, formatBytes, formatRate } from '@/lib/utils'
 
 /**
  * The gateway, on the page you land on.
  *
- * Three questions, in the order an operator asks them: is routing working,
- * which interfaces are carrying it, and is anything behind them broken. It is
- * the same shape every other section lands on — the shared status strip, then
- * the objects, then the way in to the settings — because the page that used a
- * bespoke panel was the one that read as unfinished.
- *
- * The page does not apply anything. None of routing's switches are here: the
- * module switch and the IPv4/IPv6 forwarding switches all change what every
- * network behind this router can reach, so they live together at
- * `interfaces#forwarding` with the room to explain each consequence. This page
- * answers what is true now and links to the place that changes it.
+ * The objects only: what this box is plugged into, how it reaches the internet,
+ * and what it runs for the network. There is no status strip and there are no
+ * switches. Routing's own state — on, off, behind its saved settings, or
+ * unreadable — is a detail of the routing settings, and it lives there, at
+ * `interfaces#forwarding`, beside the switches that change it and the sentences
+ * that say what turning them off closes. The one entry to that page is the
+ * Interfaces heading; Overview is where a gateway fault is reported. A landing
+ * page that repeats the module's banner above its objects read as a second
+ * status page rather than as this section's own.
  */
 export function GatewaySummary() {
-  const config = useGatewayConfig()
   const { hash } = useLocation()
 
   useEffect(() => {
-    if (!config.data || !hash) return
+    if (!hash) return
     const frame = requestAnimationFrame(() => document.getElementById(hash.slice(1))?.scrollIntoView())
     return () => cancelAnimationFrame(frame)
-  }, [config.data, hash])
-
-  if (config.isPending) return <GatewaySkeleton />
-  if (config.isError) {
-    return (
-      <Alert variant="destructive">
-        <AlertTriangle />
-        <AlertTitle>Could not load the gateway settings</AlertTitle>
-        <AlertDescription>{config.error.message}</AlertDescription>
-      </Alert>
-    )
-  }
+  }, [hash])
 
   return (
     <div className="space-y-6">
-      <GatewayHealth enabled={config.data.enabled} />
       <InterfacesCard />
       <div className="grid gap-4 lg:grid-cols-2">
         <WayOutCard />
         <ServicesCard />
-      </div>
-    </div>
-  )
-}
-
-/* -------------------------------------------------------------------------- */
-
-function GatewaySkeleton() {
-  return (
-    <div className="space-y-6">
-      <Skeleton className="h-24 w-full rounded-xl" />
-      <Skeleton className="h-[248px] w-full rounded-xl" />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Skeleton className="h-[232px] rounded-xl" />
-        <Skeleton className="h-[232px] rounded-xl" />
       </div>
     </div>
   )
@@ -100,108 +69,6 @@ const dot = {
 interface Health {
   label: string
   tone: keyof typeof tone
-}
-
-/**
- * Is this working, and where do I change it.
- *
- * The shared strip, so the first thing on this page is the first thing on every
- * section's page — but read-only. Routing is not a landing-page switch: one
- * click takes every network behind this router off the internet and closes its
- * forwarded ports, which is not a thing to do while glancing at a status. The
- * switch and its consequences live on the settings page, one click away in the
- * Interfaces heading, and this strip is the status only. The drift row points
- * at the repair plan, which this screen cannot decide to run for the operator
- * either.
- */
-function GatewayHealth({ enabled }: { enabled: boolean }) {
-  const status = useGatewayStatus()
-  const interfaces = useInterfaces()
-  const dial = useDialStatus()
-  const navigate = useNavigate()
-
-  const summary = describeGateway({
-    enabled,
-    status: status.data,
-    error: status.error as Error | null,
-    networks: interfaces.data?.networks.length,
-    dial: dial.data,
-  })
-  const foreign = status.data?.foreign?.length ?? 0
-  const drifted = Boolean(enabled && status.data?.drifted)
-
-  return (
-    <StatusStrip
-      headline={summary.headline}
-      detail={summary.detail}
-      dot={dot[summary.tone]}
-      drifted={drifted}
-      driftNote="The routing rules that are running are behind these settings."
-      driftAction={{ label: 'Review restore', onClick: () => navigate('/gateway/interfaces') }}
-      details={status.data && (
-        <>
-          <StatusDetail term="Kernel rules">
-            {status.data.known ? 'read' : 'could not be read'}
-          </StatusDetail>
-          <StatusDetail term="Exits">{status.data.exits.length}</StatusDetail>
-          <StatusDetail term="Other programs">
-            {foreign ? `${foreign} rule${foreign === 1 ? '' : 's'} outside OLR` : 'none found'}
-          </StatusDetail>
-          <StatusDetail term="Read at">{new Date(status.data.as_of).toLocaleTimeString()}</StatusDetail>
-          <p className="pt-1">
-            Read from the kernel on every request and never cached, so this is what is true right
-            now rather than what was last written.
-          </p>
-        </>
-      )}
-    />
-  )
-}
-
-function describeGateway({ enabled, status, error, networks, dial }: {
-  enabled: boolean
-  status?: GatewayStatus
-  error: Error | null
-  networks?: number
-  dial?: DialStatus
-}): { headline: string; detail: string; tone: keyof typeof tone } {
-  if (error) return { headline: 'Cannot reach the router', detail: error.message, tone: 'quiet' }
-  if (!status) return { headline: 'Checking…', detail: 'Reading the routing state.', tone: 'quiet' }
-  if (!enabled) {
-    return {
-      headline: 'Off',
-      detail: 'No routes or port forwards are applied.',
-      tone: 'quiet',
-    }
-  }
-  if (!status.known) {
-    return {
-      headline: 'Routing state unknown',
-      detail: status.problems?.[0]?.message ?? 'The kernel could not be read, so what is running is unknown.',
-      tone: 'caution',
-    }
-  }
-  if (dial && dial.default_routes.length === 0) {
-    return {
-      headline: 'No way out',
-      detail: 'This router has no default route, so nothing behind it can reach the internet.',
-      tone: 'caution',
-    }
-  }
-  if (!dial) {
-    return { headline: 'Checking…', detail: 'Reading the default route.', tone: 'quiet' }
-  }
-  if (networks === 0) {
-    return { headline: 'Forwarding traffic', detail: 'No networks are configured yet.', tone: 'good' }
-  }
-  const dev = dial.route?.dev ?? dial.default_routes[0]?.dev
-  return {
-    headline: 'Forwarding traffic',
-    detail: dev && networks
-      ? `${networks} network${networks === 1 ? '' : 's'} leave${networks === 1 ? 's' : ''} through ${dev}.`
-      : 'Working normally.',
-    tone: 'good',
-  }
 }
 
 /* -------------------------------------------------------------------------- */
