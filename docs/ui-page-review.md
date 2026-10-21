@@ -12,8 +12,8 @@ OLR capabilities, and a calm, consistent interface. This record accompanies the
 | Group | Preserve member lists and batch controls; remove repeated MAC/direct-membership prose; keep overwrite and non-inheritance consequences. |
 | Device/group QoS | State that configuration is saved but not enforced; keep forms and shared group-cap semantics. |
 | Inspection | Keep the existing panel and results; confirm privacy and CA consequences before starting; disclose lengthy preparation/scope and viewer details; retain session stop time and diagnostics. |
-| Gateway | Objects only: interface cards in a wrapping grid with role, address and rates; Way out and Services panels. No status strip and no switches — routing state, drift and all routing/forwarding switches live at interfaces#forwarding, and Overview reports faults. |
-| Interfaces/routing and interface detail | Keep controls and all observed fields; shorten management and routing explanations without moving controls. |
+| Gateway | Objects only: interface cards in a wrapping grid with role, address and rates, each linking to the interface's own page; Way out and Services panels. No status strip and no switches — routing state, drift and all routing/forwarding switches live at interfaces#forwarding, and Overview reports faults. |
+| Interfaces/routing and interface detail | Keep controls and all observed fields; carry link speed, every address, live rates, totals and the served DHCP range on the detail page, since the landing card no longer opens a dialog; shorten management and routing explanations without moving controls. |
 | Exits | Preserve list/edit forms; distinguish blocking, unknown and failed checks; remove repeated failure prose. |
 | Usage | Preserve measurement controls and counters; show a uniquely matched device name with its address; download precedes upload; disclose accounting limitations. |
 | External routing rules | Distinguish loading, failure, unknown and empty; preserve readable raw evidence and provide retry. |
@@ -90,6 +90,22 @@ single settings entry.
 
 Validated against fixture data at 1440×1000, 1024×1000, 768×1200 and 390×1200
 in both themes, plus the empty, loading and error states of each panel and the
-interface dialog. No page-wide overflow or horizontal scroll at 375px. Hash
+interface page. No page-wide overflow or horizontal scroll at 375px. Hash
 targets `#interfaces`, `#dhcp` and `#dns` still scroll. Mocked browser checks
 validate presentation, not live networking.
+
+## Interface cards review — 2026-10-21
+
+The landing card opened a dialog holding what the card could not: the network
+it carries, the negotiated link speed, MAC, every address and both totals. A
+dialog is the wrong shape for that — it is a page's worth of readings behind a
+click, with its own "Interface settings" link at the bottom — so the card now
+links straight to the interface page and the dialog is gone.
+
+The interface page took over the readings and gained the two that were only ever
+on the tile: what it is moving now and what it has moved in total, both read from
+the same NIC counters as the card. It also states the DHCP range its network
+serves and how much of it is in use, so "this interface's LAN is running out of
+addresses" is visible where the interface is inspected rather than one link
+away. Everything the dialog held is still reachable, and the keyboard path is
+shorter: one tab stop to the page instead of button → dialog → tab into it.

@@ -1,11 +1,10 @@
 import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle, ChevronRight } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ListEmpty } from '@/components/ui/list'
 import { MetricValue } from '@/components/ui/metric-value'
 import { PropertyRow, TechnicalValue } from '@/components/ui/property-row'
@@ -18,7 +17,7 @@ import { useInterfaceTraffic, type RateSample } from '@/features/link/interface-
 import { NetworkIcon } from '@/features/link/network-icon'
 import { useInterfaces } from '@/features/link/queries'
 import type { DialStatus, InterfaceList, InterfaceRow } from '@/lib/api-types'
-import { cn, formatBytes, formatRate } from '@/lib/utils'
+import { cn, formatRate } from '@/lib/utils'
 
 /**
  * The gateway, on the page you land on.
@@ -29,9 +28,10 @@ import { cn, formatBytes, formatRate } from '@/lib/utils'
  * unreadable — is a detail of the routing settings, and it lives there, at
  * `interfaces#forwarding`, beside the switches that change it and the sentences
  * that say what turning them off closes. The one entry to that page is the
- * Interfaces heading; Overview is where a gateway fault is reported. A landing
- * page that repeats the module's banner above its objects read as a second
- * status page rather than as this section's own.
+ * Interfaces heading, and each interface card opens that interface's own page;
+ * Overview is where a gateway fault is reported. A landing page that repeats
+ * the module's banner above its objects read as a second status page rather
+ * than as this section's own.
  */
 export function GatewaySummary() {
   useLocale()
@@ -81,95 +81,54 @@ function InterfacesCard() {
   const uplink = useUplink()
   const dial = useDialStatus()
   const traffic = useInterfaceTraffic(interfaces.data, interfaces.isError)
-  const [selected, setSelected] = useState<string | null>(null)
   const rows = (interfaces.data?.interfaces ?? []).filter(row => row.physical)
-  const chosen = rows.find(row => row.name === selected)
   // The configured uplink when olr owns it, otherwise the interface the observed
   // default route leaves by — the WAN is a fact, not only a setting.
   const wan = uplink.isError ? undefined : (uplink.data?.uplink?.interface ?? dial.data?.route?.dev)
-  const chosenRole = chosen ? roleOf(chosen, wan, interfaces.data) : undefined
 
   return (
-    <>
-      <Card id="interfaces" aria-labelledby="interfaces-heading" className="scroll-mt-20">
-        <CardHeader>
-          <CardTitle id="interfaces-heading">{t('Interfaces')}</CardTitle>
-          <CardAction>
-            <Link to="/gateway/interfaces" className={sectionLink}>
-              Interfaces &amp; routing <ChevronRight className="size-3.5" aria-hidden />
-            </Link>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          {interfaces.isPending && (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {[0, 1, 2].map(i => <Skeleton key={i} className="h-[136px] rounded-xl" />)}
-            </div>
-          )}
-          {interfaces.isError && (
-            <Alert variant="destructive">
-              <AlertTriangle />
-              <AlertTitle>{t('Could not load interfaces')}</AlertTitle>
-              <AlertDescription>{interfaces.error.message}</AlertDescription>
-            </Alert>
-          )}
-          {interfaces.isSuccess && rows.length === 0 && (
-            <ListEmpty> {t('No physical network interfaces found.')}{' '}
-              <Link to="/gateway/interfaces" className="underline underline-offset-4">{t('Open interface settings')}</Link>
-            </ListEmpty>
-          )}
-          {rows.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {rows.map(row => (
-                <InterfaceTile
-                  key={row.name}
-                  row={row}
-                  role={roleOf(row, wan, interfaces.data)}
-                  current={traffic.get(row.name)?.history.at(-1)}
-                  failed={Boolean(interfaces.isError)}
-                  onSelect={() => setSelected(row.name)}
-                />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Dialog open={selected !== null} onOpenChange={open => !open && setSelected(null)}>
-        <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{selected}</DialogTitle>
-            <DialogDescription>
-              {interfaces.isError ? t('Interface readings unavailable.')
-                : chosen ? `${connectionState(chosen, chosenRole)}${chosenRole ? ` · ${chosenRole}` : ''}`
-                  : 'This interface is no longer present.'}
-            </DialogDescription>
-          </DialogHeader>
-          {interfaces.isError && <p className="text-sm text-destructive">{t('Interface readings unavailable.')}</p>}
-          {chosen && (
-            <dl className="divide-y text-sm">
-              <Detail label={t('Network')} value={chosen.network ?? interfaces.data?.networks.find(n => n.members.includes(chosen.name))?.name ?? 'Not assigned'} />
-              <Detail label={t('Physical link')} value={interfaces.isError ? t('Unavailable') : !chosen.present ? t('Not found') : !chosen.up ? t('Down') : chosen.running ? 'Detected' : t('Disconnected')} />
-              <Detail label={t('Link speed')} value={interfaces.isError ? '—' : linkSpeed(chosen.speed_mbps)} />
-              <Detail label="MAC" value={chosen.mac ?? '—'} />
-              <Detail label={t('Addresses')} value={chosen.prefixes?.join(', ') || 'Not assigned'} />
-              <Detail label={t('Receive total')} value={!interfaces.isError && chosen.rx_bytes !== undefined ? formatBytes(chosen.rx_bytes) : '—'} />
-              <Detail label={t('Transmit total')} value={!interfaces.isError && chosen.tx_bytes !== undefined ? formatBytes(chosen.tx_bytes) : '—'} />
-            </dl>
-          )}
-          {chosen && !interfaces.isError && !chosen.speed_mbps && (
-            <p className="text-sm text-muted-foreground">
-              Link speed is unavailable from the system. Some drivers, especially virtual network
-              drivers, do not report it. Traffic rates are measured separately.
-            </p>
-          )}
-          <Link to={chosen ? `/gateway/interfaces/${encodeURIComponent(chosen.name)}` : '/gateway/interfaces'} className={detailLink}> {t('Interface settings')} <ChevronRight className="size-3.5" aria-hidden />
+    <Card id="interfaces" aria-labelledby="interfaces-heading" className="scroll-mt-20">
+      <CardHeader>
+        <CardTitle id="interfaces-heading">{t('Interfaces')}</CardTitle>
+        <CardAction>
+          <Link to="/gateway/interfaces" className={sectionLink}>
+            Interfaces &amp; routing <ChevronRight className="size-3.5" aria-hidden />
           </Link>
-          <Link to="/gateway/interfaces" className={detailLink}> {t('All interfaces and routing')} <ChevronRight className="size-3.5" aria-hidden />
-          </Link>
-        </DialogContent>
-      </Dialog>
-    </>
+        </CardAction>
+      </CardHeader>
+      <CardContent>
+        {interfaces.isPending && (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[0, 1, 2].map(i => <Skeleton key={i} className="h-[136px] rounded-xl" />)}
+          </div>
+        )}
+        {interfaces.isError && (
+          <Alert variant="destructive">
+            <AlertTriangle />
+            <AlertTitle>{t('Could not load interfaces')}</AlertTitle>
+            <AlertDescription>{interfaces.error.message}</AlertDescription>
+          </Alert>
+        )}
+        {interfaces.isSuccess && rows.length === 0 && (
+          <ListEmpty> {t('No physical network interfaces found.')}{' '}
+            <Link to="/gateway/interfaces" className="underline underline-offset-4">{t('Open interface settings')}</Link>
+          </ListEmpty>
+        )}
+        {rows.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {rows.map(row => (
+              <InterfaceTile
+                key={row.name}
+                row={row}
+                role={roleOf(row, wan, interfaces.data)}
+                current={traffic.get(row.name)?.history.at(-1)}
+                failed={Boolean(interfaces.isError)}
+              />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -177,29 +136,38 @@ function InterfacesCard() {
  * One interface, three lines: what it is, what address it holds, what it is
  * moving.
  *
+ * The tile is a link to the interface's own page rather than a button opening a
+ * dialog. A dialog could not hold the readings this object has — the negotiated
+ * link speed, both counters, its addresses, the network it carries and the
+ * internet route it is given — and the page behind it already keeps the
+ * switches that change them, so the card's job is to get out of the way.
+ *
  * The role moved out of the picture. Drawn inside the 48px glyph it was 9px
  * text and two 3px squares that had no name, which read as decoration because
  * it was. Link speed left too: on a box whose drivers do not report it, the
- * card said "Unknown" three times and taught nobody anything, while the dialog
- * still has the value and the sentence that explains its absence.
+ * card said "Unknown" three times and taught nobody anything, while the
+ * interface page still has the value and the sentence that explains its
+ * absence.
  */
-function InterfaceTile({ row, role, current, failed, onSelect }: {
+function InterfaceTile({ row, role, current, failed }: {
   row: InterfaceRow
   role?: string
   current?: RateSample
   failed: boolean
-  onSelect: () => void
 }) {
   useLocale()
-  const state = failed ? t('Unavailable') : connectionState(row, role)
+  // The state stays a key and is translated where it is drawn: comparing the
+  // translated label to decide whether the link is carrying traffic breaks the
+  // moment the locale changes, and reads as "no traffic" on a busy interface.
+  const state: ConnectionState | 'Unavailable' = failed ? 'Unavailable' : connectionState(row, role)
   const connected = state === 'Connected'
+  const label = t(state)
   const address = row.address || row.prefixes?.[0]?.split('/')[0]
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-label={`${row.name}${role ? `, ${role}` : ''}: ${state}${address ? `, ${address}` : ''}. Details`}
-      className="flex h-full min-w-0 flex-col rounded-xl bg-muted p-4 text-left transition-colors duration-150 hover:bg-accent active:bg-accent/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    <Link
+      to={`/gateway/interfaces/${encodeURIComponent(row.name)}`}
+      aria-label={`${row.name}${role ? `, ${role}` : ''}: ${label}${address ? `, ${address}` : ''}. ${t('Details')}`}
+      className="flex h-full min-w-0 flex-col rounded-xl bg-muted p-4 transition-colors duration-150 hover:bg-accent active:bg-accent/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       <div className="flex items-start gap-3">
         <NetworkIcon kind="interface" className={cn('size-10 shrink-0', !connected && 'opacity-60 grayscale')} />
@@ -212,7 +180,7 @@ function InterfaceTile({ row, role, current, failed, onSelect }: {
               </span>
             )}
           </div>
-          <span className={cn('mt-0.5 block truncate text-[0.8125rem]', tone[stateTone(state)])}>{state}</span>
+          <span className={cn('mt-0.5 block truncate text-[0.8125rem]', tone[stateTone(state)])}>{label}</span>
         </div>
         <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground/50" aria-hidden />
       </div>
@@ -222,16 +190,16 @@ function InterfaceTile({ row, role, current, failed, onSelect }: {
           : <span className="block text-muted-foreground">{t('No address')}</span>}
       </div>
       <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 pt-3 text-sm font-medium tabular-nums">
-        {failed ? <span className="text-muted-foreground">No readings</span>
-          : !connected ? <span className="text-muted-foreground">No traffic</span>
+        {failed ? <span className="text-muted-foreground">{t('No readings')}</span>
+          : !connected ? <span className="text-muted-foreground">{t('No traffic')}</span>
             : current ? (
               <>
-                <span className="text-receive" aria-label={`Receive ${formatRate(current.rx)}`}>↓ <MetricValue value={formatRate(current.rx)} /></span>
-                <span className="text-transmit" aria-label={`Transmit ${formatRate(current.tx)}`}>↑ <MetricValue value={formatRate(current.tx)} /></span>
+                <span className="text-receive" aria-label={t('Receive {rate}', { rate: formatRate(current.rx) })}>↓ <MetricValue value={formatRate(current.rx)} /></span>
+                <span className="text-transmit" aria-label={t('Transmit {rate}', { rate: formatRate(current.tx) })}>↑ <MetricValue value={formatRate(current.tx)} /></span>
               </>
-            ) : <span className="text-muted-foreground">Measuring…</span>}
+            ) : <span className="text-muted-foreground">{t('Measuring…')}</span>}
       </div>
-    </button>
+    </Link>
   )
 }
 
@@ -402,12 +370,6 @@ function describeDns(dns: ReturnType<typeof useDnsStatus>): Health {
 /* -------------------------------------------------------------------------- */
 
 const sectionLink = 'inline-flex min-h-11 items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring sm:min-h-9'
-const detailLink = 'inline-flex min-h-11 items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
-
-function Detail({ label, value }: { label: string; value: string }) {
-  useLocale()
-  return <PropertyRow label={label} className="py-3">{label === 'MAC' || label === 'Addresses' ? <TechnicalValue>{value}</TechnicalValue> : value}</PropertyRow>
-}
 
 function roleOf(row: InterfaceRow, wan: string | undefined, data?: InterfaceList) {
   if (row.name === wan) return 'WAN'
@@ -415,17 +377,17 @@ function roleOf(row: InterfaceRow, wan: string | undefined, data?: InterfaceList
   return undefined
 }
 
-function stateTone(state: string): keyof typeof tone {
+function stateTone(state: ConnectionState | 'Unavailable'): keyof typeof tone {
   if (state === 'Connected') return 'good'
   if (state === 'Not found' || state === 'Unavailable') return 'caution'
   return 'quiet'
 }
 
-function connectionState(row: InterfaceRow, role?: string) {
-  return !row.present ? t('Not found') : !row.up ? t('Down') : !row.running ? t('Disconnected')
-    : !role && !row.network && !row.address && !row.prefixes?.length ? 'Inactive' : t('Connected')
-}
+/** The words are keys, translated where they are drawn; the state decision
+ *  never reads a label. */
+type ConnectionState = 'Connected' | 'Disconnected' | 'Down' | 'Not found' | 'Inactive'
 
-function linkSpeed(mbps?: number) {
-  return !mbps ? t('Unknown') : mbps >= 1000 ? `${mbps / 1000} Gbps` : `${mbps} Mbps`
+function connectionState(row: InterfaceRow, role?: string): ConnectionState {
+  return !row.present ? 'Not found' : !row.up ? 'Down' : !row.running ? 'Disconnected'
+    : !role && !row.network && !row.address && !row.prefixes?.length ? 'Inactive' : 'Connected'
 }

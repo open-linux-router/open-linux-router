@@ -308,7 +308,9 @@ on/off state, drift and every routing and forwarding switch belong to the
 routing settings at interfaces#forwarding, beside the sentences that say what
 turning them off closes. Overview reports a gateway fault. Physical interface
 cards carry name, role, link state, address and current rates without history
-charts; the dialog owns link speed, MAC, addresses and totals. Way out states the
+charts, and open that interface's own page rather than a dialog: the page owns
+link speed, MAC, every address, live rates, totals and the address range the
+interface serves. Way out states the
 observed IPv4/IPv6 default routes and the resolvers this router uses, read-only.
 Services states DHCP and DNS with their state and their counters (active leases,
 queries since restart). IPv4 also controls Gateway routing and leaves system

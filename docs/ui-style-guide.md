@@ -165,8 +165,10 @@ right-side summary column, because the facts it held are panels of their own
 below: Way out (observed IPv4/IPv6 default routes and the resolvers this router
 uses) and Services (DHCP and DNS with their state and counters). Interface cards
 show name, role, link state, address and current rates without traffic charts,
-with wrapping addresses and 16px padding; link speed, MAC and totals stay in the
-card's dialog. Routing state, drift and every routing and forwarding switch
+with wrapping addresses and 16px padding, and link to the interface's own page
+instead of opening a dialog; link speed, MAC, every address, live rates and
+totals live on that page, beside the switches that change them. Routing state,
+drift and every routing and forwarding switch
 live at `interfaces#forwarding`, beside the sentences that say what turning them
 off closes; the Interfaces heading is this page's single settings entry, and
 Overview is where a gateway fault is reported.
