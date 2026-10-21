@@ -217,7 +217,8 @@ online: a DHCP lease outlives presence by hours and the kernel keeps a stale
 neighbour entry looking complete, so Online would be a claim this box cannot
 support; Last heard is the fact it can. The one exception is a device that dialed
 in: every configuration this router renders carries a keepalive, so three minutes
-without a handshake really is a broken tunnel, and that page alone says Connected.
+without a handshake really is a broken tunnel, and that page alone says
+Connected; the map draws the same fact as a dot rather than a word.
 Its Last heard (the handshake) and Way in (the tunnel interface and subnet) stay,
 because the tunnel is the only thing that can answer them, and its configured
 name is a fact row in the same place the device page puts its MAC.

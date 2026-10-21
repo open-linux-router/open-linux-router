@@ -26,6 +26,7 @@ import { ClientQueries } from '@/features/dns/client-queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
 import { DeviceServices } from '@/features/ingress/device-services'
 import { PeerBadge } from '@/features/remote/peer-badge'
+import { WayBadge } from '@/features/remote/way-badge'
 import { usePatchPeer, useRemoteStatus } from '@/features/remote/queries'
 import { useTrafficView, type Flow, type TrafficView } from '@/features/topology/traffic'
 import { ApiError } from '@/lib/api'
@@ -141,7 +142,12 @@ export function WireguardPeerPage() {
       <Card className="gap-0 p-4 sm:p-6">
         <DeviceHeader
           activity={peer.address && <DeviceActivity addresses={[peer.address]} downRate={usage?.downRate} upRate={usage?.upRate} />}
-          picture={<DeviceIcon icon={peer.icon} category={peer.category ?? ''} online={peer.online} size="lg" />}
+          picture={
+            <span className="relative flex">
+              <DeviceIcon icon={peer.icon} category={peer.category ?? ''} online={peer.online} size="lg" />
+              <WayBadge size="lg" />
+            </span>
+          }
           pictureBusy={patch.isPending}
           onPicture={beginPicture}
           title={renaming ? (

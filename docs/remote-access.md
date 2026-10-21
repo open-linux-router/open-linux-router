@@ -293,16 +293,33 @@ A peer is not a fault. The one colour the map spends is red, on a way out that
 has stopped answering; a sleeping laptop is not that, so its card is drawn in
 the same neutral as everything else and says when it last called.
 
-**Drawn as a device, not as a protocol.** The card is a device node: the peer's
+**Drawn as a device, with the way in on its picture.** The card is a device node: the peer's
 own picture from the same picker a device uses, its label over its tunnel
 address, and the state in the narrow figure column a device row keeps for its
-rate or its last-heard time. A card that announced the tunnel instead — a
-WireGuard mark in place of the picture, a dashed outline nothing else on the map
-uses — told an operator which module to edit rather than which machine this is,
-and the band above the router already says where it came from. The state stays
-because it is the one thing a tunnel can answer and a device cannot (§3.3): a
-device list reports when it was last heard, while a keepalive makes "connected
-right now" a fact here.
+rate or its last-heard time. A card that announced the tunnel in place of any of
+those — a WireGuard mark instead of the picture, a dashed outline nothing else on
+the map uses — told an operator which module to edit rather than which machine
+this is.
+
+That rule was written as "no mark at all", and what it produced was the one
+thing a card above the router could not help being: indistinguishable at a
+glance from a device under it, which is exactly what a map exists to spare
+somebody. The way in is now a badge on the corner of the picture: the WireGuard
+mark at full brand colour, on the white disc a protocol's artwork gets on the
+Access page, ringed in the card's colour so it reads as a badge rather than as
+a second picture. A mark *on* the picture is not a mark *instead of* it — which
+is the thing this section refuses — and it costs the card no width, no line of
+type and no second reading order. The method also stays in the tooltip ("over
+wg0"). The peer's own page wears the same badge on the same picture
+(`WayBadge`, `web/src/features/remote/way-badge.tsx`), so the two views agree
+about what this device is and how it got here.
+
+The state stays because it is the one thing a tunnel can answer and a device
+cannot (§3.3): a device list reports when it was last heard, while a keepalive
+makes "connected right now" a fact here. `connected` draws as a filled dot
+instead of the word, because the word read as a description of the card rather
+than as its state; the word stays as the card's title and its accessible name.
+The other three stay words: an absence of evidence must never be a status light.
 
 **The card says the label, the click target says the name.** `display_name` when
 there is one and the name otherwise, because a card in a band is read by a

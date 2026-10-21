@@ -256,7 +256,11 @@ monospace for addresses, commands and configuration.
 Device imagery identifies device categories. Device icon selection also offers
 theSVG search above the built-in categories,
 using the existing image tiles and selected state. Render chosen logos in the
-same muted tile as operating-system marks throughout device views.
+same muted tile as operating-system marks throughout device views. A device that
+dialed in wears the Way in badge in the lower-right corner of that picture — the
+same badge in the map's band card and on its own page — because the picture is
+the same in both places and the badge is the only thing that says the tunnel
+brought it.
 
 Tool directory entries use Lucide
 outline icons with a 1.75px stroke in a themed 56px surface (48px on phones),
@@ -476,12 +480,20 @@ The band above the router holds the only thing outside it: the devices dialed
 in over WireGuard, one card each, drawn side by side and joined to the router by
 their own line. A dial-in card is a device node, drawn in the band: the peer's
 own picture from the same picker a device uses, its label over its tunnel
-address, and one of four states (Connected, an elapsed time, Never connected,
-Status unavailable) in the same narrow figure column a device row keeps for its
-rate or its last-heard time, with the endpoint and totals on hover. It carries
-no rate, which is why the band's lines stay the thin ones. Never mark an absent
-peer as a fault. WireGuard off, or a tunnel with no peers, puts no band there at
-all: the map starts at the router, and with no groups either it is one box.
+address, and the state in the same narrow figure column a device row keeps for
+its rate or its last-heard time, with the endpoint and totals on hover. The way
+in is a 14px badge on the corner of the peer's picture: the WireGuard mark at
+full brand colour on the same white disc a protocol gets on the Access page, with
+a 2px ring in the card's colour so it separates from the device tile underneath.
+A badge on the picture is not a picture in place of the machine, and it costs the
+card no width; the method also stays in the tooltip ("over wg0"). Connected is a
+filled 8px success dot whose word lives in the accessible name and the card's
+title; the other three states (an elapsed time, Never connected, Status
+unavailable) stay words, since an absence of evidence must not be a status
+light. It carries no rate, which is why the band's lines stay the thin ones.
+Never mark an absent peer as a fault. WireGuard off, or a tunnel with
+no peers, puts no band there at all: the map starts at the router, and with no
+groups either it is one box.
 Observed default routes are not cards on the map. A next hop is one line of
 Link's status — address, interface, family — and drawing each one was a row of
 boxes above the router that said less than that line while pushing every group a

@@ -35,6 +35,7 @@ import { DeviceIcon } from '@/features/devices/device-icon'
 import type { GroupDeletion } from '@/features/devices/group-actions'
 import { groupOptions, MAX_GROUP_DEPTH, parentChoices } from '@/features/devices/group-tree'
 import { lastHeardLabel, lastHeardTitle } from '@/features/devices/last-heard'
+import { WayBadge } from '@/features/remote/way-badge'
 
 import type { DialInPeer } from '@/features/topology/dial-in'
 import type { Density, GroupVariant, Hidden } from '@/features/topology/layout'
@@ -154,6 +155,16 @@ function NetworkChip({ network: n }: { network: NetworkInfo }) {
  * and a box that announced the protocol it arrived on told them which module to
  * edit rather than which machine this is.
  *
+ * **The way in is a badge on the picture.** Drawn only as a device, these cards
+ * were indistinguishable at a glance from the machines under the router, and
+ * every mark tried in the card's own text (a protocol in the figure column, a
+ * legend across the top border) competed with the name for the same 272 pixels.
+ * The WireGuard mark rides the picture's corner instead: it is where the eye
+ * already looks for what this machine is, it costs the card no width, and it is
+ * the method in the brand's own colour rather than a second word to read. The
+ * picture keeps its place — a badge on it is not a picture in place of the
+ * machine, which is the mistake this module has always refused (§3.4).
+ *
  * The figure is the one thing the tunnel can answer and a device cannot: the
  * four states in `dialInLabel` (docs/remote-access.md §3.4). No rate, and no
  * bandwidth bar, which is why the band's lines stay the thin ones (band.ts).
@@ -176,17 +187,21 @@ export function DialInNode({ peer, iface, onOpen }: { peer: DialInPeer; iface: s
       onClick={onOpen}
       title={title}
       className={cn(
-        'flex size-full min-w-0 items-center gap-2.5 rounded-lg border bg-card pr-2 pl-3 text-left shadow-xs transition-colors duration-150',
+        'flex size-full min-w-0 items-center gap-2.5 rounded-lg border bg-card pr-2.5 pl-3 text-left shadow-xs transition-colors duration-150',
         onOpen && 'hover:bg-accent/60 active:bg-accent',
         focusRing,
       )}
     >
-      <DeviceIcon
-        icon={peer.icon}
-        category={peer.category ?? 'unknown'}
-        online={here ? undefined : false}
-        size="sm"
-      />
+      {/* The picture, and the way it got here on the corner of it. */}
+      <span className="relative flex shrink-0">
+        <DeviceIcon
+          icon={peer.icon}
+          category={peer.category ?? 'unknown'}
+          online={here ? undefined : false}
+          size="sm"
+        />
+        <WayBadge />
+      </span>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-[13px] leading-[18px] font-medium">{peer.label}</span>
         {peer.address ? (
@@ -197,7 +212,18 @@ export function DialInNode({ peer, iface, onOpen }: { peer: DialInPeer; iface: s
           <span className="truncate text-[11px] leading-4 text-muted-foreground italic">{t('no address')}</span>
         )}
       </span>
-      <span className="w-16 shrink-0 text-right text-[11px] leading-4 text-muted-foreground">{state}</span>
+      {peer.state === 'connected' ? (
+        // Presence is a dot, not a word. "Connected" beside a picture that is
+        // lit already said the same thing twice and read as a description of
+        // the card; the dot is the status it is, and the word stays for the
+        // screen reader and the card's title.
+        <span className="flex w-16 shrink-0 items-center justify-end">
+          <span aria-hidden className="size-2 rounded-full bg-success" />
+          <span className="sr-only">{t('Connected')}</span>
+        </span>
+      ) : (
+        <span className="w-16 shrink-0 text-right text-[11px] leading-4 text-muted-foreground">{state}</span>
+      )}
     </Shell>
   )
 }

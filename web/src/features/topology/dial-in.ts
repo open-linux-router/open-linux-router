@@ -77,8 +77,8 @@ export function dialInState(peer: RemotePeer): DialInState {
  *
  * Label order, not "connected first". The band sits above the router, where a
  * card that jumped to the front every time a phone woke up would read as the
- * picture rearranging itself; each card carries its own state word, so the
- * order has no work left to do.
+ * picture rearranging itself; each card carries its own state, so the order has
+ * no work left to do.
  *
  * The card says the `label` and the map keys it by the `name`. The two are
  * different fields rather than one that changes meaning, because the name is
