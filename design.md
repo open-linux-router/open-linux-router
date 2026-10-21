@@ -640,17 +640,17 @@ editor rather than grow one, and if it needed a draft of its own it would be a
 second owner and would not be allowed. The rule stays where a setting lives;
 the stacks decide only how it is found (decided 2026-10-21).
 
-**The route table closes the stack, because it is per family too.** The same
-stacks end with a Routes card spanning the row: the route count, whether that
-family has a default route, and how many of its tables belong to exits or to
-somebody else. The card is not a seventh stage — every module above writes into
-the table and the kernel consults it after all of them — and the row span says
-so, while the family it belongs to is the family whose stack it closes. A block
-of its own under both stacks said IPv4 and IPv6 a second time and asked the
-reader to hold two places at once for one family's routing. The card counts; the
-rows live on a read-only page (docs/gateway.md §2.4.1), because a static
-route is an object of its own and a page that reported the table must not become
-a second place to write it (decided 2026-10-22).
+**The route table closes the stack, because it is per family too.** Each stack
+ends with a Routes card drawn like the six above it: the route count, whether
+that family has a default route, and how many of its tables belong to exits or to
+somebody else. It is not one of them — every module above writes into the table
+and the kernel consults it after all of them — but it is per family, so it closes
+the family's stack rather than sitting in a block under both that named IPv4 and
+IPv6 a second time and asked the reader to hold two places at once for one
+family's routing. The card counts; the rows live on a read-only page
+(docs/gateway.md §2.4.1), because a static route is an object of its own and a
+page that reported the table must not become a second place to write it (decided
+2026-10-22).
 
 **v1 serves RA with SLAAC + RDNSS, and no DHCPv6 at all.** Two facts decide
 this, and both are structural rather than matters of taste:

@@ -51,10 +51,10 @@ type Family = 'v4' | 'v6'
  * It is not a module — every card above writes into it, and the kernel consults
  * it after all of them — but it is per family, which is the cut this page makes,
  * so a section of its own named IPv4 and IPv6 a second time and asked the reader
- * to hold two places at once for one family's routing. The card spans the row so
- * it does not claim to be a seventh stage beside the six modules: it is where
- * they all land, and it is last for that reason. A table is not a setting, so
- * the card counts and its page (/gateway/routes) carries the rows.
+ * to hold two places at once for one family's routing. It is the seventh card,
+ * drawn like the six above and read the same way; it comes last because it is
+ * where all of them land. A table is not a setting, so the card counts and its
+ * page (/gateway/routes) carries the rows.
  *
  * The stacks hold no configuration of their own. A card is a link to the
  * module's own editor, not a second copy of it: one object, one plan, one apply
@@ -461,20 +461,18 @@ function RoutesStage({ family, id }: StageProps) {
     ].filter(Boolean).join(' · ')
   }
 
-  return <StageCard id={id} title={t('Routes')} icon={Route} to="/gateway/routes" health={health} detail={detail} wide />
+  return <StageCard id={id} title={t('Routes')} icon={Route} to="/gateway/routes" health={health} detail={detail} />
 }
 
 /* -------------------------------------------------------------------------- */
 
-function StageCard({ id, title, icon: Icon, to, health, detail, wide }: {
+function StageCard({ id, title, icon: Icon, to, health, detail }: {
   id?: string
   title: string
   icon: LucideIcon
   to: string
   health: Health
   detail: ReactNode
-  /** Closes the stack: the table the cards above write into, not one more of them. */
-  wide?: boolean
 }) {
   return (
     <Link
@@ -482,7 +480,6 @@ function StageCard({ id, title, icon: Icon, to, health, detail, wide }: {
       to={to}
       className={cn(
         'flex min-w-0 gap-3 rounded-xl border bg-card p-4 transition-colors duration-150 hover:bg-accent/60 active:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-        wide && 'sm:col-span-2 lg:col-span-3',
         id && 'scroll-mt-20',
       )}
     >

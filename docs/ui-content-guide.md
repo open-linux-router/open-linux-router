@@ -364,15 +364,15 @@ under both families is one object seen twice. Drift and every routing and
 forwarding switch remain at interfaces#forwarding; Overview reports a gateway
 fault. Usage has no separate page; traffic counting lives in routing details.
 
-Each stack ends with the routing table itself, in a card that spans the row: the
-route count, whether that family has a default route, and whether any of its
-tables belongs to somebody else. It is not a seventh stage — every module in the
-stack writes into this table, and the kernel consults it after all of them — and
-it is per family, so it closes that family's stack rather than getting a block
-of its own that would name the two families again. Its page is read-only and
-groups every route by table: the box's main table, each exit's own table, and
-any table a rule outside OLR points at. A table is not a setting, so the rows
-live there and the card carries only the counts.
+Each stack ends with the routing table itself, in a seventh card of the same
+kind: the route count, whether that family has a default route, and whether any
+of its tables belongs to somebody else. It is not a stage like the six above —
+every module in the stack writes into this table, and the kernel consults it
+after all of them — and it is per family, so it closes that family's stack
+rather than getting a block of its own that would name the two families again.
+Its page is read-only and groups every route by table: the box's main table,
+each exit's own table, and any table a rule outside OLR points at. A table is
+not a setting, so the rows live there and the card carries only the counts.
 
 Open newly navigated pages at the top so their title and primary information are
 visible. Preserve section targeting for hash links and scroll for query-only changes.

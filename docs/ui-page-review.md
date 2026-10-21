@@ -13,7 +13,7 @@ OLR capabilities, and a calm, consistent interface. This record accompanies the
 | Group | Preserve member lists and batch controls; remove repeated MAC/direct-membership prose; keep overwrite and non-inheritance consequences. |
 | Device/group QoS | State that configuration is saved but not enforced; keep forms and shared group-cap semantics. |
 | Inspection | Keep the existing panel and results; confirm privacy and CA consequences before starting; disclose lengthy preparation/scope and viewer details; retain session stop time and diagnostics. |
-| Gateway | Interface cards in a wrapping grid with role, address and rates, each linking to the interface's own page, then two stacks — IPv4 and IPv6 — of seven cards each (Upstream, LAN, DHCP, Forwarding, Exit, DNS, with SLAAC or DHCPv6 in place of DHCP on the IPv6 stack, and a full-width Routes card that counts routes and links to the read-only routing table) that state the stage's answer and link to the one page that changes it. No status strip and no switches — routing drift and all routing/forwarding switches live at interfaces#forwarding, and Overview reports faults. |
+| Gateway | Interface cards in a wrapping grid with role, address and rates, each linking to the interface's own page, then two stacks — IPv4 and IPv6 — of seven cards each (Upstream, LAN, DHCP, Forwarding, Exit, DNS, with SLAAC or DHCPv6 in place of DHCP on the IPv6 stack, and a Routes card that counts routes and links to the read-only routing table) that state the stage's answer and link to the one page that changes it. No status strip and no switches — routing drift and all routing/forwarding switches live at interfaces#forwarding, and Overview reports faults. |
 | Interfaces/routing and interface detail | Keep controls and all observed fields; carry link speed, every address, live rates, totals and the served DHCP range on the detail page, since the landing card no longer opens a dialog; shorten management and routing explanations without moving controls. |
 | Exits | Preserve list/edit forms; distinguish blocking, unknown and failed checks; remove repeated failure prose. |
 | Usage | Preserve measurement controls and counters; show a uniquely matched device name with its address; download precedes upload; disclose accounting limitations. |
@@ -135,18 +135,17 @@ card reports what its switch decides rather than where the sysctl was written:
 devices reach the internet or they do not, with NAT and the port-forward count
 beside it on IPv4.
 
-Each stack ends with the routing table, which is not a stage and not a module:
-every card above writes into it and the kernel consults it after all of them.
-The Routes card spans the row so it does not read as a seventh stage, and it
-sits in the family's own stack because a route table is per family — a block
-below both stacks named IPv4 and IPv6 a second time and asked the reader to
-hold two places at once for one family's routing. It counts routes, says
-whether that family has a default route and whether any of its tables belongs
-to somebody else; its page lists every route grouped by table — the box's main
-table, each exit's own table with the rule priority that selects it, and any
-table a foreign rule points at — and is read-only, because a static route is
-its own object and a page reporting the table must not become a second place to
-write it.
+Each stack ends with the routing table, drawn as a seventh card of the same kind
+although it is not a stage and not a module: every card above writes into it and
+the kernel consults it after all of them. It sits in the family's own stack
+because a route table is per family — a block below both stacks named IPv4 and
+IPv6 a second time and asked the reader to hold two places at once for one
+family's routing. It counts routes, says whether that family has a default route
+and whether any of its tables belongs to somebody else; its page lists every
+route grouped by table — the box's main table, each exit's own table with the
+rule priority that selects it, and any table a foreign rule points at — and is
+read-only, because a static route is its own object and a page reporting the
+table must not become a second place to write it.
 
 The stacks are a read model. Every card is a link: no draft, no plan, no apply
 of its own, so the same module appearing once per family is one object seen
