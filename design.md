@@ -622,15 +622,15 @@ says so as a warning; it never writes the other module's half (decided
 2026-09-30, while adding tunnelled IPv6).
 
 **A family-wide *view* is not a family-wide setting.** The Gateway landing page
-shows two stacks, IPv4 and IPv6, each listing the same six stages —
-upstream, LAN, DHCP, forwarding, exit, DNS — with that family's answer at
-each one. The reading order is shared; the labels are not required to be. A card
-is named for the mechanism its family actually uses: DHCP on IPv4, the module's
-own name and the word an operator arrives with (§4.2), and on IPv6 the protocol
-that is running — SLAAC, DHCPv6, or both when networks differ. Those are the
-words an operator already has; symmetry for its own sake would put a name on the
-card that the reader has to translate first. Each card opens the page that
-changes its family's half — the IPv4
+shows two stacks, IPv4 and IPv6, each listing the same stages — upstream, LAN,
+DHCP, forwarding, exit, DNS — with that family's answer at each one. The reading
+order is shared; the labels are not required to be. A card is named for the
+mechanism its family actually uses: DHCP on IPv4, the module's own name and the
+word an operator arrives with (§4.2), and on IPv6 the protocol that is running —
+SLAAC, DHCPv6, or both when networks differ. Those are the words an operator
+already has; symmetry for its own sake would put a name on the card that the
+reader has to translate first. Each card opens the page that changes its
+family's half — the IPv4
 card the DHCP page, the IPv6 card the address ranges that carry each network's
 advertisement mode. This is deliberately the opposite of the wizard above: a
 stack card renders another module's state and links to that module's own editor,
@@ -639,6 +639,18 @@ is mechanical — if a card needed a control it would have to reuse that module'
 editor rather than grow one, and if it needed a draft of its own it would be a
 second owner and would not be allowed. The rule stays where a setting lives;
 the stacks decide only how it is found (decided 2026-10-21).
+
+**The route table closes the stack, because it is per family too.** The same
+stacks end with a Routes card spanning the row: the route count, whether that
+family has a default route, and how many of its tables belong to exits or to
+somebody else. The card is not a seventh stage — every module above writes into
+the table and the kernel consults it after all of them — and the row span says
+so, while the family it belongs to is the family whose stack it closes. A block
+of its own under both stacks said IPv4 and IPv6 a second time and asked the
+reader to hold two places at once for one family's routing. The card counts; the
+rows live on a read-only page (docs/gateway.md §2.4.1), because a static
+route is an object of its own and a page that reported the table must not become
+a second place to write it (decided 2026-10-22).
 
 **v1 serves RA with SLAAC + RDNSS, and no DHCPv6 at all.** Two facts decide
 this, and both are structural rather than matters of taste:

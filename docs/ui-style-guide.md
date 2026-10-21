@@ -193,26 +193,29 @@ totals live on that page, beside the switches that change them.
 Below the interfaces the page is two stacks, IPv4 and IPv6, so a family's whole
 path is readable without knowing which module owns which half. Each stack is a
 24px heading and one grid of six stage cards in the order a packet meets them —
-Upstream, LAN, DHCP, Forwarding, Exit, DNS, with the clients card reading SLAAC or
-DHCPv6 on the IPv6 stack — three across from 1024px, two from 640px and one on
-phones. The stacks share the reading order, not a card-for-card naming: a card
-is named for what its family actually runs — the protocol on the clients card —
-so the labels may differ where the families do, and a status word reports the
-outcome rather than the mechanism behind it. A card shows the stage's answer for
-its family: a tone dot, a status word and one detail line, with the whole card
-linking to the one page that changes it. The same stage therefore appears once
-per family as a second view of the same object, never as a second editor: a
-stack card holds no configuration and no draft. A stage that is missing says so
-in its card instead of disappearing. Drift and every routing and forwarding
-switch live at `interfaces#forwarding`, beside the sentences that say what
-turning them off closes; the stacks only report what those switches wrote, and
-Overview is where a gateway fault is reported. Below the stacks, the routing
-table gets a block of its own: two cards, one per family, carrying the route
-count, whether that family has a default route, and how many tables belong to
-exits or to somebody else. It is not a seventh stage — the stacks' modules write
-into this table and the kernel consults it after all of them — and its page is
-read-only, grouping every route by table so a count never has to stand in for
-the rows.
+Upstream, LAN, DHCP, Forwarding, Exit, DNS, with the clients card reading SLAAC
+or DHCPv6 on the IPv6 stack — three across from 1024px, two from 640px and one
+on phones, with a Routes card spanning the row to close it. The stacks share
+the reading order, not a card-for-card naming: a card is named for what its
+family actually runs — the protocol on the clients card — so the labels may
+differ where the families do, and a status word reports the outcome rather than
+the mechanism behind it. A card shows the stage's answer for its family: a tone
+dot, a status word and one detail line, with the whole card linking to the one
+page that changes it. The same stage therefore appears once per family as a
+second view of the same object, never as a second editor: a stack card holds no
+configuration and no draft. A stage that is missing says so in its card instead
+of disappearing. Drift and every routing and forwarding switch live at
+`interfaces#forwarding`, beside the sentences that say what turning them off
+closes; the stacks only report what those switches wrote, and Overview is where
+a gateway fault is reported.
+
+The Routes card spans the row it closes. A route table is per family, so it
+belongs to the family's stack rather than to a block of its own that would name
+IPv4 and IPv6 a second time; the row span keeps it from reading as a seventh
+stage beside the six modules. It carries the route count, whether that family
+has a default route, and how many of its tables belong to exits or to somebody
+else — counts, not rows, because a card is not a table. Its page is read-only
+and groups every route by table, so a count never has to stand in for the rows.
 
 The shell has a 1280px maximum width, a 64px header and horizontal gutters of
 16px on phones, 24px from 640px, and 32px from 1280px. Content starts with

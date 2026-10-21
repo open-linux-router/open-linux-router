@@ -4,6 +4,7 @@ import {
   ArrowUpFromLine,
   MonitorSmartphone,
   Network,
+  Route,
   Search,
   Signpost,
   type LucideIcon,
@@ -15,12 +16,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useDhcpConfig, useDhcpLeases, useDhcpStatus } from '@/features/dhcp/queries'
 import { useDialStatus, useUplink } from '@/features/dial/queries'
 import { useDnsConfig, useDnsStatus } from '@/features/dns/queries'
-import { useGatewayConfig } from '@/features/gateway/queries'
+import { useGatewayConfig, useGatewayRoutes } from '@/features/gateway/queries'
 import { useInterfaces } from '@/features/link/queries'
 import { RowChevron } from '@/components/ui/row-action'
 import { cn } from '@/lib/utils'
 import { state, type Health } from '@/lib/state'
 import { StatusInline } from '@/components/ui/status'
+import type { RouteTable } from '@/lib/api-types'
 
 type Family = 'v4' | 'v6'
 
@@ -29,8 +31,9 @@ type Family = 'v4' | 'v6'
  *
  * A normal operator asks "does IPv6 work, and where do I fix it", not "is dial
  * or dhcp configured". Each stack is that question answered in the order the
- * traffic takes: upstream, LAN addressing, DHCP, forwarding, which way out, and
- * name resolution. Every card names the one page that changes it.
+ * traffic takes: upstream, LAN addressing, DHCP, forwarding, which way out, name
+ * resolution, and the table all of it ends up in. Every card names the one page
+ * that changes it.
  *
  * The clients stage is titled for what an operator came to change: DHCP on
  * IPv4 — the module's own name and the word they arrive with (design.md §4.2) —
@@ -44,9 +47,14 @@ type Family = 'v4' | 'v6'
  * this card also counts. Its detail still answers for the network — devices get
  * out or they do not — because a sysctl nobody can see is not an answer.
  *
- * The route table is next to this flow rather than in it (routes-cards.tsx):
- * every module here writes into the table, and the kernel consults it after all
- * of them, so a seventh stage card would claim it is one more module.
+ * The route table closes each stack rather than sitting in a block below both.
+ * It is not a module — every card above writes into it, and the kernel consults
+ * it after all of them — but it is per family, which is the cut this page makes,
+ * so a section of its own named IPv4 and IPv6 a second time and asked the reader
+ * to hold two places at once for one family's routing. The card spans the row so
+ * it does not claim to be a seventh stage beside the six modules: it is where
+ * they all land, and it is last for that reason. A table is not a setting, so
+ * the card counts and its page (/gateway/routes) carries the rows.
  *
  * The stacks hold no configuration of their own. A card is a link to the
  * module's own editor, not a second copy of it: one object, one plan, one apply
@@ -74,6 +82,7 @@ const STAGES: { key: string; hash?: string; Stage: (props: StageProps) => ReactN
   { key: 'forwarding', Stage: ForwardingStage },
   { key: 'exit', Stage: ExitStage },
   { key: 'dns', hash: 'dns', Stage: DnsStage },
+  { key: 'routes', hash: 'routes', Stage: RoutesStage },
 ]
 
 function Stack({ id, title, family }: { id: string; title: string; family: Family }) {
@@ -85,7 +94,8 @@ function Stack({ id, title, family }: { id: string; title: string; family: Famil
           // The hash targets the v4 stack only. `/gateway#dhcp` and `#dns` used
           // to be the redirects from the settings trees; the trees now open
           // `/gateway/dhcp` and `/gateway/dns` themselves, but the anchors stay
-          // for links made while they pointed here.
+          // for links made while they pointed here. `#routes` is the route
+          // table's, which used to be its own section id.
           <Stage key={key} family={family} id={family === 'v4' ? hash : undefined} />
         ))}
       </div>
@@ -293,7 +303,7 @@ function ForwardingStage({ family, id }: StageProps) {
       ? [
         t('Devices behind this router reach the internet'),
         config.snat ? t('NAT on') : t('NAT off'),
-        forwards > 0 ? t('{count} port forwards', { count: forwards }) : null,
+        counted(forwards, '{count} port forward', '{count} port forwards'),
       ].filter(Boolean).join(' · ')
       : t('No device behind this router reaches the internet')
   } else if (!config.enabled) {
@@ -416,15 +426,55 @@ function DnsStage({ family, id }: StageProps) {
   return <StageCard id={id} title={t('DNS')} icon={Search} to={to} health={health} detail={detail} />
 }
 
+function RoutesStage({ family, id }: StageProps) {
+  useLocale()
+  const routes = useGatewayRoutes()
+  const tables = (routes.data?.tables ?? []).filter(table => table.family === (family === 'v4' ? 4 : 6))
+
+  let health: Health
+  let detail: ReactNode
+
+  if (routes.isError) {
+    health = state('Unavailable')
+    detail = t('Route table unavailable')
+  } else if (routes.isPending || !routes.data) {
+    health = state('Reading…')
+    detail = <Skeleton className="h-4 w-28" />
+  } else if (!routes.data.known) {
+    health = state('Unknown')
+    detail = routes.data.error ?? t('The routing table could not be read')
+  } else if (tables.length === 0) {
+    health = state('No routes')
+    detail = t('No route table was reported for this family')
+  } else if (!defaultRoute(tables)) {
+    // A table with connected subnets and no default route is a network that
+    // reaches its neighbours and nothing else, which is worth a caution of its
+    // own rather than hiding behind a route count.
+    health = state('No default route')
+    detail = t('{count} routes', { count: routeCount(tables) })
+  } else {
+    health = state('Default route')
+    detail = [
+      t('{count} routes', { count: routeCount(tables) }),
+      counted(exitTableCount(tables), '{count} exit table', '{count} exit tables'),
+      counted(otherTableCount(tables), '{count} other table', '{count} other tables'),
+    ].filter(Boolean).join(' · ')
+  }
+
+  return <StageCard id={id} title={t('Routes')} icon={Route} to="/gateway/routes" health={health} detail={detail} wide />
+}
+
 /* -------------------------------------------------------------------------- */
 
-function StageCard({ id, title, icon: Icon, to, health, detail }: {
+function StageCard({ id, title, icon: Icon, to, health, detail, wide }: {
   id?: string
   title: string
   icon: LucideIcon
   to: string
   health: Health
   detail: ReactNode
+  /** Closes the stack: the table the cards above write into, not one more of them. */
+  wide?: boolean
 }) {
   return (
     <Link
@@ -432,6 +482,7 @@ function StageCard({ id, title, icon: Icon, to, health, detail }: {
       to={to}
       className={cn(
         'flex min-w-0 gap-3 rounded-xl border bg-card p-4 transition-colors duration-150 hover:bg-accent/60 active:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+        wide && 'sm:col-span-2 lg:col-span-3',
         id && 'scroll-mt-20',
       )}
     >
@@ -471,4 +522,27 @@ function dnsHealth(dns: ReturnType<typeof useDnsStatus>): Health {
   const running = dns.data.services.length > 0 && dns.data.services.every(service => service.status?.active)
   if (!running) return state('Not running')
   return dns.data.drifted ? state('Needs attention') : state('Running')
+}
+
+/* -------------------------------------------------------------------------- */
+
+/** A count that only earns its segment when it is not zero, with its singular. */
+function counted(value: number, one: string, many: string): string | undefined {
+  return value > 0 ? t(value === 1 ? one : many, { count: value }) : undefined
+}
+
+function routeCount(tables: RouteTable[]): number {
+  return tables.reduce((sum, table) => sum + table.routes.length, 0)
+}
+
+function exitTableCount(tables: RouteTable[]): number {
+  return tables.filter(table => table.owner === 'exit').length
+}
+
+function otherTableCount(tables: RouteTable[]): number {
+  return tables.filter(table => table.owner === 'other').length
+}
+
+function defaultRoute(tables: RouteTable[]): boolean {
+  return tables.some(table => table.routes.some(route => route.default))
 }

@@ -344,34 +344,35 @@ history charts, and open that interface's own page rather than a dialog, where
 link speed, MAC, every address, live rates, totals and the served address range
 live beside the switches that change them.
 
-Below them are two stacks, IPv4 and IPv6, each naming the same six stages in the
+Below them are two stacks, IPv4 and IPv6, each naming the same stages in the
 order traffic takes them: Upstream (address, next hop, and for IPv6 whether it
-is native, delegated or tunnelled), LAN (the subnets and how much of the pool is
-in use), the clients stage, Forwarding (whether this family's traffic gets out,
-and on IPv4 what it carries: NAT and the port forwards), Exit (direct, or which
-exit carries it — and for IPv6 whether an exit drops it, since there is no NAT to
-translate it) and DNS (the resolvers, and for IPv6 whether IPv6 name resolution
-is enabled). The reading order is shared; the card labels are not required to
-match. A card is named for what an operator came to change: DHCP on IPv4,
-because that is the module's name and the word they arrive with; on IPv6, the
-protocol that is running — SLAAC, DHCPv6, or both when networks differ. Those
-are the operator's own words, so the card does not coin a name for the family.
-Each card states its stage's answer and links to the one page that changes it; a
-missing stage is named in its card rather than hidden. The stacks are a view cut
-across the modules and hold no configuration of their own, so the same module
-appearing under both families is one object seen twice. Drift and every routing
-and forwarding switch remain at interfaces#forwarding; Overview reports a
-gateway fault. Usage has no separate page; traffic counting lives in routing
-details.
+is native, delegated or tunnelled), LAN (the subnets and how much of the pool
+is in use), the clients stage, Forwarding (whether this family's traffic gets
+out, and on IPv4 what it carries: NAT and the port forwards), Exit (direct, or
+which exit carries it — and for IPv6 whether an exit drops it, since there is
+no NAT to translate it), DNS (the resolvers, and for IPv6 whether IPv6 name
+resolution is enabled) and Routes (the routing table, closing the stack). The
+reading order is shared; the card labels are not required to match. A card is
+named for what an operator came to change: DHCP on IPv4, because that is the
+module's name and the word they arrive with; on IPv6, the protocol that is
+running — SLAAC, DHCPv6, or both when networks differ. Those are the operator's
+own words, so the card does not coin a name for the family. Each card states
+its stage's answer and links to the one page that changes it; a missing stage
+is named in its card rather than hidden. The stacks are a view cut across the
+modules and hold no configuration of their own, so the same module appearing
+under both families is one object seen twice. Drift and every routing and
+forwarding switch remain at interfaces#forwarding; Overview reports a gateway
+fault. Usage has no separate page; traffic counting lives in routing details.
 
-Below the stacks is the routing table itself, one card per family: the route
-count, whether that family has a default route, and whether any table belongs to
-somebody else. It is not a seventh stage — every module in the stacks writes
-into this table, and the kernel consults it after all of them — so it gets its
-own block rather than a card in the flow. Its page is read-only and groups every
-route by table: the box's main table, each exit's own table, and any table a
-rule outside OLR points at. A table is not a setting, so the rows live there and
-the card carries only the counts.
+Each stack ends with the routing table itself, in a card that spans the row: the
+route count, whether that family has a default route, and whether any of its
+tables belongs to somebody else. It is not a seventh stage — every module in the
+stack writes into this table, and the kernel consults it after all of them — and
+it is per family, so it closes that family's stack rather than getting a block
+of its own that would name the two families again. Its page is read-only and
+groups every route by table: the box's main table, each exit's own table, and
+any table a rule outside OLR points at. A table is not a setting, so the rows
+live there and the card carries only the counts.
 
 Open newly navigated pages at the top so their title and primary information are
 visible. Preserve section targeting for hash links and scroll for query-only changes.
