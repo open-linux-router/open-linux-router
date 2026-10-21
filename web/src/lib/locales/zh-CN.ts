@@ -650,7 +650,6 @@ export const zhCN: Record<string, string> = {
   'optional': '可选',
   'Details': '详情',
   'Technical details': '技术详情',
-  'Configuration': '配置',
   'Settings': '设置',
   'Name': '名称',
   'Description': '说明',
@@ -1253,7 +1252,7 @@ export const zhCN: Record<string, string> = {
   '{name} sends IPv6 around it': '{name} 让 IPv6 绕过它',
   'WireGuard is off. The devices below are saved, but none of them can connect.': 'WireGuard 已关闭。下方设备都已保存，但都无法连接。',
   'The routing table: the box’s own table, each exit’s table, and the rules outside OLR.': '路由表：本机自己的表、每个出口的表，以及 OLR 之外的规则。',
-  'New file': '新配置文件',
+  'New setup file': '新配置文件',
   'The file was handed over once and its private key is not stored here, so it cannot be downloaded again. A new file needs a new key pair, and the file it replaces stops working.': '这份文件只交付过一次，私钥没有保存在这台路由器上，所以无法重新下载。要拿到新文件必须换一对密钥，旧文件随之失效。',
   'The key in it is not stored on the router, so this file cannot be shown again. If you lose it, issue a new one from the device’s page: that replaces this file with one built on a new key.': '其中的私钥没有保存在路由器上，因此这个文件无法再次显示。如果丢失，请在设备页面上签发新配置——新文件会用一对新密钥替换这个文件。',
 }

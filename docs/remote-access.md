@@ -367,8 +367,8 @@ only the public half. There is no route that returns *that* file a second time,
 because there is nothing left to build it from.
 
 > **A lost client configuration is a re-issue, not a re-download.**
-> `POST /api/remote/wireguard/peers/{name}/reissue` (the New file button on the
-> device's page) generates a new key pair and hands over the file that matches
+> `POST /api/remote/wireguard/peers/{name}/reissue` (the New setup file button on
+> the device's page) generates a new key pair and hands over the file that matches
 > it. The old file stops working the moment the kernel takes the new public key.
 
 Everything else about the device stays where it was, which is the argument for

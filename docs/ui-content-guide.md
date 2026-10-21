@@ -230,6 +230,12 @@ Connected; the map draws the same fact as a dot rather than a word.
 Its Last heard (the handshake) and Way in (the tunnel interface and subnet) stay,
 because the tunnel is the only thing that can answer them, and its configured
 name is a fact row in the same place the device page puts its MAC.
+That page's two actions, handing over a new setup file and editing the device,
+are one pair in the lower right corner, in the space the counters leave beside
+the taller facts column; no rule separates them from the facts they belong to.
+Name the file the button hands over, rather than a category of configuration:
+the file exists only after the click, and why it cannot be downloaded again
+belongs to its tooltip and to the confirm dialog that decides the loss.
 Speed bars open download/upload limit dialogs; keep the
 configuration-only caveat in those dialogs and save feedback, without a status row.
 Omit Notes and the QoS heading.

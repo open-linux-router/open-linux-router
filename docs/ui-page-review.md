@@ -218,3 +218,23 @@ handover — at 1440×1000 and 390×844, plus lint, type-check, unit tests and a
 production build. The daemon side is covered by
 `TestReissuingADeviceReturnsANewConfiguration`; live router state was not
 available, so the presentation check runs against fixtures.
+
+## WireGuard device actions — 2026-10-21
+
+The Configuration row put a button inside a table of facts, and the fact it
+labelled was "there is a file, once". As a row it named a category rather than
+the thing an operator is missing, and its button, New file, referred to a file
+that does not exist until it is clicked. It also ended the card in a band under a
+rule, because a footer was where page-level actions had always been put.
+
+The two actions a dialed-in device has — hand it a new setup file, edit it — are
+one pair now, in the lower right corner of the card, in the space the three
+counters leave beside the taller facts column. There is no rule: the pair belongs
+to the facts above it, and a line would announce another section of the page in
+a card that has none. The button names what the click hands over, so the row that
+had to explain it is gone; why the file cannot be downloaded again stays in its
+tooltip and in the confirm dialog, which is where the loss is decided.
+
+Validated against the scratch daemon at 1440×1000 and 390×844, in both themes,
+with no horizontal overflow, and clicked through to the handover dialog from the
+moved button. The daemon side is unchanged.

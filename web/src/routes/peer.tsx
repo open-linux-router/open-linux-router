@@ -193,16 +193,6 @@ export function WireguardPeerPage() {
           <Facts
             peer={peer}
             status={status.data}
-            configuration={
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={applier.busy}
-                onClick={() => applier.submit(remoteChange.reissuePeer(peer.name))}
-              >
-                <RotateCcw /> {t('New file')}
-              </Button>
-            }
             services={
               // Published by its tunnel address, which is the only name for
               // this device that `ingress` has: a peer is not in `devices`, so
@@ -213,17 +203,34 @@ export function WireguardPeerPage() {
               } />
             }
           />
-          <Usage flow={flow} usage={usage} addresses={peer.address ? [peer.address] : []} trafficFailed={traffic.isError} />
-        </div>
-
-        {/* The list this device came from is navigation only: renaming the key,
-            changing what it sends home and removing it happen here, the page
-            the row leads to. One entry, because three buttons in a row is the
-            thing this page is meant to avoid. */}
-        <div className="mt-6 flex justify-end border-t pt-4">
-          <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
-            <Pencil aria-hidden /> {t('Edit device')}
-          </Button>
+          {/* Three counters beside the taller list of facts leave the card's
+              lower right corner empty, which is where this device's two actions
+              belong: they are the last thing somebody reads on the page, and
+              filling the gap ends the card on them instead of on a band under a
+              rule. */}
+          <div className="flex min-w-0 flex-col gap-4">
+            <Usage flow={flow} usage={usage} addresses={peer.address ? [peer.address] : []} trafficFailed={traffic.isError} />
+            {/* The list this device came from is navigation only: renaming the
+                key, changing what it sends home and removing it happen here,
+                the page the row leads to. "New setup file" replaces a
+                Configuration row that named a category where the operator is
+                missing a file, and a New file button that pointed at a file
+                which does not exist until the click. */}
+            <div className="flex flex-wrap justify-end gap-2 lg:mt-auto">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={applier.busy}
+                title={t('The file was handed over once and its private key is not stored here, so it cannot be downloaded again. A new file needs a new key pair, and the file it replaces stops working.')}
+                onClick={() => applier.submit(remoteChange.reissuePeer(peer.name))}
+              >
+                <RotateCcw aria-hidden /> {t('New setup file')}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+                <Pencil aria-hidden /> {t('Edit device')}
+              </Button>
+            </div>
+          </div>
         </div>
       </Card>
 
@@ -302,12 +309,10 @@ function Facts({
   peer,
   status,
   services,
-  configuration,
 }: {
   peer: RemotePeer
   status?: RemoteStatus
   services: React.ReactNode
-  configuration: React.ReactNode
 }) {
   useLocale()
   return <dl className="min-w-0 text-sm">
@@ -321,12 +326,6 @@ function Facts({
       {peer.public_key ? <TechnicalValue>{peer.public_key}</TechnicalValue> : '—'}
     </DeviceSettingRow>
     <DeviceSettingRow label="Sends home">{routesLabel(peer.routes)}</DeviceSettingRow>
-    <DeviceSettingRow
-      label={t('Configuration')}
-      title={t('The file was handed over once and its private key is not stored here, so it cannot be downloaded again. A new file needs a new key pair, and the file it replaces stops working.')}
-    >
-      {configuration}
-    </DeviceSettingRow>
     <DeviceSettingRow label="Last heard" title="The last WireGuard handshake: the tunnel's own record of hearing from this device">
       {peer.last_handshake
         ? <time dateTime={peer.last_handshake}>{new Date(peer.last_handshake).toLocaleString()}</time>
