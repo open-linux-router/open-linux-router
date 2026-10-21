@@ -1587,6 +1587,7 @@ export interface FirewallApplyResult {
 export interface GatewayLatency {
   target_url: string
   state: 'measuring' | 'ok' | 'unreachable' | 'unavailable'
+  measuring: boolean
   milliseconds: number | null
   target: string
   checked_at: string | null

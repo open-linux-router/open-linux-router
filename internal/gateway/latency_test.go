@@ -486,3 +486,102 @@ func TestCustomLatencyKeepsResultWhileProbingThenPublishesFailure(t *testing.T) 
 		t.Fatalf("failure not published: %+v", got)
 	}
 }
+
+// Measure is how the overview's latency block asks for a fresh round. Progress
+// must be visible before the round finishes, and cleared by the round that
+// answered the request rather than by the once-a-minute background one.
+func TestLatencyMeasureReportsProgressUntilFreshResults(t *testing.T) {
+	m := NewLatencyMonitor()
+	m.dnsProbe = nil
+	var mu sync.Mutex
+	probes := 0
+	release := make(chan struct{})
+	m.probe = func(context.Context, string) (float64, error) {
+		mu.Lock()
+		probes++
+		n := probes
+		mu.Unlock()
+		if n >= 5 {
+			<-release
+		}
+		return 7, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go m.Run(ctx)
+
+	wait := func(what string, ok func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			if ok() {
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		t.Fatalf("timed out waiting for %s: %+v", what, m.Snapshot())
+	}
+	// The startup round probes all four candidates once. The fifth probe is the
+	// on-demand round, and it blocks until this test lets it publish.
+	wait("startup round", func() bool { s := m.Snapshot(); return s.State == "ok" && !s.Measuring })
+	m.Measure()
+	wait("on-demand probe", func() bool { mu.Lock(); defer mu.Unlock(); return probes >= 5 })
+	if !m.Snapshot().Measuring {
+		t.Fatal("on-demand round did not report progress")
+	}
+	close(release)
+	wait("on-demand results", func() bool { s := m.Snapshot(); return s.State == "ok" && !s.Measuring })
+	mu.Lock()
+	defer mu.Unlock()
+	if probes != 5 {
+		t.Fatalf("on-demand round made %d probes, want one target", probes-4)
+	}
+}
+
+// Changing the target discards the round in flight. That must not clear the
+// pending mark: the spinner belongs to the round measuring the new selection.
+func TestLatencyTargetChangeKeepsProgressUntilItsOwnRound(t *testing.T) {
+	m := NewLatencyMonitor()
+	m.dnsProbe = nil
+	var mu sync.Mutex
+	probes := 0
+	first, second := make(chan struct{}), make(chan struct{})
+	m.probe = func(context.Context, string) (float64, error) {
+		mu.Lock()
+		probes++
+		n := probes
+		mu.Unlock()
+		if n <= 4 {
+			<-first
+		} else {
+			<-second
+		}
+		return 10, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go m.Run(ctx)
+
+	wait := func(what string, ok func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			if ok() {
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		t.Fatalf("timed out waiting for %s: %+v", what, m.Snapshot())
+	}
+	wait("startup probes", func() bool { mu.Lock(); defer mu.Unlock(); return probes >= 1 })
+	if err := m.SetTarget(m.targets[1].URL); err != nil {
+		t.Fatal(err)
+	}
+	close(first)
+	wait("new selection probe", func() bool { mu.Lock(); defer mu.Unlock(); return probes >= 5 })
+	if !m.Snapshot().Measuring {
+		t.Fatal("target change lost its pending measurement")
+	}
+	close(second)
+	wait("new selection results", func() bool { s := m.Snapshot(); return s.TargetURL == m.targets[1].URL && !s.Measuring })
+}

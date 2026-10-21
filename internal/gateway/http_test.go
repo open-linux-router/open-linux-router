@@ -534,3 +534,21 @@ func TestLatencyIconMissingSite(t *testing.T) {
 		t.Fatalf("status = %d", w.Code)
 	}
 }
+
+func TestLatencyMeasureEndpointStartsARound(t *testing.T) {
+	monitor := NewLatencyMonitor()
+	monitor.probe = func(context.Context, string) (float64, error) {
+		t.Error("measure must answer before probing")
+		return 0, nil
+	}
+	w := do(t, (HTTP{Latency: monitor}).Handler(), http.MethodPost, "/latency/measure", nil)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d %s", w.Code, w.Body.String())
+	}
+	if !decode[LatencySnapshot](t, w).Measuring || !monitor.Snapshot().Measuring {
+		t.Fatal("measure did not report a round in progress")
+	}
+	if w := do(t, (HTTP{}).Handler(), http.MethodPost, "/latency/measure", nil); w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("missing monitor: status = %d", w.Code)
+	}
+}

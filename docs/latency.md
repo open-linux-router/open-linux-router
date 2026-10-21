@@ -34,6 +34,16 @@ monitored sites. Choose a provider or “Choose fastest once”, then Save.
 target requests a fresh selection. Changes wake the background monitor and
 discard any in-flight Internet result from the old selection. GET stays passive.
 
+The monitored-sites block on the Overview card is the measure-now control.
+`POST /api/gateway/latency/measure` wakes the monitor and answers `202 Accepted`
+with the current snapshot, whose `measuring` flag stays true until the round
+that answers the request publishes its results. Clicking during a background
+round asks for the next round; the earlier round's results do not end the
+spinner. Background rounds leave `measuring` false, so the card does not flash
+spinners every minute. The response keeps the last completed values, and the
+card replaces each site's value with a spinner until the new ones land. The
+route changes no configuration and is only a request to probe.
+
 Up to 12 named HTTPS URLs can be stored with `PUT /api/gateway/latency/sites`
 using objects such as `{"name":"YouTube","url":"https://www.youtube.com/","exit":"Proxy"}`.
 `exit` is optional and must name a configured gateway exit. An empty array
@@ -42,8 +52,8 @@ credentials, custom ports or fragments. Sites live in `gateway.latency_sites`
 in `olr.json`; measurements are ephemeral.
 
 The response includes `state` (`measuring`, `ok`, `unreachable`, `unavailable`),
-nullable `milliseconds`, `dns_milliseconds`, `checked_at`, the selected
-`target` name and `target_url`, built-in `sites` and `custom` sites.
+the `measuring` flag, nullable `milliseconds`, `dns_milliseconds`, `checked_at`,
+the selected `target` name and `target_url`, built-in `sites` and `custom` sites.
 A failed fixed target retains its identity but clears its measurement.
 Each site carries its latest attempt, nullable measurement and short error.
 Custom sites keep their last completed outcome while the next probe runs;

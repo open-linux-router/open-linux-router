@@ -25,12 +25,15 @@ type LatencyMonitor struct {
 	targets    []latencyTarget
 	configured string
 	revision   uint64
-	wake       chan struct{}
-	probe      func(context.Context, string) (float64, error)
-	dnsProbe   func(context.Context) (float64, error)
-	Custom     *CustomLatencyMonitor
-	Store      *core.Store
-	Lock       *core.Lock
+	// requested counts on-demand rounds asked for through Measure. A round
+	// clears measuring only when no newer request arrived while it ran.
+	requested uint64
+	wake      chan struct{}
+	probe     func(context.Context, string) (float64, error)
+	dnsProbe  func(context.Context) (float64, error)
+	Custom    *CustomLatencyMonitor
+	Store     *core.Store
+	Lock      *core.Lock
 }
 type latencyTarget struct{ Name, URL string }
 type LatencySite struct {
@@ -44,7 +47,11 @@ type LatencySite struct {
 	Error        string    `json:"error,omitempty"`
 }
 type LatencySnapshot struct {
-	State           string        `json:"state"`
+	State string `json:"state"`
+	// Measuring reports an on-demand round in flight. It is false while the
+	// once-a-minute background round runs, so passive readers never see a
+	// spinner merely because the clock ticked.
+	Measuring       bool          `json:"measuring"`
 	DNSMilliseconds *float64      `json:"dns_milliseconds"`
 	Milliseconds    *float64      `json:"milliseconds"`
 	Target          string        `json:"target"`
@@ -82,7 +89,7 @@ func OpenLatencyMonitor(store *core.Store, lock *core.Lock) (*LatencyMonitor, er
 }
 
 func (m *LatencyMonitor) emptySnapshot(target string) LatencySnapshot {
-	s := LatencySnapshot{State: "measuring", TargetURL: target, Sites: []LatencySite{}, Custom: []LatencySite{}}
+	s := LatencySnapshot{State: "measuring", Measuring: true, TargetURL: target, Sites: []LatencySite{}, Custom: []LatencySite{}}
 	for _, t := range m.targets {
 		selected := t.URL == target
 		s.Sites = append(s.Sites, LatencySite{Name: t.Name, URL: t.URL, Selected: selected})
@@ -240,6 +247,9 @@ func (m *LatencyMonitor) Snapshot() LatencySnapshot {
 }
 func (m *LatencyMonitor) Run(ctx context.Context) {
 	for ctx.Err() == nil {
+		m.mu.Lock()
+		requested, revision := m.requested, m.revision
+		m.mu.Unlock()
 		var custom sync.WaitGroup
 		if m.Custom != nil {
 			custom.Add(1)
@@ -247,6 +257,16 @@ func (m *LatencyMonitor) Run(ctx context.Context) {
 		}
 		m.sample(ctx)
 		custom.Wait()
+		// Only the round that answered the last on-demand request ends the
+		// spinner. A click during a round leaves a wake token behind, so the
+		// next loop iteration starts immediately and reports progress until
+		// results newer than the click land. A target change sets its own
+		// pending snapshot, so its new round does the clearing instead.
+		m.mu.Lock()
+		if m.requested == requested && m.revision == revision {
+			m.snapshot.Measuring = false
+		}
+		m.mu.Unlock()
 		timer := time.NewTimer(latencySampleInterval)
 		select {
 		case <-ctx.Done():
@@ -256,6 +276,23 @@ func (m *LatencyMonitor) Run(ctx context.Context) {
 			timer.Stop()
 		case <-timer.C:
 		}
+	}
+	m.mu.Lock()
+	m.snapshot.Measuring = false
+	m.mu.Unlock()
+}
+
+// Measure starts a round now instead of waiting for the next one-minute tick.
+// It returns without waiting: Measuring reports the round in progress, and the
+// snapshot keeps its last completed values until the new ones are published.
+func (m *LatencyMonitor) Measure() {
+	m.mu.Lock()
+	m.requested++
+	m.snapshot.Measuring = true
+	m.mu.Unlock()
+	select {
+	case m.wake <- struct{}{}:
+	default:
 	}
 }
 
