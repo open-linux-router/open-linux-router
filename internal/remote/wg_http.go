@@ -89,6 +89,17 @@ func (h HTTP) wireguardRoutes() []core.Route {
 			Mutating: true,
 			Handler:  h.deletePeer,
 		},
+		{
+			// The one route that hands out a client configuration for a device
+			// that already exists. Not a second copy of the old file: that key
+			// is gone. A new pair, and the file that matches it.
+			Method: "POST", Path: "/wireguard/peers/{name}/reissue",
+			Summary: "Give a device a new key pair and return its new client configuration, which is shown once. " +
+				"The file already on the device stops working; its name, address and picture do not change.",
+			Query:    gate(),
+			Mutating: true,
+			Handler:  h.reissuePeer,
+		},
 
 		{
 			Method: "POST", Path: "/wireguard/plan", Tool: "show wireguard plan",
@@ -421,6 +432,52 @@ func (h HTTP) putPeer(w http.ResponseWriter, r *http.Request) {
 		created.NextSteps = append(created.NextSteps, fmt.Sprintf(
 			"olr dns add host %s --address %s", name, addr))
 		return created, nil
+	})
+}
+
+// reissuePeer is how a device gets a second configuration.
+//
+// The file is handed over once and its private key is stored nowhere (§4.1), so
+// the old one cannot be shown again — there is nothing left to render it from.
+// What can happen is a new key pair, which is the same thing from the operator's
+// side and the safer thing from the box's: the moment the kernel takes the new
+// public key, the old file is a string of characters that opens nothing.
+//
+// It is deliberately not "remove it and add it again". That path changes the
+// address (§3, NextAddress) and takes the label and the picture with it, and an
+// operator who lost a phone's configuration did not ask to renumber the
+// network. Everything except the key stays where it is.
+//
+// The response is a handover like the add's, and it is held behind the
+// disruptive gate for the same reason a removal is: until somebody imports the
+// new file, that device cannot dial in.
+func (h HTTP) reissuePeer(w http.ResponseWriter, r *http.Request) {
+	name := normalizeName(r.PathValue("name"))
+	h.mutate(w, r, func(cfg *Config) (*peerResult, error) {
+		peer, ok := cfg.WireGuard.Peer(name)
+		if !ok {
+			return nil, notFound(fmt.Errorf("no device named %q may dial in", name))
+		}
+		pair, err := GenerateKey()
+		if err != nil {
+			return nil, err
+		}
+		peer.PublicKey = pair.Public
+		cfg.WireGuard.SetPeer(peer)
+
+		// Rendered here, inside the lock, because this is the only moment this
+		// private key exists anywhere.
+		conf, err := ClientConfig(*cfg, peer, pair.Private, networksOf(h.Tunnel.Networks))
+		if err != nil {
+			return nil, err
+		}
+		return &peerResult{
+			Name:         peer.Name,
+			Address:      peer.Address,
+			ClientConfig: conf,
+			Note: "This is the only time olr can show this file: the private key in it is not " +
+				"stored, and the one it replaced no longer works.",
+		}, nil
 	})
 }
 

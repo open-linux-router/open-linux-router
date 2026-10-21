@@ -15,21 +15,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Disclosure } from '@/components/ui/disclosure'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { DeviceIcon } from '@/features/devices/device-icon'
+import { ConfirmDialog } from '@/features/remote/apply-dialog'
 import { ClientConfigDialog } from '@/features/remote/client-config'
-import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/remote/impact'
 import { PeerBadge } from '@/features/remote/peer-badge'
 import { PeerDialog } from '@/features/remote/peer-dialog'
 import { SocksCard } from '@/features/remote/socks-card'
@@ -45,7 +37,7 @@ import {
 import { SettingsDialog } from '@/features/remote/settings-dialog'
 import { useRemoteApply } from '@/features/remote/use-apply'
 import { WayMark } from '@/features/remote/way-mark'
-import type { ProxyPlan, RemotePeer, RemoteStatus } from '@/lib/api-types'
+import type { RemotePeer, RemoteStatus } from '@/lib/api-types'
 
 export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
   useLocale()
@@ -369,73 +361,6 @@ function describePeer(p: RemotePeer): string {
   // The name stays on the row when a label hides it: it is what the commands
   // and the address bar take, and the row is where somebody reads it off.
   return p.display_name ? `${p.name} · ${where}` : where
-}
-
-/**
- * The one thing that interrupts an operator (design.md §6.3).
- *
- * Everything else applies on the click. This appears only when the plan came
- * back `disruptive`, which on this screen means somebody loses their way into
- * the network from outside it — or a configuration already on their phone stops
- * working. Neither is undone by trying again.
- */
-function ConfirmDialog({ applier }: { applier: ReturnType<typeof useRemoteApply> }) {
-  useLocale()
-  const held = applier.confirming
-  if (!held) return null
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && applier.cancel()}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"> {t('Apply this change?')} <ImpactBadge impact={held.plan.impact} />
-          </DialogTitle>
-          <DialogDescription>{impactHint(held.plan.impact)}</DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {'action' in held.plan ? (
-            <ProxyConfirmation plan={held.plan} />
-          ) : (
-            <>
-              <PlanReasons plan={held.plan} />
-              <Disclosure summary={t('What would change')}>
-                <PlanDiff plan={held.plan} />
-              </Disclosure>
-            </>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={applier.cancel}> {t('Cancel')} </Button>
-          <Button variant="destructive" onClick={applier.confirm} disabled={applier.busy}> {t('Apply anyway')} </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function ProxyConfirmation({ plan }: { plan: ProxyPlan }) {
-  useLocale()
-  return (
-    <>
-      {plan.reasons?.map((reason) => <p key={reason} className="text-sm">{reason}</p>)}
-      {plan.password_generated && (
-        <p className="text-sm text-destructive"> {t('A new password will be generated. Copy the new link after applying this change.')} </p>
-      )}
-      <Disclosure summary={t('What would change')}>
-        <ul className="space-y-2 text-sm">
-          {plan.changes.map((change) => (
-            <li key={change.path}>
-              {change.kind} {change.path}
-              {!change.secret && change.diff && <pre className="overflow-x-auto text-xs">{change.diff}</pre>}
-            </li>
-          ))}
-          {plan.action !== 'none' && <li>{t('Service:')} {plan.action}</li>}
-        </ul>
-      </Disclosure>
-    </>
-  )
 }
 
 function PageSkeleton() {

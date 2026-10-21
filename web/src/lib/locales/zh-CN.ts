@@ -1227,4 +1227,7 @@ export const zhCN: Record<string, string> = {
   '{name} carries IPv6': '{name} 承载 IPv6',
   '{name} sends IPv6 around it': '{name} 让 IPv6 绕过它',
   'WireGuard is off. The devices below are saved, but none of them can connect.': 'WireGuard 已关闭。下方设备都已保存，但都无法连接。',
+  'New file': '新配置文件',
+  'The file was handed over once and its private key is not stored here, so it cannot be downloaded again. A new file needs a new key pair, and the file it replaces stops working.': '这份文件只交付过一次，私钥没有保存在这台路由器上，所以无法重新下载。要拿到新文件必须换一对密钥，旧文件随之失效。',
+  'The key in it is not stored on the router, so this file cannot be shown again. If you lose it, issue a new one from the device’s page: that replaces this file with one built on a new key.': '其中的私钥没有保存在路由器上，因此这个文件无法再次显示。如果丢失，请在设备页面上签发新配置——新文件会用一对新密钥替换这个文件。',
 }

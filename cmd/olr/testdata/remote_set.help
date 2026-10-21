@@ -17,7 +17,7 @@ Usage:
   olr remote set [command]
 
 Available Commands:
-  peer        Rename a device, or give it a label to show
+  peer        Rename a device, label it, or give it a new configuration
   wireguard   Set the tunnel's settings
 
 Flags:

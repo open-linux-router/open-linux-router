@@ -237,10 +237,11 @@ func setCommand() *cobra.Command {
 // the device never hears about.
 func setPeerCommand() *cobra.Command {
 	var name, display string
+	var newKey bool
 
 	c := &cobra.Command{
 		Use:   "peer <name>",
-		Short: "Rename a device, or give it a label to show",
+		Short: "Rename a device, label it, or give it a new configuration",
 		Args:  cobra.ExactArgs(1),
 		Long: "Change what a device is called, keeping its address and its key.\n\n" +
 			"A name is olr's label, not part of the tunnel — WireGuard knows a\n" +
@@ -251,10 +252,25 @@ func setPeerCommand() *cobra.Command {
 			"--name has to stay a DNS label — letters, digits and hyphens — because\n" +
 			"it is the name every command takes and the one `olr dns` would be told\n" +
 			"to answer. --display-name is what a person reads instead, so it takes\n" +
-			"whatever you would write: \"Li's Macbook Pro\". Empty puts the name back.",
+			"whatever you would write: \"Li's Macbook Pro\". Empty puts the name back.\n\n" +
+			"--new-key is the other question entirely: it replaces a configuration\n" +
+			"file you have lost. The device gets a new key pair and the file that\n" +
+			"matches it, printed once like the first one, and the file it replaces\n" +
+			"stops working. Its name, address and label stay as they are.",
 		Example: "  olr remote set peer phone --name handset\n" +
-			"  olr remote set peer handset --display-name \"Li's Macbook Pro\"",
+			"  olr remote set peer handset --display-name \"Li's Macbook Pro\"\n" +
+			"  olr remote set peer phone --new-key > phone.conf",
 		RunE: func(c *cobra.Command, args []string) error {
+			if newKey {
+				// Two answers to two different questions in one command would
+				// make the file and the rename succeed or fail together.
+				if c.Flags().Changed("name") || c.Flags().Changed("display-name") {
+					return fmt.Errorf(
+						"--new-key issues a configuration and cannot be combined with --name or --display-name; " +
+							"run them as two commands")
+				}
+				return sendTunnel(c, "POST", peerEndpoint(args[0])+"/reissue", nil)
+			}
 			patch := map[string]string{}
 			if c.Flags().Changed("name") {
 				patch["name"] = name
@@ -272,6 +288,8 @@ func setPeerCommand() *cobra.Command {
 	c.Flags().StringVar(&name, "name", "", "the device's name: letters, digits and hyphens")
 	c.Flags().StringVar(&display, "display-name", "",
 		"what to call it where a person reads it; anything you would write, or empty for the name")
+	c.Flags().BoolVar(&newKey, "new-key", false,
+		"give the device a new key pair and print the configuration that matches it, once")
 	c.ValidArgsFunction = cli.CompleteArgs(peerNamesFor)
 	return c
 }
@@ -374,8 +392,8 @@ func addPeerCommand() *cobra.Command {
 			"import on it.\n\n" +
 			"olr generates the device's key pair, keeps the public half and gives\n" +
 			"you the rest. It is printed once and cannot be shown again: the\n" +
-			"private key is stored nowhere, so losing the file means removing the\n" +
-			"device and adding it back.\n\n" +
+			"private key is stored nowhere, so a lost file has to be replaced —\n" +
+			"`olr remote set peer <name> --new-key`.\n\n" +
 			"Only the tunnel has devices. The proxy has one link for everybody —\n" +
 			"see `olr remote show link`.\n\n" +
 			"Examples:\n" +

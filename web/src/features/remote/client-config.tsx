@@ -58,8 +58,7 @@ export function ClientConfigDialog({
             <Alert>
               <AlertTitle>{t('This is shown once')}</AlertTitle>
               <AlertDescription>
-                The key in it is not stored on the router, so this cannot be shown again. If you
-                lose it, remove {result.name} and add it back.
+                {t('The key in it is not stored on the router, so this file cannot be shown again. If you lose it, issue a new one from the device’s page: that replaces this file with one built on a new key.')}
               </AlertDescription>
             </Alert>
 

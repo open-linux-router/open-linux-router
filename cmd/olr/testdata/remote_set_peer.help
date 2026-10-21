@@ -12,17 +12,24 @@ it is the name every command takes and the one `olr dns` would be told
 to answer. --display-name is what a person reads instead, so it takes
 whatever you would write: "Li's Macbook Pro". Empty puts the name back.
 
+--new-key is the other question entirely: it replaces a configuration
+file you have lost. The device gets a new key pair and the file that
+matches it, printed once like the first one, and the file it replaces
+stops working. Its name, address and label stay as they are.
+
 Usage:
   olr remote set peer <name> [flags]
 
 Examples:
   olr remote set peer phone --name handset
   olr remote set peer handset --display-name "Li's Macbook Pro"
+  olr remote set peer phone --new-key > phone.conf
 
 Flags:
       --display-name string   what to call it where a person reads it; anything you would write, or empty for the name
   -h, --help                  help for peer
       --name string           the device's name: letters, digits and hyphens
+      --new-key               give the device a new key pair and print the configuration that matches it, once
 
 Global Flags:
       --dry-run         show what would change and exit without applying it

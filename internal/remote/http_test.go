@@ -142,8 +142,9 @@ func TestAddingAPeerReturnsAConfigurationOnce(t *testing.T) {
 		t.Errorf("no pointer at how to name the device: %v", resp.Peer.NextSteps)
 	}
 
-	// Editing the peer afterwards is not a re-issue — there is no private key
-	// left to write one with.
+	// Replacing the device's settings is not a re-issue: a PUT says what the
+	// device should be, and re-issuing has a route of its own because it is a
+	// handover rather than a field.
 	w = do(t, h, http.MethodPut, "/wireguard/peers/phone?confirm=true", `{"routes":"everything"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("edit = %d: %s", w.Code, w.Body)
@@ -249,6 +250,103 @@ func TestDeletingAnUnknownPeerIsNotFound(t *testing.T) {
 	turnOn(t, h)
 
 	if w := do(t, h, http.MethodDelete, "/wireguard/peers/nobody?confirm=true", ""); w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: %s", w.Code, w.Body)
+	}
+}
+
+// The second configuration, which is not the first one again.
+//
+// A lost file cannot be re-rendered — the private key went out once and is
+// stored nowhere — so what this route hands over is a new pair, and the file it
+// replaces stops working. Everything an operator did not ask to change stays:
+// the name, the label, the picture, what the device sends home, and its address.
+func TestReissuingADeviceReturnsANewConfiguration(t *testing.T) {
+	h, applier := testHTTP(t)
+	turnOn(t, h)
+	if w := do(t, h, http.MethodPut, "/wireguard/peers/phone?confirm=true",
+		`{"routes":"home","display_name":"Li's phone"}`); w.Code != http.StatusOK {
+		t.Fatalf("setup PUT = %d: %s", w.Code, w.Body)
+	}
+	if w := do(t, h, http.MethodPatch, "/wireguard/peers/phone?confirm=true",
+		`{"icon":"apple/phone"}`); w.Code != http.StatusOK {
+		t.Fatalf("setup icon PATCH = %d: %s", w.Code, w.Body)
+	}
+	before, _ := applier.Load()
+	was, _ := before.WireGuard.Peer("phone")
+
+	// Until somebody imports the new file, that device cannot dial in — the
+	// same loss a removal is, and it gets the same gate.
+	w := do(t, h, http.MethodPost, "/wireguard/peers/phone/reissue", "")
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409: %s", w.Code, w.Body)
+	}
+	held := decode[tunnelApplyResponse](t, w)
+	if held.Plan.Impact != ImpactDisruptive {
+		t.Errorf("impact = %s, want disruptive", held.Plan.Impact)
+	}
+	if held.Peer != nil && held.Peer.ClientConfig != "" {
+		t.Fatal("a refused re-issue handed over a configuration, so two files exist for one key")
+	}
+	if mid, _ := applier.Load(); func() bool {
+		p, ok := mid.WireGuard.Peer("phone")
+		return ok && p.PublicKey != was.PublicKey
+	}() {
+		t.Fatal("a refused re-issue still replaced the device's key")
+	}
+
+	w = do(t, h, http.MethodPost, "/wireguard/peers/phone/reissue?confirm=true", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", w.Code, w.Body)
+	}
+	resp := decode[tunnelApplyResponse](t, w)
+	if resp.Peer == nil || resp.Peer.ClientConfig == "" {
+		t.Fatal("no client configuration came back, so the device cannot be set up again")
+	}
+	if !strings.Contains(resp.Peer.Note, "only time") {
+		t.Errorf("nothing warns that this cannot be shown again: %q", resp.Peer.Note)
+	}
+	if resp.Peer.Address != was.Address {
+		t.Errorf("the device moved from %s to %s", was.Address, resp.Peer.Address)
+	}
+
+	// A different key, in the file and in the document, and a file whose
+	// private half is stored nowhere — the same promise the first one made.
+	now, _ := applier.Load()
+	peer, ok := now.WireGuard.Peer("phone")
+	if !ok {
+		t.Fatal("the re-issued device is gone")
+	}
+	if peer.PublicKey == was.PublicKey {
+		t.Fatal("re-issuing kept the key, so the old file still opens the tunnel")
+	}
+	if err := ValidKey(peer.PublicKey); err != nil {
+		t.Errorf("stored public key is not one: %v", err)
+	}
+	key := privateKeyOf(t, resp.Peer.ClientConfig)
+	if strings.Contains(string(mustMarshal(t, now)), key) {
+		t.Fatal("the new private key was stored")
+	}
+
+	// Labels are not tunnel state, and a lost file is not a reason to lose them.
+	if peer.DisplayName != "Li's phone" {
+		t.Errorf("display name = %q, want it kept", peer.DisplayName)
+	}
+	if peer.Icon != "apple/phone" {
+		t.Errorf("icon = %q, want it kept", peer.Icon)
+	}
+	if peer.Routes.OrDefault() != "home" {
+		t.Errorf("routes = %q, want them kept", peer.Routes)
+	}
+	if peer.Name != "phone" {
+		t.Errorf("name = %q, want it kept", peer.Name)
+	}
+}
+
+func TestReissuingAnUnknownPeerIsNotFound(t *testing.T) {
+	h, _ := testHTTP(t)
+	turnOn(t, h)
+
+	if w := do(t, h, http.MethodPost, "/wireguard/peers/nobody/reissue?confirm=true", ""); w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404: %s", w.Code, w.Body)
 	}
 }

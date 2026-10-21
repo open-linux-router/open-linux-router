@@ -1,4 +1,5 @@
 import { t, useLocale } from '@/lib/i18n'
+import { RotateCcw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
@@ -25,10 +26,13 @@ import { DeviceSettingRow } from '@/features/devices/device-setting-row'
 import { ClientQueries } from '@/features/dns/client-queries'
 import { useGatewayTraffic } from '@/features/gateway/queries'
 import { DeviceServices } from '@/features/ingress/device-services'
+import { ConfirmDialog } from '@/features/remote/apply-dialog'
+import { ClientConfigDialog } from '@/features/remote/client-config'
 import { PeerBadge } from '@/features/remote/peer-badge'
 import { WayBadge } from '@/features/remote/way-badge'
-import { usePatchPeer, useRemoteStatus } from '@/features/remote/queries'
+import { remoteChange, usePatchPeer, useRemoteStatus } from '@/features/remote/queries'
 import { useTrafficView, type Flow, type TrafficView } from '@/features/topology/traffic'
+import { useRemoteApply } from '@/features/remote/use-apply'
 import { ApiError } from '@/lib/api'
 import { formatRate } from '@/lib/utils'
 import type { RemotePeer, RemoteStatus } from '@/lib/api-types'
@@ -60,6 +64,7 @@ export function WireguardPeerPage() {
   const traffic = useGatewayTraffic()
   const flow = useTrafficView(traffic.data, traffic.isError)
   const patch = usePatchPeer()
+  const applier = useRemoteApply()
   const navigate = useNavigate()
   const peers = status.data?.peers ?? []
   // The URL carries the name, which is the key. A link that somehow says the
@@ -182,15 +187,29 @@ export function WireguardPeerPage() {
         />
 
         <div className="mt-4 grid gap-y-8 lg:grid-cols-2 lg:gap-x-16 lg:gap-y-0">
-          <Facts peer={peer} status={status.data} services={
-            // Published by its tunnel address, which is the only name for this
-            // device that `ingress` has: a peer is not in `devices`, so there is
-            // no MAC to reference and no reservation to require
-            // (docs/ingress.md §1.2, docs/remote-access.md §3.3).
-            <DeviceServices addresses={peer.address ? [peer.address] : []} add={
-              peer.address ? `/advanced/caddy?host=${encodeURIComponent(peer.address)}` : '/advanced/caddy'
-            } />
-          } />
+          <Facts
+            peer={peer}
+            status={status.data}
+            configuration={
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={applier.busy}
+                onClick={() => applier.submit(remoteChange.reissuePeer(peer.name))}
+              >
+                <RotateCcw /> {t('New file')}
+              </Button>
+            }
+            services={
+              // Published by its tunnel address, which is the only name for
+              // this device that `ingress` has: a peer is not in `devices`, so
+              // there is no MAC to reference and no reservation to require
+              // (docs/ingress.md §1.2, docs/remote-access.md §3.3).
+              <DeviceServices addresses={peer.address ? [peer.address] : []} add={
+                peer.address ? `/advanced/caddy?host=${encodeURIComponent(peer.address)}` : '/advanced/caddy'
+              } />
+            }
+          />
           <Usage flow={flow} usage={usage} addresses={peer.address ? [peer.address] : []} trafficFailed={traffic.isError} />
         </div>
       </Card>
@@ -209,6 +228,9 @@ export function WireguardPeerPage() {
           </span>
         </div>
       </section>
+
+      {applier.issued && <ClientConfigDialog result={applier.issued} onClose={applier.dismissIssued} />}
+      <ConfirmDialog applier={applier} />
 
       <Dialog open={choosing} onOpenChange={setChoosing}>
         <DialogContent className="max-h-[90svh] overflow-y-auto">
@@ -247,7 +269,17 @@ export function WireguardPeerPage() {
  * connected; this answers exactly when, which is the number to compare against
  * the router's clock when something is subtly wrong.
  */
-function Facts({ peer, status, services }: { peer: RemotePeer; status?: RemoteStatus; services: React.ReactNode }) {
+function Facts({
+  peer,
+  status,
+  services,
+  configuration,
+}: {
+  peer: RemotePeer
+  status?: RemoteStatus
+  services: React.ReactNode
+  configuration: React.ReactNode
+}) {
   useLocale()
   return <dl className="min-w-0 text-sm">
     <DeviceSettingRow label={t('Name')} title="The name the address bar and every command use">
@@ -260,6 +292,12 @@ function Facts({ peer, status, services }: { peer: RemotePeer; status?: RemoteSt
       {peer.public_key ? <TechnicalValue>{peer.public_key}</TechnicalValue> : '—'}
     </DeviceSettingRow>
     <DeviceSettingRow label="Sends home">{routesLabel(peer.routes)}</DeviceSettingRow>
+    <DeviceSettingRow
+      label={t('Configuration')}
+      title={t('The file was handed over once and its private key is not stored here, so it cannot be downloaded again. A new file needs a new key pair, and the file it replaces stops working.')}
+    >
+      {configuration}
+    </DeviceSettingRow>
     <DeviceSettingRow label="Last heard" title="The last WireGuard handshake: the tunnel's own record of hearing from this device">
       {peer.last_handshake
         ? <time dateTime={peer.last_handshake}>{new Date(peer.last_handshake).toLocaleString()}</time>

@@ -363,17 +363,29 @@ Two key pairs exist per peer relationship and they are treated differently:
 The last row is the one that carries a cost, and it is taken deliberately. olr
 generates the peer's key pair so that adding a peer is one command, hands the
 complete client configuration back in the response to that command, and keeps
-only the public half. There is no route that returns a client configuration a
-second time, because there is nothing left to build one from.
+only the public half. There is no route that returns *that* file a second time,
+because there is nothing left to build it from.
 
-> **Losing a client configuration means removing the peer and adding it again.**
+> **A lost client configuration is a re-issue, not a re-download.**
+> `POST /api/remote/wireguard/peers/{name}/reissue` (the New file button on the
+> device's page) generates a new key pair and hands over the file that matches
+> it. The old file stops working the moment the kernel takes the new public key.
+
+Everything else about the device stays where it was, which is the argument for
+having the route at all: removing the peer and adding it again used to be the
+only way back, and it renumbers (§3, `NextAddress`), drops the label and drops
+the picture — three things an operator who lost a phone's configuration never
+asked to change. The response is a handover like the add's, so it carries the
+same warning and the same one-chance rule; it is held behind the disruptive gate
+as well, because until the new file is imported that device cannot dial in.
 
 Storing the peer's private key would make the config re-showable and is what
 most WireGuard front-ends do. It is refused here for the reason
 `ingress:`§4.1 gives about the DNS provider token, one step further along: a
 credential that is never stored cannot be disclosed by a backup, a screenshot,
-or a `GET` somebody forgot to redact. The convenience lost is one re-issue on a
-lost phone, which is a thing that should arguably be a re-issue anyway.
+or a `GET` somebody forgot to redact. The convenience lost is one click when a
+file goes missing, and a key that changes when that happens is the safer of the
+two answers anyway.
 
 An operator who would rather generate the key on the device itself can:
 `olr remote add peer laptop --public-key <key>` stores the public half and

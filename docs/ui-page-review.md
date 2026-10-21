@@ -9,7 +9,7 @@ OLR capabilities, and a calm, consistent interface. This record accompanies the
 | Overview | Show Status, Traffic, Latency and Map; uptime leads Status. Omit System, information icons and the map legend/top-ten hint; retain charts and separate direction limits. |
 | Quality report | One column: the overall-score band, then the five categories. No standalone transfer card, scoring-explanation block or evidence dump: the reference transfer sits under Speed, each service's attempts open under its own row (timings for Latency, sequence for Stability, outcome for Functionality), and NAT observations are an unscored diagnostic under Functionality. Measured coverage is the only figure with a hover hint. |
 | Device | Separate observed facts from editable settings within the existing card; keep all fields; place DNS activity before inspection and QoS. |
-| WireGuard device | The tunnel's answer, not the device list's: the label edited in place in the heading with the name beside it, the picture from the same picker a device uses, then address, public key, what it sends home, last handshake and where from, with activity, current rate and totals from the address-keyed counters, the services published at its tunnel address in the same row a device page uses, and DNS queries by tunnel address. Omit vendor, group, reservation and per-device priority/limits — keyed by a MAC a tunnel does not have — and answer inspection with one word rather than a switch that cannot work. |
+| WireGuard device | The tunnel's answer, not the device list's: the label edited in place in the heading with the name beside it, the picture from the same picker a device uses, then address, public key, what it sends home and a way to replace the configuration file, last handshake and where from, with activity, current rate and totals from the address-keyed counters, the services published at its tunnel address in the same row a device page uses, and DNS queries by tunnel address. Omit vendor, group, reservation and per-device priority/limits — keyed by a MAC a tunnel does not have — and answer inspection with one word rather than a switch that cannot work. |
 | Group | Preserve member lists and batch controls; remove repeated MAC/direct-membership prose; keep overwrite and non-inheritance consequences. |
 | Device/group QoS | State that configuration is saved but not enforced; keep forms and shared group-cap semantics. |
 | Inspection | Keep the existing panel and results; confirm privacy and CA consequences before starting; disclose lengthy preparation/scope and viewer details; retain session stop time and diagnostics. |
@@ -178,3 +178,31 @@ Validated against fixture data at 1440×900 in both themes and at 390, 375 and
 overflow, and the switch stays reachable at every width the card title wraps at.
 Live router state was not available, so this checks presentation rather than
 networking.
+
+## WireGuard device configuration — 2026-10-21
+
+The page could describe a device completely and could not give back the one
+thing that gets lost. A configuration file is handed over once and its private
+key is stored nowhere (remote-access §4.1), which is deliberate and stays: there
+is no file to re-serve. What was missing was the honest next step, which used to
+be "remove the device and add it again" — a path that renumbers it, drops its
+label and drops its picture, and was written down only in the dialog that shows
+the file, at the moment nobody needed it.
+
+The facts table now ends that question with a Configuration row: a New file
+button whose tooltip says why there was nothing to download, a confirm dialog
+that states the loss (that device cannot dial in until the new file is imported,
+which the daemon classifies as disruptive and refuses without it), and then the
+same handover dialog an added device gets, saying once and only once. The name,
+the address, what it sends home and its picture do not move.
+
+The command is the same operation under the vocabulary that already exists:
+`olr remote set peer <name> --new-key` prints the file rather than drawing it,
+and refuses to be combined with a rename, because a handover and a label
+change answering one exit code would be a lie about which one failed.
+
+Validated with fixture responses for the whole sequence — row, refusal, confirm,
+handover — at 1440×1000 and 390×844, plus lint, type-check, unit tests and a
+production build. The daemon side is covered by
+`TestReissuingADeviceReturnsANewConfiguration`; live router state was not
+available, so the presentation check runs against fixtures.

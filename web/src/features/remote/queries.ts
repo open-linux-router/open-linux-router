@@ -81,7 +81,7 @@ export function useRemotePeers() {
  * `confirm=true`. Replaying is only simple if the change is data.
  */
 export interface RemoteChangeRequest {
-  method: 'PUT' | 'DELETE' | 'PATCH'
+  method: 'PUT' | 'DELETE' | 'PATCH' | 'POST'
   path: string
   body?: unknown
   /** What this change is, for the toast. */
@@ -147,6 +147,22 @@ export const remoteChange = {
     path: `${base}/wireguard/peers/${seg(name)}`,
     body: patch,
     get label() { return t('Saved') },
+  }),
+
+  /**
+   * A device's second configuration, which is not its first one again.
+   *
+   * The file olr handed over went out once and its private key is stored
+   * nowhere, so this cannot re-render it. What it does is give the device a new
+   * key pair and return the file that matches: the old one stops working, and
+   * the name, the address and the picture stay where they were. The daemon holds
+   * it behind the disruptive gate, because until the new file is imported that
+   * device cannot dial in.
+   */
+  reissuePeer: (name: string): RemoteChangeRequest => ({
+    method: 'POST',
+    path: `${base}/wireguard/peers/${seg(name)}/reissue`,
+    label: `${name} has a new configuration`,
   }),
 
   settings: (fields: Record<string, unknown>): RemoteChangeRequest => ({

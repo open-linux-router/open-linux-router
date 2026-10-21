@@ -1367,8 +1367,13 @@ export interface RemoteStatus {
  *
  * `client_config` is the only response in olr that cannot be reproduced. The
  * private key in it is stored nowhere, so a screen that receives one has to
- * treat it as the last chance to hand it over, and must not offer a way to ask
- * for it again — there is nothing to ask.
+ * treat it as the last chance to hand it over, and must not offer to show *that
+ * file* again — there is nothing left to render it from.
+ *
+ * A device can be given a second one, and that is a different request with a
+ * different consequence: `POST /wireguard/peers/{name}/reissue` generates a new
+ * key pair, so the file it hands back replaces the old one rather than repeating
+ * it.
  */
 export interface RemotePeerResult {
   name: string
