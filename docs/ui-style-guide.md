@@ -38,28 +38,31 @@ application shell. Match shell width/gutters, wrap actions on phones, and retain
 visible errors and remaining confirmation time on every page and after reload.
 
 World traffic is the one map where hue belongs to data rather than to status.
-Every location gets one translucent amber arc of the same 2px weight. Amber sits
-outside the country palette, so traffic reads as an overlay on geography; the
-arc fades in at the router, and a blurred halo underneath accumulates where arcs
-bunch up so busy junctions read as light rather than as spaghetti. An arc holds
-its weight for as long as its location reports traffic in the sampled window and
-fades only when the location leaves it: a line that dimmed while the flow
-continued would claim a connection had ended, and the sampler cannot know that —
-it differences conntrack counters and reports a rate over a rolling window, with
-no connection start or end. Width does not carry volume for the same reason it
-was flattened: four thicknesses compared badly across dozens of arcs, and the
-ranked rates live in the details dialog, so the map stays a presence and
-direction picture. A few arcs at a time — never more than five, and fewer when
-the map is sparse — carry a soft warm highlight out and back along the line, four
-seconds each way, drawn as a short blurred stroke with a feathered tail and faded
-ends. A new location takes the next free turn and the rest queue by fewest turns
-and longest wait, so every arc gets its light within a minute and the map never
-becomes a field of moving sparks. Each arc keeps its own phase, so the lights
-that are lit sit at different points. Motion, not colour, carries the direction,
-and the pale warm light keeps amber as the map's only hue. There are no endpoint
-dots — nearby destinations would turn them into a cluster of specks at the hub,
-and the converging arcs already mark both ends. The glow is a map effect only; it
-does not introduce glow elsewhere.
+Every location gets one translucent amber arc of the same weight: 2px where the
+map fits the world into a laptop or a large window, about 1px in the card
+preview and on a phone, where the same world is only a few hundred pixels wide.
+Amber sits outside the country palette, so traffic reads as an overlay on
+geography; the arc fades in at the router, and a blurred halo underneath
+accumulates where arcs bunch up so busy junctions read as light rather than as
+spaghetti. An arc holds its weight for as long as its location reports traffic
+in the sampled window and fades only when the location leaves it: a line that
+dimmed while the flow continued would claim a connection had ended, and the
+sampler cannot know that — it differences conntrack counters and reports a rate
+over a rolling window, with no connection start or end. Width does not carry
+volume for the same reason it was flattened: four thicknesses compared badly
+across dozens of arcs, and the ranked rates live in the details dialog, so the
+map stays a presence and direction picture. A few arcs at a time — never more
+than five, and fewer when the map is sparse — carry a soft warm highlight out
+and back along the line, four seconds each way, drawn as a short blurred stroke
+with a feathered tail and faded ends. A new location takes the next free turn
+and the rest queue by fewest turns and longest wait, so every arc gets its
+light within a minute and the map never becomes a field of moving sparks. Each
+arc keeps its own phase, so the lights that are lit sit at different points.
+Motion, not colour, carries the direction, and the pale warm light keeps amber
+as the map's only hue. There are no endpoint dots — nearby destinations would
+turn them into a cluster of specks at the hub, and the converging arcs already
+mark both ends. The glow is a map effect only; it does not introduce glow
+elsewhere.
 
 Use semantic Tailwind tokens from `web/src/index.css`, never page-local gray or
 blue approximations. Light and dark themes are designed as separate contrast
@@ -488,8 +491,10 @@ closes it and restores focus to the preview. Both fullscreen views are page
 states with addresses of their own, /map and /quality, so a shared link or a
 bookmark lands on the open view; Back and the close control return to Overview.
 On phones each card uses the full column. Its local MapLibre map draws one amber
-arc per remote location at a single 2px weight, and the arcs thin as the map
-zooms in, so a regional view is not buried under globe-width ribbons. An arc
+arc per remote location at a single weight — about 1px where the world is fitted
+into a few hundred pixels, 2px at the world view of a fullscreen map — and the
+arcs thin further as the map zooms in, so a regional view is not buried under
+globe-width ribbons and a small map is not buried under a bundle of them. An arc
 stays at full weight while its location is in the window and fades out when the
 location leaves; nothing periodic touches it. Card preview and fullscreen map
 show the same rotation: only a few arcs hold a highlight at a time, each a short

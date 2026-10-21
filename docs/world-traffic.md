@@ -57,22 +57,26 @@ the separate nftables interface/device totals.
 
 Blue indicates download and teal upload in the details list. The map itself
 uses one amber hue for every arc, deliberately outside the teal-green-blue
-country palette, so colour marks traffic as a category. Every arc is 2px and
-keeps that weight for as long as its location reports traffic in the sampled
-window; an arc fades out only when the location leaves the window — no eligible
-bytes in the last thirty seconds, or pushed below the top forty. A line that
-dimmed while its flow continued would claim that a connection had ended, which
-the sampler cannot know: it differences conntrack counters every two seconds,
-keeps thirty seconds of deltas, and reports a rate per remote IP. It observes no
-connection start or end, so appearance and disappearance mean "in the window"
-and "out of it", not "opened" and "closed". Width carries no volume either; the
-ranked rates live in the details dialog, and the map stays a presence and
-direction picture. A blurred amber halo sits under each arc; because arcs
-composite per feature, the halo accumulates where they bunch up — around the
-router and along busy corridors — and concentration reads as light. Every arc
-stays translucent so overlaps build up instead of replacing each other, and
-width is a single 2px at the world view that thins with zoom, so a country-sized
-view is not covered by ribbons meant for a globe.
+country palette, so colour marks traffic as a category. Every arc carries one
+weight — 2px where the map fits the world into a laptop or a large window,
+about 1px where it fits into a few hundred pixels, as the card preview and a
+phone's fullscreen map do — and keeps that weight for as long as its location
+reports traffic in the sampled window; an arc fades out only when the location
+leaves the window — no eligible bytes in the last thirty seconds, or pushed
+below the top forty. A line that dimmed while its flow continued would claim
+that a connection had ended, which the sampler cannot know: it differences
+conntrack counters every two seconds, keeps thirty seconds of deltas, and
+reports a rate per remote IP. It observes no connection start or end, so
+appearance and disappearance mean "in the window" and "out of it", not "opened"
+and "closed". Width carries no volume either; the ranked rates live in the
+details dialog, and the map stays a presence and direction picture. A blurred
+amber halo sits under each arc; because arcs composite per feature, the halo
+accumulates where they bunch up — around the router and along busy corridors —
+and concentration reads as light. Every arc stays translucent so overlaps build
+up instead of replacing each other, and width is one value per map that thins
+with zoom: 2px at the world view of a large map, 1px once the same world has to
+fit into a few hundred pixels. Neither a country-sized view nor a card preview
+is covered by ribbons meant for a globe.
 A highlight rides a few arcs at a time, not all of them: the light is a short
 stretch of the path drawn as two blurred strokes with a tail-to-head gradient,
 pale warm light rather than white so it lifts the amber without becoming a

@@ -71,10 +71,17 @@ const glowGradient = (dark: boolean) => {
 // thicknesses compared badly once dozens of arcs overlapped, so width no longer
 // carries volume; the map shows which locations are active and which way their
 // traffic runs, and the ranked rates live in the details dialog.
+// The zoom a map fits the world at also measures how much world it holds, so
+// the same ramp thins the arcs on a map too small for them. The card preview
+// fits the world into a few hundred pixels: there, 2px covers more than a
+// degree of longitude and the six-pixel halo under it merges the fan of East
+// Asian destinations into one ribbon. Below the zoom a desktop fullscreen fits
+// at — the card, and a phone's fullscreen map — the arc thins to 1px, which is
+// still two device pixels on a retina screen and keeps the gap between arcs.
 // Zoom may only be the input of a top-level interpolate, so the scale wraps
 // the width instead of multiplying it.
 const arcWidth = 2
-const scaledWidth = (base: number) => ['interpolate', ['linear'], ['zoom'], 1, base, 3, base * 0.9, 4.5, base * 0.7, 6, base * 0.55] as ExpressionSpecification
+const scaledWidth = (base: number) => ['interpolate', ['linear'], ['zoom'], -0.5, base * 0.5, 1.5, base, 3, base * 0.9, 4.5, base * 0.7, 6, base * 0.55] as ExpressionSpecification
 // The highlight is a short stretch of the arc drawn as two blurred strokes, so
 // it has no hard edge and needs no extra hue. It travels out and back in four
 // seconds each way; the window is a fixed number of the path's samples, so a
