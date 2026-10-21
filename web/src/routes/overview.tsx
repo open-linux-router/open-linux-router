@@ -724,7 +724,7 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
             const description = `${site.name} · HTTPS latency to ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!hasLatencyAttempt(site) ? 'Waiting for first probe' : site.milliseconds == null ? site.error || 'Failed' : formatLatency(site.milliseconds)}`
             return <button key={site.name} type="button" onClick={() => measure.mutate(site.name)} aria-busy={probing}
               aria-label={`${site.name}: ${latencySiteValue(site)}. ${action}`} title={`${description} · ${action}`}
-              className="-mx-1 inline-flex min-h-8 min-w-0 items-center gap-1.5 rounded-sm px-1 text-left text-xs font-semibold tabular-nums text-foreground transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring">
+              className="inline-flex min-h-8 min-w-0 items-center gap-1.5 rounded-sm text-left text-xs font-semibold tabular-nums text-foreground focus-visible:outline-2 focus-visible:outline-ring">
               <SiteIcon name={site.name} url={site.url} icon={site.icon} />
               {probing
                 ? <LoaderCircle aria-hidden className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
