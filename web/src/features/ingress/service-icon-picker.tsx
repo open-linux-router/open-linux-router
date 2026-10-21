@@ -44,7 +44,7 @@ export function ServiceIconPicker({ name, icon, onChange }: { name: string; icon
         <span className="flex size-9 items-center justify-center rounded-lg bg-muted">
           {preview ? <img src={preview} alt="" className="size-6 object-contain" /> : <span className="text-xs font-semibold uppercase">{name.slice(0, 2)}</span>}
         </span>
-        <Button type="button" variant="outline" onClick={() => { setSearch(''); setError(''); setOpen(true) }}>{t('Choose logo')}</Button>
+        <Button type="button" variant="secondary" onClick={() => { setSearch(''); setError(''); setOpen(true) }}>{t('Choose logo')}</Button>
         <span className="text-xs text-muted-foreground">{icon ? 'Custom' : 'Auto favicon'}</span>
       </div>
     </div>
@@ -52,7 +52,7 @@ export function ServiceIconPicker({ name, icon, onChange }: { name: string; icon
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>{t('Logo for')} {name || 'new site'}</DialogTitle><DialogDescription>{t('Upload an image or search theSVG library. Auto uses the site favicon.')}</DialogDescription></DialogHeader>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => { onChange(undefined); setOpen(false) }}>{t('Auto')}</Button>
+          <Button variant="secondary" onClick={() => { onChange(undefined); setOpen(false) }}>{t('Auto')}</Button>
           <label className="inline-flex h-8 cursor-pointer items-center rounded-lg border px-3 text-sm">{t('Upload image')}<input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => upload(event.target.files?.[0])} />
           </label>
         </div>

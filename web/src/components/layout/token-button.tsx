@@ -58,7 +58,7 @@ export function TokenButton() {
     >
       <DialogTrigger
         render={
-          <Button variant="ghost" size="icon" aria-label={t('Set API token')}>
+          <Button variant="quiet" size="icon" aria-label={t('Set API token')}>
             <KeyRound className="size-4" aria-hidden />
           </Button>
         }
@@ -90,7 +90,7 @@ export function TokenButton() {
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)}>{t('Cancel')}</Button>
+          <Button variant="quiet" onClick={() => setOpen(false)}>{t('Cancel')}</Button>
           <Button onClick={save}>{t('Save')}</Button>
         </DialogFooter>
       </DialogContent>

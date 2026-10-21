@@ -46,15 +46,15 @@ export function AdministratorAccessPage() {
         </form>
         {save.error && <p className="text-sm text-destructive" role="alert">{save.error.message}</p>}
         {access.data?.password_set && <>
-          {!removing ? <Button variant="outline" className="h-11 w-full" onClick={() => setRemoving(true)}>{t('Remove password…')}</Button> : <div className="space-y-3 rounded-md border p-3">
+          {!removing ? <Button variant="secondary" className="h-11 w-full" onClick={() => setRemoving(true)}>{t('Remove password…')}</Button> : <div className="space-y-3 rounded-md border p-3">
             <p className="text-sm">{t('Anyone who can reach this router will be able to configure it. Remove the password?')}</p>
             <div className="flex gap-3">
-              <Button variant="destructive" className="h-11" onClick={() => save.mutate(true)} disabled={save.isPending}>{t('Remove password')}</Button>
-              <Button variant="ghost" className="h-11" onClick={() => setRemoving(false)} disabled={save.isPending}>{t('Cancel')}</Button>
+              <Button variant="danger" className="h-11" onClick={() => save.mutate(true)} disabled={save.isPending}>{t('Remove password')}</Button>
+              <Button variant="quiet" className="h-11" onClick={() => setRemoving(false)} disabled={save.isPending}>{t('Cancel')}</Button>
             </div>
           </div>}
         </>}
-        <Button variant="outline" className="h-11 w-full" onClick={() => logout.mutate()} disabled={logout.isPending}>{t('Sign out')}</Button>
+        <Button variant="secondary" className="h-11 w-full" onClick={() => logout.mutate()} disabled={logout.isPending}>{t('Sign out')}</Button>
         {logout.error && <p className="text-sm text-destructive" role="alert">{logout.error.message}</p>}
       </CardContent>
     </Card>

@@ -98,19 +98,19 @@ export function GroupPage() {
           <dl>
             <DeviceSettingRow label={t('Uplink')}>
               <div role="group" aria-label={t('Uplink for current devices')} className="inline-flex max-w-full flex-wrap justify-end rounded-lg bg-muted p-0.5">
-                {[{ value: FOLLOW, get label() { return t('Default') } }, { value: DIRECT, get label() { return t('This router') } }, ...(gateway.data?.exits ?? []).map((e) => ({ value: e.name, label: e.name }))].map((option) => <Button key={option.value} size="sm" className="h-11 max-w-full whitespace-normal break-words px-2 sm:h-7" variant={exit === option.value ? 'outline' : 'ghost'} aria-pressed={exit === option.value} disabled={!gateway.data || working} onClick={() => setExit(option.value)}>{option.label}</Button>)}
+                {[{ value: FOLLOW, get label() { return t('Default') } }, { value: DIRECT, get label() { return t('This router') } }, ...(gateway.data?.exits ?? []).map((e) => ({ value: e.name, label: e.name }))].map((option) => <Button key={option.value} size="sm" className="h-11 max-w-full whitespace-normal break-words px-2 sm:h-7" variant={exit === option.value ? 'secondary' : 'quiet'} aria-pressed={exit === option.value} disabled={!gateway.data || working} onClick={() => setExit(option.value)}>{option.label}</Button>)}
               </div>
             </DeviceSettingRow>
             <DeviceSettingRow label={t('Priority')}>
               <div role="group" aria-label="Priority for current devices" className="inline-flex max-w-full flex-wrap justify-end rounded-lg bg-muted p-0.5">
-                {(['high', 'normal', 'low'] as const).map((value) => <Button key={value} size="sm" className="h-11 px-2 capitalize sm:h-7" variant={priority === value ? 'outline' : 'ghost'} aria-pressed={priority === value} disabled={!qos.data || working} onClick={() => setPriority(value)}>{value}</Button>)}
+                {(['high', 'normal', 'low'] as const).map((value) => <Button key={value} size="sm" className="h-11 px-2 capitalize sm:h-7" variant={priority === value ? 'secondary' : 'quiet'} aria-pressed={priority === value} disabled={!qos.data || working} onClick={() => setPriority(value)}>{value}</Button>)}
               </div>
             </DeviceSettingRow>
           </dl>
           <p className="text-sm text-muted-foreground">{t('Apply to')} {members.length} current devices, including subgroups. Existing choices are replaced; future members do not inherit these settings. Default follows each device’s network.</p>
           <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="outline" disabled={!members.length || !gateway.data || working} onClick={() => setConfirming('exit')}>{t('Apply uplink')}</Button>
-            <Button variant="outline" disabled={!members.length || !qos.data || working} onClick={() => setConfirming('priority')}>{t('Save priority')}</Button>
+            <Button variant="secondary" disabled={!members.length || !gateway.data || working} onClick={() => setConfirming('exit')}>{t('Apply uplink')}</Button>
+            <Button variant="secondary" disabled={!members.length || !qos.data || working} onClick={() => setConfirming('priority')}>{t('Save priority')}</Button>
           </div>
           <p className="text-sm text-muted-foreground">Priority is saved but not enforced in this build. Individual speed limits are preserved; edit them in device details.</p>
           {gateway.isError && <p role="alert" className="text-sm text-destructive">{t('Gateway settings are unavailable.')}</p>}
@@ -125,11 +125,11 @@ export function GroupPage() {
       {members.length ? <List>{members.map((device) => <ListRow key={device.mac} to={`/devices/${encodeURIComponent(device.mac)}`} title={device.name || device.mac} subtitle={`${device.group === name ? device.network || 'Network unknown' : `${device.group} · ${device.network || 'Network unknown'}`}`} leading={<DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor} vendorKey={device.vendor_key} />} trailing={<span className="text-xs tabular-nums text-muted-foreground" title={lastHeardTitle(device)}>{lastHeardLabel(device)}</span>} />)}</List> : <ListEmpty>{t('No devices in this group or its subgroups yet.')}</ListEmpty>}
     </CardContent></Card>
 
-    <Dialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}><DialogContent><DialogHeader><DialogTitle>{t('Change')} {members.length} current devices?</DialogTitle><DialogDescription>{confirming === 'exit' ? 'Their existing Internet via overrides will be changed. Traffic may take a different path; established connections normally keep theirs.' : 'Their priorities will apply to traffic crossing this router. Queue updates may briefly interrupt queued packets.'} {t('New members will not inherit this setting.')}</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setConfirming(null)}>{t('Cancel')}</Button><Button onClick={() => void applyCurrentMembers()}>{t('Continue')}</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}><DialogContent><DialogHeader><DialogTitle>{t('Change')} {members.length} current devices?</DialogTitle><DialogDescription>{confirming === 'exit' ? 'Their existing Internet via overrides will be changed. Traffic may take a different path; established connections normally keep theirs.' : 'Their priorities will apply to traffic crossing this router. Queue updates may briefly interrupt queued packets.'} {t('New members will not inherit this setting.')}</DialogDescription></DialogHeader><DialogFooter><Button variant="quiet" onClick={() => setConfirming(null)}>{t('Cancel')}</Button><Button onClick={() => void applyCurrentMembers()}>{t('Continue')}</Button></DialogFooter></DialogContent></Dialog>
   </div>
 }
 
 function State({ title }: { title: string }) {
   useLocale()
-  return <div className="space-y-3 py-16 text-center"><Network className="mx-auto size-8 text-muted-foreground" aria-hidden /><Heading as="h1" size="lg">{title}</Heading><Button variant="outline" nativeButton={false} render={<Link to="/">{t('Back to overview')}</Link>} /></div>
+  return <div className="space-y-3 py-16 text-center"><Network className="mx-auto size-8 text-muted-foreground" aria-hidden /><Heading as="h1" size="lg">{title}</Heading><Button variant="secondary" nativeButton={false} render={<Link to="/">{t('Back to overview')}</Link>} /></div>
 }

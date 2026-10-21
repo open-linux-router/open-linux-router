@@ -107,7 +107,7 @@ export function ProxyLinkDialog({
         </div>
 
         <DialogFooter className="sm:justify-between">
-          <Button size="sm" variant="outline" onClick={copy}>
+          <Button size="sm" variant="secondary" onClick={copy}>
             {copied ? <Check /> : <Copy />}
             {copied ? t('Copied') : 'Copy link'}
           </Button>

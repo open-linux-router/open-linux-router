@@ -90,7 +90,7 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
                 ))}
               </ul>
             </Disclosure>
-            <Button size="sm" variant="outline" onClick={applier.dismissFailure}> {t('Dismiss')} </Button>
+            <Button size="sm" variant="secondary" onClick={applier.dismissFailure}> {t('Dismiss')} </Button>
           </AlertDescription>
         </Alert>
       )}
@@ -123,7 +123,7 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
             </p>
             <Button
               size="sm"
-              variant="outline"
+              variant="secondary"
               disabled={reapply.isPending}
               onClick={() => reapply.mutate()}
             > {t('Put it back')} </Button>
@@ -267,7 +267,7 @@ function ConnectionCard({
           {status && !status.endpoint && <StatusPill tone="fault">{t('Not set')}</StatusPill>}
         </CardTitle>
         <CardAction className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={onEdit}> {t('Settings')} </Button>
+          <Button size="sm" variant="secondary" onClick={onEdit}> {t('Settings')} </Button>
           <Switch
             id="remote-enabled"
             aria-labelledby="remote-connection-title"

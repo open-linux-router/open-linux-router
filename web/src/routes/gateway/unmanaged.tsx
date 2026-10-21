@@ -16,7 +16,7 @@ export function GatewayUnmanagedPage() {
       {status.isError ? (
         <Alert variant="destructive">
           <AlertTitle>{t('Could not read routing rules')}</AlertTitle>
-          <AlertDescription>{status.error.message}<Button variant="outline" size="sm" onClick={() => void status.refetch()}>{t('Try again')}</Button></AlertDescription>
+          <AlertDescription>{status.error.message}<Button variant="secondary" size="sm" onClick={() => void status.refetch()}>{t('Try again')}</Button></AlertDescription>
         </Alert>
       ) : status.isPending ? (
         <Skeleton className="h-24 w-full" />

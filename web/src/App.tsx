@@ -166,7 +166,7 @@ function NotFound() {
       <Heading as="h1" size="lg">{t('Page not found')}</Heading>
       {/* An error page with no way out is a dead end, which on a phone means
           reaching for the URL bar. */}
-      <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/">{t('Go to Overview')}</Link>} />
+      <Button variant="secondary" size="sm" nativeButton={false} render={<Link to="/">{t('Go to Overview')}</Link>} />
     </div>
   )
 }

@@ -130,7 +130,7 @@ export function GatewayInterfacesPage() {
             </p>
             <Button
               size="sm"
-              variant="outline"
+              variant="secondary"
               disabled={preview.isPending || reapply.isPending}
               onClick={() => void reviewRepair()}
             >
@@ -163,7 +163,7 @@ export function GatewayInterfacesPage() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="ghost" disabled={reapply.isPending} onClick={() => setRepairPlan(null)}>{t('Cancel')}</Button>
+            <Button variant="quiet" disabled={reapply.isPending} onClick={() => setRepairPlan(null)}>{t('Cancel')}</Button>
             <Button disabled={reapply.isPending} onClick={() => void confirmRepair()}>
               {reapply.isPending ? 'Restoring…' : 'Restore saved settings'}
             </Button>

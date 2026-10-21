@@ -243,7 +243,7 @@ export function DeviceDetail({
         <DialogFooter>
           {onForget && (
             <Button
-              variant="destructive"
+              variant="danger"
               className="mr-auto"
               disabled={busy}
               onClick={() => {
@@ -253,7 +253,7 @@ export function DeviceDetail({
             >
               <Trash2 className="size-4" aria-hidden /> {t('Forget')} </Button>
           )}
-          <Button variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}> {t('Cancel')} </Button>
+          <Button variant="quiet" disabled={busy} onClick={() => onOpenChange(false)}> {t('Cancel')} </Button>
           <Button
             disabled={busy}
             onClick={() => {
@@ -311,7 +311,7 @@ function FixedAddress({ device, onEdit }: { device: DeviceRow; onEdit: () => voi
             )}
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={onEdit}>
+        <Button variant="secondary" size="sm" onClick={onEdit}>
           {device.fixed_ip ? t('Change') : 'Reserve'}
         </Button>
       </div>

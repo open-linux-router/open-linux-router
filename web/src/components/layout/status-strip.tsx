@@ -101,7 +101,7 @@ export function StatusStrip({
           {driftAction && (
             <Button
               size="sm"
-              variant="outline"
+              variant="secondary"
               disabled={driftAction.busy}
               onClick={driftAction.onClick}
             >

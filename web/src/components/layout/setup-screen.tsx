@@ -70,7 +70,7 @@ export function SetupScreen() {
             </p>
           )}
 
-          <Button variant="outline" className="h-11 w-full" onClick={() => claim.mutate(true)} disabled={claim.isPending}>
+          <Button variant="secondary" className="h-11 w-full" onClick={() => claim.mutate(true)} disabled={claim.isPending}>
             {claim.isPending ? t('Setting up…') : t('Continue without a password')}
           </Button>
 

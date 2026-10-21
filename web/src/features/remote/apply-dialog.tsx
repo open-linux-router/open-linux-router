@@ -53,7 +53,7 @@ export function ConfirmDialog({ applier }: { applier: ReturnType<typeof useRemot
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={applier.cancel}> {t('Cancel')}</Button>
+          <Button variant="quiet" onClick={applier.cancel}> {t('Cancel')}</Button>
           <Button onClick={applier.confirm} disabled={applier.busy}> {t('Apply anyway')} </Button>
         </DialogFooter>
       </DialogContent>

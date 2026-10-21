@@ -57,7 +57,7 @@ export function BlockerAlerts({
                 who would rather type it has lost nothing. */}
             {b.action && (
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 /* h-auto and whitespace-normal, because Button is
                    whitespace-nowrap and fixed-height by default: a label like

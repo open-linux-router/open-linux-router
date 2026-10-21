@@ -36,7 +36,7 @@ export function ConnectivityRecovery() {
           {status.isError && <p role="alert">Cannot reach the router. Confirmation has not been sent; automatic recovery remains active.</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             <Button size="sm" disabled={action.isPending || status.isError || trial.state !== 'pending' || seconds === 0} onClick={() => action.mutate('confirm')}>Keep changes</Button>
-            <Button size="sm" variant="outline" disabled={action.isPending} onClick={() => action.mutate('revert')}>Revert now</Button>
+            <Button size="sm" variant="secondary" disabled={action.isPending} onClick={() => action.mutate('revert')}>Revert now</Button>
           </div>
         </AlertDescription>
       </Alert>

@@ -76,7 +76,7 @@ export function NativeRules() {
           {query.error ? query.error.message : 'Reading the kernel ruleset…'}
         </p>
         <Button
-          variant="outline"
+          variant="secondary"
           className="mt-3"
           onClick={() => void query.refetch()}
         >{t('Refresh')}</Button>
@@ -205,7 +205,7 @@ export function NativeRules() {
           </p>
         </div>
         <Button
-          variant="outline"
+          variant="secondary"
           onClick={edit}
           disabled={draft !== null || !!query.error}
         >{t('Edit olr_filter')}</Button>
@@ -232,7 +232,7 @@ export function NativeRules() {
                 <h3 className="font-mono text-sm">{t('Draft chain')}{String(chain.name)}
                 </h3>
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   disabled={!!ruleDraft || apply.isPending || check.isPending}
                   onClick={() => {
@@ -278,7 +278,7 @@ export function NativeRules() {
                       (action) => (
                         <Button
                           key={action}
-                          variant="outline"
+                          variant="secondary"
                           size="sm"
                           disabled={
                             !!ruleDraft || apply.isPending || check.isPending
@@ -307,7 +307,7 @@ export function NativeRules() {
               />
               <Button onClick={saveRuleDraft}>{t('Update draft rule')}</Button>
               <Button
-                variant="outline"
+                variant="secondary"
                 className="ml-2"
                 onClick={() => setRuleDraft(null)}
               >{t('Close rule editor')}</Button>
@@ -338,7 +338,7 @@ export function NativeRules() {
               {check.isPending ? t('Checking…') : 'Validate and preview'}
             </Button>
             <Button
-              variant="ghost"
+              variant="quiet"
               onClick={() => {
                 setDraft(null)
                 setPlan(null)
@@ -361,7 +361,7 @@ export function NativeRules() {
                 </p>
               ))}
               <Button
-                variant="destructive"
+                variant="danger"
                 disabled={!!ruleDraft || check.isPending || apply.isPending}
                 onClick={() => apply.mutate()}
               >

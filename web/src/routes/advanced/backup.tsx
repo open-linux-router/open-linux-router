@@ -87,7 +87,7 @@ export function BackupPage() {
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">Download the complete olr.json, including administrator password hashes, VPN keys and provider credentials. Store it privately and use HTTPS when transferring it.</p>
           <p className="text-sm text-muted-foreground">External TLS files, daemon startup options, Caddy-issued certificates and runtime history are separate. Network interfaces must use the same names when restoring on another machine.</p>
-          <Button variant="outline" disabled={busy} onClick={() => void download()}>Download olr.json</Button>
+          <Button variant="secondary" disabled={busy} onClick={() => void download()}>Download olr.json</Button>
         </CardContent>
       </Card>
       <Card>

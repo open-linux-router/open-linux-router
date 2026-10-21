@@ -133,7 +133,7 @@ export function NetworkQuality({ open, onOpenChange }: {
     </section>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false} finalFocus={chart} className="flex h-dvh max-h-dvh w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none p-0 sm:max-w-none sm:p-0">
-        <DialogClose render={<Button variant="secondary" size="icon-lg" className="absolute top-3 right-3 z-10 rounded-full bg-card/95 shadow-md ring-1 ring-border backdrop-blur-sm sm:size-9" />}><X aria-hidden="true" /><span className="sr-only">{t('Close')}</span></DialogClose>
+        <DialogClose render={<Button variant="subtle" size="icon-lg" className="absolute top-3 right-3 z-10 rounded-full bg-card/95 shadow-md ring-1 ring-border backdrop-blur-sm sm:size-9" />}><X aria-hidden="true" /><span className="sr-only">{t('Close')}</span></DialogClose>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {/* The report keeps the shell's content width: a fullscreen view that
               narrows to article width leaves the page looking like a stray
@@ -223,7 +223,7 @@ function QualityReport({ data, readError, loading, retry }: {
       </div>
       <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end">
         {running
-          ? <Button variant="outline" size="lg" disabled={action.isPending} onClick={() => action.mutate({ cancel: true })}>{t('Cancel test')}</Button>
+          ? <Button variant="secondary" size="lg" disabled={action.isPending} onClick={() => action.mutate({ cancel: true })}>{t('Cancel test')}</Button>
           : <Button size="lg" disabled={action.isPending || loading} onClick={() => action.mutate({ scope: 'all' })}>
               {action.isPending ? t('Starting…') : hasRun ? t('Run all tests') : t('Run assessment')}
             </Button>}
@@ -235,7 +235,7 @@ function QualityReport({ data, readError, loading, retry }: {
       <AlertTitle>{t('Could not read the assessment.')}</AlertTitle>
       <AlertDescription className="space-y-3">
         <p>{t('Check the router connection, then try again.')}</p>
-        <Button variant="outline" size="sm" onClick={retry}>{t('Retry')}</Button>
+        <Button variant="secondary" size="sm" onClick={retry}>{t('Retry')}</Button>
       </AlertDescription>
     </Alert>}
 
@@ -525,7 +525,7 @@ function CategoryRow({ category, data, services, hasRun, runningScope, runningTa
           scores stay in one column instead of stepping sideways. */}
       <div className="flex w-8 shrink-0 justify-end">
         {scope && canRerun && <Button
-          variant="ghost"
+          variant="quiet"
           size="icon-sm"
           className={cn('shrink-0', busy && 'disabled:opacity-100')}
           disabled={anyRunning}
@@ -767,7 +767,7 @@ function QualityTestRow({ test, category, data, view, runningScope, runningTarge
         </span>
         <div className="flex w-8 justify-end">
           {rerun && !duplicated && canRerun && <Button
-            variant="ghost"
+            variant="quiet"
             size="icon-sm"
             className={busy ? 'disabled:opacity-100' : undefined}
             disabled={anyRunning}

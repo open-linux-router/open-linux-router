@@ -61,7 +61,7 @@ export function ApplyOutcome({ applier }: { applier: ReturnType<typeof useForwar
                 ))}
               </ul>
             </Disclosure>
-            <Button size="sm" variant="outline" onClick={applier.dismissFailure}>{t('Dismiss')}</Button>
+            <Button size="sm" variant="secondary" onClick={applier.dismissFailure}>{t('Dismiss')}</Button>
           </AlertDescription>
         </Alert>
       )}
@@ -101,7 +101,7 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useForwardsAppl
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={applier.cancel}>{t('Cancel')}</Button>
+          <Button variant="quiet" onClick={applier.cancel}>{t('Cancel')}</Button>
           <Button onClick={applier.confirm} disabled={applier.busy}>{t('Apply anyway')}</Button>
         </DialogFooter>
       </DialogContent>

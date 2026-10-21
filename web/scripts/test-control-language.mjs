@@ -43,6 +43,32 @@ walk(root)
 
 const rel = (path) => relative(root, path).split(sep).join('/')
 
+/**
+ * The opening tag that starts at `start`, ending at the `>` outside braces and
+ * quotes. JSX props contain `=>` and comments contain quotes, so neither a
+ * regular expression nor the first `>` can find the end.
+ */
+function openingTag(source, start) {
+  let depth = 0
+  let quote = null
+  for (let i = start; i < source.length; i += 1) {
+    const ch = source[i]
+    if (depth > 0) {
+      if (ch === '{') depth += 1
+      else if (ch === '}') depth -= 1
+      continue
+    }
+    if (quote) {
+      if (ch === quote) quote = null
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') quote = ch
+    else if (ch === '{') depth = 1
+    else if (ch === '>') return source.slice(start, i + 1)
+  }
+  return ''
+}
+
 for (const file of files) {
   const name = rel(file)
   const source = readFileSync(file, 'utf8')
@@ -83,9 +109,18 @@ for (const file of files) {
   // 4. Accepting a plan warning is not a destructive action.
   for (const match of source.matchAll(/<Button\b([\s\S]*?)>([\s\S]*?)<\/Button>/g)) {
     const [, attrs, body] = match
-    if (attrs.includes('variant="destructive"') && /anyway/i.test(body)) {
+    if (attrs.includes('variant="danger"') && /anyway/i.test(body)) {
       const line = source.slice(0, match.index).split('\n').length
-      problems.push(`${name}:${line} paints "anyway" destructive; it accepts a warning and is the primary action`)
+      problems.push(`${name}:${line} paints "anyway" danger; it accepts a warning and is the primary action`)
+    }
+  }
+
+  // 6. Button ranks are semantic; the paint names are gone.
+  for (let at = source.indexOf('<Button'); at >= 0; at = source.indexOf('<Button', at + 7)) {
+    const tag = openingTag(source, at)
+    if (/variant="(outline|ghost|destructive)"/.test(tag)) {
+      const line = source.slice(0, at).split('\n').length
+      problems.push(`${name}:${line} uses a paint name for a button rank; use primary/secondary/quiet/danger/link`)
     }
   }
 

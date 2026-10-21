@@ -75,10 +75,10 @@ export function UplinkCard({
   return (
     <>
       <PartialApply editor={editor} />
-      <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/access/tunnelbroker">Tunnel Broker</Link>} />
+      <Button variant="secondary" size="sm" nativeButton={false} render={<Link to="/access/tunnelbroker">Tunnel Broker</Link>} />
 
       {compact ? (
-        <Button size="sm" variant="outline" disabled={editor.busy} onClick={() => setOpen(true)}>
+        <Button size="sm" variant="secondary" disabled={editor.busy} onClick={() => setOpen(true)}>
           {uplink ? 'Change uplink' : 'Set up uplink'}
         </Button>
       ) : (
@@ -101,7 +101,7 @@ export function UplinkCard({
             {uplink && (
               <Button
                 size="sm"
-                variant="ghost"
+                variant="quiet"
                 disabled={editor.busy}
                 onClick={() => void editor.remove()}
               > {t('Hand it back')} </Button>
@@ -173,7 +173,7 @@ function UplinkSummary({ uplink }: { uplink: UplinkStatus }) {
               <Button
                 key={a}
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 disabled={addresses.busy}
                 onClick={() => void addresses.remove(uplink.interface, a)}
               >{t('Remove')}{a}
@@ -405,7 +405,7 @@ function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useUplinkEdit
         </Disclosure>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={editor.cancel}>{t('Cancel')}</Button>
+          <Button variant="quiet" onClick={editor.cancel}>{t('Cancel')}</Button>
           <Button disabled={editor.busy} onClick={editor.confirm}>{t('Apply anyway')}</Button>
         </DialogFooter>
       </DialogContent>
@@ -442,7 +442,7 @@ function PartialApply({ editor }: { editor: ReturnType<typeof useUplinkEditor> }
             ))}
           </ul>
         </Disclosure>
-        <Button size="sm" variant="outline" onClick={editor.dismissFailure}>{t('Dismiss')}</Button>
+        <Button size="sm" variant="secondary" onClick={editor.dismissFailure}>{t('Dismiss')}</Button>
       </AlertDescription>
     </Alert>
   )

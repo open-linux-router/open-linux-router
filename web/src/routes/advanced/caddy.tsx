@@ -118,7 +118,7 @@ export function CaddyPage() {
                 ))}
               </ul>
             </Disclosure>
-            <Button size="sm" variant="outline" onClick={applier.dismissFailure}> {t('Dismiss')} </Button>
+            <Button size="sm" variant="secondary" onClick={applier.dismissFailure}> {t('Dismiss')} </Button>
           </AlertDescription>
         </Alert>
       )}
@@ -149,7 +149,7 @@ export function CaddyPage() {
             </p>
             <Button
               size="sm"
-              variant="outline"
+              variant="secondary"
               disabled={reapply.isPending}
               onClick={() => reapply.mutate()}
             > {t('Put it back')} </Button>
@@ -289,7 +289,7 @@ function CertificateCard({
         </CardTitle>
         <CardDescription> {t('Covers all published addresses.')} </CardDescription>
         <CardAction>
-          <Button size="sm" variant="outline" onClick={onEdit}> {t('Settings')} </Button>
+          <Button size="sm" variant="secondary" onClick={onEdit}> {t('Settings')} </Button>
         </CardAction>
       </CardHeader>
       {status?.certificate.certificate && (
@@ -364,7 +364,7 @@ function ServiceList({
                 // like a form rather than a control panel.
                 <Button
                   size="sm"
-                  variant="ghost"
+                  variant="quiet"
                   aria-label={`Open ${s.name}`}
                   onClick={(e) => {
                     e.stopPropagation()
@@ -420,7 +420,7 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useIngressApply
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={applier.cancel}> {t('Cancel')}</Button>
+          <Button variant="quiet" onClick={applier.cancel}> {t('Cancel')}</Button>
           <Button onClick={applier.confirm} disabled={applier.busy}> {t('Apply anyway')} </Button>
         </DialogFooter>
       </DialogContent>

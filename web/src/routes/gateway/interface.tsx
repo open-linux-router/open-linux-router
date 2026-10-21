@@ -132,7 +132,7 @@ export function GatewayInterfacePage() {
               ? t('DHCP {range} · {active} of {size} in use', { range: poolRange(pool.ipv4.start, pool.ipv4.end), active: usage.active, size: usage.size })
               : t('DHCP {range}', { range: poolRange(pool.ipv4.start, pool.ipv4.end) })}</p>}
           </div> : <p className="text-sm text-muted-foreground">{t('No network is configured on this interface.')}</p>}
-          {!row.loopback && <Button size="sm" variant="outline" disabled={!row.adopted || editor.busy} onClick={() => setEditing(true)}><Pencil className="size-4" aria-hidden /> {network ? 'Edit network' : 'Add network'}</Button>}
+          {!row.loopback && <Button size="sm" variant="secondary" disabled={!row.adopted || editor.busy} onClick={() => setEditing(true)}><Pencil className="size-4" aria-hidden /> {network ? 'Edit network' : 'Add network'}</Button>}
           {!row.adopted && !row.loopback && <p className="text-xs text-muted-foreground">Give this interface to the router first to configure a network.</p>}
         </CardContent>
       </Card>
@@ -187,5 +187,5 @@ function linkSpeed(mbps?: number) {
 
 function State({ title, detail }: { title: string; detail: string }) {
   useLocale()
-  return <div className="space-y-3 py-16 text-center"><Heading as="h1" size="lg">{title}</Heading><p className="text-sm text-muted-foreground">{detail}</p><Button variant="outline" nativeButton={false} render={<Link to="/gateway">{t('Back to Gateway')}</Link>} /></div>
+  return <div className="space-y-3 py-16 text-center"><Heading as="h1" size="lg">{title}</Heading><p className="text-sm text-muted-foreground">{detail}</p><Button variant="secondary" nativeButton={false} render={<Link to="/gateway">{t('Back to Gateway')}</Link>} /></div>
 }

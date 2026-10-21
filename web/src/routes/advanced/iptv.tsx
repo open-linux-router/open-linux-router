@@ -128,15 +128,15 @@ export function IptvPage() {
         </label>
         <p className="text-sm text-muted-foreground">Missing your IPTV interface? Set up its VLAN and IPv4 address on the router first, then <Link className="underline underline-offset-4" to="/gateway#interfaces">adopt it under Interfaces <ArrowRight className="inline size-3" /></Link>.</p>
         <div className="flex flex-wrap gap-2 border-t pt-4">
-          <Button variant="outline" disabled={!ready || plan.isPending || apply.isPending} onClick={() => void review({ ...next, enabled: true })}>Preview changes</Button>
-          {draft.enabled && <Button variant="outline" disabled={plan.isPending || apply.isPending} onClick={() => void review({ ...next, enabled: false })}>{t('Turn off')}</Button>}
+          <Button variant="secondary" disabled={!ready || plan.isPending || apply.isPending} onClick={() => void review({ ...next, enabled: true })}>Preview changes</Button>
+          {draft.enabled && <Button variant="secondary" disabled={plan.isPending || apply.isPending} onClick={() => void review({ ...next, enabled: false })}>{t('Turn off')}</Button>}
         </div>
         {!ready && !links.isPending && <p className="text-sm text-muted-foreground">Select an adopted IPTV interface with IPv4 and at least one present IPv4 LAN to continue.</p>}
       </section>
       {preview && <section className="space-y-4 rounded-xl border border-primary/30 bg-primary/5 p-5 sm:p-6">
         <div><Heading>{t('Review before applying')}</Heading><p className="text-sm text-muted-foreground">{preview.plan.empty ? 'No service changes; the selected settings will still be saved.' : `Impact: ${preview.plan.impact}`}</p></div>
         <ul className="list-inside list-disc space-y-1 text-sm">{(preview.plan.changes ?? []).map((change) => <li key={change}>{change}</li>)}</ul>
-        <div className="flex gap-2"><Button disabled={apply.isPending} onClick={() => void save(preview.config)}>{preview.config.enabled ? 'Enable IPTV' : 'Turn off IPTV'}</Button><Button variant="ghost" onClick={() => setPreview(null)}>{t('Cancel')}</Button></div>
+        <div className="flex gap-2"><Button disabled={apply.isPending} onClick={() => void save(preview.config)}>{preview.config.enabled ? 'Enable IPTV' : 'Turn off IPTV'}</Button><Button variant="quiet" onClick={() => setPreview(null)}>{t('Cancel')}</Button></div>
       </section>}
     </SubPage>
   )

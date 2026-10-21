@@ -450,7 +450,7 @@ export function TunnelBrokerPage() {
       </nav>
       {config.error && (
         <p role="alert">{t('Could not load saved tunnel:')}{config.error.message}{' '}
-          <Button variant="outline" onClick={() => void config.refetch()}>{t('Retry')}</Button>
+          <Button variant="secondary" onClick={() => void config.refetch()}>{t('Retry')}</Button>
         </p>
       )}
       {config.isPending && <p role="status">{t('Loading saved tunnel…')}</p>}
@@ -461,7 +461,7 @@ export function TunnelBrokerPage() {
               (publicAddresses.isFetching ? t('Checking…') : t('Unavailable'))}
           </span>
           <Button
-            variant="outline"
+            variant="secondary"
             disabled={busy || publicAddresses.isFetching}
             onClick={() =>
               void run(async () => {
@@ -510,7 +510,7 @@ export function TunnelBrokerPage() {
               > {t('Measure servers')} </Button>
               {busy && (
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   onClick={() => {
                     stop.current = true
                   }}
@@ -524,7 +524,7 @@ export function TunnelBrokerPage() {
               <p role="alert">
                 {servers.error.message}{' '}
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   onClick={() => void servers.refetch()}
                 >{t('Retry')}</Button>
               </p>
@@ -665,13 +665,13 @@ export function TunnelBrokerPage() {
           </Button>
           {(saved?.enabled || (saved && status.data?.present)) && (
             <Button
-              variant="outline"
+              variant="secondary"
               disabled={disabled}
               onClick={() => void run(() => activate(false))}
             > {t('Review deactivation')} </Button>
           )}
           <Button
-            variant="outline"
+            variant="secondary"
             disabled={disabled || !saved?.enabled}
             onClick={() => void run(verify)}
           >{t('Test tunnel')}</Button>
@@ -697,7 +697,7 @@ export function TunnelBrokerPage() {
                 }
               >{t('Confirm changes')}</Button>
               <Button
-                variant="ghost"
+                variant="quiet"
                 disabled={busy}
                 onClick={() => setPreview(null)}
               >{t('Cancel')}</Button>
@@ -792,7 +792,7 @@ export function TunnelBrokerPage() {
           ].map(([module, label]) => (
             <Button
               key={module}
-              variant="outline"
+              variant="secondary"
               disabled={disabled || !saved?.enabled || !network}
               onClick={() => void run(() => reviewNetwork(module))}
             >
@@ -807,7 +807,7 @@ export function TunnelBrokerPage() {
               <Button disabled={busy} onClick={() => void run(applyNetwork)}>{t('Apply')}{networkChange.module} changes
               </Button>
               <Button
-                variant="ghost"
+                variant="quiet"
                 disabled={busy}
                 onClick={() => setNetworkChange(null)}
               >{t('Cancel')}</Button>

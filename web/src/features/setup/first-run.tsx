@@ -160,7 +160,7 @@ function Step({
 
       {!done &&
         (action.to ? (
-          <Button nativeButton={false} size="sm" variant={blocked ? 'ghost' : 'outline'} disabled={blocked} render={
+          <Button nativeButton={false} size="sm" variant={blocked ? 'quiet' : 'secondary'} disabled={blocked} render={
             <Link to={action.to}>
               {action.label}
               <ChevronRight className="size-3.5" aria-hidden />
@@ -169,7 +169,7 @@ function Step({
         ) : (
           <Button
             size="sm"
-            variant={blocked ? 'ghost' : 'outline'}
+            variant={blocked ? 'quiet' : 'secondary'}
             disabled={blocked || action.busy}
             onClick={action.onClick}
           >

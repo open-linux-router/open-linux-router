@@ -86,7 +86,7 @@ export function ApplyOutcome({ applier }: { applier: ReturnType<typeof useDnsApp
                 ))}
               </ul>
             </Disclosure>
-            <Button size="sm" variant="outline" onClick={applier.dismissFailure}>{t('Dismiss')}</Button>
+            <Button size="sm" variant="secondary" onClick={applier.dismissFailure}>{t('Dismiss')}</Button>
           </AlertDescription>
         </Alert>
       )}
@@ -127,7 +127,7 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useDnsApply> })
         )}
 
         <DialogFooter>
-          <Button variant="ghost" onClick={applier.cancel}>{t('Cancel')}</Button>
+          <Button variant="quiet" onClick={applier.cancel}>{t('Cancel')}</Button>
           <Button onClick={applier.confirm}>{t('Apply anyway')}</Button>
         </DialogFooter>
       </DialogContent>

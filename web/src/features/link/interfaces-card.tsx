@@ -405,7 +405,7 @@ function ReleaseDialog({
         </ul>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={onCancel}>{t('Cancel')}</Button>
+          <Button variant="quiet" onClick={onCancel}>{t('Cancel')}</Button>
           <Button onClick={onConfirm}>{t('Take it back anyway')}</Button>
         </DialogFooter>
       </DialogContent>
@@ -448,8 +448,8 @@ function RemoveAddressDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="ghost" onClick={onCancel}>{t('Cancel')}</Button>
-          <Button variant="destructive" disabled={busy} onClick={onConfirm}> {t('Remove it')} </Button>
+          <Button variant="quiet" onClick={onCancel}>{t('Cancel')}</Button>
+          <Button variant="danger" disabled={busy} onClick={onConfirm}> {t('Remove it')} </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

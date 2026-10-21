@@ -59,7 +59,7 @@ export function FirewallPage() {
         ) : (
           <Skeleton className="h-24 w-full" />
         )}
-        <Button variant="outline" nativeButton={false} render={<Link to="/firewall/rules" />}>{t('Rules')}</Button>
+        <Button variant="secondary" nativeButton={false} render={<Link to="/firewall/rules" />}>{t('Rules')}</Button>
       </div>
     )
   }
@@ -95,7 +95,7 @@ export function FirewallPage() {
           <AlertDescription className="space-y-3">
             <p>{lockout}</p>
             <div className="flex gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setLockout(null)}>{t('Cancel')}</Button>
+              <Button size="sm" variant="quiet" onClick={() => setLockout(null)}>{t('Cancel')}</Button>
               <Button
                 size="sm"
                 disabled={set.isPending}
@@ -117,7 +117,7 @@ export function FirewallPage() {
       )}
 
       <TrafficPermissions status={st} />
-      <Button variant="outline" nativeButton={false} render={<Link to="/firewall/rules" />}>{t('Rules')}</Button>
+      <Button variant="secondary" nativeButton={false} render={<Link to="/firewall/rules" />}>{t('Rules')}</Button>
     </div>
   )
 }

@@ -302,13 +302,13 @@ export function ServiceDialog({
                       headers[index] = { ...header, remove: e.target.checked, value: e.target.checked ? '' : header.value }
                       upstream('request_headers', headers)
                     }} />{t('Remove')}</label>
-                  <Button type="button" size="icon" variant="ghost" aria-label={`Delete header ${index + 1}`}
+                  <Button type="button" size="icon" variant="quiet" aria-label={`Delete header ${index + 1}`}
                     onClick={() => upstream('request_headers', (draft.upstream.request_headers ?? []).filter((_, i) => i !== index))}>
                     <Trash2 />
                   </Button>
                 </div>
               ))}
-              <Button type="button" size="sm" variant="outline" onClick={() =>
+              <Button type="button" size="sm" variant="secondary" onClick={() =>
                 upstream('request_headers', [...(draft.upstream.request_headers ?? []), { name: '', value: '' }])}>{t('Add header')}</Button>
             </div>
           </Disclosure>
@@ -316,13 +316,13 @@ export function ServiceDialog({
 
         <DialogFooter className="sm:justify-between">
           {onRemove ? (
-            <Button variant="destructive" onClick={onRemove}>
+            <Button variant="danger" onClick={onRemove}>
               <Trash2 />{t('Stop publishing')}</Button>
           ) : (
             <span />
           )}
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
+            <Button variant="quiet" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
             <Button
               disabled={!complete || saving}
               onClick={async () => {

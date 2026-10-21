@@ -60,7 +60,7 @@ export function SocksCard({
             {enabled && !missing && (
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 onClick={showLink}
                 disabled={fetchLink.isPending}
               >

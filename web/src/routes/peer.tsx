@@ -193,7 +193,7 @@ export function WireguardPeerPage() {
             configuration={
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 disabled={applier.busy}
                 onClick={() => applier.submit(remoteChange.reissuePeer(peer.name))}
               >
@@ -241,7 +241,7 @@ export function WireguardPeerPage() {
           </DialogHeader>
           <CategoryPicker value={picture} onChange={setPicture} />
           <DialogFooter>
-            <Button variant="ghost" disabled={patch.isPending} onClick={() => setChoosing(false)}>{t('Cancel')}</Button>
+            <Button variant="quiet" disabled={patch.isPending} onClick={() => setChoosing(false)}>{t('Cancel')}</Button>
             <Button disabled={patch.isPending} onClick={() => void savePicture()}>{t('Save icon')}</Button>
           </DialogFooter>
         </DialogContent>

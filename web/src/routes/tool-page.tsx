@@ -248,7 +248,7 @@ function SpeedTest() {
               <p className="mt-2 break-words font-mono text-xs select-text">{error.detail}</p>
             </details>
             <div className="flex flex-wrap items-center gap-3">
-              <Button variant="outline" size="sm" onClick={copyDiagnostics}>
+              <Button variant="secondary" size="sm" onClick={copyDiagnostics}>
                 <Copy aria-hidden />{copied ? t('Copied') : 'Copy diagnostics'}
               </Button>
               <a className="text-xs underline underline-offset-4" href="https://github.com/open-linux-router/open-linux-router/issues/new" target="_blank" rel="noreferrer">{t('Report an issue')}</a>
@@ -333,7 +333,7 @@ function LinkTest() {
           </div>
           {conflict && !lan.data.address && <Alert variant="destructive"><AlertTitle>Port unavailable</AlertTitle><AlertDescription>{conflict}</AlertDescription></Alert>}
           {external && !lan.data.address && <p role="status" className="text-sm text-muted-foreground">{t('Existing iperf3 server:')} {external}. OLR did not start it and will not stop it.</p>}
-          {(!external || lan.data.address) && <Button onClick={() => changeLAN(!lan.data?.address)} disabled={lanBusy || (!lan.data.address && (!selectedLAN || !!conflict))} variant={lan.data.address ? 'outline' : 'default'}>
+          {(!external || lan.data.address) && <Button onClick={() => changeLAN(!lan.data?.address)} disabled={lanBusy || (!lan.data.address && (!selectedLAN || !!conflict))} variant={lan.data.address ? 'secondary' : 'primary'}>
             {lanBusy && <LoaderCircle className="animate-spin" aria-hidden />}
             {lan.data.address ? 'Stop server' : 'Start server'}
           </Button>}
@@ -347,7 +347,7 @@ function LinkTest() {
               <p className="text-xs font-medium">{index === 0 ? 'Device → router' : 'Router → device'}</p>
               <div className="flex flex-wrap items-center gap-2">
                 <code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-background px-3 py-2 text-sm">{command}</code>
-                <Button variant="outline" size="sm" onClick={() => copyLAN(command)}><Copy aria-hidden />{lanCopied === command ? t('Copied') : t('Copy')}</Button>
+                <Button variant="secondary" size="sm" onClick={() => copyLAN(command)}><Copy aria-hidden />{lanCopied === command ? t('Copied') : t('Copy')}</Button>
               </div>
             </div>)}
           </div>}

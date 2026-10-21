@@ -311,7 +311,7 @@ export function UplinkDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
+          <Button variant="quiet" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
           <Button
             disabled={!valid}
             onClick={() =>

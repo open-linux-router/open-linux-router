@@ -73,7 +73,7 @@ export function EditableField({
       {hint && <p className="max-w-prose text-[0.8125rem] leading-relaxed text-muted-foreground">{hint}</p>}
       {dirty && (
         <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-          <Button variant="ghost" size="sm" onClick={() => setDraft(stored)}> {t('Revert')} </Button>
+          <Button variant="quiet" size="sm" onClick={() => setDraft(stored)}> {t('Revert')} </Button>
           <Button size="sm" disabled={busy} onClick={() => onSave(draft)}>{t('Save')}</Button>
         </div>
       )}

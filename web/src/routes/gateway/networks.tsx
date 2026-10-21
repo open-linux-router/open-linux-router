@@ -198,7 +198,7 @@ export function ConfirmDisruptive({ editor }: { editor: ReturnType<typeof useNet
         </Disclosure>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={editor.cancel}>{t('Cancel')}</Button>
+          <Button variant="quiet" onClick={editor.cancel}>{t('Cancel')}</Button>
           <Button disabled={editor.busy} onClick={editor.confirm}>{t('Apply anyway')}</Button>
         </DialogFooter>
       </DialogContent>
@@ -235,7 +235,7 @@ export function PartialApply({ editor }: { editor: ReturnType<typeof useNetworkE
             ))}
           </ul>
         </Disclosure>
-        <Button size="sm" variant="outline" onClick={editor.dismissFailure}>{t('Dismiss')}</Button>
+        <Button size="sm" variant="secondary" onClick={editor.dismissFailure}>{t('Dismiss')}</Button>
       </AlertDescription>
     </Alert>
   )

@@ -276,13 +276,13 @@ export function NetworkDialog({
 
         <DialogFooter className="sm:justify-between">
           {onRemove ? (
-            <Button variant="destructive" onClick={onRemove}>
+            <Button variant="danger" onClick={onRemove}>
               <Trash2 className="size-4" aria-hidden />{t('Remove')}</Button>
           ) : (
             <span />
           )}
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
+            <Button variant="quiet" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
             <Button
               disabled={!valid}
               onClick={() => {

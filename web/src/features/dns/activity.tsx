@@ -393,8 +393,8 @@ function QueryList({
             {needle || blockedOnly ? `${shown.length} matches · ` : ''} {t('Page')} {current + 1} of {Math.ceil((hasMore ? held : shown.length) / PAGE_SIZE)}
           </span>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={current === 0} onClick={() => onPageChange(current - 1)}>Previous</Button>
-            <Button variant="outline" size="sm" disabled={(current + 1) * PAGE_SIZE >= shown.length && !hasMore} onClick={() => onPageChange(current + 1)}>{t('Next')}</Button>
+            <Button variant="secondary" size="sm" disabled={current === 0} onClick={() => onPageChange(current - 1)}>Previous</Button>
+            <Button variant="secondary" size="sm" disabled={(current + 1) * PAGE_SIZE >= shown.length && !hasMore} onClick={() => onPageChange(current + 1)}>{t('Next')}</Button>
           </div>
         </nav>
       )}

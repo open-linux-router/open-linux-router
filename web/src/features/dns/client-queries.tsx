@@ -52,7 +52,7 @@ export function ClientQueries({ addresses }: { addresses: string[] }) {
             <Input ref={searchInput} id="client-dns-filter" aria-label={t('Filter DNS queries')} className="w-full" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('Search queries')} onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); setFilter(''); searchButton.current?.focus() } }} />
           </div>
         </div>}
-        {inspection && <Button ref={searchButton} className="shrink-0" variant="ghost" size="icon" aria-label={searchOpen ? 'Close DNS search' : 'Search DNS queries'} aria-expanded={searchOpen} aria-controls="client-dns-search" onClick={() => { setSearchOpen(!searchOpen); setFilter(''); if (!searchOpen) requestAnimationFrame(() => searchInput.current?.focus()) }}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>}
+        {inspection && <Button ref={searchButton} className="shrink-0" variant="quiet" size="icon" aria-label={searchOpen ? 'Close DNS search' : 'Search DNS queries'} aria-expanded={searchOpen} aria-controls="client-dns-search" onClick={() => { setSearchOpen(!searchOpen); setFilter(''); if (!searchOpen) requestAnimationFrame(() => searchInput.current?.focus()) }}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>}
         <label htmlFor="client-dns-inspection" className="sr-only text-sm sm:not-sr-only">{t('Inspection')}</label>
         <Switch id="client-dns-inspection" checked={inspection} onCheckedChange={(checked) => { setInspection(checked); setSearchOpen(false); setFilter('') }} />
       </div>

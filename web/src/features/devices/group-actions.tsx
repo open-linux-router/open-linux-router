@@ -116,9 +116,9 @@ export function useGroupActions() {
               <DialogDescription>{describeDeletion(deleting)}</DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setDeleting(null)}>{t('Cancel')}</Button>
+              <Button variant="quiet" onClick={() => setDeleting(null)}>{t('Cancel')}</Button>
               <Button
-                variant="destructive"
+                variant="danger"
                 disabled={remove.isPending}
                 onClick={async () => {
                   try {

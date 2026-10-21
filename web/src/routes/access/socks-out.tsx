@@ -52,13 +52,13 @@ export function SocksOutPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button disabled={save.isPending || config.isPending || config.isError || !(draft ?? config.data?.proxy)?.trim()} onClick={() => save.mutate({ enabled: true, proxy: (draft ?? config.data?.proxy)?.trim() })}>{save.isPending ? t('Applying…') : 'Save and start'}</Button>
-            {config.data?.enabled && <Button variant="outline" disabled={save.isPending || config.isError} onClick={() => save.mutate({ ...config.data, enabled: false })}>{t('Stop')}</Button>}
+            {config.data?.enabled && <Button variant="secondary" disabled={save.isPending || config.isError} onClick={() => save.mutate({ ...config.data, enabled: false })}>{t('Stop')}</Button>}
           </div>
         </CardContent>
       </Card>
       <Card>
         <CardHeader><CardTitle>{t('Choose who uses it')}</CardTitle><CardDescription>Starting does not change device routes. Create a way out through <code>olrsocks0</code> and assign it to a network or device. IPv6 and backend failure block rather than bypass the proxy.</CardDescription></CardHeader>
-        <CardContent><Button variant="outline" nativeButton={false} render={<Link to="/access/gateway">{t('Open gateways')}</Link>} /></CardContent>
+        <CardContent><Button variant="secondary" nativeButton={false} render={<Link to="/access/gateway">{t('Open gateways')}</Link>} /></CardContent>
       </Card>
     </SubPage>
   )

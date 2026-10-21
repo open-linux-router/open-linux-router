@@ -331,7 +331,7 @@ export function PoolDialog({
         <DialogFooter>
           {onRemove && (
             <Button
-              variant="destructive"
+              variant="danger"
               className="mr-auto"
               onClick={() => {
                 onRemove()
@@ -340,7 +340,7 @@ export function PoolDialog({
             >
               <Trash2 className="size-4" aria-hidden />{t('Remove')}</Button>
           )}
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
+          <Button variant="quiet" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
           <Button
             disabled={!complete}
             onClick={() => {

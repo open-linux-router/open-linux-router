@@ -140,7 +140,7 @@ export function GroupNameDialog({
           )}
 
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
+            <Button type="button" variant="quiet" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
             <Button type="submit" disabled={busy || !trimmed || tooLong}>
               {from === undefined ? 'Create group' : t('Rename')}
             </Button>

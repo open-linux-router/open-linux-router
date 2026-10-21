@@ -55,6 +55,6 @@ function State({ title, detail }: { title: string; detail: string }) {
   return <div className="space-y-3 py-16 text-center">
     <Heading as="h1" size="lg">{title}</Heading>
     <p className="text-sm text-muted-foreground">{detail}</p>
-    <Button variant="outline" nativeButton={false} render={<Link to="/">{t('Back to overview')}</Link>} />
+    <Button variant="secondary" nativeButton={false} render={<Link to="/">{t('Back to overview')}</Link>} />
   </div>
 }

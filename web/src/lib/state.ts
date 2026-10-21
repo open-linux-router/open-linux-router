@@ -62,7 +62,6 @@ export const STATE = {
   'No route': 'warn',
   'Unknown exit': 'warn',
   'Bypasses the exit': 'warn',
-  Blocked: 'warn',
   Partial: 'warn',
 
   // Not working, and something on this page can fix it.
@@ -87,6 +86,7 @@ export const STATE = {
   'Not in use': 'off',
   Direct: 'off',
   Loopback: 'off',
+  Blocked: 'off',
 
   // No answer yet, or no answer at all.
   'Checking…': 'unknown',

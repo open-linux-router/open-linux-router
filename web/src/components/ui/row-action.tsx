@@ -35,7 +35,7 @@ export function RowAction({
     <Button
       type="button"
       size="icon"
-      variant="ghost"
+      variant="quiet"
       disabled={disabled}
       aria-label={label}
       title={label}
@@ -67,7 +67,7 @@ export function RowMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button type="button" size="icon" variant="ghost" aria-label={label} title={label} className="text-muted-foreground" />}
+        render={<Button type="button" size="icon" variant="quiet" aria-label={label} title={label} className="text-muted-foreground" />}
       >
         <MoreHorizontal aria-hidden />
       </DropdownMenuTrigger>

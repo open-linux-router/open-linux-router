@@ -29,7 +29,7 @@ export function LanguageToggle({ className }: { className?: string }) {
     next: NAMES[locale][next],
   })
   return (
-    <Button variant="ghost" size="sm" className={cn('min-h-11 px-2 text-xs font-normal text-muted-foreground transition-colors duration-150 hover:bg-transparent hover:text-foreground active:bg-transparent dark:hover:bg-transparent lg:items-end', className)}
+    <Button variant="quiet" size="sm" className={cn('min-h-11 px-2 text-xs font-normal text-muted-foreground transition-colors duration-150 hover:bg-transparent hover:text-foreground active:bg-transparent dark:hover:bg-transparent lg:items-end', className)}
       aria-label={label} title={label}
       onClick={() => setLocale(next)}>
       <span lang={locale}>{SELF[locale]}</span>

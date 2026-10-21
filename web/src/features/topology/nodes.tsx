@@ -997,7 +997,7 @@ export function NoteNode({
           is drawn by them.
         </p>
         {onCreateGroup && (
-          <Button size="sm" variant="outline" className="shrink-0" onClick={() => onCreateGroup()}>
+          <Button size="sm" variant="secondary" className="shrink-0" onClick={() => onCreateGroup()}>
             <Plus /> {t('Create a group')} </Button>
         )}
       </div>

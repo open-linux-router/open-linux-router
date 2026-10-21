@@ -68,7 +68,7 @@ export function ApplyOutcome({ applier }: { applier: ReturnType<typeof useDhcpAp
                 ))}
               </ul>
             </Disclosure>
-            <Button size="sm" variant="outline" onClick={applier.dismissFailure}>{t('Dismiss')}</Button>
+            <Button size="sm" variant="secondary" onClick={applier.dismissFailure}>{t('Dismiss')}</Button>
           </AlertDescription>
         </Alert>
       )}
@@ -113,7 +113,7 @@ function ConfirmDialog({ applier }: { applier: ReturnType<typeof useDhcpApply> }
               devices", and the only plan that reaches this dialog is the
               disruptive one. The per-file badges inside the diff still earn
               their place, because a change can span files of mixed impact. */}
-          <Button variant="ghost" onClick={applier.cancel}>{t('Cancel')}</Button>
+          <Button variant="quiet" onClick={applier.cancel}>{t('Cancel')}</Button>
           <Button onClick={applier.confirm}>{t('Apply anyway')}</Button>
         </DialogFooter>
       </DialogContent>

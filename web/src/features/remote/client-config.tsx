@@ -166,11 +166,11 @@ function QrPanel({ config, name }: { config: string; name: string }) {
       )}
 
       <div className="flex justify-center gap-2">
-        <Button size="sm" variant="outline" onClick={copy}>
+        <Button size="sm" variant="secondary" onClick={copy}>
           {copied ? <Check /> : <Copy />}
           {copied ? t('Copied') : t('Copy')}
         </Button>
-        <Button size="sm" variant="outline" onClick={download}>
+        <Button size="sm" variant="secondary" onClick={download}>
           <Download />{t('Download')}</Button>
       </div>
     </div>

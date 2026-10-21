@@ -116,7 +116,7 @@ export function HostDialog({
                   <Button
                     key={r.mac}
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
                     onClick={() =>
                       setDraft({ name: r.hostname ?? '', addresses: [r.ip] })
@@ -155,7 +155,7 @@ export function HostDialog({
         <DialogFooter>
           {onRemove && (
             <Button
-              variant="destructive"
+              variant="danger"
               className="mr-auto"
               onClick={() => {
                 onRemove()
@@ -164,7 +164,7 @@ export function HostDialog({
             >
               <Trash2 className="size-4" aria-hidden />{t('Remove')}</Button>
           )}
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
+          <Button variant="quiet" onClick={() => onOpenChange(false)}>{t('Cancel')}</Button>
           <Button
             disabled={!complete}
             onClick={() => {

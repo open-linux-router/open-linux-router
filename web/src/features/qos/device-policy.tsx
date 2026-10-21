@@ -46,7 +46,7 @@ export function DevicePolicy({ mac, downRate, upRate, children }: { mac: string;
     <div className="flex min-h-11 flex-wrap items-center justify-between gap-3 py-1 text-sm sm:min-h-9 lg:col-start-2 lg:row-start-2">
       <span className="text-muted-foreground">{t('Priority')}</span>
       <div role="group" aria-label={t('Device priority')} className="flex rounded-lg bg-muted p-0.5">
-        {(['high', 'normal', 'low'] as Priority[]).map((value) => <Button key={value} size="sm" className="h-11 px-2 sm:h-7" variant={priority === value ? 'outline' : 'ghost'} aria-pressed={priority === value} disabled={busy} onClick={() => void save(value)}>{value[0].toUpperCase() + value.slice(1)}</Button>)}
+        {(['high', 'normal', 'low'] as Priority[]).map((value) => <Button key={value} size="sm" className="h-11 px-2 sm:h-7" variant={priority === value ? 'secondary' : 'quiet'} aria-pressed={priority === value} disabled={busy} onClick={() => void save(value)}>{value[0].toUpperCase() + value.slice(1)}</Button>)}
       </div>
     </div>
     {config.isError && <p className="text-sm text-destructive lg:col-start-2 lg:row-start-6">{t('Could not load priority and limits.')}</p>}
@@ -66,7 +66,7 @@ export function DevicePolicy({ mac, downRate, upRate, children }: { mac: string;
         <DialogHeader><DialogTitle>{editing === 'download' ? 'Download limit' : 'Upload limit'}</DialogTitle><DialogDescription>{t('Applies immediately to traffic crossing this router. Leave blank for unlimited.')}</DialogDescription></DialogHeader>
         <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (valid && !busy) void save() }}>
           <div className="space-y-2"><Label htmlFor="device-speed-limit">{t('Limit (Mbps)')}</Label><Input id="device-speed-limit" autoFocus type="number" min="0.001" max="100000" step="any" value={limit} placeholder={t('Unlimited')} disabled={busy} onChange={(event) => setLimit(event.target.value)} /></div>
-          <DialogFooter><Button type="button" variant="ghost" disabled={apply.isPending} onClick={() => setEditing(null)}>{t('Cancel')}</Button><Button type="submit" disabled={busy || !valid}>{t('Save')}</Button></DialogFooter>
+          <DialogFooter><Button type="button" variant="quiet" disabled={apply.isPending} onClick={() => setEditing(null)}>{t('Cancel')}</Button><Button type="submit" disabled={busy || !valid}>{t('Save')}</Button></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

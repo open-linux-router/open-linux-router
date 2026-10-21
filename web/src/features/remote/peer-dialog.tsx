@@ -146,7 +146,7 @@ export function PeerDialog({
         <DialogFooter className="sm:justify-between">
           {onRemove ? (
             <Button
-              variant="ghost"
+              variant="quiet"
               className="text-destructive"
               onClick={() => {
                 onOpenChange(false)
@@ -158,7 +158,7 @@ export function PeerDialog({
             <span />
           )}
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)}> {t('Cancel')} </Button>
+            <Button variant="quiet" onClick={() => onOpenChange(false)}> {t('Cancel')} </Button>
             <Button onClick={submit} disabled={!valid}>
               {editing ? t('Save') : t('Add')}
             </Button>
