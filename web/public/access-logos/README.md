@@ -16,8 +16,10 @@ from the same library as the OS marks and selectable service icons.
   own badge, since the tunnel broker service is theirs.
 - Headscale: `https://raw.githubusercontent.com/juanfont/headscale/main/docs/assets/logo/headscale3-dots.svg`
   (BSD-3-Clause project). theSVG has no entry for it.
-- frp: `https://gofrp.org/favicons/android-192x192.png`, from the official
-  website, whose navigation uses the same paper-and-colored-lines mark.
+- frp: the 196×196 inline SVG from `https://gofrp.org`'s navigation, the blue
+  badge with the white *f*. The site's 16×16 and 32×32 favicons draw the same
+  mark; its 180×180 and 192×192 PNG favicons still carry the older document
+  icon the launcher used before.
 
 Trademarks remain with their owners. SOCKS5 and Port forwarding use approved
 original artwork documented in [../feature-icons/README.md](../feature-icons/README.md).

@@ -1,7 +1,7 @@
 
 // Local copies of project artwork, taken from theSVG (thesvg.org) wherever the
 // library carries the project; provenance is in public/access-logos/README.md.
-// frp uses its official website's icon. Unbranded features can use the approved
+// frp uses its official website's mark. Unbranded features can use the approved
 // app artwork below; other entries retain the launcher's monogram fallback.
 export const ACCESS_LOGOS: Record<string, string> = {
   wireguard: '/access-logos/wireguard.svg',
@@ -11,7 +11,7 @@ export const ACCESS_LOGOS: Record<string, string> = {
   zerotier: '/access-logos/zerotier.svg',
   cloudflare: '/access-logos/cloudflare.svg',
   tunnelbroker: '/access-logos/tunnelbroker.svg',
-  frp: '/access-logos/frp.png',
+  frp: '/access-logos/frp.svg',
 }
 
 // Original feature artwork brings its own backing, unlike upstream logos.
