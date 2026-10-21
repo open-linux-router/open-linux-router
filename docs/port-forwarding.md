@@ -569,12 +569,17 @@ validation says why.
 4. **Whether split-horizon DNS should be an object, so hairpin can default
    off.** §4.1 is the argument: the masquerade hides the real client, and the
    better answer is for internal clients to resolve the name to the internal
-   address. `dns` already renders `local-zone static` entries, but only for
-   names relative to the local domain (`docs/dns.md` §4.6), so the one entry
-   this needs — a *public* name with a private answer — cannot be stored. It is
-   a small object in `dns` and it would let `firewall` stop choosing between two
-   bad defaults. The cost to weigh is that a name overridden locally and
-   forgotten is its own afternoon.
+   address. `dns` renders `local-zone static` entries for the local domain
+   (`docs/dns.md` §4.6), and a name *inside* that zone is answered there, so it
+   cannot hold a public name with a private answer. What has since become
+   possible is the cheaper half: a record in the operator's own public zone
+   pointing at a LAN address, which `dns.private_domains` exempts from
+   anti-rebinding (`docs/dns.md` §4.6a). That resolves the hairpin problem
+   without a second object — the name is genuinely public, its answer is
+   genuinely private, and nothing is overridden locally. What it does not do is
+   keep a private answer out of public DNS, so an operator who considers that
+   disclosure a problem still needs the split-horizon object, and this stays
+   open for them.
 
 5. **Replies leave by the wrong uplink on a box with two.** §6's
    `ct status & IPS_DST_NAT == 0` guard is right for one uplink and, on two,

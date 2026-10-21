@@ -19,12 +19,14 @@ but the provider list — a shipped build makes the set of available DNS provide
 a fact we assert in three places, and asking the binary makes it a fact we read.
 §11.6 and §11.7 close as a result.
 
-Building it changed §3 outright. This document treated the local name as
-something we might one day have to ask the `dns` module for; `dns` had already
-shipped it, and the consequence is that this module holds no domain of its own
-and needs no public address record at all. §3 is rewritten and §11.2 is closed.
-The same work turned up **§4.2**, which is the most expensive failure in the
-file and was nowhere in the first draft.
+Building it changed §3, twice. The first version had the module hold no domain
+of its own: published names were written into the resolver's zone and answered
+by this box. Using it then meant renaming every device in the house, because no
+CA issues for `home.arpa` — so a published name is now a record in public DNS,
+in a zone the operator owns, and this module holds that domain as its own fact.
+§3 is rewritten around the split, §11.2 is closed twice, and **§4.2** — the most
+expensive failure in the file, absent from the first draft — survives in a
+narrower form.
 
 One thing was *not* decided and is the largest question here: whether olr should
 have this module at all. §2 is that argument, and it is a positioning question
@@ -88,14 +90,15 @@ at the first request. The validator refuses the dot.
 
 ### 1.1 Module-level config, set once
 
-The DNS provider and its credential, and an ACME contact address. Entered at
-enable time, never revisited.
+The domain, the DNS provider and its credential, and an ACME contact address.
+Entered at enable time, never revisited.
 
-**Not the domain.** Published names live under the same suffix as every other
-name this network answers for, and that suffix is `dns.LocalDomain` — a fact
-the `dns` module owns. `design.md` §4.1 forbids the copy, so it is read through
-a view and this module has no field to drift from it. §3 is the whole of that
-argument.
+**The domain is this module's own** (`ingress.domain`): it is the zone the
+operator adds records to, and the zone the wildcard is for. It is deliberately
+not the resolver's local domain, which names the devices in the house and never
+needs a certificate — §3 is the whole of that argument. The only thing read from
+`dns` is that local domain, so a published domain falling inside it can be
+refused rather than silently unresolved.
 
 ### 1.2 The upstream is a device, not an address
 
@@ -172,71 +175,78 @@ document or it will not be drawn at all. §9 draws it.
 
 ---
 
-## 3. The name already resolves
+## 3. The name is a record you own
 
-This section originally weighed a public wildcard `A` record against a local
-override we would have to ask the `dns` module to build, and left the choice
-open. Both halves were wrong, because the second one already exists.
+`dns` answers a local zone authoritatively — `local-zone "<local domain>"
+static`, so every name under it comes from this box and nothing under it is ever
+forwarded. That zone is for devices: `sony-tv.home.arpa`, no certificate, never
+visible outside.
 
-`dns` owns a **local domain** and a set of **local names**, and renders them as
-an unbound `local-zone "<domain>." static` zone — this box answers the whole
-suffix itself and forwards none of it. That is how a device is reachable by
-name rather than by an address somebody memorised. A published service is one
-more name in that namespace.
+A published service is the other kind of name. It lives in public DNS, in a zone
+the operator owns, and the record is theirs to create. This module obtains the
+certificate for that zone and proxies the name. It does not write the record,
+and it does not need the resolver's help to resolve it.
 
-**This section used to end there, and the names did not resolve.** Nothing
-put a published name into `dns`: the local zone held only `dns`'s own hosts,
-so a query for `nas.<domain>` fell through to the internet. An operator who
-had added a public record pointing at the router got nothing either, because
-unbound's rebinding protection strips a private address from a public answer —
-correctly. The first real deployment served the certificate and the proxy
-perfectly on :443, and nobody on the LAN could reach it by name.
+| | device names | published names |
+|---|---|---|
+| zone | `dns.local_domain`, `home.arpa` by default | `ingress.domain`, a domain you own |
+| answered by | this box, authoritatively | your DNS provider, publicly |
+| certificate | none | one wildcard for `*.<domain>` |
+| created by | `olr dns add host` | you, in your provider's zone |
 
-So `dns` now reads the published names (a `PublishedView`, adapted in
-internal/daemon) and renders them for its relay, which answers each one itself
-with **this box's address on the network the query arrived on** — the address
-of the interface it came in on, as the hijack rule's `redirect` means "this box,
-as seen from here". Not unbound's `local-data`: that holds one fixed answer per
-name, and every query unbound sees arrives from the relay on loopback, so it
-cannot tell a client on one LAN from a client on another.
-internal/dnsrelay/published.go has the rest, including why AAAA is answered
-only to a query that itself arrived over IPv6.
+### 3.1 Why not one domain
 
-The file the names land in is re-read on SIGHUP, so `ingress` re-applying `dns`
-after publishing a name reloads the relay and interrupts nobody (design.md
-§4.1's dependents).
+The first version had no domain field at all: published names were rendered into
+the resolver's zone and answered by this box, under the same suffix as the
+devices. One namespace for the whole box sounds like one less thing to keep in
+step, and costs three things an operator can see:
 
-### 3.1 What that makes true
+- **Publishing forced a rename.** No CA issues for `home.arpa` (§4), so using
+  this module at all meant moving every device's name to a domain the operator
+  owned — one HTTPS service, and every bookmark in the house breaks.
+- **The dialog could not offer to change it**, correctly, because the field
+  belonged to another module; the operator had to read this document to find out
+  where their domain came from.
+- **The resolver answered two kinds of name in one zone.** A device name means
+  "this device's fixed address"; a published name meant "this box, as seen from
+  where you asked". The second had to be served by the relay, before unbound,
+  because `local-data` cannot express it.
 
-- **This module has no domain.** The suffix is `dns.LocalDomain`, read through
-  a view per `design.md` §4.1. The whole class of "the certificate is for one
-  domain and the resolver serves another" bug cannot be expressed.
-- **No private address is ever published.** The earlier draft's topology
-  disclosure was a cost of a design we are not using. Nothing about the inside
-  of this network appears in public DNS.
-- **The public zone is used for exactly one thing: proving the domain is
-  yours.** A `_acme-challenge` `TXT` record, written by the provider API,
-  removed after issuance. No `A` record, no `CNAME`, nothing an outsider can
-  learn an address from.
-- **`ingress → dns` is a real edge** in `design.md` §4.1's DAG, and it points
-  the way every other edge does — at the module that owns the fact.
+None of that is necessary when the record lives in public DNS. The two suffixes
+are separate facts with separate owners, and nothing has to be kept in step
+because nothing is copied.
 
-### 3.2 What it costs, which is a real constraint
+### 3.2 What it costs
 
-The local domain becomes one decision for the whole box. Setting it to a domain
-you own — which §4 requires, since no CA will issue for `home.arpa` — **renames
-every device's local name at the same time**. That is a defensible outcome and
-possibly a nicer one, but it is not a change confined to this module, and the
-error that demands it has to say so rather than presenting itself as a small
-correction.
+- **One record per service, created by hand.** `grafana.<domain>` has to point
+  at this router in the operator's zone. The UI says what the name will be and
+  never claims the record exists.
+- **A private answer needs `dns`'s permission.** Pointing that record at a LAN
+  address is legitimate and common (§3.3), but it is a public record holding a
+  private address, and unbound strips exactly those by default as
+  anti-rebinding. `dns.private_domains` is where the operator says which zones
+  are theirs; without it the record works for anyone on a public resolver and
+  silently does not exist for anyone using this one.
+- **The published domain may not live inside the resolver's zone.** Validation
+  refuses it: the resolver would answer NXDOMAIN for a name that exists, and
+  nothing would say why. A sibling is the natural answer — `home.arpa` for
+  devices, `pub.example.com` for services.
+- **It is still not exposure.** A record that points at the router does not make
+  the router reachable from outside; that is a port forward (§9).
 
-`local-zone ... static` also means the box answers the *entire* suffix
-authoritatively. A name under it that is hosted publicly — a blog at
-`www.home.example.com` on somebody else's server — is unreachable from inside
-this network, and will return a confident NXDOMAIN rather than a timeout. This
-is worth knowing before choosing which domain to hand over; delegating a
-subdomain you use for nothing else is the cheap way to avoid the question
-entirely. It is also the mechanism behind §4.2, which is worse.
+### 3.3 Public DNS with a private answer
+
+Worth naming, because it looks like a mistake and is not. `grafana.<domain>` →
+`192.168.1.1` in a public zone means: the name resolves for everyone, and
+reaches nobody without a route to this LAN — from the LAN, and over a VPN that
+routes the LAN, it works; from the internet it is an unroutable address. The
+operator has chosen "reachable where I am, not where I am not" without
+split-horizon DNS, and this module neither knows nor cares which address the
+record holds.
+
+What it does depend on is `dns.private_domains` (§3.2) for every client that
+resolves through this box — including each WireGuard peer, whose configuration
+tells it `DNS = <router>`.
 
 ---
 
@@ -282,38 +292,28 @@ Two mitigations that cost nothing and belong in the setup copy:
 This is a stopgap and the document should keep calling it one, rather than
 implying a key-management story that does not exist.
 
-### 4.2 Our own resolver will refuse to see the challenge record
+### 4.2 The propagation check must not use this box's resolver
 
-This is the most expensive thing in the document and it was not in the first
-draft. It comes straight out of §3: `dns` serves the local suffix as a
-`local-zone ... static` zone, so **this box answers the whole suffix
-authoritatively and forwards none of it.**
+The first version of this section described a death trap, and it is worth
+keeping the shape of it because the fix is one line that looks arbitrary. When
+this module had no domain of its own (§3), the published suffix *was* the local
+zone, which `dns` answers authoritatively and forwards nowhere. Caddy would ask
+the provider API to create `_acme-challenge.<domain> TXT`, the record would
+exist, and the system resolver — this box — would return a confident NXDOMAIN
+for it. Issuance blocks on a propagation check that can never succeed, nothing
+is misconfigured, and the symptom is "certificates just don't work".
 
-Now follow an issuance. Caddy asks the provider API to create
-`_acme-challenge.home.example.com TXT …` in the *public* zone. The record is
-created. Caddy then checks that it has propagated — and asks the system
-resolver, which on this box is olr's own, which is authoritative for
-`home.example.com`, which has no such record, and which therefore returns a
-confident **NXDOMAIN**.
-
-The record exists. The CA can see it. We cannot, and never will:
-
-- issuance blocks on a propagation check that can never succeed;
-- nothing is misconfigured — `dns` is doing precisely what it is for;
-- the Caddyfile is correct, the token is correct, the zone is correct;
-- and the symptom is "certificates just don't work", with no failing component
-  to find.
-
-The fix is one line and the module must never render the file without it:
-**pin the propagation check to public resolvers.** Two of them, from different
-operators — but not for redundancy. Caddy asks each listed resolver in turn and
-an unreachable one fails the check, so every entry has to be reachable from the
-box. The defaults are 1.1.1.1 and 8.8.8.8, chosen for being reachable from the
-most networks: the original 9.9.9.9 is dropped by at least one ISP, and a box
-behind it timed out on every attempt and never got a certificate. This is the single
-lookup on the box that must not use the box's own resolver, and it is stated
-here because the next person to touch the renderer will otherwise see a
-hardcoded pair of public IPs and reasonably try to remove them.
+Separate suffixes (§3) remove the contradiction: the resolver is not
+authoritative for the published zone. What remains is the reason the field
+survives — the box's resolver applies this network's blocking policies and
+whatever upstream it forwards to, and the one lookup that decides whether a
+certificate is issued should not be able to fail because of a filter we
+rendered. So the check is pinned to public resolvers, two of them, and **two is
+not redundancy**: Caddy asks each in turn and an unreachable one fails the
+check, so every entry has to be reachable from the box. The defaults are 1.1.1.1
+and 8.8.8.8, chosen for reachability: the original 9.9.9.9 is dropped by at
+least one ISP, and a box behind it timed out on every attempt and never got a
+certificate.
 
 It leaks nothing worth protecting: the only names asked are `_acme-challenge`
 records the operator is deliberately publishing, which the CA is about to query
@@ -584,7 +584,7 @@ The boundary §2 said had to be drawn here.
 | | certificate expiry and renewal state in `status` | §8; the one clock-dependent thing we own |
 | | `raw_caddyfile` escape hatch | §7.3 |
 | | `olr-caddy.service`, and a drop-in when the binary is elsewhere | §5.5 |
-| | names answered by `dns`'s existing local zone | §3 — no work, it is already there |
+| | names resolved by your own DNS records | §3 — the record is the operator's; we obtain the certificate and proxy the name |
 | **v2** | publishing the WebUI itself | §6 |
 | | shipping a proxy build, so there is no download step | §5.6 — deferred, not rejected |
 | | per-service access control by group or device | the thing a router can do here that a standalone Caddy cannot — and the only entry on this list that justifies the module living in olr rather than in a README |
@@ -632,14 +632,14 @@ The boundary §2 said had to be drawn here.
 1. **Should olr have this module at all** (§2). The positioning question, and
    the only one on this list that can cancel the others. It is not a technical
    decision and should not be settled by a technical argument.
-2. ~~**Local DNS override versus a public wildcard record.**~~ **Closed by
-   discovery, not by decision** — `dns` already answers the local suffix from a
-   static zone, so the override this asked for was built before the question was
-   written. §3 is rewritten around it: no domain field here, no public address
-   record anywhere, and the `ingress → dns` edge is real and points the right
-   way. What survives is not a choice but a consequence, recorded as §3.2: the
-   local domain is one decision for the whole box, and changing it renames every
-   device.
+2. ~~**Local DNS override versus a public wildcard record.**~~ **Closed twice,
+   the second time the other way.** It was first "closed by discovery" — `dns`
+   already served the local suffix from a static zone, so published names were
+   written into it and no public record existed at all. That answer required one
+   domain for the whole box, which forced a network-wide rename on anyone who
+   wanted one HTTPS service (§3.1). A published name is now a record in the
+   operator's own public zone: no override, no automatic write into the
+   resolver, and no shared suffix. §3 is rewritten around the split.
 3. **Where the DNS provider token lives** (§4.1). A rendered `0600` environment
    file is the answer for now, and it is the first time olr has held a
    credential for a third-party account. If a secrets story is ever going to
@@ -693,7 +693,17 @@ The boundary §2 said had to be drawn here.
    the operator's step by design. Everything up to that line is now known to
    parse.
 
-9. **The UI has not been used against a working certificate either.** The page,
+9. **Nothing checks that the record exists.** §3 makes the name the
+   operator's, and the UI says what it will be — but a published service whose
+   record was never created, or points elsewhere, looks identical in `status`
+   to a working one until somebody opens the URL. A check is cheap in
+   principle (ask two public resolvers for the name, compare against this box's
+   addresses) and would turn a silent miss into a warning on the page. Open
+   because it is a network call on a status path, and because a record that
+   legitimately points at a VPN address rather than this box would have to be
+   allowed without a complaint.
+
+10. **The UI has not been used against a working certificate either.** The page,
    both dialogs and the confirmation gate render and behave on a real daemon,
    and the disruptive-409 path is covered by `http_test.go` rather than by hand.
    What no one has seen is the screen with a valid certificate on it: every

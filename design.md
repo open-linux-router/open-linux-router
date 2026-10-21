@@ -537,8 +537,8 @@ link ──┬─→ dial ──┬─→ dns      (upstream resolvers)
        ├─→ gateway
        └─→ wifi
 
-dns ────→ ingress  (local domain, local names)
-ingress ─→ dns     (published names, one-way publish)
+ingress ─→ dns     (only: the zone the resolver answers, so a published
+                   domain inside it is refused)
 remote ──→ dns     (the dial-in address peers are told to resolve through)
 ```
 
@@ -547,14 +547,15 @@ case: `dhcp` wants to register lease hostnames in `dns`, and `dns` wants lease
 data. Direction is fixed — `dhcp` *publishes* leases, `dns` *subscribes*.
 (This is precisely why dnsmasq fuses the two; see §4.2.)
 
-`ingress` and `dns` are the second such pair. `ingress` reads the local domain
-and the names already taken, because a published name lives under that domain
-and must not collide with a device's. `dns` has to *answer* the published
-names, or they are served on :443 and unreachable by name. Direction as for
-`dhcp`: `ingress` publishes its names, `dns` subscribes and renders them for its
-relay, and `ingress` re-applies `dns` after its own apply. The reverse arrow is
-read-only and not followed — a changed local domain leaves the Caddyfile on the
-old one until ingress is re-applied, and shows as ingress drift until then.
+`ingress` and `dns` used to be the second such pair, in both directions: names
+were published into the resolver's zone, and the suffix was read from it. That
+is gone (`docs/ingress.md` §3). A published name is a record in public DNS, in a
+zone the operator owns, and the resolver is not involved in answering it — so
+there is nothing to subscribe to and nothing to re-apply after an ingress
+change. What is left is one read: the zone `dns` answers authoritatively, so
+that a published domain falling *inside* it is refused rather than silently
+answering NXDOMAIN for a name that exists. That is an invariant about two facts
+in one namespace, not a copy of either.
 
 **An arrow is walked when the fact at its tail changes.** Reading through an
 API keeps two copies of a fact from existing; it does not keep a *programmed*

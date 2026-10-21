@@ -387,6 +387,35 @@ client that was handed the domain as its search domain — DHCP option 15, which
 is `domain` on the pool in `internal/dhcp`. `sony-tv.home.arpa:5006` works
 everywhere. olr cannot make the short form universal and does not pretend to.
 
+### 4.6a Anti-rebinding, and the zones that are yours
+
+unbound is rendered with `private-address` for `10/8`, `172.16/12`,
+`192.168/16`, `169.254/16`, `fd00::/8` and `fe80::/10` — the anti-rebinding
+list in `render.go`. A *public* name whose answer holds one of those addresses
+is stripped. That is a real attack being closed: a page on the internet that
+rebinds its own domain to `192.168.1.1` can talk to whatever is on the LAN from
+the browser, and the devices that answer there — cameras, NAS boxes, printers —
+are the ones nobody updates.
+
+It is also exactly what an operator's own record looks like when they publish
+`grafana.home.example.com → 192.168.1.1` in their provider's DNS, and the rule
+cannot tell the two apart. **`private_domains`** is where the operator says
+which zones are theirs; each entry renders as unbound's `private-domain`, which
+allows private addresses in answers for that zone and its subdomains.
+
+Three things about it that matter:
+
+- **It is per zone, deliberately not a global off switch.** The protection
+  stays on for every zone nobody claimed, which is every zone that could be
+  somebody else's.
+- **It only affects clients that ask this resolver.** A device configured with a
+  public resolver gets the record directly. This matters most for WireGuard
+  peers, whose configuration tells them `DNS = <router>` — every one of them
+  uses this path.
+- **It is not a way to publish a private name.** `local-zone ... static` (§4.6)
+  answers the local domain itself; a zone inside it is answered there, never
+  forwarded, so an exemption for it does nothing. Validation says so.
+
 ### 4.7 `dhcp` is subscribed to for a warning, and nothing else
 
 `design.md` §4.1 names `dhcp`↔`dns` as the cycle that has to be broken by
@@ -509,6 +538,7 @@ this deployment risk must be addressed in firewall configuration.
 | | passthrough relay with tee, query log, domain→IP map | the observability case is the whole reason to own :53 |
 | | per-client blocking, DoT `:853` drop | built **in the relay**, not in unbound views — §4.4; the block is what protects everything else |
 | | local names under a local domain | built **in unbound**, not the relay — §4.6, which is the same question answered the other way |
+| | `private_domains`: zones whose public records may hold private answers | §4.6a — anti-rebinding stays on for everything nobody claimed |
 | | `dhcp` reservations read for a cross-check | §4.7 — the subscription design.md §4.1 asked for, restricted to validation so it cannot drift |
 | **v2** | per-client upstream selection (proxy vs direct) | built in the relay; gateway:§2.8 |
 | | DoH `:443` blocklist, TCP and UDP | ongoing maintenance, not a one-off |
