@@ -624,11 +624,13 @@ says so as a warning; it never writes the other module's half (decided
 **A family-wide *view* is not a family-wide setting.** The Gateway landing page
 shows two stacks, IPv4 and IPv6, each listing the same six stages —
 upstream, LAN, DHCP, forwarding, exit, DNS — with that family's answer at
-each one. The clients stage is titled for what an operator came to change: DHCP
-on IPv4, the module's own name and the word they arrive with (§4.2), and on IPv6
-the protocol that is running — SLAAC, DHCPv6, or both when networks differ.
-Those are the words an operator already has; the card does not coin a name for
-the pair. Each card opens the page that changes its family's half — the IPv4
+each one. The reading order is shared; the labels are not required to be. A card
+is named for the mechanism its family actually uses: DHCP on IPv4, the module's
+own name and the word an operator arrives with (§4.2), and on IPv6 the protocol
+that is running — SLAAC, DHCPv6, or both when networks differ. Those are the
+words an operator already has; symmetry for its own sake would put a name on the
+card that the reader has to translate first. Each card opens the page that
+changes its family's half — the IPv4
 card the DHCP page, the IPv6 card the address ranges that carry each network's
 advertisement mode. This is deliberately the opposite of the wizard above: a
 stack card renders another module's state and links to that module's own editor,

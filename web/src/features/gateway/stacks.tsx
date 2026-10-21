@@ -357,7 +357,7 @@ function DnsStage({ family, id }: StageProps) {
 
   let health: Health
   let detail: ReactNode
-  let to = '/gateway/dns'
+  const to = '/gateway/dns'
 
   if (family === 'v4') {
     health = dnsHealth(dns)
@@ -365,7 +365,9 @@ function DnsStage({ family, id }: StageProps) {
     else if (dial.isPending) detail = <Skeleton className="h-4 w-28" />
     else detail = dial.data.resolvers?.length ? dial.data.resolvers.join(', ') : t('No resolvers')
   } else {
-    to = '/gateway/dns/resolving'
+    // The AAAA switch leads the DNS page, so the IPv6 card opens the section
+    // rather than the upstream page it used to point at: the question is DNS's
+    // answer for this family, not which server gives it.
     if (dnsConfig.isError) {
       health = { label: t('Unavailable'), tone: 'caution' }
       detail = t('DNS settings unavailable')

@@ -192,7 +192,10 @@ path is readable without knowing which module owns which half. Each stack is a
 24px heading and one grid of six stage cards in the order a packet meets them —
 Upstream, LAN, DHCP, Forwarding, Exit, DNS, with the clients card reading SLAAC
 or DHCPv6 on the IPv6 stack — three across from 1024px, two
-from 640px and one on phones. A card shows the stage's answer for its family: a
+from 640px and one on phones. The stacks share the reading order, not a
+card-for-card naming: a card is named for the mechanism its family actually
+uses, so the labels may differ where the families do. A card shows the stage's
+answer for its family: a
 tone dot, a status word and one detail line, with the whole card linking to the
 one page that changes it. The same stage therefore appears once per family as a
 second view of the same object, never as a second editor: a stack card holds no

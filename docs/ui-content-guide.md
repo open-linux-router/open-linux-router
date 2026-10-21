@@ -343,11 +343,12 @@ is native, delegated or tunnelled), LAN (the subnets and how much of the pool is
 in use), the clients stage, Forwarding (whether the kernel forwards this family),
 Exit (direct, or which exit carries it — and for IPv6 whether an exit drops it,
 since there is no NAT to translate it) and DNS (the resolvers, and for IPv6
-whether AAAA answers are filtered). The clients stage is titled for what an
-operator came to change: DHCP on IPv4, because that is the module's name and the
-word they arrive with; on IPv6, the protocol that is running — SLAAC, DHCPv6, or
-both when networks differ. Those are the operator's own words, so the card does
-not coin a name for the family. Each
+whether AAAA answers are filtered). The reading order is shared; the card labels
+are not required to match. A card is named for what an operator came to change:
+DHCP on IPv4, because that is the module's name and the word they arrive with;
+on IPv6, the protocol that is running — SLAAC, DHCPv6, or both when networks
+differ. Those are the operator's own words, so the card does not coin a name for
+the family. Each
 card states its stage's answer and links to the one page that changes it; a
 missing stage is named in its card rather than hidden. The stacks are a view cut
 across the modules and hold no configuration of their own, so the same module
