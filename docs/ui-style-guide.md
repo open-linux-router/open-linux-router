@@ -556,7 +556,10 @@ intervals than the text. Below 640px the copyright keeps the year alone and drop
 product name, which the header already carries; the version stays at every width,
 because the footer is the only place that reports it. The repository link is GitHub's
 mark alone and the theme control a single icon; clicking the theme cycles auto, light
-and dark, and both name themselves in their accessible label and tooltip. The language
+and dark, and both name themselves in their accessible label and tooltip. Both are
+14px, the row's one icon size: an icon's class is its optical size, so artwork with no
+inset of its own brings that inset with it instead of the call site asking for a
+smaller box. The language
 control shows only the language in use, in its native writing (English / 中文): footer
 text size and weight, no icon, no separate "Language" label, and no filled hover
 background, so it reads as footer text rather than as a button, with visible keyboard

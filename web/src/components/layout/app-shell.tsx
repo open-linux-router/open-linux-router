@@ -75,10 +75,10 @@ export function AppShell() {
               plain items share. */}
           <a href="https://github.com/open-linux-router/open-linux-router" target="_blank" rel="noreferrer" aria-label="GitHub" title="GitHub"
             className="inline-flex h-11 shrink-0 items-center justify-center px-2 -mx-2 transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring lg:items-end">
-            {/* The filled mark has no viewBox padding, unlike the outlined icons
-                beside it, so it gives back a pixel to land on their optical centre
-                rather than sharing their box bottom. */}
-            <GithubMark className="size-3 mb-px" />
+            {/* One icon size for the row. The mark's artwork carries its own
+                optical inset, so it takes the same 14px as the theme control
+                rather than a smaller box that merely looks the same. */}
+            <GithubMark className="size-3.5" />
           </a>
           <ThemeToggle className="-mx-2 border-0" />
           {/* The word reports the language in use, so it is always set in the script
