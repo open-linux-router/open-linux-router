@@ -273,7 +273,9 @@ configured name in the same place. Services shows matching configured
 services as 28px icon tiles linking directly to their published webpages. A matching
 28px outlined add button opens Ingress with the device prefilled. An empty list
 shows only the add button. Total uses the Overview Traffic meter's neutral text
-arrows (↓/↑), with the same size and weight, and byte values.
+arrows (↓/↑), with the same size and weight, and byte values, followed by the
+muted window it covers (`last 90 days`) because it sums the title matrix rather
+than a counter.
 Match row padding and let wrapped content grow both sides together; feedback follows the aligned rows.
 Device speed bars use half their available value width from 640px, aligned right;
 on phones they retain the full width so rates and limit actions remain readable.
@@ -289,7 +291,7 @@ fully visible, including zero/unknown dots. Use the shared opaque activity
 palette: zero/unknown uses the empty gray, low nonzero traffic uses a stronger
 neutral gray (#cfd4db light / #48515e dark), and the remaining four levels use
 green intensities, using 25%, 50% and 75% of the greater of the retained
-14-day four-hour peak and 1 GiB as boundaries. Green starts at 10 MiB;
+90-day four-hour peak and 1 GiB as boundaries. Green starts at 10 MiB;
 boundary values keep the lighter tier. Use no decorative borders or inset rings;
 cell fills and spacing define the grid. Retain visible keyboard focus. No axes,
 legend, heading or helper text; tooltips provide dates, units and sample state.
@@ -311,7 +313,7 @@ or controls, with 36px desktop / 44px mobile minimum row height. Keep disclosure
 values rather than in a separate action column. Clicking the IP opens a dialog
 with an address and fixed toggle, without a pencil. A Fixed badge follows reserved
 addresses. Device traffic rates have Download and Upload labels beside narrower,
-arrow-free inset meters; cumulative totals sit below Upload. Uplink sits
+arrow-free inset meters; the recorded total sits below Upload. Uplink sits
 above Priority in the right column. Both use segmented controls with 28px desktop
 buttons, 2px container padding and 44px mobile targets. Uplink applies through
 the existing network-change confirmation flow. Separate the

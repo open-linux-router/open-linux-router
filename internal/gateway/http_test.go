@@ -392,6 +392,33 @@ func TestTrafficEndpointReportsUsage(t *testing.T) {
 	}
 }
 
+func TestActivityEndpointCarriesItsWindow(t *testing.T) {
+	// A device page draws the buckets and computes one total from them, so the
+	// response has to say how far back they reach: a screen that hard-coded the
+	// window would silently mislabel the number when the window changed, which
+	// is exactly the confusion this endpoint's shape exists to prevent.
+	addr := netip.MustParseAddr("192.168.1.23")
+	at := time.Now().Truncate(30 * time.Minute)
+	activity := NewActivity()
+	activity.observe(at, []Usage{{Addr: addr, UpBytes: 100}}, true)
+	activity.observe(at.Add(time.Minute), []Usage{{Addr: addr, UpBytes: 140, DownBytes: 20}}, true)
+
+	a := Applier{Kernel: &StaticKernel{}, Links: testLinks(), Store: newTestStore(t)}
+	h := HTTP{Applier: a, Activity: activity, Lock: core.NewLock(), Events: core.NewEvents()}
+
+	w := do(t, h.Handler(), http.MethodGet, "/activity?address=192.168.1.23", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+	view := decode[activityView](t, w)
+	if view.Days != activityRetentionDays {
+		t.Errorf("days = %d, want %d", view.Days, activityRetentionDays)
+	}
+	if len(view.Buckets) != 1 || view.Buckets[0].Bytes.Up != 40 || view.Buckets[0].Bytes.Down != 20 {
+		t.Fatalf("unexpected buckets: %+v", view.Buckets)
+	}
+}
+
 func TestUnsupportedKernelRefusesRatherThanPretending(t *testing.T) {
 	// The non-Linux build. Reporting an empty kernel that accepted everything
 	// would let a test pass against behaviour that has never run.

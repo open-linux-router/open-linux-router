@@ -24,6 +24,46 @@ type activityBucket struct {
 	Bytes activityBytes `json:"bytes"`
 }
 
+// activityRetentionDays and ActivityRetention are how far back the sampler's
+// half-hour buckets are kept, and therefore the window a device page's total
+// covers.
+//
+// The number is a UI contract, not only a storage choice: a device card draws
+// the matrix and then, underneath it, one total that is exactly that matrix
+// added up, so the two agree by construction and a reader who wonders where the
+// number came from can see the cells it came from. Fourteen days answered that
+// for a fortnight — long enough to look like a total, too short to be one —
+// while what it replaced (the kernel's cumulative counter, reset by every
+// restart and expired after a day of idle) covered an unexplained interval that
+// no two screens agreed on (docs/ui-content-guide.md).
+const (
+	activityRetentionDays = 90
+	ActivityRetention     = activityRetentionDays * 24 * time.Hour
+)
+
+// ActivityEntries bounds retained (bucket, address) pairs, and with them the
+// memory the sampler holds and the rows a restore reads.
+//
+// Ninety days is 4,320 buckets, so a house with thirty active addresses spends
+// roughly 130,000 of these. The ceiling leaves room for IPv6 rotation and a few
+// exits, and still stops a pathological network from growing the map without
+// bound. Reaching it costs new addresses their place in one bucket — history is
+// never evicted to make room, which is the direction that keeps what is already
+// on screen correct.
+const ActivityEntries = runtimedb.ActivityLimit
+
+// activityView is the retained history as the UI reads it, and nothing else.
+//
+// Days travels with the buckets so a screen can say "last 90 days" without
+// keeping its own copy of the retention window that could drift from this one.
+// A total is deliberately not sent: it is the sum of these buckets, and adding
+// them where they are drawn is what makes the number under the matrix and the
+// matrix itself agree.
+type activityView struct {
+	Days    int              `json:"days"`
+	Buckets []activityBucket `json:"buckets"`
+}
+
 // Activity retains bounded counter differences, never raw flows.
 type Activity struct {
 	mu       sync.Mutex
@@ -52,7 +92,7 @@ func OpenActivityDB(db *runtimedb.Store, legacy string) (*Activity, error) {
 		rows := []runtimedb.Activity{}
 		now := time.Now()
 		for at, bucket := range stored.Buckets {
-			if at < now.Add(-14*24*time.Hour).Unix() || at > now.Unix() {
+			if at < now.Add(-ActivityRetention).Unix() || at > now.Unix() {
 				continue
 			}
 			for addr, value := range bucket {
@@ -62,7 +102,7 @@ func OpenActivityDB(db *runtimedb.Store, legacy string) (*Activity, error) {
 				rows = append(rows, runtimedb.Activity{Bucket: at, Address: addr.String(), Up: value.Up, Down: value.Down})
 			}
 		}
-		if len(rows) > 100000 {
+		if len(rows) > ActivityEntries {
 			return fmt.Errorf("activity history exceeds entry limit")
 		}
 		return runtimedb.PutActivity(tx, rows)
@@ -73,7 +113,7 @@ func OpenActivityDB(db *runtimedb.Store, legacy string) (*Activity, error) {
 	a := NewActivity()
 	a.db = db
 	now := time.Now()
-	rows, err := db.Activity(now.Add(-14*24*time.Hour).Unix(), now.Unix())
+	rows, err := db.Activity(now.Add(-ActivityRetention).Unix(), now.Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +163,7 @@ func OpenActivity(path string) (*Activity, error) {
 	}
 	now := time.Now()
 	for at, bucket := range stored.Buckets {
-		if at < now.Add(-14*24*time.Hour).Unix() || at > now.Unix() {
+		if at < now.Add(-ActivityRetention).Unix() || at > now.Unix() {
 			continue
 		}
 		for addr := range bucket {
@@ -132,7 +172,7 @@ func OpenActivity(path string) (*Activity, error) {
 			}
 		}
 		a.entries += len(bucket)
-		if a.entries > 100000 {
+		if a.entries > ActivityEntries {
 			return nil, fmt.Errorf("activity history exceeds entry limit")
 		}
 		a.buckets[at] = bucket
@@ -154,7 +194,7 @@ func (a *Activity) Save() error {
 				}
 			}
 		}
-		if err := a.db.SaveActivity(rows, time.Now().Add(-14*24*time.Hour).Unix()); err != nil {
+		if err := a.db.SaveActivity(rows, time.Now().Add(-ActivityRetention).Unix()); err != nil {
 			return err
 		}
 		if a.saved == nil {
@@ -193,7 +233,7 @@ func (a *Activity) observe(now time.Time, usage []Usage, valid bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for at, bucket := range a.buckets {
-		if at < now.Add(-14*24*time.Hour).Unix() {
+		if at < now.Add(-ActivityRetention).Unix() {
 			a.entries -= len(bucket)
 			delete(a.buckets, at)
 		}
@@ -220,7 +260,7 @@ func (a *Activity) observe(now time.Time, usage []Usage, valid bool) {
 		}
 		value, held := bucket[u.Addr]
 		if !held {
-			if a.entries >= 100000 {
+			if a.entries >= ActivityEntries {
 				continue
 			}
 			a.entries++
@@ -256,6 +296,12 @@ func (a *Activity) Run(ctx context.Context, applier Applier) {
 			}
 		}
 	}
+}
+
+// view is the retained history for these addresses, tagged with the window it
+// was cut from, so a caller never has to assume how far back it reaches.
+func (a *Activity) view(addresses []netip.Addr) activityView {
+	return activityView{Days: activityRetentionDays, Buckets: a.snapshot(addresses)}
 }
 
 func (a *Activity) snapshot(addresses []netip.Addr) []activityBucket {

@@ -54,7 +54,7 @@ func TestActivityRestorePrunesAndRejectsInvalidHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	addr := netip.MustParseAddr("2001:db8::1")
-	a.buckets[time.Now().Add(-15*24*time.Hour).Unix()] = map[netip.Addr]activityBytes{addr: {Up: 10}}
+	a.buckets[time.Now().Add(-ActivityRetention-time.Hour).Unix()] = map[netip.Addr]activityBytes{addr: {Up: 10}}
 	if err := a.Save(); err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestActivityDifferencesAndGaps(t *testing.T) {
 	if a.snapshot([]netip.Addr{addr})[0].Bytes.Up != 45 {
 		t.Fatal("failed sample retained baseline")
 	}
-	a.observe(at.Add(15*24*time.Hour), sample(2000), true)
+	a.observe(at.Add(ActivityRetention+time.Hour), sample(2000), true)
 	if len(a.snapshot([]netip.Addr{addr})) != 0 {
 		t.Fatal("history was not expired")
 	}

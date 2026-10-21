@@ -16,7 +16,7 @@ import { Heading } from '@/components/ui/heading'
 import { Input } from '@/components/ui/input'
 import { MetricValue } from '@/components/ui/metric-value'
 import { TechnicalValue } from '@/components/ui/property-row'
-import { DeviceActivity } from '@/features/devices/activity'
+import { ActivityTotal, DeviceActivity } from '@/features/devices/activity'
 import { CategoryPicker, type IconChoice } from '@/features/devices/category-picker'
 import { DeviceHeader } from '@/features/devices/device-header'
 import { DeviceIcon } from '@/features/devices/device-icon'
@@ -28,7 +28,7 @@ import { PeerBadge } from '@/features/remote/peer-badge'
 import { usePatchPeer, useRemoteStatus } from '@/features/remote/queries'
 import { useTrafficView, type Flow, type TrafficView } from '@/features/topology/traffic'
 import { ApiError } from '@/lib/api'
-import { formatBytes, formatRate } from '@/lib/utils'
+import { formatRate } from '@/lib/utils'
 import type { RemotePeer, RemoteStatus } from '@/lib/api-types'
 
 /**
@@ -183,7 +183,7 @@ export function WireguardPeerPage() {
               peer.address ? `/advanced/caddy?host=${encodeURIComponent(peer.address)}` : '/advanced/caddy'
             } />
           } />
-          <Usage flow={flow} usage={usage} trafficFailed={traffic.isError} />
+          <Usage flow={flow} usage={usage} addresses={peer.address ? [peer.address] : []} trafficFailed={traffic.isError} />
         </div>
       </Card>
 
@@ -273,8 +273,12 @@ function Facts({ peer, status, services }: { peer: RemotePeer; status?: RemoteSt
  * A rate needs two samples, so it is missing on the first poll, and that absence
  * is drawn as a dash: "no rate yet" and "idle" are different answers and a zero
  * would claim the second.
+ *
+ * The total is not a rate's integral and not the kernel's lifetime counter: it
+ * is the sum of the activity matrix above, exactly as on a device page, so the
+ * two screens answer the same question the same way (docs/ui-content-guide.md).
  */
-function Usage({ flow, usage, trafficFailed }: { flow: TrafficView; usage?: Flow; trafficFailed: boolean }) {
+function Usage({ flow, usage, addresses, trafficFailed }: { flow: TrafficView; usage?: Flow; addresses: string[]; trafficFailed: boolean }) {
   return <div className="min-w-0">
     <dl className="text-sm">
       <DeviceSettingRow label="Download">
@@ -284,15 +288,12 @@ function Usage({ flow, usage, trafficFailed }: { flow: TrafficView; usage?: Flow
         <MetricValue value={flow.rated && usage ? formatRate(Math.max(0, usage.upRate ?? 0)) : null} />
       </DeviceSettingRow>
       <DeviceSettingRow label="Total">
-        <span className="inline-flex flex-wrap justify-end gap-3 tabular-nums">
-          <span className="inline-flex items-center gap-0.5" aria-label="Download total"><span aria-hidden className="text-base font-normal text-muted-foreground">↓</span><MetricValue value={flow.counting ? formatBytes(usage?.down ?? 0) : null} /></span>
-          <span className="inline-flex items-center gap-0.5" aria-label="Upload total"><span aria-hidden className="text-base font-normal text-muted-foreground">↑</span><MetricValue value={flow.counting ? formatBytes(usage?.up ?? 0) : null} /></span>
-        </span>
+        <ActivityTotal addresses={addresses} />
       </DeviceSettingRow>
     </dl>
     {!flow.counting && (
       <p className="pt-2 text-xs leading-relaxed text-muted-foreground">
-        {trafficFailed ? 'Traffic counters are unavailable right now.' : 'Traffic counting is off, so there is nothing to show here.'}
+        {trafficFailed ? 'Traffic counters are unavailable right now, so live rates are missing. The total is still what was recorded earlier.' : 'Counting is off, so there are no live rates. The total shows what was recorded while it was on.'}
       </p>
     )}
   </div>

@@ -1,12 +1,28 @@
-import { useQuery } from '@tanstack/react-query'
 import { useLayoutEffect, useRef, useState } from 'react'
 
+import { MetricValue } from '@/components/ui/metric-value'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { api } from '@/lib/api'
 import { activityLevel, activityThresholds } from '@/lib/activity-scale'
 import { formatBytes } from '@/lib/utils'
 
-interface Bucket { at: string; bytes: { up: number; down: number } }
+import { activitySummary, useActivity, type Bytes } from './activity-history'
+
+/**
+ * What the device has moved over the retained window, and how long that is.
+ *
+ * The window is printed rather than left to a tooltip: "Total" alone was the
+ * number that could not be reconciled with the picture above it, so the caption
+ * says which stretch of time it covers and the reading needs no hover.
+ */
+export function ActivityTotal({ addresses }: { addresses: string[] }) {
+  const { data } = useActivity(addresses)
+  const summary = activitySummary(data)
+  return <span className="inline-flex flex-wrap items-baseline justify-end gap-x-3 gap-y-1 tabular-nums">
+    <span className="inline-flex items-center gap-0.5" aria-label="Download total"><span aria-hidden className="text-base font-normal text-muted-foreground">↓</span><MetricValue value={summary ? formatBytes(summary.down) : null} /></span>
+    <span className="inline-flex items-center gap-0.5" aria-label="Upload total"><span aria-hidden className="text-base font-normal text-muted-foreground">↑</span><MetricValue value={summary ? formatBytes(summary.up) : null} /></span>
+    {summary && <span className="text-xs text-muted-foreground">last {summary.days} days</span>}
+  </span>
+}
 
 const fills = ['bg-[var(--activity-empty)]', 'bg-[var(--activity-low)]', 'bg-[var(--activity-green-low)]', 'bg-[var(--activity-medium)]', 'bg-[var(--activity-high)]', 'bg-[var(--activity-peak)]']
 
@@ -31,20 +47,16 @@ export function DeviceActivity({ addresses, downRate, upRate }: { addresses: str
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
-  const query = new URLSearchParams()
-  addresses.slice(0, 32).forEach(address => query.append('address', address))
-  const history = useQuery({
-    queryKey: ['gateway', 'activity', query.toString()],
-    queryFn: () => api.get<Bucket[]>(`/api/gateway/activity?${query}`),
-    refetchInterval: 10000,
-  })
-  const buckets = new Map(history.data?.map(bucket => [Date.parse(bucket.at), bucket.bytes]))
+  const history = useActivity(addresses)
+  const buckets = new Map(history.data?.buckets.map(bucket => [Date.parse(bucket.at), bucket.bytes]))
   const now = new Date()
-  // Use retained history, independently of the number of columns fitting the screen.
-  const periods = new Map<number, Bucket['bytes']>()
+  // Use retained history, independently of the number of columns fitting the
+  // screen. The daemon prunes what it no longer keeps, so the only timestamp
+  // worth rejecting here is one from the future.
+  const periods = new Map<number, Bytes>()
   if (!history.isError) {
     for (const [timestamp, sample] of buckets) {
-      if (timestamp > now.getTime() || timestamp < now.getTime() - 14 * 86400000) continue
+      if (timestamp > now.getTime()) continue
       const at = new Date(timestamp)
       at.setHours(Math.floor(at.getHours() / 4) * 4, 0, 0, 0)
       const bytes = periods.get(at.getTime()) ?? { up: 0, down: 0 }

@@ -16,7 +16,7 @@ by an older binary.
 
 | Table | Contents and lifetime |
 | --- | --- |
-| `activity` | Half-hour IP-address traffic differences; 14 days, 100,000 retained address/bucket pairs |
+| `activity` | Half-hour IP-address traffic differences; 90 days, 250,000 retained address/bucket pairs |
 | `device_seen` | Canonical MAC and last-heard timestamp; 90 days |
 | `sessions` | SHA-256 token hashes, password binding and expiry; 90 days, maximum 256 active sessions |
 | `qos_state` | Queue ownership and snapshot, scoped to Linux boot ID |

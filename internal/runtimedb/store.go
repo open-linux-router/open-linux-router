@@ -178,6 +178,14 @@ type Activity struct {
 	Up, Down uint64
 }
 
+// ActivityLimit bounds one history read, and with it what a restore can retain.
+//
+// It lives here rather than in gateway because the query has to fetch one row
+// more than the limit to notice that the limit was exceeded, and because a
+// history that was checkpointed has to be readable back: the sampler applies
+// the same ceiling, so the two cannot disagree about what fits.
+const ActivityLimit = 250_000
+
 // Counters use decimal text to preserve Go's full uint64 range in SQLite.
 func PutActivity(tx *sql.Tx, rows []Activity) error {
 	stmt, err := tx.Prepare("INSERT OR REPLACE INTO activity(bucket,address,up,down) VALUES(?,?,?,?)")
@@ -203,7 +211,7 @@ func (s *Store) SaveActivity(rows []Activity, cutoff int64) error {
 }
 
 func (s *Store) Activity(cutoff, now int64) ([]Activity, error) {
-	rows, err := s.db.Query("SELECT bucket,address,up,down FROM activity WHERE bucket>=? AND bucket<=? ORDER BY bucket,address LIMIT 100001", cutoff, now)
+	rows, err := s.db.Query("SELECT bucket,address,up,down FROM activity WHERE bucket>=? AND bucket<=? ORDER BY bucket,address LIMIT ?", cutoff, now, ActivityLimit+1)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +233,7 @@ func (s *Store) Activity(cutoff, now int64) ([]Activity, error) {
 		}
 		out = append(out, r)
 	}
-	if len(out) > 100000 {
+	if len(out) > ActivityLimit {
 		return nil, fmt.Errorf("activity history exceeds entry limit")
 	}
 	return out, rows.Err()

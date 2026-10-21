@@ -200,7 +200,7 @@ func (h HTTP) Routes() []core.Route {
 				"Reports counting:false rather than failing when the counters cannot be read.",
 			Handler: h.getTraffic,
 		},
-		{Method: "GET", Path: "/activity", Tool: "show activity", Summary: "Show retained half-hour traffic samples for the requested addresses.", Handler: h.getActivity},
+		{Method: "GET", Path: "/activity", Tool: "show activity", Summary: "Show retained half-hour traffic samples for the requested addresses, over the last 90 days.", Handler: h.getActivity},
 	}
 
 	// The NAT half's routes, under the same prefix. Appended rather than
@@ -722,7 +722,7 @@ func (h HTTP) getActivity(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusServiceUnavailable, "Activity unavailable")
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, h.Activity.snapshot(addresses))
+	core.WriteJSON(w, http.StatusOK, h.Activity.view(addresses))
 }
 
 // --- plumbing --------------------------------------------------------------

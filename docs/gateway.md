@@ -986,8 +986,14 @@ different class of gap, and it is why the topology rule exists.
 Counters are monotonic-since-load; everything anyone wants is deltas over time.
 
 Live counters are read from nftables and aged out by `statTimeout`. The activity
-sampler retains bounded half-hour differences in SQLite for 14 days, rather
-than raw flows. Runtime persistence and future analysis use the shared store
+sampler retains bounded half-hour differences in SQLite for 90 days, rather
+than raw flows. That window is also what a device page's total covers: the total
+is the matrix above it added up, not the cumulative counter, so neither a
+restart's reset nor a day of silence can make one cell of the page exceed the
+page's own total — the mismatch that made two honest numbers look like a bug.
+What the total loses in exactness it gains in being checkable against the
+picture it sits under; the counters keep their job as the thing live rates are
+differenced from. Runtime persistence and future analysis use the shared store
 described in `docs/storage.md`; choosing SQLite does not enable raw query or
 flow logging. Custom HTTPS probe targets are operator intent and live under
 `gateway.latency_sites` in `olr.json`.

@@ -1345,9 +1345,11 @@ belongs to the network, a second and deliberate act.
    database does not justify writing every DNS query or flow to disk.
 
    **Device activity exception:** a bounded sampler now retains up
-   to 14 days of half-hour counter differences for the device-card dot matrix.
+   to 90 days of half-hour counter differences for the device-card dot matrix
+   and the total beneath it, which is that matrix added up rather than the
+   kernel's cumulative counter.
    It samples every ten seconds independently of browsers, respects traffic
-   counting being off, caps retained address/bucket pairs at 100,000 and never
+   counting being off, caps retained address/bucket pairs at 250,000 and never
    stores raw flows. History is atomically checkpointed every minute and on
    graceful shutdown to SQLite (0600). Only changed buckets are checkpointed;
    the old `activity.json` is imported once.

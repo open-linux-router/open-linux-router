@@ -169,8 +169,10 @@ Show QoS as saved configuration until enforcement exists.
 Device details group stable identity and saved settings on the left, live
 uplink, priority and live traffic on the right. Reuse Overview rate meters with
 Download and Upload labels beside narrower bars, without arrows.
-Total below Upload shows cumulative download then upload with the Overview arrows;
-unavailable counters show dashes. Services below Group lists matching configured
+Total below Upload shows download then upload with the Overview arrows, added up
+over the same retained history the title matrix draws and captioned with that
+window (`last 90 days`), so a reader can check it against the cells above it;
+unavailable history shows dashes. Services below Group lists matching configured
 services as icons that open their webpages, with an equally sized add action
 that opens Ingress and prefills the current device. Empty lists show only the add action.
 Devices without a reserved name/address prefill their observed host instead.
@@ -212,7 +214,7 @@ On becoming idle, complete the current breath before settling at full brightness
 Historical colors continue to represent accumulated traffic.
 The lowest nonzero tier (below 10 MiB combined upload/download per four-hour
 period) uses a stronger neutral gray than zero/missing data; green starts at
-10 MiB. Four green levels use the device's retained 14-day four-hour totals at or
+10 MiB. Four green levels use the device's retained 90-day four-hour totals at or
 above 10 MiB, split at 25%, 50% and 75% of the greater of the maximum total
 and 1 GiB, independently of
 screen width. These divide the byte range, not the number of cells.
@@ -224,9 +226,9 @@ actively using the device.
 Immediate four-hour hover/focus hints show sampled download and upload
 or explicitly report missing/unavailable data. Partial samples are not exact
 four-hour totals. History is joined to the device's currently observed addresses.
-It begins accumulating after daemon startup. Sampling and UI
-refresh run every ten seconds; the first reading establishes a baseline.
-History retains at most 14 days and is restored from
+It begins accumulating after daemon startup. Sampling runs every ten seconds and
+the matrix refreshes every minute; the first reading establishes a baseline.
+History retains at most 90 days and is restored from
 SQLite's `activity` table in `/var/lib/open-linux-router/runtime.db` after
 restarts/upgrades. Transactional
 checkpoints run every minute and on normal shutdown; an abrupt power loss may
