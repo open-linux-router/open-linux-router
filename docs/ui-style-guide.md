@@ -166,18 +166,25 @@ page title is accessible but visually hidden; avoid a repeated introductory
 heading above the step navigation.
 
 Gateway has no status strip: its objects are the page. Physical interface cards
-wrap three across from 1024px, two from 640px and one on phones. There is no
-right-side summary column, because the facts it held are panels of their own
-below: Way out (observed IPv4/IPv6 default routes and the resolvers this router
-uses) and Services (DHCP and DNS with their state and counters). Interface cards
+wrap three across from 1024px, two from 640px and one on phones. Interface cards
 show name, role, link state, address and current rates without traffic charts,
 with wrapping addresses and 16px padding, and link to the interface's own page
 instead of opening a dialog; link speed, MAC, every address, live rates and
-totals live on that page, beside the switches that change them. Routing state,
-drift and every routing and forwarding switch
+totals live on that page, beside the switches that change them.
+
+Below the interfaces the page is two stacks, IPv4 and IPv6, so a family's whole
+path is readable without knowing which module owns which half. Each stack is a
+24px heading and one grid of six stage cards in the order a packet meets them —
+Upstream, LAN, Clients, Forwarding, Exit, DNS — three across from 1024px, two
+from 640px and one on phones. A card shows the stage's answer for its family: a
+tone dot, a status word and one detail line, with the whole card linking to the
+one page that changes it. The same stage therefore appears once per family as a
+second view of the same object, never as a second editor: a stack card holds no
+configuration and no draft. A stage that is missing says so in its card instead
+of disappearing. Routing state, drift and every routing and forwarding switch
 live at `interfaces#forwarding`, beside the sentences that say what turning them
-off closes; the Interfaces heading is this page's single settings entry, and
-Overview is where a gateway fault is reported.
+off closes; the interfaces and the stacks only report what those switches wrote,
+and Overview is where a gateway fault is reported.
 
 The shell has a 1280px maximum width, a 64px header and horizontal gutters of
 16px on phones, 24px from 640px, and 32px from 1280px. Content starts with

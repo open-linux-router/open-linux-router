@@ -311,20 +311,27 @@ scope, replacement behavior and the priority enforcement caveat beside the
 explicit apply actions; selected values are batch choices, not observed shared
 settings. List member devices below the summary.
 
-Gateway is objects only: the interfaces this router is plugged into, its way
-out, and the services it runs. It has no status strip and no switches — routing's
-on/off state, drift and every routing and forwarding switch belong to the
-routing settings at interfaces#forwarding, beside the sentences that say what
-turning them off closes. Overview reports a gateway fault. Physical interface
-cards carry name, role, link state, address and current rates without history
-charts, and open that interface's own page rather than a dialog: the page owns
-link speed, MAC, every address, live rates, totals and the address range the
-interface serves. Way out states the
-observed IPv4/IPv6 default routes and the resolvers this router uses, read-only.
-Services states DHCP and DNS with their state and their counters (active leases,
-queries since restart). IPv4 also controls Gateway routing and leaves system
-forwarding unchanged when off; IPv6 intent is unapplied when routing is off.
-Usage has no separate page; traffic counting lives in routing details.
+Gateway answers one question — does this router get its networks online — in two
+layers, and has no status strip and no switches. The interfaces are the objects:
+physical cards carry name, role, link state, address and current rates without
+history charts, and open that interface's own page rather than a dialog, where
+link speed, MAC, every address, live rates, totals and the served address range
+live beside the switches that change them.
+
+Below them are two stacks, IPv4 and IPv6, each naming the same six stages in the
+order traffic takes them: Upstream (address, next hop, and for IPv6 whether it
+is native, delegated or tunnelled), LAN (the subnets and how much of the pool is
+in use), Clients (DHCP leases for IPv4, router advertisement for IPv6), Forwarding
+(whether the kernel forwards this family), Exit (direct, or which exit carries
+it — and for IPv6 whether an exit drops it, since there is no NAT to translate
+it) and DNS (the resolvers, and for IPv6 whether AAAA answers are filtered). Each
+card states its stage's answer and links to the one page that changes it; a
+missing stage is named in its card rather than hidden. The stacks are a view cut
+across the modules and hold no configuration of their own, so the same module
+appearing under both families is one object seen twice. Routing's on/off state,
+drift and every routing and forwarding switch remain at interfaces#forwarding;
+Overview reports a gateway fault. Usage has no separate page; traffic counting
+lives in routing details.
 
 Open newly navigated pages at the top so their title and primary information are
 visible. Preserve section targeting for hash links and scroll for query-only changes.

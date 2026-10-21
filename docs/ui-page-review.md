@@ -12,7 +12,7 @@ OLR capabilities, and a calm, consistent interface. This record accompanies the
 | Group | Preserve member lists and batch controls; remove repeated MAC/direct-membership prose; keep overwrite and non-inheritance consequences. |
 | Device/group QoS | State that configuration is saved but not enforced; keep forms and shared group-cap semantics. |
 | Inspection | Keep the existing panel and results; confirm privacy and CA consequences before starting; disclose lengthy preparation/scope and viewer details; retain session stop time and diagnostics. |
-| Gateway | Objects only: interface cards in a wrapping grid with role, address and rates, each linking to the interface's own page; Way out and Services panels. No status strip and no switches — routing state, drift and all routing/forwarding switches live at interfaces#forwarding, and Overview reports faults. |
+| Gateway | Interface cards in a wrapping grid with role, address and rates, each linking to the interface's own page, then two stacks — IPv4 and IPv6 — of six stage cards each (Upstream, LAN, Clients, Forwarding, Exit, DNS) that state the stage's answer and link to the one page that changes it. No status strip and no switches — routing state, drift and all routing/forwarding switches live at interfaces#forwarding, and Overview reports faults. |
 | Interfaces/routing and interface detail | Keep controls and all observed fields; carry link speed, every address, live rates, totals and the served DHCP range on the detail page, since the landing card no longer opens a dialog; shorten management and routing explanations without moving controls. |
 | Exits | Preserve list/edit forms; distinguish blocking, unknown and failed checks; remove repeated failure prose. |
 | Usage | Preserve measurement controls and counters; show a uniquely matched device name with its address; download precedes upload; disclose accounting limitations. |
@@ -109,3 +109,36 @@ serves and how much of it is in use, so "this interface's LAN is running out of
 addresses" is visible where the interface is inspected rather than one link
 away. Everything the dialog held is still reachable, and the keyboard path is
 shorter: one tab stop to the page instead of button → dialog → tab into it.
+
+## Gateway stacks review — 2026-10-21
+
+The page answered "what is this box plugged into" and then left the operator to
+work out the rest. IPv6 in particular was one line in Way out: the delegated
+prefix, the LAN's /64, whether anyone advertised it, whether the kernel
+forwarded it, and whether an exit dropped it were each in a different module,
+and finding them required knowing which module owned which half.
+
+Way out and Services are replaced by two stacks, IPv4 and IPv6, each cut across
+the modules in packet order: Upstream, LAN, Clients, Forwarding, Exit, DNS. Each
+card states that stage's answer for that family and links to the one page that
+changes it, so the question "is IPv6 working, and where do I fix it" is answered
+without a module map. Missing stages are named in the card — no /64, nobody
+advertising, forwarding off — instead of being absent, because an absent row
+reads as "nothing to do" rather than "not configured".
+
+The stacks are a read model. Every card is a link: no draft, no plan, no apply
+of its own, so the same module appearing once per family is one object seen
+twice and cannot disagree with itself. That is also why the page can afford two
+full stacks without becoming a second settings page, and why design.md §4.3's
+"no page that sets IPv6 across modules" still holds — it is amended there to
+name this view explicitly.
+
+Hash targets survive with the new structure: `#interfaces` is the interface
+card, and `#dhcp`/`#dns` (the redirects from the settings trees) point at the
+IPv4 Clients and DNS cards. The interface card is unchanged, and every previous
+Way-out fact — both routes, the resolvers, the unmanaged-rule count — has a home
+in the stacks except the unmanaged rules, which remain on interfaces#forwarding.
+
+Validated as a read-only page: lint, type-check, unit tests and a production
+build pass. Live router state was not available, so the cards were checked
+against types and fixtures, not against a running box.

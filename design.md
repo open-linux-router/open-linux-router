@@ -621,6 +621,17 @@ not turn anything else on. Where one module's setting costs another's, the plan
 says so as a warning; it never writes the other module's half (decided
 2026-09-30, while adding tunnelled IPv6).
 
+**A family-wide *view* is not a family-wide setting.** The Gateway landing page
+shows two stacks, IPv4 and IPv6, each listing the same six stages —
+upstream, LAN, clients, forwarding, exit, DNS — with that family's answer at
+each one. This is deliberately the opposite of the wizard above: a stack card
+renders another module's state and links to that module's own editor, so the
+stacks hold no configuration, produce no plan and apply nothing. The test is
+mechanical — if a card needed a control it would have to reuse that module's
+editor rather than grow one, and if it needed a draft of its own it would be a
+second owner and would not be allowed. The rule stays where a setting lives;
+the stacks decide only how it is found (decided 2026-10-21).
+
 **v1 serves RA with SLAAC + RDNSS, and no DHCPv6 at all.** Two facts decide
 this, and both are structural rather than matters of taste:
 

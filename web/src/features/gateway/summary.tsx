@@ -1,37 +1,37 @@
 import { t, useLocale } from '@/lib/i18n'
 import { AlertTriangle, ChevronRight } from 'lucide-react'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect } from 'react'
 import { Link, useLocation } from 'react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ListEmpty } from '@/components/ui/list'
 import { MetricValue } from '@/components/ui/metric-value'
-import { PropertyRow, TechnicalValue } from '@/components/ui/property-row'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useDhcpLeases, useDhcpStatus } from '@/features/dhcp/queries'
 import { useDialStatus, useUplink } from '@/features/dial/queries'
-import { useDnsStatus } from '@/features/dns/queries'
-import { useGatewayStatus } from '@/features/gateway/queries'
 import { useInterfaceTraffic, type RateSample } from '@/features/link/interface-traffic'
 import { NetworkIcon } from '@/features/link/network-icon'
 import { useInterfaces } from '@/features/link/queries'
-import type { DialStatus, InterfaceList, InterfaceRow } from '@/lib/api-types'
+import type { InterfaceList, InterfaceRow } from '@/lib/api-types'
 import { cn, formatRate } from '@/lib/utils'
+
+import { GatewayStacks } from './stacks'
+import { tone } from './status-tone'
 
 /**
  * The gateway, on the page you land on.
  *
- * The objects only: what this box is plugged into, how it reaches the internet,
- * and what it runs for the network. There is no status strip and there are no
- * switches. Routing's own state — on, off, behind its saved settings, or
- * unreadable — is a detail of the routing settings, and it lives there, at
- * `interfaces#forwarding`, beside the switches that change it and the sentences
- * that say what turning them off closes. The one entry to that page is the
- * Interfaces heading, and each interface card opens that interface's own page;
- * Overview is where a gateway fault is reported. A landing page that repeats
- * the module's banner above its objects read as a second status page rather
- * than as this section's own.
+ * Two layers. The interfaces are the objects: what this box is plugged into,
+ * each card opening that interface's own page. Below them the page is two
+ * stacks, IPv4 and IPv6, each cut across the modules in the order a packet
+ * meets them — upstream, LAN, clients, forwarding, exit, DNS — so "does IPv6
+ * work, and where do I fix it" is answered without knowing which module owns
+ * which half. Every card links to the page that changes it and holds no
+ * configuration of its own (features/gateway/stacks.tsx).
+ *
+ * There is no status strip and there are no switches. Routing's own state is a
+ * detail of the routing settings, and the stacks report its writing rather than
+ * offering to change it; Overview is where a gateway fault is reported.
  */
 export function GatewaySummary() {
   useLocale()
@@ -44,33 +44,11 @@ export function GatewaySummary() {
   }, [hash])
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <InterfacesCard />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <WayOutCard />
-        <ServicesCard />
-      </div>
+      <GatewayStacks />
     </div>
   )
-}
-
-/* -------------------------------------------------------------------------- */
-
-const tone = {
-  good: 'text-success-foreground',
-  caution: 'text-warning-foreground',
-  quiet: 'text-muted-foreground',
-} as const
-
-const dot = {
-  good: 'bg-success',
-  caution: 'bg-warning',
-  quiet: 'bg-muted-foreground/40',
-} as const
-
-interface Health {
-  label: string
-  tone: keyof typeof tone
 }
 
 /* -------------------------------------------------------------------------- */
@@ -201,170 +179,6 @@ function InterfaceTile({ row, role, current, failed }: {
       </div>
     </Link>
   )
-}
-
-/* -------------------------------------------------------------------------- */
-
-function WayOutCard() {
-  useLocale()
-  const dial = useDialStatus()
-  const status = useGatewayStatus()
-  const foreign = status.data?.foreign?.length ?? 0
-  const routes = dial.data?.default_routes ?? []
-
-  return (
-    <Card aria-labelledby="way-out-heading">
-      <CardHeader><CardTitle id="way-out-heading">{t('Way out')}</CardTitle></CardHeader>
-      <CardContent>
-        <dl>
-          <RouteRow label="IPv4" routes={routes.filter(route => route.family === 4)} dial={dial} />
-          <RouteRow label="IPv6" routes={routes.filter(route => route.family === 6)} dial={dial} />
-          <PropertyRow label="Resolvers">
-            {dial.isError ? <span className="text-muted-foreground">{t('Unavailable')}</span>
-              : !dial.data ? <span className="text-muted-foreground">Reading…</span>
-                : dial.data.resolvers?.length
-                  ? <TechnicalValue>{dial.data.resolvers.join(', ')}</TechnicalValue>
-                  : <span className="text-muted-foreground">{t('None')}</span>}
-          </PropertyRow>
-          {foreign > 0 && (
-            <PropertyRow label="Other rules">
-              <Link to="/gateway/unmanaged" className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline">
-                {foreign} rule{foreign === 1 ? '' : 's'} <ChevronRight className="size-3.5" aria-hidden />
-              </Link>
-            </PropertyRow>
-          )}
-        </dl>
-      </CardContent>
-    </Card>
-  )
-}
-
-function RouteRow({ label, routes, dial }: {
-  label: string
-  routes: DialStatus['default_routes']
-  dial: ReturnType<typeof useDialStatus>
-}) {
-  useLocale()
-  return (
-    <PropertyRow label={label}>
-      {dial.isError ? <span className="text-muted-foreground">{t('Unavailable')}</span>
-        : !dial.data ? <span className="text-muted-foreground">Reading…</span>
-          : routes.length === 0 ? <span className="text-muted-foreground">{t('None')}</span>
-            : (
-              <span className="flex flex-col gap-1">
-                {routes.map((route, i) => (
-                  <span key={i} className="flex flex-wrap items-baseline justify-end gap-x-2">
-                    <TechnicalValue>{route.via ? `${route.via} via ${route.dev}` : `Direct on ${route.dev}`}</TechnicalValue>
-                    {route.gateway_state === 'silent' && (
-                      <span className="text-xs font-medium text-warning-foreground">not answering</span>
-                    )}
-                  </span>
-                ))}
-              </span>
-            )}
-    </PropertyRow>
-  )
-}
-
-/* -------------------------------------------------------------------------- */
-
-function ServicesCard() {
-  useLocale()
-  const dhcp = useDhcpStatus()
-  const leases = useDhcpLeases()
-  const dns = useDnsStatus()
-
-  const leaseCount = leases.isError ? undefined : leases.data?.leases.filter(lease => lease.active).length
-  const queries = dns.isError || dns.data?.stats_error ? undefined : dns.data?.stats?.queries
-
-  return (
-    <Card aria-labelledby="services-heading">
-      <CardHeader><CardTitle id="services-heading">{t('Services')}</CardTitle></CardHeader>
-      <CardContent className="px-0">
-        <div className="divide-y">
-          <ServiceRow
-            id="dhcp"
-            kind="dhcp"
-            name="DHCP"
-            to="/gateway/dhcp/details"
-            health={describeDhcp(dhcp)}
-            note={leases.isPending
-              ? <Skeleton className="h-4 w-24" />
-              : leaseCount === undefined ? 'Active leases unavailable'
-                : leaseCount === 0 ? 'No active leases'
-                  : `${leaseCount.toLocaleString()} active lease${leaseCount === 1 ? '' : 's'}`}
-          />
-          <ServiceRow
-            id="dns"
-            kind="dns"
-            name="DNS"
-            to="/gateway/dns/details"
-            health={describeDns(dns)}
-            note={dns.isPending
-              ? <Skeleton className="h-4 w-24" />
-              : queries === undefined ? 'Query count unavailable'
-                : `${queries.toLocaleString()} quer${queries === 1 ? 'y' : 'ies'} since restart`}
-          />
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-/** The count is the fact a visit comes for; the state is the answer, so it sits
- *  where the eye lands last and both rows line up.
- *
- *  A row of the list contract, built inside the card rather than as a List of
- *  its own: the List primitive draws its own border and radius, and a second
- *  panel around two rows is the nested surface this page set out to remove. */
-function ServiceRow({ id, kind, name, note, health, to }: {
-  id: string
-  kind: 'dhcp' | 'dns'
-  name: string
-  note: ReactNode
-  health: Health
-  to: string
-}) {
-  useLocale()
-  return (
-    <Link
-      id={id}
-      to={to}
-      className="flex min-h-16 scroll-mt-20 items-center gap-3 px-4 py-3 transition-colors duration-150 hover:bg-accent/60 active:bg-accent focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring sm:px-6"
-    >
-      <NetworkIcon kind={kind} className="size-8 shrink-0" />
-      <div className="min-w-0 flex-1">
-        <div className="text-sm text-foreground">{name}</div>
-        <div className="mt-0.5 text-[0.8125rem] leading-relaxed text-muted-foreground">{note}</div>
-      </div>
-      <span className={cn('flex shrink-0 items-center gap-1.5 text-[0.8125rem] font-medium', tone[health.tone])}>
-        <span className={cn('size-1.5 rounded-full', dot[health.tone])} aria-hidden />
-        {health.label}
-      </span>
-      <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-    </Link>
-  )
-}
-
-function describeDhcp(dhcp: ReturnType<typeof useDhcpStatus>): Health {
-  if (dhcp.isError) return { get label() { return t('Unavailable') }, tone: 'caution' }
-  if (!dhcp.data) return { label: 'Reading…', tone: 'quiet' }
-  if (!dhcp.data.enabled) return { get label() { return t('Off') }, tone: 'quiet' }
-  if (dhcp.data.service_error) return { get label() { return t('Unavailable') }, tone: 'caution' }
-  if (dhcp.data.drift_error || dhcp.data.blockers?.length) return { get label() { return t('Needs attention') }, tone: 'caution' }
-  if (!dhcp.data.service?.active) return { get label() { return t('Not running') }, tone: 'caution' }
-  return dhcp.data.drifted ? { get label() { return t('Needs attention') }, tone: 'caution' } : { get label() { return t('Running') }, tone: 'good' }
-}
-
-function describeDns(dns: ReturnType<typeof useDnsStatus>): Health {
-  if (dns.isError) return { get label() { return t('Unavailable') }, tone: 'caution' }
-  if (!dns.data) return { label: 'Reading…', tone: 'quiet' }
-  if (!dns.data.enabled) return { get label() { return t('Off') }, tone: 'quiet' }
-  if (dns.data.services.some(service => service.error)) return { get label() { return t('Unavailable') }, tone: 'caution' }
-  if (dns.data.drift_error || dns.data.blockers?.length) return { get label() { return t('Needs attention') }, tone: 'caution' }
-  const running = dns.data.services.length > 0 && dns.data.services.every(service => service.status?.active)
-  if (!running) return { get label() { return t('Not running') }, tone: 'caution' }
-  return dns.data.drifted ? { get label() { return t('Needs attention') }, tone: 'caution' } : { get label() { return t('Running') }, tone: 'good' }
 }
 
 /* -------------------------------------------------------------------------- */
