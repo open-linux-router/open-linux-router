@@ -1,10 +1,10 @@
 Publish an internal service so it is reachable at
-https://<name>.<your local domain>.
+https://<name>.<your published domain>.
 
-The certificate and the name's answer are already arranged — one
-wildcard certificate covers every published name, and the dns module
-already serves the suffix. So this takes a name and a target, and
-nothing else.
+The certificate is already arranged — one wildcard covers every
+published name. The DNS record is yours: point <name>.<domain> at
+this router in your own zone, and note that a private answer there
+needs the zone listed in `olr dns set --private-domain`.
 
 Examples:
   olr ingress add grafana --device nuc --port 3000

@@ -23,6 +23,7 @@ func writeConfigText(w io.Writer, c Config) error {
 		state = "enabled"
 	}
 	fmt.Fprintf(w, "Ingress is %s\n", state)
+	fmt.Fprintf(w, "  domain    %s\n", orDash(c.Domain))
 
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "certificate:\n")
@@ -35,7 +36,7 @@ func writeConfigText(w io.Writer, c Config) error {
 	fmt.Fprintf(w, "  resolvers %s\n", strings.Join(c.Certificate.ResolversOrDefault(), " "))
 
 	fmt.Fprintln(w)
-	if err := writeServicesText(w, servicesOf(c), ""); err != nil {
+	if err := writeServicesText(w, servicesOf(c), c.Domain); err != nil {
 		return err
 	}
 

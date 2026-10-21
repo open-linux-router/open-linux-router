@@ -72,10 +72,6 @@ type Paths struct {
 	// makes editing a blocklist free.
 	PolicyDir string
 
-	// Published lists the names `ingress` publishes, which the relay answers
-	// with this box's own address (published.go). Re-read on SIGHUP.
-	Published string
-
 	// Routes is gateway's effective resolver selection, reloadable without
 	// touching unbound or the relay listener.
 	Routes string
@@ -124,7 +120,6 @@ func RootedPaths(root string) Paths {
 		UnboundConf:   filepath.Join(unbound, "unbound.conf"),
 		RelayConf:     filepath.Join(rendered, "relay.json"),
 		PolicyDir:     filepath.Join(rendered, "policy.d"),
-		Published:     filepath.Join(rendered, "published.json"),
 		Routes:        filepath.Join(rendered, "routes.json"),
 		LeaseFile:     filepath.Join(root, "/var/lib/open-linux-router/dhcp/leases"),
 		HijackNFT:     filepath.Join(rendered, "hijack.nft"),
@@ -282,7 +277,7 @@ func (Backend) Canonical(data []byte) []byte {
 // SIGHUP. Used by the planner to tell a reload from a restart, including for
 // stray files no longer rendered by the current config.
 func (b Backend) reloadable(path string) bool {
-	return strings.HasPrefix(path, b.Paths.PolicyDir+"/") || path == b.Paths.Published || path == b.Paths.Routes
+	return strings.HasPrefix(path, b.Paths.PolicyDir+"/") || path == b.Paths.Routes
 }
 
 // unitFor reports which backend reads a path, for a file the current config no
@@ -297,9 +292,8 @@ func (b Backend) unitFor(path string) string {
 	return ""
 }
 
-// Render is pure: same config, same link facts and same published names, same
-// bytes. A nil PublishedView publishes nothing.
-func (b Backend) Render(c Config, links LinkView, published PublishedView) (Rendered, error) {
+// Render is pure: same config and same link facts, same bytes.
+func (b Backend) Render(c Config, links LinkView) (Rendered, error) {
 	c = c.Clone()
 	c.Normalize()
 
@@ -340,14 +334,6 @@ func (b Backend) Render(c Config, links LinkView, published PublishedView) (Rend
 			Reloadable: true,
 			Unit:       b.RelayUnit(),
 		})
-	}
-
-	pub, err := b.renderPublished(c, published)
-	if err != nil {
-		return Rendered{}, err
-	}
-	if pub != nil {
-		out.add(*pub)
 	}
 
 	if c.Hijack.Enabled {
@@ -533,6 +519,7 @@ server:
 		fmt.Fprintf(&s, "    private-address: %s\n", p)
 	}
 
+	renderPrivateDomains(&s, c)
 	renderLocalNames(&s, c)
 
 	if err := b.renderForward(&s, c.Upstream); err != nil {
@@ -551,6 +538,29 @@ server:
 	}
 
 	return []byte(s.String()), nil
+}
+
+// renderPrivateDomains exempts the operator's own zones from anti-rebinding.
+//
+// `private-address` above refuses every public answer that points into the LAN,
+// which is the right default and also exactly what an operator's own records
+// look like when they publish `grafana.home.example.com → 192.168.1.1` in their
+// provider's DNS. unbound's `private-domain` is the counterpart: the listed
+// zones may contain private addresses. Without it, that record would be visible
+// to anyone on a public resolver and absent for everyone on this one, with no
+// error anywhere to explain the difference.
+func renderPrivateDomains(s *strings.Builder, c Config) {
+	if len(c.PrivateDomains) == 0 {
+		return
+	}
+	s.WriteString(`
+    # Zones whose public records may hold private addresses — the domains you
+    # publish your own services under. unbound strips those answers by default
+    # (private-address above); this is where you say which zones are yours.
+`)
+	for _, d := range c.PrivateDomains {
+		fmt.Fprintf(s, "    private-domain: %q\n", d+".")
+	}
 }
 
 // renderLocalNames writes the names this resolver answers itself.
@@ -692,7 +702,6 @@ func (b Backend) renderRelay(c Config, links LinkView) ([]byte, error) {
 		AlsoListen:      also,
 		Upstream:        DefaultResolver,
 		PolicyDir:       b.Paths.PolicyDir,
-		PublishedFile:   b.Paths.Published,
 		RoutesFile:      b.Paths.Routes,
 		LeaseFile:       b.Paths.LeaseFile,
 		ARPFile:         "/proc/net/arp",

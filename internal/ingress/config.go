@@ -23,16 +23,34 @@ const ModuleName = "ingress"
 // It is the single source for the CLI flags, the REST body, the UI form and the
 // MCP tool definition (design.md §3.2 rule 3).
 //
-// Note what is *not* here: the domain. Published names live under the same
-// suffix as everything else this network answers for, and that suffix is
-// `dns.LocalDomain` — a fact the `dns` module owns. §4.1 forbids the copy, so
-// we read it through DNSView and this struct has no `domain` field to drift
-// from it. See docs/ingress.md §3.
+// The domain is here, and it is this module's own fact. It was `dns.LocalDomain`
+// for a while, on the theory that one namespace for the whole box could not
+// drift; what that actually bought was a published name that only existed if
+// this module also wrote it into the resolver, and a network-wide rename forced
+// on anybody who wanted one service over HTTPS (docs/ingress.md §3). It is not
+// the resolver's domain any more: the records live in public DNS, where the
+// operator puts them, and what the resolver answers is a separate question.
+//
+// Which leaves exactly one thing this module must know about the resolver: a
+// published domain that falls *inside* the zone the resolver answers
+// authoritatively would never be asked of public DNS at all, so validate.go
+// refuses it. That read is the whole of the coupling.
 type Config struct {
 	// Enabled controls whether the proxy runs at all. Disabling stops the
 	// service and leaves the configuration in place, so published services can
 	// be turned back on without retyping them.
 	Enabled bool `json:"enabled"`
+
+	// Domain is the suffix published names live under, e.g. `home.example.com`.
+	//
+	// Owned here rather than by `dns`, and deliberately not the same value: the
+	// wildcard certificate is for `*.<this>`, the records the operator writes
+	// point at this box, and neither has anything to do with what the resolver
+	// calls the devices in the house.
+	//
+	// One label, though: the wildcard covers `grafana.<domain>` and not
+	// `grafana.lab.<domain>`, so a deeper suffix would only move the problem.
+	Domain string `json:"domain,omitempty"`
 
 	// Certificate is how the wildcard is obtained. One certificate serves every
 	// published name, which is what makes adding a service a two-field
@@ -85,20 +103,16 @@ type Certificate struct {
 	Email string `json:"acme_email,omitempty"`
 
 	// Resolvers are the DNS servers Caddy uses to confirm the challenge record
-	// has propagated. **Leaving this empty is a mistake this module must not
-	// let an operator make**, and it is the subtlest thing in the file.
+	// has propagated.
 	//
-	// `dns` renders the local suffix as an unbound `local-zone ... static`
-	// zone, which means this box answers the whole zone itself and forwards
-	// none of it. A `_acme-challenge` record written into the *public* zone by
-	// the provider API is therefore invisible to anything asking our resolver:
-	// it gets an authoritative NXDOMAIN. Caddy's propagation check would then
-	// wait for a record it can never see, and certificate issuance would hang
-	// forever on a box whose DNS is working exactly as designed.
-	//
-	// So the check has to ask somebody else. DefaultResolvers is applied when
-	// this is empty rather than leaving it to Caddy's default of the system
-	// resolver, which on this box is precisely the resolver that cannot answer.
+	// They are public resolvers by default, and the reason is narrower than it
+	// used to be. This box's own resolver is not authoritative for the
+	// published domain any more (§3), so it *can* see the `_acme-challenge`
+	// record — but it also applies this network's blocking policies and
+	// whatever the upstream does, and the one lookup that must not be
+	// mistaken for a failure is the one that decides whether a certificate is
+	// issued. Asking two resolvers that are not ours keeps that question away
+	// from every filter we render.
 	Resolvers []string `json:"resolvers,omitempty"`
 }
 
@@ -131,15 +145,15 @@ func (c Certificate) ResolversOrDefault() []string {
 
 // Service is one published name.
 //
-// Two routing fields, and that is the module's entire claim: the certificate, the DNS
-// record, the proxy stanza and the `:80` redirect are all derived from things
-// established once when the module was enabled (docs/ingress.md §1).
+// Two routing fields, and that is the module's entire claim: the certificate,
+// the proxy stanza and the `:80` redirect are all derived from things
+// established once when the module was enabled (docs/ingress.md §1). The DNS
+// record is the operator's, in their own zone — §3.
 type Service struct {
-	// Name is relative to the local domain: "grafana", not
+	// Name is one label, relative to Config.Domain: "grafana", not
 	// "grafana.home.example.com". Normalize strips the suffix if it was typed,
 	// so both spellings are one entry rather than two that diff against each
-	// other forever. This mirrors dns.Host, deliberately — they are names in
-	// the same namespace and must behave the same way.
+	// other forever.
 	Name string `json:"name"`
 
 	// Upstream is where a request for this name is sent.
@@ -236,8 +250,8 @@ func (s Scheme) OrDefault() Scheme {
 }
 
 // Service returns a published service by name, given relative or in full.
-func (c Config) Service(name string, domain string) (Service, bool) {
-	name = normalizeName(name, domain)
+func (c Config) Service(name string) (Service, bool) {
+	name = normalizeName(name, c.Domain)
 	i := slices.IndexFunc(c.Services, func(s Service) bool { return s.Name == name })
 	if i < 0 {
 		return Service{}, false
@@ -246,8 +260,8 @@ func (c Config) Service(name string, domain string) (Service, bool) {
 }
 
 // SetService adds or replaces a published service, keyed by name.
-func (c *Config) SetService(s Service, domain string) {
-	s.Name = normalizeName(s.Name, domain)
+func (c *Config) SetService(s Service) {
+	s.Name = normalizeName(s.Name, c.Domain)
 	if i := slices.IndexFunc(c.Services, func(e Service) bool { return e.Name == s.Name }); i >= 0 {
 		c.Services[i] = s
 		c.Normalize()
@@ -258,8 +272,8 @@ func (c *Config) SetService(s Service, domain string) {
 }
 
 // RemoveService drops a published service, reporting whether there was one.
-func (c *Config) RemoveService(name string, domain string) bool {
-	name = normalizeName(name, domain)
+func (c *Config) RemoveService(name string) bool {
+	name = normalizeName(name, c.Domain)
 	i := slices.IndexFunc(c.Services, func(s Service) bool { return s.Name == name })
 	if i < 0 {
 		return false
@@ -275,12 +289,17 @@ func (c *Config) RemoveService(name string, domain string) bool {
 // then the rendered Caddyfile would carry two matchers for one hostname with
 // the second silently unreachable.
 func normalizeName(name, domain string) string {
-	name = strings.TrimSpace(strings.ToLower(name))
-	name = strings.TrimSuffix(name, ".")
-	if domain != "" {
-		name = strings.TrimSuffix(name, "."+strings.ToLower(domain))
+	name = normalizeDomain(name)
+	if domain = normalizeDomain(domain); domain != "" {
+		name = strings.TrimSuffix(name, "."+domain)
 	}
 	return name
+}
+
+// normalizeDomain is the canonical spelling of a suffix: lower case, no
+// whitespace, no trailing dot. Empty stays empty, which is "not set".
+func normalizeDomain(domain string) string {
+	return strings.TrimSuffix(strings.TrimSpace(strings.ToLower(domain)), ".")
 }
 
 // Normalize puts the config in its canonical form.
@@ -289,6 +308,9 @@ func normalizeName(name, domain string) string {
 // on disk to detect drift (§5.4), so a config that reorders itself between two
 // identical edits would report a change that is not one.
 func (c *Config) Normalize() {
+	// Before the services, whose names are stored relative to it.
+	c.Domain = normalizeDomain(c.Domain)
+
 	for i := range c.Services {
 		s := &c.Services[i]
 		s.Name = strings.TrimSpace(strings.ToLower(s.Name))

@@ -75,6 +75,16 @@ type Config struct {
 	// PolicyDir holds one JSON file per policy, re-read on SIGHUP.
 	PolicyDir string `json:"policy_dir,omitempty"`
 
+	// PublishedFile is accepted and ignored.
+	//
+	// It named the file of names this box answered on `ingress`'s behalf, which
+	// is gone (docs/ingress.md §3). The field stays only because this file is
+	// parsed strictly and an upgraded daemon may find the previous version's
+	// relay.json on disk: a relay that refused to start over one obsolete key
+	// would take the whole house's resolution down. Delete once no released
+	// version renders it.
+	PublishedFile string `json:"published_file,omitempty"`
+
 	// RoutesFile is a reloadable snapshot of gateway's effective DNS choices.
 	// The relay reads it on SIGHUP, never calls the control plane per query.
 	RoutesFile string `json:"routes_file,omitempty"`
@@ -82,11 +92,6 @@ type Config struct {
 	// configured routing policy. A missing source simply cannot identify a MAC.
 	LeaseFile string `json:"lease_file,omitempty"`
 	ARPFile   string `json:"arp_file,omitempty"`
-
-	// PublishedFile names the names this box answers for itself
-	// (published.go), re-read on SIGHUP with the policies. A missing file
-	// means none.
-	PublishedFile string `json:"published_file,omitempty"`
 
 	// ObserveSocket is the unix socket serving the query log and name map.
 	// Empty disables it, and then nothing can read what the relay saw.

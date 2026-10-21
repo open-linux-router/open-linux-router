@@ -157,7 +157,7 @@ func SynthesizeFailure(query []byte) ([]byte, error) {
 	return b.Finish()
 }
 
-// Answer builds the response for a name this box serves itself (published.go).
+// Answer builds a response this box claims authority for.
 //
 // A and AAAA get the addresses of that family; every other type gets NODATA —
 // the name exists, it has no record of that type. That matters more than it

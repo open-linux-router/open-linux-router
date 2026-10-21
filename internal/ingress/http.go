@@ -2,7 +2,6 @@ package ingress
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -34,13 +33,6 @@ type HTTP struct {
 
 	// IconClient is injectable for tests; production uses a bounded HTTPS client.
 	IconClient *http.Client
-
-	// Dependents re-applies the modules built from what this one publishes —
-	// `dns`, whose relay answers every published name with this box's address
-	// (internal/dns/published.go). Without it a new service is served on :443
-	// and cannot be found by name until something else re-applies dns. Nil
-	// outside olrd.
-	Dependents func(ctx context.Context) []core.Step
 }
 
 // Routes is the module's surface, declared as data so it can be enumerated
@@ -220,8 +212,7 @@ func (h HTTP) getServiceIcon(w http.ResponseWriter, r *http.Request) {
 		w.Write(data)
 		return
 	}
-	domain := h.Applier.DNS.LocalDomain()
-	origin := (&url.URL{Scheme: "https", Host: qualify(name, domain), Path: matched.LinkPath}).String()
+	origin := (&url.URL{Scheme: "https", Host: qualify(name, cfg.Domain), Path: matched.LinkPath}).String()
 	data, kind, err := DiscoverIcon(r.Context(), h.IconClient, origin)
 	if err != nil {
 		http.NotFound(w, r)
@@ -297,7 +288,7 @@ func (h HTTP) putService(w http.ResponseWriter, r *http.Request) {
 	s.Name = name
 
 	h.mutate(w, r, func(cfg *Config) error {
-		cfg.SetService(s, h.domain())
+		cfg.SetService(s)
 		return nil
 	})
 }
@@ -305,7 +296,7 @@ func (h HTTP) putService(w http.ResponseWriter, r *http.Request) {
 func (h HTTP) deleteService(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	h.mutate(w, r, func(cfg *Config) error {
-		if !cfg.RemoveService(name, h.domain()) {
+		if !cfg.RemoveService(name) {
 			// 404, not 422. "There is no service by that name" is a statement
 			// about the address, and a UI retrying a delete it already completed
 			// should be able to tell that from a refusal.
@@ -331,10 +322,6 @@ func preserveToken(next, current Config) Config {
 		next.Certificate.Token = current.Certificate.Token
 	}
 	return next
-}
-
-func (h HTTP) domain() string {
-	return strings.ToLower(strings.TrimSuffix(h.Applier.DNS.LocalDomain(), "."))
 }
 
 // applyResponse always carries the plan and the steps, successful or not
@@ -467,15 +454,6 @@ func (h HTTP) mutateWith(w http.ResponseWriter, r *http.Request, forceConfirm bo
 		}
 
 		result, applyErr = h.Applier.ApplyPlanned(r.Context(), cfg, plan)
-		// Followed even when the proxy's own plan was empty: enabling a module
-		// whose files were already rendered changes nothing here and still
-		// changes which names DNS should answer. The dependent is a no-op
-		// apply when it has nothing to do.
-		if applyErr == nil && h.Dependents != nil {
-			for _, s := range h.Dependents(r.Context()) {
-				result.Steps = append(result.Steps, Step{Description: s.Description, Done: s.Done, Error: s.Error})
-			}
-		}
 		stored, _ = h.Applier.Load()
 		return nil
 	}); lockErr != nil {
@@ -625,10 +603,9 @@ type statusResponse struct {
 	Problems []core.Problem `json:"problems,omitempty"`
 	Enabled  bool           `json:"enabled"`
 
-	// Domain is the suffix published names live under. Reported because it is
-	// not in this module's config — it belongs to `dns` (§4.1) — and an operator
-	// reading status should not have to know that to find out what their URLs
-	// look like.
+	// Domain is the suffix published names live under — this module's own
+	// Config.Domain, repeated here so an observed read does not have to load
+	// the config to find out what the URLs look like.
 	Domain string `json:"domain,omitempty"`
 
 	// Service is what systemd knows. Absent, with ServiceError set, when the
@@ -669,7 +646,7 @@ func (h HTTP) getStatus(w http.ResponseWriter, r *http.Request) {
 	resp.Enabled = cfg.Enabled
 	resp.Problems = problems(Validate(cfg, h.Applier.DNS, h.Applier.Devices).Errors)
 	resp.Published = len(cfg.Services)
-	resp.Domain = h.domain()
+	resp.Domain = cfg.Domain
 
 	// Both halves: is there a proxy, and can it do the job. The second is the one
 	// that is usually wrong (ErrNoProviders), and a status that only answered the
@@ -752,7 +729,7 @@ func (h HTTP) getServices(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	domain := h.domain()
+	domain := cfg.Domain
 
 	resp := servicesResponse{
 		Services: make([]serviceView, 0, len(cfg.Services)),

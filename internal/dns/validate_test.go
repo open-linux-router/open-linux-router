@@ -55,6 +55,34 @@ func TestValidateAcceptsAMinimalConfig(t *testing.T) {
 	}
 }
 
+func TestValidatePrivateDomains(t *testing.T) {
+	t.Run("malformed is refused", func(t *testing.T) {
+		c := validConfig()
+		c.PrivateDomains = []string{"bad domain"}
+		res := Validate(c, testLinks(), nil)
+		if !hasProblem(res.Errors, "private_domains[0]") {
+			t.Fatalf("expected an error at private_domains[0], got %v", errorPaths(res))
+		}
+	})
+
+	t.Run("inside the local domain is called out", func(t *testing.T) {
+		c := validConfig()
+		c.PrivateDomains = []string{c.LocalDomainOrDefault()}
+		res := Validate(c, testLinks(), nil)
+		if !hasProblem(res.Warnings, "private_domains[0]") {
+			t.Fatalf("expected a warning at private_domains[0], got %v", errorPaths(res))
+		}
+	})
+
+	t.Run("a claimed zone is fine", func(t *testing.T) {
+		c := validConfig()
+		c.PrivateDomains = []string{"home.example.com"}
+		if res := Validate(c, testLinks(), nil); !res.OK() {
+			t.Fatalf("a zone beside the local domain was rejected: %v", errorPaths(res))
+		}
+	})
+}
+
 func TestValidateListen(t *testing.T) {
 	tests := []struct {
 		name    string

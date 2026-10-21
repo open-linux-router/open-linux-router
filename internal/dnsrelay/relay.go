@@ -7,7 +7,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -40,15 +39,8 @@ type Relay struct {
 	// promise to re-decide questions already asked.
 	policies atomic.Pointer[PolicySet]
 
-	// published is swapped on SIGHUP alongside policies, for the same reason.
-	published atomic.Pointer[map[string]bool]
-	routes    atomic.Pointer[Routes]
-	identity  identityCache
-
-	// localAddrs finds this box's addresses as seen from where a query
-	// arrived. Nil means systemLocalAddrs; a field so tests on loopback can
-	// say what the answer should be.
-	localAddrs func(arrival) []netip.Addr
+	routes   atomic.Pointer[Routes]
+	identity identityCache
 
 	log      *QueryLog
 	names    *NameMap
@@ -110,7 +102,7 @@ func New(cfg Config, logger *slog.Logger) (*Relay, error) {
 	return r, nil
 }
 
-// Reload re-reads policies, published names and exit DNS routing atomically.
+// Reload re-reads policies and exit DNS routing atomically.
 //
 // Called on SIGHUP, which is how olrd tells this process that a blocklist
 // changed. The listen addresses and the upstream are not re-read: rebinding a
@@ -125,51 +117,15 @@ func (r *Relay) Reload() error {
 		// error reaches the journal.
 		return err
 	}
-	published, err := LoadPublished(r.cfg.PublishedFile)
-	if err != nil {
-		// Both halves keep their old sets, so a reload is all or nothing.
-		return err
-	}
 	routes, err := LoadRoutes(r.cfg.RoutesFile)
 	if err != nil {
 		return err
 	}
 	r.policies.Store(Compile(policies))
-	r.published.Store(&published)
 	r.routes.Store(&routes)
 	r.logger.Info("DNS rules loaded", "policies", len(policies), "dir", r.cfg.PolicyDir,
-		"published", len(published), "exit_dns", len(routes.Exits))
+		"exit_dns", len(routes.Exits))
 	return nil
-}
-
-// publishes reports whether name is one this box answers for itself.
-func (r *Relay) publishes(name string) bool {
-	set := r.published.Load()
-	return set != nil && (*set)[name]
-}
-
-// addrsFor is this box's addresses as seen from where a query arrived, less
-// any IPv6 address when the query did not itself arrive over IPv6.
-//
-// Having an IPv6 address on the interface does not mean a client can reach it.
-// On the network this was built against, a Mac with an address in the router's
-// own ULA prefix could reach nothing on the router over IPv6 — not :53, not the
-// proxy — while IPv4 worked. An AAAA there is at best a Happy Eyeballs detour
-// and at worst a hang in a client that does not race. A query that arrived over
-// IPv6 is the client proving the path works, so that is when AAAA is answered;
-// otherwise it is NODATA and the client uses the A record, which is always
-// given.
-func (r *Relay) addrsFor(at arrival) []netip.Addr {
-	var addrs []netip.Addr
-	if r.localAddrs != nil {
-		addrs = r.localAddrs(at)
-	} else {
-		addrs = systemLocalAddrs(at)
-	}
-	if at.addr.Is6() {
-		return addrs
-	}
-	return slices.DeleteFunc(slices.Clone(addrs), func(a netip.Addr) bool { return a.Is6() })
 }
 
 // Policies returns the live set, for the query path and for tests.
@@ -222,8 +178,8 @@ type result struct {
 	decision Decision
 	upstream string
 
-	// local marks an answer for a published name: built here, from this box's
-	// own addresses.
+	// local marks an answer built here rather than relayed — today the AAAA
+	// filter's NODATA, which is ours and not the upstream's.
 	local bool
 }
 
@@ -233,7 +189,7 @@ type result struct {
 // short. Note what it does *not* do: it never inspects or rebuilds a relayed
 // response. The bytes that come back from upstream are the bytes that go to the
 // client.
-func (r *Relay) resolve(ctx context.Context, client netip.Addr, query []byte, overTCP bool, at arrival) (result, error) {
+func (r *Relay) resolve(ctx context.Context, client netip.Addr, query []byte, overTCP bool) (result, error) {
 	var res result
 
 	// Best-effort. A query we cannot parse is still relayed — unbound is far
@@ -263,20 +219,6 @@ func (r *Relay) resolve(ctx context.Context, client netip.Addr, query []byte, ov
 			res.response = response
 			return res, nil
 		}
-	}
-
-	// After blocking, so a policy that blocks the local domain for a device
-	// still does; before forwarding, because these names are ours to answer
-	// and nobody upstream knows them.
-	if res.haveQ && r.publishes(res.question.Name) {
-		response, err := Answer(query, r.addrsFor(at), PublishedTTL)
-		if err == nil {
-			res.local = true
-			res.response = response
-			return res, nil
-		}
-		r.logger.Warn("could not build an answer for a published name; relaying instead",
-			"name", res.question.Name, "error", err)
 	}
 
 	// The local zone belongs to unbound, including names that do not exist.
@@ -402,8 +344,8 @@ func (r *Relay) record(o observation) {
 
 	// A blocked answer's addresses are ours, not the name's. Recording 0.0.0.0
 	// against a domain would pollute the attribution map with an address no
-	// traffic will ever go to. A published name's are this box's own, and
-	// traffic to them is never forwarded, so there is nothing to attribute.
+	// traffic will ever go to. The same is true of the AAAA filter's answer,
+	// which has no addresses at all.
 	if !o.blocked && !o.local {
 		r.names.Record(o.client, obs, o.at)
 	}

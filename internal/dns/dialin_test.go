@@ -96,7 +96,7 @@ func TestPeersResolveThroughAnAddressWeServe(t *testing.T) {
 	b := testBackend(t)
 	b.DialIn = tunnel()
 
-	out, err := b.Render(validConfig(), testLinks(), nil)
+	out, err := b.Render(validConfig(), testLinks())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestRenderRelayDoesNotRepeatAPinnedDialInAddress(t *testing.T) {
 	cfg := validConfig()
 	cfg.Listen = append(cfg.Listen, netip.MustParseAddrPort("10.6.0.1:53"))
 
-	out, err := b.Render(cfg, testLinks(), nil)
+	out, err := b.Render(cfg, testLinks())
 	if err != nil {
 		t.Fatal(err)
 	}

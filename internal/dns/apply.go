@@ -34,10 +34,6 @@ type Applier struct {
 	// where the reason it never reaches the renderer is written down.
 	Reservations ReservationView
 
-	// Published is the window onto the names `ingress` publishes, which the
-	// relay answers itself (published.go). Nil publishes nothing.
-	Published PublishedView
-
 	// DialIn is the window onto the tunnel's DNS promise (dialin.go): the
 	// address every dial-in client configuration names, which this module has
 	// to answer on whether or not the operator pinned it. Nil means no tunnel,
@@ -258,7 +254,7 @@ func (a Applier) Plan(ctx context.Context, desired Config) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	return BuildPlan(a.backend(), desired, a.Links, a.Reservations, a.Published, obs, time.Now())
+	return BuildPlan(a.backend(), desired, a.Links, a.Reservations, obs, time.Now())
 }
 
 // Drift reports what has changed underneath stored intent.
@@ -288,7 +284,7 @@ func (a Applier) ApplyChecked(ctx context.Context, desired Config, check func(Pl
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	plan, err := BuildPlan(a.backend(), desired, a.Links, a.Reservations, a.Published, obs, time.Now())
+	plan, err := BuildPlan(a.backend(), desired, a.Links, a.Reservations, obs, time.Now())
 	if err != nil {
 		return ApplyResult{Plan: plan}, err
 	}
@@ -368,7 +364,7 @@ func (a Applier) ApplyChecked(ctx context.Context, desired Config, check func(Pl
 		}
 	}
 
-	rendered, err := a.Backend.Render(desired, a.Links, a.Published)
+	rendered, err := a.Backend.Render(desired, a.Links)
 	if err != nil {
 		return result, err
 	}

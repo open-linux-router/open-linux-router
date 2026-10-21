@@ -4,19 +4,20 @@ Usage:
   olr dns set [flags]
 
 Flags:
-      --block-dot                 drop DNS-over-TLS on 853, so clients cannot route around the redirect
-      --filter-aaaa               answer AAAA queries without IPv6 addresses
-  -h, --help                      help for set
-      --listen stringArray        pin DNS to specific addresses, repeatable, e.g. 192.168.1.1:53 (default: every address this router holds; pins are yours to keep correct, and olr adds the addresses it hands to clients itself)
-      --local-domain string       suffix local names are published under, e.g. home.arpa
-      --mode string               how names are resolved: recurse|forward
-      --query-log                 record answered queries
-      --query-log-entries int     how many answered queries to keep in memory
-      --redirect                  redirect clients that use another resolver back to this one
-      --redirect-on stringArray   interface whose forwarded DNS is redirected, repeatable
-      --tls                       forward over DNS-over-TLS
-      --tls-name string           certificate name the forwarder must present, e.g. cloudflare-dns.com
-      --upstream stringArray      forwarder, repeatable, used with --mode forward, e.g. 1.1.1.1
+      --block-dot                    drop DNS-over-TLS on 853, so clients cannot route around the redirect
+      --filter-aaaa                  answer AAAA queries without IPv6 addresses
+  -h, --help                         help for set
+      --listen stringArray           pin DNS to specific addresses, repeatable, e.g. 192.168.1.1:53 (default: every address this router holds; pins are yours to keep correct, and olr adds the addresses it hands to clients itself)
+      --local-domain string          suffix local names are published under, e.g. home.arpa
+      --mode string                  how names are resolved: recurse|forward
+      --private-domain stringArray   zone whose public records may point at private addresses, repeatable, e.g. home.example.com (without it, a record there is invisible to clients using this resolver)
+      --query-log                    record answered queries
+      --query-log-entries int        how many answered queries to keep in memory
+      --redirect                     redirect clients that use another resolver back to this one
+      --redirect-on stringArray      interface whose forwarded DNS is redirected, repeatable
+      --tls                          forward over DNS-over-TLS
+      --tls-name string              certificate name the forwarder must present, e.g. cloudflare-dns.com
+      --upstream stringArray         forwarder, repeatable, used with --mode forward, e.g. 1.1.1.1
 
 Global Flags:
       --dry-run         show what would change and exit without applying it

@@ -11,7 +11,7 @@ func renderGood(t *testing.T, edit func(*Config)) Rendered {
 	if edit != nil {
 		edit(&c)
 	}
-	out, err := NewCaddy(RootedPaths(t.TempDir())).Render(c, goodDNS(), goodDevices())
+	out, err := NewCaddy(RootedPaths(t.TempDir())).Render(c, goodDevices())
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -45,13 +45,13 @@ func TestRenderPublishesOneWildcardSite(t *testing.T) {
 
 	// One site block for the wildcard, not one per name — a block per name
 	// would ask for a certificate per name and defeat the wildcard.
-	if !strings.Contains(got, "*.home.example.com {") {
+	if !strings.Contains(got, "*.svc.example.com {") {
 		t.Errorf("expected a wildcard site block:\n%s", got)
 	}
-	if strings.Contains(got, "grafana.home.example.com {") {
+	if strings.Contains(got, "grafana.svc.example.com {") {
 		t.Errorf("a per-name site block would request its own certificate:\n%s", got)
 	}
-	if !strings.Contains(got, "@svc_grafana host grafana.home.example.com") {
+	if !strings.Contains(got, "@svc_grafana host grafana.svc.example.com") {
 		t.Errorf("expected a host matcher:\n%s", got)
 	}
 	if !strings.Contains(got, "reverse_proxy 192.168.1.50:3000") {
@@ -110,7 +110,7 @@ func TestRenderClosesUnpublishedNames(t *testing.T) {
 // unix socket. The default, localhost:2019, is reachable by every local user.
 func TestRenderPutsTheAdminAPIOnASocketOnly(t *testing.T) {
 	b := NewCaddy(RootedPaths(t.TempDir()))
-	out, err := b.Render(good(), goodDNS(), goodDevices())
+	out, err := b.Render(good(), goodDevices())
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -249,9 +249,9 @@ func TestRedactedHidesTheToken(t *testing.T) {
 }
 
 func TestNormalizeStripsTheDomainSuffix(t *testing.T) {
-	var c Config
-	c.SetService(Service{Name: "Grafana.Home.Example.com", Upstream: Upstream{Host: "10.0.0.1", Port: 80}}, "home.example.com")
-	c.SetService(Service{Name: "grafana", Upstream: Upstream{Host: "10.0.0.2", Port: 80}}, "home.example.com")
+	c := Config{Domain: "home.example.com"}
+	c.SetService(Service{Name: "Grafana.Home.Example.com", Upstream: Upstream{Host: "10.0.0.1", Port: 80}})
+	c.SetService(Service{Name: "grafana", Upstream: Upstream{Host: "10.0.0.2", Port: 80}})
 
 	if len(c.Services) != 1 {
 		t.Fatalf("both spellings are one service, got %d: %v", len(c.Services), c.Services)
@@ -264,12 +264,12 @@ func TestNormalizeStripsTheDomainSuffix(t *testing.T) {
 func TestLinkPathDoesNotChangeProxyConfiguration(t *testing.T) {
 	c := good()
 	backend := NewCaddy(RootedPaths(t.TempDir()))
-	before, err := backend.Render(c, goodDNS(), goodDevices())
+	before, err := backend.Render(c, goodDevices())
 	if err != nil {
 		t.Fatal(err)
 	}
 	c.Services[0].LinkPath = "/ui"
-	after, err := backend.Render(c, goodDNS(), goodDevices())
+	after, err := backend.Render(c, goodDevices())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -245,7 +245,6 @@ func run(args []string) error {
 	if err != nil {
 		return fmt.Errorf("initialising dns: %w", err)
 	}
-	dnsApplier.Published = dnsPublished{store: store}
 	// The tunnel's address, read through `remote`: the resolver answers on it
 	// because every client configuration names it, not because an operator
 	// remembered to pin it (internal/dns/dialin.go).
@@ -626,9 +625,6 @@ func run(args []string) error {
 		Applier: ingressApplier,
 		Lock:    srv.ApplyLock(),
 		Events:  srv.Events(),
-		Dependents: func(ctx context.Context) []core.Step {
-			return applyDependents(ctx, logger, dnsDependent(dnsApplier))
-		},
 	}.Routes(), ingress.Config{})
 
 	// `firewall` is mounted last, matching the store's order. It re-applies

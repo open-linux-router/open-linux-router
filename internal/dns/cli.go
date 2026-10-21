@@ -295,6 +295,7 @@ type configFlags struct {
 	interfaces  []string
 	blockDoT    bool
 	localDomain string
+	private     []string
 }
 
 func (f *configFlags) register(c *cobra.Command) {
@@ -321,6 +322,9 @@ func (f *configFlags) register(c *cobra.Command) {
 		"drop DNS-over-TLS on 853, so clients cannot route around the redirect")
 	c.Flags().StringVar(&f.localDomain, "local-domain", "",
 		"suffix local names are published under, e.g. "+DefaultLocalDomain)
+	c.Flags().StringArrayVar(&f.private, "private-domain", nil,
+		"zone whose public records may point at private addresses, repeatable, e.g. home.example.com "+
+			"(without it, a record there is invisible to clients using this resolver)")
 
 	cli.EnumFlag(c, "mode", upstreamModeNames()...)
 }
@@ -385,6 +389,10 @@ func (f *configFlags) apply(c *cobra.Command, cfg *Config) error {
 	if changed("block-dot") {
 		cfg.Hijack.BlockDoT = f.blockDoT
 	}
+	if changed("private-domain") {
+		cfg.PrivateDomains = f.private
+	}
+
 	if changed("local-domain") {
 		// Normalize here and not only on the way out: hosts are stored relative
 		// to this value, so every later Host lookup in this same edit compares

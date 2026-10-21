@@ -131,7 +131,7 @@ func TestIconRouteServesPublishedService(t *testing.T) {
 	h, applier := testHTTP(t)
 	publish(t, h)
 	routes := HTTP{Applier: applier, IconClient: &http.Client{Transport: iconTransport(func(r *http.Request) (*http.Response, error) {
-		if r.URL.Host != "grafana.home.example.com" {
+		if r.URL.Host != "grafana.svc.example.com" {
 			t.Fatalf("unexpected origin %s", r.URL)
 		}
 		body := ""

@@ -9,7 +9,7 @@ import (
 // "system already in this state" fixture every drift test needs.
 func renderInto(t *testing.T, b Caddy, c Config) Observed {
 	t.Helper()
-	out, err := b.Render(c, goodDNS(), goodDevices())
+	out, err := b.Render(c, goodDevices())
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestPlanRemovingAServiceIsDisruptive(t *testing.T) {
 		t.Fatalf("impact = %s, want disruptive", p.Impact)
 	}
 	joined := strings.Join(p.Reasons, " ")
-	if !strings.Contains(joined, "grafana.home.example.com") {
+	if !strings.Contains(joined, "grafana.svc.example.com") {
 		t.Errorf("the reason must name what stops answering, got %v", p.Reasons)
 	}
 }
@@ -274,7 +274,7 @@ func TestServedNamesReadsOurOwnMatchers(t *testing.T) {
 	obs := renderInto(t, b, c)
 
 	got := obs.Served(b.Paths.Conf)
-	want := []string{"grafana.home.example.com", "nas.home.example.com"}
+	want := []string{"grafana.svc.example.com", "nas.svc.example.com"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}

@@ -29,7 +29,7 @@ func TestFilterAAAAIndependentOfTransportAndUpstream(t *testing.T) {
 			for _, typ := range []dnsmessage.Type{dnsmessage.TypeA, dnsmessage.TypeAAAA} {
 				before := calls.Load()
 				query := buildQuery(t, 42, "example.com.", typ)
-				res, err := r.resolve(context.Background(), client, query, tcp, arrival{})
+				res, err := r.resolve(context.Background(), client, query, tcp)
 				if err != nil {
 					t.Fatal(err)
 				}

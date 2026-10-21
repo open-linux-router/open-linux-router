@@ -19,7 +19,7 @@ func testBackend(t *testing.T) Backend {
 
 func renderOne(t *testing.T, b Backend, c Config, path string) string {
 	t.Helper()
-	out, err := b.Render(c, testLinks(), nil)
+	out, err := b.Render(c, testLinks())
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -55,11 +55,11 @@ func TestRenderIsDeterministic(t *testing.T) {
 	}
 	cfg.Hijack = Hijack{Enabled: true, Interfaces: []string{"lan0"}, BlockDoT: true}
 
-	first, err := b.Render(cfg, testLinks(), nil)
+	first, err := b.Render(cfg, testLinks())
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := b.Render(cfg, testLinks(), nil)
+	second, err := b.Render(cfg, testLinks())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestRenderedFilesCarryAnOwnershipHeader(t *testing.T) {
 	cfg := validConfig()
 	cfg.Hijack = Hijack{Enabled: true, Interfaces: []string{"lan0"}}
 
-	out, err := b.Render(cfg, testLinks(), nil)
+	out, err := b.Render(cfg, testLinks())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,6 +139,32 @@ func TestRenderDoesNotStripTheBenchmarkingRange(t *testing.T) {
 	}
 	if strings.Contains(conf, "198.18.") {
 		t.Error("198.18.0.0/15 is in the rebinding list; that silently breaks a fake-IP proxy behind us")
+	}
+}
+
+// A zone the operator has claimed may hold private answers; nothing else may.
+//
+// The default (no private-domain lines) is the protection. This is the exemption
+// that makes a record in the operator's own public zone usable through this
+// resolver at all.
+func TestRenderPrivateDomains(t *testing.T) {
+	b := testBackend(t)
+
+	plain := renderDirectives(t, b, validConfig(), b.Paths.UnboundConf)
+	if strings.Contains(plain, "private-domain") {
+		t.Error("no zone is claimed, so no zone should be exempt from rebinding protection")
+	}
+
+	c := validConfig()
+	c.PrivateDomains = []string{"home.example.com", "svc.example.com"}
+	conf := renderDirectives(t, b, c, b.Paths.UnboundConf)
+	for _, want := range []string{`private-domain: "home.example.com."`, `private-domain: "svc.example.com."`} {
+		if !strings.Contains(conf, want) {
+			t.Errorf("missing %q in:\n%s", want, conf)
+		}
+	}
+	if !strings.Contains(conf, "private-address: 192.168.0.0/16") {
+		t.Error("claiming a zone must not turn the protection off for everything else")
 	}
 }
 
@@ -239,7 +265,7 @@ func TestRenderPoliciesAreReloadable(t *testing.T) {
 	cfg := validConfig()
 	cfg.Policies = []Policy{{Name: "kids", Block: []string{"example.com"}}}
 
-	out, err := b.Render(cfg, testLinks(), nil)
+	out, err := b.Render(cfg, testLinks())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +349,7 @@ func TestRenderHijack(t *testing.T) {
 
 func TestRenderHijackIsAbsentWhenOff(t *testing.T) {
 	b := testBackend(t)
-	out, err := b.Render(validConfig(), testLinks(), nil)
+	out, err := b.Render(validConfig(), testLinks())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +495,7 @@ func TestGatewayExitDNSRendersPerDeviceRoutes(t *testing.T) {
 	}
 	b := testBackend(t)
 	b.Intent = store
-	out, err := b.Render(validConfig(), testLinks(), nil)
+	out, err := b.Render(validConfig(), testLinks())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -494,7 +520,7 @@ func TestGatewayDNSChangeOnlyReloadsRelay(t *testing.T) {
 	b := testBackend(t)
 	b.Intent = store
 	cfg := validConfig()
-	rendered, err := b.Render(cfg, testLinks(), nil)
+	rendered, err := b.Render(cfg, testLinks())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -511,7 +537,7 @@ func TestGatewayDNSChangeOnlyReloadsRelay(t *testing.T) {
 	if err := store.Save(doc); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := BuildPlan(b, cfg, testLinks(), nil, nil, obs, time.Now())
+	plan, err := BuildPlan(b, cfg, testLinks(), nil, obs, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

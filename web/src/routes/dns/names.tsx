@@ -86,6 +86,24 @@ export function DnsNamesPage() {
         onSave={(value) => change({ ...config, local_domain: value.trim() || undefined })}
       />
 
+      <EditableField
+        id="dns-private-domains"
+        label={t('Private-answer zones')}
+        busy={busy}
+        placeholder="home.example.com"
+        stored={(config.private_domains ?? []).join(', ')}
+        hint={
+          <>
+            {t('Comma separated. Domains whose public records may point at an address on this network — in practice the domain you publish your own services under.')}{' '}
+            {t('Without it, this resolver hides those answers for everyone using it.')}
+          </>
+        }
+        onSave={(value) => {
+          const list = value.split(/[,\s]+/).filter(Boolean)
+          change({ ...config, private_domains: list.length ? list : undefined })
+        }}
+      />
+
       <Disclosure summary={t('About local domains')}>
         <p className="text-sm text-muted-foreground">
           home.arpa is reserved for home networks. Bare names also resolve when DHCP advertises this suffix as the search domain.

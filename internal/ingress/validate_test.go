@@ -11,6 +11,9 @@ import (
 func good() Config {
 	return Config{
 		Enabled: true,
+		// Deliberately not the resolver's zone: publishing aside, a domain that
+		// has nothing to do with what this network answers is the ordinary case.
+		Domain: "svc.example.com",
 		Certificate: Certificate{
 			Provider: "cloudflare",
 			Token:    "tok",
@@ -23,8 +26,11 @@ func good() Config {
 	}
 }
 
+// goodDNS is the resolver's default zone, not the published domain: they are
+// separate settings, and the common arrangement is devices here and services
+// somewhere the operator owns.
 func goodDNS() StaticDNS {
-	return StaticDNS{Domain: "home.example.com", HostNames: []string{"printer"}}
+	return StaticDNS{Domain: "home.arpa"}
 }
 
 func goodDevices() StaticDevices {
@@ -55,36 +61,81 @@ func TestValidateAcceptsAGoodConfig(t *testing.T) {
 	}
 }
 
-// The first error most operators will ever see from this module: `dns`'s own
-// default local domain cannot carry a public certificate.
-func TestValidateRefusesTheDefaultLocalDomain(t *testing.T) {
-	r := Validate(good(), StaticDNS{Domain: "home.arpa"}, goodDevices())
-	findError(t, r, "", "no certificate authority will issue")
-	if !strings.Contains(r.Errors[0].Message, "olr dns set --local-domain") {
+// The first error most operators will ever see from this module: the field is
+// empty, because nothing is published yet.
+func TestValidateRequiresADomain(t *testing.T) {
+	c := good()
+	c.Domain = ""
+	r := Validate(c, goodDNS(), goodDevices())
+	findError(t, r, "domain", "required")
+	if !strings.Contains(r.Errors[0].Message, "olr ingress set --domain") {
 		t.Fatalf("the refusal must carry the remedy, got %q", r.Errors[0].Message)
 	}
 }
 
+// Now a *choice*, not an inherited fact: pointing the published domain at the
+// resolver's default would still be unissuable.
 func TestValidateRefusesUnissuableDomains(t *testing.T) {
 	for _, domain := range []string{"home.arpa", "my.lan", "box.local", "x.internal", "a.test"} {
 		t.Run(domain, func(t *testing.T) {
-			r := Validate(good(), StaticDNS{Domain: domain}, goodDevices())
-			findError(t, r, "", "reserved")
+			c := good()
+			c.Domain = domain
+			findError(t, Validate(c, goodDNS(), goodDevices()), "domain", "reserved")
 		})
 	}
 }
 
 func TestValidateRefusesASingleLabelDomain(t *testing.T) {
-	r := Validate(good(), StaticDNS{Domain: "router"}, goodDevices())
-	findError(t, r, "", "single label")
+	c := good()
+	c.Domain = "router"
+	findError(t, Validate(c, goodDNS(), goodDevices()), "domain", "single label")
+}
+
+// The one cross-module rule left. The resolver answers its own zone
+// authoritatively, so a published name inside it is never asked of public DNS:
+// the record exists, the Caddyfile is right, and every client on this network
+// gets NXDOMAIN.
+func TestValidateRefusesADomainInsideTheResolverZone(t *testing.T) {
+	for _, domain := range []string{"home.example.com", "svc.home.example.com"} {
+		t.Run(domain, func(t *testing.T) {
+			c := good()
+			c.Domain = domain
+			r := Validate(c, StaticDNS{Domain: "home.example.com"}, goodDevices())
+			findError(t, r, "domain", "would never be asked of your provider's DNS")
+			if !strings.Contains(r.Errors[0].Message, "pub.example.com") {
+				t.Fatalf("the refusal should suggest a sibling domain, got %q", r.Errors[0].Message)
+			}
+		})
+	}
+}
+
+// The other direction is survivable but worth saying out loud: a wildcard for
+// the parent also matches the resolver's zone apex.
+func TestValidateWarnsWhenTheWildcardCoversTheResolverZone(t *testing.T) {
+	c := good()
+	c.Domain = "example.com"
+	r := Validate(c, StaticDNS{Domain: "home.example.com"}, goodDevices())
+	if !r.OK() {
+		t.Fatalf("expected valid, got %v", r.Errors)
+	}
+	found := false
+	for _, p := range r.Warnings {
+		if p.Path == "domain" && strings.Contains(p.Message, "also matches home.example.com") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a warning about the wildcard covering the resolver zone, got %v", r.Warnings)
+	}
 }
 
 func TestValidateSkipsDomainChecksWhenDisabled(t *testing.T) {
 	c := good()
 	c.Enabled = false
+	c.Domain = ""
 	// A disabled module must not hold the config invalid — the operator has to
 	// be able to save an incomplete setup and come back to it.
-	if r := Validate(c, StaticDNS{Domain: "home.arpa"}, goodDevices()); !r.OK() {
+	if r := Validate(c, goodDNS(), goodDevices()); !r.OK() {
 		t.Fatalf("disabled config should validate, got %v", r.Errors)
 	}
 }
@@ -138,20 +189,16 @@ func TestValidateRefusesANestedName(t *testing.T) {
 	findError(t, r, "services[0].name", "more than one label")
 }
 
-// The silent one: `dns` answers first and the proxy is never reached.
-func TestValidateRefusesANameDNSAlreadyAnswers(t *testing.T) {
+// A device and a published service may share a label now, because they are
+// names in different zones: sony-tv.home.arpa is the resolver's, and
+// sony-tv.<published domain> is the proxy's.
+func TestValidateAllowsANameADSDevicesAlsoHas(t *testing.T) {
 	c := good()
 	c.Services[0].Name = "printer"
-	r := Validate(c, goodDNS(), goodDevices())
-	findError(t, r, "services[0].name", "would never reach the proxy")
-}
-
-func TestValidateNameCollisionIgnoresSpelling(t *testing.T) {
-	c := good()
-	c.Services[0].Name = "printer"
-	// dns holding the fully-qualified spelling is the same name.
-	dns := StaticDNS{Domain: "home.example.com", HostNames: []string{"printer.home.example.com"}}
-	findError(t, Validate(c, dns, goodDevices()), "services[0].name", "would never reach the proxy")
+	dns := StaticDNS{Domain: "home.example.com"}
+	if r := Validate(c, dns, goodDevices()); !r.OK() {
+		t.Fatalf("separate namespaces should not collide, got %v", r.Errors)
+	}
 }
 
 func TestValidateName(t *testing.T) {

@@ -23,8 +23,9 @@ import (
 type Applier struct {
 	// Backend renders the proxy's files.
 	Backend Caddy
-	// DNS is the window onto the dns module — the local domain, and the names
-	// it already answers for.
+	// DNS is the window onto the dns module — only the suffix it answers
+	// authoritatively, so that a published domain inside it is refused rather
+	// than silently unresolvable (validate.go).
 	DNS DNSView
 	// Devices is the window onto the devices module.
 	Devices DeviceView
@@ -356,7 +357,7 @@ func (a Applier) ApplyPlanned(ctx context.Context, desired Config, plan Plan) (A
 		return result, nil
 	}
 
-	rendered, err := a.Backend.Render(desired, a.DNS, a.Devices)
+	rendered, err := a.Backend.Render(desired, a.Devices)
 	if err != nil {
 		return result, err
 	}

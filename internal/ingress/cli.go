@@ -1,9 +1,10 @@
 // Package ingress publishes internal services over HTTPS at a name.
 //
-// It owns the bundled Caddy and nothing else. The names it publishes live in
-// the `dns` module's local domain and the devices it points at belong to
-// `devices`; both are read through views and neither is copied here
-// (design.md §4.1). See docs/ingress.md.
+// It owns the published domain, the certificate and the proxy, and nothing
+// else. The name a published service resolves at is a record in the operator's
+// own DNS (docs/ingress.md §3), and the device it points at belongs to
+// `devices`, whose address is read through a view rather than copied
+// (design.md §4.1).
 package ingress
 
 import (
@@ -210,6 +211,7 @@ func loadServices(c *cobra.Command) (servicesResponse, error) {
 
 func setCommand() *cobra.Command {
 	var (
+		domain    string
 		provider  string
 		token     string
 		tokenFile string
@@ -221,13 +223,16 @@ func setCommand() *cobra.Command {
 
 	return verb("set", "Set how certificates are obtained", func(c *cobra.Command) {
 		c.Args = cobra.NoArgs
-		c.Long = "Set the module-level settings: which DNS provider hosts your domain,\n" +
-			"the credential olr uses to prove the domain is yours, and who the\n" +
-			"certificate authority should contact.\n\n" +
-			"The domain itself is not set here. Published names live under the same\n" +
-			"suffix as every other local name, which belongs to the dns module:\n" +
-			"`olr dns set --local-domain <your domain>`."
+		c.Long = "Set the module-level settings: the domain published names live under,\n" +
+			"which DNS provider hosts it, the credential olr uses to prove the domain\n" +
+			"is yours, and who the certificate authority should contact.\n\n" +
+			"`--domain` is the zone you add records to, and the one the wildcard\n" +
+			"certificate is for: publishing grafana under home.example.com means a\n" +
+			"record you create in your own DNS and a certificate for\n" +
+			"*.home.example.com. It is deliberately not the resolver's local domain\n" +
+			"(`olr dns set --local-domain`), which names the devices in this house."
 
+		c.Flags().StringVar(&domain, "domain", "", "suffix published names live under, e.g. home.example.com")
 		c.Flags().StringVar(&provider, "provider", "", "DNS provider hosting your domain (see `olr ingress show providers`)")
 		c.Flags().StringVar(&token, "token", "",
 			"provider API credential. Prefer --token-file: a value here is recorded in your shell history")
@@ -277,6 +282,9 @@ func setCommand() *cobra.Command {
 			}
 
 			patch := map[string]any{}
+			if c.Flags().Changed("domain") {
+				patch["domain"] = domain
+			}
 			if len(cert) > 0 {
 				patch["certificate"] = cert
 			}
@@ -372,11 +380,11 @@ func addCommand() *cobra.Command {
 		c.Use = "add <name>"
 		c.Args = cobra.ExactArgs(1)
 		c.Long = "Publish an internal service so it is reachable at\n" +
-			"https://<name>.<your local domain>.\n\n" +
-			"The certificate and the name's answer are already arranged — one\n" +
-			"wildcard certificate covers every published name, and the dns module\n" +
-			"already serves the suffix. So this takes a name and a target, and\n" +
-			"nothing else.\n\n" +
+			"https://<name>.<your published domain>.\n\n" +
+			"The certificate is already arranged — one wildcard covers every\n" +
+			"published name. The DNS record is yours: point <name>.<domain> at\n" +
+			"this router in your own zone, and note that a private answer there\n" +
+			"needs the zone listed in `olr dns set --private-domain`.\n\n" +
 			"Examples:\n" +
 			"  olr ingress add grafana --device nuc --port 3000\n" +
 			"  olr ingress add nas --device synology --port 5001 --scheme https\n" +

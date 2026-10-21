@@ -34,6 +34,12 @@ func writeConfigText(w io.Writer, c Config) error {
 		fmt.Fprintln(w, "IPv6 answers: filtered (AAAA returns no address)")
 	}
 	fmt.Fprintf(w, "local names:   %s\n", describeHosts(c))
+	if len(c.PrivateDomains) > 0 {
+		// Named on the summary line because it is the one setting whose
+		// absence looks like somebody else's bug: a record in public DNS that
+		// this resolver refuses to answer.
+		fmt.Fprintf(w, "private zones: %s\n", strings.Join(c.PrivateDomains, ", "))
+	}
 
 	fmt.Fprintln(w)
 	if err := writePoliciesText(w, c.Policies); err != nil {

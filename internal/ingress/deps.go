@@ -11,31 +11,23 @@ import (
 // Declared here by the consumer, and adapted in internal/daemon, which is the
 // pattern dhcp uses for LinkView: `ingress` imports neither `dns` nor
 // `devices`, states exactly the facts it needs, and never keeps a copy of
-// either (design.md §4.1). Both edges are new to the §4.1 DAG and both point
-// the same way every other edge does — at the module that owns the fact.
+// either (design.md §4.1).
 
 // DNSView is the window onto the `dns` module.
 //
-// There is exactly one fact here and it is load-bearing: the suffix this
-// network answers for. Published names live under it, the wildcard certificate
-// covers it, and the whole reason this module has no `domain` field of its own
-// is that asking for it here cannot drift from what the resolver actually
-// serves.
+// One fact, read for one reason: the suffix the resolver answers
+// authoritatively. A published domain that falls inside it would never be
+// asked of public DNS at all — the resolver would answer NXDOMAIN for a name
+// that exists, and nothing would say why. validate.go refuses that, and this
+// is the only thing it needs to know.
+//
+// Note what is *not* here any more: the published names. They are the
+// operator's records in their own zone (docs/ingress.md §3), so this module
+// neither writes them into the resolver nor reads the resolver's names back.
 type DNSView interface {
 	// LocalDomain returns the suffix local names live under — `dns`'s
 	// LocalDomain, resolved through its own default.
 	LocalDomain() string
-
-	// Hosts returns the local names `dns` already answers for, relative to the
-	// local domain.
-	//
-	// Read for one reason: to refuse a published service whose name is already
-	// a device's. The two live in one namespace, and `dns` wins — it answers
-	// the device's address directly and the request never reaches the proxy at
-	// all. Nothing errors, nothing logs, the service is simply unreachable and
-	// the Caddyfile looks perfectly correct while it happens. That is the
-	// shape of bug worth spending an interface method to make impossible.
-	Hosts() []string
 }
 
 // DeviceView is the window onto the `devices` module.
@@ -92,15 +84,11 @@ var ErrNoSuchDevice = errors.New("no such device")
 
 // StaticDNS is a DNSView backed by literal values, for tests.
 type StaticDNS struct {
-	Domain    string
-	HostNames []string
+	Domain string
 }
 
 // LocalDomain implements DNSView.
 func (s StaticDNS) LocalDomain() string { return s.Domain }
-
-// Hosts implements DNSView.
-func (s StaticDNS) Hosts() []string { return s.HostNames }
 
 // StaticDevices is a DeviceView backed by a map, for tests.
 //

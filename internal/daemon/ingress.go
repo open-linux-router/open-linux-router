@@ -22,10 +22,11 @@ import (
 
 // ingressDNS is ingress's window onto the dns module.
 //
-// Both facts are read per request through dns's own Load. The domain especially:
-// `ingress` has no domain of its own precisely so that the certificate it
-// obtains and the zone the resolver serves cannot disagree, and that guarantee
-// only holds if this reads the live value rather than a copy taken at startup.
+// One fact, read per request through dns's own Load: the suffix the resolver
+// answers authoritatively. It is read only so that a published domain falling
+// inside it is refused rather than silently unresolved (internal/ingress
+// validate.go), and reading it live rather than caching it keeps a `olr dns set`
+// from leaving the refusal pointing at a stale zone.
 type ingressDNS struct {
 	applier dns.Applier
 }
@@ -33,25 +34,13 @@ type ingressDNS struct {
 func (d ingressDNS) LocalDomain() string {
 	cfg, err := d.applier.Load()
 	if err != nil {
-		// An unreadable dns config reads as "no domain", which the ingress
-		// validator turns into a clear refusal naming `olr dns set`. Returning
-		// a default here instead would be worse: it would let a certificate be
-		// requested for a suffix the resolver is not actually serving.
+		// An unreadable dns config reads as "no local domain", which the
+		// ingress validator treats as "nothing to collide with". Refusing
+		// instead would make a broken dns config block every ingress edit; the
+		// collision it would guard against is reported by `olr dns` itself.
 		return ""
 	}
 	return cfg.LocalDomainOrDefault()
-}
-
-func (d ingressDNS) Hosts() []string {
-	cfg, err := d.applier.Load()
-	if err != nil {
-		return nil
-	}
-	out := make([]string, 0, len(cfg.Hosts))
-	for _, h := range cfg.Hosts {
-		out = append(out, h.Name)
-	}
-	return out
 }
 
 // ingressDevices is ingress's window onto the devices module.
@@ -155,35 +144,4 @@ func deviceInfo(r devices.Resolved) ingress.DeviceInfo {
 	}
 	info.Addr = v6
 	return info
-}
-
-// dnsPublished is dns's window onto the names ingress publishes — the other
-// direction across the same pair, and the reason this file is not only
-// ingress's any more.
-//
-// Read straight from the store rather than through ingress's Applier, which is
-// constructed after dns's: the fact is ingress's stored intent and nothing
-// else, so there is no running state to ask. Disabled publishes nothing,
-// because nothing is serving the names.
-type dnsPublished struct {
-	store *core.Store
-}
-
-func (p dnsPublished) Published() ([]string, error) {
-	doc, err := p.store.Load()
-	if err != nil {
-		return nil, err
-	}
-	cfg, err := ingress.FromDocument(doc)
-	if err != nil {
-		return nil, err
-	}
-	if !cfg.Enabled {
-		return nil, nil
-	}
-	names := make([]string, 0, len(cfg.Services))
-	for _, s := range cfg.Services {
-		names = append(names, s.Name)
-	}
-	return names, nil
 }

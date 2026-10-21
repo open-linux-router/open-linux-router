@@ -68,6 +68,22 @@ type Config struct {
 	// DefaultLocalDomain.
 	LocalDomain string `json:"local_domain,omitempty"`
 
+	// PrivateDomains are zones whose public records are allowed to point at
+	// private addresses — in practice, the domain you publish your own services
+	// under in your provider's DNS.
+	//
+	// unbound rejects such answers by default, and that is anti-rebinding
+	// working as intended (render.go, rebindPrefixes): a name on the internet
+	// resolving to an address on your LAN is how a web page reaches a device it
+	// should not. The rule cannot tell your zone from an attacker's, so this is
+	// where you say which zones are yours. Without it, the record you just
+	// created in your DNS provider works for anyone using a public resolver and
+	// silently does not exist for anyone using this one.
+	//
+	// Only this resolver is affected. A device configured with a public
+	// resolver never asks us and never needs this.
+	PrivateDomains []string `json:"private_domains,omitempty"`
+
 	// Hosts are names this resolver answers itself, so a device on this network
 	// can be reached by name rather than by an address somebody has to remember.
 	Hosts []Host `json:"hosts,omitempty"`
@@ -458,6 +474,11 @@ func (c *Config) Normalize() {
 
 	// Before the hosts, which are stored relative to it.
 	c.LocalDomain = NormalizeDomain(c.LocalDomain)
+	for i, d := range c.PrivateDomains {
+		c.PrivateDomains[i] = NormalizeDomain(d)
+	}
+	slices.Sort(c.PrivateDomains)
+	c.PrivateDomains = slices.Compact(c.PrivateDomains)
 	domain := c.LocalDomainOrDefault()
 	for i := range c.Hosts {
 		h := &c.Hosts[i]
@@ -525,6 +546,7 @@ func comparePrefix(a, b netip.Prefix) int {
 func (c Config) Clone() Config {
 	out := c
 	out.Listen = slices.Clone(c.Listen)
+	out.PrivateDomains = slices.Clone(c.PrivateDomains)
 	out.Upstream.Servers = slices.Clone(c.Upstream.Servers)
 	out.Hijack.Interfaces = slices.Clone(c.Hijack.Interfaces)
 	out.Policies = make([]Policy, len(c.Policies))

@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -202,6 +203,30 @@ func loopbackConfig(t *testing.T, upstream netip.AddrPort) Config {
 // forward the original bytes untouched. Re-serialising would break DNSSEC
 // signatures, drop EDNS options we did not model, and mangle record types we
 // have never heard of.
+// countingUpstream answers NOERROR with nothing and counts what reached it.
+//
+// Lives here rather than beside the tests that first needed it: it is the way
+// every routing test asks "did this query leave the box at all".
+func countingUpstream(t *testing.T) (*fakeUpstream, func() int) {
+	t.Helper()
+	var mu sync.Mutex
+	n := 0
+	up := newFakeUpstream(t, func(query []byte) []byte {
+		mu.Lock()
+		n++
+		mu.Unlock()
+		q, _, err := ParseQuestion(query)
+		if err != nil {
+			t.Error(err)
+			return nil
+		}
+		out := buildResponse(t, 0, q.Name+".", q.Type, dnsmessage.RCodeSuccess, nil)
+		copy(out[:2], query[:2])
+		return out
+	})
+	return up, func() int { mu.Lock(); defer mu.Unlock(); return n }
+}
+
 func TestRelayForwardsResponsesByteForByte(t *testing.T) {
 	// A reply with a record type this code knows nothing about, and trailing
 	// bytes it could not have produced itself. If anything re-serialised, this

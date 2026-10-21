@@ -256,7 +256,7 @@ func BuildPlan(b Caddy, desired Config, dns DNSView, devices DeviceView, obs Obs
 		return Plan{Validation: result}, err
 	}
 
-	rendered, err := b.Render(desired, dns, devices)
+	rendered, err := b.Render(desired, devices)
 	if err != nil {
 		return Plan{Validation: result}, err
 	}
@@ -330,7 +330,7 @@ func BuildPlan(b Caddy, desired Config, dns DNSView, devices DeviceView, obs Obs
 		plan.Enable = &want
 	}
 
-	plan.Impact, plan.Reasons = classify(b, desired, plan, dns, obs)
+	plan.Impact, plan.Reasons = classify(b, desired, plan, obs)
 	return plan, nil
 }
 
@@ -360,7 +360,7 @@ func serviceAction(enabled, running, changed, needsRestart bool) ServiceAction {
 // operator nothing they can weigh; "every connection through the proxy is
 // dropped, and grafana.home.example.com stops answering" tells them whether to
 // do it now or at midnight.
-func classify(b Caddy, desired Config, plan Plan, dns DNSView, obs Observed) (Impact, []string) {
+func classify(b Caddy, desired Config, plan Plan, obs Observed) (Impact, []string) {
 	impact := ImpactNone
 	for _, c := range plan.Changes {
 		impact = max(impact, c.Impact)
@@ -371,7 +371,7 @@ func classify(b Caddy, desired Config, plan Plan, dns DNSView, obs Observed) (Im
 	// Names that are being served now and would not be afterwards. Compared
 	// against the file on disk rather than against stored intent, so a
 	// hand-edit is accounted for too.
-	domain := strings.ToLower(strings.TrimSuffix(dns.LocalDomain(), "."))
+	domain := normalizeDomain(desired.Domain)
 	wanted := map[string]bool{}
 	if desired.Enabled {
 		for _, s := range desired.Services {

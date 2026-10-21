@@ -34,9 +34,10 @@ const MANUAL = ' manual'
  * Publishes a service, or edits one.
  *
  * Two fields, which is the module's whole claim: a name and where requests go.
- * The certificate and the name's answer are not asked about because they were
- * arranged once — one wildcard certificate covers every name that will ever
- * exist, and the dns module already serves the suffix.
+ * The certificate is not asked about because it was arranged once — one wildcard
+ * covers every name that will ever exist. The name's DNS record is not asked
+ * about either, because it is the operator's, in their own zone: this dialog
+ * says what the name will be, and never claims to have created the record.
  *
  * The target is a **device reference**, not an address, which is the opposite of
  * the firewall's forward dialog and worth the contrast. A forward is a kernel
@@ -63,7 +64,7 @@ export function ServiceDialog({
   onOpenChange: (open: boolean) => void
   initial?: Service
   initialUpstream?: Service['upstream']
-  /** The suffix names live under, for the preview. Owned by the dns module. */
+  /** The suffix names live under, for the preview. This module's own setting. */
   domain?: string
   onSubmit: (service: Service) => Promise<boolean>
   /** Only supplied when editing. Removing is an edit to the thing you opened. */
@@ -144,9 +145,9 @@ export function ServiceDialog({
                 autoComplete="off"
                 onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
               />
-              {/* The suffix shown rather than typed, because it is not this
-                  module's to set — and seeing the whole address assembled is
-                  what makes the single word above obviously enough. */}
+              {/* The suffix shown rather than typed, so the whole address is
+                  visible without retyping it on every service. It is set once,
+                  in the certificate dialog above. */}
               <span className="shrink-0 font-mono text-sm text-muted-foreground">
                 .{domain ?? '…'}
               </span>
@@ -156,10 +157,11 @@ export function ServiceDialog({
                 <> {t('It will answer at')}{' '}
                   <span className="font-mono">
                     https://{name}.{domain ?? '…'}
-                  </span>
+                  </span>{' '}
+                  {t('once a DNS record for that name points at this router. The record is yours to create in your own zone.')}
                 </>
               ) : (
-                'One word. The rest of the address is the name your network already answers for.'
+                t('One word. The rest of the address is the domain you publish under.')
               )}
             </p>
           </div>

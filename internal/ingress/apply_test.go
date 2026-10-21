@@ -126,7 +126,7 @@ func TestApplyOnAFreshSystem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading the Caddyfile: %v", err)
 	}
-	if !strings.Contains(string(conf), "grafana.home.example.com") {
+	if !strings.Contains(string(conf), "grafana.svc.example.com") {
 		t.Errorf("the published name is not in the rendered file:\n%s", conf)
 	}
 

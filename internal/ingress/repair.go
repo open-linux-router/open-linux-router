@@ -8,7 +8,8 @@ import (
 // Only accept a complete repair of an existing service, with a strict reduction
 // in existing errors and no new errors. Normal edits still require valid config.
 func canSaveRepair(before, after Config, name string, dns DNSView, devices DeviceView) bool {
-	name = strings.TrimSuffix(strings.ToLower(name), "."+dns.LocalDomain())
+	// Relative to this module's own suffix, which is what the stored name is.
+	name = normalizeName(name, before.Domain)
 	old := Validate(before, dns, devices).Errors
 	next := Validate(after, dns, devices).Errors
 	if len(next) >= len(old) {

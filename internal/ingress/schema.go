@@ -86,9 +86,10 @@ func (Certificate) JSONSchema() *jsonschema.Schema {
 		Items: &jsonschema.Schema{Type: "string"},
 		Title: "Propagation-check resolvers",
 		Description: "Public DNS servers used only to confirm the challenge " +
-			"record has published. This must not be this router: olr answers " +
-			"your local domain authoritatively, so asking it would return " +
-			"\"no such record\" forever. Leave empty for sensible defaults.",
+			"record has published. Kept away from this router on purpose: a " +
+			"blocking rule or a forwarding quirk that hid the record would look " +
+			"exactly like a certificate that never arrives. Leave empty for " +
+			"sensible defaults.",
 	})
 
 	return &jsonschema.Schema{

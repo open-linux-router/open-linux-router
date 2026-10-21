@@ -65,10 +65,9 @@ func (r Result) Err() error {
 // for, because nobody can prove they own them.
 //
 // This is the error an operator hits first and it has to explain itself, not
-// just refuse. `home.arpa` is `dns`'s own default (dns.DefaultLocalDomain), so
-// a box that has never had its local domain set lands here on the very first
-// attempt to publish anything — which makes this message the module's
-// introduction to most people who use it.
+// just refuse. It is also the reason this module's domain is not `dns`'s:
+// `home.arpa` is the resolver's default, and it can never hold a published
+// service (docs/ingress.md §4).
 var unissuableSuffixes = []string{
 	"arpa", "local", "localhost", "internal", "lan", "home", "intranet",
 	"private", "corp", "test", "invalid", "example", "onion",
@@ -79,38 +78,41 @@ var unissuableSuffixes = []string{
 func Validate(c Config, dns DNSView, devices DeviceView) Result {
 	var r Result
 
-	domain := strings.ToLower(strings.TrimSuffix(dns.LocalDomain(), "."))
-	validateDomain(&r, c, domain)
+	domain := normalizeDomain(c.Domain)
+	validateDomain(&r, c, domain, dns)
 
 	if c.Enabled && len(c.Services) == 0 {
 		r.warnf("services", "ingress is enabled but nothing is published, so the proxy will answer every name with a closed connection")
 	}
 
 	validateCertificate(&r, c)
-	validateServices(&r, c, domain, dns, devices)
+	validateServices(&r, c, domain, devices)
 	validateExtraConf(&r, c.ExtraConf)
 
 	return r
 }
 
-// validateDomain checks the suffix this module inherits from `dns`.
+// validateDomain checks the suffix this module publishes under.
 //
-// Nothing here is addressed by a path into *our* config, because the field is
-// not ours — it is `dns.local_domain`, and §4.1 is why we read it rather than
-// hold it. The message therefore has to name the other module's field, since
-// that is where the operator has to go to fix it.
-func validateDomain(r *Result, c Config, domain string) {
+// The field is ours (Config.Domain), so most of these rules are about the
+// certificate: a wildcard needs a registrable domain, and no CA issues for a
+// reserved suffix. The one rule that still involves another module is the
+// overlap, and it is worth the read: the resolver answers its own zone
+// authoritatively, so a published domain inside it is a name that exists in
+// your DNS provider's zone, in the Caddyfile, and nowhere a client can see.
+func validateDomain(r *Result, c Config, domain string, dns DNSView) {
 	if !c.Enabled {
 		return
 	}
 
 	if domain == "" {
-		r.errorf("", "the dns module has no local domain, so there is no suffix to publish under; set one with `olr dns set --local-domain <your domain>`")
+		r.errorf("domain", "required: the suffix published names live under, e.g. home.example.com. "+
+			"The wildcard certificate is for *.<domain> and that is the zone you add records to — set it with `olr ingress set --domain`")
 		return
 	}
 
 	if !strings.Contains(domain, ".") {
-		r.errorf("", "the dns module's local domain %q is a single label; a certificate needs a registrable domain such as home.example.com (`olr dns set --local-domain`)", domain)
+		r.errorf("domain", "%q is a single label; a certificate needs a registrable domain such as home.example.com", domain)
 		return
 	}
 
@@ -119,10 +121,38 @@ func validateDomain(r *Result, c Config, domain string) {
 	// and an operator who invented their own should get the same explanation.
 	labels := strings.Split(domain, ".")
 	if tld := labels[len(labels)-1]; slices.Contains(unissuableSuffixes, tld) {
-		r.errorf("", "no certificate authority will issue for %q: .%s is reserved and cannot be proved to belong to anyone. "+
-			"Publishing over HTTPS needs a domain you actually own — set it with `olr dns set --local-domain <your domain>`, "+
-			"and note that this renames every device's local name too", domain, tld)
+		r.errorf("domain", "no certificate authority will issue for %q: .%s is reserved and cannot be proved to belong to anyone. "+
+			"Publishing over HTTPS needs a domain you actually own — which is why this is a separate setting from the resolver's local domain, not the same one",
+			domain, tld)
+		return
 	}
+
+	local := ""
+	if dns != nil {
+		local = normalizeDomain(dns.LocalDomain())
+	}
+	switch {
+	case local == "":
+		// No resolver zone configured; nothing to overlap with.
+	case domain == local || strings.HasSuffix(domain, "."+local):
+		r.errorf("domain", "the resolver answers %s and everything under it, so a name published here would never be asked of your "+
+			"provider's DNS: anyone using this network's resolver would get NXDOMAIN for a service that is otherwise working. "+
+			"Publish under a domain beside it rather than inside it%s", qualify("*", local), besideSuffix(local))
+	case strings.HasSuffix(local, "."+domain):
+		r.warnf("domain", "the wildcard certificate for %s also matches %s, the zone the resolver answers for device names. "+
+			"The two coexist, but a service named %q would sit exactly on top of that zone",
+			qualify("*", domain), local, strings.SplitN(local, ".", 2)[0])
+	}
+}
+
+// besideSuffix suggests a domain next to the resolver's zone rather than under
+// it — the parent with one more label in front, which is the shape people
+// reach for by hand (home.example.com → pub.example.com).
+func besideSuffix(local string) string {
+	if i := strings.Index(local, "."); i >= 0 && i+1 < len(local) {
+		return " (for example " + "pub." + local[i+1:] + ")"
+	}
+	return ""
 }
 
 func validateCertificate(r *Result, c Config) {
@@ -157,13 +187,7 @@ func validateCertificate(r *Result, c Config) {
 	}
 }
 
-func validateServices(r *Result, c Config, domain string, dns DNSView, devices DeviceView) {
-	// `dns` wins any collision, silently — see DNSView.Hosts.
-	published := map[string]bool{}
-	for _, h := range dns.Hosts() {
-		published[normalizeName(h, domain)] = true
-	}
-
+func validateServices(r *Result, c Config, domain string, devices DeviceView) {
 	seen := map[string]int{}
 	for i, s := range c.Services {
 		path := fmt.Sprintf("services[%d]", i)
@@ -179,11 +203,6 @@ func validateServices(r *Result, c Config, domain string, dns DNSView, devices D
 		seen[s.Name] = i
 
 		validateName(r, path, s.Name, domain)
-
-		if published[s.Name] {
-			r.errorf(path+".name", "the dns module already answers %q with a device's own address, so a request for it would never reach the proxy. "+
-				"Rename the service, or remove the name with `olr dns rm host %s`", qualify(s.Name, domain), s.Name)
-		}
 
 		if err := ValidateCustomIcon(s.Icon); err != nil {
 			r.errorf(path+".icon", "%v", err)

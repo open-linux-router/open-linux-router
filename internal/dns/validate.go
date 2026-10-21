@@ -77,6 +77,7 @@ func Validate(c Config, links LinkView, reservations ReservationView) Result {
 	validateListen(&r, c, links)
 	validateUpstream(&r, c, links)
 	validateHosts(&r, c, links, reservations)
+	validatePrivateDomains(&r, c)
 	validatePolicies(&r, c)
 	validateHijack(&r, c, links)
 	validateQueryLog(&r, c)
@@ -226,6 +227,30 @@ func validateUpstream(r *Result, c Config, links LinkView) {
 			r.errorf(path,
 				"%s is this box's own DNS address, so every query would be forwarded back to "+
 					"itself", srv.Addr())
+		}
+	}
+}
+
+// validatePrivateDomains checks the zones exempted from anti-rebinding.
+//
+// A malformed name here is an error rather than a warning, because unbound
+// rejects a bad `private-domain` line outright and refuses to start — which
+// takes the whole house's resolution down for a setting that only ever relaxes
+// a check.
+func validatePrivateDomains(r *Result, c Config) {
+	local := c.LocalDomainOrDefault()
+	for i, d := range c.PrivateDomains {
+		path := fmt.Sprintf("private_domains[%d]", i)
+		if err := checkName(d); err != nil {
+			r.errorf(path, "%q is not a domain name: %v", d, err)
+			continue
+		}
+		if !strings.Contains(d, ".") {
+			r.warnf(path, "%q is a single label, so it exempts every name under it; a full domain such as home.example.com is narrower", d)
+		}
+		if d == local || strings.HasSuffix(d, "."+local) {
+			r.warnf(path, "%q is inside the local domain %s, which this box answers itself. "+
+				"The exemption does nothing there: unbound never asks anybody for a name in that zone", d, local)
 		}
 	}
 }

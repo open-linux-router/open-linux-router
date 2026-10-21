@@ -124,7 +124,8 @@ func decode[T any](t *testing.T, w *httptest.ResponseRecorder) T {
 // delete disruptive.
 func publish(t *testing.T, h http.Handler) {
 	t.Helper()
-	body := `{"enabled":true,"certificate":{"provider":"cloudflare","provider_token":"tok"},` +
+	body := `{"enabled":true,"domain":"svc.example.com",` +
+		`"certificate":{"provider":"cloudflare","provider_token":"tok"},` +
 		`"services":[{"name":"grafana","upstream":{"device":"nuc","port":3000}}]}`
 	if w := do(t, h, http.MethodPut, "/config?confirm=true", body); w.Code != http.StatusOK {
 		t.Fatalf("setup PUT = %d: %s", w.Code, w.Body)
@@ -146,7 +147,7 @@ func TestDeletingAPublishedServiceIsRefusedWithoutConfirm(t *testing.T) {
 	}
 	// The refusal has to name what would be lost, or the dialog built on it
 	// cannot say anything useful.
-	if resp.Error == nil || !strings.Contains(resp.Error.Message, "grafana.home.example.com") {
+	if resp.Error == nil || !strings.Contains(resp.Error.Message, "grafana.svc.example.com") {
 		t.Errorf("the refusal must name the address, got %+v", resp.Error)
 	}
 	if !strings.Contains(resp.Error.Message, "confirm=true") {
@@ -240,6 +241,27 @@ func TestGetConfigRedactsTheCredential(t *testing.T) {
 	cfg := decode[Config](t, w)
 	if cfg.Certificate.Token != RedactedToken {
 		t.Errorf("token = %q, want the mask", cfg.Certificate.Token)
+	}
+}
+
+// The suffix is served from this module's own config now, and both the observed
+// surfaces read it there — a status that still asked the resolver would report
+// one domain while the Caddyfile served another.
+func TestStatusAndServicesReportTheConfiguredDomain(t *testing.T) {
+	h, _ := testHTTP(t)
+	publish(t, h)
+
+	status := decode[statusResponse](t, do(t, h, http.MethodGet, "/status", ""))
+	if status.Domain != "svc.example.com" {
+		t.Errorf("status domain = %q, want the configured suffix", status.Domain)
+	}
+
+	services := decode[servicesResponse](t, do(t, h, http.MethodGet, "/services", ""))
+	if services.Domain != "svc.example.com" {
+		t.Errorf("services domain = %q, want the configured suffix", services.Domain)
+	}
+	if len(services.Services) != 1 || services.Services[0].URL != "https://grafana.svc.example.com" {
+		t.Errorf("service url = %+v, want the configured suffix assembled into it", services.Services)
 	}
 }
 

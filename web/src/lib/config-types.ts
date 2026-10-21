@@ -3,6 +3,14 @@
 // Regenerate with `make types` (olrd must be running).
 // Source of truth: the Go config structs — see design.md §3.2 rule 3.
 //
+// Hand-edited again for `IngressConfig.domain` and `DnsConfig.private_domains`:
+// a real `make types` run was available and produced both fields correctly, but
+// replacing the file also renamed the generated group type (`DevicesGroup` →
+// `Group`) and marked `NetworkIPv6.subnet` required, which the device and
+// topology screens do not compile against. Those two are a separate piece of
+// work — the schema and those screens currently disagree, and that predates this
+// change — so this file stays hand-edited until it is done.
+//
 // HAND-EDITED, and it should not have been. The `firewall` module was deleted
 // and its forwards moved into `gateway`; the generator needs a running olrd to
 // talk to, and the environment that landed the move had none. The edits are the
@@ -316,6 +324,14 @@ export interface DnsConfig {
   listen?: AddressAndPort[]
   upstream: Upstream
   local_domain?: string
+  /**
+   * Zones whose public records are allowed to point at private addresses — in practice, the domain you publish your own services under in your provider's DNS.
+   *
+   * unbound rejects such answers by default, and that is anti-rebinding working as intended (render.go, rebindPrefixes): a name on the internet resolving to an address on your LAN is how a web page reaches a device it should not. The rule cannot tell your zone from an attacker's, so this is where you say which zones are yours. Without it, the record you just created in your DNS provider works for anyone using a public resolver and silently does not exist for anyone using this one.
+   *
+   * Only this resolver is affected. A device configured with a public resolver never asks us and never needs this.
+   */
+  private_domains?: string[]
   hosts?: Host[]
   policies?: Policy[]
   hijack: Hijack
@@ -414,6 +430,14 @@ export interface FirewallConfig {
 }
 export interface IngressConfig {
   enabled: boolean
+  /**
+   * The suffix published names live under, e.g. `home.example.com`.
+   *
+   * Owned here rather than by `dns`, and deliberately not the same value: the wildcard certificate is for `*.<this>`, the records the operator writes point at this box, and neither has anything to do with what the resolver calls the devices in the house.
+   *
+   * One label, though: the wildcard covers `grafana.<domain>` and not `grafana.lab.<domain>`, so a deeper suffix would only move the problem.
+   */
+  domain?: string
   certificate: Certificate
   services?: Service[]
   raw_caddyfile?: string

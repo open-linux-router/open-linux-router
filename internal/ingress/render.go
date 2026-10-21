@@ -149,8 +149,13 @@ func (Caddy) Unit() string { return UnitName }
 // is what picks up a move. Validate has already refused any device without a
 // fixed address, so in practice these do not change — but the direction of the
 // dependency is what matters (§4.1), not how often it pays off.
-func (c Caddy) Render(cfg Config, dns DNSView, devices DeviceView) (Rendered, error) {
-	domain := strings.ToLower(strings.TrimSuffix(dns.LocalDomain(), "."))
+//
+// The suffix comes from the config, not from the resolver: what this file says
+// and what the operator's DNS zone contains are the same thing by construction,
+// because both are copies of Config.Domain that only one of them is generated
+// from (docs/ingress.md §3).
+func (c Caddy) Render(cfg Config, devices DeviceView) (Rendered, error) {
+	domain := normalizeDomain(cfg.Domain)
 
 	conf, err := c.caddyfile(cfg, domain, devices)
 	if err != nil {
@@ -293,18 +298,14 @@ func (c Caddy) tls(b *strings.Builder, cfg Config, site string) {
 	b.WriteString("\ttls {\n")
 	fmt.Fprintf(b, "\t\tdns %s {env.%s}\n", cfg.Certificate.Provider, TokenEnv)
 
-	// The single most important line in this file, and the one whose absence
-	// fails in the least obvious way. `dns` serves the local suffix as an
-	// unbound `local-zone ... static` zone, so this box answers the whole zone
-	// itself and forwards none of it — and the `_acme-challenge` record the
-	// provider API just wrote into the *public* zone gets an authoritative
-	// NXDOMAIN from our own resolver. Caddy would wait for propagation of a
-	// record it can never observe, and issuance would hang forever on a box
-	// whose DNS is working exactly as designed. So the propagation check asks
-	// somebody else, explicitly.
-	b.WriteString("\n\t\t# Ask public resolvers, never this box: olr's own resolver is\n")
-	b.WriteString("\t\t# authoritative for this zone and would answer NXDOMAIN for the\n")
-	b.WriteString("\t\t# challenge record, which the CA can see and we could not.\n")
+	// The propagation check must not go through this box's resolver. It is not
+	// authoritative for the published domain any more, so it *could* answer —
+	// but it also carries this network's blocking policies and whatever
+	// upstream it forwards to, and issuance hanging on a filtered lookup is a
+	// failure that names nothing. Public resolvers are the independent second
+	// opinion, and the CA is about to ask them anyway.
+	b.WriteString("\n\t\t# Ask public resolvers, never this box: the lookup that decides whether\n")
+	b.WriteString("\t\t# a certificate is issued should not pass through our own filters.\n")
 	fmt.Fprintf(b, "\t\tresolvers %s\n", strings.Join(cfg.Certificate.ResolversOrDefault(), " "))
 	b.WriteString("\t}\n")
 }

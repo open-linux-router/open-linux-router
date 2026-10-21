@@ -31,6 +31,11 @@ const REDACTED = '********'
  * The settings paid for once, so that publishing a service afterwards is two
  * fields.
  *
+ * The domain is one of them because it is this module's own fact now: it is the
+ * zone the operator writes records into, and the one the wildcard is for. It is
+ * deliberately not the resolver's local domain — that names the devices in the
+ * house and never needs a certificate (docs/ingress.md §3).
+ *
  * One wildcard certificate covers every name that will ever be published, and
  * getting it means proving the domain is yours — which for a name the internet
  * cannot resolve means writing a temporary record through your DNS provider's
@@ -62,6 +67,7 @@ export function CertificateDialog({
   onSubmit: (fields: Partial<IngressConfig>) => void
 }) {
   useLocale()
+  const [suffix, setSuffix] = useState(domain ?? '')
   const [provider, setProvider] = useState(initial.provider ?? '')
   const [token, setToken] = useState('')
   const [email, setEmail] = useState(initial.acme_email ?? '')
@@ -72,6 +78,7 @@ export function CertificateDialog({
   const stored = (initial.provider_token ?? '') !== ''
 
   function reset() {
+    setSuffix(domain ?? '')
     setProvider(initial.provider ?? '')
     setToken('')
     setEmail(initial.acme_email ?? '')
@@ -88,12 +95,28 @@ export function CertificateDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t('Certificate')}</DialogTitle>
-          <DialogDescription> {t('How olr proves')} {domain ? <span className="font-mono">{domain}</span> : 'your domain'} is
-            yours, so browsers trust every address you publish.
+          <DialogDescription> {t('How olr proves')} {suffix ? <span className="font-mono">{suffix}</span> : t('your domain')} {t('is yours, so browsers trust every address you publish.')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="cert-domain">{t('Published domain')}</Label>
+            <Input
+              id="cert-domain"
+              autoComplete="off"
+              value={suffix}
+              placeholder="home.example.com"
+              onChange={(e) => setSuffix(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t('Names you publish live under this: grafana here becomes grafana.{domain}. The records are yours, in this domain\'s zone — point them at this router.', { domain: suffix || 'home.example.com' })}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t('Not the same as the resolver\'s local domain, which names the devices in the house and never needs a certificate.')}
+            </p>
+          </div>
+
           {providers.isError && (
             <NoProxyAlert
               message={(providers.error as Error).message}
@@ -166,7 +189,11 @@ export function CertificateDialog({
               // so omitting it is both the simplest and the safest thing.
               if (token !== '' && token !== REDACTED) cert.provider_token = token
               if (email !== (initial.acme_email ?? '')) cert.acme_email = email
-              onSubmit({ certificate: cert })
+              const fields: Partial<IngressConfig> = { certificate: cert }
+              // Only when typed, for the same reason the credential is: an
+              // untouched field must not rewrite a value it never read.
+              if (suffix.trim() !== (domain ?? '')) fields.domain = suffix.trim()
+              onSubmit(fields)
               onOpenChange(false)
             }}
           >{t('Save')}</Button>
