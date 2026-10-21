@@ -48,7 +48,6 @@ can be shared variants/tokens within those components.
 | Navigation tile | A capability/entity with one primary destination | LauncherTile in `components/layout/launcher.tsx`; logo, initial or icon mark, optional state line |
 | Property list / row | Label and current answer, optionally an edit trigger | PropertyRow inside a `dl`; DeviceSettingRow re-exports the same component |
 | Metric value | Measurement and optional unit | MetricValue, used by Tools, traffic primitives, Gateway and DNS summaries |
-| Primary metric | A summary card's one headline answer, figure or words | PrimaryMetric over MetricValue; one per Overview card, at the top of its content (Quality keeps its figure in the heading row, above its radar) |
 | Traffic meter | Current rate, optional limit and utilization | Reuse Meter; keep data/direction semantics in traffic code |
 | Status | A state's tone and its one word | `state()` in `lib/state.ts` owns the words and their tones; `StatusPill`, `StatusInline` and `StatusDot` in `components/ui/status.tsx` draw them; `StatusStrip` owns a module verdict. Badge remains a tag primitive |
 | Row action | One trailing action, or a menu of several | `RowAction`, `RowMenu` and `RowChevron` in `components/ui/row-action.tsx`; ListRow renders the pencil for `editLabel` rows |
@@ -72,8 +71,7 @@ support every size.
 | Switch | — | 44 × 24px at every size; `busy` and `disabled` are different states | — |
 | StatusPill | — | 24px tall, 12px medium text, no dot; one per surface | — |
 | Heading / CardTitle | `sm`: 14/24px, compact monitoring/list group | `md`: 16/24px, section/panel (default) | `lg`: 24/32px, page/entity title |
-| MetricValue | `sm`: 14/20px, inline (default) | `md`: 20/28px, summary; Overview's word-answer headline | `lg`: 30/36px, diagnostic result; Overview's figure headline |
-| PrimaryMetric | — | `md`: 36px reserved line box, 20px words | `lg`: 36px reserved line box, 30px figure |
+| MetricValue | `sm`: 14/20px, inline (default) | `md`: 20/28px, summary | `lg`: 30/36px, diagnostic result |
 | Card | `sm`: 12px phone / 16px desktop spacing | `default`: 16px / 24px spacing | No extra large-card density; layout controls width |
 | PropertyRow | `sm`: 32px desktop minimum | `md`: 36px desktop minimum (default) | Wrapped content grows naturally |
 
@@ -81,12 +79,6 @@ Pass these through `size`. Every PropertyRow size retains 44px on phones. Card
 density does not resize its title. Heading defaults to h2; `as` chooses document
 hierarchy independently. DialogTitle retains its accessible primitive and uses
 the medium heading scale.
-
-One headline per card, never two: the size is what tells a reader which number
-the card is for, so a second figure at headline size makes the card a table with
-no subject. PrimaryMetric reserves the same 36px line box at both headline sizes,
-which is what keeps a word answer on the same baseline as a figure answer beside
-it, and takes an optional note for the one short line under the figure.
 
 `<MetricValue size="lg" value="23.4" unit="ms" />` displays a test result;
 `<MetricValue value={formatRate(rate)} />` displays an inline rate. A null or

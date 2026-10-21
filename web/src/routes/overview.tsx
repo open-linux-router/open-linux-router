@@ -1,14 +1,12 @@
 import { t, useLocale } from '@/lib/i18n'
 import { Heading } from '@/components/ui/heading'
-import { MetricPill } from '@/components/traffic-metrics'
-import { MetricValue } from '@/components/ui/metric-value'
+import { Meter, MetricPill } from '@/components/traffic-metrics'
 import { RowAction } from '@/components/ui/row-action'
 import { StatusInline } from '@/components/ui/status'
 import { state } from '@/lib/state'
-import { PrimaryMetric } from '@/components/ui/primary-metric'
 import { WorldTraffic } from '@/features/world-traffic/world-traffic'
 import { NetworkQuality } from '@/features/network-quality/network-quality'
-import { AlertTriangle, ArrowDown, ArrowUp, CircleAlert, CircleCheck, CircleHelp, ChevronRight, Clock, Info, LoaderCircle, Trash2, GripVertical, Map } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, CircleAlert, CircleCheck, CircleHelp, ChevronRight, Info, LoaderCircle, Trash2, GripVertical, Map } from 'lucide-react'
 import { useEffect, useMemo, useState, type DragEvent, type MouseEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
@@ -412,41 +410,6 @@ function StatCard({ title, children, className, action, back, flipped = false }:
 }
 
 
-/** `formatRate` prints the unit with the figure; a primary metric sets it apart. */
-function splitRate(formatted: string): [string, string | undefined] {
-  const index = formatted.lastIndexOf(' ')
-  return index < 0 ? [formatted, undefined] : [formatted.slice(0, index), formatted.slice(index + 1)]
-}
-
-/**
- * One direction's live rate — the figure the card exists for.
- *
- * The limit stays on the same line, right-aligned into the column the totals
- * below already use, so the plan is read at a glance and never competes with
- * the measurement. Direction is an icon in the same 16px leading slot the
- * Status rows use, which is what keeps the rate and the labels under it on one
- * left rail. Clicking the row opens the limit behind it.
- */
-function RateHeadline({ direction, current, maximum, onClick }: {
-  direction: Direction
-  current: string
-  maximum?: string
-  onClick: () => void
-}) {
-  useLocale()
-  const [amount, unit] = splitRate(current)
-  const label = direction === 'down' ? t('Download') : t('Upload')
-  const Arrow = direction === 'down' ? ArrowDown : ArrowUp
-  return <button type="button" onClick={onClick} aria-label={`${label}: ${current}. ${maximum ? `Limit ${maximum}` : t('Set limit')}`}
-    className="flex w-full min-w-0 flex-wrap items-baseline justify-between gap-x-2 gap-y-1 rounded-md text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-    <span className="flex min-w-0 items-center gap-1">
-      <Arrow aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-      <MetricValue size={unit ? 'lg' : 'md'} value={amount} unit={unit} />
-    </span>
-    <span className="shrink-0 text-right text-xs text-muted-foreground tabular-nums">{maximum ? `of ${maximum}` : t('Set limit')}</span>
-  </button>
-}
-
 function CountryIcon({ code }: { code?: string }) {
   useLocale()
   if (!code || !/^[a-z]{2}$/i.test(code)) return null
@@ -680,7 +643,6 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
   const [editing, setEditing] = useState<Direction | null>(null)
   const [sitesOpen, setSitesOpen] = useState(false)
   const [showMap, setShowMap] = useState(false)
-  const [healthOpen, setHealthOpen] = useState(false)
   const flipTraffic = (event: MouseEvent<HTMLButtonElement>) => {
     const card = event.currentTarget.closest('section')
     setShowMap(value => !value)
@@ -693,58 +655,38 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
     try { localStorage.setItem(LIMITS_KEY, JSON.stringify(next)) } catch { /* private mode can disable storage */ }
   }
   const title = failed ? t('Status unavailable') : !known ? t('Checking…') : faults.length ? t('Needs attention') : idle ? 'Not set up' : 'All systems OK'
-  // A fault or a failed read is the one thing that must reach the top of the
-  // card as colour; "not checked yet" and "nothing set up" are neutral.
-  const alarming = faults.length > 0 || failed
   const measured = !latencyFailed && latency?.state === 'ok' && latency.milliseconds != null
   const dnsMeasured = !latencyFailed && latency?.dns_milliseconds != null
+  const latencyValue = measured ? formatLatency(latency.milliseconds!) : latency?.state === 'unreachable' ? 'No response' : '—'
   const measure = useMeasureLatencySite()
   const sites = latency?.custom ?? []
   const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? t('Unavailable') : '—'
   // Keep four columns for wide screens so values and units fit on one line.
   return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:gap-4">
     <StatCard title={t('Status')}>
-      <div className="flex w-full flex-1 flex-col">
-        {/* The name repeats the state the words show: the label replaces them
-            for anyone reading with a screen reader. */}
-        <PrimaryMetric
-          size="md"
-          tone={alarming ? 'fault' : known && !idle ? 'ok' : undefined}
-          icon={alarming
-            ? <CircleAlert aria-hidden className="size-4 text-destructive" />
-            : known && !idle ? <CircleCheck aria-hidden className="size-4 text-success-foreground" /> : <CircleHelp aria-hidden className="size-4 text-muted-foreground" />}
-          value={title}
-          onClick={() => setHealthOpen(true)}
-          ariaLabel={`${t('System health')}: ${title}`}
-        />
-        <div className="mt-3 w-full space-y-1">
-          <StatusDetail title={t('System')} summary={<>
-              {host ? <Clock aria-hidden className="size-4 shrink-0 text-muted-foreground" /> : <CircleHelp aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
-              <span className="min-w-0 flex-1">{host ? `Up ${uptime(host.uptime_seconds)}` : 'Uptime unavailable'}</span>
-            </>}>
-            <dl className="grid grid-cols-[max-content_minmax(0,1fr)_max-content_max-content] gap-x-1 gap-y-2 py-2 pl-6 text-xs tabular-nums">
-              {[
-                { label: 'CPU', used: host?.cpu_used_cores == null ? null : host.cpu_used_cores.toFixed(1), total: host ? `${host.cpu_cores} cores` : null },
-                { get label() { return t('Memory') }, used: host ? formatBytes(host.memory_used_bytes) : null, total: host ? formatBytes(host.memory_total_bytes) : null },
-                { get label() { return t('Disk') }, used: host?.disk_total_bytes ? formatBytes(host.disk_used_bytes!) : null, total: host?.disk_total_bytes ? formatBytes(host.disk_total_bytes) : null },
-              ].map(({ label, used, total }) => <div key={label} className="contents">
-                <dt className="text-muted-foreground">{label}</dt>
-                <dd className="col-span-3 grid grid-cols-subgrid text-right whitespace-nowrap">
-                  {used != null ? <><span>{used}</span><span>/</span><span>{total}</span></> : <span className="col-span-3">—</span>}
-                </dd>
-              </div>)}
-            </dl>
-          </StatusDetail>
-          <PublicAddressRow addresses={publicAddresses} />
-        </div>
-      </div>
-      <Dialog open={healthOpen} onOpenChange={setHealthOpen}>
-        <DialogContent className="max-h-[85dvh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{t('System health')}</DialogTitle>
-            <DialogDescription>{title}</DialogDescription>
-          </DialogHeader>
-          <dl className="space-y-1 py-2 text-xs">
+      <div className="w-full space-y-1">
+        <StatusDetail title={t('System')} summary={<>
+            {host ? <CircleCheck aria-hidden className="size-4 shrink-0 text-success-foreground" /> : <CircleHelp aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
+            <span className="min-w-0 flex-1">{host ? `Up ${uptime(host.uptime_seconds)}` : 'Uptime unavailable'}</span>
+          </>}>
+          <dl className="grid grid-cols-[max-content_minmax(0,1fr)_max-content_max-content] gap-x-1 gap-y-2 py-2 pl-6 text-xs tabular-nums">
+            {[
+              { label: 'CPU', used: host?.cpu_used_cores == null ? null : host.cpu_used_cores.toFixed(1), total: host ? `${host.cpu_cores} cores` : null },
+              { get label() { return t('Memory') }, used: host ? formatBytes(host.memory_used_bytes) : null, total: host ? formatBytes(host.memory_total_bytes) : null },
+              { get label() { return t('Disk') }, used: host?.disk_total_bytes ? formatBytes(host.disk_used_bytes!) : null, total: host?.disk_total_bytes ? formatBytes(host.disk_total_bytes) : null },
+            ].map(({ label, used, total }) => <div key={label} className="contents">
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="col-span-3 grid grid-cols-subgrid text-right whitespace-nowrap">
+                {used != null ? <><span>{used}</span><span>/</span><span>{total}</span></> : <span className="col-span-3">—</span>}
+              </dd>
+            </div>)}
+          </dl>
+        </StatusDetail>
+        <StatusDetail title={t('System health')} summary={<>
+            {faults.length || failed ? <CircleAlert aria-hidden className="size-4 shrink-0 text-destructive" /> : known && !idle ? <CircleCheck aria-hidden className="size-4 shrink-0 text-success-foreground" /> : <CircleHelp aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
+            <span className={cn('min-w-0 flex-1', (faults.length > 0 || failed) && 'text-destructive')}>{title}</span>
+          </>}>
+          <dl className="space-y-1 py-2 pl-6 text-xs">
             {modules.map((module) => {
               const issues = faults.filter((fault) => fault.to === module.to)
               const health = module.failed ? state('Unavailable') : !module.data ? state('Checking…') : issues.length ? state('Needs attention') : !module.data.enabled ? state('Disabled') : !module.observed ? state('Unavailable') : state('OK')
@@ -754,55 +696,46 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
               </div>
             })}
           </dl>
-        </DialogContent>
-      </Dialog>
+        </StatusDetail>
+        <PublicAddressRow addresses={publicAddresses} />
+      </div>
     </StatCard>
     <StatCard title={t('Traffic')} flipped={showMap} back={<WorldTraffic embedded expanded={panel === 'map'} onExpandedChange={(open) => onPanelChange(open ? 'map' : undefined)} origin={publicAddresses?.ipv4.ip ? publicAddresses.ipv4 : publicAddresses?.ipv6} />} action={<button type="button" onClick={flipTraffic} aria-label={showMap ? t('Show traffic statistics') : t('Show traffic map')} aria-pressed={showMap} title={showMap ? t('Show traffic statistics') : t('Show traffic map')} className={cn('relative inline-flex size-6 items-center justify-center rounded-sm text-muted-foreground before:absolute before:-inset-2.5 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring', showMap && 'bg-primary/10 text-primary')}><Map aria-hidden className="size-4" /></button>}>
-      <div className="flex w-full flex-1 flex-col">
-        <div className="space-y-1.5">
-          <RateHeadline direction="down" current={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
-            onClick={() => setEditing('down')} />
-          <RateHeadline direction="up" current={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
-            onClick={() => setEditing('up')} />
-        </div>
-        <div className="mt-3 space-y-1 pl-5">
-          <MetricPill label={t('Download')} value={flows.counting && !trafficFailed ? formatBytes(flows.total.down) : trafficFailed ? t('Unavailable') : '—'} valueRight />
-          <MetricPill label={t('Upload')} value={flows.counting && !trafficFailed ? formatBytes(flows.total.up) : trafficFailed ? t('Unavailable') : '—'} valueRight />
-        </div>
+      <div className="space-y-1">
+        <Meter label={t('Download')} arrow="↓" onClick={() => setEditing('down')} current={rate('downRate')} maximum={limits.down ? formatRate(limits.down * 1_000_000 / 8) : undefined}
+          percent={flows.rated && !trafficFailed && limits.down ? (flows.total.downRate ?? 0) * 8 / (limits.down * 1_000_000) * 100 : undefined} />
+        <Meter label={t('Upload')} arrow="↑" onClick={() => setEditing('up')} current={rate('upRate')} maximum={limits.up ? formatRate(limits.up * 1_000_000 / 8) : undefined}
+          percent={flows.rated && !trafficFailed && limits.up ? (flows.total.upRate ?? 0) * 8 / (limits.up * 1_000_000) * 100 : undefined} tone="amber" />
+      </div>
+      <div className="space-y-1 pt-1">
+        <MetricPill label={t('Download')} value={flows.counting && !trafficFailed ? formatBytes(flows.total.down) : trafficFailed ? t('Unavailable') : '—'} valueRight />
+        <MetricPill label={t('Upload')} value={flows.counting && !trafficFailed ? formatBytes(flows.total.up) : trafficFailed ? t('Unavailable') : '—'} valueRight />
       </div>
     </StatCard>
     <StatCard title={<button type="button" aria-haspopup="dialog" aria-label={t('Edit latency configuration')} onClick={() => setSitesOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">{t('Latency')}</button>} className={(latency?.custom?.length ?? 0) > 3 ? 'lg:aspect-auto' : undefined}>
-      <div className="flex w-full flex-1 flex-col">
-        <PrimaryMetric
-          size={measured ? 'lg' : 'md'}
-          value={measured ? (latency!.milliseconds! < 1 ? '<1' : latency!.milliseconds!.toFixed(0)) : latency?.state === 'unreachable' ? t('No response') : null}
-          unit={measured ? 'ms' : undefined}
-          note={t('Internet')}
-          title={latency?.target ? `${t('Internet')}: ${latency.target}` : undefined}
-        />
-        <div className="mt-3 space-y-1">
-          <MetricPill label={t('DNS lookup')} value={dnsMeasured ? formatLatency(latency.dns_milliseconds!) : '—'} valueRight />
+      <div className="space-y-1">
+        <div title={latency?.target ? `Internet latency to ${latency.target}` : undefined}><MetricPill label={t('Internet')} value={latencyValue} valueRight /></div>
+        <MetricPill label={t('DNS lookup')} value={dnsMeasured ? formatLatency(latency.dns_milliseconds!) : '—'} valueRight />
+      </div>
+      <div className="pt-1">
+        <div className="grid grid-cols-2 items-center gap-x-2 gap-y-1.5 sm:grid-cols-3">
+          {sites.map((site) => {
+            // Only a probe started by clicking this row sets its flag; the
+            // once-a-minute background round leaves every row quiet.
+            const probing = Boolean(site.measuring)
+            const action = probing ? t('Measuring now…') : t('Click to measure again')
+            const description = `${site.name} · HTTPS latency to ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!hasLatencyAttempt(site) ? 'Waiting for first probe' : site.milliseconds == null ? site.error || 'Failed' : formatLatency(site.milliseconds)}`
+            return <button key={site.name} type="button" onClick={() => measure.mutate(site.name)} aria-busy={probing}
+              aria-label={`${site.name}: ${latencySiteValue(site)}. ${action}`} title={`${description} · ${action}`}
+              className="inline-flex min-h-8 min-w-0 items-center gap-1.5 rounded-sm text-left text-xs font-semibold tabular-nums text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+              <SiteIcon name={site.name} url={site.url} icon={site.icon} />
+              {probing
+                ? <LoaderCircle aria-hidden className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+                : <span className="min-w-0 whitespace-nowrap">{latencySiteValue(site)}</span>}
+            </button>
+          })}
         </div>
-        <div className="pt-2">
-          <div className="grid grid-cols-2 items-center gap-x-2 gap-y-1.5 sm:grid-cols-3">
-            {sites.map((site) => {
-              // Only a probe started by clicking this row sets its flag; the
-              // once-a-minute background round leaves every row quiet.
-              const probing = Boolean(site.measuring)
-              const action = probing ? t('Measuring now…') : t('Click to measure again')
-              const description = `${site.name} · HTTPS latency to ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!hasLatencyAttempt(site) ? 'Waiting for first probe' : site.milliseconds == null ? site.error || 'Failed' : formatLatency(site.milliseconds)}`
-              return <button key={site.name} type="button" onClick={() => measure.mutate(site.name)} aria-busy={probing}
-                aria-label={`${site.name}: ${latencySiteValue(site)}. ${action}`} title={`${description} · ${action}`}
-                className="inline-flex min-h-8 min-w-0 items-center gap-1.5 rounded-sm text-left text-xs font-semibold tabular-nums text-foreground focus-visible:outline-2 focus-visible:outline-ring">
-                <SiteIcon name={site.name} url={site.url} icon={site.icon} />
-                {probing
-                  ? <LoaderCircle aria-hidden className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
-                  : <span className="min-w-0 whitespace-nowrap">{latencySiteValue(site)}</span>}
-              </button>
-            })}
-          </div>
-          {measure.isError && <p role="alert" className="pt-1 text-xs text-destructive">{t('Could not measure {name}. Try again.', { name: measure.variables ?? '' })}</p>}
-        </div>
+        {measure.isError && <p role="alert" className="pt-1 text-xs text-destructive">{t('Could not measure {name}. Try again.', { name: measure.variables ?? '' })}</p>}
       </div>
     </StatCard>
     <NetworkQuality open={panel === 'quality'} onOpenChange={(open) => onPanelChange(open ? 'quality' : undefined)} />

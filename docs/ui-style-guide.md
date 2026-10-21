@@ -235,54 +235,26 @@ none. Preserve existing redirects and deep links when moving settings.
 The spacing vocabulary is 4, 8, 12, 16, 24 and 32px. Use 32px between major
 sections, 16–24px inside cards and 8px between label and control. Basic corner
 radii are 8px for controls/small inset surfaces, 12px for panels and 16px for
-larger enclosing surfaces. Avoid arbitrary one-off radii.
-
-Every Overview card leads with exactly one headline answer, and that is the
-page's whole hierarchy. A headline is a figure at 30px/36px — result emphasis,
-unit at 14px muted on the same baseline — or, where the answer is words, 20px/28px.
-Either way it occupies one reserved 36px line box, so the four cards share a
-baseline and can be ranked without being read. Twelve pixels separate it from the
-supporting rows below. No second figure in a card takes the headline size, and
-supporting rows keep one shared, quieter treatment instead of each inventing its
-own: that is what stops four cards from becoming four designs.
-
-Status leads with its verdict ("All systems OK", or the tone-coloured word for
-trouble) and that headline opens the System health dialog. Uptime and the public
-address follow as plain rows under the same 16px leading slot — a clock, the
-country flag — so their text lines up beneath the headline; neither wears a
-health check of its own, because the headline is where the card says how the box
-is doing. Traffic leads with its two live rates, download then upload, each with
-the plan right-aligned on the same line ("of 2.0 Gbps"); the cumulative totals sit
-under them, indented to the rates' figures, as plain byte values. Utilisation is
-not drawn on the card: at the rates a home connection actually moves, a small fill
-reads as a broken meter, and the plan is already stated beside the figure a reader
-compares it with. Latency leads with internet latency and the word "Internet" as
-its note, then the DNS lookup row, then the monitored sites. Quality is the
-exception that keeps its chart: its published overall score sits at the heading's
-right — 30px figure, "/ 100" at 14px muted — and the radar keeps the card's body,
-so the result and the shape are read together; an untested, expired or cancelled
-run shows a small muted dash there rather than a number.
-
-Overview metric cards use 12px padding on phones and 16px on larger screens, an
-8px heading gap and 36px supporting rows with 4px between rows. Interactive rows
-retain 44px targets on phones; site latency items use unfilled 32px rows with 6px
-vertical gaps. Status, public addresses, latency, totals and uptime use plain
-rows; monitored sites retain their icons without capsule backgrounds. No Overview
-card uses an inset meter surface: a framed band beside a 30px figure competes with
-it, and the rates are the largest thing in the card already.
-Totals and site probes follow their headlines without divider lines. Below
-desktop, cards use their own content height.
+larger enclosing surfaces. Avoid arbitrary one-off radii. Overview metric cards
+use 12px padding on phones and 16px on larger screens, an 8px heading gap,
+36px metric rows and 4px between rows. Interactive rows retain 44px targets on
+phones; site latency items use unfilled 32px rows with 6px vertical gaps.
+Only download/upload rates use inset meter surfaces
+in Overview cards. Status, public addresses, latency, totals and uptime use plain
+rows; monitored sites retain their icons without capsule backgrounds.
+Cumulative traffic rows use Download and Upload labels with plain byte values.
+On desktop, Overview cards share title and primary metric boundaries. Totals
+and site probes follow their primary metrics without divider lines. Status
+flows naturally. Below desktop, cards use their own content height.
 Site probes use two columns on phones and three from 640px.
 Latency settings place a full-width labeled Internet target Select above the
 monitored-site list, sharing the dialog's Save and Cancel actions. Keep the
 selected provider and automatic selection in this control, without extra
 badges or explanatory content on the card.
 The public-network summary uses a locally bundled flag-icons country flag.
-Every Status control opens its own details in a shared dialog: the headline
-carries the module list, uptime the host resources, the address the public
-network. No chevrons.
+Clicking any Status row opens its details in a shared dialog, without chevrons.
 Public addresses use monospace and wrap within the dialog.
-Status rows fill the card width. Give the flag and the clock the same 16px
+Status rows fill the card width. Give flags and health icons the same 16px
 leading slot so text starts align.
 System health uses the same dialog interaction as uptime, with module names on
 the left and status values aligned right. Keep module details as plain rows.
@@ -308,9 +280,8 @@ brought it.
 Tool directory entries use Lucide
 outline icons with a 1.75px stroke in a themed 56px surface (48px on phones),
 an 18px name and one directional chevron. Avoid raster illustrations with baked-in
-backgrounds. Overview metric headings have the same 24px line box and keep it
-even where the card's headline figure sits beside them; auxiliary icons extend
-their hit area without increasing the heading height. Descriptions and instructions
+backgrounds. Overview metric headings have the same 24px line box; auxiliary
+icons extend their hit area without increasing the heading height. Descriptions and instructions
 belong on the individual tool page. No decorative glows or additional gradients are needed.
 Use Lucide consistently for functional icons, normally 16–20px. The two-color
 brand mark retains its own colors in both themes.
@@ -355,15 +326,16 @@ tooltips appear immediately. A divider separates the
 title from two columns of 36px desktop / 44px mobile minimum-height label/value rows: stable identity
 and settings on the left, routing, priority and traffic on the right. Group uses
 a clickable tag with a muted surface that opens its edit dialog.
-Device traffic keeps the shared inset meter, with visible direction labels.
+Device traffic reuses Overview meters with visible direction labels.
 At desktop widths both halves share five grid rows: Vendor/Uplink,
 MAC/Priority, IP/Download, Group/Upload and Services/Total. The hardware address
 is a mono fact row, not a chip beside the title; the dialed-in page puts its
 configured name in the same place. Services shows matching configured
 services as 28px icon tiles linking directly to their published webpages. A matching
 28px outlined add button opens Ingress with the device prefilled. An empty list
-shows only the add button. Total uses neutral text arrows (↓/↑) in muted
-foreground, with byte values and no caption after them: it sums the title matrix rather than a counter, and that matrix is
+shows only the add button. Total uses the Overview Traffic meter's neutral text
+arrows (↓/↑), with the same size and weight, and byte values, with no caption
+after them: it sums the title matrix rather than a counter, and that matrix is
 where the window is read.
 Match row padding and let wrapped content grow both sides together; feedback follows the aligned rows.
 Device speed bars use half their available value width from 640px, aligned right;
@@ -438,15 +410,13 @@ and a relevant next action where one exists.
 
 ## Responsive behavior and motion
 
-Overview has four desktop cards: Status, Traffic, Latency and Quality, each
-leading with its one headline answer (see Layout and hierarchy).
+Overview has four desktop cards: Status, Traffic, Latency and Quality.
 Clicking the Latency heading opens its site configuration dialog; omit an add icon.
 Map and Quality chart content use half the normal card side and bottom gutters
 (6px on phones, 8px on larger screens), while headings retain their normal inset.
 Desktop cards target 4:3 proportions with a 240px minimum height and grow for
 disclosures or extra probes. Use one column on phones, two from 640px and
-four from 1280px so values and units remain on one line: at the narrowest desktop
-column a rate still reads "3.8 Mbps" with its arrow and its plan beside it.
+four from 1280px so values and units remain on one line.
 Traffic's title-right map icon toggles its statistics and embedded map views.
 Keep both mounted as the front and back of one card to preserve height and map
 continuity. Rotate the whole card 180 degrees around its vertical axis over
@@ -459,9 +429,8 @@ separate Test button on the card. Retain measured scores without age-based fadin
 Network quality uses a five-axis radar with theme-aware primary fill and border
 grid lines. It occupies one card at every breakpoint. Only measured, current
 axes have points; missing/stale axes show dashes and prevent a filled polygon,
-except Wireless, which defaults to 80 for display. The heading's right side
-carries the published overall score, and nothing below the plot repeats the
-scope. The heading and plot open the shared
+except Wireless, which defaults to 80 for display. Omit the title-right total
+and below-plot scope caption. The heading and plot open the shared
 fullscreen assessment view, with one floating close control at top right and no
 other chrome. The report keeps the shell's 80rem content width and gutters
 instead of narrowing to a reading column, because a fullscreen diagnostic left
