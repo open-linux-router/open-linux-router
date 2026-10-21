@@ -163,14 +163,16 @@ accessible name repeats it for touch and screen readers. Keep the directory's
 tiles and the shared launcher in `components/layout/launcher.tsx`; a tool tile
 links to its diagnostic page, and there is no Tools directory page in between.
 
-Credits is one table grouped by feature, with Dep, Version, Website and Usage in
-that order. List every project that carries a feature, and a Go or web library
-only where it is that feature's supplier; the complete dependency and license
-lists stay linked from `go.mod` and `web/package.json`. Project marks are
+Credits opens with its title and then one ungrouped table: no visible header row,
+no section rows, and no website column. The first column is the destination —
+mark and name together as one link — followed by the version and the feature the
+project carries. List every project that carries a feature, and a Go or web
+library only where it is that feature's supplier; the complete dependency and
+license lists stay linked from `go.mod` and `web/package.json`. Project marks are
 bundled under `web/public/credit-logos` (or reused from the feature directories)
 and sit on a white tile in both themes; a row without approved artwork keeps a
-neutral initial. Below 768px the table becomes stacked records with the same
-four fields, rather than a horizontally scrolling table.
+neutral initial. Below 768px the rows become stacked records with the same three
+fields, rather than a horizontally scrolling table.
 
 Tunnel Broker uses one scrollable page with five numbered sections and a sticky
 step navigation immediately below the 64px shell header. Keep section anchors

@@ -1,11 +1,10 @@
 import { ArrowUpRight } from 'lucide-react'
-import { Link } from 'react-router'
 
 import { Heading } from '@/components/ui/heading'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table'
 import { t, useLocale } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
-import { CREDIT_GROUPS, type Credit } from './credits-data'
+import { CREDITS, type Credit } from './credits-data'
 
 // Values that describe how a project reaches the box rather than a release it
 // was built against. They stay in the Version column because that is where a
@@ -38,19 +37,21 @@ function Version({ value, className }: { value: string; className?: string }) {
   )
 }
 
-// The visible label is the host; the accessible name says which project it
-// belongs to, so a column of github.com links stays distinguishable.
-function WebsiteLink({ credit, className }: { credit: Credit; className?: string }) {
+// The whole first cell is the destination: the mark and the name are one link,
+// so there is no separate website column to repeat the same address.
+function CreditLink({ credit, className }: { credit: Credit; className?: string }) {
   return (
     <a
       href={credit.url}
       target="_blank"
       rel="noreferrer"
-      aria-label={t('{name} website at {site}, opens in a new tab', { name: credit.name, site: credit.website })}
-      className={cn('group/link inline-flex max-w-full items-center gap-1 text-muted-foreground underline-offset-4 transition-colors duration-150 hover:text-foreground hover:underline', className)}
+      title={credit.url}
+      aria-label={t('{name} website, opens in a new tab', { name: credit.name })}
+      className={cn('group/link flex min-w-0 items-center gap-3 rounded-md underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring', className)}
     >
-      <span className="truncate">{credit.website}</span>
-      <ArrowUpRight aria-hidden className="size-3.5 shrink-0 opacity-50 transition-[transform,opacity] duration-150 group-hover/link:-translate-y-0.5 group-hover/link:translate-x-0.5 group-hover/link:opacity-100" />
+      <CreditMark name={credit.name} logo={credit.logo} />
+      <span className="truncate font-medium group-hover/link:underline">{credit.name}</span>
+      <ArrowUpRight aria-hidden className="size-3.5 shrink-0 opacity-40 transition-[transform,opacity] duration-150 group-hover/link:-translate-y-0.5 group-hover/link:translate-x-0.5 group-hover/link:opacity-100" />
     </a>
   )
 }
@@ -58,94 +59,45 @@ function WebsiteLink({ credit, className }: { credit: Credit; className?: string
 function CreditRow({ credit }: { credit: Credit }) {
   return (
     <TableRow>
-      <TableCell className="py-3 pl-4 sm:pl-5">
-        <div className="flex min-w-0 items-center gap-3">
-          <CreditMark name={credit.name} logo={credit.logo} />
-          <span className="truncate font-medium">{credit.name}</span>
-        </div>
-      </TableCell>
-      <TableCell className="py-3"><Version value={credit.version} /></TableCell>
-      <TableCell className="py-3"><WebsiteLink credit={credit} className="text-sm" /></TableCell>
-      <TableCell className="whitespace-normal py-3 pr-4 leading-5 text-muted-foreground sm:pr-5">{t(credit.use)}</TableCell>
+      <TableCell className="w-[38%] py-2.5 pl-4 sm:pl-5 lg:w-[30%] xl:w-[26%]"><CreditLink credit={credit} /></TableCell>
+      <TableCell className="w-[7rem] py-2.5"><Version value={credit.version} /></TableCell>
+      <TableCell className="whitespace-normal py-2.5 pr-4 leading-5 text-muted-foreground sm:pr-5">{t(credit.use)}</TableCell>
     </TableRow>
   )
 }
 
 // Below the table breakpoint the rows become stacked records with the same
-// four fields in the same reading order; a four-column table does not fit a
-// phone without hiding the column that explains the dependency.
+// three fields in the same reading order; the list is still one flat table of
+// projects, just not a multi-column one.
 function CreditCard({ credit }: { credit: Credit }) {
   return (
-    <li className="flex gap-3 px-4 py-3.5">
-      <CreditMark name={credit.name} logo={credit.logo} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="truncate font-medium">{credit.name}</span>
-          <Version value={credit.version} className="shrink-0" />
-        </div>
-        <p className="mt-0.5 text-sm leading-5 text-muted-foreground">{t(credit.use)}</p>
-        <WebsiteLink credit={credit} className="mt-1 text-xs" />
+    <li className="px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <CreditLink credit={credit} className="min-w-0 flex-1" />
+        <Version value={credit.version} className="shrink-0" />
       </div>
+      <p className="mt-1.5 pl-12 text-sm leading-5 text-muted-foreground">{t(credit.use)}</p>
     </li>
-  )
-}
-
-function GroupMark({ title, count }: { title: string; count: number }) {
-  return (
-    <span className="flex items-center gap-2">
-      <span aria-hidden className="h-3 w-0.5 rounded-full bg-primary/60" />
-      <span className="text-xs font-medium text-foreground/80">{t(title)}</span>
-      <span className="font-mono text-[0.6875rem] font-normal tabular-nums text-muted-foreground/70">{count}</span>
-    </span>
   )
 }
 
 export function CreditsPage() {
   useLocale()
   return (
-    <div className="space-y-8 pb-12">
-      <div className="space-y-3">
-        <Link to="/" className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">{t('Back to Overview')}</Link>
-        <Heading as="h1" size="lg">{t('Built on open work')}</Heading>
-        <p className="max-w-2xl text-muted-foreground">{t('Thank you to the maintainers of the projects that make Open Linux Router possible.')}</p>
-        <p className="max-w-3xl text-sm text-muted-foreground">{t('The projects that carry each feature, grouped by what they make possible. Versions are pinned where OLR fixes one; system packages follow your distribution.')}</p>
-      </div>
+    <div className="space-y-6 pb-12">
+      <Heading as="h1" size="lg">{t('Built on open work')}</Heading>
 
       <div className="panel-surface hidden overflow-hidden md:block">
-        <Table aria-label={t('Projects by function')} className="min-w-[44rem]">
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead scope="col" className="h-11 w-[32%] pl-4 text-xs font-medium text-muted-foreground sm:pl-5">{t('Dep')}</TableHead>
-              <TableHead scope="col" className="h-11 w-[7rem] text-xs font-medium text-muted-foreground">{t('Version')}</TableHead>
-              <TableHead scope="col" className="h-11 w-[10rem] text-xs font-medium text-muted-foreground">{t('Website')}</TableHead>
-              <TableHead scope="col" className="h-11 pr-4 text-xs font-medium text-muted-foreground sm:pr-5">{t('Usage')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          {CREDIT_GROUPS.map((group) => (
-            <TableBody key={group.title}>
-              <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead scope="colgroup" colSpan={4} className="h-auto py-2.5 pl-4 sm:pl-5">
-                  <GroupMark title={group.title} count={group.items.length} />
-                </TableHead>
-              </TableRow>
-              {group.items.map((credit) => <CreditRow key={credit.name} credit={credit} />)}
-            </TableBody>
-          ))}
+        <Table aria-label={t('Projects and versions')} className="min-w-[36rem]">
+          <TableBody>
+            {CREDITS.map((credit) => <CreditRow key={credit.name} credit={credit} />)}
+          </TableBody>
         </Table>
       </div>
 
-      <div className="panel-surface overflow-hidden md:hidden">
-        {CREDIT_GROUPS.map((group, index) => (
-          <section key={group.title} aria-labelledby={`credits-group-${index}`}>
-            <h2 id={`credits-group-${index}`} className="border-b border-border/60 bg-muted/40 px-4 py-2.5">
-              <GroupMark title={group.title} count={group.items.length} />
-            </h2>
-            <ul className="divide-y divide-border/60">
-              {group.items.map((credit) => <CreditCard key={credit.name} credit={credit} />)}
-            </ul>
-          </section>
-        ))}
-      </div>
+      <ul className="panel-surface divide-y divide-border/60 overflow-hidden md:hidden">
+        {CREDITS.map((credit) => <CreditCard key={credit.name} credit={credit} />)}
+      </ul>
 
       <div className="space-y-1.5 text-xs leading-5 text-muted-foreground">
         <p>{t('distro = your distribution’s package · in-tree = part of the Linux kernel · unpinned = installed separately.')}</p>
