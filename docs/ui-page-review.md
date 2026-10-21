@@ -32,7 +32,7 @@ OLR capabilities, and a calm, consistent interface. This record accompanies the
 | DDNS | Preserve provider/source/publication information and forms; explicit loading/error/unknown status; short empty state. |
 | IPTV | Keep signal-path/source-prefix forms and preview/apply flow; concise prerequisites; disclose long scope limitations; pending status is not off. |
 | Administrator access | Keep password/security controls; remove redundant introduction. |
-| Credits | Preserve every project and attribution; remove repeated section introductions. |
+| Credits | One table grouped by feature, with Dep, Version, Website and Usage columns; stacked records below 768px. Keep every feature-carrying project and the libraries that implement a listed feature (pro-bing, for example), with full dependency and license lists linked from the manifests. |
 | Sign-in, initial setup, first-run, not-found | Preserve existing components and safety consequences; concise setup steps and missing-page message. |
 | Dialogs | Retain existing common fields, advanced disclosures and apply previews; remove redundant exit-name help; inspection consent uses the shared Dialog. |
 
