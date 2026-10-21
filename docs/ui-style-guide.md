@@ -402,14 +402,26 @@ grid lines. It occupies one card at every breakpoint. Only measured, current
 axes have points; missing/stale axes show dashes and prevent a filled polygon,
 except Wireless, which defaults to 80 for display. Omit the title-right total
 and below-plot scope caption. The heading and plot open the shared
-fullscreen assessment view: the content scrolls in a centred reading column, with
-one floating close control at top right and no other chrome. Lead that view with
-one result panel: a score ring whose number and colour follow the overall score,
-the display grade beside it, the run action, and one line naming the last update
-and the included bandwidth test. Categories follow as Access-like sections: a
-24px semibold heading, the 0–100 score, a score bar, a compact measured-scope
-label and a rerun control. Expanding a section shows the tests that produce its
-score. A service probe is one test item because one run of six fresh connections
+fullscreen assessment view, with one floating close control at top right and no
+other chrome. The report keeps the shell's 80rem content width and gutters
+instead of narrowing to a reading column, because a fullscreen diagnostic left
+at article width reads as a stray text page on a wide display. The page header
+names the view, dates the snapshot and carries the run action with the one line
+naming the included bandwidth test. A four-column summary then sits beside an
+eight-column category panel on desktop and stacks in that order on phones. The
+summary holds the score ring, the display grade, the count of scored categories
+and a measured-coverage bar, with the transfer panel beneath it leading with the
+download and upload rates as metric values; the score itself stays in foreground
+colour while only the ring arc takes the grade hue, so a run of Fair categories
+does not paint the page as a field of warnings. Categories are hairlined rows of
+one panel: a 16px semibold heading, the 0–100 score in a fixed
+right-aligned column, an action slot that stays reserved when a category has no
+rerun control, and a bar whose track is 160px in every row so fills compare down
+the list. Each row states its evidence in its own units beside the bar —
+throughput, median and variation, response counts, reachable services — and
+repeats no state word from row to row. Expanding a row indents its tests to the
+category title, and each test shows its own medians with its score landing in the
+category score column. A service probe is one test item because one run of six fresh connections
 produces its timing, stability and access measurements; its rerun control updates
 that service everywhere. Unimplemented items stay listed without a rerun control.
 Scoring formulas, per-service samples and NAT observations sit in collapsed

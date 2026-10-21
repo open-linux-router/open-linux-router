@@ -61,14 +61,21 @@ hidden page title. Detail and operation pages keep their identifying titles.
   five axes have display scores. Omit the card total and measured-category caption.
   Details show the total out of 100 using normalized weights of current scored
   categories and components. Missing tests never reduce the score; measured
-  failures still count. Clicking Quality, its chart or
-  Test opens the fullscreen assessment view. It leads with the overall score and
-  one display grade, then Access-like category sections with the score, bar and
-  measured scope. Expanding a section lists its tests; a service test item can
-  rerun just that service, and a category heading can rerun every test behind
-  that category. Unmeasured categories are excluded from the total. Raw service
-  and NAT evidence and the scoring explanation stay in collapsed Measurement
-  details. The page always includes the reference transfer, so replace the old
+  failures still count. Clicking Quality or its chart opens the fullscreen assessment view. It leads
+  with the overall score, one display grade, the count of scored categories and
+  the measured coverage, with the reference transfer's download and upload rates
+  beside them: the numbers a reader can check lead, and the score stands next to
+  what produced it. Categories follow in one panel; each names the score in a
+  fixed column and states what it measured in that category's own units —
+  throughput, median and variation, expected responses, reachable services.
+  Never repeat a category state as a word on every row: "partial" describes the
+  unfinished half of the catalogue, not this connection, and the coverage bar
+  already says how much was scored. Only a state the operator can act on, such
+  as an outdated result, earns a label. Expanding a row lists its tests; a
+  service test item can rerun just that service, and a category heading can
+  rerun every test behind that category. Unmeasured categories are excluded from
+  the total. Raw service and NAT evidence and the scoring explanation stay in
+  collapsed Measurement details. The page always includes the reference transfer, so replace the old
   optional-bandwidth switch with one short line at the run action; keep freshness
   and the router-default-route scope visible without restating the workflow.
   The view has its own /quality address. Snapshot reads never start
