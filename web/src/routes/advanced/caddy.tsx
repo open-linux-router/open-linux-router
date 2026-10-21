@@ -1,5 +1,5 @@
 import { t, useLocale } from '@/lib/i18n'
-import { AlertTriangle, ExternalLink, Plus, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Plus, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useDeviceList } from '@/features/devices/queries'
@@ -349,32 +349,12 @@ function ServiceList({
   return (
     <List>
       {services.map((s) => {
-        const url = domain ? `https://${s.name}.${domain}${s.link_path ?? ''}` : undefined
         return (
           <ListRow
             key={s.name}
             title={domain ? `${s.name}.${domain}${s.link_path ?? ''}` : s.name}
             subtitle={describeService(s, devices.data?.devices.find((d) => d.mac === s.upstream.device)?.name)}
             wrap
-            action={
-              url ? (
-                // Opens the thing itself. A published address exists to be
-                // visited, and making the operator retype what the row already
-                // says would be the small indignity that makes a screen feel
-                // like a form rather than a control panel.
-                <Button
-                  size="sm"
-                  variant="quiet"
-                  aria-label={`Open ${s.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    window.open(url, '_blank', 'noopener,noreferrer')
-                  }}
-                >
-                  <ExternalLink />
-                </Button>
-              ) : undefined
-            }
             editLabel={`${t('Edit')} ${s.name}`}
             onSelect={() => onEdit(s)}
           />

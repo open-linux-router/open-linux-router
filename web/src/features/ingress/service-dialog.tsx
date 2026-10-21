@@ -1,5 +1,5 @@
 import { t, useLocale } from '@/lib/i18n'
-import { Trash2 } from 'lucide-react'
+import { ExternalLink, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -155,9 +155,14 @@ export function ServiceDialog({
             <p className="text-xs text-muted-foreground">
               {name ? (
                 <> {t('It will answer at')}{' '}
-                  <span className="font-mono">
-                    https://{name}.{domain ?? '…'}
-                  </span>{' '}
+                  {editing && domain ? (
+                    <a href={`https://${name}.${domain}${draft.link_path ?? ''}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono text-primary underline-offset-4 hover:underline">
+                      https://{name}.{domain}{draft.link_path ?? ''}
+                      <ExternalLink className="size-3" aria-hidden />
+                    </a>
+                  ) : (
+                    <span className="font-mono">https://{name}.{domain ?? '…'}</span>
+                  )}{' '}
                   {t('once a DNS record for that name points at this router. The record is yours to create in your own zone.')}
                 </>
               ) : (

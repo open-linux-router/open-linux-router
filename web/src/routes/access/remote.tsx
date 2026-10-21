@@ -1,11 +1,10 @@
 import { t, useLocale } from '@/lib/i18n'
-import { AlertTriangle, KeyRound, Pencil, Plus } from 'lucide-react'
+import { AlertTriangle, KeyRound, Plus } from 'lucide-react'
 import { useState } from 'react'
 
 import { BlockerAlerts } from '@/components/layout/blockers'
 import { SubPage } from '@/components/layout/sub-page'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { RowAction } from '@/components/ui/row-action'
 import { StatusPill } from '@/components/ui/status'
 import { state } from '@/lib/state'
 import { Button } from '@/components/ui/button'
@@ -29,7 +28,6 @@ import { PeerDialog } from '@/features/remote/peer-dialog'
 import { SocksCard } from '@/features/remote/socks-card'
 import {
   remoteChange,
-  type PeerPatch,
   useRemoteConfig,
   useRemoteStatus,
   useReapplyRemote,
@@ -51,7 +49,6 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
   const reapply = useReapplyRemote()
 
   const [adding, setAdding] = useState(false)
-  const [editing, setEditing] = useState<RemotePeer | null>(null)
   const [settings, setSettings] = useState(false)
 
   if (config.isPending) return <SubPage section="/access" slug={slug}><PageSkeleton /></SubPage>
@@ -149,7 +146,7 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
           </CardAction>
         </CardHeader>
         <CardContent>
-          <PeerList peers={peers} onEdit={setEditing} />
+          <PeerList peers={peers} />
         </CardContent>
       </Card>
 
@@ -170,36 +167,6 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
           )
         }
       />
-      {editing && (
-        <PeerDialog
-          open
-          onOpenChange={(open) => !open && setEditing(null)}
-          initial={editing}
-          subnet={status.data?.subnet}
-          onSubmit={async (peer) => {
-            // Two changes, two requests, and the labels first: the name is the
-            // one that can be refused (another device holds it), and there is
-            // no point rewriting what the device sends if the device is still
-            // called what it was. The label travels in the same request as the
-            // name — one entry, one patch.
-            const patch: PeerPatch = {}
-            if (peer.name !== editing.name) patch.name = peer.name
-            if (peer.display_name !== (editing.display_name ?? '')) patch.display_name = peer.display_name
-            if (Object.keys(patch).length > 0) {
-              if (!(await change(remoteChange.patchPeer(editing.name, patch)))) return
-            }
-            // Compared with the same default the dialog applies, or an
-            // unstored `routes` would read as a change on every save.
-            if (peer.routes !== (editing.routes || 'home')) {
-              await change(remoteChange.savePeer(peer.name, { routes: peer.routes }))
-            }
-          }}
-          onRemove={() => {
-            setEditing(null)
-            change(remoteChange.removePeer(editing.name))
-          }}
-        />
-      )}
       <SettingsDialog
         open={settings}
         onOpenChange={setSettings}
@@ -267,7 +234,6 @@ function ConnectionCard({
           {status && !status.endpoint && <StatusPill tone="fault">{t('Not set')}</StatusPill>}
         </CardTitle>
         <CardAction className="flex items-center gap-2">
-          <Button size="sm" variant="secondary" onClick={onEdit}> {t('Settings')} </Button>
           <Switch
             id="remote-enabled"
             aria-labelledby="remote-connection-title"
@@ -293,6 +259,11 @@ function ConnectionCard({
           <p className="truncate text-xs"> {t('Public key')} <span className="font-mono">{status.public_key}</span>
           </p>
         )}
+        {/* The card's one control is the switch, so the way into its settings
+            is a line of the card rather than a second button beside it. */}
+        <div className="pt-2">
+          <Button size="sm" variant="secondary" onClick={onEdit}> {t('Connection settings')} </Button>
+        </div>
       </CardContent>
     </Card>
   )
@@ -315,13 +286,7 @@ function TunnelState({ status, enabled }: { status?: RemoteStatus; enabled: bool
   return <StatusPill tone={health.tone}>{health.label}</StatusPill>
 }
 
-function PeerList({
-  peers,
-  onEdit,
-}: {
-  peers: RemotePeer[]
-  onEdit: (peer: RemotePeer) => void
-}) {
+function PeerList({ peers }: { peers: RemotePeer[] }) {
   useLocale()
   if (peers.length === 0) {
     return (
@@ -344,7 +309,6 @@ function PeerList({
           title={p.display_name || p.name}
           subtitle={describePeer(p)}
           trailing={<PeerBadge peer={p} />}
-          action={<RowAction icon={Pencil} label={`${t('Edit')} ${p.display_name || p.name}`} onClick={() => onEdit(p)} />}
         />
       ))}
     </List>

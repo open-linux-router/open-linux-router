@@ -1,5 +1,5 @@
 import { t, useLocale } from '@/lib/i18n'
-import { RotateCcw } from 'lucide-react'
+import { Pencil, RotateCcw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
@@ -29,6 +29,8 @@ import { DeviceServices } from '@/features/ingress/device-services'
 import { ConfirmDialog } from '@/features/remote/apply-dialog'
 import { ClientConfigDialog } from '@/features/remote/client-config'
 import { PeerBadge } from '@/features/remote/peer-badge'
+import { PeerDialog } from '@/features/remote/peer-dialog'
+import { savePeerEdit } from '@/features/remote/peer-edit'
 import { WayBadge } from '@/features/remote/way-badge'
 import { remoteChange, usePatchPeer, useRemoteStatus } from '@/features/remote/queries'
 import { useTrafficView, type Flow, type TrafficView } from '@/features/topology/traffic'
@@ -82,6 +84,7 @@ export function WireguardPeerPage() {
     }
   }, [peer, name, navigate])
 
+  const [editing, setEditing] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState('')
 
@@ -212,7 +215,33 @@ export function WireguardPeerPage() {
           />
           <Usage flow={flow} usage={usage} addresses={peer.address ? [peer.address] : []} trafficFailed={traffic.isError} />
         </div>
+
+        {/* The list this device came from is navigation only: renaming the key,
+            changing what it sends home and removing it happen here, the page
+            the row leads to. One entry, because three buttons in a row is the
+            thing this page is meant to avoid. */}
+        <div className="mt-6 flex justify-end border-t pt-4">
+          <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+            <Pencil aria-hidden /> {t('Edit device')}
+          </Button>
+        </div>
       </Card>
+
+      {editing && (
+        <PeerDialog
+          open
+          onOpenChange={(open) => !open && setEditing(false)}
+          initial={peer}
+          subnet={status.data?.subnet}
+          onSubmit={(next) => savePeerEdit(peer, next, applier.submit)}
+          onRemove={() => {
+            setEditing(false)
+            void applier.submit(remoteChange.removePeer(peer.name)).then((done) => {
+              if (done) navigate('/access/wireguard')
+            })
+          }}
+        />
+      )}
 
       <ClientQueries addresses={peer.address ? [peer.address] : []} />
 

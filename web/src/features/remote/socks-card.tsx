@@ -57,16 +57,6 @@ export function SocksCard({
           </CardTitle>
           <CardDescription>{t('Unencrypted internet proxy with authentication; no access to your home network.')}</CardDescription>
           <CardAction className="flex items-center gap-2">
-            {enabled && !missing && (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={showLink}
-                disabled={fetchLink.isPending}
-              >
-                {fetchLink.isPending ? 'Fetching…' : 'Show link'}
-              </Button>
-            )}
             <Switch
               checked={enabled}
               onCheckedChange={(next) => applier.submit(socksChange.enabled(next))}
@@ -112,6 +102,14 @@ export function SocksCard({
               The box no longer matches what is stored here — the file or the service was changed
               somewhere else.
             </p>
+          )}
+
+          {enabled && !missing && (
+            <div className="pt-1">
+              <Button size="sm" variant="secondary" onClick={showLink} disabled={fetchLink.isPending}>
+                {fetchLink.isPending ? t('Fetching…') : t('Show link')}
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>

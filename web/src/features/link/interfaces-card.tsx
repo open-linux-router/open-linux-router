@@ -52,6 +52,12 @@ export function InterfacesCard({
   disabled,
   only,
   physicalOnly = false,
+  /**
+   * The rows lead to their own pages and carry no control of their own. The
+   * adoption switch lives on the interface page, so a row is never a chevron
+   * and a switch at the same time.
+   */
+  navigationOnly = false,
   uplinkAction,
   footer,
 }: {
@@ -60,6 +66,7 @@ export function InterfacesCard({
   disabled?: boolean
   only?: string
   physicalOnly?: boolean
+  navigationOnly?: boolean
   uplinkAction?: React.ReactNode
   footer?: React.ReactNode
 }) {
@@ -184,7 +191,8 @@ export function InterfacesCard({
                 role={roleOf(row, uplinkName)}
                 uplinkAction={row.name === uplinkName ? uplinkAction : undefined}
                 busy={!!busy}
-                onToggle={(on) => toggle(row, on)}
+                showLink={!only}
+                onToggle={navigationOnly ? undefined : (on) => toggle(row, on)}
                 // Only where nothing in olr owns the addressing: a network's
                 // member is its network's, and the uplink's leftovers are
                 // offered on its own card, beside the address it does claim.
@@ -254,6 +262,7 @@ function InterfaceItem({
   role,
   uplinkAction,
   busy,
+  showLink,
   onToggle,
   onRemoveAddress,
 }: {
@@ -261,7 +270,10 @@ function InterfaceItem({
   role?: string
   uplinkAction?: React.ReactNode
   busy: boolean
-  onToggle: (on: boolean) => void
+  /** False on the interface's own page, where the link would point at itself. */
+  showLink: boolean
+  /** Omitted where the row's only control is the link to its page. */
+  onToggle?: (on: boolean) => void
   /** Offered only on an interface no network or uplink owns. */
   onRemoveAddress?: (address: string) => void
 }) {
@@ -302,14 +314,16 @@ function InterfaceItem({
       <Label htmlFor={id} className="sr-only">
         Give {row.name} to this router
       </Label>
-      <Link
-        to={`/gateway/interfaces/${encodeURIComponent(row.name)}`}
-        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-        aria-label={`View ${row.name} details`}
-        title={`View ${row.name} details`}
-      >
-        <ChevronRight className="size-4" aria-hidden />
-      </Link>
+      {showLink && (
+        <Link
+          to={`/gateway/interfaces/${encodeURIComponent(row.name)}`}
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          aria-label={`View ${row.name} details`}
+          title={`View ${row.name} details`}
+        >
+          <ChevronRight className="size-4" aria-hidden />
+        </Link>
+      )}
       <Switch
         id={id}
         checked={row.adopted}

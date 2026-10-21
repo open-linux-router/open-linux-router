@@ -26,9 +26,11 @@ open.
    menu, rotating chevron expands. No glyph is reused for a second verb.
 5. **One primary action per region.** A page header and a dialog footer each have
    at most one filled button.
-6. **Off is not a fault, and "I cannot see" is not a fault either.** The only red
+6. **One control per row, one per card header.** A second action belongs on the
+   page the row leads to, in the card body, or behind one menu (§6).
+7. **Off is not a fault, and "I cannot see" is not a fault either.** The only red
    things on a page are things that are broken and that this page can fix.
-7. **Never invent a control from a class string at the call site.** If a state,
+8. **Never invent a control from a class string at the call site.** If a state,
    switch, button or row action needs a new look, it gets a variant.
 
 ## 1. The five tones
@@ -222,30 +224,43 @@ icon-only carries `aria-label` naming the object and the verb ("Edit Li's
 iPhone", "View wan1", "Change iCloud icon") plus a `title` with the same string.
 No bare `+`, `↑`, `↓` text glyphs as icons.
 
-## 6. Row actions: navigate, edit, more, expand
+## 6. Row actions: one control per row or header
 
-### 6.1 Grammar — pick one per row
+### 6.1 The rule
 
-| Row's job | Whole row | Trailing glyph | Example |
+**A row or a card header shows at most one control.** Not a chevron beside a
+pencil, not a button beside a switch. Everything else belongs on the page the
+row leads to, in the card body, or behind the one menu.
+
+| The row's job | Whole row | Its one control | Example |
 | --- | --- | --- | --- |
-| Leads to a page | link | `chevron-right` 16px, muted | WireGuard device → device page |
+| Leads to a page | link | `chevron-right` 16px | WireGuard device |
 | Opens an editor and has no page | button | `pencil` 16px in a `RowAction` | port forward, DHCP range, DNS name |
-| Leads to a page **and** can be edited | link | chevron, then `pencil` outside the link | WireGuard device |
+| Shows a setting | link, or static when the control is the point | that control only, with no chevron | interface row's adoption switch on its own page |
 | Has two or more secondary actions | link or button | `more-horizontal` → `RowMenu` | topology group |
 | Read-only record | static | none | gateway traffic sample |
-| Expands in place | `<details>` | `chevron-right` 14px, rotates 90° | technical details, quality category |
+| Expands in place | `<details>` | `chevron-right` 14px, rotates 90° | technical details |
 
-`ListRow` renders the pencil itself from an `editLabel`, so the nine dialog rows
-cannot drift apart again; a row keeps the whole-row target and gains a pencil.
+Corollaries, which are what the rule actually costs:
 
-That is the answer to today's ambiguity: **a chevron never opens a dialog.**
-Nine `ListRow`s currently break this (port forwards, exits, DDNS records, DHCP
-ranges and reservations, DNS names and blocking, networks, Caddy services). They
-keep the whole-row target and gain a pencil; the chevron goes.
+- **Editing, removing and configuring live on the detail.** A row leads to the
+  object's page and the page owns its operations: a WireGuard device's rename,
+  routes and removal are on the device page, not on the list. Where the object
+  has no page, the editor *is* the dialog and the pencil opens it — so a row that
+  opens a dialog still shows a pencil, and one that navigates shows a chevron.
+- **A control displaces the chevron.** When a row shows a switch, the row itself
+  is still the link and no chevron is drawn. Two visible controls in one trailing
+  slot is what made the page read as a toolbar per row.
+- **A card header shows one control too.** The switch when the card is about
+  turning something on; otherwise the one action that changes it. A settings
+  entry that would sit next to the switch becomes a line in the card body
+  (WireGuard's connection settings, SOCKS5's link).
+- **A menu is one control.** Several operations may hide behind one ellipsis;
+  they may not line up as several icons.
 
-The one place a row expands in place rather than navigating
-(`Disclosure`) keeps its rotating 14px chevron, and the two hand-rolled
-disclosures in `features/network-quality/network-quality.tsx` should use it.
+The one place a row expands in place rather than navigating (`Disclosure`) keeps
+its rotating 14px chevron, and the two hand-rolled disclosures in
+`features/network-quality/network-quality.tsx` should use it.
 
 ### 6.2 RowAction
 
@@ -263,6 +278,9 @@ accessible name is "{object} options".
 
 ## 7. Edit
 
+- **One entry per object, and it lives with the object.** The list navigates; the
+  page (or the dialog behind its pencil) edits. Nothing is editable from two
+  places at once.
 - **The control is the value.** Editable values in a property row are the
   control (select, segmented control, switch, in-place input) — not a pencil
   beside a static value.

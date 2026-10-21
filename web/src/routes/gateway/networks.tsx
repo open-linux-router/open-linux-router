@@ -41,6 +41,7 @@ export function InterfacesContent() {
       <InterfacesCard
         dhcp={dhcp.data}
         physicalOnly
+        navigationOnly
         uplinkAction={<span className="text-xs text-muted-foreground">{t('Internet uplink')}</span>}
         footer={gateway.config && (
           <div className="flex flex-wrap items-center gap-3 text-sm">

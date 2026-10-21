@@ -184,7 +184,7 @@ export function GatewayInterfacesPage() {
             </AlertDescription>
           </Alert>
         )}
-        <InterfacesCard dhcp={dhcp.data} />
+        <InterfacesCard dhcp={dhcp.data} navigationOnly />
         <Heading>{t('Internet uplink')}</Heading>
         <UplinkCard interfaces={links.interfaces} networks={links.networks} />
       </div>

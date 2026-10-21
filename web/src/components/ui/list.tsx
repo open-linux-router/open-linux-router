@@ -8,14 +8,19 @@ function List({ className, ...props }: React.ComponentProps<'ul'>) {
   return <ul data-slot="list" className={cn('divide-y divide-border overflow-hidden rounded-xl border bg-card', className)} {...props} />
 }
 
-/** Values reflow below the title on phones. Actions stay outside the row link/button. */
-function ListRow({ title, subtitle, leading, trailing, trailingTone = 'muted', action, editLabel, onSelect, to, wrap = false, className, ...props }: Omit<React.ComponentProps<'li'>, 'title' | 'onSelect'> & {
+/**
+ * Values reflow below the title on phones.
+ *
+ * One row, one visible control: the chevron when the row leads to a page, the
+ * pencil when it opens an editor, and nothing when it is a record. A second
+ * action belongs on the page or in the dialog, not beside the first.
+ */
+function ListRow({ title, subtitle, leading, trailing, trailingTone = 'muted', editLabel, onSelect, to, wrap = false, className, ...props }: Omit<React.ComponentProps<'li'>, 'title' | 'onSelect'> & {
   title: React.ReactNode
   subtitle?: React.ReactNode
   leading?: React.ReactNode
   trailing?: React.ReactNode
   trailingTone?: 'muted' | 'value'
-  action?: React.ReactNode
   /**
    * The accessible name for the row's edit affordance. A row that opens an
    * editor wears a pencil rather than the navigation chevron, so the glyphs in
@@ -47,10 +52,9 @@ function ListRow({ title, subtitle, leading, trailing, trailingTone = 'muted', a
       {to ? <Link to={to} className={interactive}>{body}<RowChevron /></Link>
         : onSelect ? <button type="button" onClick={onSelect} className={interactive}>{body}</button>
           : <div className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-3 sm:px-5">{body}</div>}
-      {(action || (editLabel && onSelect)) && (
-        <div className="flex shrink-0 items-center gap-1 pr-3">
-          {editLabel && onSelect && <RowAction icon={Pencil} label={editLabel} onClick={onSelect} />}
-          {action}
+      {editLabel && onSelect && (
+        <div className="flex shrink-0 items-center pr-3">
+          <RowAction icon={Pencil} label={editLabel} onClick={onSelect} />
         </div>
       )}
     </li>

@@ -330,9 +330,11 @@ State, switch placement, button rank and row glyphs follow the
 `lib/state.ts`, never chosen per page. A state is drawn in one of three shapes:
 `StatusPill` for the subject of a card, `StatusInline` (dot and word) for an item
 in a list, and the status strip for a module's verdict. Measurements stay plain
-values; only a grade is a pill. A chevron means "this row leads somewhere", a
-pencil means "this row can be changed", an ellipsis opens a menu, and a rotating
-chevron expands in place.
+values; only a grade is a pill. A row or card header shows at most one
+control: a chevron means "this row leads somewhere", a pencil means "this row can
+be changed", an ellipsis opens a menu, and a rotating chevron expands in place.
+Editing and removing live on the page the row leads to, not beside its link; a
+switch displaces the chevron rather than sitting next to it.
 
 Inline editable fields keep the input, explanation and save action within the
 same 720px field area. Show saving, error and completion where the action occurs.
