@@ -13,6 +13,10 @@ type QualityComponent struct {
 	EffectiveWeight float64  `json:"effective_weight"`
 	Score           *float64 `json:"score"`
 	Reason          string   `json:"reason,omitempty"`
+	// Target and Kind let a reader group the timing, stability and access
+	// components of one service into the single probe that produced them.
+	Target string `json:"target,omitempty"`
+	Kind   string `json:"kind,omitempty"`
 }
 
 type QualityCategory struct {
@@ -219,7 +223,7 @@ func category(id, label string, budget float64, components ...QualityComponent) 
 }
 
 func scoreQuality(s QualitySnapshot, now time.Time) ([]QualityCategory, QualityOverall) {
-	reference := QualityComponent{ID: "reference", Label: "Cloudflare download and upload", Weight: .4, Reason: "Bandwidth test not run"}
+	reference := QualityComponent{ID: "reference", Label: "Cloudflare download and upload", Weight: .4, Reason: "Bandwidth test not run", Kind: "reference"}
 	if s.Speed != nil {
 		d, u := scoreValue(s.Speed.Download, downloadCurve), scoreValue(s.Speed.Upload, uploadCurve)
 		if d != nil && u != nil {
@@ -230,7 +234,7 @@ func scoreQuality(s QualitySnapshot, now time.Time) ([]QualityCategory, QualityO
 	if s.SpeedError != "" {
 		reference.Reason = s.SpeedError
 	}
-	categories := []QualityCategory{category("speed", "Speed", 25, reference, QualityComponent{ID: "services", Label: "Service-specific transfers", Weight: .6, Reason: "Not implemented"})}
+	categories := []QualityCategory{category("speed", "Speed", 25, reference, QualityComponent{ID: "services", Label: "Service-specific transfers", Weight: .6, Reason: "Not implemented", Kind: "services"})}
 	latency, stability, functions := []QualityComponent{}, []QualityComponent{}, []QualityComponent{}
 	for _, target := range qualityTargets {
 		timing := timingScores(bestFamily(s.Targets, target.ID, false))
@@ -238,17 +242,17 @@ func scoreQuality(s QualitySnapshot, now time.Time) ([]QualityCategory, QualityO
 			id, label string
 			weight    float64
 		}{{"tcp", "TCP connection", .6}, {"dns", "DNS lookup", .15}, {"response", "HTTPS response", .25}} {
-			latency = append(latency, QualityComponent{ID: target.ID + "-" + item.id, Label: target.Name + " · " + item.label, Weight: item.weight / float64(len(qualityTargets)), Score: timing[i], Reason: "Median of at least four completed timings; best measured IP family"})
+			latency = append(latency, QualityComponent{ID: target.ID + "-" + item.id, Label: target.Name + " · " + item.label, Weight: item.weight / float64(len(qualityTargets)), Score: timing[i], Reason: "Median of at least four completed timings; best measured IP family", Target: target.ID, Kind: item.id})
 		}
 		consistency := stabilityScores(bestFamily(s.Targets, target.ID, true))
 		stability = append(stability,
-			QualityComponent{ID: target.ID + "-continuity", Label: target.Name + " · TCP connection success", Weight: .4 / float64(len(qualityTargets)), Score: consistency[0], Reason: "Six connection attempts; not packet-loss measurement"},
-			QualityComponent{ID: target.ID + "-variation", Label: target.Name + " · TCP timing variation", Weight: .3 / float64(len(qualityTargets)), Score: consistency[1], Reason: "Mean absolute difference between consecutive completed TCP timings"})
-		functions = append(functions, QualityComponent{ID: target.ID + "-access", Label: target.Name + " · Test resource access", Weight: .5 / float64(len(qualityTargets)), Score: accessScore(s.Targets, target.ID), Reason: "IPv4 or IPv6; expected resource response, not full service functionality"})
+			QualityComponent{ID: target.ID + "-continuity", Label: target.Name + " · TCP connection success", Weight: .4 / float64(len(qualityTargets)), Score: consistency[0], Reason: "Six connection attempts; not packet-loss measurement", Target: target.ID, Kind: "continuity"},
+			QualityComponent{ID: target.ID + "-variation", Label: target.Name + " · TCP timing variation", Weight: .3 / float64(len(qualityTargets)), Score: consistency[1], Reason: "Mean absolute difference between consecutive completed TCP timings", Target: target.ID, Kind: "variation"})
+		functions = append(functions, QualityComponent{ID: target.ID + "-access", Label: target.Name + " · Test resource access", Weight: .5 / float64(len(qualityTargets)), Score: accessScore(s.Targets, target.ID), Reason: "IPv4 or IPv6; expected resource response, not full service functionality", Target: target.ID, Kind: "access"})
 	}
-	stability = append(stability, QualityComponent{ID: "load", Label: "Consistency under load", Weight: .3, Reason: "Not implemented"})
-	functions = append(functions, QualityComponent{ID: "protocols", Label: "Protocol capabilities", Weight: .25, Reason: "Not implemented"}, QualityComponent{ID: "inbound-p2p", Label: "Inbound and P2P", Weight: .25, Reason: "Not implemented; STUN observations alone do not verify this capability"})
-	categories = append(categories, category("latency", "Latency", 25, latency...), category("stability", "Stability", 25, stability...), category("wifi", "Wi-Fi", 15, QualityComponent{ID: "client-link", Label: "Measured wireless links", Weight: 1, Reason: "Requires client or AP measurements"}), category("functionality", "Functionality", 10, functions...))
+	stability = append(stability, QualityComponent{ID: "load", Label: "Consistency under load", Weight: .3, Reason: "Not implemented", Kind: "load"})
+	functions = append(functions, QualityComponent{ID: "protocols", Label: "Protocol capabilities", Weight: .25, Reason: "Not implemented", Kind: "protocols"}, QualityComponent{ID: "inbound-p2p", Label: "Inbound and P2P", Weight: .25, Reason: "Not implemented; STUN observations alone do not verify this capability", Kind: "inbound-p2p"})
+	categories = append(categories, category("latency", "Latency", 25, latency...), category("stability", "Stability", 25, stability...), category("wifi", "Wi-Fi", 15, QualityComponent{ID: "client-link", Label: "Measured wireless links", Weight: 1, Reason: "Requires client or AP measurements", Kind: "client-link"}), category("functionality", "Functionality", 10, functions...))
 	return aggregateQuality(categories, s, now)
 }
 

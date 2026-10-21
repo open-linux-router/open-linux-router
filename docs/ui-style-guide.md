@@ -381,17 +381,20 @@ Network quality uses a five-axis radar with theme-aware primary fill and border
 grid lines. It occupies one card at every breakpoint. Only measured, current
 axes have points; missing/stale axes show dashes and prevent a filled polygon,
 except Wireless, which defaults to 80 for display. Omit the title-right total
-and below-plot scope caption; retain Test aligned right. The heading, plot and Test action open the shared
+and below-plot scope caption. The heading and plot open the shared
 fullscreen assessment view: the content scrolls in a centred reading column, with
 one floating close control at top right and no other chrome. Lead that view with
 one result panel: a score ring whose number and colour follow the overall score,
-the display grade beside it, and the run action in the panel footer next to the
-bandwidth switch and its duration and data hint. One category panel follows,
-each row showing the 0–100 score, a score bar and measured scope; opening a row
-shows its point contribution and components. Reference transfer is two muted
-value tiles. Scoring formulas, per-service samples and NAT observations sit in
-collapsed Measurement details disclosures, so raw evidence never pushes the
-result below the fold. Keep long errors and addresses wrapping inside the view.
+the display grade beside it, the run action, and one line naming the last update
+and the included bandwidth test. Categories follow as Access-like sections: a
+24px semibold heading, the 0–100 score, a score bar, a compact measured-scope
+label and a rerun control. Expanding a section shows the tests that produce its
+score. A service probe is one test item because one run of six fresh connections
+produces its timing, stability and access measurements; its rerun control updates
+that service everywhere. Unimplemented items stay listed without a rerun control.
+Scoring formulas, per-service samples and NAT observations sit in collapsed
+Measurement details disclosures, so raw evidence never pushes the result below
+the fold. Keep long errors and addresses wrapping inside the view.
 Accessible chart descriptions identify partial and missing measurements.
 Uptime is
 the first plain disclosure row in Status, above system health. Both rows use

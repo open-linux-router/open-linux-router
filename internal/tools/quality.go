@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +20,12 @@ const (
 	qualityVersion = "quality-v3"
 	qualityCatalog = "reference-v1"
 	qualitySamples = 6
+
+	qualityScopeAll       = "all"
+	qualityScopeResponses = "responses"
+	qualityScopeTarget    = "target"
+	qualityScopeSpeed     = "speed"
+	qualityScopeNAT       = "nat"
 )
 
 type qualityTarget struct {
@@ -63,6 +71,8 @@ type QualitySnapshot struct {
 	RunID          string                `json:"run_id"`
 	State          string                `json:"state"`
 	Phase          string                `json:"phase"`
+	RunningScope   string                `json:"running_scope,omitempty"`
+	RunningTarget  string                `json:"running_target,omitempty"`
 	IncludeSpeed   bool                  `json:"include_speed"`
 	StartedAt      *time.Time            `json:"started_at"`
 	CompletedAt    *time.Time            `json:"completed_at"`
@@ -82,6 +92,15 @@ type qualityRun struct {
 	cancel   context.CancelFunc
 	closed   bool
 	snapshot QualitySnapshot
+}
+
+// qualityRunSpec names the evidence one run refreshes. A scoped run keeps every
+// other piece of evidence and updates only its own; the score is recomputed from
+// the merged snapshot on read.
+type qualityRunSpec struct {
+	Scope        string
+	Target       string
+	IncludeSpeed bool
 }
 
 // RestoreQuality loads saved evidence before serving requests. Starting a new
@@ -106,6 +125,8 @@ func (h *HTTP) RestoreQuality() error {
 	default:
 		return fmt.Errorf("invalid saved quality state %q", snapshot.State)
 	}
+	// A checkpoint is written only between runs, so a saved run marker is stale.
+	snapshot.RunningScope, snapshot.RunningTarget, snapshot.Phase = "", "", ""
 	h.quality.mu.Lock()
 	h.quality.snapshot = snapshot
 	h.quality.mu.Unlock()
@@ -148,6 +169,40 @@ func (h *HTTP) getQuality(w http.ResponseWriter, r *http.Request) {
 	core.WriteJSON(w, http.StatusOK, h.qualitySnapshot())
 }
 
+func qualityTargetIDs() string {
+	ids := make([]string, len(qualityTargets))
+	for i, target := range qualityTargets {
+		ids[i] = target.ID
+	}
+	return strings.Join(ids, ", ")
+}
+
+func qualityPhase(scope string) string {
+	switch scope {
+	case qualityScopeSpeed:
+		return "speed"
+	case qualityScopeNAT:
+		return "nat"
+	default:
+		return "responses"
+	}
+}
+
+func qualityTimeout(scope string) time.Duration {
+	switch scope {
+	case qualityScopeResponses:
+		return 65 * time.Second
+	case qualityScopeTarget:
+		return 40 * time.Second
+	case qualityScopeSpeed:
+		return 100 * time.Second
+	case qualityScopeNAT:
+		return 20 * time.Second
+	default:
+		return 150 * time.Second
+	}
+}
+
 func (h *HTTP) startQuality(w http.ResponseWriter, r *http.Request) {
 	includeSpeed := false
 	if value := r.URL.Query().Get("speed"); value != "" {
@@ -158,14 +213,43 @@ func (h *HTTP) startQuality(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	scope := r.URL.Query().Get("scope")
+	if scope == "" {
+		scope = qualityScopeAll
+	}
+	target := r.URL.Query().Get("target")
+	switch scope {
+	case qualityScopeAll:
+		if target != "" {
+			core.WriteError(w, http.StatusBadRequest, "target is only valid with scope=target")
+			return
+		}
+	case qualityScopeResponses, qualityScopeSpeed, qualityScopeNAT:
+		if target != "" {
+			core.WriteError(w, http.StatusBadRequest, "target is only valid with scope=target")
+			return
+		}
+	case qualityScopeTarget:
+		if !slices.ContainsFunc(qualityTargets, func(item qualityTarget) bool { return item.ID == target }) {
+			core.WriteError(w, http.StatusBadRequest, "target must be one of "+qualityTargetIDs())
+			return
+		}
+	default:
+		core.WriteError(w, http.StatusBadRequest, "scope must be all, responses, target, speed or nat")
+		return
+	}
+	if includeSpeed && scope != qualityScopeAll {
+		core.WriteError(w, http.StatusBadRequest, "speed is only valid with scope=all")
+		return
+	}
 	h.quality.mu.Lock()
 	if h.quality.closed {
 		h.quality.mu.Unlock()
 		core.WriteError(w, http.StatusServiceUnavailable, "diagnostics are shutting down")
 		return
 	}
-	// Reserve existing speed/NAT runners for the whole assessment, including
-	// the response baseline, to avoid contamination by those diagnostic tests.
+	// Reserve existing speed/NAT runners for the whole run, including the
+	// response baseline, to avoid contamination by those diagnostic tests.
 	if h.quality.cancel != nil || !h.running.CompareAndSwap(false, true) {
 		h.quality.mu.Unlock()
 		core.WriteError(w, http.StatusConflict, "a quality assessment or speed test is already running")
@@ -177,16 +261,37 @@ func (h *HTTP) startQuality(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusConflict, "a NAT test is already running")
 		return
 	}
+	if scope != qualityScopeAll && h.quality.snapshot.State != "completed" {
+		h.running.Store(false)
+		h.natRunning.Store(false)
+		h.quality.mu.Unlock()
+		core.WriteError(w, http.StatusConflict, "run a full assessment before rerunning individual tests")
+		return
+	}
 	parent := h.QualityContext
 	if parent == nil {
 		parent = context.Background()
 	}
-	ctx, cancel := context.WithTimeout(parent, 150*time.Second)
-	now := time.Now().UTC()
+	ctx, cancel := context.WithTimeout(parent, qualityTimeout(scope))
 	h.quality.cancel = cancel
-	h.quality.snapshot = QualitySnapshot{State: "running", Phase: "responses", IncludeSpeed: includeSpeed, RunID: now.Format(time.RFC3339Nano), StartedAt: &now}
+	if scope == qualityScopeAll {
+		now := time.Now().UTC()
+		h.quality.snapshot = QualitySnapshot{
+			State: "running", Phase: qualityPhase(scope), RunningScope: scope,
+			IncludeSpeed: includeSpeed, RunID: now.Format(time.RFC3339Nano), StartedAt: &now,
+		}
+	} else {
+		h.quality.snapshot.RunningScope = scope
+		h.quality.snapshot.RunningTarget = target
+		h.quality.snapshot.Phase = qualityPhase(scope)
+		if scope == qualityScopeSpeed {
+			// The snapshot now carries speed evidence even when the last full
+			// run was started without a transfer.
+			h.quality.snapshot.IncludeSpeed = true
+		}
+	}
 	h.quality.mu.Unlock()
-	go h.measureQuality(ctx, includeSpeed)
+	go h.measureQuality(ctx, qualityRunSpec{Scope: scope, Target: target, IncludeSpeed: includeSpeed})
 	core.WriteJSON(w, http.StatusAccepted, h.qualitySnapshot())
 }
 
@@ -199,32 +304,91 @@ func (h *HTTP) cancelQuality(w http.ResponseWriter, r *http.Request) {
 	core.WriteJSON(w, http.StatusOK, h.qualitySnapshot())
 }
 
-func (h *HTTP) measureQuality(ctx context.Context, includeSpeed bool) {
+func (h *HTTP) measureQuality(ctx context.Context, spec qualityRunSpec) {
+	completed := false
 	defer func() {
 		h.quality.mu.Lock()
-		now := time.Now().UTC()
-		h.quality.snapshot.CompletedAt = &now
-		h.quality.snapshot.State = "completed"
-		if ctx.Err() == context.Canceled {
-			h.quality.snapshot.State = "cancelled"
-		} else if ctx.Err() != nil {
-			h.quality.snapshot.State = "timed_out"
-		}
+		h.quality.snapshot.RunningScope = ""
+		h.quality.snapshot.RunningTarget = ""
 		h.quality.snapshot.Phase = ""
-		h.saveQuality()
+		if spec.Scope == qualityScopeAll {
+			now := time.Now().UTC()
+			h.quality.snapshot.CompletedAt = &now
+			h.quality.snapshot.State = "completed"
+			if ctx.Err() == context.Canceled {
+				h.quality.snapshot.State = "cancelled"
+			} else if ctx.Err() != nil {
+				h.quality.snapshot.State = "timed_out"
+			}
+			h.saveQuality()
+		} else if completed {
+			// A scoped rerun updates the snapshot it was based on; a cancelled
+			// one leaves both the published evidence and its checkpoint alone.
+			now := time.Now().UTC()
+			h.quality.snapshot.CompletedAt = &now
+			h.saveQuality()
+		}
 		h.quality.cancel()
 		h.quality.cancel = nil
 		h.running.Store(false)
 		h.natRunning.Store(false)
 		h.quality.mu.Unlock()
 	}()
+
+	switch spec.Scope {
+	case qualityScopeResponses:
+		results := h.probeQualityTargets(ctx, nil)
+		if ctx.Err() == nil {
+			h.replaceQualityTargets(results)
+			completed = true
+		}
+	case qualityScopeTarget:
+		results := h.probeQualityTargets(ctx, []string{spec.Target})
+		if ctx.Err() == nil {
+			h.mergeQualityTarget(spec.Target, results)
+			completed = true
+		}
+	case qualityScopeSpeed:
+		h.measureQualitySpeed(ctx)
+		completed = ctx.Err() == nil
+	case qualityScopeNAT:
+		h.measureQualityNAT(ctx)
+		completed = ctx.Err() == nil
+	default:
+		h.measureQualityAll(ctx, spec.IncludeSpeed)
+	}
+}
+
+func (h *HTTP) measureQualityAll(ctx context.Context, includeSpeed bool) {
+	results := h.probeQualityTargets(ctx, nil)
+	h.quality.mu.Lock()
+	h.quality.snapshot.Targets = results
+	h.quality.mu.Unlock()
+	if includeSpeed && ctx.Err() == nil {
+		h.measureQualitySpeed(ctx)
+	}
+	if ctx.Err() == nil {
+		h.measureQualityNAT(ctx)
+	}
+}
+
+func (h *HTTP) probeQualityTargets(ctx context.Context, only []string) []QualityTargetResult {
 	probe := h.qualityProbe
 	if probe == nil {
 		probe = probeQuality
 	}
-	results := make([]QualityTargetResult, len(qualityTargets)*2)
+	targets := qualityTargets
+	if len(only) > 0 {
+		targets = make([]qualityTarget, 0, len(only))
+		for _, target := range qualityTargets {
+			if slices.Contains(only, target.ID) {
+				targets = append(targets, target)
+			}
+		}
+	}
+	results := make([]QualityTargetResult, len(targets)*2)
 	var wg sync.WaitGroup
-	for i, target := range qualityTargets {
+	for i, target := range targets {
 		for j, family := range []string{"ipv4", "ipv6"} {
 			index := i*2 + j
 			wg.Go(func() {
@@ -242,44 +406,94 @@ func (h *HTTP) measureQuality(ctx context.Context, includeSpeed bool) {
 		}
 	}
 	wg.Wait()
+	return results
+}
+
+func (h *HTTP) replaceQualityTargets(results []QualityTargetResult) {
 	h.quality.mu.Lock()
 	h.quality.snapshot.Targets = results
+	h.quality.mu.Unlock()
+}
+
+// mergeQualityTarget replaces both address-family results for one service and
+// keeps every other service's evidence, including runs from an earlier time.
+func (h *HTTP) mergeQualityTarget(id string, fresh []QualityTargetResult) {
+	h.quality.mu.Lock()
+	defer h.quality.mu.Unlock()
+	byFamily := make(map[string]QualityTargetResult, len(fresh))
+	for _, result := range fresh {
+		if result.ID == id {
+			byFamily[result.Family] = result
+		}
+	}
+	merged := make([]QualityTargetResult, 0, len(h.quality.snapshot.Targets)+len(byFamily))
+	replaced := make(map[string]bool, len(byFamily))
+	for _, existing := range h.quality.snapshot.Targets {
+		if existing.ID != id {
+			merged = append(merged, existing)
+			continue
+		}
+		if result, ok := byFamily[existing.Family]; ok {
+			merged = append(merged, result)
+			replaced[existing.Family] = true
+		}
+	}
+	for _, result := range fresh {
+		if result.ID == id && !replaced[result.Family] {
+			merged = append(merged, result)
+			replaced[result.Family] = true
+		}
+	}
+	h.quality.snapshot.Targets = merged
+}
+
+func (h *HTTP) measureQualitySpeed(ctx context.Context) {
+	h.quality.mu.Lock()
 	h.quality.snapshot.Phase = "speed"
 	h.quality.mu.Unlock()
-	if includeSpeed && ctx.Err() == nil {
-		bounded, cancel := context.WithTimeout(ctx, 90*time.Second)
-		run := h.Run
-		if run == nil {
-			run = runCloudflare
-		}
-		result, err := run(bounded)
-		cancel()
-		h.quality.mu.Lock()
-		if err == nil {
-			now := time.Now().UTC()
-			h.quality.snapshot.Speed, h.quality.snapshot.SpeedAt = &result, &now
-		} else {
-			h.quality.snapshot.SpeedError = err.Error()
-		}
-		h.quality.mu.Unlock()
+	bounded, cancel := context.WithTimeout(ctx, 90*time.Second)
+	run := h.Run
+	if run == nil {
+		run = runCloudflare
 	}
-	if ctx.Err() == nil {
-		h.quality.mu.Lock()
-		h.quality.snapshot.Phase = "nat"
-		h.quality.mu.Unlock()
-		bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
-		run := h.RunNAT
-		if run == nil {
-			run = runNAT
-		}
-		result, err := run(bounded)
-		cancel()
-		h.quality.mu.Lock()
-		if err == nil {
-			h.quality.snapshot.NAT = &result
-		} else {
-			h.quality.snapshot.NATError = err.Error()
-		}
-		h.quality.mu.Unlock()
+	result, err := run(bounded)
+	cancel()
+	h.quality.mu.Lock()
+	defer h.quality.mu.Unlock()
+	switch {
+	case ctx.Err() != nil:
+		// A cancelled run must not replace published evidence in memory.
+	case err == nil:
+		now := time.Now().UTC()
+		h.quality.snapshot.Speed, h.quality.snapshot.SpeedAt = &result, &now
+		h.quality.snapshot.SpeedError = ""
+	default:
+		// Keep the last successful transfer; the error explains why this
+		// attempt did not replace it.
+		h.quality.snapshot.SpeedError = err.Error()
+	}
+}
+
+func (h *HTTP) measureQualityNAT(ctx context.Context) {
+	h.quality.mu.Lock()
+	h.quality.snapshot.Phase = "nat"
+	h.quality.mu.Unlock()
+	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
+	run := h.RunNAT
+	if run == nil {
+		run = runNAT
+	}
+	result, err := run(bounded)
+	cancel()
+	h.quality.mu.Lock()
+	defer h.quality.mu.Unlock()
+	switch {
+	case ctx.Err() != nil:
+		// A cancelled run must not replace published evidence in memory.
+	case err == nil:
+		h.quality.snapshot.NAT = &result
+		h.quality.snapshot.NATError = ""
+	default:
+		h.quality.snapshot.NATError = err.Error()
 	}
 }

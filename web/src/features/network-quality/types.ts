@@ -18,6 +18,8 @@ export interface QualityComponent {
   effective_weight: number
   score: number | null
   reason?: string
+  target?: string
+  kind?: string
 }
 
 export interface QualityCategory {
@@ -31,6 +33,8 @@ export interface QualityCategory {
   components: QualityComponent[]
 }
 
+export type QualityScope = 'all' | 'responses' | 'target' | 'speed' | 'nat'
+
 export interface QualitySnapshot {
   scoring_version: string
   catalog_version: string
@@ -40,6 +44,8 @@ export interface QualitySnapshot {
   run_id: string
   state: 'idle' | 'running' | 'completed' | 'cancelled' | 'timed_out'
   phase: 'responses' | 'speed' | 'nat' | ''
+  running_scope?: QualityScope
+  running_target?: string
   include_speed: boolean
   started_at: string | null
   completed_at: string | null

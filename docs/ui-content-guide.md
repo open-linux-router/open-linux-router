@@ -61,15 +61,16 @@ hidden page title. Detail and operation pages keep their identifying titles.
   five axes have display scores. Omit the card total and measured-category caption.
   Details show the total out of 100 using normalized weights of current scored
   categories and components. Missing tests never reduce the score; measured
-  failures still count. Show the measured scope, effective weights and earned
-  contributions in details. Clicking Quality, its chart or
+  failures still count. Clicking Quality, its chart or
   Test opens the fullscreen assessment view. It leads with the overall score and
-  one display grade, then one row per category with score, bar and measured
-  scope; opening a row shows its point contribution and components. Unmeasured
-  categories are excluded from the total. Raw service and NAT evidence and the
-  scoring explanation stay in collapsed Measurement details. Keep run/cancel,
-  the optional bandwidth test, freshness and the bandwidth test's data cost at
-  the result panel, and keep router-default-route scope beside them.
+  one display grade, then Access-like category sections with the score, bar and
+  measured scope. Expanding a section lists its tests; a service test item can
+  rerun just that service, and a category heading can rerun every test behind
+  that category. Unmeasured categories are excluded from the total. Raw service
+  and NAT evidence and the scoring explanation stay in collapsed Measurement
+  details. The page always includes the reference transfer, so replace the old
+  optional-bandwidth switch with one short line at the run action; keep freshness
+  and the router-default-route scope visible without restating the workflow.
   The view has its own /quality address. Snapshot reads never start
   tests. Clicking the Latency title opens
   latency settings, without a separate plus button. The dialog starts with an
@@ -115,13 +116,17 @@ hidden page title. Detail and operation pages keep their identifying titles.
 ## State and data contracts
 
 Quality assessments run on demand from the fullscreen assessment view opened by
-the card heading or chart. Measured scores do not expire; results remain until
-another assessment and survive daemon and router restarts. The result view
-labels the same reference score Excellent 90–100, Good 75–89, Fair 60–74 or Poor
-below 60; the label is presentation, not another calculation. Not tested,
-cancelled, timed-out and unscored states replace the number with a dash, and a
-running assessment shows progress there instead; each carries one sentence
-saying what happened and what to do next. Missing data is never shown as zero.
+the card heading or chart. The page always includes the reference transfer. A
+full run replaces the snapshot; rerunning one category or service test reuses
+the other evidence, merges the fresh result and recalculates every affected
+score. While a rerun is in progress, keep the last scores visible, disable the
+other rerun controls and say which test is updating. Measured scores do not
+expire; results survive daemon and router restarts. The result view labels the
+same reference score Excellent 90–100, Good 75–89, Fair 60–74 or Poor below 60;
+the label is presentation, not another calculation. Not tested, cancelled,
+timed-out and unscored states replace the number with a dash, and a running
+assessment shows progress there instead; each carries one sentence saying what
+happened and what to do next. Missing data is never shown as zero.
 
 World traffic combines IPs at the same remote coordinates into one map connection.
 Line width represents that connection's combined upload and download relative

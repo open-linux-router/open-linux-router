@@ -379,3 +379,233 @@ func TestQualityCancellationAndSharedExclusion(t *testing.T) {
 		t.Fatal("assessment started during shutdown")
 	}
 }
+
+func waitQualitySettled(t *testing.T, h *HTTP) QualitySnapshot {
+	t.Helper()
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
+	for {
+		snapshot := h.qualitySnapshot()
+		if snapshot.State != "running" && snapshot.RunningScope == "" {
+			return snapshot
+		}
+		select {
+		case <-deadline.C:
+			t.Fatal("scoped assessment did not finish")
+			return QualitySnapshot{}
+		case <-tick.C:
+		}
+	}
+}
+
+func qualityTargetResult(snapshot QualitySnapshot, id, family string) QualityTargetResult {
+	for _, result := range snapshot.Targets {
+		if result.ID == id && result.Family == family {
+			return result
+		}
+	}
+	return QualityTargetResult{}
+}
+
+func qualityComponent(category QualityCategory, id string) QualityComponent {
+	for _, component := range category.Components {
+		if component.ID == id {
+			return component
+		}
+	}
+	return QualityComponent{}
+}
+
+func qualityCategory(snapshot QualitySnapshot, id string) QualityCategory {
+	for _, category := range snapshot.Categories {
+		if category.ID == id {
+			return category
+		}
+	}
+	return QualityCategory{}
+}
+
+func TestQualityScopedRerunsMergeEvidenceAndUpdateScores(t *testing.T) {
+	var probes, transfers atomic.Int32
+	var slow atomic.Bool
+	h := &HTTP{
+		QualityPath: filepath.Join(t.TempDir(), "quality.json"),
+		qualityProbe: func(_ context.Context, target qualityTarget, _ string) QualitySample {
+			probes.Add(1)
+			tcp := 10.0
+			switch target.ID {
+			case "google":
+				tcp = 60
+			case "github":
+				tcp = 30
+			}
+			if slow.Load() && target.ID == "cloudflare" {
+				tcp = 300
+			}
+			return qualityFixture("ok", tcp)[0]
+		},
+		Run: func(context.Context) (SpeedResult, error) {
+			n := float64(transfers.Add(1))
+			return SpeedResult{Server: "Reference", Download: 75 * n, Upload: 30 * n}, nil
+		},
+		RunNAT: func(context.Context) (NATResult, error) { return NATResult{Mapped: "203.0.113.1:1234"}, nil },
+	}
+	defer h.Close()
+	routes := core.RouteTable(h.Routes())
+
+	request := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		routes.ServeHTTP(w, httptest.NewRequest("POST", path, nil))
+		return w
+	}
+
+	if w := request("/quality?speed=true"); w.Code != http.StatusAccepted {
+		t.Fatalf("full run: %d %s", w.Code, w.Body.String())
+	}
+	before := waitQualitySettled(t, h)
+	if probes.Load() != 36 || transfers.Load() != 1 || before.Speed == nil || before.Overall.Score == nil {
+		t.Fatalf("full run: probes=%d transfers=%d snapshot=%+v", probes.Load(), transfers.Load(), before)
+	}
+	if component := qualityComponent(qualityCategory(before, "latency"), "cloudflare-tcp"); component.Target != "cloudflare" || component.Kind != "tcp" {
+		t.Fatalf("component metadata: %+v", component)
+	}
+	if component := qualityComponent(qualityCategory(before, "speed"), "reference"); component.Kind != "reference" {
+		t.Fatalf("reference metadata: %+v", component)
+	}
+
+	slow.Store(true)
+	if w := request("/quality?scope=target&target=cloudflare"); w.Code != http.StatusAccepted {
+		t.Fatalf("target rerun: %d %s", w.Code, w.Body.String())
+	}
+	target := waitQualitySettled(t, h)
+	if probes.Load() != 48 || transfers.Load() != 1 {
+		t.Fatalf("target rerun touched the wrong tests: probes=%d transfers=%d", probes.Load(), transfers.Load())
+	}
+	if got := qualityTargetResult(target, "cloudflare", "ipv4").Samples[0].TCP; got == nil || *got != 300 {
+		t.Fatalf("cloudflare was not refreshed: %v", got)
+	}
+	if got := qualityTargetResult(target, "google", "ipv4").Samples[0].TCP; got == nil || *got != 60 {
+		t.Fatalf("google changed outside its scope: %v", got)
+	}
+	if target.Speed == nil || target.Speed.Download != 75 {
+		t.Fatalf("target rerun replaced the speed evidence: %+v", target.Speed)
+	}
+	if target.Overall.Score == nil || *target.Overall.Score == *before.Overall.Score {
+		t.Fatalf("target rerun did not update the total: before=%v after=%v", before.Overall.Score, target.Overall.Score)
+	}
+	if target.CompletedAt == nil || before.CompletedAt == nil || !target.CompletedAt.After(*before.CompletedAt) {
+		t.Fatalf("target rerun did not update its completion time: before=%v after=%v", before.CompletedAt, target.CompletedAt)
+	}
+
+	if w := request("/quality?scope=speed"); w.Code != http.StatusAccepted {
+		t.Fatalf("speed rerun: %d %s", w.Code, w.Body.String())
+	}
+	speed := waitQualitySettled(t, h)
+	if probes.Load() != 48 || transfers.Load() != 2 || speed.Speed == nil || speed.Speed.Download != 150 || speed.SpeedError != "" {
+		t.Fatalf("speed rerun: probes=%d transfers=%d speed=%+v error=%q", probes.Load(), transfers.Load(), speed.Speed, speed.SpeedError)
+	}
+	if got := qualityTargetResult(speed, "cloudflare", "ipv4").Samples[0].TCP; got == nil || *got != 300 {
+		t.Fatalf("speed rerun replaced target evidence: %v", got)
+	}
+
+	if w := request("/quality?scope=responses"); w.Code != http.StatusAccepted {
+		t.Fatalf("responses rerun: %d %s", w.Code, w.Body.String())
+	}
+	responses := waitQualitySettled(t, h)
+	if probes.Load() != 84 || transfers.Load() != 2 || responses.Speed == nil || responses.Speed.Download != 150 {
+		t.Fatalf("responses rerun: probes=%d transfers=%d speed=%+v", probes.Load(), transfers.Load(), responses.Speed)
+	}
+
+	for _, path := range []string{
+		"/quality?scope=bogus",
+		"/quality?scope=target",
+		"/quality?scope=target&target=example",
+		"/quality?scope=target&target=cloudflare&speed=true",
+	} {
+		if w := request(path); w.Code != http.StatusBadRequest {
+			t.Errorf("%s status=%d body=%s", path, w.Code, w.Body.String())
+		}
+	}
+
+	// A scope has nothing to refresh until a full assessment exists.
+	idle := &HTTP{qualityProbe: func(context.Context, qualityTarget, string) QualitySample {
+		t.Error("a scoped rerun probed without an assessment")
+		return QualitySample{}
+	}}
+	w := httptest.NewRecorder()
+	core.RouteTable(idle.Routes()).ServeHTTP(w, httptest.NewRequest("POST", "/quality?scope=responses", nil))
+	if w.Code != http.StatusConflict {
+		t.Fatalf("scoped run on idle status=%d", w.Code)
+	}
+}
+
+func TestQualityScopedRunShowsProgressAndCancellationKeepsEvidence(t *testing.T) {
+	var targets []QualityTargetResult
+	for _, target := range qualityTargets {
+		for _, family := range []string{"ipv4", "ipv6"} {
+			targets = append(targets, QualityTargetResult{ID: target.ID, Name: target.Name, URL: target.URL, Family: family, Samples: qualityFixture("ok", 10)})
+		}
+	}
+	completed := time.Now().UTC().Add(-time.Hour)
+	path := filepath.Join(t.TempDir(), "quality.json")
+	h := &HTTP{QualityPath: path}
+	h.quality.snapshot = QualitySnapshot{
+		State: "completed", RunID: "previous", Targets: targets,
+		Speed: &SpeedResult{Download: 75, Upload: 30}, CompletedAt: &completed,
+	}
+	h.saveQuality()
+	started := make(chan struct{}, 2*qualitySamples)
+	h.qualityProbe = func(ctx context.Context, _ qualityTarget, _ string) QualitySample {
+		started <- struct{}{}
+		<-ctx.Done()
+		return QualitySample{State: "cancelled"}
+	}
+	defer h.Close()
+	routes := core.RouteTable(h.Routes())
+	w := httptest.NewRecorder()
+	routes.ServeHTTP(w, httptest.NewRequest("POST", "/quality?scope=target&target=cloudflare", nil))
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("scoped run: %d %s", w.Code, w.Body.String())
+	}
+	var progress QualitySnapshot
+	if err := json.Unmarshal(w.Body.Bytes(), &progress); err != nil {
+		t.Fatal(err)
+	}
+	if progress.State != "completed" || progress.RunningScope != "target" || progress.RunningTarget != "cloudflare" || progress.Overall.Score == nil {
+		t.Fatalf("scoped progress replaced the published result: %+v", progress)
+	}
+	for range 2 {
+		select {
+		case <-started:
+		case <-time.After(3 * time.Second):
+			t.Fatal("scoped probes did not start")
+		}
+	}
+	w = httptest.NewRecorder()
+	routes.ServeHTTP(w, httptest.NewRequest("POST", "/quality", nil))
+	if w.Code != http.StatusConflict {
+		t.Fatalf("concurrent full run status=%d", w.Code)
+	}
+	w = httptest.NewRecorder()
+	routes.ServeHTTP(w, httptest.NewRequest("DELETE", "/quality", nil))
+	result := waitQualitySettled(t, h)
+	if result.State != "completed" || result.RunningScope != "" || result.RunningTarget != "" || h.running.Load() || h.natRunning.Load() {
+		t.Fatalf("cancelled scope state: %+v running=%v nat=%v", result, h.running.Load(), h.natRunning.Load())
+	}
+	if !reflect.DeepEqual(result.Targets, targets) || result.Speed == nil || result.Speed.Download != 75 {
+		t.Fatalf("cancelled scope changed evidence: %+v", result.Targets)
+	}
+	if result.CompletedAt == nil || !result.CompletedAt.Equal(completed) {
+		t.Fatalf("cancelled scope changed its completion time: %v", result.CompletedAt)
+	}
+	restored := &HTTP{QualityPath: path}
+	if err := restored.RestoreQuality(); err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := restored.qualitySnapshot()
+	if checkpoint.RunningScope != "" || !reflect.DeepEqual(checkpoint.Targets, targets) || checkpoint.Speed == nil || checkpoint.Speed.Download != 75 {
+		t.Fatalf("cancelled scope changed the checkpoint: %+v", checkpoint)
+	}
+}

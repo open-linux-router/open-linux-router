@@ -381,7 +381,9 @@ overall score.
 Coverage is separate from quality. An unimplemented test is not evidence of a
 poor network. Exclude unimplemented, unselected, insufficient, invalid and stale
 results, then explicitly normalize the remaining weights within categories and
-across categories. Show effective weights and point contributions in details.
+across categories. The result view exposes the scoring explanation and the
+per-service evidence; it presents category and test scores rather than asking
+readers to add up weight contributions.
 An unmeasured Wi-Fi category remains a dash while the measured categories share
 100 points. A ready total means the current assessment is scored, not that the
 entire planned test catalog has been implemented or measured. The UI groups the
@@ -499,20 +501,33 @@ It replaces the fixed sample scores and renames Reachability to Functionality.
 - `GET /api/tools/quality` passively returns the latest snapshot and calculated
   category/overall results. It is also published as the `tools_show_quality`
   read tool. The initial state is `idle`, with null scores.
-- `POST /api/tools/quality?speed=false` starts a finite asynchronous assessment
-  and returns 202. `speed=true` additionally runs the existing bandwidth test.
-  Another assessment, reference speed test or NAT test holds the shared runner
-  reservations and produces 409. Regular user traffic is not controlled.
+- `POST /api/tools/quality?scope=all&speed=true` starts a finite asynchronous
+  full assessment and returns 202. The fullscreen view always sends
+  `speed=true`; API callers may omit it for a lighter run. `scope=responses`
+  reruns every service probe, `scope=target&target=cloudflare` reruns one
+  service, `scope=speed` reruns the reference transfer and `scope=nat` reruns
+  the NAT observations. A scoped run requires a completed snapshot and merges
+  its fresh evidence into the other results. Another assessment, reference speed
+  test or NAT test holds the shared runner reservations and produces 409.
+  Regular user traffic is not controlled.
 - `DELETE /api/tools/quality` requests cancellation. The runner releases its
   reservations after stopping and retains completed evidence. Daemon shutdown
   also cancels it. Closing the assessment view does not cancel a test.
-- A new assessment replaces the previous in-memory result, including its speed
-  data. Tests run only on demand. Scores do not expire and stay available until
-  the next assessment. Finished assessments (including cancelled or timed-out
-  runs with partial evidence) are atomically saved to
-  `/var/lib/open-linux-router/quality.json` and restored after daemon or router
-  restart. An interrupted run leaves the previous checkpoint intact until it
-  finishes; an abrupt shutdown therefore restores the last finished run.
+- A full assessment replaces the previous in-memory result. A scoped run
+  replaces only the targets, speed or NAT evidence it names and recalculates
+  every affected score. While a scoped run is active, `running_scope` and
+  `running_target` identify it and `state` stays `completed`, so readers keep
+  the last scores; `completed_at` advances to the last successful update. A
+  cancelled scoped run changes neither the published evidence nor the
+  checkpoint. Tests run only on demand. Scores do not expire and stay available
+  until a full assessment or a scoped rerun replaces their evidence. Finished
+  assessments (including cancelled or timed-out full runs with partial evidence)
+  are atomically saved to `/var/lib/open-linux-router/quality.json` and
+  restored after daemon or router restart. An interrupted run leaves the
+  previous checkpoint intact until it finishes; an abrupt shutdown therefore
+  restores the last finished run. Category components carry `target` and `kind`
+  so a reader can group the timing, stability and access measurements of one
+  service into that service's single test item.
 
 The run first samples the following fixed resources with IPv4 and IPv6
 independently: Cloudflare `https://speed.cloudflare.com/__down?bytes=0` (200),
@@ -531,12 +546,14 @@ inconclusive access evidence rather than a scored network failure. An expected
 status verifies only that HEAD resource transaction; it does not verify response
 body content or all functionality of the named service.
 
-The optional Cloudflare reference transfer runs after response sampling, with
-a 90-second deadline. OLR invokes the upstream Rust `cloudflare-speed-cli`
-with JSON output and history saving disabled; OLR does not reimplement its
+The Cloudflare reference transfer runs after response sampling in a full
+assessment, or alone when its test is rerun, with a 90-second deadline. OLR
+invokes the upstream Rust `cloudflare-speed-cli` with JSON output and history
+saving disabled; OLR does not reimplement its
 measurement algorithm. The packaged version is v1.0.10, with six concurrent
 workers and ten-second download and upload phases. It has no fixed byte cap
-and can consume substantial data; bandwidth testing defaults to off.
+and can consume substantial data. The fullscreen view always runs it; the API
+leaves `speed` optional and off by default for callers that need a lighter run.
 This measures the router's default route to Cloudflare, not Wi-Fi or all
 internet services. Speed scoring uses the existing curves, weighting download
 70% and upload 30%; missing, invalid or timed-out transfers are excluded.
@@ -555,7 +572,9 @@ falling back to another provider. Proxy environment variables are removed from
 the child process so they cannot change the measured path.
 Finally, the existing IPv4 STUN test has up to 15 seconds. NAT results are
 diagnostic only and do not prove public IPv4 assignment, inbound or P2P access.
-The entire assessment has a 150-second deadline. No configuration changes,
+A full assessment has a 150-second deadline; scoped reruns use shorter deadlines
+(65 seconds for all service probes, 40 seconds for one service, 100 seconds for
+the reference transfer and 20 seconds for NAT). No configuration changes,
 temporary inbound listeners or port mappings are made.
 
 ### Component base weights
