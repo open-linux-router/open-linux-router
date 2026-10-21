@@ -300,10 +300,12 @@ scope, replacement behavior and the priority enforcement caveat beside the
 explicit apply actions; selected values are batch choices, not observed shared
 settings. List member devices below the summary.
 
-Gateway opens with the shared status strip, whose switch is the module itself:
-routing and NAT for the networks behind this router. Say what turning it off
-also closes (port forwards) before the click, and link to the forwarding
-settings rather than repeating their switches. Below it, physical interface
+Gateway opens with the shared status strip, read-only: state, drift and the
+unreadable-kernel answer only. No switch, and no second link — the Interfaces
+heading directly below already opens the page that carries the routing and
+forwarding switches. Turning routing off takes every network behind the router
+off the internet and closes forwarded ports, so that action belongs beside its
+consequences on the settings page, not under a glance. Below it, physical interface
 cards carry name, role, link state, address and current rates without history
 charts; the dialog owns link speed, MAC, addresses and totals. Way out states the
 observed IPv4/IPv6 default routes and the resolvers this router uses, read-only.

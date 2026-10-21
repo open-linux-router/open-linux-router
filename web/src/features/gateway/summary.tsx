@@ -13,8 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useDhcpLeases, useDhcpStatus } from '@/features/dhcp/queries'
 import { useDialStatus, useUplink } from '@/features/dial/queries'
 import { useDnsStatus } from '@/features/dns/queries'
-import { ApplyOutcome, useGatewayEditor } from '@/features/gateway/editor'
-import { gatewayChange, useGatewayConfig, useGatewayStatus } from '@/features/gateway/queries'
+import { useGatewayConfig, useGatewayStatus } from '@/features/gateway/queries'
 import { useInterfaceTraffic, type RateSample } from '@/features/link/interface-traffic'
 import { NetworkIcon } from '@/features/link/network-icon'
 import { useInterfaces } from '@/features/link/queries'
@@ -26,35 +25,40 @@ import { cn, formatBytes, formatRate } from '@/lib/utils'
  *
  * Three questions, in the order an operator asks them: is routing working,
  * which interfaces are carrying it, and is anything behind them broken. It is
- * the same shape every other section lands on — the shared status strip and its
- * one switch, then the objects, then the way in to the settings — because the
- * page that used a bespoke panel was the one that read as unfinished.
+ * the same shape every other section lands on — the shared status strip, then
+ * the objects, then the way in to the settings — because the page that used a
+ * bespoke panel was the one that read as unfinished.
  *
- * The forwarding switches are deliberately not here. They are the module's
- * kernel-level setting, they are not what a visit is for, and a pair of
- * unlabelled toggles next to live data is a mis-click waiting to happen; the
- * enabled switch is the one this page owns, and `interfaces#forwarding` carries
- * the rest with room to explain them.
+ * The page does not apply anything. None of routing's switches are here: the
+ * module switch and the IPv4/IPv6 forwarding switches all change what every
+ * network behind this router can reach, so they live together at
+ * `interfaces#forwarding` with the room to explain each consequence. This page
+ * answers what is true now and links to the place that changes it.
  */
 export function GatewaySummary() {
-  const gateway = useGatewayConfig()
-  const editor = useGatewayEditor()
-  const { config, applier, gate } = editor
+  const config = useGatewayConfig()
   const { hash } = useLocation()
 
   useEffect(() => {
-    if (!config || !hash) return
+    if (!config.data || !hash) return
     const frame = requestAnimationFrame(() => document.getElementById(hash.slice(1))?.scrollIntoView())
     return () => cancelAnimationFrame(frame)
-  }, [config, hash])
+  }, [config.data, hash])
 
-  if (gateway.isPending) return <GatewaySkeleton />
-  if (!config) return gate
+  if (config.isPending) return <GatewaySkeleton />
+  if (config.isError) {
+    return (
+      <Alert variant="destructive">
+        <AlertTriangle />
+        <AlertTitle>Could not load the gateway settings</AlertTitle>
+        <AlertDescription>{config.error.message}</AlertDescription>
+      </Alert>
+    )
+  }
 
   return (
     <div className="space-y-6">
-      <ApplyOutcome applier={applier} />
-      <GatewayHealth editor={editor} />
+      <GatewayHealth enabled={config.data.enabled} />
       <InterfacesCard />
       <div className="grid gap-4 lg:grid-cols-2">
         <WayOutCard />
@@ -99,47 +103,38 @@ interface Health {
 }
 
 /**
- * Is this working, and can I turn it off.
+ * Is this working, and where do I change it.
  *
  * The shared strip, so the first thing on this page is the first thing on every
- * section's page. Its one switch is the module itself; the drift row points at
- * the page that can run the repair plan, which is not something this screen can
- * decide to do for the operator.
- *
- * The page's editor is passed down rather than created again: the apply outcome
- * and its confirm dialog are rendered once, at the top of the page, and a second
- * hook instance would hold a 409 that nobody draws.
+ * section's page — but read-only. Routing is not a landing-page switch: one
+ * click takes every network behind this router off the internet and closes its
+ * forwarded ports, which is not a thing to do while glancing at a status. The
+ * switch and its consequences live on the settings page, one click away in the
+ * Interfaces heading, and this strip is the status only. The drift row points
+ * at the repair plan, which this screen cannot decide to run for the operator
+ * either.
  */
-function GatewayHealth({ editor }: { editor: ReturnType<typeof useGatewayEditor> }) {
-  const { config, busy, change } = editor
+function GatewayHealth({ enabled }: { enabled: boolean }) {
   const status = useGatewayStatus()
   const interfaces = useInterfaces()
   const dial = useDialStatus()
   const navigate = useNavigate()
 
-  if (!config) return null
   const summary = describeGateway({
-    enabled: config.enabled,
+    enabled,
     status: status.data,
     error: status.error as Error | null,
     networks: interfaces.data?.networks.length,
     dial: dial.data,
   })
   const foreign = status.data?.foreign?.length ?? 0
-  const drifted = Boolean(config.enabled && status.data?.drifted)
+  const drifted = Boolean(enabled && status.data?.drifted)
 
   return (
     <StatusStrip
       headline={summary.headline}
       detail={summary.detail}
       dot={dot[summary.tone]}
-      control={{
-        id: 'gateway-enabled',
-        label: 'Route traffic for the networks behind this router',
-        checked: config.enabled,
-        busy,
-        onChange: enabled => change(gatewayChange.settings({ enabled })),
-      }}
       drifted={drifted}
       driftNote="The routing rules that are running are behind these settings."
       driftAction={{ label: 'Review restore', onClick: () => navigate('/gateway/interfaces') }}
@@ -159,20 +154,7 @@ function GatewayHealth({ editor }: { editor: ReturnType<typeof useGatewayEditor>
           </p>
         </>
       )}
-    >
-      {/* The sharper edge, said before the click rather than after it: this one
-          switch also tears down NAT, so every forwarded port stops answering.
-          The forwarding switches themselves live behind this link, with the
-          room to explain what each one changes. */}
-      {config.enabled && (
-        <p className="text-[0.8125rem] leading-relaxed text-muted-foreground">
-          Turning this off applies no routes and closes forwarded ports.{' '}
-          <Link to="/gateway/interfaces#forwarding" className="underline underline-offset-4">
-            Forwarding settings
-          </Link>
-        </p>
-      )}
-    </StatusStrip>
+    />
   )
 }
 

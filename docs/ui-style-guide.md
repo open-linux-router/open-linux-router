@@ -159,9 +159,9 @@ clear of both bars and scroll the navigation locally on narrow screens. The
 page title is accessible but visually hidden; avoid a repeated introductory
 heading above the step navigation.
 
-Gateway lands on the shared status strip. Its one switch is the module itself —
-routing and NAT for the networks behind this router — and the note under it says
-what turning it off also closes. The Interfaces panel follows, with physical
+Gateway lands on the shared status strip, read-only: routing is not something a
+visit flips on and off, so the strip reports the state and offers neither a
+switch nor a second settings link. The Interfaces panel follows, with physical
 cards wrapping three across from 1024px, two from 640px and one on phones. There
 is no right-side summary column, because the facts it held are panels of their
 own below: Way out (observed IPv4/IPv6 default routes and the resolvers this
