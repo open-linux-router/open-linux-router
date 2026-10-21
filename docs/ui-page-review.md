@@ -23,7 +23,7 @@ OLR capabilities, and a calm, consistent interface. This record accompanies the
 | Firewall | One vertical Sankey with three visual rows: external semantic categories above one virtual OLR / Firewall node, trusted/LAN and router-local categories below. Both sides arrive at OLR; outer nodes state source and Allowed/Blocked decision. Use one actual packet scale and only nonzero categories. Matching conditions include source, destination, packets and bytes. Wrap labels and adapt chart width; overflowing charts scroll from the leading edge with a visible hint. Preserve switch and warnings; native, disabled, unverified and unavailable counters do not claim automatic traffic measurements. Editing lives at `/firewall/rules`. |
 | Access | Remove duplicate hero introduction; keep the established directional groups, and link each tile straight to its configuration page or project documentation instead of a dialog. |
 | SOCKS5 outbound | Keep status, authentication and address fields; concise support scope and routing next step. |
-| WireGuard and SOCKS5 server | Keep separate status/settings/peer cards per view; remove duplicate WireGuard labels and onboarding prose; retain exposure and password information. |
+| WireGuard and SOCKS5 server | WireGuard answers on one card: its state, switch, public address and server key together, with the device list below it. SOCKS5 keeps its status and password card. Remove duplicate WireGuard labels and onboarding prose; retain exposure and password information. |
 | HTTPS ingress | Preserve certificate details and all service domains/targets; show configuration counts accurately; keep service-authentication warning. |
 | Port forwards | Keep shared routing switch and counters; distinguish unknown rules from inactive rules; configuration counts do not promise public reachability. |
 | External filtering | Distinguish loading/error/unknown/empty; retain policy and counters without claiming end-to-end connectivity. |
@@ -148,3 +148,33 @@ in the stacks except the unmanaged rules, which remain on interfaces#forwarding.
 Validated as a read-only page: lint, type-check, unit tests and a production
 build pass. Live router state was not available, so the cards were checked
 against types and fixtures, not against a running box.
+
+## WireGuard card review — 2026-10-21
+
+The page opened with two cards that each held half of one answer. A status strip
+counted "1 of 2 connected" above a list that already names every device and ends
+each row with exactly that state, and below it a settings card carried the switch
+whose consequence the strip repeated in a second voice ("Devices connected over
+WireGuard can reach every address on your network"). Neither card was wrong, and
+neither was what somebody came to the page for.
+
+They are one card now: the mark and the title, the tunnel's state as a word
+beside it, the Settings button and the switch on the same line, then the three
+facts the device list cannot give — where devices dial, the network their
+addresses come from, and the key they check. **The word follows the box and the
+switch follows intent**, so a reboot that leaves the settings stored and the
+interface gone reads "Not running" with the catch-up alert directly above it,
+and "we could not tell" stays its own answer rather than becoming a fault. The
+off state keeps one sentence, because a list of saved devices looks identical
+whether or not the tunnel is up.
+
+The count is gone rather than moved. A row already ends in Connected, an elapsed
+time or Never connected, so "1 of 2" summarised the rows directly underneath it.
+What remains above the list is what a page's first glance is for: blockers, a
+foreign interface, drift, and a public address that has not been set.
+
+Validated against fixture data at 1440×900 in both themes and at 390, 375 and
+320 wide, in the running, off and unknown states: no page-wide horizontal
+overflow, and the switch stays reachable at every width the card title wraps at.
+Live router state was not available, so this checks presentation rather than
+networking.

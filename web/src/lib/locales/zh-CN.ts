@@ -1226,4 +1226,5 @@ export const zhCN: Record<string, string> = {
   '{name} blocks IPv6': '{name} 阻断 IPv6',
   '{name} carries IPv6': '{name} 承载 IPv6',
   '{name} sends IPv6 around it': '{name} 让 IPv6 绕过它',
+  'WireGuard is off. The devices below are saved, but none of them can connect.': 'WireGuard 已关闭。下方设备都已保存，但都无法连接。',
 }

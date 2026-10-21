@@ -3,7 +3,6 @@ import { AlertTriangle, KeyRound, Pencil, Plus } from 'lucide-react'
 import { useState } from 'react'
 
 import { BlockerAlerts } from '@/components/layout/blockers'
-import { StatusStrip } from '@/components/layout/status-strip'
 import { SubPage } from '@/components/layout/sub-page'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -27,6 +26,7 @@ import {
 import { Disclosure } from '@/components/ui/disclosure'
 import { List, ListEmpty, ListRow } from '@/components/ui/list'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import { ClientConfigDialog } from '@/features/remote/client-config'
 import { ImpactBadge, PlanDiff, PlanReasons, impactHint } from '@/features/remote/impact'
@@ -137,24 +137,13 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
         </Alert>
       )}
 
-      <StatusStrip
-        headline={headline(wg.enabled, peers)}
-        detail={
-          wg.enabled
-            ? 'Devices connected over WireGuard can reach every address on your network.'
-            : 'WireGuard is off. The devices below are saved, but none of them can connect.'
-        }
-        dot={!wg.enabled ? 'bg-muted-foreground/40' : dotFor(status.data)}
-        control={{
-          id: 'remote-enabled',
-          label: 'WireGuard',
-          checked: wg.enabled,
-          busy: applier.busy,
-          onChange: (enabled) => change(remoteChange.settings({ enabled })),
-        }}
+      <ConnectionCard
+        status={status.data}
+        enabled={wg.enabled}
+        busy={applier.busy}
+        onChange={(enabled) => change(remoteChange.settings({ enabled }))}
+        onEdit={() => setSettings(true)}
       />
-
-      <ReachCard status={status.data} onEdit={() => setSettings(true)} />
 
       <Card>
         <CardHeader>
@@ -243,49 +232,61 @@ export function RemotePage({ way }: { way: 'wireguard' | 'socks-server' }) {
   )
 }
 
-function headline(enabled: boolean, peers: RemotePeer[]): string {
-  if (!enabled) return 'WireGuard is off'
-  if (peers.length === 0) return 'WireGuard is on, with no devices yet'
-  const online = peers.filter((p) => p.online).length
-  if (online > 0) return `WireGuard: ${online} of ${peers.length} connected`
-  return `WireGuard: ${peers.length} device${peers.length === 1 ? '' : 's'}, none connected`
-}
-
 /**
- * Green only when the tunnel is actually up.
+ * The tunnel, in one card: whether it is running, where a device dials, the key
+ * it checks, and the switch that closes all of them at once.
  *
- * "Switched on" and "running" are different claims here in a way they are not
- * on a file-rendering module: this one's configuration lives in the kernel, so
- * a reboot leaves the settings intact and the tunnel gone. Painting that green
- * would be the screen agreeing with itself rather than with the box.
- */
-function dotFor(status?: RemoteStatus): string {
-  if (!status || !status.kernel_known) return 'bg-muted-foreground/40'
-  if (status.interface_foreign) return 'bg-destructive'
-  return status.interface_present && status.interface_up ? 'bg-success' : 'bg-destructive'
-}
-
-/**
- * Where devices dial, and the key they check.
+ * It was two cards — a status strip above a settings card — and neither could
+ * stand alone. The strip counted connected devices directly above a list that
+ * already names every one of them and says when each was last heard, and the
+ * card below it said where to dial without saying whether anything was running.
+ * What is left here is what the list below cannot say: the address to point a
+ * device at, the key it will see there, and the off state, which is the one
+ * thing about it that is invisible from a list of saved devices.
  *
  * The public key is on screen rather than hidden behind an "advanced" anything.
  * It is not a secret — it is in every configuration this router has ever
  * handed out — and it is the one value somebody completing a file by hand, or
  * comparing against what their phone shows, actually needs.
  */
-function ReachCard({ status, onEdit }: { status?: RemoteStatus; onEdit: () => void }) {
+function ConnectionCard({
+  status,
+  enabled,
+  busy,
+  onChange,
+  onEdit,
+}: {
+  status?: RemoteStatus
+  enabled: boolean
+  busy: boolean
+  onChange: (enabled: boolean) => void
+  onEdit: () => void
+}) {
   useLocale()
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <WayMark way="wireguard" fallback={KeyRound} className="size-4" /> {t('Connection settings')} {status && !status.endpoint && <Badge variant="destructive">{t('Not set')}</Badge>}
+        <CardTitle className="flex min-w-0 flex-wrap items-center gap-2">
+          <WayMark way="wireguard" fallback={KeyRound} className="size-4" />
+          {t('Connection settings')}
+          <TunnelState status={status} enabled={enabled} />
+          {status && !status.endpoint && <Badge variant="destructive">{t('Not set')}</Badge>}
         </CardTitle>
-        <CardAction>
+        <CardAction className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={onEdit}> {t('Settings')} </Button>
+          <Switch
+            id="remote-enabled"
+            aria-label="WireGuard"
+            checked={enabled}
+            disabled={busy}
+            onCheckedChange={onChange}
+          />
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-1 text-sm text-muted-foreground">
+        {!enabled && (
+          <p> {t('WireGuard is off. The devices below are saved, but none of them can connect.')} </p>
+        )}
         {status?.endpoint ? (
           <p> {t('Devices connect to')} <span className="font-mono">{status.endpoint}</span> on UDP port{' '}
             {status.listen_port} and get addresses in{' '}
@@ -301,6 +302,24 @@ function ReachCard({ status, onEdit }: { status?: RemoteStatus; onEdit: () => vo
       </CardContent>
     </Card>
   )
+}
+
+/**
+ * Switched on and running are different claims here in a way they are not on a
+ * module that renders a file: this one's configuration lives in the kernel, so a
+ * reboot leaves the settings intact and the tunnel gone. Painting that green
+ * would be the screen agreeing with itself rather than with the box, so the word
+ * follows the kernel and the switch keeps following the intent — the drift alert
+ * above is what explains the two disagreeing.
+ */
+function TunnelState({ status, enabled }: { status?: RemoteStatus; enabled: boolean }) {
+  useLocale()
+  if (!enabled) return <Badge variant="secondary">{t('Off')}</Badge>
+  if (!status || !status.kernel_known) return <Badge variant="secondary">{t('Unknown')}</Badge>
+  if (status.interface_present && status.interface_up && !status.interface_foreign) {
+    return <Badge variant="success">{t('Running')}</Badge>
+  }
+  return <Badge variant="destructive">{t('Not running')}</Badge>
 }
 
 function PeerList({
