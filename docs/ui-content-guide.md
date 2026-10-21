@@ -115,8 +115,8 @@ the card heading or chart. Measured scores do not expire; results remain until
 another assessment and survive daemon and router restarts.
 
 World traffic combines IPs at the same remote coordinates into one map connection.
-Line width and opacity represent that connection's combined upload and download
-relative to the busiest one; per-IP rates stay in details. Arcs are one amber
+Line width represents that connection's combined upload and download relative
+to the busiest one; per-IP rates stay in details. Arcs are one amber
 hue, outside the map's country colours, and each connection has one neutral dot
 that travels out and back, illustrating both directions without selecting a
 direction based on traffic volume.

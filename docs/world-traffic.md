@@ -57,24 +57,25 @@ the separate nftables interface/device totals.
 
 Blue indicates download and teal upload in the details list. The map itself
 uses one amber hue for every arc, deliberately outside the teal-green-blue
-country palette, so colour marks traffic as a category and width and opacity
-carry its size; the moving particle is neutral, and its out-and-back motion
+country palette, so colour marks traffic as a category and width alone carries
+its size; the moving particle is neutral, and its out-and-back motion
 shows both directions without spending another colour. A blurred amber halo
 sits under each arc; because arcs composite per feature, the halo accumulates
 where they bunch up — around the router and along busy corridors — and
-concentration reads as light. Width and opacity are relative to the busiest
-plotted location, not to an absolute rate, and they fall into four steps — at
-least half of the busiest flow, at least fifteen percent, at least three
-percent, and the rest. A few widths can be grouped at a glance; a continuous
-ramp reads as noise across dozens of arcs. Every arc stays translucent so
-overlaps build up instead of replacing each other. Widths are screen pixels at
-the world view and thin with zoom, so a country-sized view is not covered by
+concentration reads as light. Width is relative to the busiest plotted
+location, not to an absolute rate, and it falls into four steps — at least half
+of the busiest flow, at least fifteen percent, at least three percent, and the
+rest. A few widths can be grouped at a glance; a continuous ramp reads as noise
+across dozens of arcs. Every arc shares one opacity, so width is the only
+variable the eye compares, and every arc stays translucent so overlaps still
+build up instead of replacing each other. Widths are whole screen pixels at the
+world view and thin with zoom, so a country-sized view is not covered by
 ribbons meant for a globe.
 Reduced motion disables particles and interpolation. The UI polls every two
 seconds, but keeps each IP's particle phase independent of ranking. Paths fade
 in and out with a 450ms exponential time constant (about two seconds to
-settle); widths and opacity ease toward new measured rates on the same
-timeline. Particles fade at path ends and render at up to 30fps. Hidden tabs
+settle); widths ease toward new measured rates on the same timeline.
+Particles fade at path ends and render at up to 30fps. Hidden tabs
 pause visual updates. Particles use the neutral text scale, so amber is the
 only hue the map adds. There are no endpoint dots: lines carry the whole
 reading, and the hub is where they converge. The embedded card preview draws

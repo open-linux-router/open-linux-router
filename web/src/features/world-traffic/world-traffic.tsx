@@ -41,16 +41,12 @@ const flowGradient = (dark: boolean, halo: boolean) => {
 // Zoom may only be the input of a top-level interpolate, so the scale wraps
 // the data width instead of multiplying it.
 const scaledWidth = (base: ExpressionSpecification) => ['interpolate', ['linear'], ['zoom'], 1, base, 3, ['*', base, 0.9], 4.5, ['*', base, 0.7], 6, ['*', base, 0.55]] as ExpressionSpecification
-// Four steps rather than a continuous ramp: with dozens of arcs a smooth range
-// reads as noise, while a few widths can be grouped at a glance. A step is
-// keyed to the location's share of the busiest plotted flow.
-const flowSteps = [
-  { share: 0.5, width: 4, strength: 0.64 },
-  { share: 0.15, width: 2.9, strength: 0.54 },
-  { share: 0.03, width: 2, strength: 0.44 },
-  { share: 0, width: 1.2, strength: 0.34 },
-] as const
-const flowStep = (share: number) => flowSteps.find(step => share >= step.share) ?? flowSteps[flowSteps.length - 1]
+// Four width steps rather than a continuous ramp: with dozens of arcs a smooth
+// range reads as noise, while a few widths can be grouped at a glance. Steps
+// are whole pixels at the world view; zoom scaling lands between them and the
+// renderer anti-aliases. Width alone carries volume — every arc shares one
+// opacity, so the eye compares length, not two variables at once.
+const flowWidth = (share: number) => share >= 0.5 ? 4 : share >= 0.15 ? 3 : share >= 0.03 ? 2 : 1
 // Zoom may only appear as the input of a top-level step/interpolate expression.
 // Layout expressions are evaluated at integer zooms; use integer thresholds
 // for regions and cities so names don't wait for the final zoom level.
@@ -120,11 +116,11 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       instance.addLayer({ id: 'flow-halo', type: 'line', source: 'flows', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: {
         'line-width': scaledWidth(['+', ['*', ['get', 'width'], 1.8], 3]),
         'line-blur': scaledWidth(['+', ['*', ['get', 'width'], 0.8], 2]),
-        'line-opacity': ['*', ['*', ['get', 'strength'], ['get', 'opacity']], 0.32],
+        'line-opacity': ['*', 0.16, ['get', 'opacity']],
       } })
       instance.addLayer({ id: 'flows', type: 'line', source: 'flows', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: {
         'line-width': scaledWidth(['get', 'width']),
-        'line-opacity': ['*', ['get', 'strength'], ['get', 'opacity']],
+        'line-opacity': ['*', 0.5, ['get', 'opacity']],
       } })
       instance.addLayer({ id: 'dots', type: 'circle', source: 'dots', paint: { 'circle-radius': ['+', 0.85, ['*', ['get', 'width'], 0.18]], 'circle-color': ['get', 'color'], 'circle-opacity': ['get', 'opacity'] } })
       fit()
@@ -172,11 +168,11 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
       if (!start || (start[0] === end[0] && start[1] === end[1])) continue
       const total = peer.download + peer.upload
       if (total <= 0) continue
-      // Width and translucency are relative to the busiest flow, not to an
-      // absolute byte rate, and they move in steps rather than continuously.
-      const { width, strength } = flowStep(total / Math.max(1, peak))
+      // Width is relative to the busiest flow, not to an absolute byte rate,
+      // and it moves in steps rather than continuously.
+      const width = flowWidth(total / Math.max(1, peak))
       const coordinates = arc(start, end, 0)
-      next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: { width, strength }, geometry: { type: 'LineString', coordinates } }, coordinates })
+      next.set(`${location}:${start}`, { feature: { type: 'Feature', properties: { width }, geometry: { type: 'LineString', coordinates } }, coordinates })
     }
     targets.current = next
   }, [peers, origin, dark, ready, expanded])
@@ -185,7 +181,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     if (!instance || !ready) return
     const set = (id: string, features: GeoJSON.Feature[]) => (instance.getSource(id) as GeoJSONSource).setData({ type: 'FeatureCollection', features })
     // Keep identity and phase independent of snapshot order and rank changes.
-    const visible = new Map<string, { target: FlowTarget; opacity: number; width: number; strength: number; phase: number }>()
+    const visible = new Map<string, { target: FlowTarget; opacity: number; width: number; phase: number }>()
     const reduced = matchMedia('(prefers-reduced-motion: reduce)')
     let previous = performance.now(), lastDraw = 0, frame = 0
     const animate = (now: number) => {
@@ -202,7 +198,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         else {
           let hash = 0
           for (const char of key) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-          visible.set(key, { target, opacity: 0, width: Number(target.feature.properties?.width || 0), strength: Number(target.feature.properties?.strength || 0), phase: hash / 4294967296 })
+          visible.set(key, { target, opacity: 0, width: Number(target.feature.properties?.width || 0), phase: hash / 4294967296 })
         }
       }
       const lines: GeoJSON.Feature[] = [], dots: GeoJSON.Feature[] = []
@@ -212,8 +208,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         if (!active && visual.opacity < 0.01) { visible.delete(key); continue }
         const path = visual.target
         visual.width += (Number(path.feature.properties?.width || 0) - visual.width) * blend
-        visual.strength += (Number(path.feature.properties?.strength || 0) - visual.strength) * blend
-        const properties = { ...path.feature.properties, opacity: visual.opacity, width: visual.width, strength: visual.strength }
+        const properties = { ...path.feature.properties, opacity: visual.opacity, width: visual.width }
         lines.push({ ...path.feature, properties })
         // The thumbnail keeps the arcs and drops the particles: at card size a
         // bead is a speck, and the cluster around the router reads as noise.

@@ -40,9 +40,9 @@ visible errors and remaining confirmation time on every page and after reload.
 World traffic is the one map where hue belongs to data rather than to status.
 Each location gets one translucent amber arc, and the fullscreen view adds one
 neutral moving dot. Amber sits outside the country palette, so traffic reads as
-an overlay on geography; the arc fades in at the router, its width and opacity
-step with that location's share of the busiest flow (four levels), and a
-blurred halo underneath
+an overlay on geography; the arc fades in at the router, its width steps with
+that location's share of the busiest flow (four whole-pixel levels at one
+shared opacity), and a blurred halo underneath
 accumulates where arcs bunch up so busy junctions read as light rather than as
 spaghetti. The dot travels out and back in four seconds each way: motion, not
 colour, carries the direction, and the neutral particle leaves amber as the
@@ -387,8 +387,8 @@ closes it and restores focus to the preview. Both fullscreen views are page
 states with addresses of their own, /map and /quality, so a shared link or a
 bookmark lands on the open view; Back and the close control return to Overview.
 On phones each card uses the full column. Its local MapLibre map draws one amber
-arc per remote location, with width and opacity relative to the busiest plotted
-location in four steps; the arcs thin as the map zooms in, so a regional view is
+arc per remote location, with width relative to the busiest plotted location in
+four steps and one shared opacity; the arcs thin as the map zooms in, so a regional view is
 not buried under globe-width ribbons. The card preview shows the arcs alone, without endpoint dots or
 particles: at thumbnail size any dot is a speck, and nearby destinations turn a
 cluster of them into noise. The fullscreen map animates neutral particles that
