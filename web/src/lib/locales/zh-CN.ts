@@ -4,6 +4,7 @@ export const zhCN: Record<string, string> = {
   'Light': '浅色',
   'Dark': '深色',
   'Theme: {current}. Switch to {next}': '当前主题：{current}。切换为{next}',
+  'Language: {current}. Switch to {next}': '当前语言：{current}。切换为{next}',
   'Accounting limits': '计数容量限制',
   'Address settings for': '地址设置：',
   'Addresses are not being handed out': '当前不分配地址',

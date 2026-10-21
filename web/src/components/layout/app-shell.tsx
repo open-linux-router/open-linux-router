@@ -81,6 +81,9 @@ export function AppShell() {
             <GithubMark className="size-3 mb-px" />
           </a>
           <ThemeToggle className="-mx-2 border-0" />
+          {/* The word reports the language in use, so it is always set in the script
+              of the words and marks beside it and shares their line, instead of being
+              the one word in a language the row is not set in. */}
           <LanguageToggle className="-mx-2 border-0" />
         </div>
       </footer>

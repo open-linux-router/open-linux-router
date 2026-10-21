@@ -518,10 +518,12 @@ product name, which the header already carries; the version stays at every width
 because the footer is the only place that reports it. The repository link is GitHub's
 mark alone and the theme control a single icon; clicking the theme cycles auto, light
 and dark, and both name themselves in their accessible label and tooltip. The language
-control shows only the destination language in its native writing (中文 / English):
-footer text size and weight, no icon, no separate "Language" label, and no filled hover
+control shows only the language in use, in its native writing (English / 中文): footer
+text size and weight, no icon, no separate "Language" label, and no filled hover
 background, so it reads as footer text rather than as a button, with visible keyboard
-focus. Place the same control below the sign-in and initial-setup forms.
+focus. Like the theme control, it reports the state it is in, and its accessible label
+and tooltip name the language a click switches to. Place the same control below the
+sign-in and initial-setup forms.
 Language changes preserve layout, current navigation and in-progress form values.
 
 Use 150–200ms color/opacity transitions. Motion should explain a state change;
