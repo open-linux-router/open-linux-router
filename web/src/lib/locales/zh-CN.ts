@@ -1170,6 +1170,7 @@ export const zhCN: Record<string, string> = {
   'Clients': '客户端',
   'Clients can resolve IPv6': '客户端可以解析 IPv6',
   'Configured': '已配置',
+  'DHCP': 'DHCP',
   'DHCPv6 stateful': 'DHCPv6 有状态',
   'DNS': 'DNS',
   'DNS settings unavailable': '无法读取 DNS 设置',

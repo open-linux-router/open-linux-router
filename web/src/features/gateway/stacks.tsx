@@ -30,9 +30,14 @@ type Family = 'v4' | 'v6'
  *
  * A normal operator asks "does IPv6 work, and where do I fix it", not "is dial
  * or dhcp configured". Each stack is that question answered in the order the
- * traffic takes: upstream, LAN addressing, how clients are configured,
- * forwarding, which way out, and name resolution. Every card names the one page
- * that changes it.
+ * traffic takes: upstream, LAN addressing, DHCP, forwarding, which way out, and
+ * name resolution. Every card names the one page that changes it.
+ *
+ * The card is titled DHCP rather than clients because that is the word an
+ * operator arrives with when they came to configure IPv4 addressing — the same
+ * reason the module itself is called `dhcp` and serves router advertisement
+ * under that name (design.md §4.2). The IPv6 card keeps the title and says the
+ * mechanism in its detail line, so the two families stay one stage.
  *
  * The stacks hold no configuration of their own. A card is a link to the
  * module's own editor, not a second copy of it: one object, one plan, one apply
@@ -56,7 +61,7 @@ export function GatewayStacks() {
 const STAGES: { key: string; hash?: string; Stage: (props: StageProps) => ReactNode }[] = [
   { key: 'upstream', Stage: UpstreamStage },
   { key: 'lan', Stage: LanStage },
-  { key: 'clients', hash: 'dhcp', Stage: ClientsStage },
+  { key: 'dhcp', hash: 'dhcp', Stage: DhcpStage },
   { key: 'forwarding', Stage: ForwardingStage },
   { key: 'exit', Stage: ExitStage },
   { key: 'dns', hash: 'dns', Stage: DnsStage },
@@ -189,7 +194,7 @@ function LanStage({ family, id }: StageProps) {
   return <StageCard id={id} title={t('LAN')} icon={Network} to={to} health={health} detail={detail} />
 }
 
-function ClientsStage({ family, id }: StageProps) {
+function DhcpStage({ family, id }: StageProps) {
   useLocale()
   const dhcp = useDhcpStatus()
   const dhcpConfig = useDhcpConfig()
@@ -214,11 +219,13 @@ function ClientsStage({ family, id }: StageProps) {
         ? t('{active} of {size} in use', { active, size })
         : t('No address ranges')
     }
-    return <StageCard id={id} title={t('Clients')} icon={MonitorSmartphone} to="/gateway/dhcp/details" health={health} detail={detail} />
+    return <StageCard id={id} title={t('DHCP')} icon={MonitorSmartphone} to="/gateway/dhcp/details" health={health} detail={detail} />
   }
 
   // IPv6 clients are configured by router advertisement, not by a lease: the
-  // mode and MTU live on the pool, the prefix comes from the network.
+  // mode and MTU live on the pool, the prefix comes from the network. The card
+  // keeps the DHCP title — it is the IPv6 half of that module — but it opens
+  // the ranges, because that is the page the advertisement mode is on.
   const pools = (dhcpConfig.data?.pools ?? []).filter(pool => (pool.ipv6?.mode ?? 'off') !== 'off')
   const total = networks.length || pools.length
 
@@ -242,7 +249,7 @@ function ClientsStage({ family, id }: StageProps) {
     detail = `${modes.join(', ')} · ${t('{advertising} of {total} networks', { advertising: pools.length, total })}${mtu ? ` · MTU ${mtu}` : ''}`
   }
 
-  return <StageCard id={id} title={t('Clients')} icon={MonitorSmartphone} to="/gateway/dhcp/ranges" health={health} detail={detail} />
+  return <StageCard id={id} title={t('DHCP')} icon={MonitorSmartphone} to="/gateway/dhcp/ranges" health={health} detail={detail} />
 }
 
 function ForwardingStage({ family, id }: StageProps) {

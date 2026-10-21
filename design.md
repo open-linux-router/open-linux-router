@@ -623,8 +623,13 @@ says so as a warning; it never writes the other module's half (decided
 
 **A family-wide *view* is not a family-wide setting.** The Gateway landing page
 shows two stacks, IPv4 and IPv6, each listing the same six stages —
-upstream, LAN, clients, forwarding, exit, DNS — with that family's answer at
-each one. This is deliberately the opposite of the wizard above: a stack card
+upstream, LAN, DHCP, forwarding, exit, DNS — with that family's answer at
+each one. The clients stage carries the module's name in both stacks for the
+same reason the module keeps it (§4.2): an operator arrives looking for DHCP,
+and the IPv6 card's detail line says whether the mechanism there is SLAAC or
+DHCPv6. Each card opens the page that changes its family's half — for IPv4 the
+DHCP page, for IPv6 the address ranges that carry each network's advertisement
+mode. This is deliberately the opposite of the wizard above: a stack card
 renders another module's state and links to that module's own editor, so the
 stacks hold no configuration, produce no plan and apply nothing. The test is
 mechanical — if a card needed a control it would have to reuse that module's

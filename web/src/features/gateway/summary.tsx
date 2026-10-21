@@ -24,7 +24,7 @@ import { tone } from './status-tone'
  * Two layers. The interfaces are the objects: what this box is plugged into,
  * each card opening that interface's own page. Below them the page is two
  * stacks, IPv4 and IPv6, each cut across the modules in the order a packet
- * meets them — upstream, LAN, clients, forwarding, exit, DNS — so "does IPv6
+ * meets them — upstream, LAN, DHCP, forwarding, exit, DNS — so "does IPv6
  * work, and where do I fix it" is answered without knowing which module owns
  * which half. Every card links to the page that changes it and holds no
  * configuration of its own (features/gateway/stacks.tsx).

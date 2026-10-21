@@ -190,7 +190,7 @@ totals live on that page, beside the switches that change them.
 Below the interfaces the page is two stacks, IPv4 and IPv6, so a family's whole
 path is readable without knowing which module owns which half. Each stack is a
 24px heading and one grid of six stage cards in the order a packet meets them —
-Upstream, LAN, Clients, Forwarding, Exit, DNS — three across from 1024px, two
+Upstream, LAN, DHCP, Forwarding, Exit, DNS — three across from 1024px, two
 from 640px and one on phones. A card shows the stage's answer for its family: a
 tone dot, a status word and one detail line, with the whole card linking to the
 one page that changes it. The same stage therefore appears once per family as a
