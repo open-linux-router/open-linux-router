@@ -507,19 +507,21 @@ Account for the device safe area and bottom navigation when laying out content
 and the footer. At 375px, keep labels, statuses, addresses and action buttons
 usable. Monitoring statistics use two columns on phones.
 
-The desktop footer bottom-aligns its text and icons with 12px bottom padding,
-keeping the visible content close to the viewport edge. Its items run in one order —
-copyright, Credits, version, then the three controls — with one visible 16px gap
-throughout: each control spends 8px of side padding on a 44px-high hit target, so
-the footer cancels that padding rather than letting the controls sit in visibly
-wider intervals than the text, and the three controls wrap together so none of them
-is ever left alone on its own line. The repository link is GitHub's mark alone and
-the theme control a single icon; clicking the theme cycles auto, light and dark, and
-both name themselves in their accessible label and tooltip. The language control
-shows only the destination language in its native writing (中文 / English): footer
-text size and weight, no icon, no separate "Language" label, and no filled hover
-background, so it reads as footer text rather than as a button, with visible
-keyboard focus. Place the same control below the sign-in and initial-setup forms.
+The footer is one line at every width: it centres its row and thins the gap to 12px
+below 360px rather than wrapping. On desktop it bottom-aligns its text and icons with
+12px bottom padding, keeping the visible content close to the viewport edge. Its items
+run in one order — copyright, Credits, version, then the three controls — with one
+visible 16px gap: each control spends 8px of side padding on a 44px-high hit target, so
+the footer cancels that padding rather than letting the controls sit in visibly wider
+intervals than the text. Below 640px the copyright keeps the year alone and drops the
+product name, which the header already carries; the version stays at every width,
+because the footer is the only place that reports it. The repository link is GitHub's
+mark alone and the theme control a single icon; clicking the theme cycles auto, light
+and dark, and both name themselves in their accessible label and tooltip. The language
+control shows only the destination language in its native writing (中文 / English):
+footer text size and weight, no icon, no separate "Language" label, and no filled hover
+background, so it reads as footer text rather than as a button, with visible keyboard
+focus. Place the same control below the sign-in and initial-setup forms.
 Language changes preserve layout, current navigation and in-progress form values.
 
 Use 150–200ms color/opacity transitions. Motion should explain a state change;

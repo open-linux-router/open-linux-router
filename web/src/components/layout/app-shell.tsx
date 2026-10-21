@@ -59,28 +59,29 @@ export function AppShell() {
         </div>
       </main>
       <footer>
-        <div className="mx-auto flex max-w-[80rem] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground lg:items-end lg:pb-3">
-          <span>© {new Date().getFullYear()} Open Linux Router</span>
+        {/* One line at every width, so the row centres instead of wrapping and the
+            gap tightens only under 360px. The product name leaves the copyright on
+            phones, where the header already carries it and the six items cannot fit;
+            the version stays, because it is the one thing the footer alone reports. */}
+        <div className="mx-auto flex max-w-[80rem] items-center justify-center gap-x-3 px-4 pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground min-[360px]:gap-x-4 lg:items-end lg:pb-3">
+          <span>© {new Date().getFullYear()}<span className="hidden sm:inline"> Open Linux Router</span></span>
           <Link to="/credits" className="inline-flex min-h-11 items-center transition-colors duration-150 hover:text-foreground lg:items-end">{t('Credits')}</Link>
           <span>{__APP_VERSION__}</span>
           {/* Each control is 44px tall with 8px of side padding, so its hit area
               reaches into the gap but stops at the midpoint instead of overlapping
-              its neighbour. Cancel that padding here: the six items then keep one
-              visible 16px gap while every control stays 44px tall to the pointer.
-              The three controls stay together so wrapping never strands one of them
-              on its own line, and border-0 keeps the buttons' 1px border from
-              lifting their content off the line the plain items share. */}
-          <div className="flex items-center gap-x-4 lg:items-end">
-            <a href="https://github.com/open-linux-router/open-linux-router" target="_blank" rel="noreferrer" aria-label="GitHub" title="GitHub"
-              className="inline-flex h-11 shrink-0 items-center justify-center px-2 -mx-2 transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring lg:items-end">
-              {/* The filled mark has no viewBox padding, unlike the outlined icons
-                  beside it, so it gives back a pixel to land on their optical centre
-                  rather than sharing their box bottom. */}
-              <GithubMark className="size-3 mb-px" />
-            </a>
-            <ThemeToggle className="-mx-2 border-0" />
-            <LanguageToggle className="-mx-2 border-0" />
-          </div>
+              its neighbour. Cancel that padding here, and the items keep one visible
+              gap while every control stays 44px tall to the pointer. border-0 keeps
+              the buttons' 1px border from lifting their content off the line the
+              plain items share. */}
+          <a href="https://github.com/open-linux-router/open-linux-router" target="_blank" rel="noreferrer" aria-label="GitHub" title="GitHub"
+            className="inline-flex h-11 shrink-0 items-center justify-center px-2 -mx-2 transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring lg:items-end">
+            {/* The filled mark has no viewBox padding, unlike the outlined icons
+                beside it, so it gives back a pixel to land on their optical centre
+                rather than sharing their box bottom. */}
+            <GithubMark className="size-3 mb-px" />
+          </a>
+          <ThemeToggle className="-mx-2 border-0" />
+          <LanguageToggle className="-mx-2 border-0" />
         </div>
       </footer>
       <nav aria-label={t('Sections')} className="fixed inset-x-0 bottom-0 z-20 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">

@@ -391,8 +391,10 @@ for excessive content.
 
 Keep the footer to the product copyright, Credits, version and the icon-only GitHub,
 theme and language controls. On desktop, bottom-align the visible content with 12px
-bottom padding. Describe the current and next theme in its accessible label and
-tooltip, and name GitHub in the accessible label and tooltip of its mark.
+bottom padding. The row stays on one line, so phones keep the year alone in the
+copyright instead of the product name the header already carries. Describe the
+current and next theme in its accessible label and tooltip, and name GitHub in the
+accessible label and tooltip of its mark.
 
 ## Capability and richness
 
