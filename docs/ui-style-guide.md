@@ -49,13 +49,17 @@ it differences conntrack counters and reports a rate over a rolling window, with
 no connection start or end. Width does not carry volume for the same reason it
 was flattened: four thicknesses compared badly across dozens of arcs, and the
 ranked rates live in the details dialog, so the map stays a presence and
-direction picture. One soft warm highlight rides each arc out and back, four
+direction picture. A few arcs at a time — never more than five, and fewer when
+the map is sparse — carry a soft warm highlight out and back along the line, four
 seconds each way, drawn as a short blurred stroke with a feathered tail and faded
-ends: motion, not colour, carries the direction, and the pale warm light keeps
-amber as the map's only hue. There are no endpoint dots — nearby destinations
-would turn them into a cluster of specks at the hub, and the converging arcs
-already mark both ends. The glow is a map effect only; it does not introduce
-glow elsewhere.
+ends. A new location takes the next free turn and the rest queue by fewest turns
+and longest wait, so every arc gets its light within a minute and the map never
+becomes a field of moving sparks. Each arc keeps its own phase, so the lights
+that are lit sit at different points. Motion, not colour, carries the direction,
+and the pale warm light keeps amber as the map's only hue. There are no endpoint
+dots — nearby destinations would turn them into a cluster of specks at the hub,
+and the converging arcs already mark both ends. The glow is a map effect only; it
+does not introduce glow elsewhere.
 
 Use semantic Tailwind tokens from `web/src/index.css`, never page-local gray or
 blue approximations. Light and dark themes are designed as separate contrast
@@ -423,10 +427,11 @@ arc per remote location at a single 2px weight, and the arcs thin as the map
 zooms in, so a regional view is not buried under globe-width ribbons. An arc
 stays at full weight while its location is in the window and fades out when the
 location leaves; nothing periodic touches it. Card preview and fullscreen map
-show the same highlight: a short blurred warm stroke that travels out and back
-along each arc, four seconds each way, with a feathered tail and faded ends, so
-the light never lands at the hub or on a destination. It carries direction and
-stops for reduced motion. Keep highlight phases stable across ranking updates
+show the same rotation: only a few arcs hold a highlight at a time, each a short
+blurred warm stroke that travels out and back along the line, four seconds each
+way, with a feathered tail and faded ends, so the light never lands at the hub or
+on a destination. It carries direction and stops for reduced motion. Keep
+highlight phases stable across ranking updates
 and fade arriving/departing arcs over a fixed 450ms eased curve, which always
 completes. When a snapshot brings or drops several locations at once, give each
 one a slot in a window that ends before the next snapshot and jitter it inside

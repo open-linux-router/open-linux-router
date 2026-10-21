@@ -73,12 +73,17 @@ router and along busy corridors — and concentration reads as light. Every arc
 stays translucent so overlaps build up instead of replacing each other, and
 width is a single 2px at the world view that thins with zoom, so a country-sized
 view is not covered by ribbons meant for a globe.
-One soft highlight rides each arc: a short stretch of the path drawn as two
-blurred strokes with a tail-to-head gradient, pale warm light rather than white
-so it lifts the amber without becoming a second hue. It travels out and back in
-four seconds each way and fades near both ends, so the light never lands at the
-hub or on a destination. Both views draw it; the card preview has room for a
-soft streak where a bead used to be a speck.
+A highlight rides a few arcs at a time, not all of them: the light is a short
+stretch of the path drawn as two blurred strokes with a tail-to-head gradient,
+pale warm light rather than white so it lifts the amber without becoming a
+second hue. It travels out and back in four seconds each way and fades near both
+ends, so the light never lands at the hub or on a destination. The number of
+concurrent lights is a quarter of the plotted arcs, from one to five; a turn
+lasts about six seconds, a location that has just appeared goes to the front of
+the queue, and the rest are ordered by fewest turns and longest wait, so every
+arc is served within a minute. Each arc keeps its own phase, so concurrent lights
+sit at different points along their lines. Both views draw the same rotation; the
+card preview has room for a soft streak where a bead used to be a speck.
 Reduced motion drops the highlight and interpolation. The UI polls every two
 seconds and keeps each IP's highlight phase independent of ranking. Paths fade
 in and out over a fixed 450ms eased curve, so a fade always finishes.

@@ -22,6 +22,24 @@ interface Origin { latitude?: number; longitude?: number }
 interface Snapshot { state: string; error?: string; as_of: string; seconds: number; total: number; peers: Peer[]; locations: { state: string; error?: string } }
 type Position = [number, number]
 interface FlowTarget { feature: GeoJSON.Feature; coordinates: Position[] }
+// One arc on screen. `opacity` is presence (the window), `glow` is whether this
+// arc currently holds a turn of the travelling highlight.
+interface Visual {
+  target: FlowTarget
+  opacity: number
+  glide: number
+  jitter: number
+  wait: number
+  from: number
+  to: number
+  fade: number
+  leaving: boolean
+  glow: number
+  on: boolean
+  turnEnd: number
+  turns: number
+  lastTurn: number
+}
 const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
 // Traffic is one colour, outside the teal-green-blue family the map itself
 // uses. A line-progress gradient only fades the alpha in at the router, where
@@ -76,6 +94,12 @@ const marginMs = 200
 const settleMs = pollMs - fadeMs - marginMs
 const ease = (t: number) => 0.5 - 0.5 * Math.cos(Math.PI * t)
 const staggerWindow = (count: number) => count < 2 ? 0 : Math.min(settleMs, count * 220)
+// A highlight on every arc at once turns the map into a field of moving sparks.
+// A few arcs hold a turn at a time; a new location takes the next free turn, and
+// the rest queue by fewest turns and longest wait, so over a minute every arc
+// has had its light. The limit grows with the number of arcs, never past five.
+const glowTurnMs = 6000
+const glowLimit = (count: number) => Math.min(5, Math.max(1, Math.round(count / 4)))
 // Each location owns a slot in the window and jitters inside it, so the gaps
 // look irregular without ever bunching the batch into one instant.
 const staggerOffset = (index: number, count: number, window: number, jitter: number) => window * (index + 0.25 + 0.5 * jitter) / count
@@ -250,8 +274,13 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     if (!instance || !ready) return
     const set = (id: string, features: GeoJSON.Feature[]) => (instance.getSource(id) as GeoJSONSource).setData({ type: 'FeatureCollection', features })
     // Keep identity and phase independent of snapshot order and rank changes.
-    const visible = new Map<string, { target: FlowTarget; opacity: number; glide: number; jitter: number; wait: number; from: number; to: number; fade: number; leaving: boolean }>()
+    const visible = new Map<string, Visual>()
     const reduced = matchMedia('(prefers-reduced-motion: reduce)')
+    const endTurn = (visual: Visual, at: number) => {
+      visual.on = false
+      visual.turns += 1
+      visual.lastTurn = at
+    }
     // Diffing against the previous snapshot, once per snapshot, is what lets a
     // batch share one stagger window. null forces the first frame to diff.
     let generation: Map<string, FlowTarget> | null = null
@@ -278,7 +307,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         staggerOrder(entering).forEach((key, index) => {
           const jitter = hashOf(key)
           const wait = staggerOffset(index, entering.length, enterWindow, jitter)
-          visible.set(key, { target: next.get(key)!, opacity: 0, glide: jitter, jitter, wait, from: 0, to: 1, fade: 0, leaving: false })
+          visible.set(key, { target: next.get(key)!, opacity: 0, glide: jitter, jitter, wait, from: 0, to: 1, fade: 0, leaving: false, glow: 0, on: false, turnEnd: 0, turns: 0, lastTurn: 0 })
         })
         staggerOrder(leaving).forEach((key, index) => {
           const visual = visible.get(key)!
@@ -290,7 +319,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
         })
         generation = next
       }
-      const lines: GeoJSON.Feature[] = [], glows: GeoJSON.Feature[] = []
+      const lines: GeoJSON.Feature[] = [], candidates: Visual[] = []
       for (const [key, visual] of visible) {
         const active = targets.current.has(key)
         const want = active ? 1 : 0
@@ -309,28 +338,49 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
           visual.opacity = visual.from + (visual.to - visual.from) * ease(visual.fade)
         }
         if (!active && visual.fade >= 1) { visible.delete(key); continue }
-        const path = visual.target
         // Presence is the only thing that changes a line. It fades in when its
         // location starts reporting traffic and out when the location leaves
-        // the window; while the location stays, the line stays at full weight
-        // and only the highlight moves along it.
+        // the window; while the location stays, the line stays at full weight.
         const light = visual.opacity
-        lines.push({ ...path.feature, properties: { opacity: light } })
-        // Both views carry the highlight: at card size a soft streak still
-        // reads, where a bead was a speck.
-        if (reduced.matches) continue
+        lines.push({ ...visual.target.feature, properties: { opacity: light } })
+        // A line on its way out gives its turn back to the queue.
+        if (visual.on && want === 0) endTurn(visual, now)
+        if (want === 1 && light > 0.9) candidates.push(visual)
+      }
+      if (!reduced.matches) {
+        // Finished turns free a slot for the next arc in the queue: fewest turns
+        // first, then the longest wait, so a new location goes before the rest.
+        for (const visual of candidates) if (visual.on && now >= visual.turnEnd) endTurn(visual, now)
+        const limit = glowLimit(candidates.length)
+        let running = 0
+        for (const visual of candidates) if (visual.on) running++
+        if (running < limit) {
+          const waiting = candidates.filter(visual => !visual.on).sort((a, b) => a.turns - b.turns || a.lastTurn - b.lastTurn || a.jitter - b.jitter)
+          for (const visual of waiting) {
+            if (running >= limit) break
+            visual.on = true
+            // Uneven turns keep two arcs from swapping their slots forever.
+            visual.turnEnd = now + glowTurnMs * (0.85 + 0.3 * visual.jitter)
+            running++
+          }
+        }
+      }
+      const glows: GeoJSON.Feature[] = []
+      for (const visual of visible.values()) {
+        // Fade the light itself in and out, so a turn does not pop on.
+        const goal = visual.on && !reduced.matches ? 1 : 0
+        visual.glow += (goal - visual.glow) * (reduced.matches ? 1 : 1 - Math.exp(-elapsed / 200))
+        if (visual.glow <= 0.01) continue
         visual.glide = (visual.glide + elapsed / glowSeconds) % 1
-        // The light dims with its arc and leaves when the arc leaves, so it
-        // never floats on a line that has already faded.
         const returning = visual.glide >= 0.5
         const progress = returning ? (1 - visual.glide) * 2 : visual.glide * 2
         // Fade near both ends. Every arc starts at the router, so a highlight
         // that lit up there would rebuild the cluster the endpoints used to make.
         const edge = Math.min(1, Math.min(progress, 1 - progress) / 0.08)
         if (edge <= 0) continue
-        const points = highlight(path.coordinates, progress * (path.coordinates.length - 1), returning)
+        const points = highlight(visual.target.coordinates, progress * (visual.target.coordinates.length - 1), returning)
         if (points.length < 3) continue
-        glows.push({ type: 'Feature', properties: { opacity: light * edge }, geometry: { type: 'LineString', coordinates: points } })
+        glows.push({ type: 'Feature', properties: { opacity: visual.opacity * edge * visual.glow }, geometry: { type: 'LineString', coordinates: points } })
       }
       set('flows', lines)
       set('glow', glows)
@@ -374,7 +424,7 @@ export function WorldTraffic({ origin, embedded = false, expanded, onExpandedCha
       <DialogClose render={<Button variant="secondary" size="icon-lg" className="absolute top-3 right-3 z-10 rounded-full bg-card/95 shadow-md ring-1 ring-border backdrop-blur-sm sm:size-9" />}><X aria-hidden="true" /><span className="sr-only">{t('Close')}</span></DialogClose>
       <div className="min-h-0 flex-1" role="region" aria-label={t('World traffic map, drag to pan and scroll to zoom')}><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} expanded /></div>
     </DialogContent></Dialog>
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>{t('Map')}</DialogTitle><DialogDescription>{t('Remote IPs by upload and download in the last 30 seconds. Every arc is the same width and carries one soft highlight that travels out and back. An arc stays while its location reports traffic and fades when it leaves the window. IP locations are approximate.')}{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>{t('Map')}</DialogTitle><DialogDescription>{t('Remote IPs by upload and download in the last 30 seconds. Every arc is the same width. A few arcs at a time carry a soft highlight that travels out and back — new locations first, then the rest take turns — and an arc fades out when its location leaves the window. IP locations are approximate.')}{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
       <p className="text-sm text-muted-foreground">{status}{data?.seconds ? ` · ${Math.round(data.seconds)}s sampled` : ''}. {data?.state === 'disabled' ? 'Connection byte accounting is off. Enable Gateway traffic counting and apply its configuration.' : 'Counts include router and forwarded connections observed in Linux conntrack. Connections ending between samples and traffic bypassing conntrack may be missed.'} {(!origin || !position(origin)) && 'Router location is unknown; arcs cannot be drawn.'}</p>
       {data?.error && <p className="break-words text-sm text-destructive">{data.error}</p>}
       {data?.locations?.error && <p className="break-words text-sm text-destructive">{data.locations.error}</p>}

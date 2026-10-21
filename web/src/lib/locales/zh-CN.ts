@@ -935,7 +935,7 @@ export const zhCN: Record<string, string> = {
   'Whole world': '全球视图',
   'Top remote IPs over the last 30 seconds ·': '最近 30 秒流量最多的远端 IP ·',
   'IP locations are approximate.': 'IP 地理位置为近似值。',
-  'Remote IPs by upload and download in the last 30 seconds. Every arc is the same width and carries one soft highlight that travels out and back. An arc stays while its location reports traffic and fades when it leaves the window. IP locations are approximate.': '最近 30 秒按上传和下载统计的远端 IP。每条弧线宽度相同，并带有一条来回移动的柔和高光；位置仍在窗口内时弧线保持不淡出，离开窗口后才淡出。IP 地理位置为近似值。',
+  'Remote IPs by upload and download in the last 30 seconds. Every arc is the same width. A few arcs at a time carry a soft highlight that travels out and back — new locations first, then the rest take turns — and an arc fades out when its location leaves the window. IP locations are approximate.': '最近 30 秒按上传和下载统计的远端 IP。每条弧线宽度相同；同一时刻只有少数几条带有一条来回移动的柔和高光，新出现的位置优先、其余轮流，位置离开窗口后弧线才淡出。IP 地理位置为近似值。',
   'Traffic permissions': '流量权限',
   'Firewall rules': '防火墙规则',
   'Native rules': '原生规则',
