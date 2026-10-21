@@ -9,11 +9,11 @@ import { formatBytes } from '@/lib/utils'
 import { activitySummary, useActivity, type Bytes } from './activity-history'
 
 /**
- * What the device has moved over the retained window, and how long that is.
+ * What the device has moved over the retained window.
  *
- * The window is printed rather than left to a tooltip: "Total" alone was the
- * number that could not be reconciled with the picture above it, so the caption
- * says which stretch of time it covers and the reading needs no hover.
+ * The figure is the title matrix added up, not the kernel's cumulative counter,
+ * and it carries no caption of its own: the matrix above it is the only picture
+ * of that window, so the window does not need to be restated here.
  */
 export function ActivityTotal({ addresses }: { addresses: string[] }) {
   const { data } = useActivity(addresses)
@@ -21,7 +21,6 @@ export function ActivityTotal({ addresses }: { addresses: string[] }) {
   return <span className="inline-flex flex-wrap items-baseline justify-end gap-x-3 gap-y-1 tabular-nums">
     <span className="inline-flex items-center gap-0.5" aria-label="Download total"><span aria-hidden className="text-base font-normal text-muted-foreground">↓</span><MetricValue value={summary ? formatBytes(summary.down) : null} /></span>
     <span className="inline-flex items-center gap-0.5" aria-label="Upload total"><span aria-hidden className="text-base font-normal text-muted-foreground">↑</span><MetricValue value={summary ? formatBytes(summary.up) : null} /></span>
-    {summary && <span className="text-xs text-muted-foreground">last {summary.days} days</span>}
   </span>
 }
 

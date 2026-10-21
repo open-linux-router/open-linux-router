@@ -195,11 +195,12 @@ Device details group stable identity and saved settings on the left, live
 uplink, priority and live traffic on the right. Reuse Overview rate meters with
 Download and Upload labels beside narrower bars, without arrows.
 Total below Upload shows download then upload with the Overview arrows, added up
-over the same retained history the title matrix draws and captioned with that
-window (`last 90 days`), so a reader can check it against the cells above it;
-unavailable history shows dashes. Services below Group lists matching configured
-services as icons that open their webpages, with an equally sized add action
-that opens Ingress and prefills the current device. Empty lists show only the add action.
+over the same retained history the title matrix draws, so a reader can check it
+against the cells above it; it states no window of its own, because the matrix
+beside the title already is that window's picture. Unavailable history shows
+dashes. Services below Group lists matching configured services as icons that
+open their webpages, with an equally sized add action that opens Ingress and
+prefills the current device. Empty lists show only the add action.
 Devices without a reserved name/address prefill their observed host instead.
 A device that dialed in draws the same row, matched by its tunnel address, and
 its add action prefills that address rather than a device reference.

@@ -8,10 +8,11 @@ export interface ActivityBucket { at: string; bytes: Bytes }
 /**
  * Retained half-hour buckets, and the window they were cut from.
  *
- * `days` comes from the daemon rather than from a constant here, because the
- * device page labels its total with it. A screen that kept its own copy of the
- * retention window would go on claiming "last 14 days" the week after the
- * daemon started keeping 90, which is the kind of drift no test would catch.
+ * `days` is the daemon's own retention window rather than a constant here, so
+ * the payload describes itself and no screen has to keep a second copy that
+ * would go stale the week after the daemon changed it. Nothing renders it: the
+ * matrix derives its columns from the width available and the total states no
+ * window.
  */
 export interface ActivityHistory {
   days: number
@@ -55,7 +56,7 @@ export function useActivity(addresses: string[]) {
  */
 export function activitySummary(history?: ActivityHistory) {
   if (!history) return undefined
-  const summary = { days: history.days, up: 0, down: 0 }
+  const summary = { up: 0, down: 0 }
   for (const bucket of history.buckets) {
     summary.up += bucket.bytes.up
     summary.down += bucket.bytes.down
