@@ -1,16 +1,16 @@
 import { t, useLocale } from '@/lib/i18n'
 import { useRef, useState } from 'react'
-import { ChevronRight, LoaderCircle, RotateCw, X } from 'lucide-react'
+import { ChevronRight, CircleHelp, LoaderCircle, RotateCw, X } from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Disclosure } from '@/components/ui/disclosure'
 import { Heading } from '@/components/ui/heading'
 import { MetricValue } from '@/components/ui/metric-value'
 import { PropertyRow, TechnicalValue } from '@/components/ui/property-row'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { categoryEvidence, serviceEvidence, type CategoryEvidence, type ServiceEvidence } from './measurements'
 import { useNetworkQuality, useQualityAction } from './queries'
@@ -228,37 +228,55 @@ function QualityReport({ data, readError, loading, retry }: {
       <AlertDescription className="break-words">{data.speed_error}</AlertDescription>
     </Alert>}
 
-    <div className="grid items-start gap-4 lg:grid-cols-12 lg:gap-6">
-      <div className="space-y-4 lg:col-span-4">
-        <ScorePanel
-          score={score}
-          grade={grade}
-          measured={measured}
-          total={categories.length}
-          coverage={data?.overall.coverage_percent ?? 0}
-          copy={copy}
-          busy={fullRunning || Boolean(loading && !data)}
-        />
-        {hasRun && <TransferPanel data={data} busy={running && data?.phase === 'speed'} />}
-      </div>
-      <div className="space-y-4 lg:col-span-8">
-        {data || readError
-          ? <CategoryList
-              categories={categories}
-              data={data}
-              services={services}
-              hasRun={hasRun}
-              runningScope={runningScope}
-              runningTarget={data?.running_target}
-              anyRunning={running || action.isPending}
-              canRerun={canRerun}
-              onRerun={next => action.mutate(next)}
-            />
-          : <Skeleton className="h-72 w-full rounded-xl" />}
-        {data && hasRun && <MeasurementDetails data={data} services={services} />}
-      </div>
+    {/* One column: the score answers the page's question, then the categories
+        explain it. A second column held nothing once the transfer moved under
+        Speed, and a narrower list would squeeze the sample tables. */}
+    <div className="space-y-4">
+      <ScorePanel
+        score={score}
+        grade={grade}
+        measured={measured}
+        total={categories.length}
+        coverage={data?.overall.coverage_percent ?? 0}
+        copy={copy}
+        busy={fullRunning || Boolean(loading && !data)}
+      />
+      {data || readError
+        ? <CategoryList
+            categories={categories}
+            data={data}
+            services={services}
+            hasRun={hasRun}
+            runningScope={runningScope}
+            runningTarget={data?.running_target}
+            anyRunning={running || action.isPending}
+            canRerun={canRerun}
+            onRerun={next => action.mutate(next)}
+          />
+        : <Skeleton className="h-72 w-full rounded-xl" />}
     </div>
   </>
+}
+
+/**
+ * The one number on the report whose label does not say what it counts.
+ *
+ * The scoring rule itself is a document, not a panel: a page that prints the
+ * weights also asks a reader to add the arithmetic up, and every run pays for
+ * it. Coverage is different — "48%" beside a score of 69.6 invites the reading
+ * that the score is a fraction of a test that did not finish, so the sentence
+ * that it does not reduce the score belongs on the number.
+ */
+function Hint({ label, children }: { label: string; children: React.ReactNode }) {
+  return <Tooltip>
+    <TooltipTrigger
+      aria-label={label}
+      className="rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      <CircleHelp className="size-3.5" aria-hidden="true" />
+    </TooltipTrigger>
+    <TooltipContent className="block max-w-64 leading-relaxed"><span>{children}</span></TooltipContent>
+  </Tooltip>
 }
 
 function ScorePanel({ score, grade, measured, total, coverage, copy, busy }: {
@@ -272,13 +290,13 @@ function ScorePanel({ score, grade, measured, total, coverage, copy, busy }: {
 }) {
   useLocale()
   return <section aria-labelledby="quality-result" className="panel-surface p-4 sm:p-5">
-    <div className="flex items-center justify-between gap-3">
-      <Heading as="h2" size="sm" id="quality-result" className="text-muted-foreground">{t('Overall score')}</Heading>
-      {grade && <Badge variant={grade.variant}>{t(grade.label)}</Badge>}
-    </div>
-    <div className="mt-4 flex items-center gap-4">
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-4">
       <ScoreRing score={score} busy={busy} />
       <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Heading as="h2" size="sm" id="quality-result" className="text-muted-foreground">{t('Overall score')}</Heading>
+          {grade && <Badge variant={grade.variant}>{t(grade.label)}</Badge>}
+        </div>
         {score != null
           ? <>
               <p className="text-sm leading-5 text-foreground">{t('{count} of {total} categories scored', { count: measured, total })}</p>
@@ -289,17 +307,22 @@ function ScorePanel({ score, grade, measured, total, coverage, copy, busy }: {
               {copy.detail && <p className="text-xs leading-5 text-muted-foreground">{copy.detail}</p>}
             </>}
       </div>
+      {score != null && coverage > 0 && <div className="w-full max-w-xs sm:w-64">
+        <div className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            {t('Measured coverage')}
+            <Hint label={t('What measured coverage means')}>
+              {t('Share of the full assessment this run measured. Unmeasured categories are left out, and the measured ones still share the full 100 points.')}
+            </Hint>
+          </span>
+          <span className="font-medium text-foreground tabular-nums">{Math.round(coverage)}%</span>
+        </div>
+        <div role="progressbar" aria-label={t('Measured coverage')} aria-valuenow={Math.round(coverage)} aria-valuemin={0} aria-valuemax={100}
+          className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full bg-muted-foreground/45 transition-[width] duration-500" style={{ width: `${Math.min(100, Math.max(0, coverage))}%` }} />
+        </div>
+      </div>}
     </div>
-    {score != null && coverage > 0 && <div className="mt-4">
-      <div className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
-        <span>{t('Measured coverage')}</span>
-        <span className="font-medium text-foreground tabular-nums">{Math.round(coverage)}%</span>
-      </div>
-      <div role="progressbar" aria-label={t('Measured coverage')} aria-valuenow={Math.round(coverage)} aria-valuemin={0} aria-valuemax={100}
-        className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-muted-foreground/45 transition-[width] duration-500" style={{ width: `${Math.min(100, Math.max(0, coverage))}%` }} />
-      </div>
-    </div>}
   </section>
 }
 
@@ -348,23 +371,28 @@ function TransferRow({ arrow, label, value }: { arrow: '↓' | '↑'; label: str
   </div>
 }
 
-function TransferPanel({ data, busy }: { data?: QualitySnapshot; busy: boolean }) {
+/**
+ * The reference transfer's own numbers, kept under the row that scores them.
+ *
+ * Download and upload are not a second score and not a category of their own:
+ * they are the evidence behind Speed, so they sit inside Speed's own detail
+ * rather than in a card beside the report. The server line stays because one
+ * edge to one provider is the whole caveat a reader needs here.
+ */
+function TransferDetail({ data, busy }: { data?: QualitySnapshot; busy: boolean }) {
   useLocale()
   const speed = data?.speed ?? null
   const where = speed ? [speed.location, speed.server].filter(Boolean).join(' · ') : ''
-  return <section aria-labelledby="quality-transfer" className="panel-surface p-4 sm:p-5">
-    <div className="flex items-baseline justify-between gap-3">
-      <Heading as="h2" size="sm" id="quality-transfer" className="text-muted-foreground">{t('Transfer')}</Heading>
-      {where && <span className="min-w-0 truncate text-xs text-muted-foreground">{where}</span>}
-    </div>
-    <div className="mt-2">
+  return <div className="mt-1 mb-1.5 ml-5">
+    <div className="rounded-lg bg-muted/30 px-3 py-2">
       <TransferRow arrow="↓" label={t('Download')} value={speed?.download_mbps ?? null} />
       <TransferRow arrow="↑" label={t('Upload')} value={speed?.upload_mbps ?? null} />
     </div>
-    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+    {where && <p className="mt-1.5 break-words text-xs leading-5 text-muted-foreground">{where}</p>}
+    <p className="mt-1 text-xs leading-5 text-muted-foreground">
       {busy ? t('Measuring download and upload') : speed ? t('One test server, not a service-wide benchmark.') : t('Not measured')}
     </p>
-  </section>
+  </div>
 }
 
 function categorySummary(evidence: CategoryEvidence, category: QualityCategory, hasRun: boolean): string | null {
@@ -505,8 +533,11 @@ function CategoryRow({ category, data, services, hasRun, runningScope, runningTa
     </div>}
     {open && <ul id={listID} className="mt-2 divide-y divide-border/60 border-t border-border/60 pl-6">
       {tests.map(test => <QualityTestRow
-        key={test.id}
+        key={`${category.id}-${test.id}`}
         test={test}
+        category={category.id}
+        data={data}
+        view={category.id === 'latency' ? 'timing' : category.id === 'stability' ? 'continuity' : 'access'}
         runningScope={runningScope}
         runningTarget={runningTarget}
         anyRunning={anyRunning}
@@ -528,12 +559,30 @@ interface TestGroup {
   id: string
   label: string
   target?: string
-  scope: 'target' | 'speed' | null
+  /** What opening the row shows, or `null` when the row is all there is. */
+  evidence: 'samples' | 'transfer' | 'nat' | null
+  scope: 'target' | 'speed' | 'nat' | null
   score: number | null
   metrics: TestMetric[]
   /** What the group measured, in its own units, so the row can be checked. */
   detail?: string
+  /** The attempts behind a service row, and the resource that answered them. */
+  samples?: QualitySample[]
+  url?: string
+  /** Which path the scored evidence came from; the two are never averaged. */
+  family?: 'ipv4' | 'ipv6'
 }
+
+/**
+ * Which part of a sample its category was scored from.
+ *
+ * The same six attempts feed three categories, so the evidence is shown three
+ * times — once as timings where Latency reads it, once as a sequence where
+ * Stability counts it, and once as an outcome where Functionality judges it.
+ * Each listing is short because it leaves out the columns another category
+ * already reads.
+ */
+type SampleView = 'timing' | 'continuity' | 'access'
 
 function weightedScore(metrics: TestMetric[]) {
   let weighted = 0
@@ -563,13 +612,20 @@ function categoryTests(category: QualityCategory, services: ServiceEvidence[], d
       let group = targets.get(component.target)
       if (!group) {
         const separator = component.label.indexOf(' · ')
+        // The score picks one address family per service, so the evidence is
+        // that family's own attempts rather than a blend of two paths.
+        const measured = data?.targets.find(target => target.id === component.target && target.family === byId.get(component.target)?.family)
         group = {
           id: component.target,
           label: separator < 0 ? component.target : component.label.slice(0, separator),
           target: component.target,
+          evidence: measured ? 'samples' : null,
           scope: 'target',
           score: null,
           metrics: [],
+          samples: measured?.samples,
+          url: measured?.url,
+          family: measured?.family,
         }
         targets.set(component.target, group)
         groups.push(group)
@@ -599,18 +655,32 @@ function categoryTests(category: QualityCategory, services: ServiceEvidence[], d
       continue
     }
     if (component.id === 'reference') {
-      const speed = data?.speed
       groups.push({
         id: 'reference',
         label: t('Cloudflare download and upload'),
+        evidence: 'transfer',
         scope: 'speed',
         score: component.score,
         metrics: [],
-        detail: speed ? `↓ ${speed.download_mbps.toFixed(1)} Mbps · ↑ ${speed.upload_mbps.toFixed(1)} Mbps` : undefined,
       })
       continue
     }
-    groups.push({ id: component.id, label: t(component.label), scope: null, score: component.score, metrics: [] })
+    groups.push({ id: component.id, label: t(component.label), evidence: null, scope: null, score: component.score, metrics: [] })
+  }
+
+  // NAT is Functionality evidence (docs/network-quality.md §6) that the score
+  // deliberately does not reward, so it is listed where a reader looks for that
+  // capability and says in its own line why it carries no number.
+  if (category.id === 'functionality' && data && (data.nat || data.nat_error)) {
+    groups.push({
+      id: 'nat',
+      label: t('NAT observations'),
+      evidence: 'nat',
+      scope: 'nat',
+      score: null,
+      metrics: [],
+      detail: t('Diagnostic only, not scored'),
+    })
   }
 
   for (const group of groups) {
@@ -623,8 +693,12 @@ function categoryTests(category: QualityCategory, services: ServiceEvidence[], d
   return groups
 }
 
-function QualityTestRow({ test, runningScope, runningTarget, anyRunning, canRerun, onRerun }: {
+function QualityTestRow({ test, category, data, view, runningScope, runningTarget, anyRunning, canRerun, onRerun }: {
   test: TestGroup
+  /** Namespaces the row's ids: one service appears under several categories. */
+  category: string
+  data?: QualitySnapshot
+  view: SampleView
   runningScope: QualityScope | ''
   runningTarget?: string
   anyRunning: boolean
@@ -632,98 +706,135 @@ function QualityTestRow({ test, runningScope, runningTarget, anyRunning, canReru
   onRerun: (action: QualityAction) => void
 }) {
   useLocale()
-  const busy = test.scope === 'target' ? runningScope === 'target' && runningTarget === test.target : test.scope === 'speed' && runningScope === 'speed'
+  const [open, setOpen] = useState(false)
+  const busy = test.scope === 'target' ? runningScope === 'target' && runningTarget === test.target : test.scope != null && runningScope === test.scope
   const rerun: QualityAction | null = test.scope === 'target' && test.target
     ? { scope: 'target', target: test.target }
-    : test.scope === 'speed'
-      ? { scope: 'speed' }
+    : test.scope === 'speed' || test.scope === 'nat'
+      ? { scope: test.scope }
       : null
+  const openable = test.evidence === 'samples' || test.evidence === 'nat'
+  const bodyID = `quality-${category}-${test.id}-evidence`
+  // The Speed row's own rerun is the reference transfer's rerun; offering the
+  // same button twice in a stack of two rows reads as two different actions.
+  const duplicated = test.scope != null && test.scope === categoryScope(category)
 
-  return <li className="flex items-start justify-between gap-3 py-2.5">
-    <div className="min-w-0">
-      <p className="text-sm text-foreground">{test.label}</p>
-      {test.detail && <p className="mt-0.5 text-xs leading-5 text-muted-foreground tabular-nums">{test.detail}</p>}
-    </div>
-    <div className="flex shrink-0 items-start gap-2">
-      {/* Same trailing columns as the category above, so a service score lands
-          under the category score it explains. */}
-      <span className="w-24 text-right text-sm font-semibold tabular-nums">
-        {test.score != null
-          ? Math.round(test.score)
-          : <span className="text-xs font-normal text-muted-foreground">{test.scope ? '—' : t('Not measured')}</span>}
-      </span>
-      <div className="flex w-8 justify-end">
-        {rerun && canRerun && <Button
-          variant="ghost"
-          size="icon-sm"
-          className={busy ? 'disabled:opacity-100' : undefined}
-          disabled={anyRunning}
-          onClick={() => onRerun(rerun)}
-          aria-label={t('Rerun {name} tests', { name: test.label })}
-          title={t('Rerun {name} tests', { name: test.label })}
-        >
-          {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <RotateCw aria-hidden="true" />}
-        </Button>}
+  return <li className="py-1">
+    <div className="flex items-start gap-2">
+      <div className="min-w-0 flex-1">
+        {openable
+          ? <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={open ? bodyID : undefined}
+              onClick={() => setOpen(value => !value)}
+              className="flex min-h-11 w-full items-center gap-1.5 rounded-md text-left text-sm text-foreground hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:min-h-9"
+            >
+              <ChevronRight className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} aria-hidden="true" />
+              <span className="min-w-0 truncate">{test.label}</span>
+            </button>
+          : <p className="flex min-h-11 items-center text-sm text-foreground sm:min-h-9">{test.label}</p>}
+        {test.detail && <p className={cn('text-xs leading-5 text-muted-foreground tabular-nums', openable && 'pl-5')}>{test.detail}</p>}
+      </div>
+      <div className="flex shrink-0 items-start gap-2">
+        {/* Same trailing columns as the category above, so a service score lands
+            under the category score it explains. */}
+        <span className="w-24 text-right text-sm font-semibold tabular-nums">
+          {test.score != null
+            ? Math.round(test.score)
+            : <span className="text-xs font-normal text-muted-foreground">{test.scope ? '—' : t('Not measured')}</span>}
+        </span>
+        <div className="flex w-8 justify-end">
+          {rerun && !duplicated && canRerun && <Button
+            variant="ghost"
+            size="icon-sm"
+            className={busy ? 'disabled:opacity-100' : undefined}
+            disabled={anyRunning}
+            onClick={() => onRerun(rerun)}
+            aria-label={t('Rerun {name} tests', { name: test.label })}
+            title={t('Rerun {name} tests', { name: test.label })}
+          >
+            {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <RotateCw aria-hidden="true" />}
+          </Button>}
+        </div>
       </div>
     </div>
+    {open && test.evidence === 'samples' && test.samples && <SampleList id={bodyID} samples={test.samples} url={test.url} family={test.family} view={view} />}
+    {open && test.evidence === 'nat' && <NATDetail id={bodyID} data={data} />}
+    {/* The transfer is the row's own measurement, not a detail under it, so its
+        two numbers are visible as soon as the category is open. */}
+    {test.evidence === 'transfer' && <TransferDetail data={data} busy={busy} />}
   </li>
 }
 
-function MeasurementDetails({ data, services }: { data: QualitySnapshot; services: ServiceEvidence[] }) {
+function sampleOutcome(sample: QualitySample) {
+  const parts: string[] = [sample.state]
+  // The stage only explains a sample that did not reach its resource; on a
+  // successful one it would be the same word six times.
+  if (sample.state !== 'ok' && sample.stage) parts.push(sample.stage)
+  if (sample.status) parts.push(`HTTP ${sample.status}`)
+  return parts.join(' · ')
+}
+
+function sampleTone(view: SampleView, state: QualitySample['state']) {
+  if (state === 'ok') return view === 'timing' ? 'text-muted-foreground' : 'text-foreground'
+  return state === 'failed' || state === 'error' ? 'text-destructive' : 'text-muted-foreground'
+}
+
+function SampleList({ id, samples, url, family, view }: {
+  id: string
+  samples: QualitySample[]
+  url?: string
+  family?: 'ipv4' | 'ipv6'
+  view: SampleView
+}) {
   useLocale()
-  const medians = new Map(services.map(service => [service.id, service]))
-  return <section aria-label={t('Measurement details')} className="panel-surface divide-y px-4 sm:px-6">
-    <Disclosure summary={t('How the score works')}>
-      <div className="space-y-2 pb-4 text-sm text-muted-foreground">
-        <p>{t('Categories with measured results share the full 100 points. Unmeasured tests are excluded; confirmed failures still count. Wireless is excluded until client or AP measurements exist.')}</p>
-        <p>{t('Overall = sum of category scores × base weights ÷ sum of measured base weights. Base weights: Speed 25, Latency 25, Stability 25, Wireless 15, Functionality 10.')}</p>
-        <p>{t('Grades: Excellent 90–100, Good 75–89, Fair 60–74, Poor below 60. Scores are references, not predictions for every client.')}</p>
-        <p>{t('The page always runs the reference transfer. It measures one Cloudflare server, not every service, and uses substantial data.')}</p>
-        <p>{t('Tests run on demand. Results stay available until the next assessment or daemon restart.')}</p>
-        <p className="text-xs">{data.scoring_version} · {data.profile_id} {data.profile_version}</p>
-      </div>
-    </Disclosure>
-    {data.targets.length > 0 && <Disclosure summary={t('Service measurements')}>
-      <div className="pb-3">
-        <p className="text-sm text-muted-foreground">{t('Six fresh HTTPS connections per service and address family. These samples feed Latency, Stability and Functionality; they check those resources, not every feature of the service.')}</p>
-        <div className="mt-1 divide-y divide-border/60">
-          {data.targets.map(target => {
-            const service = medians.get(target.id)
-            return <Disclosure key={`${target.id}-${target.family}`} summary={
-              <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <span className="font-medium text-foreground">{target.name} · {target.family.toUpperCase()}</span>
-                <span className="text-xs tabular-nums">
-                  {service?.family === target.family && service?.response != null && `${service.response.toFixed(1)} ms · `}
-                  {target.samples.filter(sample => sample.state === 'ok').length}/{target.samples.length} {t('expected responses')}
-                </span>
-              </span>
-            }>
-              <div className="pb-3 pl-5">
-                <p className="break-all font-mono text-xs text-muted-foreground">{target.url}</p>
-                <ol className="mt-2 space-y-2">
-                  {target.samples.map((sample, index) => <li key={index} className="rounded-lg bg-muted/40 px-3 py-2">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
-                      <span className="font-medium text-foreground">{index + 1}. {sample.state} · {sample.stage}{sample.status ? ` · HTTP ${sample.status}` : ''}</span>
-                      <span className="text-muted-foreground tabular-nums">DNS {duration(sample, 'dns_ms')} · TCP {duration(sample, 'tcp_ms')} · HTTPS {duration(sample, 'response_ms')}</span>
-                    </div>
-                    {sample.address && <TechnicalValue className="mt-1 block">{sample.address}</TechnicalValue>}
-                    {sample.error && <p className="mt-1 break-words text-xs text-muted-foreground">{sample.error}</p>}
-                  </li>)}
-                </ol>
-              </div>
-            </Disclosure>
-          })}
+  return <div id={id} className="mt-1 mb-1.5 ml-5 max-w-3xl rounded-lg bg-muted/30 px-3 py-2">
+    {url && <p className="flex flex-wrap items-baseline gap-x-1.5 text-[0.6875rem] leading-5 text-muted-foreground">
+      {/* The score reads one family per service, so the attempts say which. */}
+      {family && <span className="font-medium text-foreground">{family === 'ipv4' ? 'IPv4' : 'IPv6'}</span>}
+      <span className="min-w-0 break-all font-mono">{url}</span>
+    </p>}
+    <ol className="mt-1 space-y-1">
+      {samples.map((sample, index) => <li key={index} className="text-xs">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            <span className="tabular-nums text-muted-foreground">{index + 1}.</span>
+            <span className={cn('min-w-0 break-words font-medium', sampleTone(view, sample.state))}>{sampleOutcome(sample)}</span>
+          </span>
+          {view !== 'access' && <span className="tabular-nums text-muted-foreground">
+            {view === 'continuity'
+              ? `TCP ${duration(sample, 'tcp_ms')}`
+              : `DNS ${duration(sample, 'dns_ms')} · TCP ${duration(sample, 'tcp_ms')} · HTTPS ${duration(sample, 'response_ms')}`}
+          </span>}
         </div>
-      </div>
-    </Disclosure>}
-    {(data.nat || data.nat_error) && <Disclosure summary={t('NAT observations')}>
-      {data.nat && <>
-        <dl><PropertyRow label={t('STUN server')}><TechnicalValue>{data.nat.server}</TechnicalValue></PropertyRow><PropertyRow label={t('Observed mapping')}><TechnicalValue>{data.nat.mapped}</TechnicalValue></PropertyRow><PropertyRow label={t('Mapping')}>{data.nat.mapping}</PropertyRow><PropertyRow label={t('Filtering')}>{data.nat.filtering}</PropertyRow></dl>
-        <p className="pb-3 text-sm text-muted-foreground">{t('An observed mapping does not prove public IPv4 assignment, inbound access or P2P success. These observations do not add points.')}</p>
-      </>}
-      {data.nat_error && <p className="break-words pb-3 text-sm text-muted-foreground">{data.nat_error}</p>}
-    </Disclosure>}
-  </section>
+        {sample.error && <p className="mt-0.5 break-words text-muted-foreground">{sample.error}</p>}
+        {/* One address per path, not one per attempt: repeated six times it is
+            noise, and when DNS moves the row changes and says so. */}
+        {view === 'timing' && sample.address && sample.address !== samples[index - 1]?.address
+          && <TechnicalValue className="mt-0.5 block text-xs">{sample.address}</TechnicalValue>}
+      </li>)}
+    </ol>
+  </div>
+}
+
+/** Property rows elsewhere lead a six-rem label column; "Observed mapping"
+ * needs a little more before it wraps. */
+const natRow = 'grid-cols-[8rem_minmax(0,1fr)]'
+
+function NATDetail({ id, data }: { id: string; data?: QualitySnapshot }) {
+  useLocale()
+  const nat = data?.nat
+  return <div id={id} className="mt-1 mb-1.5 ml-5 max-w-xl rounded-lg bg-muted/30 px-3 py-2">
+    {nat && <dl>
+      <PropertyRow label={t('STUN server')} size="sm" className={natRow}><TechnicalValue>{nat.server}</TechnicalValue></PropertyRow>
+      <PropertyRow label={t('Observed mapping')} size="sm" className={natRow}><TechnicalValue>{nat.mapped}</TechnicalValue></PropertyRow>
+      <PropertyRow label={t('Mapping')} size="sm" className={natRow}>{nat.mapping}</PropertyRow>
+      <PropertyRow label={t('Filtering')} size="sm" className={natRow}>{nat.filtering}</PropertyRow>
+    </dl>}
+    {data?.nat_error && <p className="break-words text-xs leading-5 text-muted-foreground">{data.nat_error}</p>}
+    <p className="mt-1 text-xs leading-5 text-muted-foreground">{t('An observed mapping does not prove public IPv4 assignment, inbound access or P2P success. These observations do not add points.')}</p>
+  </div>
 }
 
 function duration(sample: QualitySample, key: 'dns_ms' | 'tcp_ms' | 'response_ms') {

@@ -381,9 +381,11 @@ overall score.
 Coverage is separate from quality. An unimplemented test is not evidence of a
 poor network. Exclude unimplemented, unselected, insufficient, invalid and stale
 results, then explicitly normalize the remaining weights within categories and
-across categories. The result view exposes the scoring explanation and the
-per-service evidence; it presents category and test scores rather than asking
-readers to add up weight contributions.
+across categories. The result view leads with category and test scores and keeps
+the arithmetic out of the page: it never asks a reader to add up weight
+contributions, and the rule that produces the total is documented here rather
+than printed on every visit. Each piece of evidence sits under the row it
+scores, opened by that row, so the page shows one level of claim at a time.
 An unmeasured Wi-Fi category remains a dash while the measured categories share
 100 points. A ready total means the current assessment is scored, not that the
 entire planned test catalog has been implemented or measured. The UI groups the
@@ -418,6 +420,30 @@ text/detail view with scores, raw values, freshness, scope and coverage. Do not
 mix simulated and live scores into a single apparently measured result. This
 implementation replaces the simulated preview with measured results and a
 normalized total for the available scope.
+
+### 9.4 Report layout
+
+The fullscreen report is one column: an overall-score band, then the five
+categories. A category opens to its scored tests, and a test opens to the
+measurements behind it. Nothing is summarised twice and nothing is explained in
+a block of its own.
+
+- The overall band carries the score, its grade label, how many categories were
+  scored and the measured coverage. Coverage alone needs a sentence — it does
+  not reduce the score — so it is the one figure with a hover hint.
+- Speed opens to the reference transfer: download and upload in Mbps, the
+  server it used, and the one-server caveat. These numbers are the evidence
+  behind the category, not a second score beside it.
+- Latency, Stability and Functionality list one row per service. Opening a
+  service shows its own attempts, weighted to the question that category asks:
+  DNS/TCP/HTTPS timings for Latency, the ordered success sequence for
+  Stability, and the resource outcome and error for Functionality. Because one
+  set of six attempts feeds all three, the same attempts appear in each, each
+  time showing only the columns that category is scored from.
+- NAT observations are Functionality evidence, not a category and not a score.
+  They appear as a row with no number, say "Diagnostic only, not scored", and
+  explain in their own detail why an observed mapping proves no inbound access.
+
 UI changes update the
 [content guide](ui-content-guide.md) and [style guide](ui-style-guide.md).
 
