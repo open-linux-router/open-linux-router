@@ -149,10 +149,10 @@ func TestEveryReadRouteIsPublishedAsATool(t *testing.T) {
 		"ingress GET /services/{name}/icon": true,
 		// Binary image bytes are for the UI; the latency JSON already names sites and outcomes.
 		"gateway GET /latency/sites/{name}/icon": true,
-		// Not a read: it starts probes rather than answering from stored state.
-		// The card's measure-now control is a UI action, and the latency GET
-		// remains the tool that reads the outcomes.
-		"gateway POST /latency/measure": true,
+		// Not a read: it starts one site's probe rather than answering from
+		// stored state. The card's measure-now control is a UI action, and the
+		// latency GET remains the tool that reads the outcomes.
+		"gateway POST /latency/sites/{name}/measure": true,
 	}
 
 	for module, routes := range moduleRoutes() {

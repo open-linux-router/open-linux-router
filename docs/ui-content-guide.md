@@ -78,10 +78,10 @@ hidden page title. Detail and operation pages keep their identifying titles.
   selected target stays fixed across failures and restarts. Show the latest
   single HTTPS latency sample, with `<1 ms` for sub-millisecond values; keep
   DNS lookup simple and omit bandwidth tests. Monitored sites follow the target.
-  Clicking the monitored-sites block measures again in place without opening the
-  dialog; replace each site's value with a spinner until that round's results
-  land, and keep the title as the only settings control. Say when the request to
-  measure failed, and read measurements without starting any.
+  Clicking one monitored site measures that site again in place without opening
+  the dialog; replace only that site's value with a spinner until its probe
+  lands, and keep the title as the only settings control. Say when the request
+  to measure failed, and read measurements without starting any.
   `Up` and elapsed uptime
   lead Status above system health. Click uptime for a dialog with CPU, memory and root disk
   used/total values; omit the separate System card.

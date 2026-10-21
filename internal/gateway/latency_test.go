@@ -487,101 +487,124 @@ func TestCustomLatencyKeepsResultWhileProbingThenPublishesFailure(t *testing.T) 
 	}
 }
 
-// Measure is how the overview's latency block asks for a fresh round. Progress
-// must be visible before the round finishes, and cleared by the round that
-// answered the request rather than by the once-a-minute background one.
-func TestLatencyMeasureReportsProgressUntilFreshResults(t *testing.T) {
-	m := NewLatencyMonitor()
-	m.dnsProbe = nil
-	var mu sync.Mutex
-	probes := 0
-	release := make(chan struct{})
-	m.probe = func(context.Context, string) (float64, error) {
-		mu.Lock()
-		probes++
-		n := probes
-		mu.Unlock()
-		if n >= 5 {
-			<-release
-		}
-		return 7, nil
+// A click probes only its own site, reports progress on that row alone, and a
+// second click while the probe runs does not start another one.
+func TestCustomLatencyMeasureProbesOneSiteAndReportsProgress(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go m.Run(ctx)
+	a := CustomLatencySite{Name: "A", URL: "https://a.example/"}
+	b := CustomLatencySite{Name: "B", URL: "https://b.example/"}
+	if err := m.Replace([]CustomLatencySite{a, b}); err != nil {
+		t.Fatal(err)
+	}
+	m.probe = func(_ context.Context, url string) (float64, error) {
+		if url == a.URL {
+			return 10, nil
+		}
+		return 20, nil
+	}
+	m.sample(context.Background())
 
-	wait := func(what string, ok func() bool) {
-		t.Helper()
-		deadline := time.Now().Add(3 * time.Second)
-		for time.Now().Before(deadline) {
-			if ok() {
-				return
-			}
-			time.Sleep(5 * time.Millisecond)
-		}
-		t.Fatalf("timed out waiting for %s: %+v", what, m.Snapshot())
+	probed := make(chan string, 4)
+	release := make(chan struct{})
+	m.probe = func(_ context.Context, url string) (float64, error) {
+		probed <- url
+		<-release
+		return 30, nil
 	}
-	// The startup round probes all four candidates once. The fifth probe is the
-	// on-demand round, and it blocks until this test lets it publish.
-	wait("startup round", func() bool { s := m.Snapshot(); return s.State == "ok" && !s.Measuring })
-	m.Measure()
-	wait("on-demand probe", func() bool { mu.Lock(); defer mu.Unlock(); return probes >= 5 })
-	if !m.Snapshot().Measuring {
-		t.Fatal("on-demand round did not report progress")
+	if err := m.Measure("A"); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-probed; got != a.URL {
+		t.Fatalf("measured %s, want only %s", got, a.URL)
+	}
+	select {
+	case other := <-probed:
+		t.Fatalf("measured %s as well", other)
+	default:
+	}
+	// The last completed outcome stays visible while the new probe runs.
+	if got := m.Snapshot(); !got[0].Measuring || got[1].Measuring || got[0].Milliseconds == nil || *got[0].Milliseconds != 10 {
+		t.Fatalf("progress not limited to the clicked row: %+v", got)
+	}
+	if err := m.Measure("A"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case other := <-probed:
+		t.Fatalf("started a second probe for an in-flight site: %s", other)
+	default:
 	}
 	close(release)
-	wait("on-demand results", func() bool { s := m.Snapshot(); return s.State == "ok" && !s.Measuring })
-	mu.Lock()
-	defer mu.Unlock()
-	if probes != 5 {
-		t.Fatalf("on-demand round made %d probes, want one target", probes-4)
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		got := m.Snapshot()
+		if !got[0].Measuring && got[0].Milliseconds != nil && *got[0].Milliseconds == 30 {
+			if got[1].Measuring || got[1].Milliseconds == nil || *got[1].Milliseconds != 20 {
+				t.Fatalf("another row changed: %+v", got)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("probe result not published: %+v", got)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := m.Measure("Missing"); err == nil {
+		t.Fatal("unknown site accepted")
 	}
 }
 
-// Changing the target discards the round in flight. That must not clear the
-// pending mark: the spinner belongs to the round measuring the new selection.
-func TestLatencyTargetChangeKeepsProgressUntilItsOwnRound(t *testing.T) {
-	m := NewLatencyMonitor()
-	m.dnsProbe = nil
-	var mu sync.Mutex
-	probes := 0
-	first, second := make(chan struct{}), make(chan struct{})
-	m.probe = func(context.Context, string) (float64, error) {
-		mu.Lock()
-		probes++
-		n := probes
-		mu.Unlock()
-		if n <= 4 {
-			<-first
-		} else {
-			<-second
-		}
-		return 10, nil
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go m.Run(ctx)
-
-	wait := func(what string, ok func() bool) {
-		t.Helper()
-		deadline := time.Now().Add(3 * time.Second)
-		for time.Now().Before(deadline) {
-			if ok() {
-				return
-			}
-			time.Sleep(5 * time.Millisecond)
-		}
-		t.Fatalf("timed out waiting for %s: %+v", what, m.Snapshot())
-	}
-	wait("startup probes", func() bool { mu.Lock(); defer mu.Unlock(); return probes >= 1 })
-	if err := m.SetTarget(m.targets[1].URL); err != nil {
+// A background round must not end a clicked row's spinner before its own probe
+// finishes, and the newer of two overlapping outcomes must survive.
+func TestCustomLatencyBackgroundRoundKeepsOnDemandProgress(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	close(first)
-	wait("new selection probe", func() bool { mu.Lock(); defer mu.Unlock(); return probes >= 5 })
-	if !m.Snapshot().Measuring {
-		t.Fatal("target change lost its pending measurement")
+	a := CustomLatencySite{Name: "A", URL: "https://a.example/"}
+	if err := m.Replace([]CustomLatencySite{a}); err != nil {
+		t.Fatal(err)
 	}
-	close(second)
-	wait("new selection results", func() bool { s := m.Snapshot(); return s.TargetURL == m.targets[1].URL && !s.Measuring })
+	m.probe = func(context.Context, string) (float64, error) { return 10, nil }
+	m.sample(context.Background())
+
+	var mu sync.Mutex
+	calls := 0
+	started := make(chan struct{})
+	release := make(chan struct{})
+	m.probe = func(context.Context, string) (float64, error) {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		if n == 1 {
+			close(started)
+			<-release
+			return 12, nil
+		}
+		return 11, nil
+	}
+	if err := m.Measure("A"); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	m.sample(context.Background())
+	if got := m.Snapshot()[0]; !got.Measuring || got.Milliseconds == nil || *got.Milliseconds != 11 {
+		t.Fatalf("background round lost the on-demand mark or its newer result: %+v", got)
+	}
+	close(release)
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		got := m.Snapshot()[0]
+		if !got.Measuring && got.Milliseconds != nil && *got.Milliseconds == 12 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("on-demand result not published: %+v", got)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }

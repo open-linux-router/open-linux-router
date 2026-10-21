@@ -75,7 +75,7 @@ func (h HTTP) Routes() []core.Route {
 	routes := []core.Route{
 		{Method: "GET", Path: "/world-traffic", Tool: "show world traffic", Summary: "Top forty remote IPs by observed connection bytes over the last thirty seconds.", Handler: h.getWorldTraffic},
 		{Method: "GET", Path: "/latency", Tool: "show latency", Summary: "Latest router HTTPS response measurements and selected websites.", Handler: h.getLatency},
-		{Method: "POST", Path: "/latency/measure", Summary: "Measure every latency target now instead of waiting for the next round.", Handler: h.postLatencyMeasure},
+		{Method: "POST", Path: "/latency/sites/{name}/measure", Summary: "Probe one monitored site now instead of waiting for the next round.", Handler: h.postLatencySiteMeasure},
 		{Method: "PUT", Path: "/latency/target", Summary: "Choose an Internet latency target; empty selects the fastest once.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencyTarget},
 		{Method: "GET", Path: "/latency/sites/{name}/icon", Summary: "Discover a monitored site icon.", Handler: h.getLatencyIcon},
 		{Method: "PUT", Path: "/latency/sites", Summary: "Replace custom HTTPS response targets.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencySites},
@@ -813,19 +813,20 @@ func (h HTTP) getLatency(w http.ResponseWriter, r *http.Request) {
 	core.WriteJSON(w, http.StatusOK, snapshot)
 }
 
-// postLatencyMeasure is the operator's "measure now". It is a POST because it
-// starts work, not because it changes configuration: no exit, site or target is
-// edited, and the background loop is the only writer of results.
-func (h HTTP) postLatencyMeasure(w http.ResponseWriter, r *http.Request) {
-	if h.Latency == nil {
+// postLatencySiteMeasure is one monitored site's "measure now". It is a POST
+// because it starts work, not because it changes configuration: the site keeps
+// its URL, exit and icon, and the result is ephemeral.
+func (h HTTP) postLatencySiteMeasure(w http.ResponseWriter, r *http.Request) {
+	if h.Latency == nil || h.Latency.Custom == nil {
 		core.WriteError(w, http.StatusServiceUnavailable, "latency monitor unavailable")
 		return
 	}
-	h.Latency.Measure()
-	snapshot := h.Latency.Snapshot()
-	if h.Latency.Custom != nil {
-		snapshot.Custom = h.Latency.Custom.Snapshot()
+	if err := h.Latency.Custom.Measure(r.PathValue("name")); err != nil {
+		core.WriteError(w, http.StatusNotFound, err.Error())
+		return
 	}
+	snapshot := h.Latency.Snapshot()
+	snapshot.Custom = h.Latency.Custom.Snapshot()
 	core.WriteJSON(w, http.StatusAccepted, snapshot)
 }
 

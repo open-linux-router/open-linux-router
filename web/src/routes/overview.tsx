@@ -23,7 +23,7 @@ import { servicesByDevice } from '@/features/topology/services'
 import { useHostMetrics, usePublicAddresses, type HostMetrics, type PublicAddresses } from '@/features/system/queries'
 import 'flag-icons/css/flag-icons.min.css'
 import thesvgSlugs from '@/features/gateway/thesvg-slugs.json'
-import { useGatewayConfig, useGatewayLatency, useMeasureGatewayLatency, useSaveLatencySites, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
+import { useGatewayConfig, useGatewayLatency, useMeasureLatencySite, useSaveLatencySites, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
 import { useRemoteStatus } from '@/features/remote/queries'
 import { buildDialIn } from '@/features/topology/dial-in'
@@ -655,14 +655,8 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
   const measured = !latencyFailed && latency?.state === 'ok' && latency.milliseconds != null
   const dnsMeasured = !latencyFailed && latency?.dns_milliseconds != null
   const latencyValue = measured ? formatLatency(latency.milliseconds!) : latency?.state === 'unreachable' ? 'No response' : '—'
-  const measure = useMeasureGatewayLatency()
-  // The POST's own pending state covers the gap before the snapshot says so;
-  // afterwards the daemon reports the round until this request's results land.
-  const measuring = Boolean(latency?.measuring) || measure.isPending
+  const measure = useMeasureLatencySite()
   const sites = latency?.custom ?? []
-  // One action owns the block, so its outcome list is attached to the button
-  // rather than left as focusable children that the button would flatten.
-  const siteSummary = sites.map((site) => `${site.name}: ${latencySiteValue(site)}`).join('. ')
   const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? t('Unavailable') : '—'
   // Keep four columns for wide screens so values and units fit on one line.
   return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:gap-4">
@@ -721,23 +715,24 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
         <MetricPill label={t('DNS lookup')} value={dnsMeasured ? formatLatency(latency.dns_milliseconds!) : '—'} valueRight />
       </div>
       <div className="pt-1">
-        <button type="button" onClick={() => measure.mutate()} aria-busy={measuring} aria-describedby={sites.length ? 'latency-sites-summary' : undefined}
-          aria-label={measuring ? t('Re-measuring latency') : t('Re-measure latency')}
-          title={measuring ? t('Measuring now…') : t('Click to measure again')}
-          className="-m-1.5 grid w-[calc(100%+0.75rem)] grid-cols-2 items-center gap-x-2 gap-y-1.5 rounded-lg p-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring sm:grid-cols-3">
+        <div className="grid grid-cols-2 items-center gap-x-2 gap-y-1.5 sm:grid-cols-3">
           {sites.map((site) => {
-            const description = measuring ? `${site.name} · ${t('Measuring now…')}` : `${site.name} · HTTPS latency to ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!hasLatencyAttempt(site) ? 'Waiting for first probe' : site.milliseconds == null ? site.error || 'Failed' : formatLatency(site.milliseconds)}`
-            return <span key={site.name} title={description}
-              className="inline-flex min-h-8 min-w-0 items-center gap-1.5 rounded-sm text-xs font-semibold tabular-nums text-foreground">
+            // Only a probe started by clicking this row sets its flag; the
+            // once-a-minute background round leaves every row quiet.
+            const probing = Boolean(site.measuring)
+            const action = probing ? t('Measuring now…') : t('Click to measure again')
+            const description = `${site.name} · HTTPS latency to ${new URL(site.url).hostname} via ${site.exit || 'router default'} · ${!hasLatencyAttempt(site) ? 'Waiting for first probe' : site.milliseconds == null ? site.error || 'Failed' : formatLatency(site.milliseconds)}`
+            return <button key={site.name} type="button" onClick={() => measure.mutate(site.name)} aria-busy={probing}
+              aria-label={`${site.name}: ${latencySiteValue(site)}. ${action}`} title={`${description} · ${action}`}
+              className="-mx-1 inline-flex min-h-8 min-w-0 items-center gap-1.5 rounded-sm px-1 text-left text-xs font-semibold tabular-nums text-foreground transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring">
               <SiteIcon name={site.name} url={site.url} icon={site.icon} />
-              {measuring
+              {probing
                 ? <LoaderCircle aria-hidden className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
                 : <span className="min-w-0 whitespace-nowrap">{latencySiteValue(site)}</span>}
-            </span>
+            </button>
           })}
-        </button>
-        {sites.length > 0 && <p id="latency-sites-summary" className="sr-only">{measuring ? t('Measuring now…') : siteSummary}</p>}
-        {measure.isError && <p role="alert" className="pt-1 text-xs text-destructive">{t('Could not measure latency. Try again.')}</p>}
+        </div>
+        {measure.isError && <p role="alert" className="pt-1 text-xs text-destructive">{t('Could not measure {name}. Try again.', { name: measure.variables ?? '' })}</p>}
       </div>
     </StatCard>
     <NetworkQuality open={panel === 'quality'} onOpenChange={(open) => onPanelChange(open ? 'quality' : undefined)} />

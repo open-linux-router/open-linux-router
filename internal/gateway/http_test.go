@@ -535,20 +535,50 @@ func TestLatencyIconMissingSite(t *testing.T) {
 	}
 }
 
-func TestLatencyMeasureEndpointStartsARound(t *testing.T) {
-	monitor := NewLatencyMonitor()
-	monitor.probe = func(context.Context, string) (float64, error) {
-		t.Error("measure must answer before probing")
-		return 0, nil
+func TestLatencySiteMeasureEndpoint(t *testing.T) {
+	custom, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	w := do(t, (HTTP{Latency: monitor}).Handler(), http.MethodPost, "/latency/measure", nil)
+	if err := custom.Replace([]CustomLatencySite{
+		{Name: "A", URL: "https://a.example/"},
+		{Name: "B", URL: "https://b.example/"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{}, 4)
+	release := make(chan struct{})
+	defer close(release)
+	custom.probe = func(context.Context, string) (float64, error) {
+		started <- struct{}{}
+		<-release
+		return 5, nil
+	}
+	monitor := NewLatencyMonitor()
+	monitor.Custom = custom
+	h := HTTP{Latency: monitor}.Handler()
+
+	w := do(t, h, http.MethodPost, "/latency/sites/A/measure", nil)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("status = %d %s", w.Code, w.Body.String())
 	}
-	if !decode[LatencySnapshot](t, w).Measuring || !monitor.Snapshot().Measuring {
-		t.Fatal("measure did not report a round in progress")
+	<-started
+	if got := decode[LatencySnapshot](t, w).Custom; len(got) != 2 || !got[0].Measuring || got[1].Measuring {
+		t.Fatalf("progress not limited to A: %+v", got)
 	}
-	if w := do(t, (HTTP{}).Handler(), http.MethodPost, "/latency/measure", nil); w.Code != http.StatusServiceUnavailable {
+	// A second click while the probe runs is accepted but starts no probe.
+	if w := do(t, h, http.MethodPost, "/latency/sites/A/measure", nil); w.Code != http.StatusAccepted {
+		t.Fatalf("repeat status = %d %s", w.Code, w.Body.String())
+	}
+	select {
+	case <-started:
+		t.Fatal("second probe started for an in-flight site")
+	default:
+	}
+	if w := do(t, h, http.MethodPost, "/latency/sites/Missing/measure", nil); w.Code != http.StatusNotFound {
+		t.Fatalf("unknown site: status = %d", w.Code)
+	}
+	if w := do(t, (HTTP{}).Handler(), http.MethodPost, "/latency/sites/A/measure", nil); w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("missing monitor: status = %d", w.Code)
 	}
 }

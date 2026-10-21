@@ -36,6 +36,12 @@ type CustomLatencyMonitor struct {
 	probe        func(context.Context, string) (float64, error)
 	probeThrough func(context.Context, string, uint32) (float64, error)
 	iconClient   func(*CustomLatencySite) (*http.Client, error)
+	// inflight marks on-demand probes, keyed by URL and exit. Background rounds
+	// never enter it, so only a clicked site reports progress.
+	inflight map[string]bool
+	// base is the daemon lifetime. On-demand probes start in a request handler,
+	// so they cannot use its context and follow this one instead.
+	base context.Context
 	// Resolve returns the current exit mark; a missing or disabled exit is an error.
 	Resolve      func(string) (uint32, error)
 	ValidateExit func(string) error
@@ -86,14 +92,14 @@ func OpenCustomLatencyConfig(store *core.Store) (*CustomLatencyMonitor, error) {
 			return nil, err
 		}
 	}
-	m := &CustomLatencyMonitor{store: store, probe: probePage, probeThrough: probePageMarked, results: []LatencySite{}}
+	m := &CustomLatencyMonitor{store: store, probe: probePage, probeThrough: probePageMarked, results: []LatencySite{}, inflight: map[string]bool{}}
 	m.sites = cfg.LatencySites
 	m.resetResults()
 	return m, nil
 }
 
 func NewCustomLatencyMonitor(path string) (*CustomLatencyMonitor, error) {
-	m := &CustomLatencyMonitor{path: path, probe: probePage, probeThrough: probePageMarked, results: []LatencySite{}}
+	m := &CustomLatencyMonitor{path: path, probe: probePage, probeThrough: probePageMarked, results: []LatencySite{}, inflight: map[string]bool{}}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return m, nil
@@ -147,6 +153,122 @@ func (m *CustomLatencyMonitor) resetResults() {
 		if old, ok := previous[site.URL+"\x00"+site.Exit]; ok {
 			result.Milliseconds, result.CheckedAt, result.Error = old.Milliseconds, old.CheckedAt, old.Error
 		}
+		// A reorder or rename during an on-demand probe keeps its spinner on the
+		// row that still names the same target.
+		result.Measuring = m.inflight[site.URL+"\x00"+site.Exit]
+		m.results[i] = result
+	}
+}
+
+// setContext makes on-demand probes follow the daemon.
+func (m *CustomLatencyMonitor) setContext(ctx context.Context) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.base = ctx
+}
+
+// Measure probes one stored site now and marks only that row as measuring.
+//
+// It returns without waiting: the result replaces the stored one when it
+// arrives. A second click while the same target is probing is a no-op, so a
+// slow site cannot accumulate parallel probes.
+func (m *CustomLatencyMonitor) Measure(name string) error {
+	m.refreshConfig()
+	var site CustomLatencySite
+	found := false
+	for _, candidate := range m.Config() {
+		if candidate.Name == name {
+			site, found = candidate, true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("no monitored site named %q", name)
+	}
+	key := site.URL + "\x00" + site.Exit
+	m.mu.Lock()
+	if m.inflight[key] {
+		m.mu.Unlock()
+		return nil
+	}
+	if m.inflight == nil {
+		m.inflight = map[string]bool{}
+	}
+	m.inflight[key] = true
+	for i := range m.results {
+		if m.results[i].URL == site.URL && m.results[i].Exit == site.Exit {
+			m.results[i].Measuring = true
+		}
+	}
+	base := m.base
+	m.mu.Unlock()
+	if base == nil {
+		base = context.Background()
+	}
+	go m.probeOne(base, site)
+	return nil
+}
+
+// probeOne runs one on-demand probe and publishes its outcome.
+func (m *CustomLatencyMonitor) probeOne(ctx context.Context, site CustomLatencySite) {
+	bounded, cancel := context.WithTimeout(ctx, pageProbeTimeout)
+	defer cancel()
+	var value float64
+	var err error
+	if site.Exit == "" {
+		value, err = m.probe(bounded, site.URL)
+	} else {
+		var mark uint32
+		if m.Resolve == nil {
+			err = errors.New("gateway exit unavailable")
+		} else {
+			mark, err = m.Resolve(site.Exit)
+		}
+		if err == nil {
+			value, err = m.probeThrough(bounded, site.URL, mark)
+		}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	key := site.URL + "\x00" + site.Exit
+	delete(m.inflight, key)
+	if ctx.Err() != nil {
+		// Shutdown, not a probe failure: clear progress without recording a
+		// measurement that never ran to completion.
+		for i := range m.results {
+			if m.results[i].URL == site.URL && m.results[i].Exit == site.Exit {
+				m.results[i].Measuring = false
+			}
+		}
+		return
+	}
+	result := LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, CheckedAt: time.Now().UTC()}
+	if site.Exit != "" && err != nil && strings.Contains(err.Error(), "gateway exit") {
+		result.Error = "Gateway exit unavailable"
+	}
+	if err == nil {
+		result.Milliseconds = &value
+	} else if result.Error == "" {
+		result.Error = latencyError(err)
+	}
+	m.storeResult(result)
+}
+
+// storeResult writes one outcome, keeping whichever attempt is newer. Callers
+// hold m.mu. Two probes of the same target can overlap — a background round and
+// a click — and the older one finishing last must not overwrite the newer one.
+func (m *CustomLatencyMonitor) storeResult(result LatencySite) {
+	key := result.URL + "\x00" + result.Exit
+	for i, site := range m.sites {
+		if site.URL != result.URL || site.Exit != result.Exit {
+			continue
+		}
+		if current := m.results[i]; !current.CheckedAt.IsZero() && current.CheckedAt.After(result.CheckedAt) {
+			return
+		}
+		result.Name = site.Name
+		result.Icon = site.Icon
+		result.Measuring = m.inflight[key]
 		m.results[i] = result
 	}
 }
@@ -284,19 +406,9 @@ func (m *CustomLatencyMonitor) sample(ctx context.Context) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// Reconcile by target rather than index: renames and reorders must not discard
-	// valid samples or attach a result to the wrong site.
-	byTarget := make(map[string]LatencySite, len(results))
+	// Reconcile by target rather than index: renames and reorders must not
+	// discard valid samples or attach a result to the wrong site.
 	for _, result := range results {
-		byTarget[result.URL+"\x00"+result.Exit] = result
-	}
-	for i, site := range m.sites {
-		result, ok := byTarget[site.URL+"\x00"+site.Exit]
-		if !ok {
-			continue
-		}
-		result.Name = site.Name
-		result.Icon = site.Icon
-		m.results[i] = result
+		m.storeResult(result)
 	}
 }

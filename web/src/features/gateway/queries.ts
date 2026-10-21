@@ -193,9 +193,11 @@ function savedLatency(): GatewayLatency | undefined {
     const stored = sessionStorage.getItem(LATENCY_SNAPSHOT_KEY)
     if (!stored) return undefined
     const snapshot = JSON.parse(stored) as GatewayLatency
-    // A saved round says nothing about the round this page is loading; the
-    // first fast poll after mount answers that.
-    return Array.isArray(snapshot.custom) ? { ...snapshot, measuring: false } : undefined
+    // A saved spinner belongs to the page that is gone. Only the daemon can say
+    // whether a probe is running now.
+    return Array.isArray(snapshot.custom)
+      ? { ...snapshot, custom: snapshot.custom.map((site) => ({ ...site, measuring: false })) }
+      : undefined
   } catch { return undefined }
 }
 
@@ -220,24 +222,24 @@ export function useGatewayLatency() {
       try { sessionStorage.setItem(LATENCY_SNAPSHOT_KEY, JSON.stringify(next)) } catch { /* storage may be disabled */ }
       return next
     },
-    // A round asked for by hand usually finishes within seconds, so follow it
-    // closely; the once-a-minute background round needs no faster poll.
-    refetchInterval: (query) => query.state.data?.measuring ? 1000 : OBSERVED_REFETCH_MS,
+    // Only a clicked site probes between the once-a-minute rounds, so only it
+    // needs a faster poll to end its spinner promptly.
+    refetchInterval: (query) => query.state.data?.custom.some((site) => site.measuring) ? 1000 : OBSERVED_REFETCH_MS,
   })
 }
 
 /**
- * Probe every latency target now, rather than at the next background round.
+ * Probe one monitored site now, rather than at the next background round.
  *
- * The response carries the snapshot with `measuring` set; the follow-up
- * invalidation starts the faster poll at a reading newer than the click, so
- * the spinner ends when this round's results land instead of at the previous
+ * The response carries the snapshot with that site's `measuring` set; the
+ * follow-up invalidation starts the faster poll at a reading newer than the
+ * click, so the spinner ends when this probe lands instead of at the previous
  * five-second tick.
  */
-export function useMeasureGatewayLatency() {
+export function useMeasureLatencySite() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => api.post<GatewayLatency>('/api/gateway/latency/measure'),
+    mutationFn: (name: string) => api.post<GatewayLatency>(`/api/gateway/latency/sites/${encodeURIComponent(name)}/measure`),
     onSuccess: (snapshot) => {
       queryClient.setQueryData(['gateway', 'latency'], snapshot)
       queryClient.invalidateQueries({ queryKey: ['gateway', 'latency'] })
