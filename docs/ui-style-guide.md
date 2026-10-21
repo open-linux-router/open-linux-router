@@ -509,7 +509,11 @@ usable. Monitoring statistics use two columns on phones.
 
 The desktop footer bottom-aligns its text and theme icon with 12px bottom padding,
 keeping the visible content close to the viewport edge while retaining 44px link
-and control hit targets. The footer theme control is a single icon. Clicking cycles
+and control hit targets. Its items keep one visible 16px gap: a control's hit
+target is wider than the icon or label it draws, so the footer cancels that inset
+rather than letting the theme and language controls sit in visibly wider intervals
+than the text, and the two controls wrap together so the language control is never
+left alone on its own line. The footer theme control is a single icon. Clicking cycles
 auto, light and dark; its accessible label and tooltip name the current and next theme.
 The adjacent language control shows a 14px Languages icon and the destination
 language in its native writing (中文 / English) and nothing else: footer text size

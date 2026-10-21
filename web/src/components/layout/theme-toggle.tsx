@@ -3,8 +3,9 @@ import { useTheme } from 'next-themes'
 
 import { Button } from '@/components/ui/button'
 import { t, useLocale } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 
-export function ThemeToggle() {
+export function ThemeToggle({ className }: { className?: string }) {
   useLocale()
   const { theme, setTheme } = useTheme()
   const current = theme === 'light' || theme === 'dark' ? theme : 'system'
@@ -17,7 +18,7 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      className="size-11 text-muted-foreground transition-colors duration-150 hover:bg-transparent hover:text-foreground active:bg-transparent dark:hover:bg-transparent lg:items-end"
+      className={cn('size-11 text-muted-foreground transition-colors duration-150 hover:bg-transparent hover:text-foreground active:bg-transparent dark:hover:bg-transparent lg:items-end', className)}
       aria-label={label}
       title={label}
       onClick={() => setTheme(next[current])}

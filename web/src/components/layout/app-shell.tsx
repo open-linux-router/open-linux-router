@@ -63,8 +63,17 @@ export function AppShell() {
           <span>{__APP_VERSION__}</span>
           <a href="https://github.com/open-linux-router/open-linux-router" target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center transition-colors duration-150 hover:text-foreground lg:items-end">GitHub</a>
           <Link to="/credits" className="inline-flex min-h-11 items-center transition-colors duration-150 hover:text-foreground lg:items-end">{t('Credits')}</Link>
-          <ThemeToggle />
-          <LanguageToggle />
+          {/* Both controls keep their 44px hit target, but a target is wider than
+              what it draws: the icon alone in a 44px square carries 15px of inset
+              per side, and the language control adds 6px of its own padding. Cancel
+              each inset so the six items keep one visible 16px gap, and hold the
+              pair together so wrapping never strands the language control alone.
+              border-0 also keeps the buttons' 1px border from lifting their text off
+              the line the plain items share; the focus ring does not need it. */}
+          <div className="flex items-center gap-x-4 lg:items-end">
+            <ThemeToggle className="-mx-[15px] border-0" />
+            <LanguageToggle className="-mx-1.5 border-0" />
+          </div>
         </div>
       </footer>
       <nav aria-label={t('Sections')} className="fixed inset-x-0 bottom-0 z-20 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
