@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { CategoryPicker, type IconChoice } from '@/features/devices/category-picker'
+import { namePlaceholder } from '@/features/devices/device-name'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import { groupOptions } from '@/features/devices/group-tree'
 import { categoryLabel } from '@/features/devices/icons'
@@ -132,8 +133,10 @@ export function DeviceDetail({
               placeholder={
                 // The hostname is shown as the placeholder rather than filled
                 // in, so it is visibly the client's own claim and not something
-                // the operator has agreed to.
-                device.hostname ? `${device.hostname} (what it calls itself)` : device.mac
+                // the operator has agreed to. A remembered name says so for the
+                // same reason: it is what the device called itself when it was
+                // last here, not what it is saying now.
+                namePlaceholder(device)
               }
             />
           </div>

@@ -76,27 +76,34 @@ func (s *Store) initialize() error {
 		if err := tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 			return err
 		}
-		if version > 2 {
+		if version > 3 {
 			return fmt.Errorf("unsupported runtime database version %d", version)
 		}
-		if version == 2 {
+		if version == 3 {
 			return nil
 		}
+		if version == 2 {
+			// A device that is gone has no source to ask for its name, so the
+			// record keeps the last one it announced beside the time it was
+			// last heard. Both are observations with a time, never intent.
+			_, err := tx.Exec(`ALTER TABLE device_seen ADD COLUMN hostname TEXT NOT NULL DEFAULT ''; ALTER TABLE device_seen ADD COLUMN hostname_at TEXT NOT NULL DEFAULT ''; PRAGMA user_version=3;`)
+			return err
+		}
 		if version == 1 {
-			_, err := tx.Exec(`CREATE TABLE geoip_cache (ip TEXT PRIMARY KEY, data BLOB NOT NULL, fetched INTEGER NOT NULL, used INTEGER NOT NULL); CREATE INDEX geoip_cache_used ON geoip_cache(used); PRAGMA user_version=2;`)
+			_, err := tx.Exec(`CREATE TABLE geoip_cache (ip TEXT PRIMARY KEY, data BLOB NOT NULL, fetched INTEGER NOT NULL, used INTEGER NOT NULL); CREATE INDEX geoip_cache_used ON geoip_cache(used); ALTER TABLE device_seen ADD COLUMN hostname TEXT NOT NULL DEFAULT ''; ALTER TABLE device_seen ADD COLUMN hostname_at TEXT NOT NULL DEFAULT ''; PRAGMA user_version=3;`)
 			return err
 		}
 		_, err := tx.Exec(`
 CREATE TABLE imports (name TEXT PRIMARY KEY);
 CREATE TABLE activity (bucket INTEGER NOT NULL, address TEXT NOT NULL, up TEXT NOT NULL, down TEXT NOT NULL, PRIMARY KEY(bucket,address));
 CREATE INDEX activity_address_time ON activity(address,bucket);
-CREATE TABLE device_seen (mac TEXT PRIMARY KEY, seen_at TEXT NOT NULL);
+CREATE TABLE device_seen (mac TEXT PRIMARY KEY, seen_at TEXT NOT NULL, hostname TEXT NOT NULL DEFAULT '', hostname_at TEXT NOT NULL DEFAULT '');
 CREATE TABLE sessions (token_hash BLOB PRIMARY KEY CHECK(length(token_hash)=32), credential TEXT NOT NULL, expires_at TEXT NOT NULL);
 CREATE TABLE qos_state (boot_id TEXT PRIMARY KEY, state BLOB NOT NULL);
 CREATE TABLE recovery_state (name TEXT PRIMARY KEY, state BLOB NOT NULL);
 CREATE TABLE geoip_cache (ip TEXT PRIMARY KEY, data BLOB NOT NULL, fetched INTEGER NOT NULL, used INTEGER NOT NULL);
 CREATE INDEX geoip_cache_used ON geoip_cache(used);
-PRAGMA user_version=2;`)
+PRAGMA user_version=3;`)
 		return err
 	})
 }
@@ -239,14 +246,42 @@ func (s *Store) Activity(cutoff, now int64) ([]Activity, error) {
 	return out, rows.Err()
 }
 
+// Seen is what the record keeps about one device that is no longer here: when
+// it was last heard from, and the last name it announced and when.
+//
+// Two observations with two times, in one row because they are forgotten
+// together — retaining a name for a MAC nobody has seen in months would be
+// history that outlives the device it describes. Either time may be zero: a
+// device can hold a lease (and a name) that the neighbour table never confirmed
+// answering, and an existing row from before hostnames were kept has no name.
 type Seen struct {
 	MAC string
 	At  time.Time
+
+	Hostname   string
+	HostnameAt time.Time
+}
+
+// seenTime formats a timestamp for storage, and the zero time as empty rather
+// than as year one: it keeps "never" distinguishable from a real instant.
+func seenTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339Nano)
+}
+
+func parseSeenTime(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+	return time.Parse(time.RFC3339Nano, s)
 }
 
 func PutSeen(tx *sql.Tx, rows []Seen) error {
 	for _, r := range rows {
-		if _, err := tx.Exec("INSERT OR REPLACE INTO device_seen(mac,seen_at) VALUES(?,?)", r.MAC, r.At.UTC().Format(time.RFC3339Nano)); err != nil {
+		if _, err := tx.Exec("INSERT OR REPLACE INTO device_seen(mac,seen_at,hostname,hostname_at) VALUES(?,?,?,?)",
+			r.MAC, seenTime(r.At), r.Hostname, seenTime(r.HostnameAt)); err != nil {
 			return err
 		}
 	}
@@ -261,7 +296,7 @@ func (s *Store) SaveSeen(rows []Seen) error {
 	})
 }
 func (s *Store) Seen() ([]Seen, error) {
-	rows, err := s.db.Query("SELECT mac,seen_at FROM device_seen")
+	rows, err := s.db.Query("SELECT mac,seen_at,hostname,hostname_at FROM device_seen")
 	if err != nil {
 		return nil, err
 	}
@@ -269,12 +304,14 @@ func (s *Store) Seen() ([]Seen, error) {
 	out := []Seen{}
 	for rows.Next() {
 		var r Seen
-		var at string
-		if err := rows.Scan(&r.MAC, &at); err != nil {
+		var at, named string
+		if err := rows.Scan(&r.MAC, &at, &r.Hostname, &named); err != nil {
 			return nil, err
 		}
-		r.At, err = time.Parse(time.RFC3339Nano, at)
-		if err != nil {
+		if r.At, err = parseSeenTime(at); err != nil {
+			return nil, err
+		}
+		if r.HostnameAt, err = parseSeenTime(named); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

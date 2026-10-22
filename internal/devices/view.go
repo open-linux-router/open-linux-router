@@ -16,11 +16,17 @@ import (
 type deviceView struct {
 	MAC string `json:"mac"`
 
-	// Name is already resolved — stored name, else observed hostname, else
-	// empty. NameOrigin says which, because "we call it this" and "it calls
-	// itself this" are different claims.
+	// Name is already resolved — stored name, else observed hostname, else the
+	// name the device last announced while it was here, else empty. NameOrigin
+	// says which, because "we call it this", "it calls itself this" and "it
+	// called itself this last week" are three different claims.
 	Name       string `json:"name"`
 	NameOrigin Origin `json:"name_origin,omitempty"`
+
+	// NameAsOf is when a remembered name was heard, present only for
+	// name_origin "remembered". A surface that shows the name without it would
+	// be reporting last week's claim as this minute's.
+	NameAsOf *time.Time `json:"name_as_of,omitempty"`
 
 	Category       Category `json:"category"`
 	CategoryOrigin Origin   `json:"category_origin,omitempty"`
@@ -102,6 +108,7 @@ func viewDevice(r Resolved) deviceView {
 		MAC:              r.MAC,
 		Name:             r.Name,
 		NameOrigin:       r.NameOrigin,
+		NameAsOf:         r.NameAsOf,
 		Category:         r.Category,
 		CategoryOrigin:   r.CategoryOrigin,
 		DetectedCategory: r.Detected.Category,

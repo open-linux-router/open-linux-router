@@ -36,6 +36,7 @@ export function DeviceHeader({
   pictureBusy,
   title,
   status,
+  note,
 }: {
   /** The traffic matrix, drawn behind everything else. */
   activity?: ReactNode
@@ -47,6 +48,12 @@ export function DeviceHeader({
   title: ReactNode
   /** A connection state, for a page that has evidence for one. */
   status?: ReactNode
+  /**
+   * A quiet line under the name, for a page whose name needs one sentence to be
+   * honest about itself — a name remembered rather than heard. Not a status:
+   * it says where the name came from, not whether the device is here.
+   */
+  note?: string
 }) {
   useLocale()
   return (
@@ -73,6 +80,7 @@ export function DeviceHeader({
           </Heading>
           {status}
         </div>
+        {note && <p className="mt-1 text-xs text-muted-foreground">{note}</p>}
       </div>
     </div>
   )

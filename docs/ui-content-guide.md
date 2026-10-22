@@ -202,6 +202,11 @@ dashes. Services below Group lists matching configured services as icons that
 open their webpages, with an equally sized add action that opens Ingress and
 prefills the current device. Empty lists show only the add action.
 Devices without a reserved name/address prefill their observed host instead.
+A device whose source of a name is gone keeps the name it last announced: rows
+and lists show it as the device's name, and its page says under the title when
+that name was last heard. A name field offers it as the last known name rather
+than as what the device calls itself, and nothing is saved as the operator's
+name unless the operator saves it.
 A device that dialed in draws the same row, matched by its tunnel address, and
 its add action prefills that address rather than a device reference.
 Group is a tag that opens its edit dialog.

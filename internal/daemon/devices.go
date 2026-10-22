@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
@@ -15,9 +16,9 @@ import (
 // They live here, in the binary that mounts both, rather than inside either
 // module. That is what keeps design.md §4.1's arrow pointing one way: `devices`
 // declares the interfaces it needs (PresenceSource, FixedAddressView,
-// NetworkView) and never imports `dhcp`, while `dhcp` stays unaware that an
-// inventory exists. The two are introduced at the one place that already knows
-// the whole module list.
+// NetworkView, NameSource) and never imports `dhcp`, while `dhcp` stays unaware
+// that an inventory exists. The two are introduced at the one place that
+// already knows the whole module list.
 
 // dhcpPresence reads the lease database as sightings.
 type dhcpPresence struct {
@@ -73,6 +74,47 @@ func (d dhcpPresence) Presence(_ context.Context) ([]devices.Sighting, []devices
 	}
 
 	return out, problems, nil
+}
+
+// dhcpNames reads what each client calls itself off the lease database, for the
+// record of names.
+//
+// The lease is the only source of a name: the neighbour table carries none, and
+// DNS records would be our own answer rather than the client's claim. Reading it
+// here rather than reusing dhcpPresence keeps the two questions apart — a lease's
+// Active flag is about presence and its hostname is about identity, and the
+// background sampler wants only the second.
+//
+// A lease with no hostname is skipped rather than reported as an empty name:
+// silence is not a client withdrawing the name it gave last week.
+type dhcpNames struct {
+	applier dhcp.Applier
+}
+
+func (d dhcpNames) Hostnames(context.Context) (map[string]string, error) {
+	leases, _, err := d.applier.Leases()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(leases))
+	for _, l := range leases {
+		if l.MAC == "" {
+			continue
+		}
+		name := strings.TrimSpace(l.Hostname)
+		if name == "" {
+			continue
+		}
+		mac, err := core.NormalizeMAC(l.MAC)
+		if err != nil {
+			// Validation rejects these on the way in, so one here means a
+			// hand-edited file. Skipped for the reason dhcpPresence skips a
+			// lease with no MAC: there is nothing to key a name on.
+			continue
+		}
+		out[mac] = name
+	}
+	return out, nil
 }
 
 // dhcpFixedAddresses reads reservations as MAC → address.

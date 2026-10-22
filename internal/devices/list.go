@@ -117,20 +117,42 @@ const (
 	// client announced.
 	OriginObserved Origin = "observed"
 
+	// OriginRemembered is a name or a time the router kept from when the device
+	// was last here. No source can be asked now, so it is history rather than an
+	// observation — see seen.go — and it is never intent.
+	OriginRemembered Origin = "remembered"
+
 	// OriginNone means nothing could supply a value.
 	OriginNone Origin = ""
 )
+
+// History is what the router remembers about devices that are not here now:
+// when it last heard them, and the name they last announced.
+//
+// It is an interface rather than *Seen so that the join can be exercised
+// without a store, and it lives here for the reason FixedAddressView does: this
+// module states the facts it needs and the composition root supplies them.
+type History interface {
+	LastSeen(mac string) (time.Time, bool)
+	Hostname(mac string) (name string, at time.Time, ok bool)
+}
 
 // Resolved is one device with both halves joined.
 type Resolved struct {
 	MAC string
 
 	// Name and NameOrigin: a stored name, else the hostname the client
-	// announced, else empty — in which case a UI falls back to the MAC. An
-	// observed hostname is *displayed* but never promoted into stored intent,
-	// so the operator's own naming stays distinguishable from the client's.
+	// announced, else the name it last announced while it was here, else empty —
+	// in which case a UI falls back to the MAC. Neither observed name is ever
+	// promoted into stored intent, and a remembered one is stamped with
+	// NameAsOf, so the operator's own naming stays distinguishable from the
+	// client's and the client's stays distinguishable from history.
 	Name       string
 	NameOrigin Origin
+
+	// NameAsOf is when a remembered name was heard, set only for
+	// OriginRemembered. Nil for a name something can confirm right now.
+	NameAsOf *time.Time
 
 	// Category and CategoryOrigin, resolved in the spec's order: operator, then
 	// detection, then nothing.
@@ -194,15 +216,21 @@ func (r Resolved) DisplayName() string {
 	return r.MAC
 }
 
-// Build joins stored identity, observed sightings and fixed addresses into the
-// list, and returns any problems collected along the way.
+// Build joins stored identity, observed sightings, fixed addresses and what the
+// router remembers into the list, and returns any problems collected along the
+// way.
 //
 // The union of three key sets, not just the sightings: a device is on the list
 // if a human described it, *or* something saw it, *or* it holds a reservation.
 // Dropping any of those three would lose a real case — the printer named last
 // year that is currently powered off, the guest phone nobody has named, and the
 // reservation made for a device that has not connected yet.
-func Build(cfg Config, sightings []Sighting, fixed map[string]string, networks []Network) ([]Resolved, []Problem) {
+//
+// History adds names and times to those devices, never devices to the list: a
+// MAC nobody described, saw or reserved is not a device the operator has here,
+// and remembering every randomised address a phone ever used would be a list of
+// everything rather than a map of the network.
+func Build(cfg Config, sightings []Sighting, fixed map[string]string, networks []Network, history History) ([]Resolved, []Problem) {
 	presence, problems := Merge(sightings)
 
 	macs := map[string]bool{}
@@ -218,7 +246,7 @@ func Build(cfg Config, sightings []Sighting, fixed map[string]string, networks [
 
 	out := make([]Resolved, 0, len(macs))
 	for mac := range macs {
-		out = append(out, resolve(mac, cfg, presence, fixed, networks))
+		out = append(out, resolve(mac, cfg, presence, fixed, networks, history))
 	}
 
 	// Sorted by the name the operator reads, not by presence. Sorting online
@@ -236,12 +264,18 @@ func Build(cfg Config, sightings []Sighting, fixed map[string]string, networks [
 }
 
 // resolve applies the resolution order for one device.
-func resolve(mac string, cfg Config, presence map[string]Presence, fixed map[string]string, networks []Network) Resolved {
+func resolve(mac string, cfg Config, presence map[string]Presence, fixed map[string]string, networks []Network, history History) Resolved {
 	r := Resolved{MAC: mac}
 
 	if p, ok := presence[mac]; ok {
 		copied := p
 		r.Presence = &copied
+	}
+
+	if history != nil {
+		if at, ok := history.LastSeen(mac); ok {
+			r.LastSeen = &at
+		}
 	}
 
 	// Which network the device is on, preferring what a source actually saw.
@@ -279,9 +313,26 @@ func resolve(mac string, cfg Config, presence map[string]Presence, fixed map[str
 		hostname = r.Presence.Hostname
 	}
 
+	// The name the client last announced while it was here, when nothing can be
+	// asked now. It is evidence about the same device, only older — which is
+	// exactly why it is a fallback and not a replacement.
+	remembered, rememberedAt := "", time.Time{}
+	if hostname == "" && history != nil {
+		if name, at, ok := history.Hostname(mac); ok {
+			remembered, rememberedAt = name, at
+		}
+	}
+
 	// Detection runs for every device, whether or not it wins, so that the UI
-	// can always show what we would have guessed.
-	r.Detected = Detect(mac, hostname)
+	// can always show what we would have guessed. A remembered hostname is
+	// evidence too: a phone away for a week is still the phone its own name
+	// says it is, and the picture should not fall back to the vendor's generic
+	// one merely because the lease lapsed.
+	evidence := hostname
+	if evidence == "" {
+		evidence = remembered
+	}
+	r.Detected = Detect(mac, evidence)
 
 	stored, ok := cfg.Find(mac)
 	if ok {
@@ -297,6 +348,12 @@ func resolve(mac string, cfg Config, presence map[string]Presence, fixed map[str
 		r.Name, r.NameOrigin = stored.Name, OriginOperator
 	case hostname != "":
 		r.Name, r.NameOrigin = hostname, OriginObserved
+	case remembered != "":
+		r.Name, r.NameOrigin = remembered, OriginRemembered
+		if !rememberedAt.IsZero() {
+			at := rememberedAt
+			r.NameAsOf = &at
+		}
 	default:
 		r.Name, r.NameOrigin = "", OriginNone
 	}

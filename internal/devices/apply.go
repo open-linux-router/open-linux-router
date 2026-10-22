@@ -42,8 +42,9 @@ type Applier struct {
 	// is a smaller answer rather than a wrong one.
 	Networks NetworkView
 
-	// Seen is when each device was last heard from. Nil leaves every
-	// device's time out rather than claiming it was never heard.
+	// Seen is what the router remembers about devices that are not here: when
+	// each was last heard from, and the name it last announced. Nil leaves both
+	// out rather than claiming the device was never heard or never named.
 	Seen *Seen
 }
 
@@ -128,11 +129,12 @@ func (a Applier) List(ctx context.Context) ([]Resolved, []Problem, error) {
 		}
 	}
 
-	list, joinProblems := Build(cfg, sightings, fixed, networks)
-	for i := range list {
-		if at, ok := a.Seen.LastSeen(list[i].MAC); ok {
-			list[i].LastSeen = &at
-		}
+	// A nil *Seen is a nil History here: nothing is remembered, and every device
+	// answers from what a source can say now.
+	var history History
+	if a.Seen != nil {
+		history = a.Seen
 	}
+	list, joinProblems := Build(cfg, sightings, fixed, networks, history)
 	return list, append(problems, joinProblems...), nil
 }

@@ -623,8 +623,10 @@ export interface DialStatus {
  *
  * The distinction is the point of the screen: what an operator was told and
  * what we inferred must never look the same, or a guess reads as a fact.
+ * `remembered` is history rather than a current observation: a name the device
+ * announced the last time it was here, kept because no source can be asked now.
  */
-export type Origin = 'operator' | 'detected' | 'observed' | ''
+export type Origin = 'operator' | 'detected' | 'observed' | 'remembered' | ''
 
 /** Which source saw a device — internal/devices Source. */
 export type PresenceSource = 'dhcp-lease' | 'arp'
@@ -684,9 +686,19 @@ export type VendorKey =
 export interface DeviceRow {
   mac: string
 
-  /** Already resolved: stored name, else observed hostname, else empty. */
+  /**
+   * Already resolved: stored name, else observed hostname, else the name the
+   * device last announced while it was here, else empty.
+   */
   name: string
   name_origin?: Origin
+
+  /**
+   * When a remembered name was heard, present only for name_origin
+   * `remembered`. A surface that shows the name without it would be reporting
+   * last week's claim as this minute's.
+   */
+  name_as_of?: string
 
   category: DeviceCategory
   category_origin?: Origin

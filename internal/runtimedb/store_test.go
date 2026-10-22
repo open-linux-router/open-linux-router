@@ -20,7 +20,7 @@ func TestRestartTransactionsAndUnsignedCounters(t *testing.T) {
 	if err := s.SaveActivity([]Activity{{Bucket: now.Unix(), Address: "192.0.2.1", Up: math.MaxUint64, Down: 42}}, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SaveSeen([]Seen{{MAC: "aa:bb:cc:dd:ee:ff", At: now}}); err != nil {
+	if err := s.SaveSeen([]Seen{{MAC: "aa:bb:cc:dd:ee:ff", At: now, Hostname: "printer", HostnameAt: now}}); err != nil {
 		t.Fatal(err)
 	}
 	key := [32]byte{1, 2, 3}
@@ -51,6 +51,9 @@ func TestRestartTransactionsAndUnsignedCounters(t *testing.T) {
 	seen, err := s.Seen()
 	if err != nil || len(seen) != 1 || !seen[0].At.Equal(now) {
 		t.Fatalf("seen: %+v %v", seen, err)
+	}
+	if seen[0].Hostname != "printer" || !seen[0].HostnameAt.Equal(now) {
+		t.Fatalf("remembered name: %+v", seen[0])
 	}
 	sessions, err := s.Sessions()
 	if err != nil || len(sessions) != 1 || sessions[0].Key != key {
@@ -107,6 +110,32 @@ func TestImportRollbackAndNoResurrection(t *testing.T) {
 	}
 }
 
+// A name outlives the last-heard time recorded beside it: a lease that
+// announced one and a neighbour entry that never confirmed an answer leave one
+// real time and one empty one, and empty must read back as "never" rather than
+// as year one.
+func TestSeenKeepsANameWithoutASighting(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	now := time.Now().UTC()
+	if err := s.SaveSeen([]Seen{{MAC: "aa:bb:cc:dd:ee:ff", Hostname: "phone", HostnameAt: now}}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.Seen()
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("seen: %+v %v", rows, err)
+	}
+	if !rows[0].At.IsZero() {
+		t.Fatalf("a name was read back as a sighting: %v", rows[0].At)
+	}
+	if rows[0].Hostname != "phone" || !rows[0].HostnameAt.Equal(now) {
+		t.Fatalf("remembered name: %+v", rows[0])
+	}
+}
+
 func TestRejectCorruptAndFutureDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "runtime.db")
 	if err := os.WriteFile(path, []byte("not sqlite"), 0600); err != nil {
@@ -120,7 +149,7 @@ func TestRejectCorruptAndFutureDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec("PRAGMA user_version=3"); err != nil {
+	if _, err := s.db.Exec("PRAGMA user_version=4"); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()

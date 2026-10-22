@@ -14,6 +14,33 @@ func arp(mac, ip string, active bool) Sighting {
 	return Sighting{MAC: mac, IP: ip, Source: SourceARP, Active: active}
 }
 
+// build is Build without a history record, which is the common case: most of
+// what is tested here is the join against what sources say right now.
+func build(cfg Config, sightings []Sighting, fixed map[string]string, networks []Network) ([]Resolved, []Problem) {
+	return Build(cfg, sightings, fixed, networks, nil)
+}
+
+type rememberedName struct {
+	name string
+	at   time.Time
+}
+
+// fakeHistory is the record with no store behind it.
+type fakeHistory struct {
+	seen  map[string]time.Time
+	names map[string]rememberedName
+}
+
+func (h fakeHistory) LastSeen(mac string) (time.Time, bool) {
+	at, ok := h.seen[mac]
+	return at, ok
+}
+
+func (h fakeHistory) Hostname(mac string) (string, time.Time, bool) {
+	n, ok := h.names[mac]
+	return n.name, n.at, ok
+}
+
 func find(t *testing.T, list []Resolved, mac string) Resolved {
 	t.Helper()
 	for _, r := range list {
@@ -33,7 +60,7 @@ func TestBuildUnionsIdentityPresenceAndReservations(t *testing.T) {
 	sightings := []Sighting{lease("bb:bb:bb:bb:bb:bb", "192.168.1.50", "guest-phone", true)}
 	fixed := map[string]string{"cc:cc:cc:cc:cc:cc": "192.168.1.9"}
 
-	list, problems := Build(cfg, sightings, fixed, nil)
+	list, problems := build(cfg, sightings, fixed, nil)
 	if len(problems) != 0 {
 		t.Errorf("unexpected problems: %s", problemStrings(problems))
 	}
@@ -77,7 +104,7 @@ func TestBuildOperatorCategoryBeatsDetection(t *testing.T) {
 	}}}
 	sightings := []Sighting{lease("aa:aa:aa:aa:aa:aa", "192.168.1.20", "laserjet-m140we", true)}
 
-	list, _ := Build(cfg, sightings, nil, nil)
+	list, _ := build(cfg, sightings, nil, nil)
 	got := find(t, list, "aa:aa:aa:aa:aa:aa")
 
 	if got.Category != CategoryServer {
@@ -96,7 +123,7 @@ func TestBuildOperatorCategoryBeatsDetection(t *testing.T) {
 func TestBuildFallsBackToDetection(t *testing.T) {
 	sightings := []Sighting{lease("aa:aa:aa:aa:aa:aa", "192.168.1.20", "Toms-iPhone", true)}
 
-	list, _ := Build(Config{}, sightings, nil, nil)
+	list, _ := build(Config{}, sightings, nil, nil)
 	got := find(t, list, "aa:aa:aa:aa:aa:aa")
 
 	if got.Category != CategoryPhone {
@@ -110,7 +137,7 @@ func TestBuildFallsBackToDetection(t *testing.T) {
 func TestBuildFallsBackToUnknown(t *testing.T) {
 	sightings := []Sighting{lease("aa:aa:aa:aa:aa:aa", "192.168.1.20", "some-box", true)}
 
-	list, _ := Build(Config{}, sightings, nil, nil)
+	list, _ := build(Config{}, sightings, nil, nil)
 	got := find(t, list, "aa:aa:aa:aa:aa:aa")
 
 	if got.Category != CategoryUnknown {
@@ -127,7 +154,7 @@ func TestBuildNamePrecedence(t *testing.T) {
 	cfg := Config{Devices: []Device{{MAC: "aa:aa:aa:aa:aa:aa", Name: "Study laptop"}}}
 	sightings := []Sighting{lease("aa:aa:aa:aa:aa:aa", "192.168.1.20", "toms-macbook", true)}
 
-	list, _ := Build(cfg, sightings, nil, nil)
+	list, _ := build(cfg, sightings, nil, nil)
 	got := find(t, list, "aa:aa:aa:aa:aa:aa")
 
 	if got.Name != "Study laptop" || got.NameOrigin != OriginOperator {
@@ -136,17 +163,71 @@ func TestBuildNamePrecedence(t *testing.T) {
 
 	// Without a stored name, the observed hostname shows through — but marked
 	// as observed, not promoted into intent.
-	list2, _ := Build(Config{}, sightings, nil, nil)
+	list2, _ := build(Config{}, sightings, nil, nil)
 	got2 := find(t, list2, "aa:aa:aa:aa:aa:aa")
 	if got2.Name != "toms-macbook" || got2.NameOrigin != OriginObserved {
 		t.Errorf("Name = %q (%s), want the hostname marked observed", got2.Name, got2.NameOrigin)
 	}
 
 	// And with neither, the MAC — a device is never nameless on screen.
-	list3, _ := Build(Config{}, []Sighting{arp("dd:dd:dd:dd:dd:dd", "192.168.1.7", true)}, nil, nil)
+	list3, _ := build(Config{}, []Sighting{arp("dd:dd:dd:dd:dd:dd", "192.168.1.7", true)}, nil, nil)
 	got3 := find(t, list3, "dd:dd:dd:dd:dd:dd")
 	if got3.DisplayName() != "dd:dd:dd:dd:dd:dd" {
 		t.Errorf("DisplayName = %q, want the MAC", got3.DisplayName())
+	}
+}
+
+// The name a client announced while it was here outlives its lease, which is
+// twelve hours by default — so a phone left in a bag for two days is still the
+// phone it said it was, and the picture agrees.
+func TestBuildFallsBackToTheRememberedName(t *testing.T) {
+	at := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+	// Described but away: no lease, no neighbour entry, only the stored group
+	// that keeps it on the list.
+	cfg := Config{Devices: []Device{{MAC: "aa:aa:aa:aa:aa:aa", Group: "home"}}}
+	history := fakeHistory{
+		names: map[string]rememberedName{"aa:aa:aa:aa:aa:aa": {name: "Sams-iPhone", at: at}},
+	}
+
+	list, _ := Build(cfg, nil, nil, nil, history)
+	got := find(t, list, "aa:aa:aa:aa:aa:aa")
+
+	if got.Name != "Sams-iPhone" || got.NameOrigin != OriginRemembered {
+		t.Errorf("Name = %q (%s), want the remembered name", got.Name, got.NameOrigin)
+	}
+	if got.NameAsOf == nil || !got.NameAsOf.Equal(at) {
+		t.Errorf("NameAsOf = %v, want %v", got.NameAsOf, at)
+	}
+	if got.Detected.Category != CategoryPhone {
+		t.Errorf("Category = %q, want the remembered name to inform detection", got.Detected.Category)
+	}
+
+	// Whatever a live source says beats the record, and the operator beats both.
+	live := []Sighting{lease("aa:aa:aa:aa:aa:aa", "192.168.1.20", "renamed-phone", true)}
+	list, _ = Build(cfg, live, nil, nil, history)
+	got = find(t, list, "aa:aa:aa:aa:aa:aa")
+	if got.Name != "renamed-phone" || got.NameOrigin != OriginObserved || got.NameAsOf != nil {
+		t.Errorf("a live hostname lost to the record: %q (%s) at %v", got.Name, got.NameOrigin, got.NameAsOf)
+	}
+
+	cfg.Devices[0].Name = "Li's phone"
+	list, _ = Build(cfg, nil, nil, nil, history)
+	got = find(t, list, "aa:aa:aa:aa:aa:aa")
+	if got.Name != "Li's phone" || got.NameOrigin != OriginOperator {
+		t.Errorf("a stored name lost to the record: %q (%s)", got.Name, got.NameOrigin)
+	}
+}
+
+// A MAC nobody described, saw or reserved is not a device the operator has
+// here, however much the record remembers about it.
+func TestBuildDoesNotListADeviceOnlyTheRecordKnows(t *testing.T) {
+	history := fakeHistory{
+		seen:  map[string]time.Time{"aa:aa:aa:aa:aa:aa": time.Now()},
+		names: map[string]rememberedName{"aa:aa:aa:aa:aa:aa": {name: "gone-phone", at: time.Now()}},
+	}
+	list, _ := Build(Config{}, nil, nil, nil, history)
+	if len(list) != 0 {
+		t.Fatalf("the record invented %d devices", len(list))
 	}
 }
 
@@ -230,7 +311,7 @@ func TestBuildSortsByNameNotByPresence(t *testing.T) {
 	// Bravo is the only one online; it must not jump to the top.
 	online := []Sighting{lease("bb:bb:bb:bb:bb:bb", "192.168.1.50", "", true)}
 
-	list, _ := Build(cfg, online, nil, nil)
+	list, _ := build(cfg, online, nil, nil)
 	want := []string{"Alpha", "Bravo", "Charlie"}
 	for i, w := range want {
 		if list[i].Name != w {
@@ -239,7 +320,7 @@ func TestBuildSortsByNameNotByPresence(t *testing.T) {
 	}
 
 	// Taking Bravo offline must not move anything either.
-	offline, _ := Build(cfg, nil, nil, nil)
+	offline, _ := build(cfg, nil, nil, nil)
 	for i, w := range want {
 		if offline[i].Name != w {
 			t.Errorf("after going offline, position %d = %q, want %q", i, offline[i].Name, w)
@@ -257,9 +338,9 @@ func TestBuildIsDeterministic(t *testing.T) {
 		arp("dd:dd:dd:dd:dd:dd", "192.168.1.4", true),
 	}
 
-	first, _ := Build(cfg, sightings, nil, nil)
+	first, _ := build(cfg, sightings, nil, nil)
 	for i := 0; i < 20; i++ {
-		again, _ := Build(cfg, sightings, nil, nil)
+		again, _ := build(cfg, sightings, nil, nil)
 		for j := range first {
 			if first[j].MAC != again[j].MAC {
 				t.Fatalf("iteration %d differs at %d: %q vs %q", i, j, first[j].MAC, again[j].MAC)
@@ -269,7 +350,7 @@ func TestBuildIsDeterministic(t *testing.T) {
 }
 
 func TestBuildEmpty(t *testing.T) {
-	list, problems := Build(Config{}, nil, nil, nil)
+	list, problems := build(Config{}, nil, nil, nil)
 	if len(list) != 0 {
 		t.Errorf("got %d devices, want an empty list rather than a failure", len(list))
 	}
@@ -311,7 +392,7 @@ func TestBuildPrefersTheObservedInterface(t *testing.T) {
 	s := arp("aa:bb:cc:dd:ee:ff", "192.168.1.150", true)
 	s.Interface = "lan0"
 
-	list, _ := Build(Config{}, []Sighting{s}, nil, []Network{
+	list, _ := build(Config{}, []Sighting{s}, nil, []Network{
 		netw("lan", "lan0", "10.0.0.100", "10.0.0.200"),
 		netw("iot", "iot0", "192.168.1.100", "192.168.1.200"),
 	})
@@ -336,7 +417,7 @@ func TestBuildDoesNotReportAnInterfaceAsANetwork(t *testing.T) {
 	s := arp("aa:bb:cc:dd:ee:ff", "10.9.9.9", true)
 	s.Interface = "eth-unmanaged"
 
-	list, _ := Build(Config{}, []Sighting{s}, nil,
+	list, _ := build(Config{}, []Sighting{s}, nil,
 		[]Network{netw("lan", "lan0", "192.168.1.100", "192.168.1.200")})
 
 	got := find(t, list, "aa:bb:cc:dd:ee:ff")
@@ -352,7 +433,7 @@ func TestBuildFallsBackToTheRangeWhenTheInterfaceIsUnknown(t *testing.T) {
 	s := arp("aa:bb:cc:dd:ee:ff", "192.168.1.150", true)
 	s.Interface = "eth-unmanaged"
 
-	list, _ := Build(Config{}, []Sighting{s}, nil,
+	list, _ := build(Config{}, []Sighting{s}, nil,
 		[]Network{netw("lan", "lan0", "192.168.1.100", "192.168.1.200")})
 
 	got := find(t, list, "aa:bb:cc:dd:ee:ff")
@@ -367,7 +448,7 @@ func TestBuildFallsBackToTheRangeWhenTheInterfaceIsUnknown(t *testing.T) {
 // A lease carries no interface, so an away device can only be placed by range.
 // Getting this wrong empties the map of everything that is asleep.
 func TestBuildPlacesALeaseByItsRange(t *testing.T) {
-	list, _ := Build(Config{}, []Sighting{lease("aa:bb:cc:dd:ee:ff", "192.168.30.142", "tv", false)}, nil,
+	list, _ := build(Config{}, []Sighting{lease("aa:bb:cc:dd:ee:ff", "192.168.30.142", "tv", false)}, nil,
 		[]Network{
 			netw("lan", "lan0", "192.168.1.100", "192.168.1.200"),
 			netw("iot", "iot0", "192.168.30.100", "192.168.30.240"),
@@ -386,7 +467,7 @@ func TestBuildPlacesALeaseByItsRange(t *testing.T) {
 // unplaced rather than filed under the nearest network, because a guess drawn
 // on a map reads exactly like a fact.
 func TestBuildLeavesAnUnplaceableDeviceEmpty(t *testing.T) {
-	list, _ := Build(Config{}, []Sighting{lease("aa:bb:cc:dd:ee:ff", "192.168.1.10", "printer", true)}, nil,
+	list, _ := build(Config{}, []Sighting{lease("aa:bb:cc:dd:ee:ff", "192.168.1.10", "printer", true)}, nil,
 		[]Network{netw("lan", "lan0", "192.168.1.100", "192.168.1.200")})
 
 	got := find(t, list, "aa:bb:cc:dd:ee:ff")
@@ -402,7 +483,7 @@ func TestBuildLeavesAnUnplaceableDeviceEmpty(t *testing.T) {
 func TestBuildPlacesNothingWithoutPresence(t *testing.T) {
 	cfg := Config{Devices: []Device{{MAC: "aa:bb:cc:dd:ee:ff", Name: "Spare laptop"}}}
 
-	list, _ := Build(cfg, nil, nil, []Network{netw("lan", "lan0", "192.168.1.100", "192.168.1.200")})
+	list, _ := build(cfg, nil, nil, []Network{netw("lan", "lan0", "192.168.1.100", "192.168.1.200")})
 
 	if got := find(t, list, "aa:bb:cc:dd:ee:ff"); got.Network != "" {
 		t.Errorf("Network = %q, want empty", got.Network)

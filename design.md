@@ -695,12 +695,22 @@ halves**, and keeping them distinct is the whole trick:
 | **Identity** — intent | user-given name, fixed address, blocked | ours, stored, revisioned |
 | **Presence** — observed | online, current address, last seen | read-through, never stored as truth |
 
-The one exception is *last seen*. No source remembers a device once it has
-gone, so `devices` keeps it: a MAC → time record sampled from the neighbour
-table (REACHABLE entries only) every few seconds, in
-`/var/lib/open-linux-router/devices/seen.json`, apart from olr.json because it
-is history, not intent. It can be deleted at any time and costs only that
-history. See internal/devices/seen.go.
+The exception is what no source remembers once the device has gone: *when it
+was last heard* and *the name it last called itself*. Both are sampled in the
+background — the time from the neighbour table (REACHABLE entries only), the
+name from the DHCP lease — and kept per MAC in the runtime database's
+`device_seen` table, apart from olr.json because it is history, not intent. It
+can be deleted at any time and costs only that history. See
+internal/devices/seen.go.
+
+The remembered name is why a phone left in a bag for two days keeps its name
+instead of becoming a MAC: a client's hostname arrives with its lease, and the
+lease is twelve hours by default. It is *displayed* while no source can say
+anything better, marked `remembered` and stamped with when it was heard, and it
+is **never promoted into intent** — the operator's own name stays distinguishable
+from the client's claim, and the client's current claim distinguishable from
+its history. Detection reads it too, so the picture does not fall back to a
+vendor default merely because the lease lapsed.
 
 Devices are a *foundation* object, not an operational one: `dhcp` references
 them for fixed addresses, `gateway` for per-device routing and forwards, `qos`

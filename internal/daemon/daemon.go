@@ -388,15 +388,18 @@ func run(args []string) error {
 		Events:  srv.Events(),
 	}.Routes(), dns.Config{})
 
-	// When each device was last heard from: the one piece of presence the
-	// devices module keeps, sampled below for as long as olrd runs.
-	seen := devices.NewSeen("", devices.Neighbours{}, logger)
+	// What the router remembers about devices that are not here: when each was
+	// last heard from, and the name it last called itself. Sampled below for as
+	// long as olrd runs, from the neighbour table and the lease file
+	// respectively — the lease is what outlives a sleeping phone's last answer.
+	names := dhcpNames{applier: applier}
+	seen := devices.NewSeen("", devices.Neighbours{}, names, logger)
 	if runtimeDB != nil {
 		restored, loadErr := restoreHistory(runtimeDB, logger, func() (*devices.Seen, error) {
-			return devices.OpenSeenDB(runtimeDB, devices.SeenPath(opts.root), devices.Neighbours{}, logger)
+			return devices.OpenSeenDB(runtimeDB, devices.SeenPath(opts.root), devices.Neighbours{}, names, logger)
 		})
 		if loadErr != nil {
-			logger.Error("could not restore last-seen history", "error", loadErr)
+			logger.Error("could not restore what the router remembers about devices", "error", loadErr)
 		} else {
 			seen = restored
 		}
@@ -1009,7 +1012,7 @@ func run(args []string) error {
 		stopSeen()
 		<-seenDone
 		if err := seen.Flush(time.Now()); err != nil {
-			logger.Warn("could not save last-seen times", "error", err)
+			logger.Warn("could not save what the router remembers about devices", "error", err)
 		}
 	}()
 	go latency.Run(ctx)

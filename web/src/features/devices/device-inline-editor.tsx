@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { CategoryPicker, type IconChoice } from '@/features/devices/category-picker'
+import { rememberedNameTitle } from '@/features/devices/device-name'
 import { DeviceHeader } from '@/features/devices/device-header'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import { DeviceSettingRow } from '@/features/devices/device-setting-row'
@@ -108,8 +109,9 @@ export function DeviceInlineEditor({ device, traffic, activity, services, total 
         picture={<DeviceIcon icon={device.icon} category={device.category} vendor={device.vendor} vendorKey={device.vendor_key} size="lg" />}
         pictureBusy={identityBusy}
         onPicture={() => begin('icon')}
+        note={rememberedNameTitle(device)}
         title={editing === 'name' ? <Input autoFocus aria-label={t('Device name')} className="h-auto w-80 max-w-full py-1 text-2xl font-semibold" value={name} disabled={saveIdentity.isPending} onChange={(e) => { nameFinished.current = false; setName(e.target.value) }} onBlur={() => finishName()} onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); finishName(e.key === 'Escape') } }} />
-          : <button type="button" disabled={identityBusy} onClick={() => begin('name')} aria-label={t('Edit device name')} className="w-full break-words rounded-md text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">{device.name || device.mac}</button>}
+          : <button type="button" disabled={identityBusy} onClick={() => begin('name')} aria-label={t('Edit device name')} title={rememberedNameTitle(device)} className="w-full break-words rounded-md text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">{device.name || device.mac}</button>}
       />
     </header>
     <div className="mt-4 grid gap-y-8 lg:grid-cols-2 lg:gap-x-16 lg:gap-y-0">
