@@ -469,7 +469,7 @@ Existing code provides useful starting points, not complete catalog coverage:
 | Tools speed test | Router-originated speedtest-go download/upload/latency/jitter, selectable server/exit; not per-service/CDN adapters |
 | Tools ping | Finite ICMP RTT/loss test; not a continuous representative stability window |
 | Tools NAT | Default-route IPv4 STUN mapping/filtering observations, subject to server support; not actual P2P or inbound verification |
-| LibreSpeed and IPERF3 | Browser-based LibreSpeed test between one device and this router (download/upload/latency/jitter), plus a temporary iperf3 server for sustained wired throughput; neither supplies whole-site Wi-Fi telemetry |
+| LibreSpeed and iPerf3 | Browser-based LibreSpeed test between one device and this router (download/upload/latency/jitter), plus a temporary iperf3 server for sustained wired throughput; neither supplies whole-site Wi-Fi telemetry |
 
 See [device link testing](device-link-test.md) for local-test scope. Reuse test
 implementations behind shared measurement interfaces where appropriate rather

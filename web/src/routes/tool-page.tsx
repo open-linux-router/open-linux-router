@@ -134,7 +134,7 @@ function TraceView({ trace }: { trace: TraceResult }) {
 export function ToolPage({ tool }: { tool: ToolSlug }) {
   useLocale()
   const definition = TOOL_DEFINITIONS.find(item => item.slug === tool)!
-  const Content = { speedtest: SpeedTest, librespeed: LibreSpeed, iperf3: IPERF3, nat: NATTest, ping: PingTest, traceroute: TracerouteTest }[tool]
+  const Content = { speedtest: SpeedTest, librespeed: LibreSpeed, iperf3: IPerf3, nat: NATTest, ping: PingTest, traceroute: TracerouteTest }[tool]
   return <div className="space-y-8">
     <PageHeading id="tool-title" title={definition.label} />
     <Content key={tool} />
@@ -323,7 +323,7 @@ function LibreSpeed() {
   </div>
 }
 
-function IPERF3() {
+function IPerf3() {
   useLocale()
   const lan = useQuery({
     queryKey: ['tools', 'lan-test'],
@@ -366,7 +366,7 @@ function IPERF3() {
 
   return <div className="space-y-6">
     <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
-      <p className="max-w-2xl text-sm text-muted-foreground">{t('iperf3 measures sustained TCP streams with its own client on the other device. It is the honest choice for a wired link faster than a browser can measure, and it needs iperf3 installed on the router and on that device. It tests the link and the router’s own receive/send capacity, not LAN-to-WAN forwarding or NAT.')}</p>
+      <p className="max-w-2xl text-sm text-muted-foreground">{t('iPerf3 measures sustained TCP streams with its own client on the other device. It is the honest choice for a wired link faster than a browser can measure, and it needs iperf3 installed on the router and on that device. It tests the link and the router’s own receive/send capacity, not LAN-to-WAN forwarding or NAT.')}</p>
       {lan.isError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('LAN addresses unavailable')}</AlertTitle><AlertDescription>{lan.error.message}</AlertDescription></Alert>}
       {lan.data && <div className="mt-5 space-y-4">
         <div className="max-w-sm space-y-1.5">
@@ -399,7 +399,7 @@ function IPERF3() {
           </div>)}
         </div>}
       </div>}
-      {lanError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('IPERF3 is unavailable')}</AlertTitle><AlertDescription>{lanError}</AlertDescription></Alert>}
+      {lanError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('iPerf3 is unavailable')}</AlertTitle><AlertDescription>{lanError}</AlertDescription></Alert>}
     </section>
   </div>
 }

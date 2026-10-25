@@ -420,7 +420,7 @@ sentences from translated fragments. Keep state decisions independent of copy.
 
 Use familiar tool names and concise task labels. A diagnostic that is a named
 upstream project takes that project's name, which is why the tools directory
-reads SpeedTest, LibreSpeed and IPERF3 rather than three versions of "speed
+reads SpeedTest, LibreSpeed and iPerf3 rather than three versions of "speed
 test": the engine is the distinction that helps an operator select one, and each
 of the three measures a different boundary. Preserve established names such as
 Ping, NAT test and Traceroute. Do not invent broad category labels for a single

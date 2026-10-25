@@ -1,7 +1,7 @@
 # Device-to-router speed tests
 
 Two tools measure one client device's link to OLR: **LibreSpeed**, which runs in
-that device's browser, and **IPERF3**, which runs a client on it. Both answer
+that device's browser, and **iPerf3**, which runs a client on it. Both answer
 "how fast can this phone or laptop talk to the router", which is a different
 question from the **SpeedTest** tool beside them: that one measures the router's
 own uplink and never involves the device at all.
@@ -55,9 +55,9 @@ on a faster link, and a phone on Wi-Fi usually reports the Wi-Fi rate rather tha
 the wire. Read it as "at least this fast, and stable or not", not as a wire-rate
 certificate.
 
-## IPERF3 (sustained, wired)
+## iPerf3 (sustained, wired)
 
-Open Tools, then IPERF3. OLR starts a temporary iperf3 server on a chosen,
+Open Tools, then iPerf3. OLR starts a temporary iperf3 server on a chosen,
 currently configured LAN IPv4 address (TCP 5201) and shows the client commands.
 Install iperf3 on the router and the other device; the other device's terminal
 displays the results.
@@ -88,6 +88,6 @@ where available; OLR never kills or reconfigures an existing process.
 
 Use LibreSpeed for the everyday question — "is this room's Wi-Fi fine?" —
 because it needs nothing installed and runs on the device that is asking. Use
-IPERF3 when the answer has to be a wire rate: gigabit or faster Ethernet, a
+iPerf3 when the answer has to be a wire rate: gigabit or faster Ethernet, a
 sustained multi-stream load, or a before/after comparison of a cable or a switch
 port.
