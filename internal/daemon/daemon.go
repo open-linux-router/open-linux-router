@@ -883,7 +883,7 @@ func run(args []string) error {
 	top.Handle(core.APIPrefix+"/", srv.Handler())
 	top.HandleFunc("GET /download/inspection-ca.crt", inspector.PublicCA)
 	top.Handle("/inspection-web/", http.StripPrefix("/inspection-web", http.HandlerFunc(inspector.WebUI)))
-	// The LAN speed test's page and byte endpoints live here rather than under
+	// LibreSpeed's page and the byte endpoints under it live here rather than under
 	// /api because the upload test posts 20 MB of raw bytes, which the API's
 	// JSON-body guard exists to refuse. What authorizes them is a viewer cookie
 	// minted inside the API — the same shape as /inspection-web/ above.

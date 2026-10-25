@@ -1,15 +1,16 @@
-# LAN speed test
+# Device-to-router speed tests
 
-The LAN speed test measures one client device's link to OLR. It answers "how
-fast can this phone or laptop talk to the router", which is a different question
-from the internet speed test on the neighbouring page: that one measures the
-router's own uplink and never involves the device at all.
+Two tools measure one client device's link to OLR: **LibreSpeed**, which runs in
+that device's browser, and **IPERF3**, which runs a client on it. Both answer
+"how fast can this phone or laptop talk to the router", which is a different
+question from the **SpeedTest** tool beside them: that one measures the router's
+own uplink and never involves the device at all.
 
-Nothing here measures LAN-to-WAN forwarding, NAT, or another device's link.
+Neither of these measures LAN-to-WAN forwarding, NAT, or another device's link.
 
-## Browser test (default)
+## LibreSpeed (browser, default)
 
-Open Tools, then LAN speed test, on the device. The test runs in that device's
+Open Tools, then LibreSpeed, on the device. The test runs in that device's
 browser against this router, so nothing has to be installed on either end.
 
 The page is LibreSpeed 6.3.1 (`internal/tools/librespeed/`, LGPLv3, unmodified).
@@ -29,10 +30,9 @@ outside it. What authorizes them is a viewer cookie: the tools page calls
 `POST /api/tools/link-test/session` — inside the API, behind the same password
 or token as everything else — and `olrd` answers with an HttpOnly,
 SameSite=Strict session cookie scoped to `/link-test/`, forgotten by the daemon
-after two hours. This is the pattern the device
-inspection page already uses to embed mitmweb. Reopening the page mints a new
-cookie; a browser that never signed in to this router gets an explanation, not a
-bandwidth source.
+after two hours. This is the pattern the device inspection page already uses to
+embed mitmweb. Reopening the page mints a new cookie; a browser that never
+signed in to this router gets an explanation, not a bandwidth source.
 
 The surface is framed only by this router's own page (`X-Frame-Options:
 SAMEORIGIN`, `Content-Security-Policy: frame-ancestors 'self'`), because the
@@ -55,12 +55,12 @@ on a faster link, and a phone on Wi-Fi usually reports the Wi-Fi rate rather tha
 the wire. Read it as "at least this fast, and stable or not", not as a wire-rate
 certificate.
 
-## iperf3 (sustained, wired)
+## IPERF3 (sustained, wired)
 
-Under **Advanced: iperf3 against this router**, OLR starts a temporary iperf3
-server on a chosen, currently configured LAN IPv4 address (TCP 5201) and shows
-the client commands. Install iperf3 on the router and the other device; the
-other device's terminal displays the results.
+Open Tools, then IPERF3. OLR starts a temporary iperf3 server on a chosen,
+currently configured LAN IPv4 address (TCP 5201) and shows the client commands.
+Install iperf3 on the router and the other device; the other device's terminal
+displays the results.
 
 This is the honest option for a wired link faster than a browser can measure.
 The server stops after two minutes, on request, or when olrd shuts down
@@ -86,8 +86,8 @@ where available; OLR never kills or reconfigures an existing process.
 
 ## Picking between them
 
-Use the browser test for the everyday question — "is this room's Wi-Fi fine?" —
+Use LibreSpeed for the everyday question — "is this room's Wi-Fi fine?" —
 because it needs nothing installed and runs on the device that is asking. Use
-iperf3 when the answer has to be a wire rate: gigabit or faster Ethernet, a
+IPERF3 when the answer has to be a wire rate: gigabit or faster Ethernet, a
 sustained multi-stream load, or a before/after comparison of a cable or a switch
 port.

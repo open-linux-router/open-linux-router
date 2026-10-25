@@ -4,8 +4,9 @@ import { t } from '@/lib/i18n'
 // name is what fits under a 64px mark. A diagnostic that is a named upstream
 // tool takes that project's name instead, and may wear its artwork.
 export const TOOL_DEFINITIONS = [
-  { slug: 'speedtest', tileLabel: 'Speed test', letter: 'S', get label() { return t('Internet speed test') }, get description() { return t('Measure download, upload and latency from the router to the internet.') } },
-  { slug: 'link-test', tileLabel: 'LAN speed test', letter: 'L', get label() { return t('LAN speed test') }, get description() { return t('Measure how fast a device can send and receive data on your local network.') } },
+  { slug: 'speedtest', tileLabel: 'SpeedTest', letter: 'S', label: 'SpeedTest', get description() { return t('Measure download, upload and latency from the router to the internet.') } },
+  { slug: 'librespeed', tileLabel: 'LibreSpeed', letter: 'L', label: 'LibreSpeed', get description() { return t('Measure how fast this device can send and receive data on your local network, in the browser.') } },
+  { slug: 'iperf3', tileLabel: 'IPERF3', letter: 'I', label: 'IPERF3', get description() { return t('Measure sustained throughput between one device and this router; iperf3 must be installed on both ends.') } },
   { slug: 'nat', tileLabel: 'NAT test', letter: 'N', get label() { return t('NAT test') }, get description() { return t('Discover the public UDP address and NAT behavior seen by a STUN server.') } },
   { slug: 'ping', tileLabel: 'Ping', letter: 'P', label: 'Ping a destination', get description() { return t('Check whether a destination responds, how quickly, and with how much packet loss.') } },
   { slug: 'traceroute', tileLabel: 'NextTrace', letter: 'T', get label() { return t('Traceroute') }, get description() { return t('Follow the network hops between this router and a hostname or IP address.') } },

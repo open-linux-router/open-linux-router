@@ -418,10 +418,13 @@ sentences from translated fragments. Keep state decisions independent of copy.
 
 ## Naming and writing
 
-Use familiar tool names and concise task labels. Keep distinctions in the name
-when they help selection: Internet speed test and LAN link test identify different
-measurement boundaries. Preserve established names such as Ping, NAT test and
-Traceroute. Do not invent broad category labels for a single item.
+Use familiar tool names and concise task labels. A diagnostic that is a named
+upstream project takes that project's name, which is why the tools directory
+reads SpeedTest, LibreSpeed and IPERF3 rather than three versions of "speed
+test": the engine is the distinction that helps an operator select one, and each
+of the three measures a different boundary. Preserve established names such as
+Ping, NAT test and Traceroute. Do not invent broad category labels for a single
+item.
 
 Name a state for what it means for the user, not for how it is carried out. The
 IPv6 DNS card on Gateway reads IPv6 disabled, not AAAA filtered: dropping AAAA

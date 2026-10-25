@@ -345,11 +345,11 @@ func (h *HTTP) linkTestLocked(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusUnauthorized)
 	_, _ = io.WriteString(w, `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LAN speed test</title>
+<title>LibreSpeed</title>
 <style>body{font-family:system-ui,sans-serif;margin:3rem auto;max-width:32rem;padding:0 1.5rem;line-height:1.6;color:#222}a{color:#0b5}</style></head>
-<body><h1>LAN speed test</h1>
+<body><h1>LibreSpeed</h1>
 <p>This test is opened from this router's own tools page, which authorizes this browser for it.</p>
-<p><a href="/tools/link-test">Open Tools &rarr; LAN speed test</a></p>
+<p><a href="/tools/librespeed">Open Tools &rarr; LibreSpeed</a></p>
 </body></html>
 `)
 }

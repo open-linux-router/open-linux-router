@@ -8,7 +8,6 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Disclosure } from '@/components/ui/disclosure'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -135,7 +134,7 @@ function TraceView({ trace }: { trace: TraceResult }) {
 export function ToolPage({ tool }: { tool: ToolSlug }) {
   useLocale()
   const definition = TOOL_DEFINITIONS.find(item => item.slug === tool)!
-  const Content = { speedtest: SpeedTest, 'link-test': LinkTest, nat: NATTest, ping: PingTest, traceroute: TracerouteTest }[tool]
+  const Content = { speedtest: SpeedTest, librespeed: LibreSpeed, iperf3: IPERF3, nat: NATTest, ping: PingTest, traceroute: TracerouteTest }[tool]
   return <div className="space-y-8">
     <PageHeading id="tool-title" title={definition.label} />
     <Content key={tool} />
@@ -273,7 +272,7 @@ function SpeedTest() {
   </div>
 }
 
-function LinkTest() {
+function LibreSpeed() {
   useLocale()
   const [granted, setGranted] = useState(false)
   const [grantError, setGrantError] = useState<string | null>(null)
@@ -295,6 +294,37 @@ function LinkTest() {
     requestSession()
   }, [requestSession])
 
+  return <div className="space-y-6">
+    <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
+      <p className="max-w-2xl text-sm text-muted-foreground">{t('Measure the link between this device and the router, in this browser. Nothing has to be installed on either end.')}</p>
+      <p className="mt-2 max-w-2xl text-xs text-muted-foreground">{t('The result describes the path this page was loaded over. This device’s Wi-Fi, browser and processor can cap it before the router’s link does, and a browser test rarely passes about one gigabit.')}</p>
+    </section>
+
+    <section aria-labelledby="librespeed-page" className="panel-surface overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border px-4 py-2.5">
+        <h2 id="librespeed-page" className="text-sm font-medium">{t('Device to router')}</h2>
+        <a className="text-xs underline underline-offset-4" href="/link-test/" target="_blank" rel="noreferrer">{t('Open the test page in a new tab')}</a>
+      </div>
+      {/* The embedded page is a fixed-shape document: 960px holds all of it at
+          desktop widths, so the frame needs no scrollbar of its own. Below sm
+          the viewport is the honest bound and the frame scrolls instead. */}
+      {granted
+        ? <iframe title="LibreSpeed" src="/link-test/" className="h-[94dvh] w-full border-0 bg-[#0e0720] sm:h-[960px]" />
+        : grantError
+          ? <div className="p-4 sm:p-6"><Alert variant="destructive">
+              <AlertTitle>{t('LibreSpeed is unavailable')}</AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p className="break-words">{grantError}</p>
+                <Button variant="secondary" size="sm" onClick={() => { setGrantError(null); requestSession() }}>{t('Try again')}</Button>
+              </AlertDescription>
+            </Alert></div>
+          : <div role="status" className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" aria-hidden />{t('Loading the test page…')}</div>}
+    </section>
+  </div>
+}
+
+function IPERF3() {
+  useLocale()
   const lan = useQuery({
     queryKey: ['tools', 'lan-test'],
     queryFn: () => api.get<LANTest>('/api/tools/lan-test'),
@@ -330,75 +360,46 @@ function LinkTest() {
       await navigator.clipboard.writeText(command)
       setLANCopied(command)
     } catch {
-      setLANError('Could not copy automatically. Select the command to copy it.')
+      setLANError(t('Could not copy automatically. Select the command to copy it.'))
     }
   }
 
   return <div className="space-y-6">
     <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
-      <p className="max-w-2xl text-sm text-muted-foreground">{t('Measure the link between this device and the router, in this browser. Nothing has to be installed on either end.')}</p>
-      <p className="mt-2 max-w-2xl text-xs text-muted-foreground">{t('The result describes the path this page was loaded over. This device’s Wi-Fi, browser and processor can cap it before the router’s link does, and a browser test rarely passes about one gigabit.')}</p>
-    </section>
-
-    <section aria-labelledby="link-test-page" className="panel-surface overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border px-4 py-2.5">
-        <h2 id="link-test-page" className="text-sm font-medium">{t('Device to router')}</h2>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="text-xs text-muted-foreground">{t('Measured by LibreSpeed')}</span>
-          <a className="text-xs underline underline-offset-4" href="/link-test/" target="_blank" rel="noreferrer">{t('Open the test page in a new tab')}</a>
+      <p className="max-w-2xl text-sm text-muted-foreground">{t('iperf3 measures sustained TCP streams with its own client on the other device. It is the honest choice for a wired link faster than a browser can measure, and it needs iperf3 installed on the router and on that device. It tests the link and the router’s own receive/send capacity, not LAN-to-WAN forwarding or NAT.')}</p>
+      {lan.isError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('LAN addresses unavailable')}</AlertTitle><AlertDescription>{lan.error.message}</AlertDescription></Alert>}
+      {lan.data && <div className="mt-5 space-y-4">
+        <div className="max-w-sm space-y-1.5">
+          <Label htmlFor="lan-address">{t('Router LAN address')}</Label>
+          <Select value={lan.data.address || selectedLAN} onValueChange={value => setLANAddress(value ?? '')} disabled={!!lan.data.address || lanBusy || !addresses.length}>
+            <SelectTrigger id="lan-address"><SelectValue placeholder={t('No configured LAN IPv4 address')} /></SelectTrigger>
+            <SelectContent>{addresses.map(address => <SelectItem key={address} value={address}>{address}</SelectItem>)}</SelectContent>
+          </Select>
         </div>
-      </div>
-      {/* The embedded page is a fixed-shape document: 960px holds all of it at
-          desktop widths, so the frame needs no scrollbar of its own. Below sm
-          the viewport is the honest bound and the frame scrolls instead. */}
-      {granted
-        ? <iframe title={t('LAN speed test')} src="/link-test/" className="h-[94dvh] w-full border-0 bg-[#0e0720] sm:h-[960px]" />
-        : grantError
-          ? <div className="p-4 sm:p-6"><Alert variant="destructive">
-              <AlertTitle>{t('The LAN speed test is unavailable')}</AlertTitle>
-              <AlertDescription className="space-y-3">
-                <p className="break-words">{grantError}</p>
-                <Button variant="secondary" size="sm" onClick={() => { setGrantError(null); requestSession() }}>{t('Try again')}</Button>
-              </AlertDescription>
-            </Alert></div>
-          : <div role="status" className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" aria-hidden />{t('Loading the test page…')}</div>}
-    </section>
-
-    <section className="panel-surface p-4 sm:p-6">
-      <Disclosure summary={t('Advanced: iperf3 against this router')}>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{t('iperf3 measures sustained TCP streams with its own client on the other device. It is the honest choice for a wired link faster than a browser can measure, and it needs iperf3 installed on the router and on that device. It tests the link and the router’s own receive/send capacity, not LAN-to-WAN forwarding or NAT.')}</p>
-        {lan.isError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('LAN addresses unavailable')}</AlertTitle><AlertDescription>{lan.error.message}</AlertDescription></Alert>}
-        {lan.data && <div className="mt-4 space-y-4">
-          <div className="max-w-sm space-y-1.5">
-            <Label htmlFor="lan-address">{t('Router LAN address')}</Label>
-            <Select value={lan.data.address || selectedLAN} onValueChange={value => setLANAddress(value ?? '')} disabled={!!lan.data.address || lanBusy || !addresses.length}>
-              <SelectTrigger id="lan-address"><SelectValue placeholder={t('No configured LAN IPv4 address')} /></SelectTrigger>
-              <SelectContent>{addresses.map(address => <SelectItem key={address} value={address}>{address}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          {conflict && !lan.data.address && <Alert variant="destructive"><AlertTitle>Port unavailable</AlertTitle><AlertDescription>{conflict}</AlertDescription></Alert>}
-          {external && !lan.data.address && <p role="status" className="text-sm text-muted-foreground">{t('Existing iperf3 server:')} {external}. OLR did not start it and will not stop it.</p>}
-          {(!external || lan.data.address) && <Button onClick={() => changeLAN(!lan.data?.address)} disabled={lanBusy || (!lan.data.address && (!selectedLAN || !!conflict))} variant={lan.data.address ? 'secondary' : 'primary'}>
-            {lanBusy && <LoaderCircle className="animate-spin" aria-hidden />}
-            {lan.data.address ? 'Stop server' : 'Start server'}
-          </Button>}
-          {testAddress && <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
-            <p className="text-sm font-medium">{lan.data.address ? `OLR server listening on ${testAddress}:${lan.data.port} until ${new Date(lan.data.expires_at!).toLocaleTimeString()}` : `Existing server on ${testAddress}:${lan.data.port}; its lifetime is managed outside OLR`}</p>
-            <p className="text-xs text-muted-foreground">{t('Anyone able to reach that address and port can use the server while it runs, and a configured firewall may need a temporary TCP 5201 opening. Run these on the other device’s terminal; the first sends data to OLR, the second makes OLR send data back.')}</p>
-            {[
-              `iperf3 -c ${testAddress} -P 4 -t 10`,
-              `iperf3 -c ${testAddress} -P 4 -t 10 -R`,
-            ].map((command, index) => <div key={command} className="space-y-1">
-              <p className="text-xs font-medium">{index === 0 ? 'Device → router' : 'Router → device'}</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-background px-3 py-2 text-sm">{command}</code>
-                <Button variant="secondary" size="sm" onClick={() => copyLAN(command)}><Copy aria-hidden />{lanCopied === command ? t('Copied') : t('Copy')}</Button>
-              </div>
-            </div>)}
-          </div>}
+        {conflict && !lan.data.address && <Alert variant="destructive"><AlertTitle>{t('Port unavailable')}</AlertTitle><AlertDescription>{conflict}</AlertDescription></Alert>}
+        {external && !lan.data.address && <p role="status" className="text-sm text-muted-foreground">{t('Existing iperf3 server:')} {external}. OLR did not start it and will not stop it.</p>}
+        {(!external || lan.data.address) && <Button onClick={() => changeLAN(!lan.data?.address)} disabled={lanBusy || (!lan.data.address && (!selectedLAN || !!conflict))} variant={lan.data.address ? 'secondary' : 'primary'}>
+          {lanBusy && <LoaderCircle className="animate-spin" aria-hidden />}
+          {lan.data.address ? t('Stop server') : t('Start server')}
+        </Button>}
+        {testAddress && <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
+          <p className="text-sm font-medium">{lan.data.address
+            ? t('OLR is listening on {address} until {time}', { address: `${testAddress}:${lan.data.port}`, time: new Date(lan.data.expires_at!).toLocaleTimeString() })
+            : t('An existing server is running on {address}; its lifetime is managed outside OLR', { address: `${testAddress}:${lan.data.port}` })}</p>
+          <p className="text-xs text-muted-foreground">{t('Anyone able to reach that address and port can use the server while it runs, and a configured firewall may need a temporary TCP 5201 opening. Run these on the other device’s terminal; the first sends data to OLR, the second makes OLR send data back.')}</p>
+          {[
+            `iperf3 -c ${testAddress} -P 4 -t 10`,
+            `iperf3 -c ${testAddress} -P 4 -t 10 -R`,
+          ].map((command, index) => <div key={command} className="space-y-1">
+            <p className="text-xs font-medium">{index === 0 ? t('Device → router') : t('Router → device')}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-background px-3 py-2 text-sm">{command}</code>
+              <Button variant="secondary" size="sm" onClick={() => copyLAN(command)}><Copy aria-hidden />{lanCopied === command ? t('Copied') : t('Copy')}</Button>
+            </div>
+          </div>)}
         </div>}
-        {lanError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('Link test unavailable')}</AlertTitle><AlertDescription>{lanError}</AlertDescription></Alert>}
-      </Disclosure>
+      </div>}
+      {lanError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('IPERF3 is unavailable')}</AlertTitle><AlertDescription>{lanError}</AlertDescription></Alert>}
     </section>
   </div>
 }

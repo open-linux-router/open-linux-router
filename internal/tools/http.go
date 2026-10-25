@@ -76,7 +76,7 @@ func (h *HTTP) Routes() []core.Route {
 		{Method: "GET", Path: "/lan-test", Tool: "show lan test", Summary: "List LAN addresses and the current temporary iperf3 server session.", Handler: h.lanStatus},
 		{Method: "POST", Path: "/lan-test", Mutating: true, Summary: "Start a temporary iperf3 server bound to a configured LAN address; consumes router resources when a client connects.", Handler: h.startLAN},
 		{Method: "DELETE", Path: "/lan-test", Mutating: true, Summary: "Stop the temporary iperf3 server.", Handler: h.stopLAN},
-		{Method: "POST", Path: "/link-test/session", Mutating: true, Summary: "Authorize this browser to run the embedded LAN speed test page; the cookie it sets is not an API credential.", Handler: h.linkTestSession},
+		{Method: "POST", Path: "/link-test/session", Mutating: true, Summary: "Authorize this browser to run the embedded LibreSpeed device-to-router test; the cookie it sets is not an API credential.", Handler: h.linkTestSession},
 		{Method: "POST", Path: "/ping", Mutating: true, Summary: "Send four ICMP echo requests from this router to a hostname or IP address and report packet loss and latency.", Handler: h.ping},
 		{Method: "POST", Path: "/traceroute", Mutating: true, Summary: "Trace the route from this router to a domain or IP using nexttrace; sends network probes.", Handler: h.traceroute},
 	}
