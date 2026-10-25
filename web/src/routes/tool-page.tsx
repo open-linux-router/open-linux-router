@@ -1,13 +1,14 @@
 import { t, useLocale } from '@/lib/i18n'
 import { Activity, ArrowDown, ArrowUp, Copy, LoaderCircle, Radio, Route } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PageHeading } from '@/components/layout/page-heading'
 import { MetricValue } from '@/components/ui/metric-value'
 import { TOOL_DEFINITIONS, type ToolSlug } from '@/features/tools/catalog'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/disclosure'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -274,6 +275,26 @@ function SpeedTest() {
 
 function LinkTest() {
   useLocale()
+  const [granted, setGranted] = useState(false)
+  const [grantError, setGrantError] = useState<string | null>(null)
+  const asked = useRef(false)
+  const grant = useMutation({
+    mutationFn: () => api.post<void>('/api/tools/link-test/session'),
+    onSuccess: () => setGranted(true),
+    onError: error => setGrantError(error instanceof Error ? error.message : String(error)),
+  })
+  const requestSession = grant.mutate
+  // The test page is its own document, so it takes its credential as a cookie
+  // rather than as the header this page puts on every API call. Asking for one
+  // on arrival is what makes the embedded test a single click: the operator
+  // signed in here, so the grant is scoped to the test page and dies when the
+  // browser session does.
+  useEffect(() => {
+    if (asked.current) return
+    asked.current = true
+    requestSession()
+  }, [requestSession])
+
   const lan = useQuery({
     queryKey: ['tools', 'lan-test'],
     queryFn: () => api.get<LANTest>('/api/tools/lan-test'),
@@ -313,17 +334,41 @@ function LinkTest() {
     }
   }
 
-
   return <div className="space-y-6">
-      <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
-        <div className="flex items-start gap-4">
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Run iperf3 on another device to measure its connection to this router. This tests the link and router's own receive/send capacity, not LAN-to-WAN forwarding or NAT.</p>
-          </div>
+    <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
+      <p className="max-w-2xl text-sm text-muted-foreground">{t('Measure the link between this device and the router, in this browser. Nothing has to be installed on either end.')}</p>
+      <p className="mt-2 max-w-2xl text-xs text-muted-foreground">{t('The result describes the path this page was loaded over. This device’s Wi-Fi, browser and processor can cap it before the router’s link does, and a browser test rarely passes about one gigabit.')}</p>
+    </section>
+
+    <section aria-labelledby="link-test-page" className="panel-surface overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border px-4 py-2.5">
+        <h2 id="link-test-page" className="text-sm font-medium">{t('Device to router')}</h2>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="text-xs text-muted-foreground">{t('Measured by LibreSpeed')}</span>
+          <a className="text-xs underline underline-offset-4" href="/link-test/" target="_blank" rel="noreferrer">{t('Open the test page in a new tab')}</a>
         </div>
-        <p className="mt-4 text-sm text-muted-foreground">Install iperf3 on both devices. OLR starts a temporary server on TCP 5201 for two minutes, or detects an existing iperf3 server without taking ownership of it. Anyone able to reach this address and port can connect during that time. A configured firewall may require a temporary TCP 5201 opening.</p>
+      </div>
+      {/* The embedded page is a fixed-shape document: 960px holds all of it at
+          desktop widths, so the frame needs no scrollbar of its own. Below sm
+          the viewport is the honest bound and the frame scrolls instead. */}
+      {granted
+        ? <iframe title={t('LAN speed test')} src="/link-test/" className="h-[94dvh] w-full border-0 bg-[#0e0720] sm:h-[960px]" />
+        : grantError
+          ? <div className="p-4 sm:p-6"><Alert variant="destructive">
+              <AlertTitle>{t('The LAN speed test is unavailable')}</AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p className="break-words">{grantError}</p>
+                <Button variant="secondary" size="sm" onClick={() => { setGrantError(null); requestSession() }}>{t('Try again')}</Button>
+              </AlertDescription>
+            </Alert></div>
+          : <div role="status" className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" aria-hidden />{t('Loading the test page…')}</div>}
+    </section>
+
+    <section className="panel-surface p-4 sm:p-6">
+      <Disclosure summary={t('Advanced: iperf3 against this router')}>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{t('iperf3 measures sustained TCP streams with its own client on the other device. It is the honest choice for a wired link faster than a browser can measure, and it needs iperf3 installed on the router and on that device. It tests the link and the router’s own receive/send capacity, not LAN-to-WAN forwarding or NAT.')}</p>
         {lan.isError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('LAN addresses unavailable')}</AlertTitle><AlertDescription>{lan.error.message}</AlertDescription></Alert>}
-        {lan.data && <div className="mt-5 space-y-4">
+        {lan.data && <div className="mt-4 space-y-4">
           <div className="max-w-sm space-y-1.5">
             <Label htmlFor="lan-address">{t('Router LAN address')}</Label>
             <Select value={lan.data.address || selectedLAN} onValueChange={value => setLANAddress(value ?? '')} disabled={!!lan.data.address || lanBusy || !addresses.length}>
@@ -339,7 +384,7 @@ function LinkTest() {
           </Button>}
           {testAddress && <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
             <p className="text-sm font-medium">{lan.data.address ? `OLR server listening on ${testAddress}:${lan.data.port} until ${new Date(lan.data.expires_at!).toLocaleTimeString()}` : `Existing server on ${testAddress}:${lan.data.port}; its lifetime is managed outside OLR`}</p>
-            <p className="text-xs text-muted-foreground">Run these on the other device's terminal. The first sends data to OLR; the second makes OLR send data back. Results print in that terminal.</p>
+            <p className="text-xs text-muted-foreground">{t('Anyone able to reach that address and port can use the server while it runs, and a configured firewall may need a temporary TCP 5201 opening. Run these on the other device’s terminal; the first sends data to OLR, the second makes OLR send data back.')}</p>
             {[
               `iperf3 -c ${testAddress} -P 4 -t 10`,
               `iperf3 -c ${testAddress} -P 4 -t 10 -R`,
@@ -353,7 +398,8 @@ function LinkTest() {
           </div>}
         </div>}
         {lanError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('Link test unavailable')}</AlertTitle><AlertDescription>{lanError}</AlertDescription></Alert>}
-      </section>
+      </Disclosure>
+    </section>
   </div>
 }
 

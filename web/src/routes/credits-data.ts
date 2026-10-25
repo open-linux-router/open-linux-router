@@ -37,6 +37,7 @@ export const CREDITS: readonly Credit[] = [
   { name: 'cloudflare-speed-cli', version: 'v1.0.10', url: 'https://github.com/kavehtehrani/cloudflare-speed-cli', use: 'Reference speed transfer for network quality' },
   { name: 'speedtest-go', version: 'v1.8.3', url: 'https://github.com/showwin/speedtest-go', use: 'Selectable-server internet speed test' },
   { name: 'NextTrace', version: 'unpinned', url: 'https://github.com/nxtrace/NTrace-core', use: 'Traceroute and route maps', logo: '/tool-logos/nexttrace.webp' },
-  { name: 'iperf3', version: 'distro', url: 'https://software.es.net/iperf/', use: 'LAN throughput test' },
+  { name: 'LibreSpeed', version: '6.3.1', url: 'https://github.com/librespeed/speedtest', use: 'Browser-based LAN speed test (LGPLv3)' },
+  { name: 'iperf3', version: 'distro', url: 'https://software.es.net/iperf/', use: 'Sustained wired throughput test' },
   { name: 'modernc.org/sqlite', version: 'v1.60.1', url: 'https://sqlite.org/', use: 'Runtime history and traffic samples', logo: '/credit-logos/sqlite.svg' },
 ]

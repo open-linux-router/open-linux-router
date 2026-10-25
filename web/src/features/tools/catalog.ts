@@ -5,7 +5,7 @@ import { t } from '@/lib/i18n'
 // tool takes that project's name instead, and may wear its artwork.
 export const TOOL_DEFINITIONS = [
   { slug: 'speedtest', tileLabel: 'Speed test', letter: 'S', get label() { return t('Internet speed test') }, get description() { return t('Measure download, upload and latency from the router to the internet.') } },
-  { slug: 'link-test', tileLabel: 'LAN link test', letter: 'L', get label() { return t('Device-to-router link test') }, get description() { return t('Measure how fast a device can send and receive data on your local network.') } },
+  { slug: 'link-test', tileLabel: 'LAN speed test', letter: 'L', get label() { return t('LAN speed test') }, get description() { return t('Measure how fast a device can send and receive data on your local network.') } },
   { slug: 'nat', tileLabel: 'NAT test', letter: 'N', get label() { return t('NAT test') }, get description() { return t('Discover the public UDP address and NAT behavior seen by a STUN server.') } },
   { slug: 'ping', tileLabel: 'Ping', letter: 'P', label: 'Ping a destination', get description() { return t('Check whether a destination responds, how quickly, and with how much packet loss.') } },
   { slug: 'traceroute', tileLabel: 'NextTrace', letter: 'T', get label() { return t('Traceroute') }, get description() { return t('Follow the network hops between this router and a hostname or IP address.') } },

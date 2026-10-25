@@ -164,4 +164,7 @@ func (h *HTTP) Close() {
 		h.lan = nil
 	}
 	h.lanMu.Unlock()
+	h.linkMu.Lock()
+	h.linkViewers = nil
+	h.linkMu.Unlock()
 }
