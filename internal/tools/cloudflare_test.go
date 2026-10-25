@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,8 +19,11 @@ func TestCloudflareResultAndScore(t *testing.T) {
 		t.Fatalf("result = %+v, error = %v", speed, err)
 	}
 	categories, overall := scoreQuality(QualitySnapshot{Speed: &speed}, time.Now())
+	// The weights are applied in float64, so the sum of 0.7*90 and 0.3*80 lands
+	// one ulp under 87 and an exact comparison fails on an answer that is right.
 	want := 90*.7 + 80*.3
-	if categories[0].Score == nil || *categories[0].Score != want || overall.Score == nil || *overall.Score != want {
+	const tolerance = 1e-9
+	if categories[0].Score == nil || math.Abs(*categories[0].Score-want) > tolerance || overall.Score == nil || math.Abs(*overall.Score-want) > tolerance {
 		t.Fatalf("Cloudflare throughput did not contribute to score: %+v, %+v", categories[0], overall)
 	}
 	for _, input := range []string{`{}`, `null`, `{"download":{"mbps":100}}`, `{"download":{"mbps":0},"upload":{"mbps":10}}`, `{"download":{"mbps":-1},"upload":{"mbps":10}}`, `{"download":{"mbps":1e999},"upload":{"mbps":10}}`, `not json`} {
