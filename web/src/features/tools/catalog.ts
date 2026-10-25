@@ -6,7 +6,9 @@ import { t } from '@/lib/i18n'
 export const TOOL_DEFINITIONS = [
   { slug: 'speedtest', tileLabel: 'SpeedTest', letter: 'S', label: 'SpeedTest', get description() { return t('Measure download, upload and latency from the router to the internet.') } },
   { slug: 'librespeed', tileLabel: 'LibreSpeed', letter: 'L', label: 'LibreSpeed', get description() { return t('Measure how fast this device can send and receive data on your local network, in the browser.') } },
-  { slug: 'iperf3', tileLabel: 'iPerf3', letter: 'I', label: 'iPerf3', get description() { return t('Measure sustained throughput between one device and this router; iperf3 must be installed on both ends.') } },
+  // The mark is the project's own lowercase initial: the tool is iPerf3, and a
+  // capital I in the tile would be the only place the name is spelled wrong.
+  { slug: 'iperf3', tileLabel: 'iPerf3', letter: 'i', label: 'iPerf3', get description() { return t('Measure sustained throughput between one device and this router; iperf3 must be installed on both ends.') } },
   { slug: 'nat', tileLabel: 'NAT test', letter: 'N', get label() { return t('NAT test') }, get description() { return t('Discover the public UDP address and NAT behavior seen by a STUN server.') } },
   { slug: 'ping', tileLabel: 'Ping', letter: 'P', label: 'Ping a destination', get description() { return t('Check whether a destination responds, how quickly, and with how much packet loss.') } },
   { slug: 'traceroute', tileLabel: 'NextTrace', letter: 'T', get label() { return t('Traceroute') }, get description() { return t('Follow the network hops between this router and a hostname or IP address.') } },
