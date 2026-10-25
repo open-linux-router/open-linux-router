@@ -39,6 +39,8 @@ import {
 import type { VendorKey } from '@/lib/api-types'
 import type { DeviceCategory } from '@/lib/config-types'
 
+import { type BrandGroup, brandGroups } from '@/features/devices/brand-groups'
+
 import accessPoint from '@/assets/device-icons/accesspoint.webp'
 import aircon from '@/assets/device-icons/aircon.webp'
 import airer from '@/assets/device-icons/airer.webp'
@@ -252,8 +254,9 @@ const IMAGES: Partial<Record<IconKey, string>> = {
   'desktop/ikoolcorer2': ikoolcoreR2,
   'desktop/ikoolcorer2max': ikoolcoreR2Max,
 
-  // In the order the picker shows them: the makers most homes have several
-  // things from first, then one-product vendors, then the cupboard.
+  // Grouped by maker in the picker, not listed flat — see BRAND_GROUPS below.
+  // The order here still matters: it breaks ties between brands holding the
+  // same number of pictures, and it is the order within each brand's section.
   'apple/phone': applePhone,
   'apple/tablet': appleTablet,
   'apple/laptop': appleLaptop,
@@ -699,18 +702,90 @@ export interface IconChoiceTile {
 }
 
 /**
- * Every vendor picture that has been drawn, for the picker. Derived from
+ * What a maker is called, for the heading over their pictures.
+ *
+ * Total by construction over VendorKey, for the same reason LABELS is total
+ * over DeviceCategory: it is the prompt for a name, not a place to remember one.
+ * A brand is a proper noun and is *not* translated — Apple is Apple in a Chinese
+ * UI, and the zh-CN catalogue has no entry for it — but it still has to be
+ * spelled here rather than derived from the slug, because a slug is a filename
+ * and its shape leaks: "Tp-link", "Raspberry-pi", "Philips-hue". Deriving a
+ * name from a key is how the picker used to caption a vendor's fallback tile,
+ * and it was wrong for exactly the makers whose names have a hyphen in them.
+ */
+const BRAND_NAMES: Record<VendorKey, string> = {
+  acer: 'Acer',
+  amazon: 'Amazon',
+  apple: 'Apple',
+  asus: 'Asus',
+  brother: 'Brother',
+  canon: 'Canon',
+  cisco: 'Cisco',
+  dell: 'Dell',
+  epson: 'Epson',
+  espressif: 'Espressif',
+  google: 'Google',
+  hp: 'HP',
+  hpe: 'HPE',
+  huawei: 'Huawei',
+  intel: 'Intel',
+  lenovo: 'Lenovo',
+  lg: 'LG',
+  microsoft: 'Microsoft',
+  mikrotik: 'MikroTik',
+  netgear: 'Netgear',
+  nintendo: 'Nintendo',
+  'philips-hue': 'Philips Hue',
+  qnap: 'QNAP',
+  'raspberry-pi': 'Raspberry Pi',
+  roku: 'Roku',
+  samsung: 'Samsung',
+  sonos: 'Sonos',
+  sony: 'Sony',
+  synology: 'Synology',
+  'tp-link': 'TP-Link',
+  ubiquiti: 'Ubiquiti',
+  xiaomi: 'Xiaomi',
+  zyxel: 'Zyxel',
+}
+
+/**
+ * Every vendor picture that has been drawn, as picker tiles. Derived from
  * IMAGES rather than listed, so a new `huawei/phone` shows up in the picker
  * the moment its line is added there. A vendor's variant — the Mac mini — is
  * one of these too: it is Apple's, not every desktop's.
+ *
+ * Not exported: the picker's unit is a brand section, not a tile, and a flat
+ * list is exactly the thing BRAND_GROUPS exists to stop it from rendering.
  */
-export const BRAND_CHOICES: IconChoiceTile[] = (Object.keys(IMAGES) as IconKey[])
+const BRAND_TILES: IconChoiceTile[] = (Object.keys(IMAGES) as IconKey[])
   .filter((key) => key.includes('/') && !(key.split('/')[0] in LABELS))
   .map((key) => {
-    const [vendor, category] = key.split('/') as [string, DeviceCategory]
-    const name = vendor.charAt(0).toUpperCase() + vendor.slice(1)
-    return { icon: key, category, label: BRAND_LABELS[key] ?? `${name} ${LABELS[category].toLowerCase()}` }
+    const [vendor, category] = key.split('/') as [VendorKey, DeviceCategory]
+    return {
+      icon: key,
+      category,
+      label: BRAND_LABELS[key] ?? `${BRAND_NAMES[vendor]} ${LABELS[category].toLowerCase()}`,
+    }
   })
+
+/**
+ * The brand sections of the picker, in the order they are shown: the makers
+ * with several pictures each, biggest first, then one section for the makers
+ * with a single picture.
+ *
+ * Derived, so adding a picture is still one file and one line in IMAGES. The
+ * rule — and why one picture does not earn a heading — is in brand-groups.ts.
+ *
+ * The last section's label is a message rather than a brand, which is why it is
+ * the one label the picker passes through `t()`; the vendor names it does not.
+ */
+export const BRAND_GROUPS: BrandGroup<IconChoiceTile>[] = brandGroups(
+  BRAND_TILES,
+  (tile) => tile.icon.split('/')[0],
+  (vendor) => BRAND_NAMES[vendor as VendorKey] ?? vendor,
+  'Other brands',
+)
 
 const VARIANT_LABELS: Partial<Record<VariantKey, string>> = {
   'nas/4bay': '4-bay NAS',

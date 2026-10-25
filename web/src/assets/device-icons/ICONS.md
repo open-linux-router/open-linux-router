@@ -55,6 +55,26 @@ belong to — a brandless variant is tier 1, Apple's is tier 1.5 — and changed
 from its base in exactly one respect: the NAS set is one prompt with the bay
 count swapped, so the family reads as one product line.
 
+**How the picker arranges them.** Vendor pictures are grouped by maker, one
+section each — Apple, Samsung, Huawei — instead of one flat grid of every
+vendor tile. The grouping is derived from the artwork in `IMAGES`, not listed
+beside it, in `brandGroups()` in `features/devices/brand-groups.ts`:
+
+- A maker with **two or more pictures** gets its own section, headed with the
+  maker's name. The name comes from `BRAND_NAMES`, never from the slug: a slug
+  is a filename, and deriving a caption from one produced "Tp-link".
+- A maker with **one picture** does not earn a heading. A dozen headings over a
+  dozen single tiles is longer to scan than the flat grid it replaced, so those
+  tiles — which already name their maker ("Brother printer") — collect under a
+  final *Other brands* section.
+- Sections are ordered by **how many pictures they hold**, ties in artwork
+  order, so that adding a maker's second picture promotes them without anyone
+  editing a list.
+
+Adding a picture is therefore still one file and one line in `IMAGES`. The tile
+lands under its maker if they have a section, in *Other brands* if they do not,
+and a maker leaves that bucket the moment they hold two.
+
 **Tier 2 — model image.** One per specific product, e.g. `synology/ds224plus`,
 overriding its vendor and category icons. **Never text-to-image**: a prompt for
 "Synology DS224+" yields a convincing two-bay NAS that is not a DS224+, and an

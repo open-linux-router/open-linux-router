@@ -777,7 +777,7 @@ export const zhCN: Record<string, string> = {
   'Search logos': '搜索标志',
   'Choose logo': '选择标志',
   'Detect automatically': '自动识别',
-  'Brands': '品牌',
+  'Other brands': '其他品牌',
   'Computing': '计算设备',
   'Appliances': '家用电器',
   'Upload image': '上传图片',

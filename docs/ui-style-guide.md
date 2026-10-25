@@ -275,7 +275,11 @@ monospace for addresses, commands and configuration.
 
 Device imagery identifies device categories. Device icon selection also offers
 theSVG search above the built-in categories,
-using the existing image tiles and selected state. Render chosen logos in the
+using the existing image tiles and selected state. Vendor pictures below them
+are grouped one labelled section per maker — Apple, Samsung, Huawei — rather
+than shown in a single grid; makers holding one picture share a final *Other
+brands* section, and a maker's section leaves that bucket on their second
+picture. See `web/src/assets/device-icons/ICONS.md`. Render chosen logos in the
 same muted tile as operating-system marks throughout device views. A device that
 dialed in wears the Way in badge in the lower-right corner of that picture — the
 same badge in the map's band card and on its own page — because the picture is

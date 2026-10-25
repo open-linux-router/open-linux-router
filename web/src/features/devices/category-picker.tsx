@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import thesvgSlugs from '@/features/gateway/thesvg-slugs.json'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import {
-  BRAND_CHOICES,
+  BRAND_GROUPS,
   CATEGORY_GROUPS,
   OS_KEYS,
   OS_MARKS,
@@ -29,6 +29,11 @@ export interface IconChoice {
  * choosing "nas" from a list of twenty-odd words to find out what it looks like
  * is a guess-and-check loop. Showing the pictures makes the choice the same
  * shape as the result.
+ *
+ * Vendor pictures are grouped by maker, one section each, instead of being
+ * listed in one grid: someone looking for the phone they own is looking for
+ * Apple, not for the thirty-first tile. Which makers get a heading is derived
+ * from the artwork rather than decided here — see BRAND_GROUPS.
  *
  * Built-in tiles and library logos preserve these distinctions:
  *
@@ -130,18 +135,20 @@ export function CategoryPicker({
         </Section>
       ))}
 
-      <Section label={t('Brands')}>
-        {BRAND_CHOICES.map((choice) => (
-          <Tile
-            key={choice.icon}
-            label={choice.label}
-            selected={value.icon === choice.icon}
-            onClick={() => onChange({ category: choice.category, icon: choice.icon })}
-          >
-            <DeviceIcon icon={choice.icon} category={choice.category} size="md" />
-          </Tile>
-        ))}
-      </Section>
+      {BRAND_GROUPS.map((group) => (
+        <Section key={group.label} label={t(group.label)}>
+          {group.choices.map((choice) => (
+            <Tile
+              key={choice.icon}
+              label={choice.label}
+              selected={value.icon === choice.icon}
+              onClick={() => onChange({ category: choice.category, icon: choice.icon })}
+            >
+              <DeviceIcon icon={choice.icon} category={choice.category} size="md" />
+            </Tile>
+          ))}
+        </Section>
+      ))}
 
       <Section label={t('Operating system')}>
         {OS_KEYS.map((os) => (
