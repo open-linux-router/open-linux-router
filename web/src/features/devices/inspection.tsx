@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Settings } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
+import { ClientQueries } from '@/features/dns/client-queries'
+import { SiteActivity } from '@/features/devices/site-activity'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -94,9 +96,23 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
           <a href={caURL} target="_blank" rel="noreferrer" className="break-all text-sm text-primary underline">{t('Open setup guide')}</a>
         </DialogContent>
       </Dialog>
-      {mine && (viewerReady
-        ? <iframe title={t('Full request and response inspection')} src="/inspection-web/" className="h-[75vh] min-h-[480px] w-full rounded border bg-white" />
-        : <div className="h-[75vh] min-h-[480px] text-sm text-muted-foreground">{t('Opening the inspection viewer…')}</div>)}
+      {/* Three sections, one switch. The chart is the week before this session,
+          DNS is where the names in it came from, and Connections is the content
+          the session can see. Everything below only exists while it is on. */}
+      {mine && <div className="border-t">
+        <h3 className="px-4 pt-4 text-sm font-medium sm:px-6">{t('Activity')}</h3>
+        <SiteActivity addresses={ipv4} />
+      </div>}
+      {mine && <div className="border-t">
+        <h3 className="px-4 pt-4 text-sm font-medium sm:px-6">{t('DNS queries')}</h3>
+        <ClientQueries addresses={ipv4} defaultOn />
+      </div>}
+      {mine && <div className="border-t pt-4">
+        <h3 className="px-4 pb-3 text-sm font-medium sm:px-6">{t('Connections')}</h3>
+        {viewerReady
+          ? <iframe title={t('Full request and response inspection')} src="/inspection-web/" className="h-[75vh] min-h-[480px] w-full rounded border bg-white" />
+          : <div className="px-4 pb-4 text-sm text-muted-foreground sm:px-6">{t('Opening the inspection viewer…')}</div>}
+      </div>}
     </div>
   </section>
 }

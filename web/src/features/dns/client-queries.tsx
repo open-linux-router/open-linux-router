@@ -25,9 +25,11 @@ import { useDnsConfig, useDnsQueries } from '@/features/dns/queries'
  * "the log is off", "the resolver is down" and "nothing matched" are three
  * different things to go and do.
  */
-export function ClientQueries({ addresses }: { addresses: string[] }) {
+export function ClientQueries({ addresses, defaultOn = false }: { addresses: string[]; defaultOn?: boolean }) {
   useLocale()
-  const [inspection, setInspection] = useState(false)
+  // defaultOn is for the one caller that owns the surrounding switch: the
+  // device page's Inspection, where this card is one of its three sections.
+  const [inspection, setInspection] = useState(defaultOn)
   const [searchOpen, setSearchOpen] = useState(false)
   const [filter, setFilter] = useState('')
   const searchInput = useRef<HTMLInputElement>(null)

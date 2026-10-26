@@ -692,6 +692,9 @@ func run(args []string) error {
 		}
 	}
 	inspector := &inspection.Service{Enabled: opts.root == "", Dir: filepath.Join(opts.root, "/var/lib/open-linux-router/inspection")}
+	// The chart above the session covers the days before it starts, so this
+	// sampler runs for as long as olrd does rather than for a session.
+	inspector.Activity = inspection.NewActivity(inspection.Flows, inspectionNames(dnsApplier.Observer))
 	inspector.ExitMark = func(mac string) (uint32, error) {
 		cfg, err := gatewayApplier.Load()
 		if err != nil {
@@ -1022,6 +1025,7 @@ func run(args []string) error {
 	}()
 	go latency.Run(ctx)
 	go world.Run(ctx)
+	go inspector.Activity.Run(ctx)
 	activityDone := make(chan struct{})
 	activityCtx, stopActivity := context.WithCancel(ctx)
 	go func() {

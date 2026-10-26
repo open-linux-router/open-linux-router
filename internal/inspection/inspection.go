@@ -4,6 +4,7 @@ package inspection
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -70,6 +71,9 @@ type Status struct {
 	ExitRouted    bool      `json:"exit_routed"`
 }
 
+// Flows is the platform's conntrack reader, for callers that own the sampler.
+func Flows(ctx context.Context) ([]Flow, error) { return readFlows(ctx) }
+
 type Service struct {
 	Enabled bool
 	Dir     string
@@ -77,6 +81,9 @@ type Service struct {
 	ExitMark func(string) (uint32, error)
 	mu       sync.Mutex
 	session  *session
+	// Activity is the per-site series the device page draws above the session.
+	// Nil means this build cannot observe, and the endpoint says so.
+	Activity *Activity
 }
 
 type session struct {
@@ -94,6 +101,7 @@ type session struct {
 
 func (s *Service) Routes() []core.Route {
 	return []core.Route{
+		{Method: "GET", Path: "/activity", Tool: "show activity", Summary: "Show per-site traffic for one device over the retained week.", Handler: s.activity},
 		{Method: "GET", Path: "/status", Tool: "status", Summary: "Show the temporary device request inspection session.", Handler: s.status},
 		{Method: "POST", Path: "/session", Summary: "Start a 15-minute inspection for observed device IPv4 addresses.", Mutating: true, Handler: s.start},
 		{Method: "DELETE", Path: "/session", Summary: "Stop inspection, remove interception and clear captured requests.", Mutating: true, Handler: s.stop},
