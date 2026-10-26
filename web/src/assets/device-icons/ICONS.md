@@ -77,33 +77,47 @@ single tile. So:
 With that, the Common grid is left with the categories and the two brandless
 shapes, which is what it is for.
 
-Which counts have a master:
+Which counts have a master — all eight, drawn as one batch so they share a
+material, a camera and a caddy:
 
-| Bays | File | Drawn from |
-|---|---|---|
-| 1 | `synology-nas-1bay.webp` | the prompt below |
-| 2 | `synology-nas.webp` | the vendor picture, drawn with the set |
-| 3 | `synology-nas-3bay.webp` | the prompt below |
-| 4 | `synology-nas-4bay.webp` | the set's existing bay drawing |
-| 5 | `synology-nas-5bay.webp` | the set's existing bay drawing |
-| 6 | `synology-nas-6bay.webp` | the set's existing bay drawing |
-| 8 | `synology-nas-8bay.webp` | the set's existing bay drawing |
-| 12 | `synology-nas-12bay.webp` | the prompt below |
+| Bays | File |
+|---|---|
+| 1 | `synology-nas-1bay.webp` |
+| 2 | `synology-nas.webp` — also the vendor picture |
+| 3 | `synology-nas-3bay.webp` |
+| 4 | `synology-nas-4bay.webp` |
+| 5 | `synology-nas-5bay.webp` |
+| 6 | `synology-nas-6bay.webp` |
+| 8 | `synology-nas-8bay.webp` |
+| 12 | `synology-nas-12bay.webp` |
 
-The four middle counts were drawn before the family moved, against the
-brandless wording — which is why they read as the DS box without ever saying
-so. That is the finish they keep: a vendor picture may carry the maker's
-silhouette, and here the silhouette is the whole subject.
+**One batch, then one tone.** Eight calls to a text-to-image model do not agree
+on what "matte charcoal" means: the first pass over these came back anywhere
+from a mean luminance of 47 to 78, and eight tiles in a row make that
+difference the first thing anyone sees. Two fixes, and both are needed:
+
+1. **Draw them in one sitting**, from one prompt with only the count changed.
+   That keeps the drawing language — corner radius, caddy handles, button — the
+   same, and it narrowed the tone spread from 1.7× to 1.15×.
+2. **Match what is left** with a single linear gain per icon, so the mean
+   luminance of the drawn pixels agrees to within a point. A gain is not a
+   redraw: it is the same adjustment the optimiser already makes to framing,
+   applied to brightness, and it is why the eight read as one product line
+   rather than eight renders of one idea. The measured target is the batch's
+   own median, never a fixed number — the family is matched to itself, not to a
+   colour the set does not otherwise use.
 
 This is the one family where the *whole* subject is a number, so it is exactly
 the case text-to-image is safe for, and adding a count is one word. The subject
 sentence, on top of the preamble in "Adding one":
 
-> Subject: **a desktop NAS tower in matte charcoal, front view, one row of
-> \<n\> vertical front-loading drive caddies side by side, a small round power
-> button at the lower right of the front panel**. Very minimal: a few large
-> simple forms, no fine textures, no small parts, no vents, no screws, no
-> perforations, no LEDs, no labels, no drives sticking out.
+> Subject: **a desktop NAS enclosure in matte charcoal grey, mid-dark neutral
+> grey, front view, one row of \<n\> vertical front-loading drive caddies side
+> by side with even spacing, caddy width constant, the enclosure wider than it
+> is tall and wider still as the count grows, a small round power button low on
+> the right of the front panel**. Very minimal: a few large simple forms, no
+> fine textures, no small parts, no vents, no screws, no perforations, no LEDs,
+> no labels, no drives sticking out.
 
 Two counts want their wording bent, and both were: **one bay** is *a single
 vertical front-loading drive caddy filling most of the front* of a tall narrow
