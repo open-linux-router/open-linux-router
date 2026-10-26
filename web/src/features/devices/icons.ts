@@ -1,4 +1,3 @@
-import { t } from '@/lib/i18n'
 import {
   AirVent,
   Bell,
@@ -41,6 +40,7 @@ import type { DeviceCategory } from '@/lib/config-types'
 
 import { brandLogoSrc, brandLogoSlug } from '@/features/brand-logos/brand-logos'
 import { type BrandGroup, brandGroups } from '@/features/devices/brand-groups'
+import { searchIcons } from '@/features/devices/icon-search'
 
 import accessPoint from '@/assets/device-icons/accesspoint.webp'
 import aircon from '@/assets/device-icons/aircon.webp'
@@ -538,27 +538,27 @@ export function categoryLabel(category: DeviceCategory): string {
 }
 
 /**
- * The vocabulary in the order the picker shows it, grouped the way an operator
- * thinks about a network rather than alphabetically. Mirrors the order in
+ * The vocabulary in reading order, grouped the way an operator thinks about a
+ * network rather than alphabetically. Mirrors the order in
  * internal/devices/category.go.
  *
- * "Not set" is omitted: clearing a category is a distinct action ("Use the
- * detected category"), not a value to pick from a list.
+ * The groups are *only* an order now: the picker draws one flat Common grid
+ * (see COMMON_TILES), so the headings these groups used to own are gone. The
+ * grouping survives because it still decides what sits next to what — the
+ * phones before the appliances, the grey box last — and because a heading can
+ * come back without the order having to be rediscovered.
+ *
+ * "Not set" is omitted: clearing a category is a distinct action, not a value
+ * to pick from a list.
  */
-export const CATEGORY_GROUPS: { label: string; categories: DeviceCategory[] }[] = [
-  { get label() { return t('Personal') }, categories: ['phone', 'tablet', 'laptop', 'desktop', 'watch', 'ereader'] },
-  { get label() { return t('Media') }, categories: ['tv', 'speaker', 'console'] },
-  {
-    get label() { return t('Home') },
-    categories: ['camera', 'doorbell', 'thermostat', 'sensor', 'plug', 'light', 'vacuum'],
-  },
-  {
-    get label() { return t('Appliances') },
-    categories: ['airpurifier', 'waterpurifier', 'humidifier', 'aircon', 'airer', 'fridge', 'washer'],
-  },
-  { get label() { return t('Computing') }, categories: ['printer', 'nas', 'server', 'sbc'] },
-  { get label() { return t('Network') }, categories: ['modem', 'router', 'accesspoint', 'switch', 'hub'] },
-  { get label() { return t('Other') }, categories: ['unknown'] },
+export const CATEGORY_ORDER: DeviceCategory[][] = [
+  ['phone', 'tablet', 'laptop', 'desktop', 'watch', 'ereader'],
+  ['tv', 'speaker', 'console'],
+  ['camera', 'doorbell', 'thermostat', 'sensor', 'plug', 'light', 'vacuum'],
+  ['airpurifier', 'waterpurifier', 'humidifier', 'aircon', 'airer', 'fridge', 'washer'],
+  ['printer', 'nas', 'server', 'sbc'],
+  ['modem', 'router', 'accesspoint', 'switch', 'hub'],
+  ['unknown'],
 ]
 
 /**
@@ -808,4 +808,159 @@ export function variantChoices(category: DeviceCategory): IconChoiceTile[] {
   return (Object.keys(IMAGES) as IconKey[])
     .filter((key) => key.startsWith(`${category}/`))
     .map((key) => ({ icon: key, category, label: VARIANT_LABELS[key as VariantKey] ?? key }))
+}
+
+/**
+ * The extra words a picture answers to, on top of its own name.
+ *
+ * A tile already names itself, its maker and its kind, and that covers most of
+ * what anyone types. It does not cover the words that belong to the *thing*
+ * rather than to the picture of it: somebody hunting for their NAS types
+ * "storage", somebody hunting for the box in the cupboard types "rack", and
+ * somebody hunting for the plug types "socket". None of those words is written
+ * on a tile, and a search that cannot find a NAS by the word "storage" is a
+ * search nobody uses twice.
+ *
+ * Keyed by the same IconKey IMAGES is, so a tag cannot name a picture that does
+ * not exist. That failure would be silent otherwise: a mistyped key is a tag
+ * nobody ever reads.
+ */
+const ICON_TAGS: Partial<Record<IconKey, readonly string[]>> = {
+  phone: ['smartphone', 'mobile', 'cellular', 'handset'],
+  tablet: ['pad', 'slate'],
+  laptop: ['notebook', 'computer', 'portable'],
+  desktop: ['pc', 'computer', 'workstation', 'tower'],
+  watch: ['smartwatch', 'wearable'],
+  ereader: ['ebook', 'kindle', 'reading'],
+  tv: ['television', 'screen', 'display'],
+  speaker: ['audio', 'sound', 'smart speaker'],
+  console: ['gaming', 'game', 'playstation', 'xbox'],
+  camera: ['cctv', 'surveillance', 'security', 'ip camera'],
+  doorbell: ['bell', 'entry', 'video doorbell'],
+  thermostat: ['heating', 'hvac', 'climate', 'radiator'],
+  sensor: ['motion', 'contact', 'temperature', 'humidity', 'leak'],
+  plug: ['socket', 'outlet', 'relay', 'power', 'smart plug'],
+  light: ['lamp', 'bulb', 'lighting'],
+  vacuum: ['robot vacuum', 'robovac', 'cleaner'],
+  airpurifier: ['air cleaner', 'hepa', 'purifier'],
+  waterpurifier: ['water filter', 'reverse osmosis', 'ro'],
+  humidifier: ['moisture', 'mist'],
+  aircon: ['air conditioner', 'ac', 'cooling', 'hvac', 'heat pump'],
+  airer: ['drying rack', 'laundry', 'clothes'],
+  fridge: ['refrigerator', 'freezer'],
+  washer: ['washing machine', 'laundry', 'dryer'],
+  printer: ['scanner', 'inkjet', 'laser', 'mfp', 'print'],
+  nas: ['network storage', 'storage', 'backup', 'file server', 'disk'],
+  server: ['host', 'rack', 'rackmount', 'bare metal'],
+  sbc: ['single board computer', 'raspberry pi', 'arduino', 'esp32', 'board'],
+  modem: ['dsl', 'cable', 'isp', 'fibre'],
+  router: ['gateway', 'wifi', 'wireless', 'routing'],
+  accesspoint: ['wifi', 'wireless', 'mesh'],
+  switch: ['ethernet', 'lan', 'network switch'],
+  hub: ['zigbee', 'zwave', 'thread', 'matter', 'bridge', 'home assistant'],
+  unknown: ['other', 'generic', 'unrecognised'],
+
+  'nas/4bay': ['four bay'],
+  'nas/5bay': ['five bay'],
+  'nas/6bay': ['six bay'],
+  'nas/8bay': ['eight bay'],
+  'desktop/mini': ['small', 'sff'],
+  'desktop/ikoolcorer1': ['mini pc', 'firewall box'],
+  'desktop/ikoolcorer2': ['mini pc', 'firewall box'],
+  'desktop/ikoolcorer2max': ['mini pc', 'firewall box'],
+
+  'apple/phone': ['iphone'],
+  'apple/tablet': ['ipad', 'ipad pro'],
+  'apple/laptop': ['macbook', 'macbook air', 'macbook pro', 'mac'],
+  'apple/desktop': ['imac', 'mac'],
+  'apple/desktop/mini': ['mac mini', 'mini pc', 'mac'],
+  'apple/desktop/studio': ['mac studio', 'mac'],
+  'apple/watch': ['apple watch'],
+  'apple/tv': ['apple tv', 'set top box'],
+  'apple/speaker': ['homepod'],
+  'samsung/phone': ['galaxy', 'android'],
+  'google/phone': ['pixel', 'android'],
+  'microsoft/console': ['xbox'],
+  'microsoft/laptop': ['surface'],
+  'sony/console': ['playstation', 'ps5'],
+  'nintendo/console': ['switch', 'handheld'],
+  'amazon/speaker': ['echo', 'alexa'],
+  'sonos/speaker': ['sonos'],
+  'lenovo/laptop': ['thinkpad'],
+  'huawei/laptop': ['matebook'],
+  'huawei/tablet': ['matepad'],
+  'xiaomi/phone': ['redmi', 'poco'],
+  'intel/desktop': ['nuc', 'mini pc'],
+  'intel/desktop/nuc12extreme': ['nuc', 'mini pc'],
+  'raspberry-pi/sbc': ['rpi', 'pi'],
+  'ubiquiti/accesspoint': ['unifi', 'ap'],
+  'synology/nas': ['diskstation', 'dsm'],
+  'tp-link/router': ['tp link', 'deco'],
+  'xiaomi/router/be7000': ['wifi 7', 'mesh'],
+  'tp-link/router/xdr6080': ['wifi 7', 'mesh'],
+  'lg/tv': ['oled'],
+  'hp/printer': ['laserjet'],
+  'canon/printer': ['pixma'],
+  'epson/printer': ['ecotank'],
+}
+
+/**
+ * The picker's last section: every picture that is nobody's product.
+ *
+ * One flat grid, not the six themed groups the picker used to render. Themes
+ * were a table of contents for a vocabulary nobody browses by theme — someone
+ * who does not know what to call the box in the hall is not going to guess
+ * whether it is filed under Home or Computing, and they are going to search
+ * instead. The search is the way in; a grid of shapes is the thing you scan
+ * when you do not yet know the word, and scanning is faster in one grid than
+ * in six.
+ *
+ * The category groups still decide the order, so the list reads the way it
+ * always did — personal devices first, the grey box last — with each variant
+ * immediately after the category it is a shape of.
+ */
+export const COMMON_TILES: IconChoiceTile[] = CATEGORY_ORDER.flatMap((group) =>
+  group.flatMap((category) => [
+    { icon: '', category, label: categoryLabel(category) },
+    ...variantChoices(category),
+  ]),
+)
+
+/**
+ * The words one tile answers to, in the order that decides who wins a tie.
+ *
+ * The label leads on purpose: icon-search ranks a tile whose text *opens* with
+ * the query above one that merely holds it somewhere, so "mac" has to meet
+ * "MacBook" before it meets a path that happens to contain those letters. The
+ * key and the maker come next because they are still names; the category and
+ * the tags come last because they are descriptions, and a description that
+ * happens to hold the query is the weakest answer worth showing.
+ */
+function searchText(tile: IconChoiceTile): string {
+  const key = tile.icon || tile.category
+  const [first] = key.split('/')
+  const vendor = first in BRAND_NAMES ? BRAND_NAMES[first as VendorKey] : ''
+  return [
+    tile.label,
+    key.split('/').join(' '),
+    vendor,
+    categoryLabel(tile.category),
+    ...(ICON_TAGS[key as IconKey] ?? []),
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+const SEARCHABLE_ICONS = [...COMMON_TILES, ...BRAND_TILES].map((tile) => ({ tile, text: searchText(tile) }))
+
+/**
+ * The bundled pictures a query asks for, best first.
+ *
+ * The other half of the picker's search is theSVG's, asked over HTTP because
+ * six thousand marks do not belong in a browser; this half is local and
+ * instant. Both are rendered as the same tiles, so a query is one list of
+ * pictures however each one was found.
+ */
+export function searchBundledIcons(query: string): IconChoiceTile[] {
+  return searchIcons(SEARCHABLE_ICONS, (entry) => entry.text, query).map((entry) => entry.tile)
 }

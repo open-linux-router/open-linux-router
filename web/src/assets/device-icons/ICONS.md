@@ -55,10 +55,20 @@ belong to — a brandless variant is tier 1, Apple's is tier 1.5 — and changed
 from its base in exactly one respect: the NAS set is one prompt with the bay
 count swapped, so the family reads as one product line.
 
-**How the picker arranges them.** Vendor pictures are grouped by maker, one
-section each — Apple, Samsung, Huawei — instead of one flat grid of every
-vendor tile. The grouping is derived from the artwork in `IMAGES`, not listed
-beside it, in `brandGroups()` in `features/devices/brand-groups.ts`:
+**How the picker arranges them.** The picker is a search box over two
+catalogues, and below it two blocks in this order:
+
+1. **Brands**, one labelled section per maker — Apple, Samsung, Huawei.
+2. **Common**, one grid mixing every picture that is nobody's product: the
+   categories and their variants, phones beside washing machines. Its order is
+   `CATEGORY_ORDER`, so the list still reads personal-devices-first and the
+   grey box last, but it draws no headings. A grid is scanned; a table of
+   contents is not, and nobody wants to decide whether the box in the hall is
+   filed under Home or Computing before they can pick it.
+
+Brands lead because a brand is a name the operator already has. The grouping is
+derived from the artwork in `IMAGES`, not listed beside it, in `brandGroups()`
+in `features/devices/brand-groups.ts`:
 
 - A maker with **two or more pictures** gets its own section, headed with the
   maker's name. The name comes from `BRAND_NAMES`, never from the slug: a slug
@@ -74,6 +84,17 @@ beside it, in `brandGroups()` in `features/devices/brand-groups.ts`:
 Adding a picture is therefore still one file and one line in `IMAGES`. The tile
 lands under its maker if they have a section, in *Other brands* if they do not,
 and a maker leaves that bucket the moment they hold two.
+
+**The search answers from both catalogues.** One box finds a maker, a model and
+a kind of device alike: theSVG's six thousand marks are matched on the daemon
+(`internal/brandlogo`), and the pictures in the bundle are matched in the
+browser against their labels, their maker, their category and their **tags** —
+`ICON_TAGS` in `features/devices/icons.ts`, which is where "storage" finds the
+NAS and "socket" finds the smart plug. A new picture needs a line in `ICON_TAGS`
+only when nobody would type its label; the vocabulary is keyed by `IconKey`, so
+a tag cannot name a picture that does not exist. While a query is active the
+two blocks are replaced by the results, bundled pictures first, theSVG's marks
+under a heading of their own.
 
 **Tier 2 — model image.** One per specific product, e.g. `synology/ds224plus`,
 overriding its vendor and category icons. **Never text-to-image**: a prompt for
@@ -172,12 +193,19 @@ laptops apart is the row's job — its title and vendor — not the icon's.
 
 ## Operating-system marks
 
-A device can wear an OS's logo instead of a picture — `os/debian`, chosen in
-the picker and stored as the device's `icon` (see `internal/devices/icon.go`).
-This is the one place logos are allowed, and deliberately: a picture of "a
-computer running Debian" is a generic box, and the mark is the only thing that
-says Debian. The rule against logos is about *device pictures*, where a brand
-mark would be decoration; here the mark *is* the information.
+A device can wear an OS's logo instead of a picture — `os/debian`, stored as
+the device's `icon` (see `internal/devices/icon.go`). This is the one place
+logos are allowed, and deliberately: a picture of "a computer running Debian"
+is a generic box, and the mark is the only thing that says Debian.
+
+The picker no longer offers them. What a machine *runs* is a third axis beside
+what it is and who made it, and a picker of two blocks — brands, then one
+common grid — could not hold three without one of them becoming the block
+nobody scrolls to. Stored `os/…` values still draw, `internal/devices` still
+validates them, and putting a chooser back is a section, not a rebuild.
+
+The rule against logos is about *device pictures*, where a brand mark would be
+decoration; here the mark *is* the information.
 
 They live in `../os-marks/`, one SVG each, in full colour from
 [thesvg.org](https://thesvg.org) (MIT; `public/icons/<slug>/default.svg` in

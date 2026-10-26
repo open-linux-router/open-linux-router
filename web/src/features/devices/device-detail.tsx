@@ -143,7 +143,7 @@ export function DeviceDetail({
 
           <div className="grid gap-2">
             <Label>{t('Icon')}</Label>
-            <CategoryPicker value={look} detected={device.detected_category} onChange={setLook} />
+            <CategoryPicker value={look} onChange={setLook} />
           </div>
 
           {/* Part of the form, saved with the rest, rather than applied the
