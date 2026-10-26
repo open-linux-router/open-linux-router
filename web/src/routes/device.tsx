@@ -3,7 +3,6 @@ import { Heading } from '@/components/ui/heading'
 import { Link, useParams } from 'react-router'
 
 import { Button } from '@/components/ui/button'
-import { ClientQueries } from '@/features/dns/client-queries'
 import { DeviceInspection } from '@/features/devices/inspection'
 import { ActivityTotal, DeviceActivity } from '@/features/devices/activity'
 import { DeviceInlineEditor } from '@/features/devices/device-inline-editor'
@@ -42,8 +41,6 @@ export function DevicePage() {
             )}
         </DevicePolicy>
       } />
-
-      <ClientQueries addresses={device.ips ?? []} />
 
       <DeviceInspection key={device.mac} mac={device.mac} addresses={device.ips ?? []} />
     </div>

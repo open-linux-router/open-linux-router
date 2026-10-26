@@ -52,6 +52,8 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
   }, [caURL])
   const active = status.data?.active
   const mine = active && status.data?.mac?.toLowerCase() === mac.toLowerCase()
+  // A reason the switch cannot be used, in the space the session would fill.
+  const notice = status.isError || Boolean(active && !mine) || (!active && (ipv4.length === 0 || ipv4.length > 8))
 
   useEffect(() => {
     if (!mine) return
@@ -81,11 +83,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         </div>
       </div>
     </div>
-    <div className={mine || status.isError || (active && !mine) || (!active && (ipv4.length === 0 || ipv4.length > 8)) ? 'mx-4 space-y-3 border-t py-4 sm:mx-6 sm:py-6' : ''}>
-      {status.isError ? <p role="alert" className="text-sm text-destructive">{t('Inspection status is unavailable. Do not assume interception has stopped.')}</p> : null}
-      {active && !mine ? <p className="text-sm text-muted-foreground">{t('Another device is being inspected. Stop that session before starting this one.')}</p> : null}
-      {ipv4.length === 0 && !active && <p className="text-sm text-muted-foreground">OLR has not observed an IPv4 address for this device yet. Connect it to the network and refresh this page to enable inspection.</p>}
-      {ipv4.length > 8 && !active && <p className="text-sm text-muted-foreground">{t('Too many addresses are associated with this device to start inspection safely.')}</p>}
+    <div>
       <Dialog open={showSetup} onOpenChange={setShowSetup}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -96,22 +94,29 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
           <a href={caURL} target="_blank" rel="noreferrer" className="break-all text-sm text-primary underline">{t('Open setup guide')}</a>
         </DialogContent>
       </Dialog>
-      {/* Three sections, one switch. The chart is the week before this session,
-          DNS is where the names in it came from, and Connections is the content
-          the session can see. Everything below only exists while it is on. */}
+      {/* Everything the switch turned on lives here, so there is one card, one
+          switch and one answer to "is this device being inspected". One divider
+          per section, drawn full width by the section itself: the chart is the
+          week before this session, DNS is where the names in it came from, and
+          the last section is the content the session can see. */}
+      {notice && <div className="space-y-3 border-t px-4 py-4 sm:px-6 sm:py-6">
+        {status.isError ? <p role="alert" className="text-sm text-destructive">{t('Inspection status is unavailable. Do not assume interception has stopped.')}</p> : null}
+        {active && !mine ? <p className="text-sm text-muted-foreground">{t('Another device is being inspected. Stop that session before starting this one.')}</p> : null}
+        {ipv4.length === 0 && !active && <p className="text-sm text-muted-foreground">OLR has not observed an IPv4 address for this device yet. Connect it to the network and refresh this page to enable inspection.</p>}
+        {ipv4.length > 8 && !active && <p className="text-sm text-muted-foreground">{t('Too many addresses are associated with this device to start inspection safely.')}</p>}
+      </div>}
       {mine && <div className="border-t">
         <h3 className="px-4 pt-4 text-sm font-medium sm:px-6">{t('Activity')}</h3>
         <SiteActivity addresses={ipv4} />
       </div>}
-      {mine && <div className="border-t">
-        <h3 className="px-4 pt-4 text-sm font-medium sm:px-6">{t('DNS queries')}</h3>
-        <ClientQueries addresses={ipv4} defaultOn />
-      </div>}
+      {mine && <div className="border-t"><ClientQueries addresses={ipv4} section /></div>}
       {mine && <div className="border-t pt-4">
-        <h3 className="px-4 pb-3 text-sm font-medium sm:px-6">{t('Connections')}</h3>
-        {viewerReady
-          ? <iframe title={t('Full request and response inspection')} src="/inspection-web/" className="h-[75vh] min-h-[480px] w-full rounded border bg-white" />
-          : <div className="px-4 pb-4 text-sm text-muted-foreground sm:px-6">{t('Opening the inspection viewer…')}</div>}
+        <h3 className="px-4 pb-3 text-sm font-medium sm:px-6">{t('Requests')}</h3>
+        <div className="px-4 pb-4 sm:px-6 sm:pb-6">
+          {viewerReady
+            ? <iframe title={t('Full request and response inspection')} src="/inspection-web/" className="h-[75vh] min-h-[480px] w-full rounded border bg-white" />
+            : <div className="text-sm text-muted-foreground">{t('Opening the inspection viewer…')}</div>}
+        </div>
       </div>}
     </div>
   </section>

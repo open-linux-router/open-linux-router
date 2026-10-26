@@ -20,25 +20,85 @@ import { useDnsConfig, useDnsQueries } from '@/features/dns/queries'
  * device that dialed in over WireGuard has only the second (the tunnel address
  * baked into its configuration), so it matches here and nowhere else.
  *
- * Off by default, and the switch is the operator asking: the log holds every
- * name their devices looked up. Three empty states rather than one, because
- * "the log is off", "the resolver is down" and "nothing matched" are three
- * different things to go and do.
+ * Two presentations, one body. On the WireGuard device page this is a card with
+ * its own switch: off by default, because the log holds every name that device
+ * looked up, and the switch is the operator asking. On a device page it is a
+ * `section` of the inspection panel, whose single switch already answered that
+ * question for the whole session; a second switch inside would let the panel
+ * say "on" while this part was off.
+ *
+ * Three empty states rather than one, because "the log is off", "the resolver
+ * is down" and "nothing matched" are three different things to go and do.
  */
-export function ClientQueries({ addresses, defaultOn = false }: { addresses: string[]; defaultOn?: boolean }) {
+export function ClientQueries({ addresses, section = false }: { addresses: string[]; section?: boolean }) {
   useLocale()
-  // defaultOn is for the one caller that owns the surrounding switch: the
-  // device page's Inspection, where this card is one of its three sections.
-  const [inspection, setInspection] = useState(defaultOn)
+  // A section never keeps this state: the panel that renders it has already
+  // decided, so the list is live whenever the section is on screen.
+  const [inspection, setInspection] = useState(false)
+  const open = section || inspection
   const [searchOpen, setSearchOpen] = useState(false)
   const [filter, setFilter] = useState('')
   const searchInput = useRef<HTMLInputElement>(null)
   const searchButton = useRef<HTMLButtonElement>(null)
-  const queries = useDnsQueries(inspection)
+  const queries = useDnsQueries(open)
   const config = useDnsConfig()
   const watched = new Set(addresses.map((address) => address.toLowerCase()))
   const matching = queries.data?.queries.filter((q) => watched.has(q.client.toLowerCase())) ?? []
   const shown = matching.filter((q) => !filter.trim() || [q.name, q.type, q.rcode, q.policy ?? '', ...(q.answers ?? [])].some((value) => value.toLowerCase().includes(filter.trim().toLowerCase())))
+
+  const content = queries.isError ? (
+    <p className="text-sm text-muted-foreground">{t('The DNS query log is unavailable. The resolver may be stopped.')}</p>
+  ) : queries.isPending ? (
+    <p className="text-sm text-muted-foreground">{t('Loading recent queries…')}</p>
+  ) : config.isError ? (
+    <p role="alert" className="text-sm text-muted-foreground">{t('The DNS query log configuration is unavailable.')}</p>
+  ) : config.isPending ? (
+    <p className="text-sm text-muted-foreground">{t('Loading DNS configuration…')}</p>
+  ) : !config.data?.query_log.enabled ? (
+    <p className="text-sm text-muted-foreground">{t('The DNS query log is off. Queries are answered but not kept.')}</p>
+  ) : shown.length === 0 ? (
+    <p className="text-sm text-muted-foreground">{matching.length ? t('Nothing matches that filter.') : 'No matching queries in the recent sample.'}</p>
+  ) : (
+    <div className="max-h-80 overflow-y-auto">
+      {/* One line per query. A name or a CDN answer list wraps into four
+          lines and the table scrolls sideways; each column owns its width
+          instead and cuts what does not fit. */}
+      <Table aria-label={t('Recent DNS queries: time, record, type, answer')} className="min-w-[36rem] table-fixed">
+        <colgroup>
+          <col className="w-24" />
+          <col className="w-[36%]" />
+          <col className="w-[4.5rem]" />
+          <col />
+        </colgroup>
+        <TableBody>{shown.map((q, i) => <TableRow key={`${q.at}-${q.client}-${q.name}-${i}`} className="h-10">
+          <TableCell><time dateTime={q.at} className="font-mono text-xs text-muted-foreground">{new Date(q.at).toLocaleTimeString()}</time></TableCell>
+          <TableCell><span className="block truncate" title={q.name}>{q.name}</span></TableCell>
+          <TableCell className="text-muted-foreground"><span className="block truncate">{q.type}</span></TableCell>
+          <TableCell>{q.blocked ? <Badge variant="secondary" className="max-w-full"><span className="min-w-0 truncate">{t('Blocked')}{q.policy ? ` · ${q.policy}` : ''}</span></Badge> : q.rcode !== 'NOERROR' ? <Badge variant="warning">{q.rcode}</Badge> : q.answers?.length ? <DnsAnswers answers={q.answers} /> : <span className="text-xs text-muted-foreground">{t('No answer')}</span>}</TableCell>
+        </TableRow>)}</TableBody>
+      </Table>
+    </div>
+  )
+
+  // The filter, for both presentations. Its trailing edge is pinned to the
+  // right, so opening it adds the field to the left of the icon and nothing the
+  // operator aimed at moves.
+  const search = <>
+    <div id="client-dns-search" className={`overflow-hidden transition-[width,opacity] duration-200 motion-reduce:transition-none ${searchOpen ? 'w-28 opacity-100 sm:w-56' : 'w-0 opacity-0'}`} inert={!searchOpen}>
+      <div className="overflow-hidden">
+        <Input ref={searchInput} id="client-dns-filter" aria-label={t('Filter DNS queries')} className="w-full" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('Search queries')} onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); setFilter(''); searchButton.current?.focus() } }} />
+      </div>
+    </div>
+    <Button ref={searchButton} className="shrink-0" variant="quiet" size="icon" aria-label={searchOpen ? 'Close DNS search' : 'Search DNS queries'} aria-expanded={searchOpen} aria-controls="client-dns-search" onClick={() => { setSearchOpen(!searchOpen); setFilter(''); if (!searchOpen) requestAnimationFrame(() => searchInput.current?.focus()) }}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>
+  </>
+
+  if (section) return <div className="[overflow-anchor:none]">
+    <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-6">
+      <h3 className="text-sm font-medium">{t('DNS queries')}</h3>
+      <div className="flex items-center gap-3">{search}</div>
+    </div>
+    <div className="px-4 pt-3 pb-4 sm:px-6">{content}</div>
+  </div>
 
   return <Card className="gap-0 py-0 [overflow-anchor:none]">
     <CardHeader className="mx-4 flex h-18 flex-row items-center justify-between gap-3 rounded-none px-0 sm:mx-6">
@@ -49,51 +109,12 @@ export function ClientQueries({ addresses, defaultOn = false }: { addresses: str
           button, so the Inspection control is always where the operator left
           it. */}
       <div className="flex items-center gap-3">
-        {inspection && <div id="client-dns-search" className={`overflow-hidden transition-[width,opacity] duration-200 motion-reduce:transition-none ${searchOpen ? 'w-28 opacity-100 sm:w-56' : 'w-0 opacity-0'}`} inert={!searchOpen}>
-          <div className="overflow-hidden">
-            <Input ref={searchInput} id="client-dns-filter" aria-label={t('Filter DNS queries')} className="w-full" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('Search queries')} onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); setFilter(''); searchButton.current?.focus() } }} />
-          </div>
-        </div>}
-        {inspection && <Button ref={searchButton} className="shrink-0" variant="quiet" size="icon" aria-label={searchOpen ? 'Close DNS search' : 'Search DNS queries'} aria-expanded={searchOpen} aria-controls="client-dns-search" onClick={() => { setSearchOpen(!searchOpen); setFilter(''); if (!searchOpen) requestAnimationFrame(() => searchInput.current?.focus()) }}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>}
+        {open && search}
         <label htmlFor="client-dns-inspection" className="sr-only text-sm sm:not-sr-only">{t('Inspection')}</label>
         <Switch id="client-dns-inspection" checked={inspection} onCheckedChange={(checked) => { setInspection(checked); setSearchOpen(false); setFilter('') }} />
       </div>
     </CardHeader>
-    {inspection && <CardContent className="mx-4 space-y-4 border-t px-0 py-4 sm:mx-6 sm:py-6">
-      {queries.isError ? (
-        <p className="text-sm text-muted-foreground">{t('The DNS query log is unavailable. The resolver may be stopped.')}</p>
-      ) : queries.isPending ? (
-        <p className="text-sm text-muted-foreground">{t('Loading recent queries…')}</p>
-      ) : config.isError ? (
-        <p role="alert" className="text-sm text-muted-foreground">{t('The DNS query log configuration is unavailable.')}</p>
-      ) : config.isPending ? (
-        <p className="text-sm text-muted-foreground">{t('Loading DNS configuration…')}</p>
-      ) : !config.data?.query_log.enabled ? (
-        <p className="text-sm text-muted-foreground">{t('The DNS query log is off. Queries are answered but not kept.')}</p>
-      ) : shown.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{matching.length ? t('Nothing matches that filter.') : 'No matching queries in the recent sample.'}</p>
-      ) : (
-        <div className="max-h-80 overflow-y-auto">
-          {/* One line per query. A name or a CDN answer list wraps into four
-              lines and the table scrolls sideways; each column owns its width
-              instead and cuts what does not fit. */}
-          <Table aria-label={t('Recent DNS queries: time, record, type, answer')} className="min-w-[36rem] table-fixed">
-            <colgroup>
-              <col className="w-24" />
-              <col className="w-[36%]" />
-              <col className="w-[4.5rem]" />
-              <col />
-            </colgroup>
-            <TableBody>{shown.map((q, i) => <TableRow key={`${q.at}-${q.client}-${q.name}-${i}`} className="h-10">
-              <TableCell><time dateTime={q.at} className="font-mono text-xs text-muted-foreground">{new Date(q.at).toLocaleTimeString()}</time></TableCell>
-              <TableCell><span className="block truncate" title={q.name}>{q.name}</span></TableCell>
-              <TableCell className="text-muted-foreground"><span className="block truncate">{q.type}</span></TableCell>
-              <TableCell>{q.blocked ? <Badge variant="secondary" className="max-w-full"><span className="min-w-0 truncate">{t('Blocked')}{q.policy ? ` · ${q.policy}` : ''}</span></Badge> : q.rcode !== 'NOERROR' ? <Badge variant="warning">{q.rcode}</Badge> : q.answers?.length ? <DnsAnswers answers={q.answers} /> : <span className="text-xs text-muted-foreground">{t('No answer')}</span>}</TableCell>
-            </TableRow>)}</TableBody>
-          </Table>
-        </div>
-      )}
-    </CardContent>}
+    {open && <CardContent className="mx-4 space-y-4 border-t px-0 py-4 sm:mx-6 sm:py-6">{content}</CardContent>}
   </Card>
 }
 

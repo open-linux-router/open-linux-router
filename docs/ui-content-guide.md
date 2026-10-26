@@ -284,17 +284,21 @@ The Inspection switch starts and stops the session directly, without confirmatio
 Explain credentials, certificate trust and cleanup in the setup guide.
 Device Connections keeps Inspection and its switch in the title bar, with a
 setup gear icon to the left of the label while active; keep the QR code and guide link inside the setup
-dialog. Show the mitmproxy viewer directly, without duplicate request lists, diagnostics or a
+dialog. That one switch opens one panel with three sections — Activity, DNS
+queries and Requests (the live session) — so inspecting a device is one card
+and one answer, never a second switch for part of it. Show the mitmproxy viewer
+directly, without duplicate request lists, diagnostics or a
 disclosure. Certificate installation, trust and cleanup belong
 in the public five-step setup guide, with the certificate download at step two.
-Device DNS defaults to hidden records with an Inspection switch in its title bar.
-Enabling it polls and displays Time, Record, Type and right-aligned Answer values
-without a visible header row. An accessible search icon sits to the left of
-Inspection and reveals a compact filter that opens to the left of itself;
-closing clears the filter. Both inspection panels keep their title bars fixed
-and expand content downward, and their Inspection label and switch keep their
-place at the trailing edge as those controls appear.
-DNS and Connections title bars show dividers only while their inspection is active.
+The DNS section lists Time, Record, Type and right-aligned Answer values without
+a visible header row and without a switch of its own: the panel's switch already
+opened it. An accessible search icon in the section heading reveals a compact
+filter that opens to the left of itself; closing clears the filter. The panel
+keeps its title bar fixed and expands content downward, each section introducing
+itself with a full-width divider, and the Inspection label and switch keep their
+place at the trailing edge as content changes.
+WireGuard devices keep DNS as its own card with its own Inspection switch,
+because their tunnel traffic cannot be inspected; there the card starts closed.
 Do not promise encrypted DNS blocking beyond the supported protocol and port.
 
 Use download then upload consistently. Device names may supplement an address
