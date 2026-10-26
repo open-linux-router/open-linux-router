@@ -42,18 +42,71 @@ dozen anyone will ever draw, which no set of assets can.
 **Variants — one shape of a kind.** Some kinds of device come in shapes too
 different to share a picture: an eight-bay NAS is not the two-bay box, and a
 Mac mini is not the iMac that `apple/desktop` draws. A variant is keyed under
-what it is a shape *of* — `nas/4bay`, `apple/desktop/mini` — and the list is
-closed, in `variants` in `internal/devices/icon.go` and hand-mirrored as
-`VariantKey` in `features/devices/icons.ts`. The brandless pair matter most at
-home, because they are what a home runs: `server/tower` is the PC under a desk
-that is really a server, and `desktop/mini` is the small box on a shelf that is
-really a computer — neither is the rack unit or the monitor-and-tower the plain
-category draws. Detection never picks one; only an
-operator does, from the picker, where brandless variants sit beside their
-category's tile and vendor ones among the brands. Drawn like the tier they
-belong to — a brandless variant is tier 1, Apple's is tier 1.5 — and changed
-from its base in exactly one respect: the NAS set is one prompt with the bay
-count swapped, so the family reads as one product line.
+what it is a shape *of* — `server/tower`, `apple/desktop/mini`,
+`synology/nas/8bay` — and the list is closed, in `variants` in
+`internal/devices/icon.go` and hand-mirrored as `VariantKey` in
+`features/devices/icons.ts`. The brandless pair matter most at home, because
+they are what a home runs: `server/tower` is the PC under a desk that is really
+a server, and `desktop/mini` is the small box on a shelf that is really a
+computer — neither is the rack unit or the monitor-and-tower the plain category
+draws. Detection never picks one; only an operator does, from the picker, where
+brandless variants sit beside their category's tile and vendor ones among the
+brands. Drawn like the tier they belong to — a brandless variant is tier 1,
+Apple's is tier 1.5 — and changed from its base in exactly one respect.
+
+**The NAS family is Synology's.** A NAS box comes in as many shapes as it has
+bays, so the family is a variant set — and it hangs off the maker, not the
+category, because the box everyone pictures *is* the Synology DS tower that
+this set was drawn from. Filing it under `nas/` claimed a generic picture for a
+shape that is really one maker's, and buried the maker in *Other brands* with a
+single tile. So:
+
+- **The two-bay box is the vendor picture**, `synology/nas`. It is what a
+  detected Synology NAS wears before anyone says how many bays it has, which is
+  exactly the count nobody can detect.
+- **The other counts are variants**, `synology/nas/<n>bay`, one prompt with the
+  bay count swapped so the family reads as one product line. The closed list is
+  one to twelve: **1, 3, 4, 5, 6, 8, 12**. The vocabulary is allowed to run
+  ahead of the artwork — a count with no master is a valid value the picker
+  never offers — which is how 1, 3 and 12 are ready the day their pictures land.
+- **The old `nas/<n>bay` keys still validate and still draw**, from the same
+  pictures, because a config written before the move must load unchanged. They
+  are not offered anywhere: the vocabulary is history, not a menu. See
+  `MOVED_ICONS` in `features/devices/icons.ts`.
+
+With that, the Common grid is left with the categories and the two brandless
+shapes, which is what it is for.
+
+Which counts have a master, and which are still to draw:
+
+| Bays | File | State |
+|---|---|---|
+| 2 | `synology-nas.webp` | drawn — the vendor picture |
+| 4 | `synology-nas-4bay.webp` | drawn |
+| 5 | `synology-nas-5bay.webp` | drawn |
+| 6 | `synology-nas-6bay.webp` | drawn |
+| 8 | `synology-nas-8bay.webp` | drawn |
+| 1 | `synology-nas-1bay.webp` | **to draw** |
+| 3 | `synology-nas-3bay.webp` | **to draw** |
+| 12 | `synology-nas-12bay.webp` | **to draw** |
+
+The three missing ones are one prompt with the count changed, the same shape
+of prompt the drawn four came from — this is the one family where the *whole*
+subject is a number, so it is exactly the case text-to-image is safe for. The
+four that exist were drawn against the brandless wording before the family
+moved, which is why they read as the DS box without saying so; re-generating
+them with the sentence below is optional and changes nothing but the finish:
+
+> Subject: **a Synology DiskStation-style desktop NAS tower, front view, one
+> row of \<n\> vertical front-loading drive caddies, matte charcoal enclosure,
+> a single small round power button at the lower right, no screen, no logo, no
+> text, no drives sticking out**. Very minimal: a few large simple forms, no
+> fine textures, no small parts, no vents, no screws, no LEDs, no labels.
+
+Adding one is the usual three steps: optimise the master into this directory,
+add its line to `IMAGES` (and its name to `variants` in
+`internal/devices/icon.go` if it is not there yet — the counts above already
+are), and nothing else moves.
 
 **How the picker arranges them.** The picker is a search box over two
 catalogues, and below it two blocks in this order:
@@ -302,7 +355,7 @@ someone else's logo.
 
 2. **Optimise** it into this directory, named exactly after the category, or
    `<vendor>-<category>` for a vendor icon, with `-<variant>` appended for a
-   variant (`nas-4bay`, `apple-desktop-mini`):
+   variant (`synology-nas-4bay`, `apple-desktop-mini`):
 
    ```
    node scripts/optimize-icons.mjs <dir-of-masters>

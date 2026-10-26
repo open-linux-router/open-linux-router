@@ -147,7 +147,7 @@ export function DeviceInlineEditor({ device, traffic, activity, services, total 
     </Card>
     <Dialog open={editing === 'icon'} onOpenChange={(open) => { if (!open) setEditing(null) }}>
       <DialogContent className="max-h-[90svh] overflow-y-auto">
-        <DialogHeader><DialogTitle>{t('Device icon')}</DialogTitle><DialogDescription>{t('Choose an icon for')} {device.name || device.mac}.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>{t('Device icon')}</DialogTitle></DialogHeader>
         <CategoryPicker value={look} onChange={setLook} />
         <DialogFooter><Button variant="quiet" disabled={saveIdentity.isPending} onClick={() => setEditing(null)}>{t('Cancel')}</Button><Button disabled={identityBusy} onClick={() => void save({ category: look.category || undefined, icon: look.icon || undefined })}>{t('Save icon')}</Button></DialogFooter>
       </DialogContent>

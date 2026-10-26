@@ -59,10 +59,6 @@ import laptop from '@/assets/device-icons/laptop.webp'
 import light from '@/assets/device-icons/light.webp'
 import modem from '@/assets/device-icons/modem.webp'
 import nas from '@/assets/device-icons/nas.webp'
-import nas4Bay from '@/assets/device-icons/nas-4bay.webp'
-import nas5Bay from '@/assets/device-icons/nas-5bay.webp'
-import nas6Bay from '@/assets/device-icons/nas-6bay.webp'
-import nas8Bay from '@/assets/device-icons/nas-8bay.webp'
 import phone from '@/assets/device-icons/phone.webp'
 import plug from '@/assets/device-icons/plug.webp'
 import printer from '@/assets/device-icons/printer.webp'
@@ -123,6 +119,10 @@ import sonyConsole from '@/assets/device-icons/sony-console.webp'
 import sonyPhone from '@/assets/device-icons/sony-phone.webp'
 import sonyTv from '@/assets/device-icons/sony-tv.webp'
 import synologyNas from '@/assets/device-icons/synology-nas.webp'
+import synologyNas4Bay from '@/assets/device-icons/synology-nas-4bay.webp'
+import synologyNas5Bay from '@/assets/device-icons/synology-nas-5bay.webp'
+import synologyNas6Bay from '@/assets/device-icons/synology-nas-6bay.webp'
+import synologyNas8Bay from '@/assets/device-icons/synology-nas-8bay.webp'
 import tpLinkRouter from '@/assets/device-icons/tp-link-router.webp'
 import tpLinkRouterXdr6080 from '@/assets/device-icons/tp-link-router-xdr6080.webp'
 import ubiquitiAccesspoint from '@/assets/device-icons/ubiquiti-accesspoint.webp'
@@ -195,6 +195,16 @@ type IconKey = DeviceCategory | VendorKey | `${VendorKey}/${DeviceCategory}` | V
  * published as a pattern, so nothing generates this list.
  */
 type VariantKey =
+  | 'synology/nas/1bay'
+  | 'synology/nas/3bay'
+  | 'synology/nas/4bay'
+  | 'synology/nas/5bay'
+  | 'synology/nas/6bay'
+  | 'synology/nas/8bay'
+  | 'synology/nas/12bay'
+  // Retired, and still drawn: the bay-count family used to hang off the
+  // category. A config that stored one keeps its picture — see MOVED_ICONS —
+  // but nothing offers them any more.
   | 'nas/4bay'
   | 'nas/5bay'
   | 'nas/6bay'
@@ -245,10 +255,6 @@ const IMAGES: Partial<Record<IconKey, string>> = {
   waterpurifier: waterPurifier,
   watch,
 
-  'nas/4bay': nas4Bay,
-  'nas/5bay': nas5Bay,
-  'nas/6bay': nas6Bay,
-  'nas/8bay': nas8Bay,
   'server/tower': serverTower,
   'desktop/mini': desktopMini,
   'desktop/ikoolcorer1': ikoolcoreR1,
@@ -306,7 +312,17 @@ const IMAGES: Partial<Record<IconKey, string>> = {
   'amazon/speaker': amazonSpeaker,
   'sonos/speaker': sonosSpeaker,
 
+  // The NAS family is Synology's, drawn as one product line: the two-bay box
+  // is the vendor picture itself, so a detected Synology NAS wears something
+  // right before anyone knows how many bays it has. The bay counts that have
+  // masters follow it; 1, 3 and 12 are in the vocabulary and in the prompt
+  // table in ICONS.md, and are deliberately absent here — an entry with no
+  // picture behind it would be a blank tile.
   'synology/nas': synologyNas,
+  'synology/nas/4bay': synologyNas4Bay,
+  'synology/nas/5bay': synologyNas5Bay,
+  'synology/nas/6bay': synologyNas6Bay,
+  'synology/nas/8bay': synologyNas8Bay,
   'raspberry-pi/sbc': raspberryPiSbc,
   'tp-link/router': tpLinkRouter,
   'tp-link/router/xdr6080': tpLinkRouterXdr6080,
@@ -629,8 +645,26 @@ export function chosenIcon(icon?: string): ChosenIcon | undefined {
     const mark = OS_MARKS[icon.slice(3) as OsKey]
     return mark && { kind: 'os', ...mark }
   }
-  const src = IMAGES[icon as IconKey]
+  const moved = MOVED_ICONS[icon]
+  const src = IMAGES[icon as IconKey] ?? (moved ? IMAGES[moved] : undefined)
   return src ? { kind: 'photo', src } : undefined
+}
+
+/**
+ * Values that still resolve, under a picture that has moved.
+ *
+ * When the NAS bay-count family was filed under Synology, the drawings
+ * travelled with it: `nas/4bay` and `synology/nas/4bay` are the same box. A
+ * config written before the move is still valid — the vocabulary keeps the old
+ * keys for exactly that reason — so this is the one place that has to know
+ * where a picture went. Nothing new is written with the old name: the picker
+ * cannot offer a key that is no longer in IMAGES.
+ */
+const MOVED_ICONS: Partial<Record<string, IconKey>> = {
+  'nas/4bay': 'synology/nas/4bay',
+  'nas/5bay': 'synology/nas/5bay',
+  'nas/6bay': 'synology/nas/6bay',
+  'nas/8bay': 'synology/nas/8bay',
 }
 
 /**
@@ -685,7 +719,14 @@ const BRAND_LABELS: Partial<Record<IconKey, string>> = {
   'amazon/speaker': 'Echo',
   'sonos/speaker': 'Sonos',
 
-  'synology/nas': 'Synology',
+  'synology/nas': '2-bay',
+  'synology/nas/1bay': '1-bay',
+  'synology/nas/3bay': '3-bay',
+  'synology/nas/4bay': '4-bay',
+  'synology/nas/5bay': '5-bay',
+  'synology/nas/6bay': '6-bay',
+  'synology/nas/8bay': '8-bay',
+  'synology/nas/12bay': '12-bay',
   'raspberry-pi/sbc': 'Raspberry Pi',
   'tp-link/router': 'TP-Link router',
   'ubiquiti/accesspoint': 'UniFi AP',
@@ -789,10 +830,6 @@ export const BRAND_GROUPS: BrandGroup<IconChoiceTile>[] = brandGroups(
 )
 
 const VARIANT_LABELS: Partial<Record<VariantKey, string>> = {
-  'nas/4bay': '4-bay NAS',
-  'nas/5bay': '5-bay NAS',
-  'nas/6bay': '6-bay NAS',
-  'nas/8bay': '8-bay NAS',
   'server/tower': 'Tower server',
   'desktop/mini': 'Mini PC',
   'desktop/ikoolcorer1': 'iKOOLCORE R1',
@@ -801,8 +838,10 @@ const VARIANT_LABELS: Partial<Record<VariantKey, string>> = {
 }
 
 /**
- * Category variants, shown in the picker right after the category's own tile
- * — a 4-bay NAS is found where the NAS is, and mini PCs beside Desktop.
+ * Category variants, shown in the picker right after the category's own tile:
+ * the tower server beside Server, the mini PC beside Desktop. They are shapes,
+ * not products — which is why the NAS bay counts are not here: those are
+ * Synology's, and hang off the maker instead (see ICONS.md).
  */
 export function variantChoices(category: DeviceCategory): IconChoiceTile[] {
   return (Object.keys(IMAGES) as IconKey[])

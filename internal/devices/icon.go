@@ -51,11 +51,28 @@ var operatingSystems = []string{
 }
 
 // variants is the vocabulary of variant pictures, keyed by what they are a
-// variant *of*: a category, or a vendor's take on one. Closed like the rest,
-// and deliberately no wider than the artwork: a variant is a *shape*, so one
-// nobody has drawn would be a word with no picture behind it.
+// variant *of*: a category, or a vendor's take on one. Closed like the rest.
+//
+// It may run a step ahead of the artwork, and the Synology bay counts do: a
+// variant nobody has painted is a config value the picker never offers — the
+// SPA draws only what its IMAGES map carries — but it is *valid*, so the day a
+// picture lands the operator does not have to wait for a validator change to
+// use it.
 var variants = map[string][]string{
-	"nas":            {"4bay", "5bay", "6bay", "8bay"},
+	// The bay-count family used to hang off the category, as "nas/4bay". The
+	// pictures were always Synology-shaped — the DS box is what the set is
+	// drawn from — so the picker files them under the maker now. These keys
+	// stay valid because a config that stored one must still load, and the SPA
+	// still draws them from the moved pictures (see MOVED_ICONS in
+	// features/devices/icons.ts); nothing offers them any more.
+	"nas": {"4bay", "5bay", "6bay", "8bay"},
+	// One to twelve bays, drawn as one product line so the family reads as one.
+	// "2bay" is absent on purpose: the two-bay box is the vendor picture
+	// itself, "synology/nas", which is also what a detected Synology NAS wears
+	// before anyone says how many bays it has. The rest are one swap of a
+	// number in one prompt, and the picker shows the ones that have been
+	// painted.
+	"synology/nas":   {"1bay", "3bay", "4bay", "5bay", "6bay", "8bay", "12bay"},
 	"apple/desktop":  {"mini", "studio"},
 	"intel/desktop":  {"nuc12extreme"},
 	"xiaomi/router":  {"be7000"},
@@ -149,7 +166,7 @@ func (Icon) JSONSchema() *jsonschema.Schema {
 		Description: "A picture chosen for this device, overriding the one its " +
 			"category and vendor would pick: <vendor>/<category> such as " +
 			"\"apple/laptop\", optionally followed by /<variant> such as " +
-			"\"apple/desktop/mini\", <category>/<variant> such as \"nas/4bay\", " +
+			"\"apple/desktop/mini\", <category>/<variant> such as \"server/tower\", " +
 			"os/<system> such as \"os/debian\", or thesvg:<slug> such as \"thesvg:proxmox\". Empty " +
 			"means the picture follows category and vendor.",
 		Pattern: `^$|^[a-z0-9-]+/[a-z0-9]+(/[a-z0-9]+)?$|^thesvg:[a-z0-9][a-z0-9-]{0,95}$`,

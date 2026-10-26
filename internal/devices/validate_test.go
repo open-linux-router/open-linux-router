@@ -145,6 +145,7 @@ func problemStrings(ps []Problem) string {
 func TestValidateIcons(t *testing.T) {
 	for _, icon := range []Icon{"", "apple/laptop", "apple/phone", "os/debian", "os/proxmox", "huawei/laptop",
 		"nas/4bay", "nas/8bay", "apple/desktop/mini", "apple/desktop/studio",
+		"synology/nas/1bay", "synology/nas/4bay", "synology/nas/12bay",
 		"server/tower", "desktop/mini", "intel/desktop",
 		"desktop/ikoolcorer1", "desktop/ikoolcorer2", "desktop/ikoolcorer2max",
 		"thesvg:proxmox", "thesvg:home-assistant", "thesvg:1password"} {
@@ -166,6 +167,9 @@ func TestValidateIcons(t *testing.T) {
 		"apple/laptop/x",       // laptops have no variants
 		"apple/desktop/x",      // not a variant of the iMac's category
 		"nas/3bay",             // not a variant anyone drew
+		"synology/nas/2bay",    // the two-bay box is the vendor picture itself
+		"synology/nas/7bay",    // no such count in the family
+		"synology/router/4bay", // routers have no variants
 		"desktop/ikoolcorer3",  // no artwork for an unregistered model
 		"router/4bay",          // routers have no variants
 		"modem/4bay",           // nor modems
