@@ -6,8 +6,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/showwin/speedtest-go/speedtest"
 
@@ -245,5 +247,98 @@ func TestSelectedExitIsValidatedForBothRoutes(t *testing.T) {
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("%s: got %d, want 400", path, w.Code)
 		}
+	}
+}
+
+func TestServerOptionsDropUnreachableAndCountBoth(t *testing.T) {
+	servers := speedtest.Servers{
+		{ID: "1", Sponsor: "Near", Name: "City", Country: "Country A", Latency: 12 * time.Millisecond},
+		{ID: "2", Sponsor: "Gone", Name: "City", Country: "Country B", Latency: speedtest.PingTimeout},
+		{ID: "3", Sponsor: "Far", Name: "Town", Country: "Country C", Latency: 90 * time.Millisecond},
+	}
+	list := serverOptions(servers)
+	if list.Candidates != 3 || list.Reachable != 2 || len(list.Servers) != 2 {
+		t.Fatalf("list = %+v", list)
+	}
+	if list.Servers[0].ID != "1" || list.Servers[0].Latency != 12 {
+		t.Fatalf("servers are not ordered by latency: %+v", list.Servers)
+	}
+}
+
+func TestServerOptionsStopAtTheLimit(t *testing.T) {
+	servers := make(speedtest.Servers, 0, serverListLimit+10)
+	for i := range serverListLimit + 10 {
+		servers = append(servers, &speedtest.Server{ID: strconv.Itoa(i), Sponsor: "Sponsor", Latency: time.Duration(i) * time.Millisecond})
+	}
+	list := serverOptions(servers)
+	if len(list.Servers) != serverListLimit || list.Reachable != serverListLimit+10 {
+		t.Fatalf("listed %d servers of %d", len(list.Servers), list.Reachable)
+	}
+}
+
+func TestServerSearchIsTrimmedAndBounded(t *testing.T) {
+	if search, err := serverSearch("  Taiwan  "); err != nil || search != "Taiwan" {
+		t.Fatalf("search = %q, err = %v", search, err)
+	}
+	if _, err := serverSearch(strings.Repeat("x", 65)); err == nil {
+		t.Fatal("over-long search was accepted")
+	}
+	if _, err := serverSearch("line\nbreak"); err == nil {
+		t.Fatal("control characters were accepted")
+	}
+}
+
+func TestServersReportWhatTheTargetAnswered(t *testing.T) {
+	var gotExit, gotSearch string
+	h := &HTTP{ListServers: func(_ context.Context, exit, search string) (ServerList, error) {
+		gotExit, gotSearch = exit, search
+		return ServerList{Servers: []ServerOption{{ID: "9", Sponsor: "Sponsor", Location: "City, Country", Latency: 20}}, Candidates: 12, Reachable: 4}, nil
+	}}
+	w := httptest.NewRecorder()
+	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/speedtest/servers?search=%20Taiwan%20", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	if gotExit != "" || gotSearch != "Taiwan" {
+		t.Fatalf("exit = %q, search = %q", gotExit, gotSearch)
+	}
+	var list ServerList
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if list.Candidates != 12 || list.Reachable != 4 || len(list.Servers) != 1 || list.Servers[0].ID != "9" {
+		t.Fatalf("list = %+v", list)
+	}
+}
+
+func TestServersRejectUnusableSearch(t *testing.T) {
+	h := &HTTP{ListServers: func(context.Context, string, string) (ServerList, error) {
+		t.Fatal("listed servers for an unusable search")
+		return ServerList{}, nil
+	}}
+	routes := core.RouteTable(h.Routes())
+	for _, query := range []string{"search=" + strings.Repeat("x", 80), "search=a%0Ab"} {
+		for _, method := range []string{http.MethodGet, http.MethodPost} {
+			path := "/speedtest/servers"
+			if method == http.MethodPost {
+				path = "/speedtest"
+			}
+			w := httptest.NewRecorder()
+			routes.ServeHTTP(w, httptest.NewRequest(method, path+"?"+query, nil))
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("%s %s: got %d, want 400", method, path, w.Code)
+			}
+		}
+	}
+}
+
+func TestServersReportListFailures(t *testing.T) {
+	h := &HTTP{ListServers: func(context.Context, string, string) (ServerList, error) {
+		return ServerList{}, errors.New("provider unreachable")
+	}}
+	w := httptest.NewRecorder()
+	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/speedtest/servers", nil))
+	if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "provider unreachable") {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
 	}
 }

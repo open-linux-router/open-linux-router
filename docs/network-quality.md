@@ -466,7 +466,7 @@ Existing code provides useful starting points, not complete catalog coverage:
 | --- | --- |
 | Overview radar | Measured partial reference assessment with raw evidence; complete coverage remains future work |
 | Gateway latency monitor | Single HTTPS HEAD application-round-trip sample against a saved target, plus separate DNS timing; not network RTT or a quality history store |
-| Tools speed test | Router-originated speedtest-go download/upload/latency/jitter, selectable server/exit; not per-service/CDN adapters |
+| Tools speed test | Router-originated speedtest-go download/upload/latency/jitter, selectable server/exit; the server picker lists nearby Ookla servers or a provider, city or country search and says how many of the listed servers answered; not per-service/CDN adapters |
 | Tools ping | Finite ICMP RTT/loss test; not a continuous representative stability window |
 | Tools NAT | Default-route IPv4 STUN mapping/filtering observations, subject to server support; not actual P2P or inbound verification |
 | LibreSpeed and iPerf3 | Browser-based LibreSpeed test between one device and this router (download/upload/latency/jitter), plus a temporary iperf3 server for sustained wired throughput; neither supplies whole-site Wi-Fi telemetry |

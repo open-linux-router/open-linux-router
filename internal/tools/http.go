@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/showwin/speedtest-go/speedtest"
 
@@ -17,6 +18,10 @@ import (
 )
 
 const ModuleName = "tools"
+
+// serverListLimit caps how many servers the picker returns: enough for a real
+// choice, short enough to stay a list rather than a directory.
+const serverListLimit = 50
 
 type SpeedResult struct {
 	Server   string  `json:"server"`
@@ -33,6 +38,14 @@ type ServerOption struct {
 	Sponsor  string  `json:"sponsor"`
 	Location string  `json:"location"`
 	Latency  float64 `json:"latency_ms"`
+}
+
+// ServerList reports the reachable servers a picker can offer, and how much of
+// what the provider listed answered, so a short list explains itself.
+type ServerList struct {
+	Servers    []ServerOption `json:"servers"`
+	Candidates int            `json:"candidates"`
+	Reachable  int            `json:"reachable"`
 }
 
 type HTTP struct {
@@ -62,16 +75,20 @@ type HTTP struct {
 	ResolveExit func(string) (uint32, error)
 	// Run is replaceable in tests; nil uses the actual network test.
 	Run func(context.Context) (SpeedResult, error)
+	// ListServers is replaceable in tests; nil queries Ookla through the
+	// selected way out.
+	ListServers func(context.Context, string, string) (ServerList, error)
 }
 
 func (h *HTTP) Routes() []core.Route {
 	exit := core.QueryParam{Name: "exit", Type: "string", Summary: "Configured way out; empty uses the router's own default route."}
+	search := core.QueryParam{Name: "search", Type: "string", Summary: "Optional word to widen the server list, matched by Ookla against provider, city and country names; empty lists nearby servers."}
 	return []core.Route{
 		{Method: "GET", Path: "/quality", Tool: "show quality", Summary: "Read the latest network quality assessment, evidence and score coverage without starting tests.", Handler: h.getQuality},
 		{Method: "POST", Path: "/quality", Mutating: true, Summary: "Run a full router default-route quality assessment, or rerun one scope and update its scores; the reference transfer consumes bandwidth.", Query: []core.QueryParam{{Name: "scope", Type: "string", Summary: "all (default) runs every test; responses, target, speed and nat rerun one part and keep the rest."}, {Name: "target", Type: "string", Summary: "Service target ID when scope is target: cloudflare, google or github."}, {Name: "speed", Type: "boolean", Summary: "Include the bandwidth-consuming reference transfer with scope=all; defaults to false."}}, Handler: h.startQuality},
 		{Method: "DELETE", Path: "/quality", Mutating: true, Summary: "Cancel the active network quality assessment and retain its completed evidence.", Handler: h.cancelQuality},
-		{Method: "GET", Path: "/speedtest/servers", Tool: "show speedtest servers", Summary: "Find nearby speed test servers through the selected way out; makes network requests but transfers no test data.", Query: []core.QueryParam{exit}, Handler: h.servers},
-		{Method: "POST", Path: "/speedtest", Mutating: true, Summary: "Measure this router's internet latency, download and upload speed using speedtest-go; consumes bandwidth.", Query: []core.QueryParam{exit, {Name: "server_id", Type: "string", Summary: "Speed test server ID from the server list; empty picks a reachable server automatically."}}, Handler: h.speedtest},
+		{Method: "GET", Path: "/speedtest/servers", Tool: "show speedtest servers", Summary: "Find nearby speed test servers through the selected way out; makes network requests but transfers no test data.", Query: []core.QueryParam{exit, search}, Handler: h.servers},
+		{Method: "POST", Path: "/speedtest", Mutating: true, Summary: "Measure this router's internet latency, download and upload speed using speedtest-go; consumes bandwidth.", Query: []core.QueryParam{exit, search, {Name: "server_id", Type: "string", Summary: "Speed test server ID from the server list; empty picks a reachable server automatically."}}, Handler: h.speedtest},
 		{Method: "POST", Path: "/nat", Mutating: true, Summary: "Probe this router’s default-route UDP mapping and filtering through public STUN servers; sends UDP packets.", Handler: h.nat},
 		{Method: "GET", Path: "/lan-test", Tool: "show lan test", Summary: "List LAN addresses and the current temporary iperf3 server session.", Handler: h.lanStatus},
 		{Method: "POST", Path: "/lan-test", Mutating: true, Summary: "Start a temporary iperf3 server bound to a configured LAN address; consumes router resources when a client connects.", Handler: h.startLAN},
@@ -82,15 +99,22 @@ func (h *HTTP) Routes() []core.Route {
 	}
 }
 
-func (h *HTTP) client(exit string) (*speedtest.Speedtest, error) {
-	config := &speedtest.UserConfig{}
+// exitError marks what the router itself rejected, such as a way out that is
+// gone, so a handler answers 400 instead of blaming the network.
+type exitError struct{ err error }
+
+func (e exitError) Error() string { return e.err.Error() }
+func (e exitError) Unwrap() error { return e.err }
+
+func (h *HTTP) client(exit, search string) (*speedtest.Speedtest, error) {
+	config := &speedtest.UserConfig{Keyword: search}
 	if exit != "" {
 		if h.ResolveExit == nil {
-			return nil, errors.New("exit selection is unavailable")
+			return nil, exitError{errors.New("exit selection is unavailable")}
 		}
 		mark, err := h.ResolveExit(exit)
 		if err != nil {
-			return nil, err
+			return nil, exitError{err}
 		}
 		config.DialerControl = markSocket(mark)
 	}
@@ -101,30 +125,72 @@ func (h *HTTP) client(exit string) (*speedtest.Speedtest, error) {
 	return client, nil
 }
 
+// serverSearch bounds the optional search term. Ookla matches it against
+// provider and place names, so it is free text rather than an identifier.
+func serverSearch(raw string) (string, error) {
+	search := strings.TrimSpace(raw)
+	if len(search) > 64 {
+		return "", errors.New("server search must be 64 characters or fewer")
+	}
+	if strings.ContainsFunc(search, unicode.IsControl) {
+		return "", errors.New("server search contains control characters")
+	}
+	return search, nil
+}
+
 func (h *HTTP) servers(w http.ResponseWriter, r *http.Request) {
-	client, err := h.client(r.URL.Query().Get("exit"))
+	exit := r.URL.Query().Get("exit")
+	search, err := serverSearch(r.URL.Query().Get("search"))
 	if err != nil {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	find := h.ListServers
+	if find == nil {
+		find = h.listServers
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	servers, err := client.FetchServerListContext(ctx)
+	list, err := find(ctx, exit, search)
 	if err != nil {
+		var badExit exitError
+		if errors.As(err, &badExit) {
+			core.WriteError(w, http.StatusBadRequest, badExit.Error())
+			return
+		}
 		core.WriteError(w, http.StatusServiceUnavailable, "finding test servers: "+err.Error())
 		return
 	}
-	options := make([]ServerOption, 0, 20)
-	for _, server := range *servers.Available() {
+	core.WriteJSON(w, http.StatusOK, list)
+}
+
+func (h *HTTP) listServers(ctx context.Context, exit, search string) (ServerList, error) {
+	client, err := h.client(exit, search)
+	if err != nil {
+		return ServerList{}, err
+	}
+	servers, err := client.FetchServerListContext(ctx)
+	if err != nil {
+		return ServerList{}, err
+	}
+	return serverOptions(servers), nil
+}
+
+// serverOptions keeps every reachable server the provider returned, up to the
+// picker's limit, and reports the counts the picker shows.
+func serverOptions(servers speedtest.Servers) ServerList {
+	available := *servers.Available()
+	options := make([]ServerOption, 0, min(len(available), serverListLimit))
+	for _, server := range available {
 		if server.ID == "" {
 			continue
 		}
 		options = append(options, ServerOption{ID: server.ID, Sponsor: server.Sponsor, Location: server.Name + ", " + server.Country, Latency: float64(server.Latency) / float64(time.Millisecond)})
-		if len(options) == 20 {
+		if len(options) == serverListLimit {
 			break
 		}
 	}
-	core.WriteJSON(w, http.StatusOK, map[string]any{"servers": options})
+	return ServerList{Servers: options, Candidates: len(servers), Reachable: len(available)}
 }
 
 func (h *HTTP) traceroute(w http.ResponseWriter, r *http.Request) {
@@ -174,7 +240,12 @@ func (h *HTTP) speedtest(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusBadRequest, "invalid server ID")
 		return
 	}
-	client, err := h.client(exit)
+	search, err := serverSearch(r.URL.Query().Get("search"))
+	if err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	client, err := h.client(exit, search)
 	if err != nil {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
 		return

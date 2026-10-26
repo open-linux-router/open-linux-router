@@ -68,6 +68,12 @@ interface ServerOption {
   latency_ms: number
 }
 
+interface ServerList {
+  servers: ServerOption[]
+  candidates: number
+  reachable: number
+}
+
 interface NATResult {
   server: string
   mapped: string
@@ -146,12 +152,20 @@ function SpeedTest() {
   const gateway = useGatewayConfig()
   const [exit, setExit] = useState('')
   const [serverID, setServerID] = useState('')
+  const [search, setSearch] = useState('')
+  const [appliedSearch, setAppliedSearch] = useState('')
   const exits = gateway.data?.enabled ? (gateway.data.exits ?? []).filter((item) => item.via.kind !== 'blocked') : []
   const exitUnavailable = exit !== '' && !!gateway.data && !exits.some((item) => item.name === exit)
   const selectedExit = exit
+  // Typing refetches the list, so the term is settled first: every keystroke
+  // would otherwise cost a round trip to Ookla.
+  useEffect(() => {
+    const timer = setTimeout(() => setAppliedSearch(search.trim()), 400)
+    return () => clearTimeout(timer)
+  }, [search])
   const servers = useQuery({
-    queryKey: ['tools', 'speedtest', 'servers', selectedExit],
-    queryFn: () => api.get<{ servers: ServerOption[] }>(`/api/tools/speedtest/servers?exit=${encodeURIComponent(selectedExit)}`),
+    queryKey: ['tools', 'speedtest', 'servers', selectedExit, appliedSearch],
+    queryFn: () => api.get<ServerList>(`/api/tools/speedtest/servers?${new URLSearchParams({ exit: selectedExit, search: appliedSearch })}`),
     staleTime: 60_000,
     retry: false,
   })
@@ -173,7 +187,7 @@ function SpeedTest() {
     setCopied(false)
     setCopyFailed(false)
     try {
-      setResult(await api.post<SpeedResult>(`/api/tools/speedtest?${new URLSearchParams({ exit: selectedExit, server_id: selectedServer })}`))
+      setResult(await api.post<SpeedResult>(`/api/tools/speedtest?${new URLSearchParams({ exit: selectedExit, server_id: selectedServer, search: appliedSearch })}`))
     } catch (err) {
       setError(explainFailure(err))
     } finally {
@@ -217,6 +231,7 @@ function SpeedTest() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="speed-server">{t('Test server')}</Label>
+              <Input id="speed-server-search" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setServerID('') }} placeholder={t('Country, city or provider')} aria-label={t('Narrow the server list')} maxLength={64} disabled={running} />
               <Select value={selectedServer || 'auto'} onValueChange={(value) => setServerID(value === 'auto' ? '' : value ?? '')} disabled={running || servers.isPending}>
                 <SelectTrigger id="speed-server" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -227,7 +242,9 @@ function SpeedTest() {
               {servers.isPending && <p className="text-xs text-muted-foreground">{t('Finding reachable servers…')}</p>}
               {serverUnavailable && <p className="text-xs text-destructive">{t('Refresh the server list or choose another server before testing.')}</p>}
               {servers.isError && <p className="text-xs text-destructive">{t('Could not list servers:')} {servers.error.message}. Automatic selection is still available.</p>}
-              <p className="text-xs text-muted-foreground">{t('Up to 20 reachable servers.')}</p>
+              {servers.isSuccess && options.length === 0 && <p className="text-xs text-destructive">{t('No server matched that search. Clear it to see nearby servers.')}</p>}
+              {servers.isSuccess && options.length > 0 && <p className="text-xs text-muted-foreground">{t('{reachable} of {candidates} listed servers answered.', { reachable: servers.data.reachable, candidates: servers.data.candidates })}</p>}
+              {servers.isSuccess && servers.data.reachable > options.length && <p className="text-xs text-muted-foreground">{t('Showing the {shown} closest responding.', { shown: options.length })}</p>}
             </div>
           </div>
           <Button onClick={run} disabled={running || gateway.isPending || exitUnavailable || serverUnavailable}>
