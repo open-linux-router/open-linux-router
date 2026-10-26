@@ -1,21 +1,24 @@
 package ingress
 
 import (
-	"context"
 	"encoding/base64"
-	"encoding/xml"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/brandlogo"
 )
 
 var svgSlug = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,79}$`)
 
 // ValidateCustomIcon accepts a bounded raster image or a theSVG catalog ID.
+//
+// A slug is validated by shape, not by asking the catalogue whether it holds
+// one: a configuration written against an older olrd may name a mark this
+// build does not carry, and that must not turn into a box whose configuration
+// refuses to load. The UI draws the category's own picture when a mark is
+// missing, exactly as it does when none was chosen.
 func ValidateCustomIcon(icon string) error {
 	if icon == "" {
 		return nil
@@ -42,8 +45,14 @@ func ValidateCustomIcon(icon string) error {
 	return errors.New("use a PNG, JPEG, WebP or theSVG icon")
 }
 
-// CustomIcon resolves an already validated choice, without following redirects.
-func CustomIcon(ctx context.Context, icon string) ([]byte, string, error) {
+// CustomIcon resolves an already validated choice from the binary's own
+// catalogue.
+//
+// It used to fetch the mark from raw.githubusercontent.com. That made an icon
+// on a router page depend on GitHub being reachable from the router, and it
+// put an unbounded, unauthenticated network fetch behind a configuration
+// field; the artwork now ships in olrd (see internal/brandlogo).
+func CustomIcon(icon string) ([]byte, string, error) {
 	if icon == "" {
 		return nil, "", errors.New("no custom icon")
 	}
@@ -55,56 +64,9 @@ func CustomIcon(ctx context.Context, icon string) ([]byte, string, error) {
 		data, _ := base64.StdEncoding.DecodeString(strings.SplitN(icon, ",", 2)[1])
 		return data, kind, nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
-	defer cancel()
-	request, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/"+strings.TrimPrefix(icon, "thesvg:")+"/default.svg", nil)
-	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	response, err := client.Do(request)
+	data, err := brandlogo.SVG(strings.TrimPrefix(icon, "thesvg:"))
 	if err != nil {
 		return nil, "", err
 	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("theSVG icon unavailable: HTTP %d", response.StatusCode)
-	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, 64<<10+1))
-	if err != nil || len(data) > 64<<10 || !SafeTheSVG(data) {
-		return nil, "", errors.New("invalid theSVG response")
-	}
 	return data, "image/svg+xml", nil
-}
-
-func SafeTheSVG(data []byte) bool {
-	decoder := xml.NewDecoder(strings.NewReader(string(data)))
-	root := false
-	for {
-		token, err := decoder.Token()
-		if err == io.EOF {
-			return root
-		}
-		if err != nil {
-			return false
-		}
-		switch element := token.(type) {
-		case xml.StartElement:
-			if !root {
-				if element.Name.Local != "svg" {
-					return false
-				}
-				root = true
-			}
-			if strings.EqualFold(element.Name.Local, "script") || strings.EqualFold(element.Name.Local, "foreignObject") {
-				return false
-			}
-			for _, attr := range element.Attr {
-				key := strings.ToLower(attr.Name.Local)
-				value := strings.ToLower(strings.TrimSpace(attr.Value))
-				if strings.HasPrefix(key, "on") || (key == "href" && !strings.HasPrefix(value, "#")) || strings.Contains(value, "url(") && !strings.Contains(value, "url(#") {
-					return false
-				}
-			}
-		case xml.Directive, xml.ProcInst:
-			return false
-		}
-	}
 }

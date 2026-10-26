@@ -157,11 +157,21 @@ ouidb: ## Rebuild the embedded IEEE vendor table (fetches ~5 MB from ieee.org)
 	@# downloaded, which is what you want while editing the name cleanup.
 	cd internal/devices/ouidb && $(GO) run gen.go $(if $(SRC),-src $(SRC),)
 
+.PHONY: brand-logos
+brand-logos: ## Rebuild the embedded brand-logo catalogue from web/node_modules
+	@# Artwork, not code: generated from the @thesvg/icons dev dependency and
+	@# gitignored. `npm run build` runs this as its prebuild step, so `make web`
+	@# produces it; this target is for refreshing it without rebuilding the SPA.
+	@# The version is whatever web/package.json pins — bumping the library is
+	@# `npm update @thesvg/icons` and a rebuild, with the marks in the binary and
+	@# nothing in the diff.
+	cd $(WEB) && $(NPM) run brand-logos
+
 .PHONY: all
 all: web build ## Build the SPA and the binary
 
 .PHONY: dev
-dev: build ## Run olrd against a scratch root, for `npm run dev` to proxy to
+dev: brand-logos build ## Run olrd against a scratch root, for `npm run dev` to proxy to
 	@mkdir -p $(DEV_ROOT)
 	$(DIST)/$(BIN) internal daemon \
 	  --socket $(DEV_SOCKET) \

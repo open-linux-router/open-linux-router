@@ -39,6 +39,7 @@ import {
 import type { VendorKey } from '@/lib/api-types'
 import type { DeviceCategory } from '@/lib/config-types'
 
+import { brandLogoSrc, brandLogoSlug } from '@/features/brand-logos/brand-logos'
 import { type BrandGroup, brandGroups } from '@/features/devices/brand-groups'
 
 import accessPoint from '@/assets/device-icons/accesspoint.webp'
@@ -620,9 +621,9 @@ export type ChosenIcon =
 
 export function chosenIcon(icon?: string): ChosenIcon | undefined {
   if (!icon) return undefined
-  if (/^thesvg:[a-z0-9][a-z0-9-]{0,95}$/.test(icon)) {
-    const slug = icon.slice(7)
-    return { kind: 'os', label: slug, src: `https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${slug}/default.svg` }
+  if (brandLogoSlug(icon)) {
+    const slug = brandLogoSlug(icon)
+    return { kind: 'os', label: slug, src: brandLogoSrc(slug) }
   }
   if (icon.startsWith('os/')) {
     const mark = OS_MARKS[icon.slice(3) as OsKey]

@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -334,15 +333,6 @@ func TestCustomLatencyIconValidation(t *testing.T) {
 	for _, icon := range []string{"thesvg:../wechat", "data:image/svg+xml;base64,PHN2Zz4=", "https://evil.example/icon.svg"} {
 		if err := m.Replace([]CustomLatencySite{{Name: "Test", URL: "https://example.com/", Icon: icon}}); err == nil {
 			t.Fatalf("accepted %s", icon)
-		}
-	}
-}
-
-func TestSafeTheSVG(t *testing.T) {
-	for _, input := range []string{`<svg xmlns="http://www.w3.org/2000/svg"><path fill="#07C160" d="M0 0"/></svg>`, `<svg><script>alert(1)</script></svg>`, `<svg><image href="https://example.com/a"/></svg>`, `<svg onload="alert(1)"/>`} {
-		safe := safeTheSVG([]byte(input))
-		if safe != strings.Contains(input, "<path") {
-			t.Fatalf("unexpected SVG safety for %s", input)
 		}
 	}
 }

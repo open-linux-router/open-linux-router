@@ -3,7 +3,7 @@ import { Check } from 'lucide-react'
 import { useState } from 'react'
 
 import { Input } from '@/components/ui/input'
-import thesvgSlugs from '@/features/gateway/thesvg-slugs.json'
+import { useBrandLogoSearch } from '@/features/brand-logos/brand-logos'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import {
   BRAND_GROUPS,
@@ -70,7 +70,7 @@ export function CategoryPicker({
   const auto = value.category === '' && value.icon === ''
   const [search, setSearch] = useState('')
   const query = search.trim().toLowerCase()
-  const matches = query ? thesvgSlugs.filter((slug) => slug.includes(query)).slice(0, 32) : []
+  const { slugs: matches, loading } = useBrandLogoSearch(search)
   const selectedSlug = value.icon.startsWith('thesvg:') ? value.icon.slice(7) : ''
 
   return (
@@ -106,7 +106,7 @@ export function CategoryPicker({
             </Tile>
           ))}
         </Section>}
-        {query && matches.length === 0 && <p role="status" className="text-sm text-muted-foreground">{t('No matching icons.')}</p>}
+        {query && !loading && matches.length === 0 && <p role="status" className="text-sm text-muted-foreground">{t('No matching icons.')}</p>}
         <p className="text-xs text-muted-foreground">{t('Icons by theSVG (MIT). Only the selected ID is saved.')}</p>
       </div>
 

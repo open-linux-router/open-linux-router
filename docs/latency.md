@@ -68,6 +68,7 @@ The monitoring dialog preserves the order of the `custom` list. Rows can be
 reordered, edited, and given a custom icon. Clicking an icon offers automatic
 favicon discovery, a resized PNG/JPEG/WebP upload (at most 96 KiB in stored
 form), or a searchable theSVG icon ID. Uploaded images are stored as validated
-base64 in the saved site configuration; theSVG IDs are fetched from the fixed
-library path and served as bounded SVG images after validation. This icon fetch
-is independent of the latency probe.
+base64 in the saved site configuration; a theSVG ID names one of the marks
+bundled in `olrd`, which is served from the binary and never fetched from a third
+party (`internal/brandlogo`). Supplying an icon is independent of the latency
+probe.

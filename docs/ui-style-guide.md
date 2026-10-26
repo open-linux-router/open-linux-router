@@ -275,7 +275,9 @@ monospace for addresses, commands and configuration.
 
 Device imagery identifies device categories. Device icon selection also offers
 theSVG search above the built-in categories,
-using the existing image tiles and selected state. Vendor pictures below them
+using the existing image tiles and selected state. The marks are bundled in the
+binary and searched through the daemon (`internal/brandlogo`), so the picker
+works on a router with no internet and draws no third-party image. Vendor pictures below them
 are grouped one labelled section per maker — Apple, Samsung, Huawei — rather
 than shown in a single grid; makers holding one picture share a final *Other
 brands* section, and a maker's section leaves that bucket on their second

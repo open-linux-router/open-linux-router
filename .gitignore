@@ -6,6 +6,14 @@
 /internal/webui/assets/*
 !/internal/webui/assets/.gitkeep
 
+# The brand-logo catalogue is artwork generated from the @thesvg/icons dev
+# dependency by `npm run build` (web/scripts/build-brand-logos.mjs). Ignored for
+# the same reason: it is produced, not written, and 6 MB of gzip in a diff
+# tracks nothing a version bump does not. data/README.md states where it comes
+# from and the directory keeps the embed target present on a fresh clone.
+/internal/brandlogo/data/logos.bin
+/internal/brandlogo/data/logos.idx
+
 /web/node_modules/
 
 # Working directory for launch content: strategy, copy, screenshots, renders.

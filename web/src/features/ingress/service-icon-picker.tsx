@@ -4,14 +4,14 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import thesvgSlugs from '@/features/gateway/thesvg-slugs.json'
+import { brandLogoHref, brandLogoSrc, useBrandLogoSearch } from '@/features/brand-logos/brand-logos'
 
 export function ServiceIconPicker({ name, icon, onChange }: { name: string; icon?: string; onChange: (icon?: string) => void }) {
   useLocale()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
-  const matches = search.trim() ? thesvgSlugs.filter((slug) => slug.includes(search.trim().toLowerCase())).slice(0, 32) : []
+  const { slugs: matches } = useBrandLogoSearch(search)
 
   async function upload(file?: File) {
     if (!file) return
@@ -35,8 +35,7 @@ export function ServiceIconPicker({ name, icon, onChange }: { name: string; icon
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not read image') }
   }
 
-  const preview = icon?.startsWith('data:') ? icon : icon?.startsWith('thesvg:')
-    ? `https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${icon.slice(7)}/default.svg` : undefined
+  const preview = icon?.startsWith('data:') ? icon : brandLogoHref(icon)
   return <>
     <div className="space-y-1.5">
       <span className="text-sm font-medium">{t('Site logo')}</span>
@@ -59,7 +58,7 @@ export function ServiceIconPicker({ name, icon, onChange }: { name: string; icon
         <Input aria-label={t('Search theSVG icons')} placeholder={t('Search theSVG (e.g. grafana)')} value={search} onChange={(event) => setSearch(event.target.value)} />
         <div className="grid max-h-52 grid-cols-4 gap-2 overflow-y-auto">{matches.map((slug) => <button key={slug} type="button" className="flex min-w-0 flex-col items-center gap-1 rounded-lg border p-2 text-xs hover:bg-muted" title={slug}
           onClick={() => { onChange(`thesvg:${slug}`); setOpen(false) }}>
-          <img src={`https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${slug}/default.svg`} alt="" className="size-7" loading="lazy" />
+          <img src={brandLogoSrc(slug)} alt="" className="size-7" loading="lazy" />
           <span className="w-full truncate">{slug}</span></button>)}</div>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <p className="text-xs text-muted-foreground">{t('Icons by theSVG (MIT). Only the selected ID is saved.')}</p>

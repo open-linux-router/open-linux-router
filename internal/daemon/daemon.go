@@ -34,6 +34,7 @@ import (
 
 	sddaemon "github.com/coreos/go-systemd/v22/daemon"
 
+	"github.com/open-linux-router/open-linux-router/internal/brandlogo"
 	"github.com/open-linux-router/open-linux-router/internal/buildinfo"
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/devices"
@@ -891,6 +892,19 @@ func run(args []string) error {
 	// JSON-body guard exists to refuse. What authorizes them is a viewer cookie
 	// minted inside the API — the same shape as /inspection-web/ above.
 	top.Handle(tools.LinkTestPrefix+"/", toolHTTP.LinkTestHandler())
+	// The brand marks the pickers offer are static artwork with no
+	// configuration in them, so they sit outside /api for the same reason the
+	// SPA does: an <img> must render without a session, and one installation
+	// ships exactly what another does.
+	top.Handle(brandlogo.Prefix, brandlogo.Handler())
+	top.Handle(brandlogo.Prefix+"/", brandlogo.Handler())
+	if !brandlogo.Built() {
+		// Like the SPA, the catalogue comes from the web build; a binary
+		// compiled without it still runs, and this is the one line that
+		// explains why the picker is showing category pictures.
+		logger.Warn("this olrd was built without the brand-logo catalogue",
+			"note", "the device and site pickers fall back to category pictures; run `make web` before `make build` to include the marks")
+	}
 	top.Handle("/", webui.Handler())
 
 	// The MCP surface (§6.4), composed here for the same reason the SPA is:

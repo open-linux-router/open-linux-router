@@ -56,7 +56,8 @@ shortcut and icon discovery. It opens that page under the published name;
 it does not rewrite requests or alter the Caddyfile. If the homepage redirects
 to a page with an icon, icon discovery follows same-origin HTTPS redirects.
 The WebUI can instead save a custom PNG/JPEG/WebP logo (resized to 128 px)
-or a theSVG icon ID for each service. Clearing it restores automatic favicon
+or a theSVG icon ID for each service, which names a mark bundled in `olrd`
+rather than fetching one (`internal/brandlogo`). Clearing it restores automatic favicon
 discovery; this changes only the Overview shortcut, not proxy routing.
 
 Each upstream may also set or remove request headers sent to that service.

@@ -31,6 +31,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { brandLogoHref } from '@/features/brand-logos/brand-logos'
 import { DeviceIcon } from '@/features/devices/device-icon'
 import type { GroupDeletion } from '@/features/devices/group-actions'
 import { groupOptions, MAX_GROUP_DEPTH, parentChoices } from '@/features/devices/group-tree'
@@ -738,6 +739,7 @@ function loadIcon(url: string): Promise<string | undefined> {
 export function ServiceIcon({ name, version, choice }: { name: string; version?: string; choice?: string }) {
   useLocale()
   const [icon, setIcon] = useState<string>()
+  const [broken, setBroken] = useState<string>()
   useEffect(() => {
     if (choice || !version) return
     let listening = true
@@ -746,10 +748,13 @@ export function ServiceIcon({ name, version, choice }: { name: string; version?:
     })
     return () => { listening = false }
   }, [name, version, choice])
-  const preview = choice?.startsWith('data:') ? choice : choice?.startsWith('thesvg:')
-    ? `https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${choice.slice(7)}/default.svg` : icon
-  return preview ? (
-    <img src={preview} alt="" className="size-5 object-contain" />
+  const preview = choice?.startsWith('data:') ? choice : (brandLogoHref(choice) ?? icon)
+  // A mark this build does not carry 404s like any missing picture, and the
+  // tile goes back to being the service's own initials rather than a broken
+  // image.
+  const show = preview && preview !== broken
+  return show ? (
+    <img src={preview} alt="" className="size-5 object-contain" onError={() => setBroken(preview)} />
   ) : (
     <span className="text-[10px] font-semibold uppercase" aria-hidden>{name.slice(0, 2)}</span>
   )

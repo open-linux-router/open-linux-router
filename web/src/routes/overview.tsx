@@ -25,7 +25,7 @@ import { useIngressConfig, useIngressStatus } from '@/features/ingress/queries'
 import { servicesByDevice } from '@/features/topology/services'
 import { useHostMetrics, usePublicAddresses, type HostMetrics, type PublicAddresses } from '@/features/system/queries'
 import 'flag-icons/css/flag-icons.min.css'
-import thesvgSlugs from '@/features/gateway/thesvg-slugs.json'
+import { brandLogoHref, brandLogoSrc, useBrandLogoSearch } from '@/features/brand-logos/brand-logos'
 import { useGatewayConfig, useGatewayLatency, useMeasureLatencySite, useSaveLatencySites, useGatewayStatus, useGatewayTraffic } from '@/features/gateway/queries'
 import { FirstRun } from '@/features/setup/first-run'
 import { useRemoteStatus } from '@/features/remote/queries'
@@ -453,6 +453,7 @@ function PublicAddressRow({ addresses }: { addresses?: PublicAddresses }) {
 function SiteIcon({ name, url, icon: iconChoice }: { name: string; url: string; icon?: string }) {
   useLocale()
   const [autoIcon, setAutoIcon] = useState<string>()
+  const [broken, setBroken] = useState<string>()
   useEffect(() => {
     if (iconChoice?.startsWith('data:')) return
     const controller = new AbortController()
@@ -472,8 +473,10 @@ function SiteIcon({ name, url, icon: iconChoice }: { name: string; url: string; 
       if (objectURL) URL.revokeObjectURL(objectURL)
     }
   }, [name, url, iconChoice])
-  const preview = iconChoice?.startsWith('data:') ? iconChoice : iconChoice?.startsWith('thesvg:') ? `https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${iconChoice.slice(7)}/default.svg` : autoIcon
-  return preview ? <img src={preview} alt="" className="size-5 shrink-0 rounded-sm object-contain" />
+  const preview = iconChoice?.startsWith('data:') ? iconChoice : (brandLogoHref(iconChoice) ?? autoIcon)
+  // A mark this build does not carry falls back to the site's initials, the
+  // same answer as a site with no favicon at all.
+  return preview && preview !== broken ? <img src={preview} alt="" className="size-5 shrink-0 rounded-sm object-contain" onError={() => setBroken(preview)} />
     : <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground/10 text-[10px] font-bold uppercase">{name.slice(0, 2)}</span>
 }
 
@@ -516,6 +519,7 @@ function LatencySitesDialog({ sites, exits, latency, onClose }: { sites: Monitor
   const [search, setSearch] = useState('')
   const [iconError, setIconError] = useState('')
   const [dragging, setDragging] = useState<number | null>(null)
+  const { slugs: matches } = useBrandLogoSearch(search)
   const save = useSaveLatencySites()
   const update = (index: number, changes: Partial<MonitoredSite>) => setDraft((current) => current.map((site, i) => i === index ? { ...site, ...changes } : site))
   const add = () => {
@@ -556,7 +560,6 @@ function LatencySitesDialog({ sites, exits, latency, onClose }: { sites: Monitor
       setIconFor(null)
     } catch (error) { setIconError(error instanceof Error ? error.message : 'Could not read image') }
   }
-  const matches = search.trim() ? thesvgSlugs.filter((slug) => slug.includes(search.trim().toLowerCase())).slice(0, 32) : []
   return <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
     <DialogContent className="sm:max-w-2xl">
       <DialogHeader><DialogTitle>{t('Latency settings')}</DialogTitle><DialogDescription> {t('Measure HTTPS latency from this router.')} </DialogDescription></DialogHeader>
@@ -613,7 +616,7 @@ function LatencySitesDialog({ sites, exits, latency, onClose }: { sites: Monitor
         <Input aria-label={t('Search theSVG icons')} placeholder={t('Search theSVG (e.g. wechat)')} value={search} onChange={(event) => setSearch(event.target.value)} />
         <div className="grid max-h-52 grid-cols-4 gap-2 overflow-y-auto">{matches.map((slug) => <button key={slug} type="button" className="flex min-w-0 flex-col items-center gap-1 rounded-lg border p-2 text-xs hover:bg-muted" title={slug}
           onClick={() => { update(iconFor, { icon: `thesvg:${slug}` }); setIconFor(null) }}>
-          <img src={`https://raw.githubusercontent.com/GLINCKER/thesvg/main/public/icons/${slug}/default.svg`} alt="" className="size-7" loading="lazy" />
+          <img src={brandLogoSrc(slug)} alt="" className="size-7" loading="lazy" />
           <span className="w-full truncate">{slug}</span></button>)}</div>
         {iconError && <p role="alert" className="text-sm text-destructive">{iconError}</p>}
         <p className="text-xs text-muted-foreground">{t('Icons by theSVG (MIT). Only the selected ID is saved.')}</p>

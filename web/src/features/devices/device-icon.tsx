@@ -1,4 +1,4 @@
-import { createElement } from 'react'
+import { createElement, useState } from 'react'
 
 import { chosenIcon, deviceGlyph, deviceIcon, vendorInitials } from '@/features/devices/icons'
 import type { VendorKey } from '@/lib/api-types'
@@ -90,6 +90,12 @@ export function DeviceIcon({
   const initials = category === 'unknown' || category === '' ? vendorInitials(vendor) : ''
 
   const chosen = chosenIcon(icon)
+  // A mark a newer build carries and this one does not is a 404 at draw time,
+  // not at save time: the config was valid where it was written. Forget the
+  // picture and let the category answer, which is the same last resort as for
+  // a device nobody has drawn.
+  const [brokenSrc, setBrokenSrc] = useState<string>()
+  const drawable = chosen && chosen.src !== brokenSrc ? chosen : undefined
 
   // The quiet tile, shared by the mark, lettering and glyph cases so they are
   // the same object with different contents rather than several things that
@@ -101,17 +107,18 @@ export function DeviceIcon({
     className,
   )
 
-  if (chosen?.kind === 'os') {
+  if (drawable?.kind === 'os') {
     const mark = cn('size-[62%] object-contain', dimmed && 'saturate-50')
     return (
-      <div title={chosen.label} aria-label={chosen.label} className={tile}>
-        <img src={chosen.src} alt="" className={cn(mark, chosen.dark && 'dark:hidden')} />
-        {chosen.dark && <img src={chosen.dark} alt="" className={cn(mark, 'hidden dark:block')} />}
+      <div title={drawable.label} aria-label={drawable.label} className={tile}>
+        <img src={drawable.src} alt="" className={cn(mark, drawable.dark && 'dark:hidden')}
+          onError={() => setBrokenSrc(drawable.src)} />
+        {drawable.dark && <img src={drawable.dark} alt="" className={cn(mark, 'hidden dark:block')} />}
       </div>
     )
   }
 
-  const photo = chosen?.src ?? deviceIcon(category, vendorKey, initials !== '')
+  const photo = (drawable?.kind === 'photo' ? drawable.src : undefined) ?? deviceIcon(category, vendorKey, initials !== '')
   if (photo) {
     return (
       <img

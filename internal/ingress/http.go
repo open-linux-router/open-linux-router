@@ -201,7 +201,7 @@ func (h HTTP) getServiceIcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if matched.Icon != "" {
-		data, kind, err := CustomIcon(r.Context(), matched.Icon)
+		data, kind, err := CustomIcon(matched.Icon)
 		if err != nil {
 			http.NotFound(w, r)
 			return

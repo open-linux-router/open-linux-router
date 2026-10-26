@@ -53,7 +53,7 @@ func (m *CustomLatencyMonitor) Icon(ctx context.Context, name string) ([]byte, s
 		return m.discoverIcon(ctx, site, client)
 	}
 	if strings.HasPrefix(site.Icon, "thesvg:") {
-		data, kind, err := ingress.CustomIcon(ctx, site.Icon)
+		data, kind, err := ingress.CustomIcon(site.Icon)
 		if err != nil {
 			return nil, "", err
 		}
@@ -111,5 +111,3 @@ func (m *CustomLatencyMonitor) siteByName(name string) CustomLatencySite {
 	}
 	return CustomLatencySite{}
 }
-
-func safeTheSVG(data []byte) bool { return ingress.SafeTheSVG(data) }
