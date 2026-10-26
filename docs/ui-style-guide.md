@@ -276,20 +276,22 @@ monospace for addresses, commands and configuration.
 Device imagery identifies device categories. Device icon selection is one search
 box over two catalogues — the pictures bundled in the binary, matched on labels,
 makers, categories and tags, and theSVG's marks, matched on the daemon
-(`internal/brandlogo`) — so it works on a router with no internet and draws no
-third-party image. The box sits above a list that scrolls on its own, so it is
-still there when the list is long. Below it, two blocks: brand pictures grouped
-one labelled section per maker — Apple, Samsung, Huawei — with makers holding
-one picture sharing a trailing *Other brands* section, then one *Common* grid
-mixing every unbranded picture and its variants. A query replaces both blocks
-with results, bundled pictures first and theSVG's marks under their own
-heading. Operating-system marks are no longer offered there; stored marks still
-draw. See `web/src/assets/device-icons/ICONS.md`. Render chosen logos in the
-same muted tile as operating-system marks throughout device views. A device that
-dialed in wears the Way in badge in the lower-right corner of that picture — the
-same badge in the map's band card and on its own page — because the picture is
-the same in both places and the badge is the only thing that says the tunnel
-brought it.
+(`internal/brandlogo`: exactly, then by prefix and substring, then on a near
+miss, so a dropped or transposed letter still finds the mark) — so it works on a
+router with no internet and draws no third-party image. The box sits above a
+list that scrolls on its own, so it is still there when the list is long. Below
+it, two blocks: brand pictures grouped one labelled section per maker — Apple,
+Samsung, Huawei — with makers holding one picture sharing a trailing *Other
+brands* section, then one *Common* grid mixing every unbranded picture and its
+variants. A query replaces both blocks with results, bundled pictures first and
+theSVG's marks under their own heading. Operating-system marks are no longer
+offered there; stored marks still draw. See
+`web/src/assets/device-icons/ICONS.md`. Render chosen logos in the same muted
+tile as operating-system marks throughout device views. A device that dialed in
+wears the Way in badge in the lower-right corner of that picture — the same
+badge in the map's band card and on its own page — because the picture is the
+same in both places and the badge is the only thing that says the tunnel brought
+it.
 
 Tool directory entries use Lucide
 outline icons with a 1.75px stroke in a themed 56px surface (48px on phones),

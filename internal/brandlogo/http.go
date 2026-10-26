@@ -48,7 +48,7 @@ func (catalogueHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // serveSearch answers the picker's query.
 //
-// The SPA no longer downloads the slug list: 6,418 names is more than a picker
+// The SPA no longer downloads the slug list: 7,630 names is more than a picker
 // will ever show and more than a router should send to paint a search box. The
 // index is here, so the question comes here too.
 func serveSearch(w http.ResponseWriter, r *http.Request) {

@@ -34,9 +34,9 @@ thing in the library that names an address off the box.
 
 | | |
 |---|---|
-| Marks | 6,418 in `@thesvg/icons` 3.2.4 |
-| SVG as published | 13.9 MiB |
-| On the binary, per-mark gzip | 5.9 MiB |
+| Marks | 7,630 in `@thesvg/icons` 3.4.2 |
+| SVG as published | 16.4 MiB |
+| On the binary, per-mark gzip | 7.0 MiB |
 
 `logos.bin` is one gzip stream per mark, concatenated in slug order; `logos.idx`
 is `slug<TAB>offset<TAB>length`, sorted by slug. Serving a mark is a slice of

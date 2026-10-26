@@ -70,6 +70,81 @@ func TestSearchIsASubstringOfTheSlug(t *testing.T) {
 	}
 }
 
+// A picker is typed by hand, and a hand is not a spelling checker: the query
+// that finds openlist-badge when it is right should still find it with a letter
+// dropped or two transposed.
+func TestSearchToleratesAHalfTypedName(t *testing.T) {
+	requireCatalogue(t)
+	if got := Search("openlist"); len(got) == 0 || got[0] != "openlist-badge" {
+		t.Errorf("Search(openlist) = %v, want openlist-badge first", got)
+	}
+	for _, query := range []string{"openlst", "openlsit", "opnlist"} {
+		if got := Search(query); !contains(got, "openlist-badge") {
+			t.Errorf("Search(%s) = %v, want it to include openlist-badge", query, got)
+		}
+	}
+	if got := Search("grafnaa"); len(got) == 0 || got[0] != "grafana" {
+		t.Errorf("Search(grafnaa) = %v, want grafana first", got)
+	}
+}
+
+// Two letters are a word the picker is still typing. Guessing at them would
+// spend every tile on noise, and the literal passes already answer short
+// queries, so nothing outside the prefix comes back.
+func TestSearchDoesNotGuessAtTwoLetters(t *testing.T) {
+	requireCatalogue(t)
+	for _, slug := range Search("op") {
+		if !strings.HasPrefix(slug, "op") {
+			t.Errorf("Search(op) offered %q, which does not start with the query", slug)
+		}
+	}
+}
+
+// The two near-miss measures are the whole of the fuzzy pass, and neither needs
+// a catalogue: a clone with no Node installed still runs these.
+func TestNearMissCost(t *testing.T) {
+	skipped := []struct {
+		query, slug string
+		want        int
+	}{
+		{"openlist", "openlist-badge", 0}, // contiguous
+		{"opnls", "openlist-badge", 2},    // i, i and t skipped
+		{"link", "tp-link", 0},
+	}
+	for _, c := range skipped {
+		if got, ok := skippedCost([]rune(c.query), c.slug); !ok || got != c.want {
+			t.Errorf("skippedCost(%s, %s) = %d, %v; want %d, true", c.query, c.slug, got, ok, c.want)
+		}
+	}
+	if _, ok := skippedCost([]rune("zzz"), "openlist-badge"); ok {
+		t.Error("skippedCost(zzz) matched a slug with no z in it")
+	}
+
+	typos := []struct {
+		query, slug string
+		want        int
+	}{
+		{"openlist", "openlist-badge", 0},         // the query is inside the slug
+		{"cady", "caddy", 1},                      // a dropped letter
+		{"openlsit", "openlist-badge", 2},         // two transposed letters
+		{"openlistt", "openlist-badge", 1},        // a repeated letter
+		{"openlist-badge-x", "openlist-badge", 2}, // the query runs past the name
+	}
+	for _, c := range typos {
+		rows := make([]int, 2*(len([]rune(c.query))+1))
+		runes := []rune(c.query)
+		got, ok := typoCost(runes, c.slug, rows[:len(runes)+1], rows[len(runes)+1:])
+		if !ok || got != c.want {
+			t.Errorf("typoCost(%s, %s) = %d, %v; want %d, true", c.query, c.slug, got, ok, c.want)
+		}
+	}
+	rows := make([]int, 2*(len([]rune("kubectl"))+1))
+	runes := []rune("kubectl")
+	if _, ok := typoCost(runes, "openlist-badge", rows[:len(runes)+1], rows[len(runes)+1:]); ok {
+		t.Error("typoCost(kubectl, openlist-badge) matched a slug it is not close to")
+	}
+}
+
 func TestMarkIsServedGzippedToABrowser(t *testing.T) {
 	requireCatalogue(t)
 	request := httptest.NewRequest(http.MethodGet, Prefix+"/caddy", nil)

@@ -43,9 +43,18 @@ if (!existsSync(dist)) {
   process.exit(1)
 }
 
-/** The `default` variant is what public/icons/<slug>/default.svg is upstream. */
+/**
+ * The `default` variant is what public/icons/<slug>/default.svg is upstream.
+ *
+ * Up to 3.4.1 a module exported that string directly (`export const svg = ...`);
+ * 3.4.2 moved every variant into a `variantSvgs` object and points `svg` at the
+ * `default` one. Both shapes are read here, so the dependency can move without
+ * the rest of the script caring which one it is.
+ */
 function extract(source) {
-  const match = source.match(/export const svg = `([\s\S]*?)`;?\n/)
+  const exported = source.match(/export const svg = `([\s\S]*?)`;?\n/)
+  const variant = source.match(/"default":\s*`([\s\S]*?)`/)
+  const match = exported ?? variant
   if (!match) return undefined
   let mark = match[1]
   // An XML prolog and a DOCTYPE say nothing an <img> needs, and the DOCTYPE
@@ -77,7 +86,11 @@ for (const slug of slugs) {
   // Anything the daemon would have to sanitize at runtime is a bug in the
   // catalogue, not a request to filter: refuse to build it in. A leading
   // comment carrying the mark's provenance is fine and is kept.
-  if (!/^(<!--[\s\S]*?-->\s*)*<svg[\s>]/.test(svg) || /<script|<foreignObject|on\w+=/i.test(svg)) {
+  //
+  // The event-handler test is anchored on whitespace: an attribute name is only
+  // a name after a space, and the unanchored form also caught `aria-owns`, which
+  // is not script and appears in Microsoft's marks.
+  if (!/^(<!--[\s\S]*?-->\s*)*<svg[\s>]/.test(svg) || /<script|<foreignObject|\son[a-z]+\s*=/i.test(svg)) {
     console.error(`skipping ${slug}: not a plain mark`)
     continue
   }

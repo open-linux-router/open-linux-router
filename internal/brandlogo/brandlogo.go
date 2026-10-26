@@ -11,8 +11,8 @@
 //
 // # Why a bundle rather than a directory of files
 //
-// The catalogue is ~14 MB of SVG and ~6 MB once each mark is gzipped. Shipping
-// it as one file per mark would put 6,418 entries into the embedded filesystem
+// The catalogue is ~16 MB of SVG and ~7 MB once each mark is gzipped. Shipping
+// it as one file per mark would put 7,630 entries into the embedded filesystem
 // and into git for no gain: nothing reads them but this package, and no one
 // edits a brand mark by hand. The two generated files are
 //
@@ -22,7 +22,7 @@
 // which lets the handler answer with a slice of logos.bin and the browser
 // decompress it — no decompression on the router, and no per-request memory
 // that grows with the catalogue. The index is slugs and offsets only, so the
-// search endpoint searches it rather than making the SPA download 6,400 names.
+// search endpoint searches it rather than making the SPA download 7,600 names.
 //
 // Both files are generated, not committed: web/scripts/build-brand-logos.mjs
 // packs them from the @thesvg/icons dev dependency as part of `npm run build`
@@ -34,13 +34,16 @@ package brandlogo
 
 import (
 	"bytes"
+	"cmp"
 	"compress/gzip"
 	"embed"
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // The generated catalogue, produced by web/scripts/build-brand-logos.mjs from
@@ -157,7 +160,7 @@ func Count() int {
 	return len(c.marks)
 }
 
-// Search returns the slugs containing query, best match first.
+// Search returns the slugs matching query, best match first.
 //
 // Substring rather than prefix matching is what the picker has always done:
 // "link" finds "tp-link", which is the way somebody types a brand they are
@@ -167,6 +170,12 @@ func Count() int {
 // Ranking is exact, then prefix, then anywhere-in-the-slug. Plain catalogue
 // order answers "grafana" with the two cloud managed services that also
 // contain the word, and the picker shows at most Limit tiles.
+//
+// Those three passes are literal, so a query that is close but not literal —
+// "openlsit" for openlist-badge, "opnls" for the letters a hand actually
+// reaches — would otherwise answer with nothing. A fourth pass covers that, and
+// it is the last one on purpose: it only runs once the literal passes have left
+// room, so a near miss never displaces a mark the query names outright.
 func Search(query string) []string {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
@@ -190,7 +199,157 @@ func Search(query string) []string {
 	add(func(slug string) bool { return slug == q })
 	add(func(slug string) bool { return strings.HasPrefix(slug, q) })
 	add(func(slug string) bool { return strings.Contains(slug, q) })
+	// One or two letters are a query the picker is still typing: guessing at
+	// them would fill the tiles with noise before the operator reaches the word
+	// they meant, and the literal passes already answer every short query.
+	if len(found) < Limit && utf8.RuneCountInString(q) > 2 {
+		for _, slug := range nearMisses(c, q) {
+			if len(found) == Limit {
+				break
+			}
+			if taken[slug] {
+				continue
+			}
+			taken[slug] = true
+			found = append(found, slug)
+		}
+	}
 	return found
+}
+
+// nearMisses returns every mark close enough to be worth offering for q, best
+// guess first.
+//
+// "Close" is measured in characters the guess has to skip or rewrite, which is
+// what makes the order sensible: the pickers draw Limit tiles and a near miss
+// is only useful if it is near the top. Alphabetical order would answer a
+// mistyped "openlist" with the whole aws-amazon-opensearch family.
+func nearMisses(c *catalogue, q string) []string {
+	type guess struct {
+		slug string
+		cost int
+		// Where the query's first letter lands in the slug. A guess that
+		// starts the name beats one buried inside it: "cady" should reach
+		// caddy before adyen.
+		anchor int
+	}
+	// Rows for the edit-distance scan, allocated once: this runs per debounced
+	// keystroke on a router, and scoring 7,600 marks does not need 15,000
+	// allocations to do it.
+	runes := []rune(q)
+	rows := make([]int, 2*(len(runes)+1))
+	guesses := make([]guess, 0, Limit*2)
+	for _, m := range c.marks {
+		cost, ok := nearMissCost(runes, m.slug, rows[:len(runes)+1], rows[len(runes)+1:])
+		if !ok {
+			continue
+		}
+		anchor := strings.IndexRune(m.slug, runes[0])
+		if anchor < 0 {
+			anchor = len(m.slug)
+		}
+		guesses = append(guesses, guess{m.slug, cost, anchor})
+	}
+	slices.SortFunc(guesses, func(a, b guess) int {
+		if a.cost != b.cost {
+			return cmp.Compare(a.cost, b.cost)
+		}
+		if a.anchor != b.anchor {
+			return cmp.Compare(a.anchor, b.anchor)
+		}
+		// Same distance, same start: the shorter name is the more likely
+		// brand, and the slug keeps the answer stable between two builds of
+		// the catalogue.
+		if len(a.slug) != len(b.slug) {
+			return cmp.Compare(len(a.slug), len(b.slug))
+		}
+		return strings.Compare(a.slug, b.slug)
+	})
+	out := make([]string, len(guesses))
+	for i, g := range guesses {
+		out[i] = g.slug
+	}
+	return out
+}
+
+// nearMissCost is how far slug is from q, or false when it is too far to show.
+//
+// Two shapes of near miss: the query's letters are all there in order but with
+// something skipped ("opnls" for openlist-badge), or one or two of them are
+// wrong or swapped ("openlsit"), which is what a keyboard produces. Both are
+// counted in characters, so a skipped letter and a mistyped one cost the same
+// and the cheapest guesses sort above the rest.
+func nearMissCost(q []rune, slug string, prev, curr []int) (int, bool) {
+	if cost, ok := skippedCost(q, slug); ok {
+		return cost, true
+	}
+	return typoCost(q, slug, prev, curr)
+}
+
+// skippedCost is the number of characters between the query's first and last
+// letter that the query does not account for, when every letter appears in
+// order. A contiguous occurrence costs nothing, which is why this only ever
+// adds to the substring pass: it finds marks whose letters are in there with
+// gaps between them.
+func skippedCost(q []rune, slug string) (int, bool) {
+	first, last, at := -1, 0, 0
+	for i, r := range slug {
+		if at == len(q) {
+			break
+		}
+		if r == q[at] {
+			if first < 0 {
+				first = i
+			}
+			last = i
+			at++
+		}
+	}
+	if at < len(q) {
+		return 0, false
+	}
+	return last - first + 1 - len(q), true
+}
+
+// typoCost is the smallest number of single-character edits that turns q into
+// part of slug — an insertion, a deletion or a substitution — or false when
+// even the closest part of the slug needs more than maxTypos.
+//
+// This is Levenshtein distance with two changes: the first column is zeroed on
+// every row, which lets the match start anywhere in the slug, and the best
+// result is kept across rows, which lets it end anywhere. Together they answer
+// "how close is q to some substring of slug", which is the question a search
+// box asks.
+func typoCost(q []rune, slug string, prev, curr []int) (int, bool) {
+	const maxTypos, ceiling = 2, 3
+	if len(slug)+maxTypos < len(q) {
+		return 0, false
+	}
+	for j := 0; j <= len(q); j++ {
+		prev[j] = j
+	}
+	best := len(q)
+	for _, r := range slug {
+		curr[0] = 0
+		for j := 1; j <= len(q); j++ {
+			edit := prev[j-1]
+			if q[j-1] != r {
+				edit++
+			}
+			// Everything above the ceiling is the same answer — too far —
+			// so the numbers stay small and the arithmetic cannot drift.
+			curr[j] = min(edit, prev[j]+1, curr[j-1]+1, ceiling)
+		}
+		best = min(best, curr[len(q)])
+		if best == 0 {
+			return 0, true
+		}
+		copy(prev, curr)
+	}
+	if best > maxTypos {
+		return 0, false
+	}
+	return best, true
 }
 
 // Packed returns one mark as a gzip stream, ready to be served with
