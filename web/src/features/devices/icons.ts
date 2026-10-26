@@ -119,10 +119,13 @@ import sonyConsole from '@/assets/device-icons/sony-console.webp'
 import sonyPhone from '@/assets/device-icons/sony-phone.webp'
 import sonyTv from '@/assets/device-icons/sony-tv.webp'
 import synologyNas from '@/assets/device-icons/synology-nas.webp'
+import synologyNas1Bay from '@/assets/device-icons/synology-nas-1bay.webp'
+import synologyNas3Bay from '@/assets/device-icons/synology-nas-3bay.webp'
 import synologyNas4Bay from '@/assets/device-icons/synology-nas-4bay.webp'
 import synologyNas5Bay from '@/assets/device-icons/synology-nas-5bay.webp'
 import synologyNas6Bay from '@/assets/device-icons/synology-nas-6bay.webp'
 import synologyNas8Bay from '@/assets/device-icons/synology-nas-8bay.webp'
+import synologyNas12Bay from '@/assets/device-icons/synology-nas-12bay.webp'
 import tpLinkRouter from '@/assets/device-icons/tp-link-router.webp'
 import tpLinkRouterXdr6080 from '@/assets/device-icons/tp-link-router-xdr6080.webp'
 import ubiquitiAccesspoint from '@/assets/device-icons/ubiquiti-accesspoint.webp'
@@ -312,17 +315,19 @@ const IMAGES: Partial<Record<IconKey, string>> = {
   'amazon/speaker': amazonSpeaker,
   'sonos/speaker': sonosSpeaker,
 
-  // The NAS family is Synology's, drawn as one product line: the two-bay box
-  // is the vendor picture itself, so a detected Synology NAS wears something
-  // right before anyone knows how many bays it has. The bay counts that have
-  // masters follow it; 1, 3 and 12 are in the vocabulary and in the prompt
-  // table in ICONS.md, and are deliberately absent here — an entry with no
-  // picture behind it would be a blank tile.
+  // The NAS family is Synology's, drawn as one product line and listed here in
+  // bay order. The two-bay box is the vendor picture itself, so a detected
+  // Synology NAS wears something right before anyone knows how many bays it
+  // has. One bay is narrower than the rest; the wide ones are the same box
+  // with more caddies, which is exactly what a bay count means.
+  'synology/nas/1bay': synologyNas1Bay,
   'synology/nas': synologyNas,
+  'synology/nas/3bay': synologyNas3Bay,
   'synology/nas/4bay': synologyNas4Bay,
   'synology/nas/5bay': synologyNas5Bay,
   'synology/nas/6bay': synologyNas6Bay,
   'synology/nas/8bay': synologyNas8Bay,
+  'synology/nas/12bay': synologyNas12Bay,
   'raspberry-pi/sbc': raspberryPiSbc,
   'tp-link/router': tpLinkRouter,
   'tp-link/router/xdr6080': tpLinkRouterXdr6080,

@@ -77,36 +77,43 @@ single tile. So:
 With that, the Common grid is left with the categories and the two brandless
 shapes, which is what it is for.
 
-Which counts have a master, and which are still to draw:
+Which counts have a master:
 
-| Bays | File | State |
+| Bays | File | Drawn from |
 |---|---|---|
-| 2 | `synology-nas.webp` | drawn — the vendor picture |
-| 4 | `synology-nas-4bay.webp` | drawn |
-| 5 | `synology-nas-5bay.webp` | drawn |
-| 6 | `synology-nas-6bay.webp` | drawn |
-| 8 | `synology-nas-8bay.webp` | drawn |
-| 1 | `synology-nas-1bay.webp` | **to draw** |
-| 3 | `synology-nas-3bay.webp` | **to draw** |
-| 12 | `synology-nas-12bay.webp` | **to draw** |
+| 1 | `synology-nas-1bay.webp` | the prompt below |
+| 2 | `synology-nas.webp` | the vendor picture, drawn with the set |
+| 3 | `synology-nas-3bay.webp` | the prompt below |
+| 4 | `synology-nas-4bay.webp` | the set's existing bay drawing |
+| 5 | `synology-nas-5bay.webp` | the set's existing bay drawing |
+| 6 | `synology-nas-6bay.webp` | the set's existing bay drawing |
+| 8 | `synology-nas-8bay.webp` | the set's existing bay drawing |
+| 12 | `synology-nas-12bay.webp` | the prompt below |
 
-The three missing ones are one prompt with the count changed, the same shape
-of prompt the drawn four came from — this is the one family where the *whole*
-subject is a number, so it is exactly the case text-to-image is safe for. The
-four that exist were drawn against the brandless wording before the family
-moved, which is why they read as the DS box without saying so; re-generating
-them with the sentence below is optional and changes nothing but the finish:
+The four middle counts were drawn before the family moved, against the
+brandless wording — which is why they read as the DS box without ever saying
+so. That is the finish they keep: a vendor picture may carry the maker's
+silhouette, and here the silhouette is the whole subject.
 
-> Subject: **a Synology DiskStation-style desktop NAS tower, front view, one
-> row of \<n\> vertical front-loading drive caddies, matte charcoal enclosure,
-> a single small round power button at the lower right, no screen, no logo, no
-> text, no drives sticking out**. Very minimal: a few large simple forms, no
-> fine textures, no small parts, no vents, no screws, no LEDs, no labels.
+This is the one family where the *whole* subject is a number, so it is exactly
+the case text-to-image is safe for, and adding a count is one word. The subject
+sentence, on top of the preamble in "Adding one":
 
-Adding one is the usual three steps: optimise the master into this directory,
-add its line to `IMAGES` (and its name to `variants` in
-`internal/devices/icon.go` if it is not there yet — the counts above already
-are), and nothing else moves.
+> Subject: **a desktop NAS tower in matte charcoal, front view, one row of
+> \<n\> vertical front-loading drive caddies side by side, a small round power
+> button at the lower right of the front panel**. Very minimal: a few large
+> simple forms, no fine textures, no small parts, no vents, no screws, no
+> perforations, no LEDs, no labels, no drives sticking out.
+
+Two counts want their wording bent, and both were: **one bay** is *a single
+vertical front-loading drive caddy filling most of the front* of a tall narrow
+box — "one row" reads as a row of one and comes back too wide — and **twelve**
+wants *very wide, low* and *narrow caddies*, or the bays come out fat and the
+box square.
+
+Adding a count is the usual three steps: optimise the master into this
+directory, add its line to `IMAGES` and its name to `variants` in
+`internal/devices/icon.go` if it is a new count, and nothing else moves.
 
 **How the picker arranges them.** The picker is a search box over two
 catalogues, and below it two blocks in this order:
