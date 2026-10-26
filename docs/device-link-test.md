@@ -36,7 +36,9 @@ signed in to this router gets an explanation, not a bandwidth source.
 
 The surface is framed only by this router's own page (`X-Frame-Options:
 SAMEORIGIN`, `Content-Security-Policy: frame-ancestors 'self'`), because the
-tool page embeds it.
+tool page embeds it. That page is the tool: the frame sits under the Tools
+heading with no introduction, no second title and no link out, so the test
+itself is everything the operator has to read.
 
 Telemetry is off and no result is stored: there is no database behind this page,
 so the privacy dialog LibreSpeed can show would be a false promise.

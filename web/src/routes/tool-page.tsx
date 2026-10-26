@@ -294,33 +294,24 @@ function LibreSpeed() {
     requestSession()
   }, [requestSession])
 
-  return <div className="space-y-6">
-    <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
-      <p className="max-w-2xl text-sm text-muted-foreground">{t('Measure the link between this device and the router, in this browser. Nothing has to be installed on either end.')}</p>
-      <p className="mt-2 max-w-2xl text-xs text-muted-foreground">{t('The result describes the path this page was loaded over. This device’s Wi-Fi, browser and processor can cap it before the router’s link does, and a browser test rarely passes about one gigabit.')}</p>
-    </section>
-
-    <section aria-labelledby="librespeed-page" className="panel-surface overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border px-4 py-2.5">
-        <h2 id="librespeed-page" className="text-sm font-medium">{t('Device to router')}</h2>
-        <a className="text-xs underline underline-offset-4" href="/link-test/" target="_blank" rel="noreferrer">{t('Open the test page in a new tab')}</a>
-      </div>
-      {/* The embedded page is a fixed-shape document: 960px holds all of it at
-          desktop widths, so the frame needs no scrollbar of its own. Below sm
-          the viewport is the honest bound and the frame scrolls instead. */}
-      {granted
-        ? <iframe title="LibreSpeed" src="/link-test/" className="h-[94dvh] w-full border-0 bg-[#0e0720] sm:h-[960px]" />
-        : grantError
-          ? <div className="p-4 sm:p-6"><Alert variant="destructive">
-              <AlertTitle>{t('LibreSpeed is unavailable')}</AlertTitle>
-              <AlertDescription className="space-y-3">
-                <p className="break-words">{grantError}</p>
-                <Button variant="secondary" size="sm" onClick={() => { setGrantError(null); requestSession() }}>{t('Try again')}</Button>
-              </AlertDescription>
-            </Alert></div>
-          : <div role="status" className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" aria-hidden />{t('Loading the test page…')}</div>}
-    </section>
-  </div>
+  // The tool page is the test page: no introduction and no second title above
+  // it, so the embedded document is all the operator sees.
+  return <section aria-label={t('Device to router')} className="panel-surface overflow-hidden">
+    {/* The embedded page is a fixed-shape document: 960px holds all of it at
+        desktop widths, so the frame needs no scrollbar of its own. Below sm
+        the viewport is the honest bound and the frame scrolls instead. */}
+    {granted
+      ? <iframe title="LibreSpeed" src="/link-test/" className="h-[94dvh] w-full border-0 bg-[#0e0720] sm:h-[960px]" />
+      : grantError
+        ? <div className="p-4 sm:p-6"><Alert variant="destructive">
+            <AlertTitle>{t('LibreSpeed is unavailable')}</AlertTitle>
+            <AlertDescription className="space-y-3">
+              <p className="break-words">{grantError}</p>
+              <Button variant="secondary" size="sm" onClick={() => { setGrantError(null); requestSession() }}>{t('Try again')}</Button>
+            </AlertDescription>
+          </Alert></div>
+        : <div role="status" className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" aria-hidden />{t('Loading the test page…')}</div>}
+  </section>
 }
 
 function IPerf3() {
