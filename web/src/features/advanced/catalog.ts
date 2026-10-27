@@ -9,11 +9,11 @@ import { TOOL_ARTWORK, TOOL_DEFINITIONS, TOOL_LOGOS } from '@/features/tools/cat
  * it, Services are the background jobs it runs for the network, and Diagnostics
  * are the measurements an operator runs on demand.
  *
- * A tile is a link and one short name. OLR features use approved app artwork
- * where available, otherwise a letter in the group's hue. A tile that names an
+ * A tile is a link and one name. OLR features use approved app artwork where
+ * available, otherwise a letter in the group's hue. A tile that names an
  * upstream project may wear its mark instead: a self-contained app icon that
- * fills the tile (NextTrace), or a plain glyph on white (Caddy, Speedtest),
- * like Access's project marks.
+ * fills the tile (NextTrace), or a plain glyph on white (Caddy, Speedtest by
+ * Ookla), like Access's project marks.
  */
 export interface AdvancedTile {
   slug: string

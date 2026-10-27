@@ -1,16 +1,17 @@
 import { t } from '@/lib/i18n'
-// The directory tile wears a short name and a letter mark; the page behind it
-// keeps the fuller label. Both name the same operation, and the tile's short
-// name is what fits under a 64px mark. A diagnostic that is a named upstream
-// service takes that service's name instead, and may wear its mark.
+// One name per tool, usually the same on the tile and on the page behind it.
+// `tileLabel` is what the tile shows where the two differ — NextTrace is the
+// project, Traceroute is the operation — and a diagnostic that is a named
+// upstream service keeps that service's own name in both places, because the
+// service is what distinguishes it from its neighbours.
 export const TOOL_DEFINITIONS = [
   // The internet speed tests are one tile per service, not one tile and a
   // picker: each measures a different path, and nobody arrives here wanting
   // "a speed test" without already knowing which one. The daemon runs Ookla
   // itself and shells out to the other two, which is how the page knows one is
   // missing while the others still work.
-  { slug: 'speedtest', tileLabel: 'Speedtest', letter: 'S', label: 'Speedtest by Ookla', get description() { return t('Measure download, upload and latency against an Ookla server near this router.') } },
-  { slug: 'cloudflare', tileLabel: 'Cloudflare', letter: 'C', label: 'Cloudflare Speed Test', get description() { return t('Measure download, upload and latency against the nearest Cloudflare edge.') } },
+  { slug: 'speedtest', tileLabel: 'Speedtest by Ookla', letter: 'S', label: 'Speedtest by Ookla', get description() { return t('Measure download, upload and latency against an Ookla server near this router.') } },
+  { slug: 'cloudflare', tileLabel: 'Cloudflare Speed Test', letter: 'C', label: 'Cloudflare Speed Test', get description() { return t('Measure download, upload and latency against the nearest Cloudflare edge.') } },
   { slug: 'fastcom', tileLabel: 'Fast.com', letter: 'F', label: 'Fast.com', get description() { return t('Measure download and upload on the Netflix Open Connect path streaming uses.') } },
   { slug: 'librespeed', tileLabel: 'LibreSpeed', letter: 'L', label: 'LibreSpeed', get description() { return t('Measure how fast this device can send and receive data on your local network, in the browser.') } },
   // The mark is the project's own lowercase initial: the tool is iPerf3, and a

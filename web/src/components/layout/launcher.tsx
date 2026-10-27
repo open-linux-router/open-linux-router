@@ -106,9 +106,11 @@ export function LauncherTile({
                 ? <span aria-hidden className="text-[28px] leading-none font-semibold tracking-tight">{mark.letter}</span>
                 : mark.children}
         </span>
-        {/* One line, always: a name that wraps turns one row of tiles into a
-            ragged block and makes the next group's heading look misplaced. */}
-        <span className="w-full truncate text-center text-[13px] font-medium sm:text-sm">{name}</span>
+        {/* A name the tile has to show in full — "Cloudflare Speed Test" names
+            one service among three — wraps to a second line rather than being
+            cut off at the ellipsis, which would leave two tiles reading
+            "Cloudflare…". Short names still sit on one line. */}
+        <span className="w-full text-center text-[13px] leading-tight font-medium text-balance sm:text-sm">{name}</span>
       </TooltipTrigger>
       <TooltipContent className="block space-y-2 text-sm leading-relaxed">
         <p>{description}</p>
