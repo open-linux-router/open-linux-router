@@ -584,9 +584,12 @@ This measures the router's default route to Cloudflare, not Wi-Fi or all
 internet services. Speed scoring uses the existing curves, weighting download
 70% and upload 30%; missing, invalid or timed-out transfers are excluded.
 Scoring version `quality-v3` identifies this change of reference provider.
-The standalone Speedtest tool offers three services. Ookla keeps its nearby
-server picker and probes latency only when the test runs. Cloudflare uses the
-same packaged CLI as the reference transfer, and fast.com uses the packaged Zig
+The standalone speed tests are one tool each — Speedtest by Ookla, Cloudflare
+Speed Test and Fast.com — because the three measure different paths and an
+operator arrives already knowing which one they want; a page whose command is
+missing says so instead of offering the test. Ookla keeps its nearby server
+picker and probes latency only when the test runs. Cloudflare uses the same
+packaged CLI as the reference transfer, and Fast.com uses the packaged Zig
 `fast-cli`. All three accept a way out: Ookla marks its own sockets with
 `SO_MARK`, while the two command-line tools are started under a reserved group
 id and an nftables rule marks every socket that group opens with the exit's
@@ -594,7 +597,7 @@ fwmark (`meta skgid … meta mark set …` in a `type route` output chain). That
 the mechanism the inspection proxy already uses for `mitmweb`; the group is
 never created in `/etc/group`, the table is `olr_speed` and not `olr_route`, and
 a zero mark means the router's default route and installs no rule. The two
-command-line services cannot choose a server, because the service does. fast.com
+command-line services cannot choose a server, because the service does. Fast.com
 reports latency and download/upload but no jitter, and its numbers describe the
 Netflix Open Connect path rather than general internet quality.
 

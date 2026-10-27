@@ -2,9 +2,16 @@ import { t } from '@/lib/i18n'
 // The directory tile wears a short name and a letter mark; the page behind it
 // keeps the fuller label. Both name the same operation, and the tile's short
 // name is what fits under a 64px mark. A diagnostic that is a named upstream
-// tool takes that project's name instead, and may wear its artwork.
+// service takes that service's name instead, and may wear its mark.
 export const TOOL_DEFINITIONS = [
-  { slug: 'speedtest', tileLabel: 'SpeedTest', letter: 'S', label: 'SpeedTest', get description() { return t('Measure download, upload and latency from the router to the internet.') } },
+  // The internet speed tests are one tile per service, not one tile and a
+  // picker: each measures a different path, and nobody arrives here wanting
+  // "a speed test" without already knowing which one. The daemon runs Ookla
+  // itself and shells out to the other two, which is how the page knows one is
+  // missing while the others still work.
+  { slug: 'speedtest', tileLabel: 'Speedtest', letter: 'S', label: 'Speedtest by Ookla', get description() { return t('Measure download, upload and latency against an Ookla server near this router.') } },
+  { slug: 'cloudflare', tileLabel: 'Cloudflare', letter: 'C', label: 'Cloudflare Speed Test', get description() { return t('Measure download, upload and latency against the nearest Cloudflare edge.') } },
+  { slug: 'fastcom', tileLabel: 'Fast.com', letter: 'F', label: 'Fast.com', get description() { return t('Measure download and upload on the Netflix Open Connect path streaming uses.') } },
   { slug: 'librespeed', tileLabel: 'LibreSpeed', letter: 'L', label: 'LibreSpeed', get description() { return t('Measure how fast this device can send and receive data on your local network, in the browser.') } },
   // The mark is the project's own lowercase initial: the tool is iPerf3, and a
   // capital I in the tile would be the only place the name is spelled wrong.
@@ -16,10 +23,20 @@ export const TOOL_DEFINITIONS = [
 
 export type ToolSlug = typeof TOOL_DEFINITIONS[number]['slug']
 
-// A tool that is a named upstream project may wear that project's own app
-// icon; every other tool keeps its letter. Artwork is bundled under
-// `public/tool-logos`, where its provenance is recorded. Never borrow the mark
-// of a protocol, or of a service a test happens to contact.
+// A tool that is a named upstream project may wear that project's mark; every
+// other tool keeps its letter, because a mark says which project answers the
+// measurement rather than how it is carried out. Marks are bundled under
+// `public/tool-logos`, where their provenance is recorded.
+//
+// `TOOL_ARTWORK` is artwork that carries its own backing and fills the tile;
+// `TOOL_LOGOS` is a plain glyph drawn on the launcher's white tile.
 export const TOOL_ARTWORK: Partial<Record<ToolSlug, string>> = {
   traceroute: '/tool-logos/nexttrace.webp',
+  librespeed: '/tool-logos/librespeed.svg',
+}
+
+export const TOOL_LOGOS: Partial<Record<ToolSlug, string>> = {
+  speedtest: '/tool-logos/speedtest.svg',
+  cloudflare: '/tool-logos/cloudflare.svg',
+  fastcom: '/tool-logos/fastcom.png',
 }

@@ -3,8 +3,8 @@
 Two tools measure one client device's link to OLR: **LibreSpeed**, which runs in
 that device's browser, and **iPerf3**, which runs a client on it. Both answer
 "how fast can this phone or laptop talk to the router", which is a different
-question from the **SpeedTest** tool beside them: that one measures the router's
-own uplink and never involves the device at all.
+question from the **Speedtest by Ookla** tool beside them: that one measures the
+router's own uplink and never involves the device at all.
 
 Neither of these measures LAN-to-WAN forwarding, NAT, or another device's link.
 

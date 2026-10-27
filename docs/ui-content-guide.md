@@ -430,11 +430,11 @@ sentences from translated fragments. Keep state decisions independent of copy.
 
 Use familiar tool names and concise task labels. A diagnostic that is a named
 upstream project takes that project's name, which is why the tools directory
-reads SpeedTest, LibreSpeed and iPerf3 rather than three versions of "speed
-test": the engine is the distinction that helps an operator select one, and each
-of the three measures a different boundary. Preserve established names such as
-Ping, NAT test and Traceroute. Do not invent broad category labels for a single
-item.
+reads Speedtest, Cloudflare, Fast.com, LibreSpeed and iPerf3 rather than one
+"speed test" and a service picker: the service is the distinction that helps an
+operator select one, and each measures a different path. Preserve established
+names such as Ping, NAT test and Traceroute. Do not invent broad category labels
+for a single item.
 
 Name a state for what it means for the user, not for how it is carried out. The
 IPv6 DNS card on Gateway reads IPv6 disabled, not AAAA filtered: dropping AAAA
@@ -483,14 +483,18 @@ Its contract is:
 - Three groups with charters: System (the machine and what may reach it),
   Services (background work for the network), Diagnostics (measurements).
   Place a feature by its charter, not by which module happens to own it.
-- One tile per destination, with a capital initial on a 64px tinted tile. The
-  tiles of a group share one hue; the letter carries identity.
-- A tile that names an upstream tool takes that project's name and its app icon
-  (NextTrace opens Traceroute); a tile that is a protocol or OLR's own
-  measurement keeps its initial.
+- One tile per destination. Most tiles wear a capital initial on a 64px tinted
+  tile: the tiles of a group share one hue, and the letter carries identity.
+- A tile that names an upstream tool or service takes that name and its mark
+  instead — filling the tile when the mark carries its own backing (NextTrace)
+  and on white when it is a plain glyph (Speedtest, Cloudflare, Fast.com). A
+  tile that is a protocol or OLR's own measurement keeps its initial. One
+  destination measures one thing, so the three internet speed tests are three
+  tiles rather than one tile and a service picker.
 - One line of name below the tile, never wrapped, and nothing printed under it.
   Keep the tile's name short enough for one line; the page behind it may carry
-  the longer name (Admin access opens Administrator access).
+  the longer name (Speedtest opens Speedtest by Ookla, Admin access opens
+  Administrator access).
 - Function and state appear on hover/focus and in the tile's accessible name.
 - The whole tile is a keyboard-accessible link; no dialog opens on click.
 - There is no intermediate "Tools" page: a diagnostic tile opens the tool.

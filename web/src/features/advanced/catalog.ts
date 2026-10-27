@@ -1,5 +1,5 @@
 import { t } from '@/lib/i18n'
-import { TOOL_ARTWORK, TOOL_DEFINITIONS } from '@/features/tools/catalog'
+import { TOOL_ARTWORK, TOOL_DEFINITIONS, TOOL_LOGOS } from '@/features/tools/catalog'
 
 /**
  * The Advanced directory.
@@ -12,8 +12,8 @@ import { TOOL_ARTWORK, TOOL_DEFINITIONS } from '@/features/tools/catalog'
  * A tile is a link and one short name. OLR features use approved app artwork
  * where available, otherwise a letter in the group's hue. A tile that names an
  * upstream project may wear its mark instead: a self-contained app icon that
- * fills the tile (NextTrace), or a plain glyph on white (Caddy), like Access's
- * project marks.
+ * fills the tile (NextTrace), or a plain glyph on white (Caddy, Speedtest),
+ * like Access's project marks.
  */
 export interface AdvancedTile {
   slug: string
@@ -121,6 +121,7 @@ export const ADVANCED_GROUPS: AdvancedGroup[] = [
       name: tool.tileLabel,
       letter: tool.letter,
       artwork: TOOL_ARTWORK[tool.slug],
+      logo: TOOL_LOGOS[tool.slug],
       description: tool.description,
       to: `/tools/${tool.slug}`,
     })),

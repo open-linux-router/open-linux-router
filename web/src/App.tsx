@@ -116,6 +116,8 @@ export function App() {
           <Route path="access/filtering" element={<RedirectWithState to="/advanced/filtering" />} />
           <Route path="tools" element={<RedirectWithState to="/advanced" />} />
           <Route path="tools/speedtest" element={<ToolPage tool="speedtest" />} />
+          <Route path="tools/cloudflare" element={<ToolPage tool="cloudflare" />} />
+          <Route path="tools/fastcom" element={<ToolPage tool="fastcom" />} />
           <Route path="tools/librespeed" element={<ToolPage tool="librespeed" />} />
           <Route path="tools/iperf3" element={<ToolPage tool="iperf3" />} />
           <Route path="tools/nat" element={<ToolPage tool="nat" />} />
