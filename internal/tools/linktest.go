@@ -22,7 +22,9 @@ import (
 // The page is LibreSpeed's (vendored under librespeed/, LGPLv3, unmodified); what
 // it needs from a server is four dumb endpoints — a byte source, a byte sink, an
 // empty reply for latency, and one line naming the client — which are replaced
-// here by Go so that nothing on the router has to run PHP.
+// here by Go so that nothing on the router has to run PHP. The tool page drives
+// that engine itself rather than framing upstream's page, so the surface is a
+// plain document and an asset tree, not an embedded console.
 //
 // This surface is deliberately not part of the API. Two reasons, and the first
 // is not negotiable: the upload test posts 20 MB of raw bytes, and BrowserGuard
@@ -168,11 +170,9 @@ func (h *HTTP) serveLinkTest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	// BrowserGuard denies framing for the whole box, and it is right to: no
-	// other surface may be framed. This one is framed by the tool page that owns
-	// it and by nothing else.
-	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
-	w.Header().Set("Content-Security-Policy", "frame-ancestors 'self'")
+	// BrowserGuard denies framing for the whole box, and nothing here frames
+	// this surface any more: the tool page loads the LibreSpeed engine in its
+	// own document instead of embedding upstream's page.
 	if !h.linkTestAllowed(r) {
 		h.linkTestLocked(w, r)
 		return

@@ -28,13 +28,19 @@ That is deliberate. Keeping the upstream files byte-identical is what makes a
 future upgrade a copy rather than a merge, and it keeps the LGPL half of this
 directory separable from the rest of the binary at the file level.
 
+OLR's tool page loads `speedtest.js` and starts `speedtest_worker.js` in its own
+document; it does not frame upstream's `index.html`, which stays served for a
+direct visit. The page around the engine — start control, running state and
+result tiles — is OLR's own, and the engine's URLs are pointed at `/link-test/`
+from `web/src/features/tools/link-test.ts`.
+
 ## Updating
 
 1. Take the release tag, not `master`.
 2. Copy the table above into `static/`, preserving paths.
 3. Replace `LICENSE`.
 4. Update the version and commit here and in `web/src/routes/credits-data.ts`.
-5. Open the tool page on a router and run one test: the page must load, and the
-   download, upload and latency numbers must all move.
+5. Open the tool page on a router and run one test: the test must start, run in
+   that browser, and report latency, jitter, download and upload.
 6. Re-check that `linktest_test.go` still finds `LibreSpeed` in `speedtest.js`
    and that `settings.json` still turns telemetry off — upstream renames things.

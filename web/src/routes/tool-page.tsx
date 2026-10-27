@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { PageHeading } from '@/components/layout/page-heading'
 import { MetricValue } from '@/components/ui/metric-value'
 import { TOOL_DEFINITIONS, type ToolSlug } from '@/features/tools/catalog'
+import { createLinkTestEngine, linkTestResult, loadLinkTestEngine, loadLinkTestSettings, startLinkTest, type LinkTestEngine, type LinkTestResult, type LinkTestSample } from '@/features/tools/link-test'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -451,7 +452,7 @@ function SpeedTest({ service }: { service: SpeedService }) {
       {result && (
         <div className="space-y-4" aria-live="polite">
           <div className="grid gap-3 sm:grid-cols-3">
-            <Metric icon={Activity} label={t('Latency')} value={result.latency_ms} unit="ms" detail={result.jitter_ms == null ? undefined : `Jitter ${result.jitter_ms.toFixed(1)} ms`} />
+            <Metric icon={Activity} label={t('Latency')} value={result.latency_ms} unit="ms" detail={result.jitter_ms == null ? undefined : `${t('Jitter')} ${result.jitter_ms.toFixed(1)} ms`} />
             <Metric icon={ArrowDown} label={t('Download')} value={result.download_mbps} unit="Mbps" />
             <Metric icon={ArrowUp} label={t('Upload')} value={result.upload_mbps} unit="Mbps" />
           </div>
@@ -461,10 +462,24 @@ function SpeedTest({ service }: { service: SpeedService }) {
   </div>
 }
 
+/**
+ * The device-to-router test.
+ *
+ * The measurement is LibreSpeed's engine, but the page is OLR's: a start
+ * control, one running state, and the same result tiles the internet speed
+ * tests use. The engine's background, title and gauges are gone on purpose, and
+ * so are its moving numbers — a test that takes half a minute does not need a
+ * reader to watch it fluctuate, only the answer at the end.
+ */
 function LibreSpeed() {
   useLocale()
   const [granted, setGranted] = useState(false)
   const [grantError, setGrantError] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<LinkTestResult | null>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+  const engine = useRef<LinkTestEngine | null>(null)
+  const deadline = useRef<number | undefined>(undefined)
   const asked = useRef(false)
   const grant = useMutation({
     mutationFn: () => api.post<void>('/api/tools/link-test/session'),
@@ -472,35 +487,121 @@ function LibreSpeed() {
     onError: error => setGrantError(error instanceof Error ? error.message : String(error)),
   })
   const requestSession = grant.mutate
-  // The test page is its own document, so it takes its credential as a cookie
+  // The test surface is not part of the API: the upload test posts raw bytes,
+  // which the API refuses by design. So it takes its credential as a cookie
   // rather than as the header this page puts on every API call. Asking for one
-  // on arrival is what makes the embedded test a single click: the operator
-  // signed in here, so the grant is scoped to the test page and dies when the
-  // browser session does.
+  // on arrival keeps the test a single click, and the grant is scoped to
+  // /link-test/ and dies with the browser session.
   useEffect(() => {
     if (asked.current) return
     asked.current = true
     requestSession()
   }, [requestSession])
 
-  // The tool page is the test page: no introduction and no second title above
-  // it, so the embedded document is all the operator sees.
-  return <section aria-label={t('Device to router')} className="panel-surface overflow-hidden">
-    {/* The embedded page is a fixed-shape document: 960px holds all of it at
-        desktop widths, so the frame needs no scrollbar of its own. Below sm
-        the viewport is the honest bound and the frame scrolls instead. */}
-    {granted
-      ? <iframe title="LibreSpeed" src="/link-test/" className="h-[94dvh] w-full border-0 bg-[#0e0720] sm:h-[960px]" />
-      : grantError
-        ? <div className="p-4 sm:p-6"><Alert variant="destructive">
-            <AlertTitle>{t('LibreSpeed is unavailable')}</AlertTitle>
-            <AlertDescription className="space-y-3">
-              <p className="break-words">{grantError}</p>
-              <Button variant="secondary" size="sm" onClick={() => { setGrantError(null); requestSession() }}>{t('Try again')}</Button>
-            </AlertDescription>
-          </Alert></div>
-        : <div role="status" className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" aria-hidden />{t('Loading the test page…')}</div>}
-  </section>
+  // Leaving the page mid-test stops the transfer; the router would otherwise
+  // keep serving blocks to a browser that is no longer reading them. `gone`
+  // also covers a start that is still waiting for the engine to load.
+  const gone = useRef(false)
+  useEffect(() => () => {
+    gone.current = true
+    window.clearTimeout(deadline.current)
+    const test = engine.current
+    engine.current = null
+    if (!test) return
+    test.onend = null
+    try { test.abort() } catch { /* the test had already finished */ }
+  }, [])
+
+  async function run() {
+    if (running || !granted) return
+    setRunning(true)
+    setResult(null)
+    setFailure(null)
+    const latest: { sample: LinkTestSample | null } = { sample: null }
+    let settled = false
+    const settle = (value: LinkTestResult | null, message: string | null) => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(deadline.current)
+      engine.current = null
+      setRunning(false)
+      setResult(value)
+      setFailure(message)
+    }
+    try {
+      // A page left open may have outlived its viewer grant, so every run mints
+      // a fresh one: the test should not depend on how long this tab has been
+      // sitting here.
+      await api.post<void>('/api/tools/link-test/session')
+      const [Engine, settings] = await Promise.all([loadLinkTestEngine(), loadLinkTestSettings()])
+      if (gone.current) return
+      const test = createLinkTestEngine(Engine, settings)
+      engine.current = test
+      // The worker reports on every tick; the page keeps the last sample for the
+      // result and shows none of them while the test runs.
+      test.onupdate = data => { latest.sample = data }
+      test.onend = aborted => {
+        const finished = aborted || !latest.sample ? null : linkTestResult(latest.sample)
+        settle(finished, finished ? null
+          : aborted ? t('The test was stopped before it finished.')
+            : t('The transfer test finished without usable numbers.'))
+      }
+      startLinkTest(test)
+      // The engine ends itself; this only covers a worker that goes quiet.
+      deadline.current = window.setTimeout(() => {
+        try { test.abort() } catch { /* the test had already finished */ }
+        settle(null, t('The test did not finish in time.'))
+      }, 60_000)
+    } catch (error) {
+      settle(null, error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  return <div className="space-y-6">
+    <div className="panel-surface relative p-4 sm:p-6">
+      <div className="relative space-y-5">
+        <div className="max-w-2xl space-y-1 text-sm text-muted-foreground">
+          <p>{t('Measure how fast this device can send and receive data on your local network, in the browser.')}</p>
+          <p>{t('The test measures this device’s link to the router, not the router’s internet speed.')}</p>
+        </div>
+        {grantError
+          ? <Alert variant="destructive">
+              <AlertTitle>{t('LibreSpeed is unavailable')}</AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p className="break-words">{grantError}</p>
+                <Button variant="secondary" size="sm" onClick={() => { setGrantError(null); requestSession() }}>{t('Try again')}</Button>
+              </AlertDescription>
+            </Alert>
+          : <>
+              <Button onClick={run} disabled={running || !granted}>
+                {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Activity aria-hidden />}
+                {running ? t('Testing…') : result ? t('Run again') : t('Start test')}
+              </Button>
+              {running && <p role="status" className="text-sm text-muted-foreground">{t('Testing this device’s link to the router. It usually takes about 30 seconds.')}</p>}
+            </>}
+      </div>
+    </div>
+
+    {failure && (
+      <Alert variant="destructive">
+        <AlertTitle>{t('The test could not finish')}</AlertTitle>
+        <AlertDescription className="space-y-3">
+          <p className="break-words">{failure}</p>
+          <Button variant="secondary" size="sm" onClick={run}>{t('Try again')}</Button>
+        </AlertDescription>
+      </Alert>
+    )}
+
+    {result && (
+      <div className="space-y-4" aria-live="polite">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Metric icon={Activity} label={t('Latency')} value={result.latency} unit="ms" detail={result.jitter == null ? undefined : `${t('Jitter')} ${result.jitter.toFixed(1)} ms`} />
+          <Metric icon={ArrowDown} label={t('Download')} value={result.download} unit="Mbps" />
+          <Metric icon={ArrowUp} label={t('Upload')} value={result.upload} unit="Mbps" />
+        </div>
+      </div>
+    )}
+  </div>
 }
 
 function IPerf3() {
