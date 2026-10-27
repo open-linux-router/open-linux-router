@@ -59,6 +59,16 @@ func markCommand(cmd *exec.Cmd, mark uint32) (func(), error) {
 		cleanup()
 		return nil, err
 	}
+	// Exit tables send IPv6 to `unreachable`, but a local socket settles its
+	// source address on the default route before this chain runs, so an AAAA
+	// connection ends up in SYN-SENT until TCP gives up rather than failing.
+	// Refuse the family outright: a tool that resolves both then falls back to
+	// IPv4 instead of outliving the run's deadline.
+	if err := nft("add", "rule", "inet", speedTable, "output",
+		"meta", "skgid", fmt.Sprint(speedGID), "meta", "nfproto", "ipv6", "reject", "with", "icmpv6", "admin-prohibited"); err != nil {
+		cleanup()
+		return nil, err
+	}
 	if err := nft("add", "rule", "inet", speedTable, "output",
 		"meta", "skgid", fmt.Sprint(speedGID), "meta", "mark", "set", fmt.Sprintf("%#x", mark)); err != nil {
 		cleanup()

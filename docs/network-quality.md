@@ -596,8 +596,15 @@ id and an nftables rule marks every socket that group opens with the exit's
 fwmark (`meta skgid … meta mark set …` in a `type route` output chain). That is
 the mechanism the inspection proxy already uses for `mitmweb`; the group is
 never created in `/etc/group`, the table is `olr_speed` and not `olr_route`, and
-a zero mark means the router's default route and installs no rule. The two
-command-line services cannot choose a server, because the service does. Fast.com
+a zero mark means the router's default route and installs no rule. A chosen way
+out also refuses that group's IPv6 sockets (`meta nfproto ipv6 reject with
+icmpv6 admin-prohibited`). Exit tables send IPv6 to `unreachable`, but a local
+socket settles its source address on the default route before this chain runs,
+so an AAAA connection would sit in SYN-SENT until TCP gave up instead of
+failing; refusing the family at once lets a tool that resolves both fall back to
+IPv4 — `fast-cli` opens every address it resolves — rather than outliving the
+run's 90-second deadline. The two command-line services cannot choose a server,
+because the service does. Fast.com
 reports latency and download/upload but no jitter, and its numbers describe the
 Netflix Open Connect path rather than general internet quality.
 

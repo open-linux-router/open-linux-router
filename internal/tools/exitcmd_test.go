@@ -50,6 +50,7 @@ func TestMarkCommandInstallsAndRemovesTheRule(t *testing.T) {
 		{"delete", "table", "inet", speedTable},
 		{"add", "table", "inet", speedTable},
 		{"add", "chain", "inet", speedTable, "output", "{ type route hook output priority mangle; policy accept; }"},
+		{"add", "rule", "inet", speedTable, "output", "meta", "skgid", "2147418114", "meta", "nfproto", "ipv6", "reject", "with", "icmpv6", "admin-prohibited"},
 		{"add", "rule", "inet", speedTable, "output", "meta", "skgid", "2147418114", "meta", "mark", "set", "0x30000"},
 	}
 	if !reflect.DeepEqual(*calls, want) {
@@ -69,7 +70,7 @@ func TestMarkCommandInstallsAndRemovesTheRule(t *testing.T) {
 func TestMarkCommandRemovesTheTableWhenTheRuleFails(t *testing.T) {
 	failed := errors.New("nft failed")
 	calls := withNFT(t, func(args ...string) error {
-		if len(args) > 2 && args[2] == "rule" {
+		if len(args) > 1 && args[0] == "add" && args[1] == "rule" {
 			return failed
 		}
 		return nil

@@ -549,6 +549,23 @@ func TestSpeedtestRunsTheSelectedServiceThroughTheWayOut(t *testing.T) {
 	}
 }
 
+// A run that outlives the handler's deadline is the one failure the operator
+// can act on: the page has to say the test gave up rather than hand them the
+// library's "context deadline exceeded".
+func TestSpeedtestNamesTheDeadline(t *testing.T) {
+	h := &HTTP{RunCloudflare: func(context.Context, uint32) (SpeedResult, error) {
+		return SpeedResult{}, context.DeadlineExceeded
+	}}
+	w := httptest.NewRecorder()
+	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/speedtest?provider=cloudflare", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); !strings.Contains(body, "90 seconds") || strings.Contains(body, "context deadline") {
+		t.Fatalf("deadline reported as %s", body)
+	}
+}
+
 func TestSpeedtestRejectsUnknownServiceAndWayOut(t *testing.T) {
 	h := &HTTP{
 		ResolveExit: func(string) (uint32, error) { return 0, errors.New("way out %q is unavailable") },

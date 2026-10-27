@@ -351,6 +351,11 @@ const (
 	speedFast       = "fastcom"
 )
 
+// speedDeadline is how long a run may take before the page is told the service
+// never answered. An Ookla run finds a server and measures both directions; the
+// command-line tools measure both inside one process.
+const speedDeadline = 90 * time.Second
+
 // SpeedProvider is one selectable service and whether this router can run it.
 type SpeedProvider struct {
 	ID        string `json:"id"`
@@ -610,12 +615,20 @@ func (h *HTTP) speedtest(w http.ResponseWriter, r *http.Request) {
 		run = h.providerRun(provider, mark)
 	}
 	h.startSpeed(provider, exit, phase)
-	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), speedDeadline)
 	defer cancel()
 	result, err := run(ctx)
 	if err != nil {
 		h.finishSpeed(nil, err)
 		if r.Context().Err() != nil {
+			return
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			// This handler sets the only deadline a run can outlive, and
+			// "context deadline exceeded" says nothing about what to try next.
+			core.WriteError(w, http.StatusServiceUnavailable, fmt.Sprintf(
+				"speed test failed: no result within %d seconds; the service or the way out did not finish the transfer",
+				int(speedDeadline/time.Second)))
 			return
 		}
 		core.WriteError(w, http.StatusServiceUnavailable, "speed test failed: "+err.Error())
