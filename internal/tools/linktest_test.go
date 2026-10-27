@@ -104,18 +104,15 @@ func TestLinkTestExpiredSessionIsRefused(t *testing.T) {
 	}
 }
 
-func TestLinkTestServesTheVendoredPage(t *testing.T) {
+func TestLinkTestPageIsFramedOnlyByThisBox(t *testing.T) {
 	h := &HTTP{}
 	cookie := linkTestAuthorized(t, h)
 	w := linkTestRequest(t, h, cookie, http.MethodGet, "/link-test/", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("page status = %d, want 200", w.Code)
 	}
-	// The page is served for a direct visit, but nothing frames it any more:
-	// the tool page drives the engine in its own document, so the module leaves
-	// BrowserGuard's global frame policy alone.
-	if got := w.Header().Get("X-Frame-Options"); got != "" {
-		t.Fatalf("X-Frame-Options = %q; the link test should not relax the global frame policy", got)
+	if got := w.Header().Get("X-Frame-Options"); got != "SAMEORIGIN" {
+		t.Fatalf("X-Frame-Options = %q, want SAMEORIGIN", got)
 	}
 	if !strings.Contains(w.Body.String(), "LibreSpeed") && !strings.Contains(w.Body.String(), "speedtest.js") {
 		t.Fatalf("page does not look like the vendored LibreSpeed page: %.120q", w.Body.String())

@@ -607,13 +607,17 @@ stage in flight, the server being tested, the values already settled and the
 rate the current transfer is reaching; the elapsed time comes from the run's own
 start on the router's clock. Ookla can report latency, download and upload
 separately because the library runs them in that order, and its transfer
-callbacks supply the live rate. The two command-line services measure both
-directions inside one process whose only output is the final JSON, so they
-report one `transfer` stage and no rate: the page shows that they are measuring
-rather than inventing intermediate numbers. The page polls, like the rest of the
-UI, because EventSource cannot send the API's `Authorization` header. A stage
-that has not measured anything stays absent rather than becoming a zero, and the
-live rate is dropped as soon as its transfer ends.
+callbacks supply the live rate. The tool page draws that run as two dials on a
+logarithmic 0–10 Gbps scale, the way LibreSpeed draws its own: the direction
+being measured carries its live rate, the other holds its last reading, and both
+settle on the result with latency and jitter above them. The two command-line
+services measure both directions inside one process whose only output is the
+final JSON, so they report one `transfer` stage and no rate: their dials stay
+empty until the result arrives rather than inventing intermediate numbers. The
+page polls, like the rest of the UI, because EventSource cannot send the API's
+`Authorization` header. A stage that has not measured anything stays absent
+rather than becoming a zero, and the live rate is dropped as soon as its
+transfer ends.
 
 The `.deb` includes the unmodified CLI, its GPLv3 license and corresponding
 source under `/usr/share/doc/olr/cloudflare-speed-cli`. `make cloudflare-speed`

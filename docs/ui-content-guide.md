@@ -141,19 +141,18 @@ happened and what to do next. Missing data is never shown as zero.
 
 A speed test runs as one request that stays open until the measurement ends, so
 its page reads the run's stage on a second request rather than waiting on a
-spinner. Name the stage in flight, show each of latency, download and upload as
-it is settled, show the rate the current transfer is reaching, and count the
-elapsed seconds. A stage that has not measured anything shows no value rather
-than a zero, and a service that reports only a finished result says it is
-measuring instead of promising numbers it cannot see yet. Screen readers are
-told the stage when it changes; the ticking clock stays out of that announcement.
+spinner. The measurement is shown the way LibreSpeed's page shows its own: two
+dials, download and upload, on a logarithmic 0–10 Gbps scale. The direction
+being measured carries the rate it has reached, the other holds its last
+reading, and both settle on the result, with latency and jitter above them. A
+dial that has not measured shows a dash rather than a zero, and a service that
+reports only a finished result says it is measuring instead of inventing numbers
+it cannot see yet.
 
-LibreSpeed measures the link between the operator's own device and the router,
-in that browser. Its page offers one start control outside the measurement, then
-two dials: each follows the direction being measured on a logarithmic scale,
-holds its last reading while the other direction runs, and settles on the final
-number, with latency and jitter above them. A dial that has not measured shows a
-dash rather than a zero, and no second set of readouts sits beside the dials.
+LibreSpeed is the exception among the tools: its page frames LibreSpeed's own
+document unchanged, because that page is the measurement, and OLR supplies only
+the viewer credential and the frame around it. Every other speed test borrows
+that page's dials for its own result rather than shipping its own charts.
 
 World traffic combines IPs at the same remote coordinates into one map connection.
 Line width represents that connection's combined upload and download relative

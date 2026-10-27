@@ -13,9 +13,8 @@ Neither of these measures LAN-to-WAN forwarding, NAT, or another device's link.
 Open Tools, then LibreSpeed, on the device. The test runs in that device's
 browser against this router, so nothing has to be installed on either end.
 
-The measurement is LibreSpeed 6.3.1 (`internal/tools/librespeed/`, LGPLv3,
-unmodified). `olrd` serves the engine at `/link-test/speedtest.js` and its
-worker at `/link-test/speedtest_worker.js`, and answers the four requests the
+The page is LibreSpeed 6.3.1 (`internal/tools/librespeed/`, LGPLv3, unmodified).
+`olrd` serves it at `/link-test/` and answers the four requests the LibreSpeed
 worker makes:
 
 | Request | Answer |
@@ -35,15 +34,11 @@ after two hours. This is the pattern the device inspection page already uses to
 embed mitmweb. Reopening the page mints a new cookie; a browser that never
 signed in to this router gets an explanation, not a bandwidth source.
 
-The tool page loads that engine in its own document instead of framing
-upstream's page: LibreSpeed's background and title are gone, the start control
-sits outside the measurement, and the measurement is the two dials. Each dial
-follows the direction being measured on the engine's own logarithmic scale, holds
-its last reading while the other direction runs, and settles on the final number;
-latency and jitter appear above them once the engine has measured them. Leaving
-the page aborts the test, so the router stops serving blocks to a browser that is
-no longer reading them. Nothing frames this surface any more, so it keeps
-BrowserGuard's global refusal rather than relaxing it to `SAMEORIGIN`.
+The surface is framed only by this router's own page (`X-Frame-Options:
+SAMEORIGIN`, `Content-Security-Policy: frame-ancestors 'self'`), because the
+tool page embeds it. That page is the tool: the frame sits under the Tools
+heading with no introduction, no second title and no link out, so the test
+itself is everything the operator has to read.
 
 Telemetry is off and no result is stored: there is no database behind this page,
 so the privacy dialog LibreSpeed can show would be a false promise.

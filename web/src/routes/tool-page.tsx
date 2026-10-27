@@ -1,11 +1,10 @@
 import { t, useLocale } from '@/lib/i18n'
-import { Activity, ArrowDown, ArrowUp, Check, Copy, LoaderCircle, Radio, Route } from 'lucide-react'
+import { Activity, Copy, LoaderCircle, Radio, Route } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { PageHeading } from '@/components/layout/page-heading'
 import { MetricValue } from '@/components/ui/metric-value'
 import { TOOL_DEFINITIONS, type ToolSlug } from '@/features/tools/catalog'
-import { LinkGauge } from '@/features/tools/link-gauge'
-import { createLinkTestEngine, formatReading, linkTestReading, linkTestResult, loadLinkTestEngine, loadLinkTestSettings, startLinkTest, type LinkTestEngine, type LinkTestResult, type LinkTestSample } from '@/features/tools/link-test'
+import { SpeedDial } from '@/features/tools/speed-dial'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -13,10 +12,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { StatusDot, textClass } from '@/components/ui/status'
 import { useGatewayConfig } from '@/features/gateway/queries'
 import { ApiError, api } from '@/lib/api'
-import { cn } from '@/lib/utils'
 
 interface TestError {
   title: string
@@ -225,39 +222,6 @@ function speedPhaseLabel(phase: string | undefined): string {
 }
 
 /**
- * The stages an Ookla test runs, in the order it runs them.
- *
- * A stage shows its settled measurement, the rate it is reaching while it runs,
- * or nothing at all — an unmeasured stage is not a zero, and the row says which
- * of the three it is with a check, a spinner or a plain dot.
- */
-function SpeedStages({ progress }: { progress?: SpeedProgress }) {
-  useLocale()
-  const stages = [
-    { id: 'latency', label: t('Latency'), unit: 'ms', measured: progress?.latency_ms ?? null },
-    { id: 'download', label: t('Download'), unit: 'Mbps', measured: progress?.download_mbps ?? null },
-    { id: 'upload', label: t('Upload'), unit: 'Mbps', measured: progress?.upload_mbps ?? null },
-  ]
-  return <ul className="max-w-[15rem] space-y-1.5">
-    {stages.map((stage) => {
-      const active = stage.measured == null && progress?.phase === stage.id
-      const value = stage.measured ?? (active ? progress?.live_mbps ?? null : null)
-      return <li key={stage.id} className="flex items-center justify-between gap-4 text-sm">
-        <span className="flex items-center gap-2">
-          {stage.measured != null
-            ? <Check className={cn('size-4', textClass('ok'))} aria-hidden />
-            : active
-              ? <LoaderCircle className="size-4 animate-spin text-muted-foreground" aria-hidden />
-              : <span className="flex size-4 items-center justify-center"><StatusDot tone="unknown" /></span>}
-          <span className={stage.measured != null || active ? 'text-foreground' : 'text-muted-foreground'}>{stage.label}</span>
-        </span>
-        {value != null && <MetricValue size="sm" value={value.toFixed(1)} unit={stage.unit} />}
-      </li>
-    })}
-  </ul>
-}
-
-/**
  * One internet speed test service per page.
  *
  * The three measure different paths — Ookla's nearest servers, the closest
@@ -364,6 +328,13 @@ function SpeedTest({ service }: { service: SpeedService }) {
       ? t('Measures this router’s own connection to the nearest Cloudflare edge.')
       : t('Measures the Netflix Open Connect path a streaming session uses.')
 
+  // The dials read the settled result when there is one, the rate the direction
+  // being measured is reaching while the test runs, and nothing before that.
+  const download = result ? result.download_mbps : live?.download_mbps ?? (live?.phase === 'download' ? live.live_mbps ?? null : null)
+  const upload = result ? result.upload_mbps : live?.upload_mbps ?? (live?.phase === 'upload' ? live.live_mbps ?? null : null)
+  const latency = result ? result.latency_ms : live?.latency_ms ?? null
+  const jitter = result ? result.jitter_ms : null
+
   return <div className="space-y-6">
       <div className="panel-surface relative p-4 sm:p-6">
         <div className="relative space-y-5">
@@ -414,15 +385,8 @@ function SpeedTest({ service }: { service: SpeedService }) {
                   {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Activity aria-hidden />}
                   {running ? 'Testing connection…' : result ? 'Run again' : 'Start speed test'}
                 </Button>
-                {running && <div className="max-w-md space-y-2">
-                  <p className="text-sm">
-                    {/* The elapsed count changes every second, so it sits
-                        outside the live region: a screen reader should hear the
-                        stage change, not tick along with the clock. */}
-                    <span role="status">{speedPhaseLabel(live?.phase)}</span>
-                    {live && <span aria-hidden className="ml-2 text-xs tabular-nums text-muted-foreground">{Math.floor(live.elapsed_ms / 1_000)}s</span>}
-                  </p>
-                  {service === 'ookla' && <SpeedStages progress={live} />}
+                {running && <div className="space-y-1">
+                  <p role="status" className="text-sm">{speedPhaseLabel(live?.phase)}</p>
                   <p className="text-xs text-muted-foreground">{t('This test can take up to 90 seconds.')}</p>
                 </div>}
               </>}
@@ -450,38 +414,26 @@ function SpeedTest({ service }: { service: SpeedService }) {
         </Alert>
       )}
 
-      {result && (
-        <div className="space-y-4" aria-live="polite">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Metric icon={Activity} label={t('Latency')} value={result.latency_ms} unit="ms" detail={result.jitter_ms == null ? undefined : `${t('Jitter')} ${result.jitter_ms.toFixed(1)} ms`} />
-            <Metric icon={ArrowDown} label={t('Download')} value={result.download_mbps} unit="Mbps" />
-            <Metric icon={ArrowUp} label={t('Upload')} value={result.upload_mbps} unit="Mbps" />
-          </div>
-          <p className="text-sm text-muted-foreground">{resultSummary(service, result)}</p>
+      {/* The dials are the measurement: the direction being measured leads,
+          the other holds what it last measured, and both settle on the result. */}
+      {!serviceUnavailable && <div className="panel-surface p-4 sm:p-6">
+        {(latency != null || jitter != null) && <div className="mb-6 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground">
+          {latency != null && <span className="flex items-center gap-2">{t('Latency')}<MetricValue size="sm" value={latency.toFixed(1)} unit="ms" /></span>}
+          {jitter != null && <span className="flex items-center gap-2">{t('Jitter')}<MetricValue size="sm" value={jitter.toFixed(1)} unit="ms" /></span>}
+        </div>}
+        <div className="flex flex-wrap items-start justify-center gap-12">
+          <SpeedDial label={t('Download')} value={download} active={running && (live?.phase === 'download' || live?.phase === 'transfer')} />
+          <SpeedDial label={t('Upload')} value={upload} active={running && (live?.phase === 'upload' || live?.phase === 'transfer')} />
         </div>
-      )}
+        {result && <p className="mt-6 text-center text-sm text-muted-foreground">{resultSummary(service, result)}</p>}
+      </div>}
   </div>
 }
 
-/**
- * The device-to-router test.
- *
- * The measurement is LibreSpeed's engine, but the page is OLR's: a start
- * control, one running state, and the same result tiles the internet speed
- * tests use. The engine's background, title and gauges are gone on purpose, and
- * so are its moving numbers — a test that takes half a minute does not need a
- * reader to watch it fluctuate, only the answer at the end.
- */
 function LibreSpeed() {
   useLocale()
   const [granted, setGranted] = useState(false)
   const [grantError, setGrantError] = useState<string | null>(null)
-  const [running, setRunning] = useState(false)
-  const [result, setResult] = useState<LinkTestResult | null>(null)
-  const [sample, setSample] = useState<LinkTestSample | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
-  const engine = useRef<LinkTestEngine | null>(null)
-  const deadline = useRef<number | undefined>(undefined)
   const asked = useRef(false)
   const grant = useMutation({
     mutationFn: () => api.post<void>('/api/tools/link-test/session'),
@@ -489,137 +441,35 @@ function LibreSpeed() {
     onError: error => setGrantError(error instanceof Error ? error.message : String(error)),
   })
   const requestSession = grant.mutate
-  // The test surface is not part of the API: the upload test posts raw bytes,
-  // which the API refuses by design. So it takes its credential as a cookie
+  // The test page is its own document, so it takes its credential as a cookie
   // rather than as the header this page puts on every API call. Asking for one
-  // on arrival keeps the test a single click, and the grant is scoped to
-  // /link-test/ and dies with the browser session.
+  // on arrival is what makes the embedded test a single click: the operator
+  // signed in here, so the grant is scoped to the test page and dies when the
+  // browser session does.
   useEffect(() => {
     if (asked.current) return
     asked.current = true
     requestSession()
   }, [requestSession])
 
-  // Leaving the page mid-test stops the transfer; the router would otherwise
-  // keep serving blocks to a browser that is no longer reading them. `gone`
-  // also covers a start that is still waiting for the engine to load.
-  const gone = useRef(false)
-  useEffect(() => () => {
-    gone.current = true
-    window.clearTimeout(deadline.current)
-    const test = engine.current
-    engine.current = null
-    if (!test) return
-    test.onend = null
-    try { test.abort() } catch { /* the test had already finished */ }
-  }, [])
-
-  async function run() {
-    if (running || !granted) return
-    setRunning(true)
-    setResult(null)
-    setSample(null)
-    setFailure(null)
-    const latest: { sample: LinkTestSample | null } = { sample: null }
-    let settled = false
-    const settle = (value: LinkTestResult | null, message: string | null) => {
-      if (settled) return
-      settled = true
-      window.clearTimeout(deadline.current)
-      engine.current = null
-      setRunning(false)
-      setResult(value)
-      setFailure(message)
-      // A run that ended without a result leaves no reading to keep on the
-      // dials; the alert is the whole answer.
-      if (!value) setSample(null)
-    }
-    try {
-      // A page left open may have outlived its viewer grant, so every run mints
-      // a fresh one: the test should not depend on how long this tab has been
-      // sitting here.
-      await api.post<void>('/api/tools/link-test/session')
-      const [Engine, settings] = await Promise.all([loadLinkTestEngine(), loadLinkTestSettings()])
-      if (gone.current) return
-      const test = createLinkTestEngine(Engine, settings)
-      engine.current = test
-      // The worker reports on every tick; the dials show the direction that is
-      // measuring, and the last sample is kept as the settled result.
-      test.onupdate = data => {
-        latest.sample = data
-        setSample(data)
-      }
-      test.onend = aborted => {
-        const finished = aborted || !latest.sample ? null : linkTestResult(latest.sample)
-        settle(finished, finished ? null
-          : aborted ? t('The test was stopped before it finished.')
-            : t('The transfer test finished without usable numbers.'))
-      }
-      startLinkTest(test)
-      // The engine ends itself; this only covers a worker that goes quiet.
-      deadline.current = window.setTimeout(() => {
-        try { test.abort() } catch { /* the test had already finished */ }
-        settle(null, t('The test did not finish in time.'))
-      }, 60_000)
-    } catch (error) {
-      settle(null, error instanceof Error ? error.message : String(error))
-    }
-  }
-
-  const download = result ? result.download : linkTestReading(sample, 'download')
-  const upload = result ? result.upload : linkTestReading(sample, 'upload')
-  const latency = result ? result.latency : linkTestReading(sample, 'latency')
-  const jitter = result ? result.jitter : linkTestReading(sample, 'jitter')
-
-  return <div className="space-y-6">
-    <div className="panel-surface relative p-4 sm:p-6">
-      <div className="relative space-y-5">
-        <div className="max-w-2xl space-y-1 text-sm text-muted-foreground">
-          <p>{t('Measure how fast this device can send and receive data on your local network, in the browser.')}</p>
-          <p>{t('The test measures this device’s link to the router, not the router’s internet speed.')}</p>
-        </div>
-        {grantError
-          ? <Alert variant="destructive">
-              <AlertTitle>{t('LibreSpeed is unavailable')}</AlertTitle>
-              <AlertDescription className="space-y-3">
-                <p className="break-words">{grantError}</p>
-                <Button variant="secondary" size="sm" onClick={() => { setGrantError(null); requestSession() }}>{t('Try again')}</Button>
-              </AlertDescription>
-            </Alert>
-          : <>
-              <Button onClick={run} disabled={running || !granted}>
-                {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Activity aria-hidden />}
-                {running ? t('Testing…') : result ? t('Run again') : t('Start test')}
-              </Button>
-              {running && <p role="status" className="text-sm text-muted-foreground">{t('Testing this device’s link to the router. It usually takes about 30 seconds.')}</p>}
-            </>}
-      </div>
-    </div>
-
-    {failure && (
-      <Alert variant="destructive">
-        <AlertTitle>{t('The test could not finish')}</AlertTitle>
-        <AlertDescription className="space-y-3">
-          <p className="break-words">{failure}</p>
-          <Button variant="secondary" size="sm" onClick={run}>{t('Try again')}</Button>
-        </AlertDescription>
-      </Alert>
-    )}
-
-    {/* The dials are the test: the direction being measured leads, the other
-        holds what it last measured, and both settle on the final values. */}
-    {!grantError && <div className="panel-surface p-4 sm:p-6">
-      {(latency != null || jitter != null) && <div className="mb-6 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground">
-        {latency != null && <span className="flex items-center gap-2">{t('Latency')}<MetricValue size="sm" value={formatReading(latency)} unit="ms" /></span>}
-        {jitter != null && <span className="flex items-center gap-2">{t('Jitter')}<MetricValue size="sm" value={formatReading(jitter)} unit="ms" /></span>}
-      </div>}
-      <div className="flex flex-wrap items-start justify-center gap-12">
-        <LinkGauge label={t('Download')} value={download} active={running && sample?.testState === 1} />
-        <LinkGauge label={t('Upload')} value={upload} active={running && sample?.testState === 3} />
-      </div>
-    </div>}
-    <div role="status" className="sr-only">{!running && result ? t('Test finished.') : ''}</div>
-  </div>
+  // The tool page is the test page: no introduction and no second title above
+  // it, so the embedded document is all the operator sees.
+  return <section aria-label={t('Device to router')} className="panel-surface overflow-hidden">
+    {/* The embedded page is a fixed-shape document: 960px holds all of it at
+        desktop widths, so the frame needs no scrollbar of its own. Below sm
+        the viewport is the honest bound and the frame scrolls instead. */}
+    {granted
+      ? <iframe title="LibreSpeed" src="/link-test/" className="h-[94dvh] w-full border-0 bg-[#0e0720] sm:h-[960px]" />
+      : grantError
+        ? <div className="p-4 sm:p-6"><Alert variant="destructive">
+            <AlertTitle>{t('LibreSpeed is unavailable')}</AlertTitle>
+            <AlertDescription className="space-y-3">
+              <p className="break-words">{grantError}</p>
+              <Button variant="secondary" size="sm" onClick={() => { setGrantError(null); requestSession() }}>{t('Try again')}</Button>
+            </AlertDescription>
+          </Alert></div>
+        : <div role="status" className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" aria-hidden />{t('Loading the test page…')}</div>}
+  </section>
 }
 
 function IPerf3() {
