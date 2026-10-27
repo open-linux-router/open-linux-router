@@ -693,8 +693,9 @@ func run(args []string) error {
 		}
 	}
 	inspector := &inspection.Service{Enabled: opts.root == "", Dir: filepath.Join(opts.root, "/var/lib/open-linux-router/inspection")}
-	// The chart above the session covers the days before it starts, so this
-	// sampler runs for as long as olrd does rather than for a session.
+	// The chart belongs to the inspection session: the service starts and drops
+	// it with the session, and this sampler reads the table only while one is
+	// open rather than keeping a history of its own.
 	inspector.Activity = inspection.NewActivity(inspection.Flows, inspectionNames(dnsApplier.Observer))
 	inspector.ExitMark = func(mac string) (uint32, error) {
 		cfg, err := gatewayApplier.Load()

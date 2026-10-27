@@ -7,33 +7,39 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/publicsuffix"
 )
 
-// What this device did, per site, over the last week.
+// What this device did, per site, while the inspection session ran.
 //
 // The device page's chart asks a question nothing else in olr answers: not "who
 // is this device talking to now" (conntrack) and not "what names did it look
 // up" (the relay's log), but "where did the bytes go, over time, and under which
-// name". That join is (device address, remote address) from conntrack against
-// the relay's observed name map, accumulated into buckets.
+// name" while inspection runs. That join is (device address, remote address)
+// from conntrack against the relay's observed name map, accumulated into
+// buckets.
 //
 // Three properties, each a decision:
 //
-//   - **In memory.** design.md §10 rejected writing flow events to disk, and the
-//     reason has not changed: a line per sample is flash wear on an SD-card
-//     router, and a per-device history is a profile of somebody's evening. A
-//     week of half-hour buckets is a bounded ring that costs a few megabytes and
-//     disappears with the process. A restart loses the chart; that is the trade.
+//   - **Only while the switch is on.** Inspection is opt-in and temporary, so
+//     its history is too: Begin starts the series with the session and End
+//     drops it, and nothing survives the process. Turning inspection off clears
+//     what it saw rather than leaving a week of somebody's evening behind. That
+//     is the same argument design.md §10 makes against writing flow events to
+//     disk, applied to keeping them after the operator stopped looking.
 //   - **Attribution is fixed at sample time.** A bucket is written once, from
 //     the name the relay had at that moment. Later queries never rewrite it, so
-//     last night's numbers do not change while nobody is looking.
+//     the numbers already on screen do not change while nobody is looking.
 //   - **Unnamed is a bucket, not a gap.** Traffic whose address was never
 //     resolved is kept under "未命名"; dropping it would make the totals lie.
 const (
-	// activityWidth is the width of a stored bucket.
-	activityWidth = 30 * time.Minute
-	// ActivityRetention is how far back the ring reaches.
-	ActivityRetention = 7 * 24 * time.Hour
+	// activityWidth is the width of a stored bucket. A session lasts fifteen
+	// minutes, so a minute is the resolution the chart can show.
+	activityWidth = time.Minute
+	// activityBuckets bounds the ring. It is generous next to one session, so a
+	// longer session keeps its start instead of silently losing it.
+	activityBuckets = 240
 	// activitySites bounds the sites kept per (bucket, address). Beyond it the
 	// smallest are folded into one row rather than dropped.
 	activitySites = 24
@@ -67,13 +73,13 @@ type SiteUsage struct {
 	Down uint64 `json:"down"`
 }
 
-// ActivityBucket is one half-hour, as the API and the chart read it.
+// ActivityBucket is one minute of a session, as the API and the chart read it.
 type ActivityBucket struct {
 	At    time.Time   `json:"at"`
 	Sites []SiteUsage `json:"sites"`
 }
 
-// Activity keeps a bounded ring of per-site traffic per address.
+// Activity keeps a bounded ring of per-site traffic for one session's addresses.
 //
 // Sampling and reading never block each other for longer than a copy: the
 // sampler holds the lock for the length of one diff, and a reader copies the
@@ -87,6 +93,15 @@ type Activity struct {
 	buckets map[int64]map[netip.Addr]map[string]*counters
 	order   []int64
 	entries int
+
+	// watched and started are the open session. A zero started means idle: the
+	// sampler reads nothing and the endpoint has nothing to return.
+	watched map[netip.Addr]bool
+	started time.Time
+	// baseline asks the next sample to record counters without counting them.
+	// It is only needed when reading the table at Begin failed: the first
+	// successful reading is then still history from before the session.
+	baseline bool
 
 	// namesSeen is rebuilt at most every nameRefresh; the relay's map is short
 	// lived, so a stale copy would name traffic after the wrong site.
@@ -114,8 +129,8 @@ func NewActivity(flows func(context.Context) ([]Flow, error), names func(context
 }
 
 // SampleInterval is how often Run reads the table. Thirty seconds is short
-// enough that a half-hour bucket is accurate to a rounding error, and long
-// enough that reading conntrack is not the busiest thing the box does.
+// enough that a minute bucket is accurate to a rounding error, and long enough
+// that reading conntrack is not the busiest thing the box does.
 const SampleInterval = 30 * time.Second
 
 // Run samples until ctx ends.
@@ -137,8 +152,91 @@ func (a *Activity) Run(ctx context.Context) {
 	}
 }
 
+// Begin starts a session's series for the addresses it inspects, dropping
+// anything a previous session left behind. The counters already on the table
+// belong to before the session, so they are read once as a baseline and never
+// charged to it.
+func (a *Activity) Begin(ctx context.Context, addresses []string) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.reset()
+	a.watched = make(map[netip.Addr]bool, len(addresses))
+	for _, raw := range addresses {
+		if addr, err := netip.ParseAddr(strings.TrimSpace(raw)); err == nil {
+			a.watched[addr.Unmap()] = true
+		}
+	}
+	if a.flows != nil {
+		flows, err := a.flows(ctx)
+		if err != nil {
+			// The first reading that succeeds becomes the baseline instead.
+			a.baseline = true
+		} else {
+			a.remember(flows)
+		}
+	}
+	a.started = a.now()
+}
+
+// remember records the counters of the flows the session watches, without
+// counting any of them as traffic. The caller holds the lock.
+func (a *Activity) remember(flows []Flow) {
+	for _, f := range flows {
+		src := f.Src.Unmap()
+		if !attributable(f) || !a.watched[src] {
+			continue
+		}
+		a.prev[flowKey{src, f.Dst, f.Sport, f.Dport, f.Proto}] = [2]uint64{f.BytesOut, f.BytesIn}
+	}
+}
+
+// End stops recording and forgets the session.
+func (a *Activity) End() {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.reset()
+}
+
+// Started is when the current series began, or the zero time while idle.
+func (a *Activity) Started() time.Time {
+	if a == nil {
+		return time.Time{}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.started
+}
+
+// reset drops the session's counters. The caller holds the lock.
+func (a *Activity) reset() {
+	a.prev = map[flowKey][2]uint64{}
+	a.buckets = map[int64]map[netip.Addr]map[string]*counters{}
+	a.order = nil
+	a.entries = 0
+	a.siteByFlow = map[flowKey]string{}
+	a.namesAt = time.Time{}
+	a.watched = nil
+	a.started = time.Time{}
+	a.baseline = false
+}
+
+func (a *Activity) recording() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return !a.started.IsZero()
+}
+
 // Sample reads the table once and folds the differences into the current bucket.
 func (a *Activity) Sample(ctx context.Context) error {
+	if a == nil || a.flows == nil || !a.recording() {
+		return nil
+	}
 	flows, err := a.flows(ctx)
 	if err != nil {
 		return err
@@ -147,6 +245,11 @@ func (a *Activity) Sample(ctx context.Context) error {
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	// The session can end while conntrack is being read; its ring is already
+	// gone and must not be rebuilt from a reading nothing asked for.
+	if a.started.IsZero() {
+		return nil
+	}
 
 	if now.Sub(a.namesAt) > 15*time.Second && a.names != nil {
 		if names, err := a.names(ctx); err == nil {
@@ -156,27 +259,42 @@ func (a *Activity) Sample(ctx context.Context) error {
 	}
 
 	seen := make(map[flowKey][2]uint64, len(flows))
+	watched := make([]flowKey, 0, len(flows))
 	for _, f := range flows {
 		if !attributable(f) {
 			continue
 		}
-		k := flowKey{f.Src, f.Dst, f.Sport, f.Dport, f.Proto}
+		src := f.Src.Unmap()
+		if !a.watched[src] {
+			continue
+		}
+		k := flowKey{src, f.Dst, f.Sport, f.Dport, f.Proto}
 		seen[k] = [2]uint64{f.BytesOut, f.BytesIn}
+		watched = append(watched, k)
+	}
+	if a.baseline {
+		// The table could not be read at Begin; this reading is still history
+		// from before the session, so it becomes the baseline instead of traffic.
+		a.prev = seen
+		a.baseline = false
+		return nil
+	}
+	for _, k := range watched {
 		before := a.prev[k]
 		var up, down uint64
-		if f.BytesOut >= before[0] {
-			up = f.BytesOut - before[0]
+		if seen[k][0] >= before[0] {
+			up = seen[k][0] - before[0]
 		}
-		if f.BytesIn >= before[1] {
-			down = f.BytesIn - before[1]
+		if seen[k][1] >= before[1] {
+			down = seen[k][1] - before[1]
 		}
 		if up == 0 && down == 0 {
 			continue
 		}
-		a.add(now, f.Src, a.siteFor(k), up, down)
+		a.add(now, k.src, a.siteFor(k), up, down)
 	}
 	a.prev = seen
-	a.prune(now)
+	a.prune()
 	return nil
 }
 
@@ -204,15 +322,30 @@ func (a *Activity) siteFor(k flowKey) string {
 	return unnamedSite
 }
 
-// siteOf reduces a host name to the site it belongs to. Two labels is the
-// registrable domain for everything a household talks to, and it keeps a CDN's
-// per-edge names from turning one site into forty rows.
+// siteOf reduces a host name to the site it belongs to: the registrable domain
+// under the public suffix list. Two labels was that for everything a household
+// talks to until a name ended in `com.cn`, where the suffix is the last two
+// labels and the site is the third. The list is the maintained answer to "which
+// suffix is this", so a CDN's per-edge names under one domain stay one row.
+//
+// Only ICANN suffixes count. A private suffix such as `s3.amazonaws.com` names
+// an object store, not a site, and treating it as one would give every bucket
+// its own row.
 func siteOf(name string) string {
 	name = strings.TrimSuffix(strings.ToLower(name), ".")
 	if name == "" {
 		return unnamedSite
 	}
 	labels := strings.Split(name, ".")
+	// The registrable domain is the longest registered public suffix plus one
+	// label. The first exact match walking down the labels is that suffix.
+	for i := 1; i < len(labels); i++ {
+		candidate := strings.Join(labels[i:], ".")
+		if suffix, icann := publicsuffix.PublicSuffix(candidate); icann && suffix == candidate {
+			return strings.Join(labels[i-1:], ".")
+		}
+	}
+	// Unknown or single-label namespace: two labels is the best available guess.
 	if len(labels) < 2 {
 		return name
 	}
@@ -243,12 +376,11 @@ func (a *Activity) add(now time.Time, addr netip.Addr, site string, up, down uin
 	c.down += down
 }
 
-// prune drops buckets past retention, then whole devices, then whole buckets,
-// until the ring fits. History is never evicted to make room for new data in the
-// same bucket: the direction that keeps what is already on screen correct.
-func (a *Activity) prune(now time.Time) {
-	cutoff := now.Add(-ActivityRetention).Truncate(activityWidth).Unix()
-	for len(a.order) > 0 && a.order[0] < cutoff {
+// prune drops the oldest buckets until the ring fits. History is never evicted
+// to make room for new data in the same bucket: the direction that keeps what is
+// already on screen correct.
+func (a *Activity) prune() {
+	for len(a.order) > activityBuckets {
 		a.dropBucket(a.order[0])
 	}
 	for a.entries > activityEntries && len(a.order) > 0 {
@@ -274,25 +406,26 @@ func (a *Activity) dropBucket(key int64) {
 	}
 }
 
-// Snapshot returns the retained buckets for the given addresses, oldest first.
-// Sites beyond activitySites per bucket are folded into one row.
-func (a *Activity) Snapshot(addresses []netip.Addr, since time.Time) []ActivityBucket {
+// Snapshot returns the current session's buckets for the given addresses,
+// oldest first. Sites beyond activitySites per bucket are folded into one row.
+func (a *Activity) Snapshot(addresses []netip.Addr) []ActivityBucket {
 	if a == nil {
 		return nil
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.started.IsZero() {
+		// No session, no series: an empty list rather than a missing one, so the
+		// device page can keep counting on a list after the session ends.
+		return []ActivityBucket{}
+	}
 
 	wanted := make(map[netip.Addr]bool, len(addresses))
 	for _, addr := range addresses {
 		wanted[addr.Unmap()] = true
 	}
-	cutoff := since.Truncate(activityWidth).Unix()
 	out := make([]ActivityBucket, 0, len(a.order))
 	for _, key := range a.order {
-		if key < cutoff {
-			continue
-		}
 		byAddr, ok := a.buckets[key]
 		if !ok {
 			continue

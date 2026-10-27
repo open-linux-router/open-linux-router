@@ -5,22 +5,26 @@ import { api } from '@/lib/api'
 import { formatBytes } from '@/lib/utils'
 
 /**
- * The device's week, one axis.
+ * What the device did while inspection was on, one axis.
  *
- * Height is traffic, colour is the site the bytes belong to, and the window is
- * a rolling four buckets so a burst reads as a hill instead of a comb. The
- * series is sampled on the router (inspection.Activity) and kept in memory for a
- * week; a restart starts the chart over, which the footer says rather than
+ * Height is traffic and colour is the site the bytes belong to. The series is
+ * sampled on the router only while the session runs and dropped when it stops,
+ * so the chart starts when the switch does and the footer says so rather than
  * leaving a silently short history on screen.
+ *
+ * The router also reports the session's length, so the axis is the whole
+ * session: a new bucket takes its place beside the ones already there instead
+ * of stretching the chart, and the area covers only the minutes that have
+ * happened rather than drawing the rest as traffic that stopped.
  */
 
 interface SiteUsage { site: string; up: number; down: number }
 interface Bucket { at: string; sites: SiteUsage[] }
 interface Response {
   buckets: Bucket[]
-  days: number
+  since?: string
+  window_seconds: number
   bucket_seconds: number
-  retention_days: number
   sample_seconds: number
 }
 
@@ -32,7 +36,7 @@ export function SiteActivity({ addresses }: { addresses: string[] }) {
   useLocale()
   const query = useQuery({
     queryKey: ['inspection', 'activity', addresses.join(',')],
-    queryFn: () => api.get<Response>(`/api/inspection/activity?${addresses.map((a) => `address=${encodeURIComponent(a)}`).join('&')}&days=7`),
+    queryFn: () => api.get<Response>(`/api/inspection/activity?${addresses.map((a) => `address=${encodeURIComponent(a)}`).join('&')}`),
     refetchInterval: 15000,
     enabled: addresses.length > 0,
   })
@@ -41,10 +45,15 @@ export function SiteActivity({ addresses }: { addresses: string[] }) {
   if (query.isError) return <p className="px-4 py-4 text-sm text-muted-foreground sm:px-6">{t('The activity series is unavailable.')}</p>
   if (query.isPending) return <p className="px-4 py-4 text-sm text-muted-foreground sm:px-6">{t('Loading activity…')}</p>
 
-  const buckets = query.data.buckets
+  const data = query.data
+  const buckets = data.buckets ?? []
   if (buckets.length === 0) return <p className="px-4 py-4 text-sm text-muted-foreground sm:px-6">{t('No traffic recorded yet. The chart fills in as the router samples connections.')}</p>
 
-  // top sites over the window, everything else folded into 其他
+  const bucketSeconds = Math.max(1, data.bucket_seconds)
+  const slots = Math.max(1, Math.round(data.window_seconds / bucketSeconds))
+  const started = Date.parse(data.since ?? buckets[0].at)
+
+  // top sites over the session, everything else folded into 其他
   const totals = new Map<string, number>()
   for (const bucket of buckets) for (const row of bucket.sites) {
     totals.set(row.site, (totals.get(row.site) ?? 0) + row.up + row.down)
@@ -60,30 +69,36 @@ export function SiteActivity({ addresses }: { addresses: string[] }) {
   }
 
   const keys = [...kept, ...(named.length > kept.length ? ['其他'] : []), '未命名']
-  const values = keys.map(() => new Array(buckets.length).fill(0))
-  const columnTotals = new Array(buckets.length).fill(0)
-  buckets.forEach((bucket, index) => {
+  const values = keys.map(() => new Array(slots).fill(0))
+  const columnTotals = new Array(slots).fill(0)
+  let lastSlot = 0
+  for (const bucket of buckets) {
+    const slot = Math.min(slots - 1, Math.max(0, Math.round((Date.parse(bucket.at) - started) / 1000 / bucketSeconds)))
+    lastSlot = Math.max(lastSlot, slot)
     for (const row of bucket.sites) {
       const site = row.site
       const key = keys.includes(site) ? site : '其他'
-      const slot = keys.indexOf(key)
-      if (slot < 0) continue
-      values[slot][index] += row.up + row.down
-      columnTotals[index] += row.up + row.down
+      const index = keys.indexOf(key)
+      if (index < 0) continue
+      values[index][slot] += row.up + row.down
+      columnTotals[slot] += row.up + row.down
     }
-  })
+  }
   const grand = columnTotals.reduce((a, b) => a + b, 0)
+  // The axis is the whole session, but the area only covers the minutes that
+  // have happened: drawing the rest as zero would read as traffic that stopped.
+  const drawn = Math.min(slots, lastSlot + 1)
 
   const width = 1000
   const height = 132
   const base = height - 4
-  const max = Math.max(...columnTotals, 1)
-  const x = (i: number) => (buckets.length === 1 ? 0 : (i / (buckets.length - 1)) * width)
-  const lower = new Array(buckets.length).fill(0)
+  const max = Math.max(...columnTotals.slice(0, drawn), 1)
+  const x = (i: number) => (slots === 1 ? 0 : (i / (slots - 1)) * width)
+  const lower = new Array(drawn).fill(0)
   const paths = keys.map((key, slot) => {
     const top: number[] = []
     const bottom: number[] = []
-    for (let i = 0; i < buckets.length; i++) {
+    for (let i = 0; i < drawn; i++) {
       const total = columnTotals[i]
       const share = total > 0 ? values[slot][i] / total : 0
       const scaled = Math.sqrt(total / max) * (base - 8)
@@ -102,9 +117,9 @@ export function SiteActivity({ addresses }: { addresses: string[] }) {
   return <div className="px-4 pb-4 sm:px-6">
     <div className="mb-1 flex items-baseline gap-4">
       <span className="text-2xl font-semibold tabular-nums">{formatBytes(grand)}</span>
-      <span className="text-sm text-muted-foreground">{t('in the last 7 days')}</span>
+      <span className="text-sm text-muted-foreground">{t('in this session')}</span>
     </div>
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block h-28 w-full" role="img" aria-label={t('Traffic over the last seven days, by site')}>
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block h-28 w-full" role="img" aria-label={t('Traffic during this inspection, by site')}>
       {paths}
       <line x1="0" y1={base} x2={width} y2={base} stroke="var(--border)" strokeWidth="1" />
     </svg>
@@ -116,7 +131,7 @@ export function SiteActivity({ addresses }: { addresses: string[] }) {
           <b className="font-medium tabular-nums">{Math.round((100 * (totals.get(key) ?? 0)) / grand)}%</b>
         </span>
       ))}
-      <span className="ml-auto">{t('Kept in memory for a week; a restart starts it over.')}</span>
+      <span className="ml-auto">{t('Recorded while inspection is on; turning it off clears it.')}</span>
     </div>
   </div>
 }

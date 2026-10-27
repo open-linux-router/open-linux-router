@@ -399,9 +399,11 @@ desktop identity/settings and traffic halves with a 64px gutter; stack them with
 Never style a pending or failed read as a disabled service.
 Active device inspection expands one panel below a 72px title bar whose height
 stays fixed. The panel has three sections — Activity, then DNS queries, then
-Requests (the embedded mitmproxy viewer, directly below its divider) — each
-drawing one full-width divider, and nothing repeats them outside it, so a device
-has one Inspection switch and one card. The title names the switch, so no
+Requests (the embedded mitmproxy viewer) — under one full-width divider below the
+title bar. The sections are told apart by their headings and spacing, not by a
+rule each: one line per section turned the panel into ruled paper. The DNS list
+draws no rules between rows either. Nothing repeats the divider outside it, so a
+device has one Inspection switch and one card. The title names the switch, so no
 "Inspection" label repeats beside it; keep the setup gear icon to the left of the
 switch, and the QR code and setup guide link belong in the setup dialog, not in
 the title bar. Disable scroll anchoring on the panel and reserve the document

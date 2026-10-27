@@ -81,8 +81,10 @@ type Service struct {
 	ExitMark func(string) (uint32, error)
 	mu       sync.Mutex
 	session  *session
-	// Activity is the per-site series the device page draws above the session.
-	// Nil means this build cannot observe, and the endpoint says so.
+	// Activity is the per-site series the device page draws while a session is
+	// running. It begins with the session and is dropped when the session ends,
+	// so turning inspection off clears what it saw. Nil means this build cannot
+	// observe, and the endpoint says so.
 	Activity *Activity
 }
 
@@ -101,7 +103,7 @@ type session struct {
 
 func (s *Service) Routes() []core.Route {
 	return []core.Route{
-		{Method: "GET", Path: "/activity", Tool: "show activity", Summary: "Show per-site traffic for one device over the retained week.", Handler: s.activity},
+		{Method: "GET", Path: "/activity", Tool: "show activity", Summary: "Show per-site traffic for one device since inspection started.", Handler: s.activity},
 		{Method: "GET", Path: "/status", Tool: "status", Summary: "Show the temporary device request inspection session.", Handler: s.status},
 		{Method: "POST", Path: "/session", Summary: "Start a 15-minute inspection for observed device IPv4 addresses.", Mutating: true, Handler: s.start},
 		{Method: "DELETE", Path: "/session", Summary: "Stop inspection, remove interception and clear captured requests.", Mutating: true, Handler: s.stop},
@@ -415,6 +417,7 @@ func (s *Service) start(w http.ResponseWriter, r *http.Request) {
 	}
 	q := &session{mac: normalized, ips: ips, expires: time.Now().Add(duration), mark: mark, webToken: webToken, cancel: cancel, done: make(chan struct{})}
 	s.session = q
+	s.Activity.Begin(r.Context(), ips)
 	go s.consume(q, stdout)
 	go s.watch(q)
 	core.WriteJSON(w, http.StatusOK, s.snapshotLocked())
@@ -486,6 +489,9 @@ func (s *Service) end(q *session) {
 	}
 	q.cancel()
 	s.session = nil
+	// The chart belongs to the session; once interception stopped there is no
+	// reason to keep what it saw.
+	s.Activity.End()
 }
 
 func (s *Service) retryCleanup(q *session) {
@@ -529,6 +535,7 @@ func (s *Service) Close() error {
 	}
 	s.session.cancel()
 	s.session = nil
+	s.Activity.End()
 	return nil
 }
 func Recover() error {

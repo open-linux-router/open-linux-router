@@ -66,8 +66,13 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
     return () => { cancelled = true; setViewerReady(false) }
   }, [mine, status.data?.expires])
 
+  // One rule under the title bar separates the switch from what it turned on;
+  // the sections below are told apart by their headings and spacing rather than
+  // by a line each, which turned the panel into ruled paper.
+  const divided = Boolean(notice) || Boolean(mine)
+
   return <section className="overflow-hidden rounded-xl border bg-card shadow-xs [overflow-anchor:none]" aria-labelledby="inspection-title">
-    <div className="px-4 sm:px-6">
+    <div className={`px-4 sm:px-6 ${divided ? 'border-b' : ''}`}>
       <div className="flex h-18 items-center justify-between gap-3">
         <Heading id="inspection-title">{t('Inspection')}</Heading>
         {/* The title names the switch, so the title bar needs no second
@@ -92,22 +97,21 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         </DialogContent>
       </Dialog>
       {/* Everything the switch turned on lives here, so there is one card, one
-          switch and one answer to "is this device being inspected". One divider
-          per section, drawn full width by the section itself: the chart is the
-          week before this session, DNS is where the names in it came from, and
-          the last section is the content the session can see. */}
-      {notice && <div className="space-y-3 border-t px-4 py-4 sm:px-6 sm:py-6">
+          switch and one answer to "is this device being inspected". The chart is
+          this session, DNS is where the names in it came from, and the last
+          section is the content the session can see. */}
+      {notice && <div className="space-y-3 px-4 py-4 sm:px-6 sm:py-6">
         {status.isError ? <p role="alert" className="text-sm text-destructive">{t('Inspection status is unavailable. Do not assume interception has stopped.')}</p> : null}
         {active && !mine ? <p className="text-sm text-muted-foreground">{t('Another device is being inspected. Stop that session before starting this one.')}</p> : null}
         {ipv4.length === 0 && !active && <p className="text-sm text-muted-foreground">OLR has not observed an IPv4 address for this device yet. Connect it to the network and refresh this page to enable inspection.</p>}
         {ipv4.length > 8 && !active && <p className="text-sm text-muted-foreground">{t('Too many addresses are associated with this device to start inspection safely.')}</p>}
       </div>}
-      {mine && <div className="border-t">
+      {mine && <div>
         <h3 className="px-4 pt-4 text-sm font-medium sm:px-6">{t('Activity')}</h3>
         <SiteActivity addresses={ipv4} />
       </div>}
-      {mine && <div className="border-t"><ClientQueries addresses={ipv4} section /></div>}
-      {mine && <div className="border-t pt-4">
+      {mine && <ClientQueries addresses={ipv4} section />}
+      {mine && <div className="pt-4">
         <h3 className="px-4 pb-3 text-sm font-medium sm:px-6">{t('Requests')}</h3>
         <div className="px-4 pb-4 sm:px-6 sm:pb-6">
           {viewerReady

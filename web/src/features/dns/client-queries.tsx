@@ -62,7 +62,9 @@ export function ClientQueries({ addresses, section = false }: { addresses: strin
     <div className="max-h-80 overflow-y-auto">
       {/* One line per query. A name or a CDN answer list wraps into four
           lines and the table scrolls sideways; each column owns its width
-          instead and cuts what does not fit. */}
+          instead and cuts what does not fit. A log is read row by row, so the
+          rows carry no rules: the line height and the time in the first column
+          already say where one query ends. */}
       <Table aria-label={t('Recent DNS queries: time, record, type, answer')} className="min-w-[36rem] table-fixed">
         <colgroup>
           <col className="w-24" />
@@ -70,7 +72,7 @@ export function ClientQueries({ addresses, section = false }: { addresses: strin
           <col className="w-[4.5rem]" />
           <col />
         </colgroup>
-        <TableBody>{shown.map((q, i) => <TableRow key={`${q.at}-${q.client}-${q.name}-${i}`} className="h-10">
+        <TableBody className="[&_tr]:border-0">{shown.map((q, i) => <TableRow key={`${q.at}-${q.client}-${q.name}-${i}`} className="h-10">
           <TableCell><time dateTime={q.at} className="font-mono text-xs text-muted-foreground">{new Date(q.at).toLocaleTimeString()}</time></TableCell>
           <TableCell><span className="block truncate" title={q.name}>{q.name}</span></TableCell>
           <TableCell className="text-muted-foreground"><span className="block truncate">{q.type}</span></TableCell>

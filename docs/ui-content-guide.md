@@ -291,13 +291,18 @@ never a second switch for part of it. Show the mitmproxy viewer directly, withou
 duplicate request lists, diagnostics or a disclosure. Certificate installation,
 trust and cleanup belong in the public five-step setup guide, with the
 certificate download at step two.
+Activity is the session, not a history: its total reads "in this session", and the
+footer says the series is recorded while inspection is on and cleared when it is
+turned off. Sites are named by registrable domain under the public suffix list, so
+a multi-label suffix such as `com.cn` is never shown as a site.
 The DNS section lists Time, Record, Type and right-aligned Answer values without
 a visible header row and without a switch of its own: the panel's switch already
 opened it. An accessible search icon in the section heading reveals a compact
 filter that opens to the left of itself; closing clears the filter. The panel
-keeps its title bar fixed and expands content downward, each section introducing
-itself with a full-width divider, and the switch keeps its place at the trailing
-edge as content changes.
+keeps its title bar fixed and expands content downward under one divider below
+that bar; its three sections are separated by headings and spacing rather than by
+a rule each, and the DNS rows carry no rules. The switch keeps its place at the
+trailing edge as content changes.
 WireGuard devices keep DNS as its own card with its own Inspection switch,
 because their tunnel traffic cannot be inspected; there the card starts closed.
 Do not promise encrypted DNS blocking beyond the supported protocol and port.

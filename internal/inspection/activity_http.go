@@ -9,20 +9,22 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// activityResponse is the device page's chart: the retained buckets plus the
+// activityResponse is the device page's chart: the session's buckets plus the
 // facts a reader needs to interpret them.
 type activityResponse struct {
 	Buckets   []ActivityBucket `json:"buckets"`
-	Days      int              `json:"days"`
+	Since     *time.Time       `json:"since,omitempty"`
+	WindowSec int              `json:"window_seconds"`
 	BucketSec int              `json:"bucket_seconds"`
-	Retention int              `json:"retention_days"`
 	Sampled   int              `json:"sample_seconds"`
 }
 
-// activity serves GET /api/inspection/activity?address=…&days=7.
+// activity serves GET /api/inspection/activity?address=…
 //
 // Addresses rather than a MAC: the sampler sees addresses, the device page
 // already has them, and a device that dials in over WireGuard has nothing else.
+// The series only exists while a session is running; without one the response
+// is empty rather than an error, because "inspection is off" is not a failure.
 func (s *Service) activity(w http.ResponseWriter, r *http.Request) {
 	if s.Activity == nil {
 		core.WriteError(w, http.StatusServiceUnavailable, "this olrd was built without per-site accounting")
@@ -43,22 +45,14 @@ func (s *Service) activity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	days := 7
-	if raw := query.Get("days"); raw != "" {
-		n, err := strconv.Atoi(raw)
-		if err != nil || n < 1 || n > 30 {
-			core.WriteError(w, http.StatusBadRequest, "days must be a whole number between 1 and 30")
-			return
-		}
-		days = n
-	}
-
-	since := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
-	core.WriteJSON(w, http.StatusOK, activityResponse{
-		Buckets:   s.Activity.Snapshot(addresses, since),
-		Days:      days,
+	out := activityResponse{
+		Buckets:   s.Activity.Snapshot(addresses),
+		WindowSec: int(duration.Seconds()),
 		BucketSec: int(activityWidth.Seconds()),
-		Retention: int(ActivityRetention.Hours() / 24),
 		Sampled:   int(SampleInterval.Seconds()),
-	})
+	}
+	if started := s.Activity.Started(); !started.IsZero() {
+		out.Since = &started
+	}
+	core.WriteJSON(w, http.StatusOK, out)
 }
