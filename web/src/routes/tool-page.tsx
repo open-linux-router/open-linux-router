@@ -65,13 +65,11 @@ interface ServerOption {
   id: string
   sponsor: string
   location: string
-  latency_ms: number
 }
 
 interface ServerList {
   servers: ServerOption[]
-  candidates: number
-  reachable: number
+  total: number
 }
 
 interface NATResult {
@@ -236,15 +234,15 @@ function SpeedTest() {
                 <SelectTrigger id="speed-server" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="auto">{t('Automatic (first working server)')}</SelectItem>
-                  {options.map((item) => <SelectItem key={item.id} value={item.id}>{item.sponsor} · {item.location} ({item.latency_ms.toFixed(0)} ms)</SelectItem>)}
+                  {options.map((item) => <SelectItem key={item.id} value={item.id}>{item.sponsor} · {item.location}</SelectItem>)}
                 </SelectContent>
               </Select>
-              {servers.isPending && <p className="text-xs text-muted-foreground">{t('Finding reachable servers…')}</p>}
+              {servers.isPending && <p className="text-xs text-muted-foreground">{t('Finding nearby servers…')}</p>}
               {serverUnavailable && <p className="text-xs text-destructive">{t('Refresh the server list or choose another server before testing.')}</p>}
               {servers.isError && <p className="text-xs text-destructive">{t('Could not list servers:')} {servers.error.message}. Automatic selection is still available.</p>}
               {servers.isSuccess && options.length === 0 && <p className="text-xs text-destructive">{t('No server matched that search. Clear it to see nearby servers.')}</p>}
-              {servers.isSuccess && options.length > 0 && <p className="text-xs text-muted-foreground">{t('{reachable} of {candidates} listed servers answered.', { reachable: servers.data.reachable, candidates: servers.data.candidates })}</p>}
-              {servers.isSuccess && servers.data.reachable > options.length && <p className="text-xs text-muted-foreground">{t('Showing the {shown} closest responding.', { shown: options.length })}</p>}
+              {servers.isSuccess && options.length > 0 && <p className="text-xs text-muted-foreground">{t('{count} servers listed near this way out; latency is measured when the test runs.', { count: servers.data.total })}</p>}
+              {servers.isSuccess && servers.data.total > options.length && <p className="text-xs text-muted-foreground">{t('Showing the {shown} closest.', { shown: options.length })}</p>}
             </div>
           </div>
           <Button onClick={run} disabled={running || gateway.isPending || exitUnavailable || serverUnavailable}>

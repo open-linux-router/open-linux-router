@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/showwin/speedtest-go/speedtest"
 
@@ -218,17 +217,6 @@ func TestLimitedTraceOutput(t *testing.T) {
 		t.Fatalf("write=%d, length=%d, truncated=%v, err=%v", n, b.Len(), b.truncated, err)
 	}
 }
-func TestSelectedServerMustBeReachable(t *testing.T) {
-	servers := speedtest.Servers{{ID: "1", Sponsor: "Near"}, {ID: "2", Sponsor: "Far"}}
-	server, err := serverByID(servers, "2")
-	if err != nil || server != servers[1] {
-		t.Fatalf("server=%v, err=%v", server, err)
-	}
-	if _, err := serverByID(servers, "3"); err == nil {
-		t.Fatal("unlisted server was accepted")
-	}
-}
-
 func TestSelectedExitIsValidatedForBothRoutes(t *testing.T) {
 	h := &HTTP{ResolveExit: func(name string) (uint32, error) {
 		if name != "working" {
@@ -250,29 +238,75 @@ func TestSelectedExitIsValidatedForBothRoutes(t *testing.T) {
 	}
 }
 
-func TestServerOptionsDropUnreachableAndCountBoth(t *testing.T) {
-	servers := speedtest.Servers{
-		{ID: "1", Sponsor: "Near", Name: "City", Country: "Country A", Latency: 12 * time.Millisecond},
-		{ID: "2", Sponsor: "Gone", Name: "City", Country: "Country B", Latency: speedtest.PingTimeout},
-		{ID: "3", Sponsor: "Far", Name: "Town", Country: "Country C", Latency: 90 * time.Millisecond},
+func TestServerOptionsKeepProviderOrderAndCount(t *testing.T) {
+	rows := []providerServer{
+		{ID: "1", Sponsor: "Near", Name: "City", Country: "Country A"},
+		{ID: "", Sponsor: "Unidentified", Name: "Town", Country: "Country B"},
+		{ID: "3", Sponsor: "Far", Name: "Town", Country: "Country C"},
 	}
-	list := serverOptions(servers)
-	if list.Candidates != 3 || list.Reachable != 2 || len(list.Servers) != 2 {
+	list := serverOptions(rows)
+	if list.Total != 2 || len(list.Servers) != 2 {
 		t.Fatalf("list = %+v", list)
 	}
-	if list.Servers[0].ID != "1" || list.Servers[0].Latency != 12 {
-		t.Fatalf("servers are not ordered by latency: %+v", list.Servers)
+	if list.Servers[0].ID != "1" || list.Servers[1].Location != "Town, Country C" {
+		t.Fatalf("servers did not keep the provider order: %+v", list.Servers)
 	}
 }
 
 func TestServerOptionsStopAtTheLimit(t *testing.T) {
-	servers := make(speedtest.Servers, 0, serverListLimit+10)
+	rows := make([]providerServer, 0, serverListLimit+10)
 	for i := range serverListLimit + 10 {
-		servers = append(servers, &speedtest.Server{ID: strconv.Itoa(i), Sponsor: "Sponsor", Latency: time.Duration(i) * time.Millisecond})
+		rows = append(rows, providerServer{ID: strconv.Itoa(i), Sponsor: "Sponsor", Name: "City"})
 	}
-	list := serverOptions(servers)
-	if len(list.Servers) != serverListLimit || list.Reachable != serverListLimit+10 {
-		t.Fatalf("listed %d servers of %d", len(list.Servers), list.Reachable)
+	list := serverOptions(rows)
+	if len(list.Servers) != serverListLimit || list.Total != serverListLimit+10 {
+		t.Fatalf("listed %d servers of %d", len(list.Servers), list.Total)
+	}
+}
+
+func TestServerLabelsSkipMissingParts(t *testing.T) {
+	for _, test := range []struct{ name, country, want string }{
+		{"Keelung", "Taiwan", "Keelung, Taiwan"},
+		{"Hong Kong", "", "Hong Kong"},
+		{"", "Taiwan", "Taiwan"},
+		{"Keelung", "Keelung", "Keelung"},
+	} {
+		if got := place(test.name, test.country); got != test.want {
+			t.Errorf("place(%q, %q) = %q, want %q", test.name, test.country, got, test.want)
+		}
+	}
+}
+
+func TestProviderServersAskForTheSearchTerm(t *testing.T) {
+	var gotQuery string
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("search")
+		_, _ = w.Write([]byte(`[{"id":"9","sponsor":"Sponsor","name":"Keelung","country":"Taiwan"}]`))
+	}))
+	defer provider.Close()
+	rows, err := providerServers(context.Background(), provider.Client(), provider.URL, "Taiwan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotQuery != "Taiwan" || len(rows) != 1 || rows[0].ID != "9" {
+		t.Fatalf("search = %q, rows = %+v", gotQuery, rows)
+	}
+}
+
+func TestProviderServersReportBadResponses(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer provider.Close()
+	if _, err := providerServers(context.Background(), provider.Client(), provider.URL, ""); err == nil {
+		t.Fatal("a refused request was treated as a server list")
+	}
+	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"servers":[]}`))
+	}))
+	defer broken.Close()
+	if _, err := providerServers(context.Background(), broken.Client(), broken.URL, ""); err == nil {
+		t.Fatal("a payload that is not a server list was accepted")
 	}
 }
 
@@ -288,11 +322,11 @@ func TestServerSearchIsTrimmedAndBounded(t *testing.T) {
 	}
 }
 
-func TestServersReportWhatTheTargetAnswered(t *testing.T) {
+func TestServersReturnTheProviderList(t *testing.T) {
 	var gotExit, gotSearch string
 	h := &HTTP{ListServers: func(_ context.Context, exit, search string) (ServerList, error) {
 		gotExit, gotSearch = exit, search
-		return ServerList{Servers: []ServerOption{{ID: "9", Sponsor: "Sponsor", Location: "City, Country", Latency: 20}}, Candidates: 12, Reachable: 4}, nil
+		return ServerList{Servers: []ServerOption{{ID: "9", Sponsor: "Sponsor", Location: "City, Country"}}, Total: 12}, nil
 	}}
 	w := httptest.NewRecorder()
 	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/speedtest/servers?search=%20Taiwan%20", nil))
@@ -306,7 +340,7 @@ func TestServersReportWhatTheTargetAnswered(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
-	if list.Candidates != 12 || list.Reachable != 4 || len(list.Servers) != 1 || list.Servers[0].ID != "9" {
+	if list.Total != 12 || len(list.Servers) != 1 || list.Servers[0].ID != "9" {
 		t.Fatalf("list = %+v", list)
 	}
 }

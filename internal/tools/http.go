@@ -3,9 +3,11 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,6 +25,11 @@ const ModuleName = "tools"
 // choice, short enough to stay a list rather than a directory.
 const serverListLimit = 50
 
+// serverListURL is Ookla's nearby-server payload. One request answers with the
+// servers this caller's way out would use, ordered by distance and carrying no
+// latency, so opening the picker costs a round trip rather than a ping sweep.
+const serverListURL = "https://www.speedtest.net/api/js/servers"
+
 type SpeedResult struct {
 	Server   string  `json:"server"`
 	Location string  `json:"location"`
@@ -34,18 +41,25 @@ type SpeedResult struct {
 }
 
 type ServerOption struct {
-	ID       string  `json:"id"`
-	Sponsor  string  `json:"sponsor"`
-	Location string  `json:"location"`
-	Latency  float64 `json:"latency_ms"`
+	ID       string `json:"id"`
+	Sponsor  string `json:"sponsor"`
+	Location string `json:"location"`
 }
 
-// ServerList reports the reachable servers a picker can offer, and how much of
-// what the provider listed answered, so a short list explains itself.
+// ServerList reports the servers the provider lists for one way out, and how
+// many it listed before the picker's limit, so a truncated list explains itself.
 type ServerList struct {
-	Servers    []ServerOption `json:"servers"`
-	Candidates int            `json:"candidates"`
-	Reachable  int            `json:"reachable"`
+	Servers []ServerOption `json:"servers"`
+	Total   int            `json:"total"`
+}
+
+// providerServer is one row of Ookla's nearby-server payload, narrowed to the
+// fields the picker shows.
+type providerServer struct {
+	ID      string `json:"id"`
+	Sponsor string `json:"sponsor"`
+	Name    string `json:"name"`
+	Country string `json:"country"`
 }
 
 type HTTP struct {
@@ -87,8 +101,8 @@ func (h *HTTP) Routes() []core.Route {
 		{Method: "GET", Path: "/quality", Tool: "show quality", Summary: "Read the latest network quality assessment, evidence and score coverage without starting tests.", Handler: h.getQuality},
 		{Method: "POST", Path: "/quality", Mutating: true, Summary: "Run a full router default-route quality assessment, or rerun one scope and update its scores; the reference transfer consumes bandwidth.", Query: []core.QueryParam{{Name: "scope", Type: "string", Summary: "all (default) runs every test; responses, target, speed and nat rerun one part and keep the rest."}, {Name: "target", Type: "string", Summary: "Service target ID when scope is target: cloudflare, google or github."}, {Name: "speed", Type: "boolean", Summary: "Include the bandwidth-consuming reference transfer with scope=all; defaults to false."}}, Handler: h.startQuality},
 		{Method: "DELETE", Path: "/quality", Mutating: true, Summary: "Cancel the active network quality assessment and retain its completed evidence.", Handler: h.cancelQuality},
-		{Method: "GET", Path: "/speedtest/servers", Tool: "show speedtest servers", Summary: "Find nearby speed test servers through the selected way out; makes network requests but transfers no test data.", Query: []core.QueryParam{exit, search}, Handler: h.servers},
-		{Method: "POST", Path: "/speedtest", Mutating: true, Summary: "Measure this router's internet latency, download and upload speed using speedtest-go; consumes bandwidth.", Query: []core.QueryParam{exit, search, {Name: "server_id", Type: "string", Summary: "Speed test server ID from the server list; empty picks a reachable server automatically."}}, Handler: h.speedtest},
+		{Method: "GET", Path: "/speedtest/servers", Tool: "show speedtest servers", Summary: "List the speed test servers near the selected way out; one network request, no latency probing and no test data.", Query: []core.QueryParam{exit, search}, Handler: h.servers},
+		{Method: "POST", Path: "/speedtest", Mutating: true, Summary: "Measure this router's internet latency, download and upload speed using speedtest-go; consumes bandwidth.", Query: []core.QueryParam{exit, search, {Name: "server_id", Type: "string", Summary: "Speed test server ID from the server list; empty probes the nearby servers and starts with the first that answers."}}, Handler: h.speedtest},
 		{Method: "POST", Path: "/nat", Mutating: true, Summary: "Probe this router’s default-route UDP mapping and filtering through public STUN servers; sends UDP packets.", Handler: h.nat},
 		{Method: "GET", Path: "/lan-test", Tool: "show lan test", Summary: "List LAN addresses and the current temporary iperf3 server session.", Handler: h.lanStatus},
 		{Method: "POST", Path: "/lan-test", Mutating: true, Summary: "Start a temporary iperf3 server bound to a configured LAN address; consumes router resources when a client connects.", Handler: h.startLAN},
@@ -169,28 +183,75 @@ func (h *HTTP) listServers(ctx context.Context, exit, search string) (ServerList
 	if err != nil {
 		return ServerList{}, err
 	}
-	servers, err := client.FetchServerListContext(ctx)
+	// The speedtest client is the round tripper, so this request carries the
+	// selected way out and its user agent, and the list is the one that way out
+	// would be offered.
+	rows, err := providerServers(ctx, &http.Client{Transport: client}, serverListURL, search)
 	if err != nil {
 		return ServerList{}, err
 	}
-	return serverOptions(servers), nil
+	return serverOptions(rows), nil
 }
 
-// serverOptions keeps every reachable server the provider returned, up to the
-// picker's limit, and reports the counts the picker shows.
-func serverOptions(servers speedtest.Servers) ServerList {
-	available := *servers.Available()
-	options := make([]ServerOption, 0, min(len(available), serverListLimit))
-	for _, server := range available {
-		if server.ID == "" {
+// providerServers asks the provider for its nearby list and returns the rows the
+// picker needs.
+func providerServers(ctx context.Context, doer *http.Client, endpoint, search string) ([]providerServer, error) {
+	target, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	query := target.Query()
+	if search != "" {
+		query.Set("search", search)
+	}
+	target.RawQuery = query.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := doer.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("provider answered %s", resp.Status)
+	}
+	var rows []providerServer
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		return nil, fmt.Errorf("reading provider response: %w", err)
+	}
+	return rows, nil
+}
+
+// serverOptions keeps the provider's distance order, drops rows the router
+// could not test by ID, stops at the picker's limit, and reports how many the
+// provider listed so a truncated list explains itself.
+func serverOptions(rows []providerServer) ServerList {
+	total := 0
+	options := make([]ServerOption, 0, min(len(rows), serverListLimit))
+	for _, row := range rows {
+		if row.ID == "" {
 			continue
 		}
-		options = append(options, ServerOption{ID: server.ID, Sponsor: server.Sponsor, Location: server.Name + ", " + server.Country, Latency: float64(server.Latency) / float64(time.Millisecond)})
-		if len(options) == serverListLimit {
-			break
+		total++
+		if len(options) < serverListLimit {
+			options = append(options, ServerOption{ID: row.ID, Sponsor: row.Sponsor, Location: place(row.Name, row.Country)})
 		}
 	}
-	return ServerList{Servers: options, Candidates: len(servers), Reachable: len(available)}
+	return ServerList{Servers: options, Total: total}
+}
+
+// place joins the two labels Ookla splits a server's site into, without leaving
+// a dangling separator when one of them is missing or repeats the other.
+func place(name, country string) string {
+	switch {
+	case name == "":
+		return country
+	case country == "" || country == name:
+		return name
+	}
+	return name + ", " + country
 }
 
 func (h *HTTP) traceroute(w http.ResponseWriter, r *http.Request) {
@@ -270,6 +331,20 @@ func (h *HTTP) speedtest(w http.ResponseWriter, r *http.Request) {
 
 func measure(ctx context.Context, client *speedtest.Speedtest, id string) (SpeedResult, error) {
 	client.SetCaptureTime(10 * time.Second).SetNThread(4)
+	if id != "" {
+		// The picker already knows which server the user wants; asking Ookla for
+		// that one server keeps the chosen path free of a ping sweep over the
+		// rest, and still catches an ID the provider has retired.
+		server, err := client.FetchServerByIDContext(ctx, id)
+		if errors.Is(err, speedtest.ErrServerNotFound) {
+			return SpeedResult{}, fmt.Errorf("selected server %q is no longer available; refresh the list", id)
+		}
+		if err != nil {
+			return SpeedResult{}, fmt.Errorf("finding test server %s: %w", id, err)
+		}
+		client.Reset()
+		return testServer(ctx, server)
+	}
 	servers, err := client.FetchServerListContext(ctx)
 	if err != nil {
 		return SpeedResult{}, fmt.Errorf("finding test servers: %w", err)
@@ -278,27 +353,10 @@ func measure(ctx context.Context, client *speedtest.Speedtest, id string) (Speed
 	if len(available) == 0 {
 		return SpeedResult{}, errors.New("no reachable test server available")
 	}
-	if id != "" {
-		server, err := serverByID(available, id)
-		if err != nil {
-			return SpeedResult{}, err
-		}
-		client.Reset()
-		return testServer(ctx, server)
-	}
 	return tryServers(ctx, available, func(ctx context.Context, server *speedtest.Server) (SpeedResult, error) {
 		client.Reset()
 		return testServer(ctx, server)
 	})
-}
-
-func serverByID(servers speedtest.Servers, id string) (*speedtest.Server, error) {
-	for _, server := range servers {
-		if server.ID == id {
-			return server, nil
-		}
-	}
-	return nil, fmt.Errorf("selected server %q is no longer available; refresh the list", id)
 }
 
 func tryServers(ctx context.Context, servers speedtest.Servers, run func(context.Context, *speedtest.Server) (SpeedResult, error)) (SpeedResult, error) {
@@ -339,7 +397,7 @@ func testServer(ctx context.Context, server *speedtest.Server) (SpeedResult, err
 		return SpeedResult{}, errors.New("upload returned no usable data")
 	}
 	return SpeedResult{
-		Server: server.Sponsor, Location: server.Name + ", " + server.Country,
+		Server: server.Sponsor, Location: place(server.Name, server.Country),
 		Latency:  float64(server.Latency) / float64(time.Millisecond),
 		Jitter:   float64(server.Jitter) / float64(time.Millisecond),
 		Download: server.DLSpeed.Mbps(), Upload: server.ULSpeed.Mbps(),
