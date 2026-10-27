@@ -620,7 +620,13 @@ need curl, tar and sha256sum. Single-binary tarball users must install
 [upstream release](https://github.com/mikkelam/fast-cli/releases/tag/v0.3.10).
 The tool has the fast.com app token compiled in, so a token rotation needs a
 newer release; the test reports the CLI's error and does not fall back to
-another service.
+another service. The token is not the only way the API refuses a run: from a
+source address Netflix does not serve — mainland China among them — it answers
+`403 Not Available` before any transfer starts. `fast-cli` puts that reason on
+stderr while its JSON only says `Failed to get URLs`, so the tool passes the
+last stderr line through to the page's technical details; reading it separates a
+blocked path from an expired token. A blocked path needs a way out in a country
+the service serves, not a newer binary.
 Finally, the existing IPv4 STUN test has up to 15 seconds. NAT results are
 diagnostic only and do not prove public IPv4 assignment, inbound or P2P access.
 A full assessment has a 150-second deadline; scoped reruns use shorter deadlines

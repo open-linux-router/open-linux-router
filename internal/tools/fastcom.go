@@ -45,7 +45,29 @@ func runFast(ctx context.Context, mark uint32) (SpeedResult, error) {
 	if err != nil {
 		return SpeedResult{}, fmt.Errorf("fast-cli failed: %s: %w", strings.TrimSpace(stderr.String()), err)
 	}
-	return parseFast([]byte(stdout.String()))
+	speed, err := parseFast([]byte(stdout.String()))
+	if err != nil {
+		// The JSON failure is a summary ("Failed to get URLs"); the reason — an
+		// HTTP 403 from the API, a refused connection, a token the service no
+		// longer accepts — is only on stderr. Carry it so the page can say why.
+		if reason := lastLine(stderr.String()); reason != "" {
+			return SpeedResult{}, fmt.Errorf("%w: %s", err, reason)
+		}
+		return SpeedResult{}, err
+	}
+	return speed, nil
+}
+
+// lastLine returns the last non-blank line of a diagnostic stream, which is
+// where the upstream tool leaves the error it failed on.
+func lastLine(output string) string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if line := strings.TrimSpace(lines[i]); line != "" {
+			return line
+		}
+	}
+	return ""
 }
 
 func parseFast(data []byte) (SpeedResult, error) {

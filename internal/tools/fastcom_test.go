@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -57,6 +58,21 @@ func TestFastCommand(t *testing.T) {
 	cancel()
 	if _, err := runFast(ctx, 0); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancel: %v", err)
+	}
+	// The JSON error is all the page would otherwise see; the reason the tool
+	// failed lives on stderr and has to survive into the returned error.
+	refusal := "#!/bin/sh\n" +
+		"printf '%s\\n' '{\"download_mbps\": null, \"upload_mbps\": null, \"error\": \"Failed to get URLs\"}'\n" +
+		"echo 'info(fast_api): Config: json=true' >&2\n" +
+		"echo 'error(fast_api): Fast.com API denied access (HTTP 403); the bundled token may need updating' >&2\n"
+	if err := os.WriteFile(binary, []byte(refusal), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runFast(context.Background(), 0); err == nil ||
+		!strings.Contains(err.Error(), "Failed to get URLs") ||
+		!strings.Contains(err.Error(), "HTTP 403") ||
+		strings.Contains(err.Error(), "Config:") {
+		t.Fatalf("refusal without its reason: %v", err)
 	}
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\necho failure >&2\nexit 1\n"), 0755); err != nil {
 		t.Fatal(err)
