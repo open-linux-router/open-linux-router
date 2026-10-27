@@ -44,7 +44,7 @@ export function SpeedDial({ label, value, direction, active }: {
           cx={knob.x} cy={knob.y} r="7" strokeWidth="3"
           className={cn('stroke-card', direction === 'download' ? 'fill-receive' : 'fill-transmit')}
         />}
-        <text x="100" y="86" textAnchor="middle" className="fill-foreground text-[40px] font-semibold tabular-nums">
+        <text x="100" y="86" textAnchor="middle" className={cn('text-[40px] tabular-nums', value == null ? 'fill-muted-foreground' : 'fill-foreground font-semibold')}>
           {value == null ? '—' : formatReading(value)}
         </text>
         <text x="100" y="104" textAnchor="middle" className="fill-muted-foreground text-[12px]">Mbps</text>

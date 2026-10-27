@@ -332,29 +332,40 @@ function SpeedTest({ service }: { service: SpeedService }) {
             <p>{t('Install that command on the router’s PATH, then reload this page.')}</p>
           </AlertDescription>
         </Alert>
-      : <div className="panel-surface mx-auto w-fit max-w-full p-2.5 sm:p-3">
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
-            <Select value={selectedExit || 'default'} onValueChange={(value) => { setExit(value === 'default' ? '' : value ?? ''); setServerID('') }} disabled={running || gateway.isPending}>
-              <SelectTrigger aria-label={t('Way out')} className="w-48"><SelectValue>{(value) => (value === 'default' ? t('Router default route') : String(value))}</SelectValue></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="default">{t('Router default route')}</SelectItem>
-                {exits.map((item) => <SelectItem key={item.name} value={item.name}>{item.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {service === 'ookla' && <Select value={selectedServer || 'auto'} onValueChange={(value) => setServerID(value === 'auto' ? '' : value ?? '')} disabled={running || servers.isPending}>
-              <SelectTrigger aria-label={t('Test server')} className="w-72"><SelectValue>{(value) => serverLabel(value)}</SelectValue></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">{t('Automatic (first working server)')}</SelectItem>
-                {options.map((item) => <SelectItem key={item.id} value={item.id}>{item.sponsor} · {item.location}</SelectItem>)}
-              </SelectContent>
-            </Select>}
-            <Button onClick={run} disabled={running || gateway.isPending || exitUnavailable}>
+      : <div className="panel-surface p-5 sm:p-8">
+          <div className="mx-auto flex max-w-3xl flex-col items-center gap-6">
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+              <Select value={selectedExit || 'default'} onValueChange={(value) => { setExit(value === 'default' ? '' : value ?? ''); setServerID('') }} disabled={running || gateway.isPending}>
+                <SelectTrigger aria-label={t('Way out')} className="w-48"><SelectValue>{(value) => (value === 'default' ? t('Router default route') : String(value))}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">{t('Router default route')}</SelectItem>
+                  {exits.map((item) => <SelectItem key={item.name} value={item.name}>{item.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {service === 'ookla' && <Select value={selectedServer || 'auto'} onValueChange={(value) => setServerID(value === 'auto' ? '' : value ?? '')} disabled={running || servers.isPending}>
+                <SelectTrigger aria-label={t('Test server')} className="w-72"><SelectValue>{(value) => serverLabel(value)}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">{t('Automatic (first working server)')}</SelectItem>
+                  {options.map((item) => <SelectItem key={item.id} value={item.id}>{item.sponsor} · {item.location}</SelectItem>)}
+                </SelectContent>
+              </Select>}
+            </div>
+            {exitUnavailable && <p className="-mt-3 text-xs text-destructive">{t('This way out is no longer available. Choose another before testing.')}</p>}
+            <Button size="lg" className="min-w-44 justify-center" onClick={run} disabled={running || gateway.isPending || exitUnavailable}>
               {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Activity aria-hidden />}
               {running ? t('Testing connection…') : result ? t('Run again') : t('Start speed test')}
             </Button>
+            {(latency != null || jitter != null) && <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground">
+              {latency != null && <span className="flex items-center gap-2">{t('Latency')}<MetricValue size="sm" value={latency.toFixed(1)} unit="ms" /></span>}
+              {jitter != null && <span className="flex items-center gap-2">{t('Jitter')}<MetricValue size="sm" value={jitter.toFixed(1)} unit="ms" /></span>}
+            </div>}
+            <div className="flex flex-wrap items-start justify-center gap-10 sm:gap-16">
+              <SpeedDial direction="download" label={t('Download')} value={download} active={running && (live?.phase === 'download' || live?.phase === 'transfer')} />
+              <SpeedDial direction="upload" label={t('Upload')} value={upload} active={running && (live?.phase === 'upload' || live?.phase === 'transfer')} />
+            </div>
+            {result && <p className="text-center text-sm text-muted-foreground">{resultSummary(service, result)}</p>}
             {running && <span role="status" className="sr-only">{speedPhaseLabel(live?.phase)}</span>}
           </div>
-          {exitUnavailable && <p className="mt-2 text-xs text-destructive">{t('This way out is no longer available. Choose another before testing.')}</p>}
         </div>}
 
       {error && (
@@ -377,20 +388,6 @@ function SpeedTest({ service }: { service: SpeedService }) {
           </AlertDescription>
         </Alert>
       )}
-
-      {/* The dials are the measurement: the direction being measured leads,
-          the other holds what it last measured, and both settle on the result. */}
-      {!serviceUnavailable && <div className="space-y-6 py-2">
-        {(latency != null || jitter != null) && <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground">
-          {latency != null && <span className="flex items-center gap-2">{t('Latency')}<MetricValue size="sm" value={latency.toFixed(1)} unit="ms" /></span>}
-          {jitter != null && <span className="flex items-center gap-2">{t('Jitter')}<MetricValue size="sm" value={jitter.toFixed(1)} unit="ms" /></span>}
-        </div>}
-        <div className="flex flex-wrap items-start justify-center gap-10 sm:gap-16">
-          <SpeedDial direction="download" label={t('Download')} value={download} active={running && (live?.phase === 'download' || live?.phase === 'transfer')} />
-          <SpeedDial direction="upload" label={t('Upload')} value={upload} active={running && (live?.phase === 'upload' || live?.phase === 'transfer')} />
-        </div>
-        {result && <p className="text-center text-sm text-muted-foreground">{resultSummary(service, result)}</p>}
-      </div>}
   </div>
 }
 

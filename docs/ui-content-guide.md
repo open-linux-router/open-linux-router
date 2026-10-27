@@ -148,7 +148,8 @@ reading, and both settle on the result, with latency and jitter above them. A
 dial that has not measured shows a dash rather than a zero, and a service that
 reports only a finished result says it is measuring instead of inventing numbers
 it cannot see yet. The controls stay to one row — way out, test server, start —
-and carry no explanatory copy; the dials are the page.
+and carry no explanatory copy; controls, start button and dials sit in one card,
+the way the embedded LibreSpeed page is one panel.
 
 LibreSpeed is the exception among the tools: its page frames LibreSpeed's own
 document unchanged, because that page is the measurement, and OLR supplies only
