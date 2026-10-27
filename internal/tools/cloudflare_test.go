@@ -15,7 +15,7 @@ const cloudflareFixture = `{"download":{"mbps":150},"upload":{"mbps":30},"idle_l
 
 func TestCloudflareResultAndScore(t *testing.T) {
 	speed, err := parseCloudflare([]byte(cloudflareFixture))
-	if err != nil || speed.Server != "Cloudflare" || speed.Location != "LHR" || speed.Latency != 12 || speed.Jitter != 2 {
+	if err != nil || speed.Server != "Cloudflare" || speed.Location != "LHR" || speed.Latency != 12 || speed.Jitter == nil || *speed.Jitter != 2 {
 		t.Fatalf("result = %+v, error = %v", speed, err)
 	}
 	categories, overall := scoreQuality(QualitySnapshot{Speed: &speed}, time.Now())
@@ -50,18 +50,18 @@ func TestCloudflareCommand(t *testing.T) {
 	for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
 		t.Setenv(name, "http://proxy.invalid")
 	}
-	if _, err := runCloudflare(context.Background()); err != nil {
+	if _, err := runCloudflare(context.Background(), 0); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := runCloudflare(ctx); !errors.Is(err, context.Canceled) {
+	if _, err := runCloudflare(ctx, 0); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancel: %v", err)
 	}
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\necho failure >&2\nexit 1\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runCloudflare(context.Background()); err == nil {
+	if _, err := runCloudflare(context.Background(), 0); err == nil {
 		t.Fatal("accepted failed subprocess")
 	}
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexec /bin/sleep 30\n"), 0755); err != nil {
@@ -69,13 +69,13 @@ func TestCloudflareCommand(t *testing.T) {
 	}
 	deadline, stop := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer stop()
-	if _, err := runCloudflare(deadline); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err := runCloudflare(deadline, 0); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("running subprocess deadline: %v", err)
 	}
 	if err := os.Remove(binary); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runCloudflare(context.Background()); err == nil {
+	if _, err := runCloudflare(context.Background(), 0); err == nil {
 		t.Fatal("missing CLI must be reported")
 	}
 	categories, _ := scoreQuality(QualitySnapshot{SpeedError: "CLI unavailable"}, time.Now())

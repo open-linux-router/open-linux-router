@@ -31,13 +31,13 @@ const serverListLimit = 50
 const serverListURL = "https://www.speedtest.net/api/js/servers"
 
 type SpeedResult struct {
-	Server   string  `json:"server"`
-	Location string  `json:"location"`
-	Exit     string  `json:"exit,omitempty"`
-	Latency  float64 `json:"latency_ms"`
-	Jitter   float64 `json:"jitter_ms"`
-	Download float64 `json:"download_mbps"`
-	Upload   float64 `json:"upload_mbps"`
+	Server   string   `json:"server"`
+	Location string   `json:"location"`
+	Exit     string   `json:"exit,omitempty"`
+	Latency  float64  `json:"latency_ms"`
+	Jitter   *float64 `json:"jitter_ms"`
+	Download float64  `json:"download_mbps"`
+	Upload   float64  `json:"upload_mbps"`
 }
 
 type ServerOption struct {
@@ -87,11 +87,21 @@ type HTTP struct {
 	linkViewers  []linkTestViewer
 	// ResolveExit returns a current fwmark, rejecting disabled or blocked exits.
 	ResolveExit func(string) (uint32, error)
-	// Run is replaceable in tests; nil uses the actual network test.
+	// Run is replaceable in tests; nil uses the actual Ookla network test.
 	Run func(context.Context) (SpeedResult, error)
+	// RunQuality is replaceable in tests; nil uses the Cloudflare reference
+	// transfer for the network quality score.
+	RunQuality func(context.Context) (SpeedResult, error)
+	// RunCloudflare and RunFast are replaceable in tests; nil runs the installed
+	// command-line tools. The mark selects a way out and is zero for the
+	// router's default route.
+	RunCloudflare func(context.Context, uint32) (SpeedResult, error)
+	RunFast       func(context.Context, uint32) (SpeedResult, error)
 	// ListServers is replaceable in tests; nil queries Ookla through the
 	// selected way out.
 	ListServers func(context.Context, string, string) (ServerList, error)
+	// LookTool is replaceable in tests; nil searches the router's PATH.
+	LookTool func(string) string
 }
 
 func (h *HTTP) Routes() []core.Route {
@@ -101,8 +111,9 @@ func (h *HTTP) Routes() []core.Route {
 		{Method: "GET", Path: "/quality", Tool: "show quality", Summary: "Read the latest network quality assessment, evidence and score coverage without starting tests.", Handler: h.getQuality},
 		{Method: "POST", Path: "/quality", Mutating: true, Summary: "Run a full router default-route quality assessment, or rerun one scope and update its scores; the reference transfer consumes bandwidth.", Query: []core.QueryParam{{Name: "scope", Type: "string", Summary: "all (default) runs every test; responses, target, speed and nat rerun one part and keep the rest."}, {Name: "target", Type: "string", Summary: "Service target ID when scope is target: cloudflare, google or github."}, {Name: "speed", Type: "boolean", Summary: "Include the bandwidth-consuming reference transfer with scope=all; defaults to false."}}, Handler: h.startQuality},
 		{Method: "DELETE", Path: "/quality", Mutating: true, Summary: "Cancel the active network quality assessment and retain its completed evidence.", Handler: h.cancelQuality},
+		{Method: "GET", Path: "/speedtest/providers", Tool: "show speedtest providers", Summary: "List the speed test services this router can run and whether each command-line tool is installed.", Handler: h.providers},
 		{Method: "GET", Path: "/speedtest/servers", Tool: "show speedtest servers", Summary: "List the speed test servers near the selected way out; one network request, no latency probing and no test data.", Query: []core.QueryParam{exit, search}, Handler: h.servers},
-		{Method: "POST", Path: "/speedtest", Mutating: true, Summary: "Measure this router's internet latency, download and upload speed using speedtest-go; consumes bandwidth.", Query: []core.QueryParam{exit, search, {Name: "server_id", Type: "string", Summary: "Speed test server ID from the server list; empty probes the nearby servers and starts with the first that answers."}}, Handler: h.speedtest},
+		{Method: "POST", Path: "/speedtest", Mutating: true, Summary: "Measure this router's internet latency, download and upload speed against the selected service; consumes bandwidth.", Query: []core.QueryParam{exit, search, {Name: "provider", Type: "string", Summary: "Speed test service: ookla (default, pick a server), cloudflare or fastcom; the command-line services accept a way out."}, {Name: "server_id", Type: "string", Summary: "Speed test server ID from the server list; ookla only, and empty probes the nearby servers and starts with the first that answers."}}, Handler: h.speedtest},
 		{Method: "POST", Path: "/nat", Mutating: true, Summary: "Probe this router’s default-route UDP mapping and filtering through public STUN servers; sends UDP packets.", Handler: h.nat},
 		{Method: "GET", Path: "/lan-test", Tool: "show lan test", Summary: "List LAN addresses and the current temporary iperf3 server session.", Handler: h.lanStatus},
 		{Method: "POST", Path: "/lan-test", Mutating: true, Summary: "Start a temporary iperf3 server bound to a configured LAN address; consumes router resources when a client connects.", Handler: h.startLAN},
@@ -289,6 +300,84 @@ func (h *HTTP) traceroute(w http.ResponseWriter, r *http.Request) {
 	core.WriteJSON(w, http.StatusOK, result)
 }
 
+// The selectable measurement services. Ookla has a server picker; the other
+// two run the command-line tool this package ships.
+const (
+	speedOokla      = "ookla"
+	speedCloudflare = "cloudflare"
+	speedFast       = "fastcom"
+)
+
+// SpeedProvider is one selectable service and whether this router can run it.
+type SpeedProvider struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Available bool   `json:"available"`
+	Detail    string `json:"detail,omitempty"`
+}
+
+func (h *HTTP) tool(name string) string {
+	if h.LookTool != nil {
+		return h.LookTool(name)
+	}
+	return core.LookTool(name)
+}
+
+func (h *HTTP) speedProviders() []SpeedProvider {
+	providers := []SpeedProvider{
+		{ID: speedOokla, Name: "Ookla", Available: true},
+		{ID: speedCloudflare, Name: "Cloudflare", Available: h.tool("cloudflare-speed-cli") != ""},
+		{ID: speedFast, Name: "fast.com", Available: h.tool("fast-cli") != ""},
+	}
+	if !providers[1].Available {
+		providers[1].Detail = "cloudflare-speed-cli is not installed"
+	}
+	if !providers[2].Available {
+		providers[2].Detail = "fast-cli is not installed"
+	}
+	return providers
+}
+
+func (h *HTTP) providers(w http.ResponseWriter, r *http.Request) {
+	core.WriteJSON(w, http.StatusOK, struct {
+		Providers []SpeedProvider `json:"providers"`
+	}{h.speedProviders()})
+}
+
+// exitMark resolves a way out for a command-line tool. An empty name means the
+// router's own default route, which needs no mark.
+func (h *HTTP) exitMark(exit string) (uint32, error) {
+	if exit == "" {
+		return 0, nil
+	}
+	if h.ResolveExit == nil {
+		return 0, exitError{errors.New("exit selection is unavailable")}
+	}
+	mark, err := h.ResolveExit(exit)
+	if err != nil {
+		return 0, exitError{err}
+	}
+	return mark, nil
+}
+
+// providerRun returns the measurement for a command-line service, honouring a
+// test seam before the installed tool.
+func (h *HTTP) providerRun(provider string, mark uint32) func(context.Context) (SpeedResult, error) {
+	var run func(context.Context, uint32) (SpeedResult, error)
+	if provider == speedCloudflare {
+		run = h.RunCloudflare
+		if run == nil {
+			run = runCloudflare
+		}
+	} else {
+		run = h.RunFast
+		if run == nil {
+			run = runFast
+		}
+	}
+	return func(ctx context.Context) (SpeedResult, error) { return run(ctx, mark) }
+}
+
 func (h *HTTP) speedtest(w http.ResponseWriter, r *http.Request) {
 	if !h.running.CompareAndSwap(false, true) {
 		core.WriteError(w, http.StatusConflict, "a speed test is already running")
@@ -296,27 +385,52 @@ func (h *HTTP) speedtest(w http.ResponseWriter, r *http.Request) {
 	}
 	defer h.running.Store(false)
 
-	exit, id := r.URL.Query().Get("exit"), r.URL.Query().Get("server_id")
+	query := r.URL.Query()
+	provider := query.Get("provider")
+	if provider == "" {
+		provider = speedOokla
+	}
+	switch provider {
+	case speedOokla, speedCloudflare, speedFast:
+	default:
+		core.WriteError(w, http.StatusBadRequest, "unknown speed test service")
+		return
+	}
+	exit, id := query.Get("exit"), query.Get("server_id")
 	if len(id) > 32 || strings.ContainsAny(id, " \t\r\n") {
 		core.WriteError(w, http.StatusBadRequest, "invalid server ID")
 		return
 	}
-	search, err := serverSearch(r.URL.Query().Get("search"))
+	search, err := serverSearch(query.Get("search"))
 	if err != nil {
 		core.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	client, err := h.client(exit, search)
-	if err != nil {
-		core.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	var run func(context.Context) (SpeedResult, error)
+	if provider == speedOokla {
+		client, err := h.client(exit, search)
+		if err != nil {
+			core.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if run = h.Run; run == nil {
+			run = func(ctx context.Context) (SpeedResult, error) { return measure(ctx, client, id) }
+		}
+	} else {
+		mark, err := h.exitMark(exit)
+		if err != nil {
+			var badExit exitError
+			if errors.As(err, &badExit) {
+				core.WriteError(w, http.StatusBadRequest, badExit.Error())
+				return
+			}
+			core.WriteError(w, http.StatusServiceUnavailable, err.Error())
+			return
+		}
+		run = h.providerRun(provider, mark)
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
-	run := h.Run
-	if run == nil {
-		run = func(ctx context.Context) (SpeedResult, error) { return measure(ctx, client, id) }
-	}
 	result, err := run(ctx)
 	if err != nil {
 		if r.Context().Err() != nil {
@@ -399,7 +513,7 @@ func testServer(ctx context.Context, server *speedtest.Server) (SpeedResult, err
 	return SpeedResult{
 		Server: server.Sponsor, Location: place(server.Name, server.Country),
 		Latency:  float64(server.Latency) / float64(time.Millisecond),
-		Jitter:   float64(server.Jitter) / float64(time.Millisecond),
+		Jitter:   qualityMS(server.Jitter),
 		Download: server.DLSpeed.Mbps(), Upload: server.ULSpeed.Mbps(),
 	}, nil
 }

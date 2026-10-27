@@ -376,3 +376,82 @@ func TestServersReportListFailures(t *testing.T) {
 		t.Fatalf("status %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestSpeedtestRunsTheSelectedServiceThroughTheWayOut(t *testing.T) {
+	var gotMark uint32
+	h := &HTTP{
+		ResolveExit: func(name string) (uint32, error) {
+			if name != "wan2" {
+				t.Fatalf("resolved %q", name)
+			}
+			return 0x00030000, nil
+		},
+		RunCloudflare: func(_ context.Context, mark uint32) (SpeedResult, error) {
+			gotMark = mark
+			return SpeedResult{Server: "Cloudflare", Download: 100, Upload: 10}, nil
+		},
+	}
+	w := httptest.NewRecorder()
+	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/speedtest?provider=cloudflare&exit=wan2", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	if gotMark != 0x00030000 {
+		t.Fatalf("service ran with mark %#x", gotMark)
+	}
+	var result SpeedResult
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Server != "Cloudflare" || result.Exit != "wan2" {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestSpeedtestRejectsUnknownServiceAndWayOut(t *testing.T) {
+	h := &HTTP{
+		ResolveExit: func(string) (uint32, error) { return 0, errors.New("way out %q is unavailable") },
+		RunFast:     func(context.Context, uint32) (SpeedResult, error) { return SpeedResult{}, nil },
+	}
+	routes := core.RouteTable(h.Routes())
+	for _, target := range []string{"/speedtest?provider=nonsense", "/speedtest?provider=fastcom&exit=gone"} {
+		w := httptest.NewRecorder()
+		routes.ServeHTTP(w, httptest.NewRequest(http.MethodPost, target, nil))
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("%s returned %d, want 400: %s", target, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestProvidersReportWhichServicesAreInstalled(t *testing.T) {
+	h := &HTTP{LookTool: func(name string) string {
+		if name == "fast-cli" {
+			return "/usr/bin/fast-cli"
+		}
+		return ""
+	}}
+	w := httptest.NewRecorder()
+	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/speedtest/providers", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	var body struct {
+		Providers []SpeedProvider `json:"providers"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]SpeedProvider{}
+	for _, provider := range body.Providers {
+		got[provider.ID] = provider
+	}
+	if len(got) != 3 || !got["ookla"].Available {
+		t.Fatalf("providers = %+v", body.Providers)
+	}
+	if got["cloudflare"].Available || got["cloudflare"].Detail == "" {
+		t.Fatalf("cloudflare should be unavailable with a reason: %+v", got["cloudflare"])
+	}
+	if !got["fastcom"].Available {
+		t.Fatalf("fast.com should be available: %+v", got["fastcom"])
+	}
+}

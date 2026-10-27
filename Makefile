@@ -185,8 +185,12 @@ dev: brand-logos build ## Run olrd against a scratch root, for `npm run dev` to 
 cloudflare-speed: ## Fetch pinned Cloudflare speed CLI binaries and corresponding source
 	sh packaging/scripts/cloudflare-speed.sh $(DIST)/cloudflare-speed
 
+.PHONY: fast-cli
+fast-cli: ## Fetch pinned fast.com CLI binaries
+	sh packaging/scripts/fast-cli.sh $(DIST)/fast-cli
+
 .PHONY: package
-package: web cross cloudflare-speed ## Build the .deb for every architecture
+package: web cross cloudflare-speed fast-cli ## Build the .deb for every architecture
 	@# The dependency on dnsmasq is declared in the package rather than checked
 	@# in Go: apt resolves it before any of our code runs.
 	@#

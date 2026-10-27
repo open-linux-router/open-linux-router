@@ -35,6 +35,7 @@ export const CREDITS: readonly Credit[] = [
   { name: 'IEEE OUI registry', version: 'registry', url: 'https://standards-oui.ieee.org/', use: 'Device vendor identification', logo: '/credit-logos/ieee.svg' },
   { name: 'pro-bing', version: 'v0.9.1', url: 'https://github.com/prometheus-community/pro-bing', use: 'Ping, loss and reachability checks' },
   { name: 'cloudflare-speed-cli', version: 'v1.0.10', url: 'https://github.com/kavehtehrani/cloudflare-speed-cli', use: 'Reference speed transfer for network quality' },
+  { name: 'fast-cli', version: 'v0.3.10', url: 'https://github.com/mikkelam/fast-cli', use: 'fast.com speed test service' },
   { name: 'speedtest-go', version: 'v1.8.3', url: 'https://github.com/showwin/speedtest-go', use: 'Selectable-server internet speed test' },
   { name: 'NextTrace', version: 'unpinned', url: 'https://github.com/nxtrace/NTrace-core', use: 'Traceroute and route maps', logo: '/tool-logos/nexttrace.webp' },
   { name: 'LibreSpeed', version: '6.3.1', url: 'https://github.com/librespeed/speedtest', use: 'LibreSpeed tool: browser-based LAN speed test (LGPLv3)' },

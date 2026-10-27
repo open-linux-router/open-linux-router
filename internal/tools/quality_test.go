@@ -244,7 +244,7 @@ func TestQualityRoutesArePassiveAndPublishEvidence(t *testing.T) {
 			probes.Add(1)
 			return qualityFixture("ok", 10)[0]
 		},
-		Run: func(context.Context) (SpeedResult, error) {
+		RunQuality: func(context.Context) (SpeedResult, error) {
 			transfers.Add(1)
 			return SpeedResult{Server: "Reference", Download: 75, Upload: 30}, nil
 		},
@@ -446,7 +446,7 @@ func TestQualityScopedRerunsMergeEvidenceAndUpdateScores(t *testing.T) {
 			}
 			return qualityFixture("ok", tcp)[0]
 		},
-		Run: func(context.Context) (SpeedResult, error) {
+		RunQuality: func(context.Context) (SpeedResult, error) {
 			n := float64(transfers.Add(1))
 			return SpeedResult{Server: "Reference", Download: 75 * n, Upload: 30 * n}, nil
 		},

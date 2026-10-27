@@ -452,9 +452,9 @@ func (h *HTTP) measureQualitySpeed(ctx context.Context) {
 	h.quality.snapshot.Phase = "speed"
 	h.quality.mu.Unlock()
 	bounded, cancel := context.WithTimeout(ctx, 90*time.Second)
-	run := h.Run
+	run := h.RunQuality
 	if run == nil {
-		run = runCloudflare
+		run = func(ctx context.Context) (SpeedResult, error) { return runCloudflare(ctx, 0) }
 	}
 	result, err := run(bounded)
 	cancel()

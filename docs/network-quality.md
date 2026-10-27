@@ -466,7 +466,7 @@ Existing code provides useful starting points, not complete catalog coverage:
 | --- | --- |
 | Overview radar | Measured partial reference assessment with raw evidence; complete coverage remains future work |
 | Gateway latency monitor | Single HTTPS HEAD application-round-trip sample against a saved target, plus separate DNS timing; not network RTT or a quality history store |
-| Tools speed test | Router-originated speedtest-go download/upload/latency/jitter, selectable server/exit; the picker opens Ookla's nearby list in one request, narrowed by a provider, city or country search, and probes latency only when the test runs; not per-service/CDN adapters |
+| Tools speed test | Router-originated download/upload/latency/jitter against Ookla (selectable server), Cloudflare or fast.com; all three accept a way out, and the two command-line services take it through an nftables socket-group mark; not per-service or per-CDN coverage beyond those three |
 | Tools ping | Finite ICMP RTT/loss test; not a continuous representative stability window |
 | Tools NAT | Default-route IPv4 STUN mapping/filtering observations, subject to server support; not actual P2P or inbound verification |
 | LibreSpeed and iPerf3 | Browser-based LibreSpeed test between one device and this router (download/upload/latency/jitter), plus a temporary iperf3 server for sustained wired throughput; neither supplies whole-site Wi-Fi telemetry |
@@ -584,7 +584,19 @@ This measures the router's default route to Cloudflare, not Wi-Fi or all
 internet services. Speed scoring uses the existing curves, weighting download
 70% and upload 30%; missing, invalid or timed-out transfers are excluded.
 Scoring version `quality-v3` identifies this change of reference provider.
-The standalone Speedtest tool retains its selectable server and exit.
+The standalone Speedtest tool offers three services. Ookla keeps its nearby
+server picker and probes latency only when the test runs. Cloudflare uses the
+same packaged CLI as the reference transfer, and fast.com uses the packaged Zig
+`fast-cli`. All three accept a way out: Ookla marks its own sockets with
+`SO_MARK`, while the two command-line tools are started under a reserved group
+id and an nftables rule marks every socket that group opens with the exit's
+fwmark (`meta skgid … meta mark set …` in a `type route` output chain). That is
+the mechanism the inspection proxy already uses for `mitmweb`; the group is
+never created in `/etc/group`, the table is `olr_speed` and not `olr_route`, and
+a zero mark means the router's default route and installs no rule. The two
+command-line services cannot choose a server, because the service does. fast.com
+reports latency and download/upload but no jitter, and its numbers describe the
+Netflix Open Connect path rather than general internet quality.
 
 The `.deb` includes the unmodified CLI, its GPLv3 license and corresponding
 source under `/usr/share/doc/olr/cloudflare-speed-cli`. `make cloudflare-speed`
@@ -596,6 +608,16 @@ or `cargo install cloudflare-speed-cli --version 1.0.10 --locked`.
 An absent CLI is reported as an unmeasured speed component, without silently
 falling back to another provider. Proxy environment variables are removed from
 the child process so they cannot change the measured path.
+
+The `.deb` also includes the unmodified MIT `fast-cli` v0.3.10 and its license
+under `/usr/share/doc/olr/fast-cli`. `make fast-cli` downloads pinned
+amd64/arm64 static builds and verifies committed SHA-256 hashes; build hosts
+need curl, tar and sha256sum. Single-binary tarball users must install
+`fast-cli` separately on the router's PATH, using the
+[upstream release](https://github.com/mikkelam/fast-cli/releases/tag/v0.3.10).
+The tool has the fast.com app token compiled in, so a token rotation needs a
+newer release; the test reports the CLI's error and does not fall back to
+another service.
 Finally, the existing IPv4 STUN test has up to 15 seconds. NAT results are
 diagnostic only and do not prove public IPv4 assignment, inbound or P2P access.
 A full assessment has a 150-second deadline; scoped reruns use shorter deadlines

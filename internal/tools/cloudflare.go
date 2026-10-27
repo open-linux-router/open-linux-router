@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -14,8 +13,9 @@ import (
 )
 
 // Run the upstream Rust implementation rather than maintaining a second
-// throughput algorithm. Only default-route measurements are supported here.
-func runCloudflare(ctx context.Context) (SpeedResult, error) {
+// throughput algorithm. A non-zero mark makes the tool's sockets take the
+// selected way out; zero is the router's default route.
+func runCloudflare(ctx context.Context, mark uint32) (SpeedResult, error) {
 	binary := core.LookTool("cloudflare-speed-cli")
 	if binary == "" {
 		return SpeedResult{}, errors.New("cloudflare-speed-cli is not installed; install v1.0.10 or later from github.com/kavehtehrani/cloudflare-speed-cli/releases")
@@ -23,19 +23,15 @@ func runCloudflare(ctx context.Context) (SpeedResult, error) {
 	cmd := exec.CommandContext(ctx, binary, "--json", "--auto-save", "false",
 		"--download-duration", "10s", "--upload-duration", "10s")
 	cmd.WaitDelay = time.Second
-	// Proxy variables would change the measured route. Do not let daemon
-	// environment settings silently select a different network path.
-	for _, entry := range os.Environ() {
-		key, _, _ := strings.Cut(entry, "=")
-		switch strings.ToLower(key) {
-		case "http_proxy", "https_proxy", "all_proxy":
-			continue
-		}
-		cmd.Env = append(cmd.Env, entry)
+	cmd.Env = commandEnv()
+	cleanup, err := markCommand(cmd, mark)
+	if err != nil {
+		return SpeedResult{}, err
 	}
+	defer cleanup()
 	var stdout, stderr limitedBuffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	err := cmd.Run()
+	err = cmd.Run()
 	if ctx.Err() != nil {
 		return SpeedResult{}, ctx.Err()
 	}
@@ -74,8 +70,6 @@ func parseCloudflare(data []byte) (SpeedResult, error) {
 	if result.Idle.Mean != nil {
 		speed.Latency = *result.Idle.Mean
 	}
-	if result.Idle.Jitter != nil {
-		speed.Jitter = *result.Idle.Jitter
-	}
+	speed.Jitter = result.Idle.Jitter
 	return speed, nil
 }
