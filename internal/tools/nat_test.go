@@ -59,3 +59,77 @@ func TestAlternateMustBePublic(t *testing.T) {
 		t.Fatal("rejected public alternate")
 	}
 }
+
+func TestAlternateUsable(t *testing.T) {
+	cases := []struct {
+		name  string
+		probe stunProbe
+		want  bool
+	}{
+		{"no alternate", stunProbe{target: "212.227.67.33:3478"}, false},
+		{"same address, other port", stunProbe{target: "137.74.112.113:3478", other: "137.74.112.113:3479"}, false},
+		{"private alternate", stunProbe{target: "212.227.67.33:3478", other: "10.0.0.1:3479"}, false},
+		{"port zero", stunProbe{target: "212.227.67.33:3478", other: "212.227.67.34:0"}, false},
+		{"different address", stunProbe{target: "212.227.67.33:3478", other: "212.227.67.34:3479"}, true},
+	}
+	for _, c := range cases {
+		if got := alternateUsable(c.probe); got != c.want {
+			t.Fatalf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestClassifyPrefersServerThatCanClassify(t *testing.T) {
+	probes := []stunProbe{
+		{server: "plain:3478", target: "198.51.100.10:3478", mapped: "203.0.113.7:5000"},
+		{server: "capable:3478", target: "212.227.67.33:3478", mapped: "203.0.113.7:5001", other: "212.227.67.34:3479"},
+	}
+	classify := func(_ context.Context, probe stunProbe) (string, string) {
+		if probe.server != "capable:3478" {
+			t.Fatalf("classified %s, which offers no alternate address", probe.server)
+		}
+		return "endpoint-independent", "address-dependent"
+	}
+	result, err := classifyProbes(context.Background(), probes, classify)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Server != "capable:3478" || !result.Alternate || result.Mapping != "endpoint-independent" || result.Filtering != "address-dependent" {
+		t.Fatalf("%+v", result)
+	}
+}
+
+func TestClassifyPrefersCapableServerWhenNeitherClassifies(t *testing.T) {
+	probes := []stunProbe{
+		{server: "plain:3478", target: "198.51.100.10:3478", mapped: "203.0.113.7:5000"},
+		{server: "capable:3478", target: "212.227.67.33:3478", mapped: "203.0.113.7:5001", other: "212.227.67.34:3479"},
+	}
+	classify := func(context.Context, stunProbe) (string, string) { return natNotTested, natNotTested }
+	result, err := classifyProbes(context.Background(), probes, classify)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Server != "capable:3478" || !result.Alternate {
+		t.Fatalf("%+v", result)
+	}
+}
+
+func TestClassifyKeepsMappingWithoutAlternate(t *testing.T) {
+	probes := []stunProbe{{server: "plain:3478", target: "198.51.100.10:3478", mapped: "203.0.113.7:5000"}}
+	result, err := classifyProbes(context.Background(), probes, func(context.Context, stunProbe) (string, string) {
+		t.Fatal("classified a server with no alternate address")
+		return "", ""
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Mapping != natNotTested || result.Filtering != natNotTested || result.Alternate || result.Mapped != "203.0.113.7:5000" {
+		t.Fatalf("%+v", result)
+	}
+}
+
+func TestClassifyRequiresAnAnswer(t *testing.T) {
+	if _, err := classifyProbes(context.Background(), []stunProbe{{server: "silent:3478"}}, nil); err == nil {
+		t.Fatal("accepted a round with no mapping")
+	}
+}

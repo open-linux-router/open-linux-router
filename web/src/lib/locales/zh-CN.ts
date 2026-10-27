@@ -1054,6 +1054,8 @@ export const zhCN: Record<string, string> = {
   'The STUN server saw this router\'s UDP traffic as': 'STUN 服务器观察到此路由器的 UDP 流量来自',
   'Whether the public UDP address and port change when this router contacts different destinations.': '此路由器访问不同目标时，公网 UDP 地址和端口是否变化。',
   'Whether replies from another server IP or port get through.': '其他服务器 IP 或端口发来的响应能否通过。',
+  'The server offers a second address, but the replies that classification needs did not arrive. This can be the router\'s filtering, the server, or packet loss. Your NAT behavior is unknown, not necessarily restrictive.': '服务器提供了第二个地址，但分类所需的响应没有到达。这可能是路由器的过滤规则、服务器本身，或丢包造成。此时 NAT 行为未知，但不代表受限。',
+  'The answering server offers only a single address, so it cannot classify mapping or filtering. Your NAT behavior is unknown here, not necessarily restrictive.': '应答的服务器只提供单一地址，无法判定映射与过滤类型。此处 NAT 行为未知，但不代表受限。',
   'An observed mapping does not prove public IPv4 assignment, inbound access or P2P success. These observations do not add points.': '观察到的映射不能证明已分配公网 IPv4、入站可达或 P2P 可用。这些观察结果不计分。',
   'Could not read the assessment.': '无法读取评估结果。',
   'Up to date': '已是最新',

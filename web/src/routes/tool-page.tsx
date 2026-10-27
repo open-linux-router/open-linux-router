@@ -107,6 +107,8 @@ interface NATResult {
   mapped: string
   mapping: string
   filtering: string
+  /** The answering server offered a second address, so it could have classified. */
+  alternate: boolean
 }
 
 interface PingResult {
@@ -550,7 +552,9 @@ function NATTest() {
           <div className="rounded-xl border bg-muted/40 p-4">
             <p className="font-medium">{t('What this test found')}</p>
             <p className="mt-1 text-muted-foreground">{t('The STUN server saw this router\'s UDP traffic as')} <span className="font-mono text-foreground">{natResult.mapped}</span>. This is the address and temporary port observed for this test, not proof that incoming connections can reach the router.</p>
-            {(natResult.mapping === 'not tested' || natResult.filtering === 'not tested') && <p className="mt-2 text-muted-foreground">The server did not provide enough usable replies to determine {natResult.mapping === 'not tested' && natResult.filtering === 'not tested' ? 'mapping or filtering' : natResult.mapping === 'not tested' ? 'mapping' : 'filtering'}. Your NAT behavior is unknown, not necessarily restrictive.</p>}
+            {(natResult.mapping === 'not tested' || natResult.filtering === 'not tested') && <p className="mt-2 text-muted-foreground">{natResult.alternate
+              ? t('The server offers a second address, but the replies that classification needs did not arrive. This can be the router\'s filtering, the server, or packet loss. Your NAT behavior is unknown, not necessarily restrictive.')
+              : t('The answering server offers only a single address, so it cannot classify mapping or filtering. Your NAT behavior is unknown here, not necessarily restrictive.')}</p>}
           </div>
           <dl className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border p-4">
