@@ -56,6 +56,147 @@ func TestSpeedtestRejectsConcurrentRun(t *testing.T) {
 	}
 }
 
+// TestSpeedtestProgressFollowsTheStages pins what a page may show while the
+// POST is still open: the stage actually running, the values it has settled,
+// and a live rate only for the direction being measured.
+func TestSpeedtestProgressFollowsTheStages(t *testing.T) {
+	h := &HTTP{}
+	h.startSpeed(speedOokla, "wan2", speedPhaseServer)
+	h.setSpeedServer("hong", "Hong Kong")
+	h.setSpeedPhase(speedPhaseLatency)
+	h.setSpeedValue(speedPhaseLatency, 8.2)
+	h.setSpeedPhase(speedPhaseDownload)
+	// The library's callback for a direction that is not the one running must
+	// not publish a rate: it would label a finished stage as live.
+	h.setSpeedLive(speedPhaseUpload, 999)
+	h.setSpeedLive(speedPhaseDownload, 321.5)
+
+	w := httptest.NewRecorder()
+	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/speedtest/progress", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	var progress SpeedProgress
+	if err := json.Unmarshal(w.Body.Bytes(), &progress); err != nil {
+		t.Fatal(err)
+	}
+	if !progress.Running || progress.Phase != speedPhaseDownload {
+		t.Fatalf("progress is not in the download stage: %+v", progress)
+	}
+	if progress.Provider != speedOokla || progress.Exit != "wan2" || progress.Server != "hong" || progress.Location != "Hong Kong" {
+		t.Fatalf("progress lost the run's identity: %+v", progress)
+	}
+	if progress.Latency == nil || *progress.Latency != 8.2 {
+		t.Fatalf("latency = %v, want the value the ping stage settled", progress.Latency)
+	}
+	if progress.Download != nil || progress.Upload != nil {
+		t.Fatalf("unfinished stages were reported as measured: %+v", progress)
+	}
+	if progress.Live == nil || *progress.Live != 321.5 {
+		t.Fatalf("live = %v, want the download rate only", progress.Live)
+	}
+	if progress.ElapsedMS < 0 {
+		t.Fatalf("elapsed_ms = %d", progress.ElapsedMS)
+	}
+}
+
+func TestSpeedtestProgressSettlesWhenTheRunEnds(t *testing.T) {
+	h := &HTTP{
+		ResolveExit: func(name string) (uint32, error) {
+			if name != "wan2" {
+				t.Fatalf("resolved %q", name)
+			}
+			return 0x00030000, nil
+		},
+		Run: func(context.Context) (SpeedResult, error) {
+			return SpeedResult{Server: "Test", Location: "Somewhere", Latency: 7.5, Download: 123.4, Upload: 56.7}, nil
+		},
+	}
+	routes := core.RouteTable(h.Routes())
+	routes.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/speedtest?exit=wan2", nil))
+
+	w := httptest.NewRecorder()
+	routes.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/speedtest/progress", nil))
+	var progress SpeedProgress
+	if err := json.Unmarshal(w.Body.Bytes(), &progress); err != nil {
+		t.Fatal(err)
+	}
+	if progress.Running || progress.Phase != speedPhaseDone || progress.Live != nil {
+		t.Fatalf("finished run still reports progress: %+v", progress)
+	}
+	if progress.Download == nil || *progress.Download != 123.4 || progress.Upload == nil || *progress.Upload != 56.7 {
+		t.Fatalf("finished run lost its values: %+v", progress)
+	}
+	if progress.Server != "Test" || progress.Location != "Somewhere" || progress.Exit != "wan2" {
+		t.Fatalf("finished run lost its server: %+v", progress)
+	}
+}
+
+func TestSpeedtestProgressRecordsFailureAndStops(t *testing.T) {
+	h := &HTTP{Run: func(context.Context) (SpeedResult, error) {
+		return SpeedResult{}, errors.New("no usable test server among the first three candidates")
+	}}
+	routes := core.RouteTable(h.Routes())
+	w := httptest.NewRecorder()
+	routes.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/speedtest", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("failing test returned %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	routes.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/speedtest/progress", nil))
+	var progress SpeedProgress
+	if err := json.Unmarshal(w.Body.Bytes(), &progress); err != nil {
+		t.Fatal(err)
+	}
+	if progress.Running {
+		t.Fatalf("a failed run is still reported as running: %+v", progress)
+	}
+	if !strings.Contains(progress.Error, "no usable test server") {
+		t.Fatalf("error = %q, want the run's failure", progress.Error)
+	}
+	if progress.Phase != speedPhaseServer {
+		t.Fatalf("phase = %q; a failed run keeps the stage it failed in", progress.Phase)
+	}
+}
+
+func TestSpeedtestProgressIsReadableWhileTheTestRuns(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	h := &HTTP{Run: func(context.Context) (SpeedResult, error) {
+		close(started)
+		<-release
+		return SpeedResult{Server: "Test", Download: 10, Upload: 2}, nil
+	}}
+	routes := core.RouteTable(h.Routes())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		routes.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/speedtest", nil))
+	}()
+	<-started
+
+	w := httptest.NewRecorder()
+	routes.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/speedtest/progress", nil))
+	var progress SpeedProgress
+	if err := json.Unmarshal(w.Body.Bytes(), &progress); err != nil {
+		t.Fatal(err)
+	}
+	if !progress.Running || progress.Phase != speedPhaseServer {
+		t.Fatalf("progress while the POST is open = %+v", progress)
+	}
+
+	close(release)
+	<-done
+	w = httptest.NewRecorder()
+	routes.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/speedtest/progress", nil))
+	if err := json.Unmarshal(w.Body.Bytes(), &progress); err != nil {
+		t.Fatal(err)
+	}
+	if progress.Running {
+		t.Fatalf("progress still running after the POST answered: %+v", progress)
+	}
+}
+
 func TestTryServersFallsBackAfterUnusableTransfer(t *testing.T) {
 	servers := speedtest.Servers{
 		{Sponsor: "First", Name: "Near"},

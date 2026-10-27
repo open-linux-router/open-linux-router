@@ -139,6 +139,15 @@ timed-out and unscored states replace the number with a dash, and a running
 assessment shows progress there instead; each carries one sentence saying what
 happened and what to do next. Missing data is never shown as zero.
 
+A speed test runs as one request that stays open until the measurement ends, so
+its page reads the run's stage on a second request rather than waiting on a
+spinner. Name the stage in flight, show each of latency, download and upload as
+it is settled, show the rate the current transfer is reaching, and count the
+elapsed seconds. A stage that has not measured anything shows no value rather
+than a zero, and a service that reports only a finished result says it is
+measuring instead of promising numbers it cannot see yet. Screen readers are
+told the stage when it changes; the ticking clock stays out of that announcement.
+
 World traffic combines IPs at the same remote coordinates into one map connection.
 Line width represents that connection's combined upload and download relative
 to the busiest one; per-IP rates stay in details. Arcs are one amber

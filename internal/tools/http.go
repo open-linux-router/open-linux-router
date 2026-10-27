@@ -53,6 +53,41 @@ type ServerList struct {
 	Total   int            `json:"total"`
 }
 
+// SpeedProgress is the live state of one speed test.
+//
+// The page reads it while POST /speedtest is still in flight, so it reports
+// only what the run has already observed: the stage it is in, how long it has
+// run, and the values that stage settled. Live is the rate the transfer in
+// flight is reaching; it is dropped as soon as that transfer ends, because a
+// number that has stopped moving is a result rather than progress.
+type SpeedProgress struct {
+	Running   bool     `json:"running"`
+	Provider  string   `json:"provider,omitempty"`
+	Exit      string   `json:"exit,omitempty"`
+	Phase     string   `json:"phase,omitempty"`
+	Server    string   `json:"server,omitempty"`
+	Location  string   `json:"location,omitempty"`
+	ElapsedMS int64    `json:"elapsed_ms"`
+	Latency   *float64 `json:"latency_ms"`
+	Download  *float64 `json:"download_mbps"`
+	Upload    *float64 `json:"upload_mbps"`
+	Live      *float64 `json:"live_mbps,omitempty"`
+	Error     string   `json:"error,omitempty"`
+}
+
+// The stages a speed test moves through. Ookla runs latency, then download,
+// then upload and can report each; the two command-line services measure both
+// directions inside one process, so they report transfer for the whole
+// measurement rather than a stage they never announced.
+const (
+	speedPhaseServer   = "server"
+	speedPhaseLatency  = "latency"
+	speedPhaseDownload = "download"
+	speedPhaseUpload   = "upload"
+	speedPhaseTransfer = "transfer"
+	speedPhaseDone     = "done"
+)
+
 // providerServer is one row of Ookla's nearby-server payload, narrowed to the
 // fields the picker shows.
 type providerServer struct {
@@ -68,6 +103,13 @@ type HTTP struct {
 	tracing     atomic.Bool
 	natRunning  atomic.Bool
 	quality     qualityRun
+	// speedMu guards the progress of the run that holds running. The test
+	// writes it from its own goroutines — the Ookla library reports transfer
+	// rates from a capture loop — while the page reads it from a poll.
+	speedMu      sync.Mutex
+	speed        SpeedProgress
+	speedStarted time.Time
+	speedEnded   time.Time
 	// QualityContext follows daemon shutdown; nil is suitable for standalone use.
 	QualityContext context.Context
 	// QualityPath stores the latest finished assessment; empty disables persistence.
@@ -113,6 +155,7 @@ func (h *HTTP) Routes() []core.Route {
 		{Method: "DELETE", Path: "/quality", Mutating: true, Summary: "Cancel the active network quality assessment and retain its completed evidence.", Handler: h.cancelQuality},
 		{Method: "GET", Path: "/speedtest/providers", Tool: "show speedtest providers", Summary: "List the speed test services this router can run and whether each command-line tool is installed.", Handler: h.providers},
 		{Method: "GET", Path: "/speedtest/servers", Tool: "show speedtest servers", Summary: "List the speed test servers near the selected way out; one network request, no latency probing and no test data.", Query: []core.QueryParam{exit, search}, Handler: h.servers},
+		{Method: "GET", Path: "/speedtest/progress", Tool: "show speedtest progress", Summary: "Read the speed test running now: its stage, elapsed time, the rates measured so far, and the last run's outcome when idle.", Handler: h.getSpeedProgress},
 		{Method: "POST", Path: "/speedtest", Mutating: true, Summary: "Measure this router's internet latency, download and upload speed against the selected service; consumes bandwidth.", Query: []core.QueryParam{exit, search, {Name: "provider", Type: "string", Summary: "Speed test service: ookla (default, pick a server), cloudflare or fastcom; the command-line services accept a way out."}, {Name: "server_id", Type: "string", Summary: "Speed test server ID from the server list; ookla only, and empty probes the nearby servers and starts with the first that answers."}}, Handler: h.speedtest},
 		{Method: "POST", Path: "/nat", Mutating: true, Summary: "Probe this router’s default-route UDP mapping and filtering through public STUN servers; sends UDP packets.", Handler: h.nat},
 		{Method: "GET", Path: "/lan-test", Tool: "show lan test", Summary: "List LAN addresses and the current temporary iperf3 server session.", Handler: h.lanStatus},
@@ -378,6 +421,137 @@ func (h *HTTP) providerRun(provider string, mark uint32) func(context.Context) (
 	return func(ctx context.Context) (SpeedResult, error) { return run(ctx, mark) }
 }
 
+// The progress of the run that holds running. Every field goes through speedMu
+// because the measurement's own goroutines write it while a poll reads it.
+func (h *HTTP) startSpeed(provider, exit, phase string) {
+	h.speedMu.Lock()
+	defer h.speedMu.Unlock()
+	h.speed = SpeedProgress{Running: true, Provider: provider, Exit: exit, Phase: phase}
+	h.speedStarted, h.speedEnded = time.Now(), time.Time{}
+}
+
+func (h *HTTP) setSpeedPhase(phase string) {
+	h.speedMu.Lock()
+	defer h.speedMu.Unlock()
+	if h.speed.Running {
+		// A new stage has measured nothing yet, and the previous stage's rate is
+		// not its starting point.
+		h.speed.Phase, h.speed.Live = phase, nil
+	}
+}
+
+func (h *HTTP) setSpeedServer(server, location string) {
+	h.speedMu.Lock()
+	defer h.speedMu.Unlock()
+	if h.speed.Running {
+		h.speed.Server, h.speed.Location = server, location
+	}
+}
+
+// setSpeedValue records one settled stage. The live rate goes with it: the
+// measured value now describes the stage, and two numbers for one stage would
+// disagree the moment the transfer stopped.
+func (h *HTTP) setSpeedValue(phase string, value float64) {
+	h.speedMu.Lock()
+	defer h.speedMu.Unlock()
+	if !h.speed.Running {
+		return
+	}
+	switch phase {
+	case speedPhaseLatency:
+		h.speed.Latency = &value
+	case speedPhaseDownload:
+		h.speed.Download = &value
+	case speedPhaseUpload:
+		h.speed.Upload = &value
+	}
+	h.speed.Live = nil
+}
+
+// setSpeedLive records the rate one direction is reaching right now. The
+// library's callback keeps firing for as long as that transfer runs, so only
+// the direction actually being measured may publish: a late callback must not
+// make a finished stage look like it is still moving.
+func (h *HTTP) setSpeedLive(direction string, rate float64) {
+	h.speedMu.Lock()
+	defer h.speedMu.Unlock()
+	if h.speed.Running && h.speed.Phase == direction && rate > 0 {
+		h.speed.Live = &rate
+	}
+}
+
+func (h *HTTP) finishSpeed(result *SpeedResult, err error) {
+	h.speedMu.Lock()
+	defer h.speedMu.Unlock()
+	h.speed.Running, h.speed.Live = false, nil
+	h.speedEnded = time.Now()
+	if err != nil {
+		h.speed.Error = err.Error()
+		return
+	}
+	h.speed.Phase = speedPhaseDone
+	if result != nil {
+		latency, download, upload := result.Latency, result.Download, result.Upload
+		h.speed.Latency, h.speed.Download, h.speed.Upload = &latency, &download, &upload
+		h.speed.Server, h.speed.Location = result.Server, result.Location
+	}
+}
+
+// speedProgress copies the state for a reader. Elapsed is measured from the
+// run's own start on the router's clock, so two readers cannot disagree about
+// how long the test has taken, and a page that polled late is not told less.
+func (h *HTTP) speedProgress() SpeedProgress {
+	h.speedMu.Lock()
+	defer h.speedMu.Unlock()
+	progress := h.speed
+	end := h.speedEnded
+	if progress.Running || end.IsZero() {
+		end = time.Now()
+	}
+	if !h.speedStarted.IsZero() {
+		progress.ElapsedMS = end.Sub(h.speedStarted).Milliseconds()
+	}
+	return progress
+}
+
+func (h *HTTP) getSpeedProgress(w http.ResponseWriter, r *http.Request) {
+	core.WriteJSON(w, http.StatusOK, h.speedProgress())
+}
+
+// speedReport carries a run's milestones into the progress state. Its zero
+// value reports nowhere, which keeps the measurement code usable from tests and
+// from any caller with no page watching.
+type speedReport struct{ h *HTTP }
+
+func (r speedReport) phase(phase string) {
+	if r.h != nil {
+		r.h.setSpeedPhase(phase)
+	}
+}
+
+func (r speedReport) server(server, location string) {
+	if r.h != nil {
+		r.h.setSpeedServer(server, location)
+	}
+}
+
+func (r speedReport) value(phase string, value float64) {
+	if r.h != nil {
+		r.h.setSpeedValue(phase, value)
+	}
+}
+
+// attach installs the transfer callbacks. The client recreates its rate
+// directions on Reset, which drops anything set before it, so this runs after
+// each Reset and before the transfers it reports on.
+func (r speedReport) attach(client *speedtest.Speedtest) {
+	if r.h == nil {
+		return
+	}
+	client.SetCallbackDownload(func(rate speedtest.ByteRate) { r.h.setSpeedLive(speedPhaseDownload, rate.Mbps()) })
+	client.SetCallbackUpload(func(rate speedtest.ByteRate) { r.h.setSpeedLive(speedPhaseUpload, rate.Mbps()) })
+}
+
 func (h *HTTP) speedtest(w http.ResponseWriter, r *http.Request) {
 	if !h.running.CompareAndSwap(false, true) {
 		core.WriteError(w, http.StatusConflict, "a speed test is already running")
@@ -407,14 +581,20 @@ func (h *HTTP) speedtest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var run func(context.Context) (SpeedResult, error)
+	report := speedReport{h}
+	// The phase a run opens in is all the handler can say before the
+	// measurement itself starts: Ookla settles on a server first, while the
+	// command-line services measure both directions inside one process.
+	phase := speedPhaseTransfer
 	if provider == speedOokla {
+		phase = speedPhaseServer
 		client, err := h.client(exit, search)
 		if err != nil {
 			core.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		if run = h.Run; run == nil {
-			run = func(ctx context.Context) (SpeedResult, error) { return measure(ctx, client, id) }
+			run = func(ctx context.Context) (SpeedResult, error) { return measure(ctx, client, id, report) }
 		}
 	} else {
 		mark, err := h.exitMark(exit)
@@ -429,10 +609,12 @@ func (h *HTTP) speedtest(w http.ResponseWriter, r *http.Request) {
 		}
 		run = h.providerRun(provider, mark)
 	}
+	h.startSpeed(provider, exit, phase)
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
 	result, err := run(ctx)
 	if err != nil {
+		h.finishSpeed(nil, err)
 		if r.Context().Err() != nil {
 			return
 		}
@@ -440,15 +622,17 @@ func (h *HTTP) speedtest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result.Exit = exit
+	h.finishSpeed(&result, nil)
 	core.WriteJSON(w, http.StatusOK, result)
 }
 
-func measure(ctx context.Context, client *speedtest.Speedtest, id string) (SpeedResult, error) {
+func measure(ctx context.Context, client *speedtest.Speedtest, id string, report speedReport) (SpeedResult, error) {
 	client.SetCaptureTime(10 * time.Second).SetNThread(4)
 	if id != "" {
 		// The picker already knows which server the user wants; asking Ookla for
 		// that one server keeps the chosen path free of a ping sweep over the
 		// rest, and still catches an ID the provider has retired.
+		report.phase(speedPhaseServer)
 		server, err := client.FetchServerByIDContext(ctx, id)
 		if errors.Is(err, speedtest.ErrServerNotFound) {
 			return SpeedResult{}, fmt.Errorf("selected server %q is no longer available; refresh the list", id)
@@ -457,8 +641,10 @@ func measure(ctx context.Context, client *speedtest.Speedtest, id string) (Speed
 			return SpeedResult{}, fmt.Errorf("finding test server %s: %w", id, err)
 		}
 		client.Reset()
-		return testServer(ctx, server)
+		report.attach(client)
+		return testServer(ctx, server, report)
 	}
+	report.phase(speedPhaseServer)
 	servers, err := client.FetchServerListContext(ctx)
 	if err != nil {
 		return SpeedResult{}, fmt.Errorf("finding test servers: %w", err)
@@ -469,7 +655,8 @@ func measure(ctx context.Context, client *speedtest.Speedtest, id string) (Speed
 	}
 	return tryServers(ctx, available, func(ctx context.Context, server *speedtest.Server) (SpeedResult, error) {
 		client.Reset()
-		return testServer(ctx, server)
+		report.attach(client)
+		return testServer(ctx, server, report)
 	})
 }
 
@@ -494,25 +681,33 @@ func tryServers(ctx context.Context, servers speedtest.Servers, run func(context
 	return SpeedResult{}, fmt.Errorf("no usable test server among the first three candidates; last error: %w", lastErr)
 }
 
-func testServer(ctx context.Context, server *speedtest.Server) (SpeedResult, error) {
+func testServer(ctx context.Context, server *speedtest.Server, report speedReport) (SpeedResult, error) {
+	report.server(server.Sponsor, place(server.Name, server.Country))
+	report.phase(speedPhaseLatency)
 	if err := server.PingTestContext(ctx, nil); err != nil {
 		return SpeedResult{}, fmt.Errorf("measuring latency: %w", err)
 	}
+	latency := float64(server.Latency) / float64(time.Millisecond)
+	report.value(speedPhaseLatency, latency)
+	report.phase(speedPhaseDownload)
 	if err := server.DownloadTestContext(ctx); err != nil || ctx.Err() != nil {
 		return SpeedResult{}, fmt.Errorf("measuring download: %w", firstError(err, ctx.Err()))
 	}
 	if server.DLSpeed <= 0 {
 		return SpeedResult{}, errors.New("download returned no usable data")
 	}
+	report.value(speedPhaseDownload, server.DLSpeed.Mbps())
+	report.phase(speedPhaseUpload)
 	if err := server.UploadTestContext(ctx); err != nil || ctx.Err() != nil {
 		return SpeedResult{}, fmt.Errorf("measuring upload: %w", firstError(err, ctx.Err()))
 	}
 	if server.ULSpeed <= 0 {
 		return SpeedResult{}, errors.New("upload returned no usable data")
 	}
+	report.value(speedPhaseUpload, server.ULSpeed.Mbps())
 	return SpeedResult{
 		Server: server.Sponsor, Location: place(server.Name, server.Country),
-		Latency:  float64(server.Latency) / float64(time.Millisecond),
+		Latency:  latency,
 		Jitter:   qualityMS(server.Jitter),
 		Download: server.DLSpeed.Mbps(), Upload: server.ULSpeed.Mbps(),
 	}, nil

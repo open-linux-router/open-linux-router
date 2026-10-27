@@ -1,5 +1,5 @@
 import { t, useLocale } from '@/lib/i18n'
-import { Activity, ArrowDown, ArrowUp, Copy, LoaderCircle, Radio, Route } from 'lucide-react'
+import { Activity, ArrowDown, ArrowUp, Check, Copy, LoaderCircle, Radio, Route } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { PageHeading } from '@/components/layout/page-heading'
 import { MetricValue } from '@/components/ui/metric-value'
@@ -11,8 +11,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { StatusDot, textClass } from '@/components/ui/status'
 import { useGatewayConfig } from '@/features/gateway/queries'
 import { ApiError, api } from '@/lib/api'
+import { cn } from '@/lib/utils'
 
 interface TestError {
   title: string
@@ -59,6 +61,28 @@ interface SpeedResult {
   jitter_ms: number | null
   download_mbps: number
   upload_mbps: number
+}
+
+/**
+ * What the running test has observed so far, as the daemon reports it.
+ *
+ * `live_mbps` is the rate the transfer in flight is reaching, and the daemon
+ * drops it the moment that transfer ends, so a number here is either a settled
+ * measurement or one still moving — never a guess at where it will land.
+ */
+interface SpeedProgress {
+  running: boolean
+  provider?: string
+  exit?: string
+  phase?: string
+  server?: string
+  location?: string
+  elapsed_ms: number
+  latency_ms: number | null
+  download_mbps: number | null
+  upload_mbps: number | null
+  live_mbps?: number
+  error?: string
 }
 
 interface SpeedProvider {
@@ -184,6 +208,53 @@ function resultSummary(service: SpeedService, result: SpeedResult): string {
   return server ? `${server} · ${exit}` : exit
 }
 
+/** What the run is doing, named for the operator rather than for the library. */
+function speedPhaseLabel(phase: string | undefined): string {
+  switch (phase) {
+    case 'server': return t('Finding a test server…')
+    case 'latency': return t('Measuring latency…')
+    case 'download': return t('Measuring download…')
+    case 'upload': return t('Measuring upload…')
+    // The command-line services measure both directions inside one process and
+    // announce no stage of their own, so this is as specific as the page can be.
+    case 'transfer': return t('Measuring download and upload…')
+    default: return t('Starting…')
+  }
+}
+
+/**
+ * The stages an Ookla test runs, in the order it runs them.
+ *
+ * A stage shows its settled measurement, the rate it is reaching while it runs,
+ * or nothing at all — an unmeasured stage is not a zero, and the row says which
+ * of the three it is with a check, a spinner or a plain dot.
+ */
+function SpeedStages({ progress }: { progress?: SpeedProgress }) {
+  useLocale()
+  const stages = [
+    { id: 'latency', label: t('Latency'), unit: 'ms', measured: progress?.latency_ms ?? null },
+    { id: 'download', label: t('Download'), unit: 'Mbps', measured: progress?.download_mbps ?? null },
+    { id: 'upload', label: t('Upload'), unit: 'Mbps', measured: progress?.upload_mbps ?? null },
+  ]
+  return <ul className="max-w-[15rem] space-y-1.5">
+    {stages.map((stage) => {
+      const active = stage.measured == null && progress?.phase === stage.id
+      const value = stage.measured ?? (active ? progress?.live_mbps ?? null : null)
+      return <li key={stage.id} className="flex items-center justify-between gap-4 text-sm">
+        <span className="flex items-center gap-2">
+          {stage.measured != null
+            ? <Check className={cn('size-4', textClass('ok'))} aria-hidden />
+            : active
+              ? <LoaderCircle className="size-4 animate-spin text-muted-foreground" aria-hidden />
+              : <span className="flex size-4 items-center justify-center"><StatusDot tone="unknown" /></span>}
+          <span className={stage.measured != null || active ? 'text-foreground' : 'text-muted-foreground'}>{stage.label}</span>
+        </span>
+        {value != null && <MetricValue size="sm" value={value.toFixed(1)} unit={stage.unit} />}
+      </li>
+    })}
+  </ul>
+}
+
 /**
  * One internet speed test service per page.
  *
@@ -237,6 +308,19 @@ function SpeedTest({ service }: { service: SpeedService }) {
   const [error, setError] = useState<TestError | null>(null)
   const [copied, setCopied] = useState(false)
   const [copyFailed, setCopyFailed] = useState(false)
+  // The POST stays open until the measurement is done, so the stage it has
+  // reached arrives on a second request. It polls rather than streams because
+  // EventSource cannot send this API's Authorization header; only a snapshot
+  // taken during *this* run is shown, so a previous run's numbers never pass
+  // for a fresh one while the first poll is still in flight.
+  const progress = useQuery({
+    queryKey: ['tools', 'speedtest', 'progress'],
+    queryFn: () => api.get<SpeedProgress>('/api/tools/speedtest/progress'),
+    enabled: running,
+    refetchInterval: 1_000,
+    retry: false,
+  })
+  const live = running && progress.data?.running ? progress.data : undefined
 
   async function run() {
     if (exitUnavailable || serviceUnavailable || (service === 'ookla' && serverUnavailable)) return
@@ -328,7 +412,17 @@ function SpeedTest({ service }: { service: SpeedService }) {
                   {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Activity aria-hidden />}
                   {running ? 'Testing connection…' : result ? 'Run again' : 'Start speed test'}
                 </Button>
-                {running && <p role="status" className="text-sm text-muted-foreground">{t('Measuring ping, download and upload. This may take up to 90 seconds.')}</p>}
+                {running && <div className="max-w-md space-y-2">
+                  <p className="text-sm">
+                    {/* The elapsed count changes every second, so it sits
+                        outside the live region: a screen reader should hear the
+                        stage change, not tick along with the clock. */}
+                    <span role="status">{speedPhaseLabel(live?.phase)}</span>
+                    {live && <span aria-hidden className="ml-2 text-xs tabular-nums text-muted-foreground">{Math.floor(live.elapsed_ms / 1_000)}s</span>}
+                  </p>
+                  {service === 'ookla' && <SpeedStages progress={live} />}
+                  <p className="text-xs text-muted-foreground">{t('This test can take up to 90 seconds.')}</p>
+                </div>}
               </>}
         </div>
       </div>
