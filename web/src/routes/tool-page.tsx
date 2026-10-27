@@ -236,8 +236,6 @@ function SpeedTest({ service }: { service: SpeedService }) {
   const gateway = useGatewayConfig()
   const [exit, setExit] = useState('')
   const [serverID, setServerID] = useState('')
-  const [search, setSearch] = useState('')
-  const [appliedSearch, setAppliedSearch] = useState('')
   const exits = gateway.data?.enabled ? (gateway.data.exits ?? []).filter((item) => item.via.kind !== 'blocked') : []
   const exitUnavailable = exit !== '' && !!gateway.data && !exits.some((item) => item.name === exit)
   const selectedExit = exit
@@ -252,21 +250,16 @@ function SpeedTest({ service }: { service: SpeedService }) {
   })
   const serviceInfo = services.data?.providers.find((item) => item.id === service)
   const serviceUnavailable = !!serviceInfo && !serviceInfo.available
-  // Typing refetches the list, so the term is settled first: every keystroke
-  // would otherwise cost a round trip to Ookla.
-  useEffect(() => {
-    const timer = setTimeout(() => setAppliedSearch(search.trim()), 400)
-    return () => clearTimeout(timer)
-  }, [search])
+  // The picker lists the servers this way out is offered. The API still takes a
+  // search term; the page keeps the choice to one control.
   const servers = useQuery({
-    queryKey: ['tools', 'speedtest', 'servers', selectedExit, appliedSearch],
-    queryFn: () => api.get<ServerList>(`/api/tools/speedtest/servers?${new URLSearchParams({ exit: selectedExit, search: appliedSearch })}`),
+    queryKey: ['tools', 'speedtest', 'servers', selectedExit],
+    queryFn: () => api.get<ServerList>(`/api/tools/speedtest/servers?${new URLSearchParams({ exit: selectedExit })}`),
     enabled: service === 'ookla',
     staleTime: 60_000,
     retry: false,
   })
   const options = servers.data?.servers ?? []
-  const serverUnavailable = serverID !== '' && (servers.isPending || (servers.isSuccess && !options.some((item) => item.id === serverID)))
   const selectedServer = serverID
 
   const [result, setResult] = useState<SpeedResult | null>(null)
@@ -289,7 +282,7 @@ function SpeedTest({ service }: { service: SpeedService }) {
   const live = running && progress.data?.running ? progress.data : undefined
 
   async function run() {
-    if (exitUnavailable || serviceUnavailable || (service === 'ookla' && serverUnavailable)) return
+    if (exitUnavailable || serviceUnavailable) return
     setRunning(true)
     setResult(null)
     setError(null)
@@ -297,10 +290,7 @@ function SpeedTest({ service }: { service: SpeedService }) {
     setCopyFailed(false)
     try {
       const query = new URLSearchParams({ exit: selectedExit, provider: service })
-      if (service === 'ookla') {
-        query.set('server_id', selectedServer)
-        query.set('search', appliedSearch)
-      }
+      if (service === 'ookla') query.set('server_id', selectedServer)
       setResult(await api.post<SpeedResult>(`/api/tools/speedtest?${query}`))
     } catch (err) {
       setError(explainFailure(err))
@@ -320,14 +310,6 @@ function SpeedTest({ service }: { service: SpeedService }) {
     }
   }
 
-  // What this service measures; the bandwidth caveat under it is the same for
-  // all three, and two lines keep each language's own sentence spacing.
-  const intro = service === 'ookla'
-    ? t('Measures this router’s own connection through Ookla’s nearby servers.')
-    : service === 'cloudflare'
-      ? t('Measures this router’s own connection to the nearest Cloudflare edge.')
-      : t('Measures the Netflix Open Connect path a streaming session uses.')
-
   // The dials read the settled result when there is one, the rate the direction
   // being measured is reaching while the test runs, and nothing before that.
   const download = result ? result.download_mbps : live?.download_mbps ?? (live?.phase === 'download' ? live.live_mbps ?? null : null)
@@ -335,63 +317,45 @@ function SpeedTest({ service }: { service: SpeedService }) {
   const latency = result ? result.latency_ms : live?.latency_ms ?? null
   const jitter = result ? result.jitter_ms : null
 
-  return <div className="space-y-6">
-      <div className="panel-surface relative p-4 sm:p-6">
-        <div className="relative space-y-5">
-          <div className="max-w-xl space-y-1 text-sm text-muted-foreground">
-            <p>{intro}</p>
-            <p>{t('Uses your internet bandwidth and may affect other devices while it runs.')}</p>
+  function serverLabel(value: unknown) {
+    if (!value || value === 'auto') return t('Automatic (first working server)')
+    const found = options.find((item) => item.id === value)
+    return found ? `${found.sponsor} · ${found.location}` : String(value)
+  }
+
+  return <div className="space-y-8">
+    {serviceUnavailable
+      ? <Alert variant="destructive">
+          <AlertTitle>{t('{name} is unavailable', { name: SPEED_SERVICE_NAMES[service] })}</AlertTitle>
+          <AlertDescription className="space-y-3">
+            {serviceInfo?.detail && <p className="break-words font-mono text-xs select-text">{serviceInfo.detail}</p>}
+            <p>{t('Install that command on the router’s PATH, then reload this page.')}</p>
+          </AlertDescription>
+        </Alert>
+      : <div className="panel-surface mx-auto w-fit max-w-full p-2.5 sm:p-3">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+            <Select value={selectedExit || 'default'} onValueChange={(value) => { setExit(value === 'default' ? '' : value ?? ''); setServerID('') }} disabled={running || gateway.isPending}>
+              <SelectTrigger aria-label={t('Way out')} className="w-48"><SelectValue>{(value) => (value === 'default' ? t('Router default route') : String(value))}</SelectValue></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">{t('Router default route')}</SelectItem>
+                {exits.map((item) => <SelectItem key={item.name} value={item.name}>{item.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {service === 'ookla' && <Select value={selectedServer || 'auto'} onValueChange={(value) => setServerID(value === 'auto' ? '' : value ?? '')} disabled={running || servers.isPending}>
+              <SelectTrigger aria-label={t('Test server')} className="w-72"><SelectValue>{(value) => serverLabel(value)}</SelectValue></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">{t('Automatic (first working server)')}</SelectItem>
+                {options.map((item) => <SelectItem key={item.id} value={item.id}>{item.sponsor} · {item.location}</SelectItem>)}
+              </SelectContent>
+            </Select>}
+            <Button onClick={run} disabled={running || gateway.isPending || exitUnavailable}>
+              {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Activity aria-hidden />}
+              {running ? t('Testing connection…') : result ? t('Run again') : t('Start speed test')}
+            </Button>
+            {running && <span role="status" className="sr-only">{speedPhaseLabel(live?.phase)}</span>}
           </div>
-          {serviceUnavailable
-            ? <Alert variant="destructive">
-                <AlertTitle>{t('{name} is unavailable', { name: SPEED_SERVICE_NAMES[service] })}</AlertTitle>
-                <AlertDescription className="space-y-3">
-                  {serviceInfo?.detail && <p className="break-words font-mono text-xs select-text">{serviceInfo.detail}</p>}
-                  <p>{t('Install that command on the router’s PATH, then reload this page.')}</p>
-                </AlertDescription>
-              </Alert>
-            : <>
-                <div className="max-w-sm space-y-1.5">
-                  <Label htmlFor="speed-exit">{t('Way out')}</Label>
-                  <Select value={selectedExit || 'default'} onValueChange={(value) => { setExit(value === 'default' ? '' : value ?? ''); setServerID('') }} disabled={running || gateway.isPending}>
-                    <SelectTrigger id="speed-exit" className="w-full"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">{t('Router default route')}</SelectItem>
-                      {exits.map((item) => <SelectItem key={item.name} value={item.name}>{item.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">{t('Applies to this test only.')}</p>
-                  {exitUnavailable && <p className="text-xs text-destructive">{t('This way out is no longer available. Choose another before testing.')}</p>}
-                  {gateway.isError && <p className="text-xs text-destructive">{t('Could not load ways out. The router default route is still available.')}</p>}
-                </div>
-                {service === 'ookla' && <div className="max-w-2xl space-y-1.5">
-                  <Label htmlFor="speed-server">{t('Test server')}</Label>
-                  <Input id="speed-server-search" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setServerID('') }} placeholder={t('Country, city or provider')} aria-label={t('Narrow the server list')} maxLength={64} disabled={running} />
-                  <Select value={selectedServer || 'auto'} onValueChange={(value) => setServerID(value === 'auto' ? '' : value ?? '')} disabled={running || servers.isPending}>
-                    <SelectTrigger id="speed-server" className="w-full"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">{t('Automatic (first working server)')}</SelectItem>
-                      {options.map((item) => <SelectItem key={item.id} value={item.id}>{item.sponsor} · {item.location}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  {servers.isPending && <p className="text-xs text-muted-foreground">{t('Finding nearby servers…')}</p>}
-                  {serverUnavailable && <p className="text-xs text-destructive">{t('Refresh the server list or choose another server before testing.')}</p>}
-                  {servers.isError && <p className="text-xs text-destructive">{t('Could not list servers:')} {servers.error.message}. Automatic selection is still available.</p>}
-                  {servers.isSuccess && options.length === 0 && <p className="text-xs text-destructive">{t('No server matched that search. Clear it to see nearby servers.')}</p>}
-                  {servers.isSuccess && options.length > 0 && <p className="text-xs text-muted-foreground">{t('{count} servers listed near this way out; latency is measured when the test runs.', { count: servers.data.total })}</p>}
-                  {servers.isSuccess && servers.data.total > options.length && <p className="text-xs text-muted-foreground">{t('Showing the {shown} closest.', { shown: options.length })}</p>}
-                </div>}
-                <Button onClick={run} disabled={running || gateway.isPending || exitUnavailable || (service === 'ookla' && serverUnavailable)}>
-                  {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Activity aria-hidden />}
-                  {running ? 'Testing connection…' : result ? 'Run again' : 'Start speed test'}
-                </Button>
-                {running && <div className="space-y-1">
-                  <p role="status" className="text-sm">{speedPhaseLabel(live?.phase)}</p>
-                  <p className="text-xs text-muted-foreground">{t('This test can take up to 90 seconds.')}</p>
-                </div>}
-              </>}
-        </div>
-      </div>
+          {exitUnavailable && <p className="mt-2 text-xs text-destructive">{t('This way out is no longer available. Choose another before testing.')}</p>}
+        </div>}
 
       {error && (
         <Alert variant="destructive">
@@ -416,16 +380,16 @@ function SpeedTest({ service }: { service: SpeedService }) {
 
       {/* The dials are the measurement: the direction being measured leads,
           the other holds what it last measured, and both settle on the result. */}
-      {!serviceUnavailable && <div className="panel-surface p-4 sm:p-6">
-        {(latency != null || jitter != null) && <div className="mb-6 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground">
+      {!serviceUnavailable && <div className="space-y-6 py-2">
+        {(latency != null || jitter != null) && <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground">
           {latency != null && <span className="flex items-center gap-2">{t('Latency')}<MetricValue size="sm" value={latency.toFixed(1)} unit="ms" /></span>}
           {jitter != null && <span className="flex items-center gap-2">{t('Jitter')}<MetricValue size="sm" value={jitter.toFixed(1)} unit="ms" /></span>}
         </div>}
-        <div className="flex flex-wrap items-start justify-center gap-12">
-          <SpeedDial label={t('Download')} value={download} active={running && (live?.phase === 'download' || live?.phase === 'transfer')} />
-          <SpeedDial label={t('Upload')} value={upload} active={running && (live?.phase === 'upload' || live?.phase === 'transfer')} />
+        <div className="flex flex-wrap items-start justify-center gap-10 sm:gap-16">
+          <SpeedDial direction="download" label={t('Download')} value={download} active={running && (live?.phase === 'download' || live?.phase === 'transfer')} />
+          <SpeedDial direction="upload" label={t('Upload')} value={upload} active={running && (live?.phase === 'upload' || live?.phase === 'transfer')} />
         </div>
-        {result && <p className="mt-6 text-center text-sm text-muted-foreground">{resultSummary(service, result)}</p>}
+        {result && <p className="text-center text-sm text-muted-foreground">{resultSummary(service, result)}</p>}
       </div>}
   </div>
 }

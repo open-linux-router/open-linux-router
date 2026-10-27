@@ -2,47 +2,55 @@ import { t, useLocale } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 /**
- * One direction's dial on an internet speed test page.
+ * One direction's dial, drawn the way LibreSpeed draws its own: a half circle
+ * with the reading inside and the direction underneath.
  *
- * LibreSpeed's page draws a speed on a logarithmic scale, because a linear one
- * makes a 100 Mbit link and a 1 Gbit link look almost the same; the tool pages
- * that borrow its look keep that scale, 0 to 10 Gbps. The ring is the same
- * construction as the quality score ring, so the two dials read as measurements
- * rather than as decoration. An unmeasured direction shows a dash, never a zero.
+ * The scale is LibreSpeed's logarithmic one (0 to 10 Gbps), because a linear
+ * scale makes a 100 Mbit link and a 1 Gbit link look almost the same. The
+ * download arc takes the receive colour and the upload arc the transmit colour,
+ * so the two dials are told apart the way the traffic meters tell them apart.
  */
-export function SpeedDial({ label, value, active }: { label: string; value: number | null; active: boolean }) {
+export function SpeedDial({ label, value, direction, active }: {
+  label: string
+  value: number | null
+  direction: 'download' | 'upload'
+  active: boolean
+}) {
   useLocale()
-  const radius = 52
-  const circumference = 2 * Math.PI * radius
+  const radius = 88
+  const length = Math.PI * radius
   const fraction = value == null || value <= 0 ? 0 : Math.min(1, Math.log10(value + 1) / Math.log10(10_001))
-  return <div className="flex flex-col items-center gap-3">
+  const arc = `M12,112 A${radius},${radius} 0 0 1 188,112`
+  // The arc's leading end, marked like a gauge pointer.
+  const tip = Math.PI * (1 - fraction)
+  const knob = { x: 100 + radius * Math.cos(tip), y: 112 - radius * Math.sin(tip) }
+  return <div className="flex flex-col items-center gap-2">
     <div
-      className="relative size-40 shrink-0 sm:size-44"
+      className="relative w-64 shrink-0 sm:w-80"
       role="img"
       aria-label={`${label}: ${value == null ? t('Unavailable') : `${formatReading(value)} Mbps`}`}
     >
-      <svg viewBox="0 0 120 120" className="size-full -rotate-90" aria-hidden="true">
+      <svg viewBox="0 0 200 120" className="w-full" aria-hidden="true">
         {/* A direction that is being measured but has not reported a rate yet
-            keeps its ring breathing, so the page does not look stopped. */}
-        <circle cx="60" cy="60" r={radius} className={cn('fill-none stroke-border', active && value == null && 'animate-pulse')} strokeWidth="8" />
-        {/* The arc grows from the top like a dial: it is the direction's live
-            reading, and it settles where the measurement stops. */}
-        {fraction > 0 && <circle
-          cx="60" cy="60" r={radius}
-          className="fill-none stroke-primary transition-[stroke-dashoffset] duration-300 ease-out"
-          strokeWidth="8" strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - fraction)}
+            keeps its track breathing, so the page does not look stopped. */}
+        <path d={arc} fill="none" strokeWidth="9" strokeLinecap="round" className={cn('stroke-border', active && value == null && 'animate-pulse')} />
+        {fraction > 0 && <path
+          d={arc} fill="none" strokeWidth="9" strokeLinecap="round"
+          className={cn('transition-[stroke-dashoffset] duration-300 ease-out', direction === 'download' ? 'stroke-receive' : 'stroke-transmit')}
+          strokeDasharray={length}
+          strokeDashoffset={length * (1 - fraction)}
         />}
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center" aria-hidden="true">
-        <span className="text-3xl leading-none font-semibold tracking-tight text-foreground tabular-nums">
+        {fraction > 0 && <circle
+          cx={knob.x} cy={knob.y} r="7" strokeWidth="3"
+          className={cn('stroke-card', direction === 'download' ? 'fill-receive' : 'fill-transmit')}
+        />}
+        <text x="100" y="86" textAnchor="middle" className="fill-foreground text-[40px] font-semibold tabular-nums">
           {value == null ? '—' : formatReading(value)}
-        </span>
-        <span className="mt-1.5 text-[10px] font-medium tracking-wider text-muted-foreground">Mbps</span>
-      </div>
+        </text>
+        <text x="100" y="104" textAnchor="middle" className="fill-muted-foreground text-[12px]">Mbps</text>
+      </svg>
     </div>
-    <span aria-hidden="true" className={active ? 'text-sm font-medium text-foreground' : 'text-sm text-muted-foreground'}>{label}</span>
+    <span className={cn('text-xs font-medium tracking-[0.14em] uppercase', active ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
   </div>
 }
 
