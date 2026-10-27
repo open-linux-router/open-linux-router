@@ -149,11 +149,11 @@ measuring instead of promising numbers it cannot see yet. Screen readers are
 told the stage when it changes; the ticking clock stays out of that announcement.
 
 LibreSpeed measures the link between the operator's own device and the router,
-in that browser. Its page offers one start control and, while the test runs, one
-line saying so; the latency, jitter, download and upload appear together when
-the worker reports its final sample. Do not echo the engine's gauges or moving
-rates: the result is the measurement, and a half-minute run has no partial state
-the operator can act on.
+in that browser. Its page offers one start control outside the measurement, then
+two dials: each follows the direction being measured on a logarithmic scale,
+holds its last reading while the other direction runs, and settles on the final
+number, with latency and jitter above them. A dial that has not measured shows a
+dash rather than a zero, and no second set of readouts sits beside the dials.
 
 World traffic combines IPs at the same remote coordinates into one map connection.
 Line width represents that connection's combined upload and download relative

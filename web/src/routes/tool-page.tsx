@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { PageHeading } from '@/components/layout/page-heading'
 import { MetricValue } from '@/components/ui/metric-value'
 import { TOOL_DEFINITIONS, type ToolSlug } from '@/features/tools/catalog'
-import { createLinkTestEngine, linkTestResult, loadLinkTestEngine, loadLinkTestSettings, startLinkTest, type LinkTestEngine, type LinkTestResult, type LinkTestSample } from '@/features/tools/link-test'
+import { LinkGauge } from '@/features/tools/link-gauge'
+import { createLinkTestEngine, formatReading, linkTestReading, linkTestResult, loadLinkTestEngine, loadLinkTestSettings, startLinkTest, type LinkTestEngine, type LinkTestResult, type LinkTestSample } from '@/features/tools/link-test'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -477,6 +478,7 @@ function LibreSpeed() {
   const [grantError, setGrantError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<LinkTestResult | null>(null)
+  const [sample, setSample] = useState<LinkTestSample | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const engine = useRef<LinkTestEngine | null>(null)
   const deadline = useRef<number | undefined>(undefined)
@@ -516,6 +518,7 @@ function LibreSpeed() {
     if (running || !granted) return
     setRunning(true)
     setResult(null)
+    setSample(null)
     setFailure(null)
     const latest: { sample: LinkTestSample | null } = { sample: null }
     let settled = false
@@ -527,6 +530,9 @@ function LibreSpeed() {
       setRunning(false)
       setResult(value)
       setFailure(message)
+      // A run that ended without a result leaves no reading to keep on the
+      // dials; the alert is the whole answer.
+      if (!value) setSample(null)
     }
     try {
       // A page left open may have outlived its viewer grant, so every run mints
@@ -537,9 +543,12 @@ function LibreSpeed() {
       if (gone.current) return
       const test = createLinkTestEngine(Engine, settings)
       engine.current = test
-      // The worker reports on every tick; the page keeps the last sample for the
-      // result and shows none of them while the test runs.
-      test.onupdate = data => { latest.sample = data }
+      // The worker reports on every tick; the dials show the direction that is
+      // measuring, and the last sample is kept as the settled result.
+      test.onupdate = data => {
+        latest.sample = data
+        setSample(data)
+      }
       test.onend = aborted => {
         const finished = aborted || !latest.sample ? null : linkTestResult(latest.sample)
         settle(finished, finished ? null
@@ -556,6 +565,11 @@ function LibreSpeed() {
       settle(null, error instanceof Error ? error.message : String(error))
     }
   }
+
+  const download = result ? result.download : linkTestReading(sample, 'download')
+  const upload = result ? result.upload : linkTestReading(sample, 'upload')
+  const latency = result ? result.latency : linkTestReading(sample, 'latency')
+  const jitter = result ? result.jitter : linkTestReading(sample, 'jitter')
 
   return <div className="space-y-6">
     <div className="panel-surface relative p-4 sm:p-6">
@@ -592,15 +606,19 @@ function LibreSpeed() {
       </Alert>
     )}
 
-    {result && (
-      <div className="space-y-4" aria-live="polite">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Metric icon={Activity} label={t('Latency')} value={result.latency} unit="ms" detail={result.jitter == null ? undefined : `${t('Jitter')} ${result.jitter.toFixed(1)} ms`} />
-          <Metric icon={ArrowDown} label={t('Download')} value={result.download} unit="Mbps" />
-          <Metric icon={ArrowUp} label={t('Upload')} value={result.upload} unit="Mbps" />
-        </div>
+    {/* The dials are the test: the direction being measured leads, the other
+        holds what it last measured, and both settle on the final values. */}
+    {!grantError && <div className="panel-surface p-4 sm:p-6">
+      {(latency != null || jitter != null) && <div className="mb-6 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground">
+        {latency != null && <span className="flex items-center gap-2">{t('Latency')}<MetricValue size="sm" value={formatReading(latency)} unit="ms" /></span>}
+        {jitter != null && <span className="flex items-center gap-2">{t('Jitter')}<MetricValue size="sm" value={formatReading(jitter)} unit="ms" /></span>}
+      </div>}
+      <div className="flex flex-wrap items-start justify-center gap-12">
+        <LinkGauge label={t('Download')} value={download} active={running && sample?.testState === 1} />
+        <LinkGauge label={t('Upload')} value={upload} active={running && sample?.testState === 3} />
       </div>
-    )}
+    </div>}
+    <div role="status" className="sr-only">{!running && result ? t('Test finished.') : ''}</div>
   </div>
 }
 

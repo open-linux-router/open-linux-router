@@ -36,14 +36,14 @@ embed mitmweb. Reopening the page mints a new cookie; a browser that never
 signed in to this router gets an explanation, not a bandwidth source.
 
 The tool page loads that engine in its own document instead of framing
-upstream's page: OLR's start button, one running state and the same result tiles
-the internet speed tests use replace LibreSpeed's background, title and gauges.
-The page shows no intermediate numbers — a test that runs for half a minute only
-needs to say it is running — and the latency, jitter, download and upload appear
-together when the worker reports its final sample. Leaving the page aborts the
-test, so the router stops serving blocks to a browser that is no longer reading
-them. Nothing frames this surface any more, so it keeps BrowserGuard's global
-refusal rather than relaxing it to `SAMEORIGIN`.
+upstream's page: LibreSpeed's background and title are gone, the start control
+sits outside the measurement, and the measurement is the two dials. Each dial
+follows the direction being measured on the engine's own logarithmic scale, holds
+its last reading while the other direction runs, and settles on the final number;
+latency and jitter appear above them once the engine has measured them. Leaving
+the page aborts the test, so the router stops serving blocks to a browser that is
+no longer reading them. Nothing frames this surface any more, so it keeps
+BrowserGuard's global refusal rather than relaxing it to `SAMEORIGIN`.
 
 Telemetry is off and no result is stored: there is no database behind this page,
 so the privacy dialog LibreSpeed can show would be a false promise.

@@ -1004,6 +1004,7 @@ export const zhCN: Record<string, string> = {
   'The test was stopped before it finished.': '测试在完成前被中止。',
   'The transfer test finished without usable numbers.': '传输测试结束，但没有得到可用的数值。',
   'The test did not finish in time.': '测试未在限定时间内完成。',
+  'Test finished.': '测试完成。',
   'Measure sustained throughput between one device and this router; iperf3 must be installed on both ends.': '测量一台设备与此路由器之间的持续吞吐；两端都需安装 iperf3。',
   'iPerf3 measures sustained TCP streams with its own client on the other device. It is the honest choice for a wired link faster than a browser can measure, and it needs iperf3 installed on the router and on that device. It tests the link and the router’s own receive/send capacity, not LAN-to-WAN forwarding or NAT.': 'iPerf3 使用另一台设备上的客户端测量持续 TCP 流。当有线链路快过浏览器能测量的范围时，它才是可靠选择；路由器与该设备都需安装 iperf3。它测量的是链路和路由器自身的收发能力，不涉及局域网到公网的转发或 NAT。',
   'Anyone able to reach that address and port can use the server while it runs, and a configured firewall may need a temporary TCP 5201 opening. Run these on the other device’s terminal; the first sends data to OLR, the second makes OLR send data back.': '服务运行期间，任何能访问该地址和端口的设备都可以使用它；已配置的防火墙可能需要临时放开 TCP 5201。请在另一台设备的终端运行以下命令：第一条向 OLR 发送数据，第二条让 OLR 回传数据。',

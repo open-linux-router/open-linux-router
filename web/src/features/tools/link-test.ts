@@ -12,13 +12,16 @@
 /** Where olrd serves the vendored engine, its worker and the test endpoints. */
 export const LINK_TEST_PREFIX = '/link-test'
 
-/** One status message from the worker; only the last one is used. */
+/** One status message from the worker: the readings and how far each has got. */
 export interface LinkTestSample {
   testState: number
   dlStatus: string
   ulStatus: string
   pingStatus: string
   jitterStatus: string
+  dlProgress: number
+  ulProgress: number
+  pingProgress: number
 }
 
 /** What the page shows once the test ends. */
@@ -154,9 +157,45 @@ export function linkTestResult(sample: LinkTestSample): LinkTestResult | null {
   return { latency, download, upload, jitter: Number.isFinite(jitter) ? jitter : null }
 }
 
+/**
+ * What one dial should read right now, or null when that measurement has not
+ * happened yet.
+ *
+ * The worker reports every counter as "0" before it measures, so a zero is only
+ * a reading once its direction has actually started — otherwise a dial would
+ * claim 0 Mbps for a direction nobody has tested. Jitter is the exception: a
+ * measured 0 ms spread is a real answer, so it follows the ping instead.
+ */
+export function linkTestReading(sample: LinkTestSample | null, reading: 'download' | 'upload' | 'latency' | 'jitter'): number | null {
+  if (!sample) return null
+  const ping = started(measured(sample.pingStatus), sample.pingProgress)
+  switch (reading) {
+    case 'download': return started(measured(sample.dlStatus), sample.dlProgress)
+    case 'upload': return started(measured(sample.ulStatus), sample.ulProgress)
+    case 'latency': return ping
+    case 'jitter': {
+      const jitter = measured(sample.jitterStatus)
+      return ping != null && Number.isFinite(jitter) ? jitter : null
+    }
+  }
+}
+
+/** A reading that has begun, or null when its direction has not measured yet. */
+function started(value: number, progress: number): number | null {
+  if (!Number.isFinite(value)) return null
+  return value > 0 || progress > 0 ? value : null
+}
+
 /** One worker value as a number, or NaN when the worker did not measure it. */
 function measured(raw: string): number {
   const value = raw.trim()
   if (value === '' || value === 'Fail') return Number.NaN
   return Number(value)
+}
+
+/** How a dial shows a reading: the engine's own rounding, so 9.99 stays legible. */
+export function formatReading(value: number): string {
+  if (value < 10) return value.toFixed(2)
+  if (value < 100) return value.toFixed(1)
+  return value.toFixed(0)
 }
