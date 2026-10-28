@@ -452,7 +452,7 @@ and iPerf3 rather than one "speed test" and a service picker: the service is the
 distinction that helps an operator select one, and each measures a different
 path. A shortened name would make two entries ambiguous — "Cloudflare" alone
 also names the tunnel on Access — so the tile carries the same name as its
-page. Preserve established names such as Ping, NAT test and Traceroute. Do not
+page. Preserve established names such as Ping, STUN and Traceroute. Do not
 invent broad category labels for a single item.
 
 Name a state for what it means for the user, not for how it is carried out. The

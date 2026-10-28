@@ -9,6 +9,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/disclosure'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -538,40 +539,73 @@ function NATTest() {
 
   return <div className="space-y-6">
       <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
-        <div className="flex items-start gap-4">
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Send UDP probes from this router over its default route to public STUN servers. This does not test a device behind the router or whether a game port is open.</p>
-          </div>
-        </div>
+        <p className="text-sm text-muted-foreground">{t('Probe public STUN servers from this router over its default route. This does not test a device behind the router or whether a game port is open.')}</p>
         <Button className="mt-5" onClick={runNAT} disabled={natRunning}>
           {natRunning && <LoaderCircle className="animate-spin" aria-hidden />}
-          {natRunning ? 'Testing…' : 'Run NAT test'}
+          {natRunning ? t('Testing…') : t('Run STUN test')}
         </Button>
-        {natError && <Alert variant="destructive" className="mt-5"><AlertTitle>{t('NAT test unavailable')}</AlertTitle><AlertDescription className="break-words">{natError}</AlertDescription></Alert>}
-        {natResult && <div className="mt-5 space-y-4 text-sm" aria-live="polite">
-          <div className="rounded-xl border bg-muted/40 p-4">
-            <p className="font-medium">{t('What this test found')}</p>
-            <p className="mt-1 text-muted-foreground">{t('The STUN server saw this router\'s UDP traffic as')} <span className="font-mono text-foreground">{natResult.mapped}</span>. This is the address and temporary port observed for this test, not proof that incoming connections can reach the router.</p>
-            {(natResult.mapping === 'not tested' || natResult.filtering === 'not tested') && <p className="mt-2 text-muted-foreground">{natResult.alternate
-              ? t('The server offers a second address, but the replies that classification needs did not arrive. This can be the router\'s filtering, the server, or packet loss. Your NAT behavior is unknown, not necessarily restrictive.')
-              : t('The answering server offers only a single address, so it cannot classify mapping or filtering. Your NAT behavior is unknown here, not necessarily restrictive.')}</p>}
-          </div>
-          <dl className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border p-4">
-              <dt className="font-medium">{t('Mapping')}</dt>
-              <dd className="mt-1 font-mono text-sm">{natResult.mapping}</dd>
-              <p className="mt-2 text-xs text-muted-foreground">{t('Whether the public UDP address and port change when this router contacts different destinations.')} {mappingExplanation(natResult.mapping)}</p>
-            </div>
-            <div className="rounded-xl border p-4">
-              <dt className="font-medium">{t('Filtering')}</dt>
-              <dd className="mt-1 font-mono text-sm">{natResult.filtering}</dd>
-              <p className="mt-2 text-xs text-muted-foreground">{t('Whether replies from another server IP or port get through.')} {filteringExplanation(natResult.filtering)}</p>
-            </div>
-          </dl>
-          <p className="text-xs text-muted-foreground">{t('STUN server:')} <span className="font-mono">{natResult.server}</span>. Results do not determine an Xbox or PlayStation NAT type.</p>
-        </div>}
+        {natError && <Alert variant="destructive" className="mt-5"><AlertTitle>{t('STUN test unavailable')}</AlertTitle><AlertDescription className="break-words">{natError}</AlertDescription></Alert>}
+        {natResult && <STUNResult result={natResult} />}
       </section>
   </div>
+}
+
+/**
+ * The answer as three facts and the limit that follows them. A reader who stops
+ * here knows the address and both verdicts; the reasoning and the caveats are
+ * one disclosure below, because they explain the result rather than report it.
+ */
+function STUNResult({ result }: { result: NATResult }) {
+  useLocale()
+  const unknown = result.mapping === 'not tested' || result.filtering === 'not tested'
+  return <div className="mt-6 space-y-3" aria-live="polite">
+    <dl className="grid gap-3 sm:grid-cols-3">
+      <div className="rounded-lg bg-muted/50 p-4">
+        <dt className="text-sm text-muted-foreground">{t('Public address')}</dt>
+        <dd className="mt-2 font-mono text-xl leading-7 font-semibold [overflow-wrap:anywhere]">{result.mapped}</dd>
+        <dd className="mt-1 text-xs leading-4 text-muted-foreground">{t('Temporary port observed by')} <span className="font-mono">{result.server}</span></dd>
+      </div>
+      <STUNFact label={t('Mapping')} verdict={mappingVerdict(result.mapping)} observed={result.mapping} />
+      <STUNFact label={t('Filtering')} verdict={filteringVerdict(result.filtering)} observed={result.filtering} />
+    </dl>
+    <p className="text-xs text-muted-foreground">{t('STUN shows what one server sees. It cannot prove that incoming connections reach this router.')}</p>
+    {unknown && <p className="text-xs text-muted-foreground">{result.alternate
+      ? t('The server offered a second address, but the replies classification needs did not arrive.')
+      : t('The server that answered cannot classify this, so it reports the address only.')}</p>}
+    <Disclosure summary={t('What these results mean')}>
+      <ul className="space-y-2 pb-1 pl-5 text-xs leading-5 text-muted-foreground">
+        <li className="list-disc">{t('Mapping: whether the public UDP port stays the same as the router contacts different destinations. One stable port is what a direct connection between two hosts needs.')}</li>
+        <li className="list-disc">{t('Filtering: who may send back to that port. Any host is the most permissive; only hosts already contacted is stricter.')}</li>
+        <li className="list-disc">{t('STUN observes one UDP flow. It cannot prove that a console or server accepts incoming connections, and it is not an Xbox or PlayStation NAT type.')}</li>
+      </ul>
+    </Disclosure>
+  </div>
+}
+
+function STUNFact({ label, verdict, observed }: { label: string; verdict: string; observed: string }) {
+  return <div className="rounded-lg bg-muted/50 p-4">
+    <dt className="text-sm text-muted-foreground">{label}</dt>
+    <dd className="mt-2 text-base leading-6 font-medium">{verdict}</dd>
+    {observed !== 'not tested' && <dd className="mt-1 font-mono text-xs leading-4 text-muted-foreground [overflow-wrap:anywhere]">{observed}</dd>}
+  </div>
+}
+
+function mappingVerdict(value: string): string {
+  switch (value) {
+    case 'endpoint-independent': return t('One port for every destination')
+    case 'address-dependent': return t('Port varies by destination address')
+    case 'address-and-port-dependent': return t('Port varies by destination address and port')
+    default: return t('Not tested')
+  }
+}
+
+function filteringVerdict(value: string): string {
+  switch (value) {
+    case 'endpoint-independent': return t('Any host can reach this port')
+    case 'address-dependent': return t('Only hosts this router contacted can reach it')
+    case 'no changed-source reply': return t('Reachability from outside is unconfirmed')
+    default: return t('Not tested')
+  }
 }
 
 function PingTest() {
@@ -690,22 +724,4 @@ function Metric({ icon: Icon, label, value, unit, detail, surface = 'panel' }: {
       {detail && <p className="mt-2 text-xs text-muted-foreground">{detail}</p>}
     </div>
   )
-}
-
-function mappingExplanation(value: string): string {
-  switch (value) {
-    case 'endpoint-independent': return 'The same address and port were observed for the tested destinations.'
-    case 'address-dependent': return 'The mapping changed with the destination IP.'
-    case 'address-and-port-dependent': return 'The mapping changed with the destination IP and port.'
-    default: return 'No conclusion from this test.'
-  }
-}
-
-function filteringExplanation(value: string): string {
-  switch (value) {
-    case 'endpoint-independent': return 'A reply from a different IP and port arrived.'
-    case 'address-dependent': return 'A reply from the same IP but a different port arrived; the different-IP reply did not.'
-    case 'no changed-source reply': return 'No reply from a changed source arrived. This could be filtering, server behavior, or packet loss.'
-    default: return 'No conclusion from this test.'
-  }
 }

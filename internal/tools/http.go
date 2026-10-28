@@ -771,7 +771,7 @@ func firstError(err, fallback error) error {
 
 func (h *HTTP) nat(w http.ResponseWriter, r *http.Request) {
 	if !h.natRunning.CompareAndSwap(false, true) {
-		core.WriteError(w, http.StatusConflict, "a NAT test is already running")
+		core.WriteError(w, http.StatusConflict, "a STUN test is already running")
 		return
 	}
 	defer h.natRunning.Store(false)
@@ -786,7 +786,7 @@ func (h *HTTP) nat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		core.WriteError(w, http.StatusServiceUnavailable, "NAT test failed: "+err.Error())
+		core.WriteError(w, http.StatusServiceUnavailable, "STUN test failed: "+err.Error())
 		return
 	}
 	core.WriteJSON(w, http.StatusOK, result)

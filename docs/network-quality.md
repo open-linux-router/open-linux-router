@@ -468,7 +468,7 @@ Existing code provides useful starting points, not complete catalog coverage:
 | Gateway latency monitor | Single HTTPS HEAD application-round-trip sample against a saved target, plus separate DNS timing; not network RTT or a quality history store |
 | Tools speed test | Router-originated download/upload/latency/jitter against Ookla (selectable server), Cloudflare or fast.com; all three accept a way out, and the two command-line services take it through an nftables socket-group mark; not per-service or per-CDN coverage beyond those three |
 | Tools ping | Finite ICMP RTT/loss test; not a continuous representative stability window |
-| Tools NAT | Default-route IPv4 STUN mapping/filtering observations: every server is probed in parallel and a server that offers a second address is preferred over one that can only report the mapping; still subject to server support, and not actual P2P or inbound verification |
+| Tools STUN | Default-route IPv4 STUN mapping/filtering observations: every server is probed in parallel and a server that offers a second address is preferred over one that can only report the mapping; still subject to server support, and not actual P2P or inbound verification |
 | LibreSpeed and iPerf3 | Browser-based LibreSpeed test between one device and this router (download/upload/latency/jitter), plus a temporary iperf3 server for sustained wired throughput; neither supplies whole-site Wi-Fi telemetry |
 
 See [device link testing](device-link-test.md) for local-test scope. Reuse test
@@ -534,7 +534,7 @@ It replaces the fixed sample scores and renames Reachability to Functionality.
   service, `scope=speed` reruns the reference transfer and `scope=nat` reruns
   the NAT observations. A scoped run requires a completed snapshot and merges
   its fresh evidence into the other results. Another assessment, reference speed
-  test or NAT test holds the shared runner reservations and produces 409.
+  test or STUN test holds the shared runner reservations and produces 409.
   Regular user traffic is not controlled.
 - `DELETE /api/tools/quality` requests cancellation. The runner releases its
   reservations after stopping and retains completed evidence. Daemon shutdown

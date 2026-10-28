@@ -258,7 +258,7 @@ func (h *HTTP) startQuality(w http.ResponseWriter, r *http.Request) {
 	if !h.natRunning.CompareAndSwap(false, true) {
 		h.running.Store(false)
 		h.quality.mu.Unlock()
-		core.WriteError(w, http.StatusConflict, "a NAT test is already running")
+		core.WriteError(w, http.StatusConflict, "a STUN test is already running")
 		return
 	}
 	if scope != qualityScopeAll && h.quality.snapshot.State != "completed" {
