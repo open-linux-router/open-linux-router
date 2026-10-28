@@ -105,9 +105,9 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         </DialogContent>
       </Dialog>
       {/* Everything the switch turned on lives here, so there is one card, one
-          switch and one answer to "is this device being inspected". The chart is
-          this session, DNS is where the names in it came from, and the last
-          section is the content the session can see. */}
+          switch and one answer to "is this device being inspected". The chart
+          covers this switch, DNS is where the names in it came from, and the
+          last section is the content the session can see. */}
       {notice && <div className="space-y-3 px-4 py-4 sm:px-6 sm:py-6">
         {status.isError ? <p role="alert" className="text-sm text-destructive">{t('Inspection status is unavailable. Do not assume interception has stopped.')}</p> : null}
         {other ? <p className="text-sm text-muted-foreground">{t('Another device is set for inspection. Turn its switch off before starting this one.')}</p> : null}
