@@ -120,6 +120,48 @@ func (l *CityLocator) Locate(addrs []netip.Addr) (map[string]Place, Status) {
 	return out, s
 }
 
+// LocateNow resolves the addresses and waits for the answers.
+//
+// Locate is the page-polling path: it never waits for HTTP and reports what the
+// cache happens to hold. A diagnostic that answers once cannot rely on a second
+// poll, so it asks here and gets the place in the same response. Fresh cached
+// entries are reused, which keeps a repeated check off the network; the same
+// endpoint, validation and cache are used, so the two paths cannot disagree.
+func (l *CityLocator) LocateNow(ctx context.Context, addrs []netip.Addr) (map[string]Place, Status) {
+	out := map[string]Place{}
+	s := Status{State: Ready, Source: "ip.sb", SourceURL: "https://ip.sb"}
+	now := l.now()
+	for _, a := range addrs {
+		a = a.Unmap()
+		if !a.IsValid() {
+			continue
+		}
+		ip := a.String()
+		if local(a) || !a.IsGlobalUnicast() {
+			out[ip] = Place{Local: true}
+			continue
+		}
+		l.mu.Lock()
+		e, exists := l.entries[ip]
+		l.mu.Unlock()
+		if exists && !e.fetched.IsZero() && now.Sub(e.fetched) < cityTTL {
+			out[ip] = e.place
+			continue
+		}
+		place, _, err := l.lookup(ctx, ip)
+		if err != nil {
+			s.State = Unavailable
+			s.Error = err.Error()
+			continue
+		}
+		l.mu.Lock()
+		l.put(ip, cityEntry{place: place, fetched: l.now(), used: l.now(), touched: l.now()})
+		l.mu.Unlock()
+		out[ip] = place
+	}
+	return out, s
+}
+
 func (l *CityLocator) touch(ip string, now time.Time) {
 	if err := l.db.TouchGeoIP(ip, now.UnixNano()); err != nil {
 		l.lastErr = err.Error()

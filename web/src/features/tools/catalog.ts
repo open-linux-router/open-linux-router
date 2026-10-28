@@ -20,6 +20,9 @@ export const TOOL_DEFINITIONS = [
   // Not a project mark: three providers answer this, and the question is which
   // node of theirs this router reaches, so the tile keeps a letter.
   { slug: 'edge', tileLabel: 'CDN edge', letter: 'E', label: 'CDN edge', get description() { return t('See which edge node Cloudflare, CloudFront and Fastly assign this router.') } },
+  // Two sources answer, and the answer is the resolver's address rather than
+  // this router's, so the page is named for what it reports.
+  { slug: 'dns-exit', tileLabel: 'DNS exit', letter: 'D', label: 'DNS exit', get description() { return t('See where the resolver answering this router leaves from, asked through two independent whoami names.') } },
   // NatTypeTester is the upstream project that answers this measurement, so
   // the tile and page carry its name rather than a generic "NAT test".
   { slug: 'nat', tileLabel: 'NatTypeTester', letter: 'N', label: 'NatTypeTester', get description() { return t('Run NatTypeTester to see this router’s NAT type and how it maps and filters UDP traffic.') } },

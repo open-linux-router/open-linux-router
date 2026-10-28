@@ -761,6 +761,45 @@ func run(args []string) error {
 			}
 		}
 		return 0, fmt.Errorf("way out %q is unavailable", name)
+	}, DNSLegs: func() ([]tools.DNSLeg, error) {
+		// The resolvers this box can name, not a guess at one: its own, and
+		// every exit whose DNS setting points somewhere else. The relay
+		// renders the same list for its routes file.
+		cfg, err := dnsApplier.Load()
+		if err != nil {
+			return nil, err
+		}
+		var legs []tools.DNSLeg
+		if cfg.Enabled {
+			legs = append(legs, tools.DNSLeg{Name: "This router", Server: dns.DefaultResolver.String(), Kind: "router"})
+		}
+		g, err := gatewayApplier.Load()
+		if err != nil {
+			return nil, err
+		}
+		if g.Enabled {
+			for _, exit := range g.Exits {
+				if exit.DNS == nil {
+					continue
+				}
+				var server netip.AddrPort
+				switch exit.DNS.Mode {
+				case "exit":
+					if exit.Via.NextHop != nil {
+						server = netip.AddrPortFrom(*exit.Via.NextHop, 53)
+					}
+				case "custom":
+					server = exit.DNS.Server
+				}
+				if server.IsValid() {
+					legs = append(legs, tools.DNSLeg{Name: exit.Name, Server: server.String(), Kind: "exit"})
+				}
+			}
+		}
+		return legs, nil
+	}, Locate: func(ctx context.Context, addrs []netip.Addr) (map[string]geoip.Place, error) {
+		located, _ := places.LocateNow(ctx, addrs)
+		return located, nil
 	}}
 	srv.Mount(tools.ModuleName, toolHTTP.Routes(), struct{}{})
 

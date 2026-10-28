@@ -148,3 +148,54 @@ func TestCityWorkerPacingAndShutdownDuringBackoff(t *testing.T) {
 	}
 	// Deferred Close must cancel the minute-long backoff immediately.
 }
+
+func TestLocateNowWaitsForTheAnswerAndReusesTheCache(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.URL.Path != "/8.8.8.8" {
+			t.Errorf("request: %s", r.URL.Path)
+		}
+		w.Write([]byte(`{"ip":"8.8.8.8","country":"United States","country_code":"US","city":"Mountain View","region":"California","latitude":37.4,"longitude":-122.1,"asn":15169,"asn_organization":"Google LLC"}`))
+	}))
+	defer server.Close()
+	l := NewCity(nil)
+	defer l.Close()
+	l.endpoint = server.URL + "/"
+
+	ips := []netip.Addr{netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("192.168.1.10")}
+	places, status := l.LocateNow(context.Background(), ips)
+	if status.State != Ready {
+		t.Fatalf("status: %+v", status)
+	}
+	if p := places["8.8.8.8"]; p.City != "Mountain View" || p.ASN != 15169 {
+		t.Fatalf("place: %+v", p)
+	}
+	if !places["192.168.1.10"].Local {
+		t.Fatalf("private address was not reported local: %+v", places)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("calls: %d", calls.Load())
+	}
+	if _, _ = l.LocateNow(context.Background(), ips); calls.Load() != 1 {
+		t.Fatalf("a fresh cache entry was fetched again: %d", calls.Load())
+	}
+}
+
+func TestLocateNowReportsAFailedLookup(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "no", http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+	l := NewCity(nil)
+	defer l.Close()
+	l.endpoint = server.URL + "/"
+
+	places, status := l.LocateNow(context.Background(), []netip.Addr{netip.MustParseAddr("8.8.8.8")})
+	if status.State != Unavailable || status.Error == "" {
+		t.Fatalf("status: %+v", status)
+	}
+	if _, ok := places["8.8.8.8"]; ok {
+		t.Fatalf("failed lookup produced a place: %+v", places)
+	}
+}

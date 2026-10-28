@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/showwin/speedtest-go/speedtest"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/geoip"
 )
 
 const ModuleName = "tools"
@@ -121,7 +123,13 @@ type HTTP struct {
 	// RunPing is replaceable in tests; nil sends real ICMP echo requests.
 	RunPing func(context.Context, string) (PingResult, error)
 	// RunEdge is replaceable in tests; nil asks each CDN's own endpoint.
-	RunEdge      func(context.Context) (EdgeReport, error)
+	RunEdge func(context.Context) (EdgeReport, error)
+	// DNSLegs names the resolvers this router can ask; nil disables the DNS
+	// exit check rather than guessing at one.
+	DNSLegs func() ([]DNSLeg, error)
+	// Locate resolves the addresses the DNS exit check learned; nil reports
+	// addresses without places.
+	Locate       func(context.Context, []netip.Addr) (map[string]geoip.Place, error)
 	LANAddresses func() ([]string, error)
 	LANProbe     func(string) (string, error)
 	StartIperf   func(string, int) (func(), <-chan struct{}, error)
@@ -167,6 +175,7 @@ func (h *HTTP) Routes() []core.Route {
 		{Method: "POST", Path: "/ping", Mutating: true, Summary: "Send four ICMP echo requests from this router to a hostname or IP address and report packet loss and latency.", Handler: h.ping},
 		{Method: "POST", Path: "/traceroute", Mutating: true, Summary: "Trace the route from this router to a domain or IP using nexttrace; sends network probes.", Handler: h.traceroute},
 		{Method: "POST", Path: "/edge", Mutating: true, Summary: "Ask Cloudflare, CloudFront and Fastly which edge point of presence answers this router; sends one HTTPS request per CDN.", Handler: h.edge},
+		{Method: "POST", Path: "/dns-exit", Mutating: true, Summary: "Ask each configured resolver where it leaves from, using two whoami names; sends DNS queries from this router.", Handler: h.dnsExit},
 	}
 }
 

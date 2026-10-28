@@ -185,6 +185,7 @@ export function ToolPage({ tool }: { tool: ToolSlug }) {
     nat: NATTest,
     ping: PingTest,
     edge: CDNEdgeTest,
+    'dns-exit': DNSExitTest,
     traceroute: TracerouteTest,
   }[tool]
   return <div className="space-y-8">
@@ -748,6 +749,105 @@ function CDNEdgeTest() {
           </ul>
         )}
         {report && <p className="mt-3 text-xs text-muted-foreground">{t('A code names the node that answered, not the nearest one. A distant code can explain a slow site; this check does not measure speed.')}</p>}
+      </section>
+  </div>
+}
+
+interface DNSPlace {
+  city?: string
+  region?: string
+  country?: string
+  country_name?: string
+  org?: string
+}
+
+interface DNSAnswer {
+  source: string
+  name: string
+  ip?: string
+  place?: DNSPlace
+}
+
+interface DNSLegResult {
+  name: string
+  server: string
+  kind: string
+  latency_ms: number
+  answers: DNSAnswer[]
+  error?: string
+}
+
+interface DNSExitReport {
+  legs: DNSLegResult[]
+}
+
+/** Where a resolver appears to be, in the order a person reads it. */
+function placeSummary(place?: DNSPlace): string | null {
+  if (!place) return null
+  const parts = [place.city, place.country_name || place.country].filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
+/**
+ * Where each resolver this router can name leaves from.
+ *
+ * The row names the resolver and the server it was asked at, so a reader can
+ * tell "this router" from an exit's DNS. Two whoami names answer independently;
+ * showing both keeps one provider's view from passing for the whole answer.
+ */
+function DNSExitTest() {
+  useLocale()
+  const [report, setReport] = useState<DNSExitReport | null>(null)
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function checkExit() {
+    setRunning(true)
+    setError(null)
+    try {
+      setReport(await api.post<DNSExitReport>('/api/tools/dns-exit'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return <div className="space-y-6">
+      <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
+        <p className="text-sm text-muted-foreground">{t('Each resolver this router can ask is asked where it leaves from, through two whoami names that report the address they see. No configuration changes.')}</p>
+        <Button className="mt-4" onClick={checkExit} disabled={running}>
+          {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Globe aria-hidden />}
+          {running ? t('Asking resolvers…') : t('Check DNS exit')}
+        </Button>
+        {running && <p role="status" className="mt-4 text-sm text-muted-foreground">{t('Two queries per resolver. This takes a few seconds.')}</p>}
+        {error && <Alert variant="destructive" className="mt-5"><AlertTitle>{t('Could not check the DNS exit')}</AlertTitle><AlertDescription className="break-words">{error}</AlertDescription></Alert>}
+        {report?.legs.length === 0 && <p className="mt-6 text-sm text-muted-foreground">{t('DNS is off, so this router has no resolver to ask.')}</p>}
+        {report && report.legs.length > 0 && (
+          <ul className="mt-6 space-y-3" aria-live="polite">
+            {report.legs.map(leg => (
+              <li key={leg.name} className="rounded-lg bg-muted/40 p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="text-sm font-medium">{leg.name}</span>
+                  <span className="text-xs text-muted-foreground">{leg.server} · {leg.latency_ms < 1 ? '<1' : Math.round(leg.latency_ms)} ms</span>
+                </div>
+                {leg.error
+                  ? <p className="mt-2 text-sm text-destructive">{leg.error}</p>
+                  : <ul className="mt-2 space-y-1">
+                      {leg.answers.map(answer => {
+                        const place = placeSummary(answer.place)
+                        return <li key={answer.source} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                          <span className="font-mono">{answer.ip}</span>
+                          {place && <span className="text-muted-foreground">{place}</span>}
+                          <span className="text-xs text-muted-foreground">{t('reported by {source}', { source: answer.source })}</span>
+                        </li>
+                      })}
+                    </ul>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {report && report.legs.length > 0 && <p className="mt-3 text-xs text-muted-foreground">{t('The address belongs to the resolver, not to this router. A resolver in another city can make a CDN hand you a distant node.')}</p>}
       </section>
   </div>
 }
