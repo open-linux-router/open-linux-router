@@ -1,5 +1,5 @@
 import { t, useLocale } from '@/lib/i18n'
-import { Activity, Copy, LoaderCircle, Radio, Route } from 'lucide-react'
+import { Activity, Copy, Globe, LoaderCircle, Radio, Route } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { PageHeading } from '@/components/layout/page-heading'
 import { MetricValue } from '@/components/ui/metric-value'
@@ -184,6 +184,7 @@ export function ToolPage({ tool }: { tool: ToolSlug }) {
     iperf3: IPerf3,
     nat: NATTest,
     ping: PingTest,
+    edge: CDNEdgeTest,
     traceroute: TracerouteTest,
   }[tool]
   return <div className="space-y-8">
@@ -680,6 +681,73 @@ function PingTest() {
             </div>
           </div>
         )}
+      </section>
+  </div>
+}
+
+interface EdgeResult {
+  cdn: string
+  pop?: string
+  token?: string
+  latency_ms: number
+  error?: string
+}
+
+interface EdgeReport {
+  edges: EdgeResult[]
+}
+
+/**
+ * Which of each CDN's edge nodes this router reaches.
+ *
+ * The page states the scope in one line rather than in a paragraph: one request
+ * per provider, the node that answered, and no claim about speed. A row that
+ * failed keeps its provider name, because which CDN did not answer is the
+ * finding.
+ */
+function CDNEdgeTest() {
+  useLocale()
+  const [report, setReport] = useState<EdgeReport | null>(null)
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function checkEdges() {
+    setRunning(true)
+    setError(null)
+    try {
+      setReport(await api.post<EdgeReport>('/api/tools/edge'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return <div className="space-y-6">
+      <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
+        <p className="text-sm text-muted-foreground">{t('Each provider is asked which of its edge nodes answered this router: one HTTPS request each, and no configuration change.')}</p>
+        <Button className="mt-4" onClick={checkEdges} disabled={running}>
+          {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Globe aria-hidden />}
+          {running ? t('Checking edges…') : t('Check edges')}
+        </Button>
+        {running && <p role="status" className="mt-4 text-sm text-muted-foreground">{t('Waiting for three answers. This takes a few seconds.')}</p>}
+        {error && <Alert variant="destructive" className="mt-5"><AlertTitle>{t('Could not check the edges')}</AlertTitle><AlertDescription className="break-words">{error}</AlertDescription></Alert>}
+        {report && (
+          <ul className="mt-6 divide-y divide-border rounded-lg bg-muted/40" aria-live="polite">
+            {report.edges.map(edge => (
+              <li key={edge.cdn} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-3">
+                <span className="text-sm font-medium">{edge.cdn}</span>
+                {edge.error
+                  ? <span className="text-sm text-destructive">{edge.error}</span>
+                  : <span className="flex items-baseline gap-3">
+                      <span className="font-mono text-lg font-semibold tracking-tight">{edge.pop || '—'}</span>
+                      <span className="text-xs text-muted-foreground">{edge.token && edge.token !== edge.pop ? `${edge.token} · ` : ''}{edge.latency_ms < 1 ? '<1' : Math.round(edge.latency_ms)} ms</span>
+                    </span>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {report && <p className="mt-3 text-xs text-muted-foreground">{t('A code names the node that answered, not the nearest one. A distant code can explain a slow site; this check does not measure speed.')}</p>}
       </section>
   </div>
 }

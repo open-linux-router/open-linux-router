@@ -119,7 +119,9 @@ type HTTP struct {
 	Trace  func(context.Context, string) (TraceResult, error)
 	RunNAT func(context.Context) (NATResult, error)
 	// RunPing is replaceable in tests; nil sends real ICMP echo requests.
-	RunPing      func(context.Context, string) (PingResult, error)
+	RunPing func(context.Context, string) (PingResult, error)
+	// RunEdge is replaceable in tests; nil asks each CDN's own endpoint.
+	RunEdge      func(context.Context) (EdgeReport, error)
 	LANAddresses func() ([]string, error)
 	LANProbe     func(string) (string, error)
 	StartIperf   func(string, int) (func(), <-chan struct{}, error)
@@ -164,6 +166,7 @@ func (h *HTTP) Routes() []core.Route {
 		{Method: "POST", Path: "/link-test/session", Mutating: true, Summary: "Authorize this browser to run the embedded LibreSpeed device-to-router test; the cookie it sets is not an API credential.", Handler: h.linkTestSession},
 		{Method: "POST", Path: "/ping", Mutating: true, Summary: "Send four ICMP echo requests from this router to a hostname or IP address and report packet loss and latency.", Handler: h.ping},
 		{Method: "POST", Path: "/traceroute", Mutating: true, Summary: "Trace the route from this router to a domain or IP using nexttrace; sends network probes.", Handler: h.traceroute},
+		{Method: "POST", Path: "/edge", Mutating: true, Summary: "Ask Cloudflare, CloudFront and Fastly which edge point of presence answers this router; sends one HTTPS request per CDN.", Handler: h.edge},
 	}
 }
 

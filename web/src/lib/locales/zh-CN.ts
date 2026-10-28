@@ -1323,4 +1323,12 @@ export const zhCN: Record<string, string> = {
   'New setup file': '新配置文件',
   'The file was handed over once and its private key is not stored here, so it cannot be downloaded again. A new file needs a new key pair, and the file it replaces stops working.': '这份文件只交付过一次，私钥没有保存在这台路由器上，所以无法重新下载。要拿到新文件必须换一对密钥，旧文件随之失效。',
   'The key in it is not stored on the router, so this file cannot be shown again. If you lose it, issue a new one from the device’s page: that replaces this file with one built on a new key.': '其中的私钥没有保存在路由器上，因此这个文件无法再次显示。如果丢失，请在设备页面上签发新配置——新文件会用一对新密钥替换这个文件。',
+  'CDN edge': 'CDN 边缘节点',
+  'See which edge node Cloudflare, CloudFront and Fastly assign this router.': '查看 Cloudflare、CloudFront 与 Fastly 把这台路由器分到了哪个边缘节点。',
+  'Each provider is asked which of its edge nodes answered this router: one HTTPS request each, and no configuration change.': '分别询问每家 CDN 是哪个边缘节点回应了这台路由器：每家一次 HTTPS 请求，不修改任何配置。',
+  'Check edges': '检查边缘节点',
+  'Checking edges…': '正在检查边缘节点…',
+  'Waiting for three answers. This takes a few seconds.': '正在等待三家回应，通常需要几秒。',
+  'Could not check the edges': '无法检查边缘节点',
+  'A code names the node that answered, not the nearest one. A distant code can explain a slow site; this check does not measure speed.': '代码表示实际回应的节点，不一定是最近的节点。节点很远可以解释网站为什么慢；这项检查不测速。',
 }

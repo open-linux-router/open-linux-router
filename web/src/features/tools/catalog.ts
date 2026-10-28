@@ -17,6 +17,9 @@ export const TOOL_DEFINITIONS = [
   // The mark is the project's own lowercase initial: the tool is iPerf3, and a
   // capital I in the tile would be the only place the name is spelled wrong.
   { slug: 'iperf3', tileLabel: 'iPerf3', letter: 'i', label: 'iPerf3', get description() { return t('Measure sustained throughput between one device and this router; iperf3 must be installed on both ends.') } },
+  // Not a project mark: three providers answer this, and the question is which
+  // node of theirs this router reaches, so the tile keeps a letter.
+  { slug: 'edge', tileLabel: 'CDN edge', letter: 'E', label: 'CDN edge', get description() { return t('See which edge node Cloudflare, CloudFront and Fastly assign this router.') } },
   // NatTypeTester is the upstream project that answers this measurement, so
   // the tile and page carry its name rather than a generic "NAT test".
   { slug: 'nat', tileLabel: 'NatTypeTester', letter: 'N', label: 'NatTypeTester', get description() { return t('Run NatTypeTester to see this router’s NAT type and how it maps and filters UDP traffic.') } },
