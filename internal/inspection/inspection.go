@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -57,6 +58,12 @@ type Event struct {
 	Reason          string            `json:"reason,omitempty"`
 	RequestHeaders  map[string]string `json:"request_headers,omitempty"`
 	ResponseHeaders map[string]string `json:"response_headers,omitempty"`
+	// Client and Server are the pair the activity chart joins on: the device's
+	// address and the destination the connection was opened to. The name the
+	// request was made under is the URL's host, or Target when a connection
+	// failed before there was one.
+	Client string `json:"client,omitempty"`
+	Server string `json:"server,omitempty"`
 }
 
 type Status struct {
@@ -100,7 +107,36 @@ type Service struct {
 	// so turning inspection off clears what it saw. Nil means this build cannot
 	// observe, and the endpoint says so.
 	Activity *Activity
+
+	// names is the host each intercepted connection was for, in the shape the
+	// activity sampler joins on. It is what the proxy adds to attribution: a
+	// connection the relay never named — dialled by address, resolved elsewhere,
+	// or opened before the switch — still gets a row of its own instead of
+	// 未命名. Locked separately from mu, so the sampler never waits on the
+	// session, and always taken after mu, never before it.
+	namesMu sync.Mutex
+	names   map[nameKey]observedName
 }
+
+// observedName is one host a device reached through the proxy.
+type observedName struct {
+	client netip.Addr
+	addr   netip.Addr
+	host   string
+	at     time.Time
+}
+
+// nameKey is (device, destination), the same pairing the relay's map is keyed
+// by: two devices reaching one address by different names are different facts.
+type nameKey struct {
+	client netip.Addr
+	addr   netip.Addr
+}
+
+// maxObservedNames bounds the proxy's name map. It is small because it covers
+// one session: a device left under inspection for a week resolves a few
+// thousand hosts at most, and the same recency rule as the relay's map applies.
+const maxObservedNames = 1024
 
 type session struct {
 	mac      string
@@ -504,6 +540,126 @@ func (s *Service) snapshotLocked() Status {
 	return Status{Active: true, MAC: q.mac, IPs: append([]string(nil), q.ips...), Events: []Event{}, CAPresent: true, ExitRouted: q.mark != 0, Error: s.problem}
 }
 
+// Names returns the hosts this session's proxy saw, in the shape the activity
+// sampler joins on. It is a copy: the sampler keeps its own index and must not
+// read a map a request is folding into.
+func (s *Service) Names() []Name {
+	if s == nil {
+		return nil
+	}
+	s.namesMu.Lock()
+	defer s.namesMu.Unlock()
+	out := make([]Name, 0, len(s.names))
+	for _, n := range s.names {
+		out = append(out, Name{Client: n.client, Addr: n.addr, Name: n.host})
+	}
+	return out
+}
+
+// NamesFrom combines name sources, the first source winning a pairing.
+//
+// The relay's map covers every client, so it goes first; the proxy's map fills
+// in what the relay never saw — a connection dialled by address, resolved
+// elsewhere, or opened before the switch. The sampler keeps one name per
+// (client, destination), so the earlier source must be the better one.
+func NamesFrom(sources ...func(context.Context) ([]Name, error)) func(context.Context) ([]Name, error) {
+	return func(ctx context.Context) ([]Name, error) {
+		out := make([]Name, 0, 64)
+		seen := make(map[nameKey]bool)
+		var failure error
+		answered := 0
+		for _, source := range sources {
+			if source == nil {
+				continue
+			}
+			names, err := source(ctx)
+			if err != nil {
+				failure = err
+				continue
+			}
+			answered++
+			for _, n := range names {
+				key := nameKey{client: n.Client.Unmap(), addr: n.Addr.Unmap()}
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				out = append(out, n)
+			}
+		}
+		// A source that is down leaves the sample with the others; only when
+		// every one failed is there nothing to index, and the sampler keeps the
+		// names it already had.
+		if answered == 0 && failure != nil {
+			return nil, failure
+		}
+		return out, nil
+	}
+}
+
+// observeName remembers which host a connection through the proxy was for. The
+// caller holds s.mu, which must be taken before namesMu.
+//
+// A request's URL host is a name the device actually asked for, so this is
+// evidence of the same kind as the relay's observation — just evidence the
+// relay could not get: a client that dialled an address, resolved over DoH, or
+// asked before the switch was on.
+func (s *Service) observeName(event Event, now time.Time) {
+	host := eventHost(event)
+	if host == "" {
+		return
+	}
+	client, err := netip.ParseAddr(event.Client)
+	if err != nil {
+		return
+	}
+	addr, err := netip.ParseAddr(event.Server)
+	if err != nil {
+		return
+	}
+	key := nameKey{client: client.Unmap(), addr: addr.Unmap()}
+
+	s.namesMu.Lock()
+	defer s.namesMu.Unlock()
+	if s.names == nil {
+		s.names = make(map[nameKey]observedName, 16)
+	}
+	if _, held := s.names[key]; !held && len(s.names) >= maxObservedNames {
+		s.evictNamesLocked()
+	}
+	s.names[key] = observedName{client: key.client, addr: key.addr, host: host, at: now}
+}
+
+// eventHost is the name a request was made under: the URL's host, or the target
+// a connection named before it got far enough to have a URL.
+func eventHost(event Event) string {
+	if event.URL != "" {
+		if u, err := url.Parse(event.URL); err == nil && u.Hostname() != "" {
+			return u.Hostname()
+		}
+	}
+	if event.Target == "unknown" {
+		return ""
+	}
+	return event.Target
+}
+
+// evictNamesLocked drops the tenth of the name map that was seen longest ago.
+// The caller holds namesMu.
+func (s *Service) evictNamesLocked() {
+	if len(s.names) < maxObservedNames {
+		return
+	}
+	oldest := make([]nameKey, 0, len(s.names))
+	for key := range s.names {
+		oldest = append(oldest, key)
+	}
+	sort.Slice(oldest, func(i, j int) bool { return s.names[oldest[i]].at.Before(s.names[oldest[j]].at) })
+	for _, key := range oldest[:max(1, len(oldest)/10)] {
+		delete(s.names, key)
+	}
+}
+
 func (s *Service) consume(q *session, stdout interface{ Read([]byte) (int, error) }) {
 	defer close(q.done)
 	defer func() {
@@ -524,6 +680,7 @@ func (s *Service) consume(q *session, stdout interface{ Read([]byte) (int, error
 				q.accepted++
 			} else {
 				q.events = append(q.events, event)
+				s.observeName(event, time.Now())
 			}
 			if len(q.events) > maxEvents {
 				q.events = q.events[len(q.events)-maxEvents:]
@@ -559,6 +716,11 @@ func (s *Service) end(q *session) {
 	// The chart belongs to the session; once interception stopped there is no
 	// reason to keep what it saw.
 	s.Activity.End()
+	// The names were derived from the same session, so they go with it: a later
+	// session must not be attributed by what an earlier one happened to see.
+	s.namesMu.Lock()
+	s.names = nil
+	s.namesMu.Unlock()
 	if s.armed != nil {
 		// The setting outlived the proxy: say so, and let the page retry.
 		s.problem = "the inspection proxy exited; retry to start it again"

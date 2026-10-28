@@ -696,7 +696,15 @@ func run(args []string) error {
 	// The chart belongs to the inspection session: the service starts and drops
 	// it with the session, and this sampler reads the table only while one is
 	// open rather than keeping a history of its own.
-	inspector.Activity = inspection.NewActivity(inspection.Flows, inspectionNames(dnsApplier.Observer))
+	//
+	// Two name sources, relay first: it names every client, including the ones
+	// the proxy never sees. The proxy's own observations come second and fill
+	// what the relay could not name — a device that dialled an address, resolved
+	// it elsewhere, or asked before the switch was on.
+	inspector.Activity = inspection.NewActivity(inspection.Flows, inspection.NamesFrom(
+		inspectionNames(dnsApplier.Observer),
+		func(context.Context) ([]inspection.Name, error) { return inspector.Names(), nil },
+	))
 	inspector.ExitMark = func(mac string) (uint32, error) {
 		cfg, err := gatewayApplier.Load()
 		if err != nil {
