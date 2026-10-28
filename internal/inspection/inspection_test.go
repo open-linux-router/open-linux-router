@@ -2,6 +2,7 @@ package inspection
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -181,7 +182,7 @@ func TestViewerAccessRequiresSessionAndCookie(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("inactive access = %d", rec.Code)
 	}
-	s.session = &session{webToken: "secret", expires: time.Now().Add(time.Minute)}
+	s.session = &session{webToken: "secret"}
 	rec = httptest.NewRecorder()
 	s.viewerAccess(rec, req)
 	if rec.Code != http.StatusNoContent || len(rec.Result().Cookies()) != 1 {
@@ -252,7 +253,7 @@ func TestViewerWebSocketUpgrade(t *testing.T) {
 	})}
 	go server.Serve(listener)
 	defer server.Close()
-	s := &Service{session: &session{webToken: "secret", expires: time.Now().Add(time.Minute)}}
+	s := &Service{session: &session{webToken: "secret"}}
 	mux := http.NewServeMux()
 	mux.Handle("/inspection-web/", http.StripPrefix("/inspection-web", http.HandlerFunc(s.WebUI)))
 	front := httptest.NewServer(core.WithLogging(core.WithRecovery(core.WithSharedUnits(mux))))
@@ -279,5 +280,84 @@ func TestViewerWebSocketUpgrade(t *testing.T) {
 	payload := make([]byte, 4)
 	if _, err := io.ReadFull(reader, payload); err != nil || string(payload) != "ping" {
 		t.Fatalf("tunnel echo = %q, %v", payload, err)
+	}
+}
+
+func TestSwitchPersistsAndClears(t *testing.T) {
+	dir := t.TempDir()
+	s := &Service{Enabled: true, Dir: dir}
+	want := &setting{MAC: "c4:c1:7d:e0:a3:65", IPs: []string{"172.16.1.135", "172.16.1.39"}}
+	if err := s.writeSetting(want); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, settingFile)
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("setting file: %v %v", info, err)
+	}
+	got, err := s.readSetting()
+	if err != nil || got == nil || got.MAC != want.MAC || len(got.IPs) != 2 {
+		t.Fatalf("read back = %+v, %v", got, err)
+	}
+	if err := s.clearSetting(); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.readSetting(); err != nil || got != nil {
+		t.Fatalf("after clear = %+v, %v", got, err)
+	}
+	if err := s.clearSetting(); err != nil {
+		t.Fatalf("clearing twice must be quiet: %v", err)
+	}
+}
+
+func TestResumeKeepsSwitchOnWhenProxyCannotStart(t *testing.T) {
+	dir := t.TempDir()
+	s := &Service{Enabled: true, Dir: dir}
+	if err := s.writeSetting(&setting{MAC: "c4:c1:7d:e0:a3:65", IPs: []string{"172.16.1.135"}}); err != nil {
+		t.Fatal(err)
+	}
+	// No mitmweb on PATH: the restored switch cannot start.
+	t.Setenv("PATH", t.TempDir())
+	if err := s.Resume(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	st := s.snapshot()
+	if !st.Pending || st.Active || st.MAC != "c4:c1:7d:e0:a3:65" || st.Error == "" {
+		t.Fatalf("resumed switch = %+v", st)
+	}
+	// The failure must not look like the operator turned it off.
+	if _, err := os.Stat(filepath.Join(dir, settingFile)); err != nil {
+		t.Fatalf("resume dropped the setting: %v", err)
+	}
+}
+
+func TestResumeWithoutSwitchDoesNothing(t *testing.T) {
+	s := &Service{Enabled: true, Dir: t.TempDir()}
+	if err := s.Resume(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if st := s.snapshot(); st.Active || st.Pending || st.MAC != "" {
+		t.Fatalf("resume without a switch = %+v", st)
+	}
+}
+
+func TestStopClearsPersistedSwitch(t *testing.T) {
+	dir := t.TempDir()
+	s := &Service{Enabled: true, Dir: dir}
+	st := &setting{MAC: "c4:c1:7d:e0:a3:65", IPs: []string{"172.16.1.135"}}
+	if err := s.writeSetting(st); err != nil {
+		t.Fatal(err)
+	}
+	s.armed = st
+	rec := httptest.NewRecorder()
+	s.stop(rec, httptest.NewRequest(http.MethodDelete, "/session", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("stop = %d %s", rec.Code, rec.Body.String())
+	}
+	if got := s.snapshot(); got.Active || got.Pending || got.MAC != "" {
+		t.Fatalf("after stop = %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, settingFile)); !os.IsNotExist(err) {
+		t.Fatalf("setting survived stop: %v", err)
 	}
 }

@@ -177,3 +177,23 @@ func TestSampleIgnoresAddressesOutsideTheSession(t *testing.T) {
 		t.Fatalf("got %d buckets for the watched address, want 1", len(got))
 	}
 }
+
+// The chart's axis grows with the switch and stops at the ring: a short
+// inspection stays readable, a long one scrolls instead of promising memory
+// that was pruned.
+func TestActivityWindowGrowsAndCaps(t *testing.T) {
+	cases := map[time.Duration]time.Duration{
+		0:                   15 * time.Minute,
+		2 * time.Minute:     15 * time.Minute,
+		15 * time.Minute:    15 * time.Minute,
+		61 * time.Minute:    61 * time.Minute,
+		3 * time.Hour:       3 * time.Hour,
+		5 * time.Hour:       activityBuckets * activityWidth,
+		30 * 24 * time.Hour: activityBuckets * activityWidth,
+	}
+	for elapsed, want := range cases {
+		if got := activityWindow(elapsed); got != want {
+			t.Errorf("activityWindow(%v) = %v, want %v", elapsed, got, want)
+		}
+	}
+}

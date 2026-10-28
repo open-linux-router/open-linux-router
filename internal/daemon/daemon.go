@@ -1041,6 +1041,13 @@ func run(args []string) error {
 	go latency.Run(ctx)
 	go world.Run(ctx)
 	go inspector.Activity.Run(ctx)
+	// The switch outlives the daemon: resume the device it names. A failure is
+	// reported on the device page rather than refusing to start the router.
+	go func() {
+		if err := inspector.Resume(ctx); err != nil {
+			logger.Error("could not resume inspection", "error", err)
+		}
+	}()
 	activityDone := make(chan struct{})
 	activityCtx, stopActivity := context.WithCancel(ctx)
 	go func() {

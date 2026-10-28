@@ -22,24 +22,30 @@ import (
 //
 // Three properties, each a decision:
 //
-//   - **Only while the switch is on.** Inspection is opt-in and temporary, so
-//     its history is too: Begin starts the series with the session and End
-//     drops it, and nothing survives the process. Turning inspection off clears
-//     what it saw rather than leaving a week of somebody's evening behind. That
-//     is the same argument design.md §10 makes against writing flow events to
-//     disk, applied to keeping them after the operator stopped looking.
+//   - **Only while the switch is on.** The chart is a live view, not history:
+//     Begin starts the series with the session and End drops it, and nothing
+//     survives the process. Turning inspection off clears what it saw rather
+//     than leaving a week of somebody's evening behind. That is the same
+//     argument design.md §10 makes against writing flow events to disk,
+//     applied to keeping them after the operator stopped looking.
 //   - **Attribution is fixed at sample time.** A bucket is written once, from
 //     the name the relay had at that moment. Later queries never rewrite it, so
 //     the numbers already on screen do not change while nobody is looking.
 //   - **Unnamed is a bucket, not a gap.** Traffic whose address was never
 //     resolved is kept under "未命名"; dropping it would make the totals lie.
 const (
-	// activityWidth is the width of a stored bucket. A session lasts fifteen
-	// minutes, so a minute is the resolution the chart can show.
+	// activityWidth is the width of a stored bucket. The switch stays on as
+	// long as the operator leaves it, so a minute is the resolution the chart
+	// can show without an unreadable axis.
 	activityWidth = time.Minute
-	// activityBuckets bounds the ring. It is generous next to one session, so a
-	// longer session keeps its start instead of silently losing it.
+	// activityBuckets bounds the ring: four hours at one minute each. The
+	// chart scrolls past that rather than resetting, and a router left on for
+	// days still spends a fixed amount of memory on the series.
 	activityBuckets = 240
+	// activityFloor is the chart's smallest frame. It keeps a two-minute
+	// inspection from drawing a sliver one bucket wide; the axis grows with
+	// the time the switch has been on and stops at the ring.
+	activityFloor = 15 * time.Minute
 	// activitySites bounds the sites kept per (bucket, address). Beyond it the
 	// smallest are folded into one row rather than dropped.
 	activitySites = 24
@@ -204,6 +210,16 @@ func (a *Activity) End() {
 }
 
 // Started is when the current series began, or the zero time while idle.
+// activityWindow is the chart's time frame for a session that has run for
+// elapsed: at least activityFloor so a short inspection stays readable, at most
+// the ring's span so the axis never promises memory that was pruned, and
+// rounded up to whole buckets so slots line up.
+func activityWindow(elapsed time.Duration) time.Duration {
+	window := max(elapsed, activityFloor)
+	window = min(window, activityBuckets*activityWidth)
+	return (window + activityWidth - 1) / activityWidth * activityWidth
+}
+
 func (a *Activity) Started() time.Time {
 	if a == nil {
 		return time.Time{}

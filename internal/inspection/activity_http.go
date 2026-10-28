@@ -45,14 +45,21 @@ func (s *Service) activity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out := activityResponse{
-		Buckets:   s.Activity.Snapshot(addresses),
-		WindowSec: int(duration.Seconds()),
-		BucketSec: int(activityWidth.Seconds()),
-		Sampled:   int(SampleInterval.Seconds()),
-	}
+	window := activityWindow(0)
+	out := activityResponse{Buckets: s.Activity.Snapshot(addresses)}
 	if started := s.Activity.Started(); !started.IsZero() {
-		out.Since = &started
+		now := time.Now()
+		window = activityWindow(now.Sub(started))
+		// The axis starts when the switch did, until the session is longer
+		// than the ring; then it scrolls with the newest four hours.
+		since := started
+		if edge := now.Add(-window); edge.After(since) {
+			since = edge
+		}
+		out.Since = &since
 	}
+	out.WindowSec = int(window.Seconds())
+	out.BucketSec = int(activityWidth.Seconds())
+	out.Sampled = int(SampleInterval.Seconds())
 	core.WriteJSON(w, http.StatusOK, out)
 }

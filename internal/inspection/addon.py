@@ -1,6 +1,14 @@
 import json
 import sys
-from mitmproxy import http
+
+from mitmproxy import ctx, http
+
+# The switch stays on until it is turned off, so the viewer keeps a bounded
+# recent list: mitmweb holds every flow in the router's memory, and a device
+# left under inspection for a week should not grow without bound. Older flows
+# age out of the viewer only; OLR's own event list is bounded separately.
+MAX_FLOWS = 1000
+_retained = []
 
 
 def emit(item):
@@ -17,6 +25,22 @@ def response(flow: http.HTTPFlow):
         "request_headers": dict(flow.request.headers),
         "response_headers": dict(flow.response.headers),
     })
+    retain(flow)
+
+
+def retain(flow: http.HTTPFlow):
+    _retained.append(flow)
+    excess = len(_retained) - MAX_FLOWS
+    if excess <= 0:
+        return
+    dropped = _retained[:excess]
+    del _retained[:excess]
+    try:
+        ctx.master.commands.call("view.flows.remove", dropped)
+    except Exception:
+        # The cap is a courtesy, not a contract: never take the proxy down
+        # because a mitmproxy version names its view command differently.
+        pass
 
 
 def error(flow: http.HTTPFlow):

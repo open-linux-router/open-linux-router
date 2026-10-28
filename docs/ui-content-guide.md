@@ -297,8 +297,12 @@ Use label/value pairs within each device-detail half. Keep units with their inpu
 in a dialog opened by clicking the IP. Show a Fixed tag beside reserved addresses;
 keep the hover hint limited to DHCP lease information and omit the hostname field.
 Preserve diagnostic scope: router-originated tests do not measure a downstream device's path.
-The Inspection switch starts and stops the session directly, without confirmation.
-Explain credentials, certificate trust and cleanup in the setup guide.
+The Inspection switch starts and stops interception directly, without confirmation.
+Explain credentials, certificate trust and cleanup in the setup guide. It is the
+device's setting, not a session: it stays where the operator left it across
+reloads, daemon restarts and upgrades, so no copy may promise a countdown or a
+temporary window. When the proxy cannot start, the card keeps the switch on, says
+why beside it and offers Retry instead of showing the switch off.
 Device Inspection is one card, and its title names the switch in the title bar:
 no second "Inspection" label sits beside it, and a setup gear icon joins from the
 left while active; keep the QR code and guide link inside the setup dialog. That
@@ -308,10 +312,11 @@ never a second switch for part of it. Show the mitmproxy viewer directly, withou
 duplicate request lists, diagnostics or a disclosure. Certificate installation,
 trust and cleanup belong in the public five-step setup guide, with the
 certificate download at step two.
-Activity is the session, not a history: its total reads "in this session", and the
-footer says the series is recorded while inspection is on and cleared when it is
-turned off. Sites are named by registrable domain under the public suffix list, so
-a multi-label suffix such as `com.cn` is never shown as a site.
+Activity covers the time the switch has been on, not a retained history: its
+total reads "in this inspection", and the footer says the series is recorded
+while inspection is on and cleared when it is turned off. Sites are named by
+registrable domain under the public suffix list, so a multi-label suffix such as
+`com.cn` is never shown as a site.
 The DNS section lists Time, Record, Type and right-aligned Answer values without
 a visible header row and without a switch of its own: the panel's switch already
 opened it. An accessible search icon in the section heading reveals a compact

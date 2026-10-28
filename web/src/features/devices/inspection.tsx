@@ -15,9 +15,11 @@ import { api } from '@/lib/api'
 
 interface Status {
   active: boolean
+  /* The switch was restored but the proxy is not running; error says why. */
+  pending?: boolean
+  error?: string
   mac?: string
   ips?: string[]
-  expires?: string
   ca_present: boolean
   ca_sha256?: string
   redirected_packets?: number
@@ -35,7 +37,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
     refetchInterval: 2000,
   })
   const start = useMutation({
-    mutationFn: () => api.post<Status>('/api/inspection/session', { mac, ips: ipv4 }),
+    mutationFn: (addresses?: string[]) => api.post<Status>('/api/inspection/session', { mac, ips: addresses?.length ? addresses : ipv4 }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['inspection'] }),
     onError: (error) => toast.error(String(error)),
   })
@@ -50,13 +52,19 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
   const caQR = useMemo(() => {
     try { return encodeQR(caURL, 'svg') } catch { return null }
   }, [caURL])
-  const active = status.data?.active
-  const mine = active && status.data?.mac?.toLowerCase() === mac.toLowerCase()
+  // The switch is a setting, not a session: it is on when this device is the
+  // one recorded, whether or not the proxy behind it is running.
+  const active = Boolean(status.data?.active)
+  const pending = Boolean(status.data?.pending)
+  const sameDevice = Boolean(status.data?.mac) && status.data?.mac?.toLowerCase() === mac.toLowerCase()
+  const on = sameDevice && (active || pending)
+  const live = sameDevice && active
+  const other = Boolean(status.data?.mac) && !sameDevice && (active || pending)
   // A reason the switch cannot be used, in the space the session would fill.
-  const notice = status.isError || Boolean(active && !mine) || (!active && (ipv4.length === 0 || ipv4.length > 8))
+  const notice = status.isError || Boolean(status.data?.error) || other || (on && !active) || (!on && !other && (ipv4.length === 0 || ipv4.length > 8))
 
   useEffect(() => {
-    if (!mine) return
+    if (!live) return
     let cancelled = false
     api.post('/api/inspection/viewer-access').then(() => {
       if (!cancelled) setViewerReady(true)
@@ -64,12 +72,12 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
       if (!cancelled) toast.error(`Could not open full inspection viewer: ${String(error)}`)
     })
     return () => { cancelled = true; setViewerReady(false) }
-  }, [mine, status.data?.expires])
+  }, [live])
 
   // One rule under the title bar separates the switch from what it turned on;
   // the sections below are told apart by their headings and spacing rather than
   // by a line each, which turned the panel into ruled paper.
-  const divided = Boolean(notice) || Boolean(mine)
+  const divided = Boolean(notice) || on
 
   return <section className="overflow-hidden rounded-xl border bg-card shadow-xs [overflow-anchor:none]" aria-labelledby="inspection-title">
     <div className={`px-4 sm:px-6 ${divided ? 'border-b' : ''}`}>
@@ -80,8 +88,8 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
             left without moving the control the operator came for. */}
         <div className="flex flex-wrap items-center justify-end gap-3">
           {status.isPending && <span className="text-xs text-muted-foreground">{t('Checking…')}</span>}
-          {mine && <Button variant="quiet" size="icon" aria-label={t('Inspection setup')} title={t('Inspection setup')} onClick={() => setShowSetup(true)}><Settings className="size-5" /></Button>}
-          <Switch id="device-inspection" aria-labelledby="inspection-title" checked={Boolean(mine)} busy={start.isPending || stop.isPending} disabled={status.isPending || status.isError || Boolean(active && !mine) || (!mine && (ipv4.length === 0 || ipv4.length > 8))} onCheckedChange={(checked) => { if (checked) start.mutate(); else stop.mutate() }} />
+          {on && <Button variant="quiet" size="icon" aria-label={t('Inspection setup')} title={t('Inspection setup')} onClick={() => setShowSetup(true)}><Settings className="size-5" /></Button>}
+          <Switch id="device-inspection" aria-labelledby="inspection-title" checked={on} busy={start.isPending || stop.isPending} disabled={status.isPending || status.isError || other || (!on && (ipv4.length === 0 || ipv4.length > 8))} onCheckedChange={(checked) => { if (checked) start.mutate(undefined); else stop.mutate() }} />
         </div>
       </div>
     </div>
@@ -102,16 +110,20 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
           section is the content the session can see. */}
       {notice && <div className="space-y-3 px-4 py-4 sm:px-6 sm:py-6">
         {status.isError ? <p role="alert" className="text-sm text-destructive">{t('Inspection status is unavailable. Do not assume interception has stopped.')}</p> : null}
-        {active && !mine ? <p className="text-sm text-muted-foreground">{t('Another device is being inspected. Stop that session before starting this one.')}</p> : null}
-        {ipv4.length === 0 && !active && <p className="text-sm text-muted-foreground">OLR has not observed an IPv4 address for this device yet. Connect it to the network and refresh this page to enable inspection.</p>}
-        {ipv4.length > 8 && !active && <p className="text-sm text-muted-foreground">{t('Too many addresses are associated with this device to start inspection safely.')}</p>}
+        {other ? <p className="text-sm text-muted-foreground">{t('Another device is set for inspection. Turn its switch off before starting this one.')}</p> : null}
+        {on && !active ? <div className="flex flex-wrap items-center gap-3">
+          <p role="alert" className="text-sm text-destructive">{status.data?.error || t('The inspection proxy is not running.')}</p>
+          <Button size="sm" variant="secondary" onClick={() => start.mutate(status.data?.ips)}>{t('Retry')}</Button>
+        </div> : live && status.data?.error ? <p role="alert" className="text-sm text-destructive">{status.data.error}</p> : null}
+        {!on && !other && ipv4.length === 0 && !active && <p className="text-sm text-muted-foreground">OLR has not observed an IPv4 address for this device yet. Connect it to the network and refresh this page to enable inspection.</p>}
+        {!on && !other && ipv4.length > 8 && !active && <p className="text-sm text-muted-foreground">{t('Too many addresses are associated with this device to start inspection safely.')}</p>}
       </div>}
-      {mine && <div>
+      {live && <div>
         <h3 className="px-4 pt-4 text-sm font-medium sm:px-6">{t('Activity')}</h3>
         <SiteActivity addresses={ipv4} />
       </div>}
-      {mine && <ClientQueries addresses={ipv4} section />}
-      {mine && <div className="pt-4">
+      {live && <ClientQueries addresses={ipv4} section />}
+      {live && <div className="pt-4">
         <h3 className="px-4 pb-3 text-sm font-medium sm:px-6">{t('Requests')}</h3>
         <div className="px-4 pb-4 sm:px-6 sm:pb-6">
           {viewerReady

@@ -8,14 +8,14 @@ import { formatBytes } from '@/lib/utils'
  * What the device did while inspection was on, one axis.
  *
  * Height is traffic and colour is the site the bytes belong to. The series is
- * sampled on the router only while the session runs and dropped when it stops,
- * so the chart starts when the switch does and the footer says so rather than
- * leaving a silently short history on screen.
+ * sampled on the router only while the switch is on and dropped when it is
+ * turned off, so the chart starts when the switch does and the footer says so
+ * rather than leaving a silently short history on screen.
  *
- * The router also reports the session's length, so the axis is the whole
- * session: a new bucket takes its place beside the ones already there instead
- * of stretching the chart, and the area covers only the minutes that have
- * happened rather than drawing the rest as traffic that stopped.
+ * The router also reports the window, so a new bucket takes its place beside
+ * the ones already there instead of stretching the chart, and the area covers
+ * only the minutes that have happened rather than drawing the rest as traffic
+ * that stopped.
  */
 
 interface SiteUsage { site: string; up: number; down: number }
@@ -117,7 +117,7 @@ export function SiteActivity({ addresses }: { addresses: string[] }) {
   return <div className="px-4 pb-4 sm:px-6">
     <div className="mb-1 flex items-baseline gap-4">
       <span className="text-2xl font-semibold tabular-nums">{formatBytes(grand)}</span>
-      <span className="text-sm text-muted-foreground">{t('in this session')}</span>
+      <span className="text-sm text-muted-foreground">{t('in this inspection')}</span>
     </div>
     <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block h-28 w-full" role="img" aria-label={t('Traffic during this inspection, by site')}>
       {paths}

@@ -32,11 +32,11 @@
     <p>Open Linux Router · Follow these steps on the device being inspected.</p>
     <p>Inspection can capture credentials and private request data. Only install a certificate from a router you trust.</p>
     <ol>
-      <li><h2>Connect and enable inspection</h2><p>Connect this device to the router's network. The router needs mitmproxy (mitmweb) installed. Enable Inspection on this device's OLR page; the session lasts 15 minutes.</p></li>
+      <li><h2>Connect and enable inspection</h2><p>Connect this device to the router's network. The router needs mitmproxy (mitmweb) installed. Enable Inspection on this device's OLR page; it stays on until you turn it off.</p></li>
       <li><h2>Download the public certificate</h2><p>Download after inspection starts and generates the router CA. This link contains only the public certificate; the private key stays on the router.</p><a class="download" href="/download/inspection-ca.crt" download>Download certificate</a></li>
       <li><h2>Install the certificate</h2><p>On iPhone or iPad, use Safari to download, then open Settings → General → VPN &amp; Device Management, select the downloaded profile and install it. On Android, use Settings → Security → Encryption &amp; credentials → Install a certificate → CA certificate (names vary). On a computer, import it into the system or browser certificate store.</p></li>
       <li><h2>Enable trust and test</h2><p>On iPhone or iPad, open Settings → General → About → Certificate Trust Settings and enable full trust for the OLR certificate. On a computer, enable trust for websites. Browse an HTTPS website, then check Connections in OLR. Some apps reject user certificates.</p></li>
-      <li><h2>Stop and remove the certificate</h2><p>Turn Inspection off when finished, or let the session expire. Normal forwarding resumes and session data is cleared. Remove the installed CA/profile from this device's settings: stopping inspection does not remove certificate trust.</p></li>
+      <li><h2>Stop and remove the certificate</h2><p>Turn Inspection off when finished. Normal forwarding resumes and captured data is cleared. Remove the installed CA/profile from this device's settings: stopping inspection does not remove certificate trust.</p></li>
     </ol>
     <aside>Only supported IPv4 HTTP/HTTPS traffic on TCP ports 80/443 to public destinations is inspected. IPv6, QUIC/HTTP/3, other protocols and pinned certificates are excluded. An empty capture does not mean the device made no connections.</aside>
   </main>

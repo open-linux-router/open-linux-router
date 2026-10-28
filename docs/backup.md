@@ -52,7 +52,8 @@ This is a configuration backup, not an image of the Linux machine. It excludes:
 - Caddy's ACME accounts and issued certificate storage. Its configuration and
   DNS credentials are backed up; it can obtain certificates again, subject to
   provider availability and issuance limits.
-- Inspection CA state and previously generated, unstored client private keys.
+- Inspection CA state, the inspection switch and previously generated,
+  unstored client private keys.
 - SQLite observation history, login sessions and host recovery bookkeeping.
   See [storage.md](storage.md) for consistent runtime database backups. Do not
   transplant host recovery records from another machine.
