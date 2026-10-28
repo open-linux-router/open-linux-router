@@ -258,7 +258,7 @@ func (h *HTTP) startQuality(w http.ResponseWriter, r *http.Request) {
 	if !h.natRunning.CompareAndSwap(false, true) {
 		h.running.Store(false)
 		h.quality.mu.Unlock()
-		core.WriteError(w, http.StatusConflict, "a STUN test is already running")
+		core.WriteError(w, http.StatusConflict, "a NatTypeTester test is already running")
 		return
 	}
 	if scope != qualityScopeAll && h.quality.snapshot.State != "completed" {
@@ -492,7 +492,9 @@ func (h *HTTP) measureQualityNAT(ctx context.Context) {
 		// A cancelled run must not replace published evidence in memory.
 	case err == nil:
 		h.quality.snapshot.NAT = &result
-		h.quality.snapshot.NATError = ""
+		// A partial answer still replaces the previous evidence; the upstream
+		// test that failed is named instead of being hidden.
+		h.quality.snapshot.NATError = result.Error
 	default:
 		h.quality.snapshot.NATError = err.Error()
 	}

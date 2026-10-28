@@ -468,7 +468,7 @@ Existing code provides useful starting points, not complete catalog coverage:
 | Gateway latency monitor | Single HTTPS HEAD application-round-trip sample against a saved target, plus separate DNS timing; not network RTT or a quality history store |
 | Tools speed test | Router-originated download/upload/latency/jitter against Ookla (selectable server), Cloudflare or fast.com; all three accept a way out, and the two command-line services take it through an nftables socket-group mark; not per-service or per-CDN coverage beyond those three |
 | Tools ping | Finite ICMP RTT/loss test; not a continuous representative stability window |
-| Tools STUN | Default-route IPv4 STUN mapping/filtering observations: every server is probed in parallel and a server that offers a second address is preferred over one that can only report the mapping; still subject to server support, and not actual P2P or inbound verification |
+| Tools NatTypeTester | Default-route IPv4 NatTypeTester 10.0.10: its RFC 3489 probe names the NAT type and its RFC 5780 probe reports mapping/filtering, run in parallel against one STUN server with a second server as fallback; a partial answer is reported when only one probe completes; still subject to server support, and not actual P2P or inbound verification |
 | LibreSpeed and iPerf3 | Browser-based LibreSpeed test between one device and this router (download/upload/latency/jitter), plus a temporary iperf3 server for sustained wired throughput; neither supplies whole-site Wi-Fi telemetry |
 
 See [device link testing](device-link-test.md) for local-test scope. Reuse test
@@ -484,7 +484,7 @@ every catalog entry or all five scores at once.
 
 | Stage | Deliverable | Intentionally deferred |
 | --- | --- | --- |
-| 1. Measurement foundation | Small verified target catalog; bounded on-demand run model; evidence/freshness/coverage; existing speed, ping, STUN and observed address data exposed with honest scope; basic IPv4/IPv6 service transactions | Broad provider claims, complete category scores, whole-site Wi-Fi |
+| 1. Measurement foundation | Small verified target catalog; bounded on-demand run model; evidence/freshness/coverage; existing speed, ping, NatTypeTester and observed address data exposed with honest scope; basic IPv4/IPv6 service transactions | Broad provider claims, complete category scores, whole-site Wi-Fi |
 | 2. First useful quality assessment | Several independently operated verified transfer/response endpoints; target-level latency and repeated-probe stability; basic service-access results; idle versus download/upload load measurements; reviewed scoring for sufficiently covered categories | Broad media integrations, coordinated inbound/P2P, AP integrations |
 | 3. Rich service coverage and history | Additional CDN, media, distribution and storage adapters; protocol/DNS diagnostics; time-of-day trends and observed availability; optional additional exit scopes | Tests without suitable resources or adequate observation history |
 | 4. Cooperative diagnostics and Wi-Fi | External-peer inbound/P2P, mapping lifetime, client/local-link probes, supported AP telemetry and later roaming/backhaul tests | Universal AP support or whole-site claims without representative data |
@@ -534,7 +534,7 @@ It replaces the fixed sample scores and renames Reachability to Functionality.
   service, `scope=speed` reruns the reference transfer and `scope=nat` reruns
   the NAT observations. A scoped run requires a completed snapshot and merges
   its fresh evidence into the other results. Another assessment, reference speed
-  test or STUN test holds the shared runner reservations and produces 409.
+  test or NatTypeTester test holds the shared runner reservations and produces 409.
   Regular user traffic is not controlled.
 - `DELETE /api/tools/quality` requests cancellation. The runner releases its
   reservations after stopping and retains completed evidence. Daemon shutdown
@@ -658,7 +658,19 @@ stderr while its JSON only says `Failed to get URLs`, so the tool passes the
 last stderr line through to the page's technical details; reading it separates a
 blocked path from an expired token. A blocked path needs a way out in a country
 the service serves, not a newer binary.
-Finally, the existing IPv4 STUN test has up to 15 seconds. NAT results are
+
+The `.deb` also includes the unmodified MIT NatTypeTester 10.0.10 console binary
+as `/usr/bin/natty`. `make natty` downloads the pinned linux-x64/linux-arm64
+archives and verifies committed SHA-256 hashes; build hosts need curl, 7z and
+sha256sum. The binary is native AOT and needs no .NET runtime, but it needs ICU
+for globalization; the tool runs it with
+`DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1` so a box without libicu still gets
+the English labels its output is parsed by. The upstream linux builds need
+glibc 2.38 or newer, which Debian 13 and Ubuntu 24.04 provide. Single-binary
+tarball users must install the [upstream console
+release](https://github.com/HMBSbige/NatTypeTester/releases/tag/10.0.10) as
+`natty` on the router's PATH. Its two probes run in parallel and share a
+15-second budget; a partial answer names the probe that failed. NAT results are
 diagnostic only and do not prove public IPv4 assignment, inbound or P2P access.
 A full assessment has a 150-second deadline; scoped reruns use shorter deadlines
 (65 seconds for all service probes, 40 seconds for one service, 100 seconds for

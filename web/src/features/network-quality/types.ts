@@ -60,7 +60,16 @@ export interface QualitySnapshot {
   speed: { server: string; location: string; download_mbps: number; upload_mbps: number } | null
   speed_at: string | null
   speed_error?: string
-  nat: { server: string; mapped: string; mapping: string; filtering: string } | null
+  nat: {
+    server: string
+    nat_type: string
+    mapped: string
+    local?: string
+    binding?: string
+    mapping: string
+    filtering: string
+    error?: string
+  } | null
   nat_error?: string
   categories: QualityCategory[]
   overall: {

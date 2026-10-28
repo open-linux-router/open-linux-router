@@ -81,6 +81,11 @@ jobs:
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
+      # NatTypeTester ships its console build as a .7z; the packaging script
+      # verifies the archive before extracting it.
+      - name: Install 7z
+        run: sudo apt-get update && sudo apt-get install --yes p7zip-full
+
       # Both numbers come from the Makefile, which reads them from the VERSION
       # file — asking make is what keeps a release from being versioned by a
       # different rule than a developer's `make package`. VERSION is what the

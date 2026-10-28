@@ -157,7 +157,7 @@ func (h *HTTP) Routes() []core.Route {
 		{Method: "GET", Path: "/speedtest/servers", Tool: "show speedtest servers", Summary: "List the speed test servers near the selected way out; one network request, no latency probing and no test data.", Query: []core.QueryParam{exit, search}, Handler: h.servers},
 		{Method: "GET", Path: "/speedtest/progress", Tool: "show speedtest progress", Summary: "Read the speed test running now: its stage, elapsed time, the rates measured so far, and the last run's outcome when idle.", Handler: h.getSpeedProgress},
 		{Method: "POST", Path: "/speedtest", Mutating: true, Summary: "Measure this router's internet latency, download and upload speed against the selected service; consumes bandwidth.", Query: []core.QueryParam{exit, search, {Name: "provider", Type: "string", Summary: "Speed test service: ookla (default, pick a server), cloudflare or fastcom; the command-line services accept a way out."}, {Name: "server_id", Type: "string", Summary: "Speed test server ID from the server list; ookla only, and empty probes the nearby servers and starts with the first that answers."}}, Handler: h.speedtest},
-		{Method: "POST", Path: "/nat", Mutating: true, Summary: "Probe this router’s default-route UDP mapping and filtering through public STUN servers; sends UDP packets.", Handler: h.nat},
+		{Method: "POST", Path: "/nat", Mutating: true, Summary: "Run NatTypeTester’s RFC 3489 and RFC 5780 probes from this router over its default route; sends UDP packets.", Handler: h.nat},
 		{Method: "GET", Path: "/lan-test", Tool: "show lan test", Summary: "List LAN addresses and the current temporary iperf3 server session.", Handler: h.lanStatus},
 		{Method: "POST", Path: "/lan-test", Mutating: true, Summary: "Start a temporary iperf3 server bound to a configured LAN address; consumes router resources when a client connects.", Handler: h.startLAN},
 		{Method: "DELETE", Path: "/lan-test", Mutating: true, Summary: "Stop the temporary iperf3 server.", Handler: h.stopLAN},
@@ -771,7 +771,7 @@ func firstError(err, fallback error) error {
 
 func (h *HTTP) nat(w http.ResponseWriter, r *http.Request) {
 	if !h.natRunning.CompareAndSwap(false, true) {
-		core.WriteError(w, http.StatusConflict, "a STUN test is already running")
+		core.WriteError(w, http.StatusConflict, "a NatTypeTester test is already running")
 		return
 	}
 	defer h.natRunning.Store(false)
@@ -786,7 +786,7 @@ func (h *HTTP) nat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		core.WriteError(w, http.StatusServiceUnavailable, "STUN test failed: "+err.Error())
+		core.WriteError(w, http.StatusServiceUnavailable, "NatTypeTester failed: "+err.Error())
 		return
 	}
 	core.WriteJSON(w, http.StatusOK, result)

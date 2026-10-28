@@ -189,8 +189,12 @@ cloudflare-speed: ## Fetch pinned Cloudflare speed CLI binaries and correspondin
 fast-cli: ## Fetch pinned fast.com CLI binaries
 	sh packaging/scripts/fast-cli.sh $(DIST)/fast-cli
 
+.PHONY: natty
+natty: ## Fetch pinned NatTypeTester console binaries
+	sh packaging/scripts/natty.sh $(DIST)/natty
+
 .PHONY: package
-package: web cross cloudflare-speed fast-cli ## Build the .deb for every architecture
+package: web cross cloudflare-speed fast-cli natty ## Build the .deb for every architecture
 	@# The dependency on dnsmasq is declared in the package rather than checked
 	@# in Go: apt resolves it before any of our code runs.
 	@#

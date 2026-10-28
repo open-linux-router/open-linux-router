@@ -95,6 +95,15 @@ contents:
       mode: 0755
   - src: dist/fast-cli/fast-cli-LICENSE
     dst: /usr/share/doc/olr/fast-cli/LICENSE
+  # NatTypeTester is also MIT and unmodified; the console build is native AOT,
+  # so it needs no .NET runtime on the router. The tool invokes it as `natty`.
+  - src: dist/natty/natty-${ARCH}
+    dst: /usr/bin/natty
+    expand: true
+    file_info:
+      mode: 0755
+  - src: dist/natty/NatTypeTester-LICENSE
+    dst: /usr/share/doc/olr/natty/LICENSE
   # `expand: true` is required for ${ARCH} to mean anything here. nfpm expands
   # environment variables in top-level fields unconditionally, but in contents
   # only for entries that ask — so without it, the source path stays literal and

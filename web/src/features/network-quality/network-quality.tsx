@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { StatusPill } from '@/components/ui/status'
 import { cn } from '@/lib/utils'
+import { filteringVerdict, mappingVerdict, natTypeLabel } from '@/features/tools/nat'
 import { categoryEvidence, serviceEvidence, type CategoryEvidence, type ServiceEvidence } from './measurements'
 import { useNetworkQuality, useQualityAction } from './queries'
 import type { QualityAction } from './queries'
@@ -67,7 +68,7 @@ const toneFill: Record<GradeTone, string> = {
 const phaseText: Record<string, string> = {
   responses: 'Checking service responses',
   speed: 'Measuring download and upload',
-  nat: 'Checking NAT behavior',
+  nat: 'Checking NAT type',
   '': 'Starting…',
 }
 
@@ -831,9 +832,10 @@ function NATDetail({ id, data }: { id: string; data?: QualitySnapshot }) {
   return <div id={id} className="mt-1 mb-1.5 ml-5 max-w-xl rounded-lg bg-muted/30 px-3 py-2">
     {nat && <dl>
       <PropertyRow label={t('STUN server')} size="sm" className={natRow}><TechnicalValue>{nat.server}</TechnicalValue></PropertyRow>
+      {nat.nat_type && <PropertyRow label={t('NAT type')} size="sm" className={natRow}>{natTypeLabel(nat.nat_type)}</PropertyRow>}
       <PropertyRow label={t('Observed mapping')} size="sm" className={natRow}><TechnicalValue>{nat.mapped}</TechnicalValue></PropertyRow>
-      <PropertyRow label={t('Mapping')} size="sm" className={natRow}>{nat.mapping}</PropertyRow>
-      <PropertyRow label={t('Filtering')} size="sm" className={natRow}>{nat.filtering}</PropertyRow>
+      <PropertyRow label={t('Mapping')} size="sm" className={natRow}>{mappingVerdict(nat.mapping)}</PropertyRow>
+      <PropertyRow label={t('Filtering')} size="sm" className={natRow}>{filteringVerdict(nat.filtering)}</PropertyRow>
     </dl>}
     {data?.nat_error && <p className="break-words text-xs leading-5 text-muted-foreground">{data.nat_error}</p>}
     <p className="mt-1 text-xs leading-5 text-muted-foreground">{t('An observed mapping does not prove public IPv4 assignment, inbound access or P2P success. These observations do not add points.')}</p>

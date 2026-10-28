@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { PageHeading } from '@/components/layout/page-heading'
 import { MetricValue } from '@/components/ui/metric-value'
 import { TOOL_DEFINITIONS, type ToolSlug } from '@/features/tools/catalog'
+import { behaviorLabel, filteringVerdict, mappingVerdict, natTypeLabel } from '@/features/tools/nat'
 import { SpeedDial } from '@/features/tools/speed-dial'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
@@ -105,11 +106,15 @@ interface ServerList {
 
 interface NATResult {
   server: string
+  /** NatTypeTester's RFC 3489 verdict, as a machine token. */
+  nat_type: string
   mapped: string
+  local?: string
+  binding?: string
   mapping: string
   filtering: string
-  /** The answering server offered a second address, so it could have classified. */
-  alternate: boolean
+  /** One upstream probe did not finish while the other still produced evidence. */
+  error?: string
 }
 
 interface PingResult {
@@ -539,73 +544,60 @@ function NATTest() {
 
   return <div className="space-y-6">
       <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
-        <p className="text-sm text-muted-foreground">{t('Probe public STUN servers from this router over its default route. This does not test a device behind the router or whether a game port is open.')}</p>
+        <p className="text-sm text-muted-foreground">{t('NatTypeTester probes public STUN servers from this router over its default route. It does not test a device behind the router or whether a game port is open.')}</p>
         <Button className="mt-5" onClick={runNAT} disabled={natRunning}>
           {natRunning && <LoaderCircle className="animate-spin" aria-hidden />}
-          {natRunning ? t('Testing…') : t('Run STUN test')}
+          {natRunning ? t('Testing…') : t('Run NatTypeTester')}
         </Button>
-        {natError && <Alert variant="destructive" className="mt-5"><AlertTitle>{t('STUN test unavailable')}</AlertTitle><AlertDescription className="break-words">{natError}</AlertDescription></Alert>}
-        {natResult && <STUNResult result={natResult} />}
+        {natError && <Alert variant="destructive" className="mt-5"><AlertTitle>{t('NatTypeTester unavailable')}</AlertTitle><AlertDescription className="break-words">{natError}</AlertDescription></Alert>}
+        {natResult && <NatTypeTesterResult result={natResult} />}
       </section>
   </div>
 }
 
 /**
- * The answer as three facts and the limit that follows them. A reader who stops
- * here knows the address and both verdicts; the reasoning and the caveats are
- * one disclosure below, because they explain the result rather than report it.
+ * NatTypeTester's answer: the RFC 3489 type first, then the RFC 5780 address,
+ * mapping and filtering. The type leads because it is what the tool is named
+ * for; the disclosure explains how the two probes relate.
  */
-function STUNResult({ result }: { result: NATResult }) {
+function NatTypeTesterResult({ result }: { result: NATResult }) {
   useLocale()
-  const unknown = result.mapping === 'not tested' || result.filtering === 'not tested'
   return <div className="mt-6 space-y-3" aria-live="polite">
+    <dl className="rounded-lg bg-muted/50 p-4">
+      <dt className="text-sm text-muted-foreground">{t('NAT type')}</dt>
+      <dd className="mt-2 text-2xl leading-8 font-semibold">{natTypeLabel(result.nat_type)}</dd>
+      <dd className="mt-1 text-xs leading-4 text-muted-foreground">{t('NatTypeTester’s RFC 3489 test names the type; its RFC 5780 test observes mapping and filtering.')}</dd>
+    </dl>
     <dl className="grid gap-3 sm:grid-cols-3">
       <div className="rounded-lg bg-muted/50 p-4">
         <dt className="text-sm text-muted-foreground">{t('Public address')}</dt>
-        <dd className="mt-2 font-mono text-xl leading-7 font-semibold [overflow-wrap:anywhere]">{result.mapped}</dd>
+        <dd className="mt-2 font-mono text-xl leading-7 font-semibold [overflow-wrap:anywhere]">{result.mapped || '—'}</dd>
         <dd className="mt-1 text-xs leading-4 text-muted-foreground">{t('Temporary port observed by')} <span className="font-mono">{result.server}</span></dd>
       </div>
-      <STUNFact label={t('Mapping')} verdict={mappingVerdict(result.mapping)} observed={result.mapping} />
-      <STUNFact label={t('Filtering')} verdict={filteringVerdict(result.filtering)} observed={result.filtering} />
+      <NATFact label={t('Mapping')} verdict={mappingVerdict(result.mapping)} observed={result.mapping} />
+      <NATFact label={t('Filtering')} verdict={filteringVerdict(result.filtering)} observed={result.filtering} />
     </dl>
-    <p className="text-xs text-muted-foreground">{t('STUN shows what one server sees. It cannot prove that incoming connections reach this router.')}</p>
-    {unknown && <p className="text-xs text-muted-foreground">{result.alternate
-      ? t('The server offered a second address, but the replies classification needs did not arrive.')
-      : t('The server that answered cannot classify this, so it reports the address only.')}</p>}
+    {result.error && <p className="text-xs text-muted-foreground">{result.error}</p>}
+    <p className="text-xs text-muted-foreground">{t('NatTypeTester reports one UDP flow from this router’s default route. It cannot prove that incoming connections reach this router.')}</p>
     <Disclosure summary={t('What these results mean')}>
       <ul className="space-y-2 pb-1 pl-5 text-xs leading-5 text-muted-foreground">
+        <li className="list-disc">{t('NAT type is NatTypeTester’s RFC 3489 label: Open Internet, Full Cone, Restricted Cone, Port Restricted Cone or Symmetric. UDP Blocked means the server never answered.')}</li>
         <li className="list-disc">{t('Mapping: whether the public UDP port stays the same as the router contacts different destinations. One stable port is what a direct connection between two hosts needs.')}</li>
-        <li className="list-disc">{t('Filtering: who may send back to that port. Any host is the most permissive; only hosts already contacted is stricter.')}</li>
-        <li className="list-disc">{t('STUN observes one UDP flow. It cannot prove that a console or server accepts incoming connections, and it is not an Xbox or PlayStation NAT type.')}</li>
+        <li className="list-disc">{t('Filtering: who may send back to that port. Any host is the most permissive; only the exact host and port already contacted is stricter.')}</li>
+        <li className="list-disc">{t('The type and the mapping/filtering observations come from separate probes, so their public ports can differ.')}</li>
+        <li className="list-disc">{t('This is not a console’s NAT type and cannot prove that a game or server accepts incoming connections.')}</li>
+        <li className="list-disc">{t('Probe details: server {server}, local endpoint {local}, binding test {binding}.', { server: result.server, local: result.local || '—', binding: result.binding || '—' })}</li>
       </ul>
     </Disclosure>
   </div>
 }
 
-function STUNFact({ label, verdict, observed }: { label: string; verdict: string; observed: string }) {
+function NATFact({ label, verdict, observed }: { label: string; verdict: string; observed: string }) {
   return <div className="rounded-lg bg-muted/50 p-4">
     <dt className="text-sm text-muted-foreground">{label}</dt>
     <dd className="mt-2 text-base leading-6 font-medium">{verdict}</dd>
-    {observed !== 'not tested' && <dd className="mt-1 font-mono text-xs leading-4 text-muted-foreground [overflow-wrap:anywhere]">{observed}</dd>}
+    {observed !== 'not tested' && <dd className="mt-1 font-mono text-xs leading-4 text-muted-foreground">{behaviorLabel(observed)}</dd>}
   </div>
-}
-
-function mappingVerdict(value: string): string {
-  switch (value) {
-    case 'endpoint-independent': return t('One port for every destination')
-    case 'address-dependent': return t('Port varies by destination address')
-    case 'address-and-port-dependent': return t('Port varies by destination address and port')
-    default: return t('Not tested')
-  }
-}
-
-function filteringVerdict(value: string): string {
-  switch (value) {
-    case 'endpoint-independent': return t('Any host can reach this port')
-    case 'address-dependent': return t('Only hosts this router contacted can reach it')
-    case 'no changed-source reply': return t('Reachability from outside is unconfirmed')
-    default: return t('Not tested')
-  }
 }
 
 function PingTest() {
