@@ -16,6 +16,30 @@ export function natTypeLabel(value: string): string {
   }
 }
 
+/** What the type means in one line; the cards below carry the evidence. */
+export function natTypeMeaning(value: string): string {
+  switch (value) {
+    case 'open-internet': return t('No NAT between this router and the internet.')
+    case 'full-cone': return t('A single mapped port that any host can reach.')
+    case 'restricted-cone': return t('A single mapped port, filtered by destination address.')
+    case 'port-restricted-cone': return t('A single mapped port, filtered by destination address and port.')
+    case 'symmetric': return t('The mapped port changes with the destination.')
+    case 'symmetric-udp-firewall': return t('No NAT, but only contacted hosts get through.')
+    case 'udp-blocked': return t('No STUN reply; UDP may be blocked on this path.')
+    case 'unsupported-server': return t('The server could not supply the second address the test needs.')
+    default: return t('The type test did not finish.')
+  }
+}
+
+export function bindingLabel(value: string | undefined): string {
+  switch (value) {
+    case 'success': return t('Success')
+    case 'failed': return t('Failed')
+    case 'unsupported-server': return t('Unsupported server')
+    default: return t('Not tested')
+  }
+}
+
 export function mappingVerdict(value: string): string {
   switch (value) {
     case 'direct': return t('No NAT: the public port is the local port')
