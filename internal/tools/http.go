@@ -176,6 +176,7 @@ func (h *HTTP) Routes() []core.Route {
 		{Method: "POST", Path: "/traceroute", Mutating: true, Summary: "Trace the route from this router to a domain or IP using nexttrace; sends network probes.", Handler: h.traceroute},
 		{Method: "POST", Path: "/edge", Mutating: true, Summary: "Ask Cloudflare, CloudFront and Fastly which edge point of presence answers this router; sends one HTTPS request per CDN.", Handler: h.edge},
 		{Method: "POST", Path: "/dns-exit", Mutating: true, Summary: "Ask each configured resolver where it leaves from, using two whoami names; sends DNS queries from this router.", Handler: h.dnsExit},
+		{Method: "POST", Path: "/split-check", Mutating: true, Summary: "Ask a fixed set of public endpoints which address they see this router leave from, and group the answers by address; sends one small request per endpoint.", Handler: h.splitCheck},
 	}
 }
 

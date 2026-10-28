@@ -186,6 +186,7 @@ export function ToolPage({ tool }: { tool: ToolSlug }) {
     ping: PingTest,
     edge: CDNEdgeTest,
     'dns-exit': DNSExitTest,
+    'split-check': SplitCheckTest,
     traceroute: TracerouteTest,
   }[tool]
   return <div className="space-y-8">
@@ -753,7 +754,7 @@ function CDNEdgeTest() {
   </div>
 }
 
-interface DNSPlace {
+interface Place {
   city?: string
   region?: string
   country?: string
@@ -765,7 +766,7 @@ interface DNSAnswer {
   source: string
   name: string
   ip?: string
-  place?: DNSPlace
+  place?: Place
 }
 
 interface DNSLegResult {
@@ -782,7 +783,7 @@ interface DNSExitReport {
 }
 
 /** Where a resolver appears to be, in the order a person reads it. */
-function placeSummary(place?: DNSPlace): string | null {
+function placeSummary(place?: Place): string | null {
   if (!place) return null
   const parts = [place.city, place.country_name || place.country].filter(Boolean)
   return parts.length > 0 ? parts.join(' · ') : null
@@ -848,6 +849,97 @@ function DNSExitTest() {
           </ul>
         )}
         {report && report.legs.length > 0 && <p className="mt-3 text-xs text-muted-foreground">{t('The address belongs to the resolver, not to this router. A resolver in another city can make a CDN hand you a distant node.')}</p>}
+      </section>
+  </div>
+}
+
+interface SplitProbeResult {
+  probe: string
+  region: string
+  ip?: string
+  place?: Place
+  latency_ms: number
+  error?: string
+}
+
+interface SplitEgress {
+  ip: string
+  place?: Place
+  probes: string[]
+}
+
+interface SplitReport {
+  probes: SplitProbeResult[]
+  egresses: SplitEgress[]
+}
+
+/**
+ * How many ways out this network uses.
+ *
+ * The answer is the grouping, so the groups come first and the endpoints that
+ * produced them second. A run where most probes failed says so: coverage is
+ * part of the reading, not a footnote.
+ */
+function SplitCheckTest() {
+  useLocale()
+  const [report, setReport] = useState<SplitReport | null>(null)
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function checkEgress() {
+    setRunning(true)
+    setError(null)
+    try {
+      setReport(await api.post<SplitReport>('/api/tools/split-check'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  const answered = report?.probes.filter(probe => probe.ip).length ?? 0
+
+  return <div className="space-y-6">
+      <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
+        <p className="text-sm text-muted-foreground">{t('Each endpoint reports the address it sees this router leave from. One address means every probe took the same way out; several means the network sends different destinations out differently.')}</p>
+        <Button className="mt-4" onClick={checkEgress} disabled={running}>
+          {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Globe aria-hidden />}
+          {running ? t('Checking egress…') : t('Check egress')}
+        </Button>
+        {running && <p role="status" className="mt-4 text-sm text-muted-foreground">{t('One small request per endpoint. This takes a few seconds.')}</p>}
+        {error && <Alert variant="destructive" className="mt-5"><AlertTitle>{t('Could not check the egress')}</AlertTitle><AlertDescription className="break-words">{error}</AlertDescription></Alert>}
+        {report && (
+          <>
+            <p className="mt-6 text-sm text-muted-foreground">{t('Egress addresses: {count} · endpoints answered: {answered}/{total}', { count: report.egresses.length, answered, total: report.probes.length })}</p>
+            <ul className="mt-3 space-y-3" aria-live="polite">
+              {report.egresses.map(egress => {
+                const place = placeSummary(egress.place)
+                return <li key={egress.ip} className="rounded-lg bg-muted/40 p-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="font-mono text-sm font-medium">{egress.ip}</span>
+                    {place && <span className="text-sm text-muted-foreground">{place}</span>}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{t('Seen by: {probes}', { probes: egress.probes.join(', ') })}</p>
+                </li>
+              })}
+            </ul>
+            <ul className="mt-6 divide-y divide-border rounded-lg bg-muted/20">
+              {report.probes.map(probe => (
+                <li key={probe.probe} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-2 text-sm">
+                  <span>{probe.probe} <span className="text-xs text-muted-foreground">{t(probe.region)}</span></span>
+                  {probe.error
+                    ? <span className="text-destructive">{probe.error}</span>
+                    : <span className="flex items-baseline gap-3">
+                        <span className="font-mono text-xs">{probe.ip}</span>
+                        <span className="text-xs text-muted-foreground">{probe.latency_ms < 1 ? '<1' : Math.round(probe.latency_ms)} ms</span>
+                      </span>}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {report && <p className="mt-3 text-xs text-muted-foreground">{t('The endpoints are a fixed, short list rather than every network on the internet. Several addresses is the finding; which address each one belongs to is approximate (ip.sb).')}</p>}
       </section>
   </div>
 }
