@@ -603,8 +603,14 @@ socket settles its source address on the default route before this chain runs,
 so an AAAA connection would sit in SYN-SENT until TCP gave up instead of
 failing; refusing the family at once lets a tool that resolves both fall back to
 IPv4 — `fast-cli` opens every address it resolves — rather than outliving the
-run's 90-second deadline. The two command-line services cannot choose a server,
-because the service does. Fast.com
+run's 90-second deadline. What is left of that class of failure is the exit's
+own path: a connect that never answers. Each command-line attempt is therefore
+capped (40 seconds for Fast.com, 60 for Cloudflare) and a run that ends without
+a measurement is given a second process inside the same 90-second budget. The
+tools resolve their hosts and open their connections themselves, so the next
+attempt usually gets through; Ookla, which walks its own server list, is not
+retried. The two command-line services cannot choose a server, because the
+service does. Fast.com
 reports latency and download/upload but no jitter, and its numbers describe the
 Netflix Open Connect path rather than general internet quality.
 

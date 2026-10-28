@@ -353,8 +353,44 @@ const (
 
 // speedDeadline is how long a run may take before the page is told the service
 // never answered. An Ookla run finds a server and measures both directions; the
-// command-line tools measure both inside one process.
+// command-line tools measure both inside one process, and each gets a second
+// attempt inside this budget.
 const speedDeadline = 90 * time.Second
+
+// speedAttemptBudget is the share of speedDeadline one command-line attempt may
+// spend. A healthy fast.com run takes about 25 seconds and a Cloudflare one
+// about 40, so these caps leave room for a retry while still cutting an attempt
+// whose connect never completes. It is a variable so tests can shrink the clock.
+var speedAttemptBudget = func(provider string) time.Duration {
+	if provider == speedCloudflare {
+		return 60 * time.Second
+	}
+	return 40 * time.Second
+}
+
+// runSpeedtest runs the selected service and gives a command-line one a second
+// attempt when the first produced no result. Those tools resolve hosts and open
+// their own connections, so an attempt that lost its SYN to a stalled path is
+// usually answered on the next one; Ookla already walks its own server list.
+func runSpeedtest(ctx context.Context, provider string, run func(context.Context) (SpeedResult, error)) (SpeedResult, error) {
+	result, err := attemptSpeedtest(ctx, provider, run)
+	if err == nil || provider == speedOokla || ctx.Err() != nil {
+		return result, err
+	}
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < speedAttemptBudget(provider)/2 {
+		return result, err
+	}
+	return attemptSpeedtest(ctx, provider, run)
+}
+
+func attemptSpeedtest(ctx context.Context, provider string, run func(context.Context) (SpeedResult, error)) (SpeedResult, error) {
+	if provider == speedOokla {
+		return run(ctx)
+	}
+	attemptCtx, cancel := context.WithTimeout(ctx, speedAttemptBudget(provider))
+	defer cancel()
+	return run(attemptCtx)
+}
 
 // SpeedProvider is one selectable service and whether this router can run it.
 type SpeedProvider struct {
@@ -617,7 +653,7 @@ func (h *HTTP) speedtest(w http.ResponseWriter, r *http.Request) {
 	h.startSpeed(provider, exit, phase)
 	ctx, cancel := context.WithTimeout(r.Context(), speedDeadline)
 	defer cancel()
-	result, err := run(ctx)
+	result, err := runSpeedtest(ctx, provider, run)
 	if err != nil {
 		h.finishSpeed(nil, err)
 		if r.Context().Err() != nil {

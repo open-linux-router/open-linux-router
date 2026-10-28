@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/showwin/speedtest-go/speedtest"
 
@@ -563,6 +564,75 @@ func TestSpeedtestNamesTheDeadline(t *testing.T) {
 	}
 	if body := w.Body.String(); !strings.Contains(body, "90 seconds") || strings.Contains(body, "context deadline") {
 		t.Fatalf("deadline reported as %s", body)
+	}
+}
+
+// A command-line service that fails without a result gets one more process. The
+// tools resolve hosts and open their own connections, so the second attempt is
+// often the one that gets through.
+func TestSpeedtestRetriesACommandLineService(t *testing.T) {
+	calls := 0
+	h := &HTTP{RunFast: func(context.Context, uint32) (SpeedResult, error) {
+		calls++
+		if calls == 1 {
+			return SpeedResult{}, errors.New("fast-cli failed: Failed to establish secure connection to fast.com servers")
+		}
+		return SpeedResult{Server: "fast.com", Download: 90, Upload: 9}, nil
+	}}
+	w := httptest.NewRecorder()
+	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/speedtest?provider=fastcom", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	if calls != 2 {
+		t.Fatalf("service ran %d times", calls)
+	}
+	var result SpeedResult
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Download != 90 || result.Upload != 9 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+// Ookla picks from a list of servers and measures them itself; a failed run is
+// its verdict, not a lost race, so the handler must not repeat it.
+func TestSpeedtestDoesNotRetryOokla(t *testing.T) {
+	calls := 0
+	h := &HTTP{Run: func(context.Context) (SpeedResult, error) {
+		calls++
+		return SpeedResult{}, errors.New("no usable test server available")
+	}}
+	w := httptest.NewRecorder()
+	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/speedtest", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	if calls != 1 {
+		t.Fatalf("Ookla ran %d times", calls)
+	}
+}
+
+// An attempt that never connects has to be cut short enough that the retry
+// still fits; waiting out the whole budget would spend it on one stalled tool.
+func TestSpeedtestCutsAStalledAttempt(t *testing.T) {
+	original := speedAttemptBudget
+	speedAttemptBudget = func(string) time.Duration { return 30 * time.Millisecond }
+	t.Cleanup(func() { speedAttemptBudget = original })
+	attempts := 0
+	h := &HTTP{RunFast: func(ctx context.Context, _ uint32) (SpeedResult, error) {
+		attempts++
+		<-ctx.Done()
+		return SpeedResult{}, ctx.Err()
+	}}
+	w := httptest.NewRecorder()
+	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/speedtest?provider=fastcom", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	if attempts != 2 {
+		t.Fatalf("stalled service attempted %d times", attempts)
 	}
 }
 
