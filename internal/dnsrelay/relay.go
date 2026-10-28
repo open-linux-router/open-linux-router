@@ -355,6 +355,6 @@ func (r *Relay) record(o observation) {
 // Unbounded returns all of it.
 func (r *Relay) Queries(limit int) []Query { return r.log.Snapshot(limit) }
 
-// Names returns up to limit entries of the live domain→address map, newest
-// first. Unbounded returns all of it.
-func (r *Relay) Names(now time.Time, limit int) []Name { return r.names.Snapshot(now, limit) }
+// Names returns up to limit entries of the domain→address map, newest first.
+// Unbounded returns all of it.
+func (r *Relay) Names(limit int) []Name { return r.names.Snapshot(limit) }

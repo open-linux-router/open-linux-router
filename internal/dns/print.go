@@ -243,7 +243,7 @@ func writeNamesText(w io.Writer, resp namesResponse) error {
 		return cli.NoneObserved(w, "addresses", "")
 	}
 	t := table(w)
-	fmt.Fprintln(t, "CLIENT\tADDRESS\tNAME\tVIA\tEXPIRES")
+	fmt.Fprintln(t, "CLIENT\tADDRESS\tNAME\tVIA\tSEEN")
 	for _, n := range resp.Names {
 		via := "-"
 		if len(n.Chain) > 0 {
@@ -252,7 +252,7 @@ func writeNamesText(w io.Writer, resp namesResponse) error {
 			via = n.Chain[len(n.Chain)-1]
 		}
 		fmt.Fprintf(t, "%s\t%s\t%s\t%s\t%s\n",
-			n.Client, n.Address, n.Name, via, n.Expires.Local().Format("15:04:05"))
+			n.Client, n.Address, n.Name, via, n.LastSeen.Local().Format("01-02 15:04"))
 	}
 	return t.Flush()
 }

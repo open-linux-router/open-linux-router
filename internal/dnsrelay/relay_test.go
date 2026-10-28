@@ -366,7 +366,7 @@ func TestRelayRecordsWhatItSaw(t *testing.T) {
 		t.Errorf("Client = %s", queries[0].Client)
 	}
 
-	names := relay.Names(time.Now(), Unbounded)
+	names := relay.Names(Unbounded)
 	if len(names) != 1 || names[0].Name != "www.example.com" {
 		t.Fatalf("name map = %+v", names)
 	}
@@ -403,7 +403,7 @@ func TestBlockedAnswersStayOutOfTheNameMap(t *testing.T) {
 	if queries[0].Policy != "default" {
 		t.Errorf("Policy = %q — without it the log cannot say why", queries[0].Policy)
 	}
-	if names := relay.Names(time.Now(), Unbounded); len(names) != 0 {
+	if names := relay.Names(Unbounded); len(names) != 0 {
 		t.Errorf("a blocked answer entered the name map: %+v", names)
 	}
 }

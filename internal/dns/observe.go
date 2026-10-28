@@ -61,7 +61,6 @@ type Name struct {
 	Name     string
 	Addr     netip.Addr
 	Chain    []string
-	Expires  time.Time
 	LastSeen time.Time
 }
 
@@ -198,7 +197,7 @@ func (o SocketObserver) Names(ctx context.Context, limit int) ([]Name, Stats, er
 	for _, n := range body.Names {
 		out = append(out, Name{
 			Client: n.Client, Name: n.Name, Addr: n.Addr, Chain: n.Chain,
-			Expires: n.Expires, LastSeen: n.LastSeen,
+			LastSeen: n.LastSeen,
 		})
 	}
 	return out, viewStats(body.Stats), nil

@@ -121,14 +121,13 @@ type nameView struct {
 	Name     string    `json:"name"`
 	Address  string    `json:"address"`
 	Chain    []string  `json:"chain,omitempty"`
-	Expires  time.Time `json:"expires"`
 	LastSeen time.Time `json:"last_seen"`
 }
 
 func viewName(n Name) nameView {
 	return nameView{
 		Client: n.Client.String(), Name: n.Name, Address: n.Addr.String(),
-		Chain: n.Chain, Expires: n.Expires, LastSeen: n.LastSeen,
+		Chain: n.Chain, LastSeen: n.LastSeen,
 	}
 }
 

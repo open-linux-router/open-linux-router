@@ -908,7 +908,7 @@ export interface NameRow {
   name: string
   address: string
   chain?: string[]
-  expires: string
+  /** When an answer last confirmed the pairing; also the map's eviction order. */
   last_seen: string
 }
 

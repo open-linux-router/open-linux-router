@@ -275,9 +275,15 @@ as it is.
 - **It is many-to-many.** One name resolves to several addresses; one CDN
   address serves dozens of names. This is precisely the case where a per-domain
   byte split must not be fabricated.
-- **Expire at TTL plus grace.** Conntrack flows routinely outlive the TTL that
-  created them, and an address reassigned to another tenant misattributes
-  silently.
+- **Bound the map by capacity and recency, not by the answer's TTL.** A TTL says
+  how long a resolver may cache an answer, not how long the pairing stays true:
+  a connection routinely outlives the lookup that opened it, and a name dropped
+  on the resolver's clock takes attribution with it. The map keeps the most
+  recent 20,000 `(device, address)` pairs and, when full, evicts the pair no
+  answer has confirmed for longest. That bounds an address reassigned to another
+  tenant the same way it bounds everything else — the stale pair is the one
+  nothing refreshed, so it is the first to go — rather than by a timer that
+  happens to be right for neither short-TTL nor long-TTL answers.
 - **Key by `(device, IP)`.** The source address is free and global keying
   cross-attributes when two devices reach one CDN address by different names.
 

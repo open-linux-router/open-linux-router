@@ -23,29 +23,26 @@ import (
 // and the map is the weaker, uniform story that remains. Better one account of
 // how accurate this is than two.
 
-// NameGrace is how long an entry outlives the TTL that created it.
-//
-// A real trade in both directions, so the number is a judgement rather than a
-// derivation. Conntrack flows routinely outlive the TTL that created them, and
-// dropping the entry first loses attribution for a connection that is still
-// open. Holding it too long misattributes silently once a CDN address is
-// reassigned to another tenant. Half an hour covers the first without being
-// long enough for the second to matter much.
-const NameGrace = 30 * time.Minute
-
-// MinNameLifetime is the floor on how long an entry is kept.
-//
-// CDNs answer with 30-second TTLs as a matter of course. Without a floor the
-// map would be almost empty almost always, and the feature would look broken
-// rather than short-lived.
-const MinNameLifetime = 5 * time.Minute
-
-// MaxNames bounds the map.
+// MaxNames bounds the map, and is the only thing that ever removes an entry.
 //
 // It is keyed by (client, address), so the natural size is devices times the
 // addresses each has resolved, which for a house is thousands. The cap is what
 // stops one device enumerating a subdomain wildcard from growing this without
 // limit — the same class of defence as dnsmasq's lease ceiling.
+//
+// An earlier design expired entries at the answer's TTL plus a grace period, on
+// the theory that a TTL says how long the pairing is true. It does not: a TTL
+// says how long a resolver may cache the answer, while a connection routinely
+// outlives it and the name stays right. Tying attribution to the resolver's
+// clock made retention unpredictable — the same map held an entry for five
+// minutes or for ten hours depending on who answered — and could drop a name
+// out from under a live connection, which is exactly when the chart needs it.
+//
+// So this is a bounded set of facts ordered by recency, not a cache. When it
+// fills, the pairing nobody has confirmed for longest goes first. That bounds
+// retention by how much the network resolves rather than by a timer, and it
+// bounds the damage of a reassigned address the same way: the stale pairing is
+// the one no answer has refreshed, so it is the first to be evicted.
 const MaxNames = 20000
 
 type nameKey struct {
@@ -78,20 +75,16 @@ func (m *NameMap) Record(client netip.Addr, obs Observation, now time.Time) {
 		return
 	}
 
-	lifetime := obs.TTL + NameGrace
-	if lifetime < MinNameLifetime {
-		lifetime = MinNameLifetime
-	}
-	expires := now.Add(lifetime)
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if len(m.entries) >= MaxNames {
-		m.evictLocked(now)
-	}
-
 	for _, addr := range obs.Addrs {
+		// Checked per address rather than once per answer: one answer routinely
+		// carries a dozen addresses, and a check before the loop would let the
+		// map overshoot its cap by the size of the answer.
+		if len(m.entries) >= MaxNames {
+			m.evictLocked()
+		}
 		// Later evidence wins. When the same device reaches one address by two
 		// names both are true, and the query log still holds the earlier one —
 		// but keeping a list here would imply we know how that device's traffic
@@ -104,14 +97,13 @@ func (m *NameMap) Record(client netip.Addr, obs Observation, now time.Time) {
 			Name:     obs.Name,
 			Addr:     key.addr,
 			Chain:    obs.Chain,
-			Expires:  expires,
 			LastSeen: now,
 		}
 	}
 }
 
-// Snapshot returns up to limit live entries, newest first, dropping anything
-// expired. A negative limit — Unbounded — returns everything.
+// Snapshot returns up to limit entries, newest first. A negative limit —
+// Unbounded — returns everything.
 //
 // The sort runs outside the lock, which is why this takes and releases it by
 // hand rather than deferring. Ordering up to MaxNames entries while holding it
@@ -126,12 +118,11 @@ func (m *NameMap) Record(client netip.Addr, obs Observation, now time.Time) {
 // "the newest N" is only known once everything is ordered. What it saves is
 // encoding, sending and parsing entries nobody asked for, which on a full map
 // is all but a fraction of them.
-func (m *NameMap) Snapshot(now time.Time, limit int) []Name {
+func (m *NameMap) Snapshot(limit int) []Name {
 	if m == nil {
 		return nil
 	}
 	m.mu.Lock()
-	m.expireLocked(now)
 	out := make([]Name, 0, len(m.entries))
 	for _, n := range m.entries {
 		out = append(out, n)
@@ -156,8 +147,7 @@ func (m *NameMap) Snapshot(now time.Time, limit int) []Name {
 	return out
 }
 
-// Len is how many live entries are held, expired ones included until the next
-// sweep.
+// Len is how many entries are held.
 func (m *NameMap) Len() int {
 	if m == nil {
 		return 0
@@ -167,18 +157,9 @@ func (m *NameMap) Len() int {
 	return len(m.entries)
 }
 
-func (m *NameMap) expireLocked(now time.Time) {
-	for k, n := range m.entries {
-		if now.After(n.Expires) {
-			delete(m.entries, k)
-		}
-	}
-}
-
-// evictLocked makes room when the map is full: expired entries first, and if
-// that was not enough, the least recently seen.
-func (m *NameMap) evictLocked(now time.Time) {
-	m.expireLocked(now)
+// evictLocked drops the tenth of the map that no answer has confirmed for
+// longest. The caller holds the lock.
+func (m *NameMap) evictLocked() {
 	if len(m.entries) < MaxNames {
 		return
 	}

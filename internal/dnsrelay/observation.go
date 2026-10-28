@@ -89,12 +89,9 @@ type Name struct {
 	// Query.Chain is.
 	Chain []string `json:"chain,omitempty"`
 
-	// Expires is the record's TTL plus a grace period. Conntrack flows
-	// routinely outlive the TTL that created them, and an address reassigned to
-	// another tenant misattributes silently.
-	Expires time.Time `json:"expires"`
-
-	// LastSeen is when this pairing was last confirmed by an answer.
+	// LastSeen is when this pairing was last confirmed by an answer. It is
+	// also the map's eviction order: the pairing confirmed longest ago is the
+	// first to go when the map is full.
 	LastSeen time.Time `json:"last_seen"`
 }
 

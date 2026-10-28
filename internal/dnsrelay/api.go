@@ -128,9 +128,8 @@ func (r *Relay) handleNames(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	now := time.Now()
 	writeJSON(w, NamesResponse{
-		Names: r.Names(now, limit),
+		Names: r.Names(limit),
 		Stats: r.Snapshot(),
 	})
 }

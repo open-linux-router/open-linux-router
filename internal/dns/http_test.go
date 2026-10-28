@@ -404,7 +404,7 @@ func TestQueriesAndNamesAreStamped(t *testing.T) {
 		}},
 		names: []Name{{
 			Client: netip.MustParseAddr("192.168.1.10"), Name: "example.com",
-			Addr: netip.MustParseAddr("93.184.216.34"), Expires: time.Now().Add(time.Hour),
+			Addr: netip.MustParseAddr("93.184.216.34"), LastSeen: time.Now(),
 		}},
 		stats: Stats{Since: time.Now(), Queries: 1, Dropped: 3, Capacity: 100, Held: 1},
 	}
@@ -535,7 +535,7 @@ func TestQueriesAndNamesTakeAnOptionalLimit(t *testing.T) {
 		})
 		names = append(names, Name{
 			Client: netip.MustParseAddr("192.168.1.10"), Name: "example.com",
-			Addr: netip.MustParseAddr("93.184.216.34"), Expires: time.Now().Add(time.Hour),
+			Addr: netip.MustParseAddr("93.184.216.34"), LastSeen: time.Now(),
 		})
 	}
 	applier.Observer = stubObserver{

@@ -14,43 +14,55 @@ func obsOf(name string, ttl time.Duration, addrs ...string) Observation {
 	return o
 }
 
-func TestNameMapRecordsAndExpires(t *testing.T) {
+// A pairing is a fact about what the device asked for, not a cache entry, so it
+// survives the TTL that produced it. Billing a connection's bytes to 未命名
+// because the lookup that opened it happened an hour ago was the failure this
+// replaced: a short TTL drops the name out from under a connection that is
+// still moving bytes.
+func TestNameMapDoesNotExpire(t *testing.T) {
+	m := NewNameMap()
+	recorded := time.Now().Add(-30 * 24 * time.Hour)
+	client := netip.MustParseAddr("192.168.1.10")
+
+	m.Record(client, obsOf("example.com", 30*time.Second, "93.184.216.34"), recorded)
+
+	got := m.Snapshot(Unbounded)
+	if len(got) != 1 || got[0].Name != "example.com" {
+		t.Fatalf("a month-old pairing was dropped: %+v", got)
+	}
+	if !got[0].LastSeen.Equal(recorded) {
+		t.Errorf("LastSeen = %s, want the observation time %s", got[0].LastSeen, recorded)
+	}
+}
+
+// When the map fills, what goes is the pairing no answer has confirmed for
+// longest — not the one that happens to be oldest in wall-clock terms or first
+// in iteration order.
+func TestNameMapEvictsTheLeastRecentlyConfirmed(t *testing.T) {
 	m := NewNameMap()
 	now := time.Now()
 	client := netip.MustParseAddr("192.168.1.10")
 
-	m.Record(client, obsOf("example.com", time.Hour, "93.184.216.34"), now)
-
-	got := m.Snapshot(now, Unbounded)
-	if len(got) != 1 || got[0].Name != "example.com" {
-		t.Fatalf("Snapshot = %+v", got)
+	for i := range MaxNames {
+		addr := netip.AddrFrom4([4]byte{10, byte(i >> 16), byte(i >> 8), byte(i)})
+		m.Record(client, obsOf("filler.example", time.Hour, addr.String()), now.Add(time.Duration(i)*time.Second))
 	}
-	// TTL plus grace: conntrack flows routinely outlive the TTL that created
-	// them, and dropping the entry first loses attribution for a connection
-	// that is still open.
-	if got[0].Expires.Before(now.Add(time.Hour + NameGrace - time.Second)) {
-		t.Errorf("Expires = %s, want TTL plus grace", got[0].Expires.Sub(now))
-	}
+	fresh := netip.MustParseAddr("203.0.113.9")
+	m.Record(client, obsOf("fresh.example", time.Hour, fresh.String()), now.Add(MaxNames*time.Second))
 
-	if later := m.Snapshot(now.Add(2*time.Hour+NameGrace), Unbounded); len(later) != 0 {
-		t.Errorf("an expired entry survived: %+v", later)
+	got := m.Snapshot(Unbounded)
+	names := map[string]bool{}
+	for _, n := range got {
+		names[n.Addr.String()] = true
 	}
-}
-
-// CDNs answer with 30-second TTLs as a matter of course. Without a floor the
-// map would be almost always empty, and the feature would look broken rather
-// than short-lived.
-func TestNameMapHasAMinimumLifetime(t *testing.T) {
-	m := NewNameMap()
-	now := time.Now()
-	m.Record(netip.MustParseAddr("192.168.1.10"), obsOf("cdn.example", 30*time.Second, "1.2.3.4"), now)
-
-	got := m.Snapshot(now, Unbounded)
-	if len(got) != 1 {
-		t.Fatal("nothing recorded")
+	if names["10.0.0.0"] {
+		t.Error("the least recently confirmed pairing survived eviction")
 	}
-	if got[0].Expires.Sub(now) < MinNameLifetime {
-		t.Errorf("lifetime = %s, want at least %s", got[0].Expires.Sub(now), MinNameLifetime)
+	if !names[fresh.String()] {
+		t.Error("the newest pairing was evicted")
+	}
+	if m.Len() > MaxNames {
+		t.Errorf("held %d entries, above the %d cap", m.Len(), MaxNames)
 	}
 }
 
@@ -65,7 +77,7 @@ func TestNameMapKeysByDeviceAndAddress(t *testing.T) {
 	m.Record(netip.MustParseAddr("192.168.1.10"), obsOf("news.example", time.Hour, shared), now)
 	m.Record(netip.MustParseAddr("192.168.1.20"), obsOf("shop.example", time.Hour, shared), now)
 
-	got := m.Snapshot(now, Unbounded)
+	got := m.Snapshot(Unbounded)
 	if len(got) != 2 {
 		t.Fatalf("held %d entries, want one per device", len(got))
 	}
@@ -87,7 +99,7 @@ func TestNameMapIsManyToMany(t *testing.T) {
 
 	m.Record(client, obsOf("example.com", time.Hour, "1.2.3.4", "5.6.7.8", "2606:2800::1"), now)
 
-	if got := m.Snapshot(now, Unbounded); len(got) != 3 {
+	if got := m.Snapshot(Unbounded); len(got) != 3 {
 		t.Errorf("held %d entries, want one per address", len(got))
 	}
 }
@@ -100,7 +112,7 @@ func TestNameMapKeepsTheChain(t *testing.T) {
 
 	m.Record(netip.MustParseAddr("192.168.1.10"), o, now)
 
-	got := m.Snapshot(now, Unbounded)
+	got := m.Snapshot(Unbounded)
 	if len(got) != 1 || len(got[0].Chain) != 1 || got[0].Chain[0] != "example.cdn.net" {
 		t.Errorf("the CNAME chain was lost: %+v", got)
 	}
@@ -117,7 +129,7 @@ func TestNameMapSnapshotLimit(t *testing.T) {
 	m.Record(client, obsOf("mid.example", time.Hour, "2.2.2.2"), now.Add(-time.Minute))
 	m.Record(client, obsOf("new.example", time.Hour, "3.3.3.3"), now)
 
-	got := m.Snapshot(now, 2)
+	got := m.Snapshot(2)
 	if len(got) != 2 {
 		t.Fatalf("limit 2 returned %d entries, want 2", len(got))
 	}
@@ -125,10 +137,10 @@ func TestNameMapSnapshotLimit(t *testing.T) {
 		t.Errorf("limit took %q, %q; want the two most recently seen", got[0].Name, got[1].Name)
 	}
 
-	if got := m.Snapshot(now, 0); len(got) != 0 {
+	if got := m.Snapshot(0); len(got) != 0 {
 		t.Errorf("limit 0 returned %d entries, want none", len(got))
 	}
-	if got := m.Snapshot(now, 50); len(got) != 3 {
+	if got := m.Snapshot(50); len(got) != 3 {
 		t.Errorf("a limit past the end returned %d entries, want all 3", len(got))
 	}
 }
@@ -169,9 +181,9 @@ func TestNameMapSnapshotIsTotallyOrdered(t *testing.T) {
 		m.Record(netip.MustParseAddr("192.168.1.10"), obsOf("example.com", time.Hour, addr), now)
 	}
 
-	first := m.Snapshot(now, Unbounded)
+	first := m.Snapshot(Unbounded)
 	for range 10 {
-		next := m.Snapshot(now, Unbounded)
+		next := m.Snapshot(Unbounded)
 		for i := range first {
 			if first[i].Addr != next[i].Addr {
 				t.Fatalf("snapshot order is unstable at %d: %s vs %s", i, first[i].Addr, next[i].Addr)
