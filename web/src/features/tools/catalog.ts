@@ -19,7 +19,7 @@ export const TOOL_DEFINITIONS = [
   { slug: 'iperf3', tileLabel: 'iPerf3', letter: 'i', label: 'iPerf3', get description() { return t('Measure sustained throughput between one device and this router; iperf3 must be installed on both ends.') } },
   // The headline question this group of diagnostics answers: how many ways out
   // is this network actually using.
-  { slug: 'split-check', tileLabel: 'Split check', letter: 'S', label: 'Split check', get description() { return t('See how many ways out this network uses, from the address each public endpoint reports.') } },
+  { slug: 'split-check', tileLabel: 'Split check', letter: 'S', label: 'Split check', get description() { return t('See how many ways out this network uses, from the addresses the Ookla speed-test fleet reports.') } },
   // Not a project mark: three providers answer this, and the question is which
   // node of theirs this router reaches, so the tile keeps a letter.
   { slug: 'edge', tileLabel: 'CDN edge', letter: 'E', label: 'CDN edge', get description() { return t('See which edge node Cloudflare, CloudFront and Fastly assign this router.') } },

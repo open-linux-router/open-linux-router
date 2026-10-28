@@ -1,64 +1,62 @@
 # Split check
 
-The split check asks a fixed set of public endpoints which address they see
-this router leave from, then groups the answers by address. One address means
-every endpoint took the same way out; several means this network hands
-different destinations to different exits.
+The split check asks Ookla's public speed-test fleet which address it sees this
+router leave from, then groups the answers by address. One address means every
+server took the same way out; several means this network hands different
+destinations to different exits.
 
-This is the router's own answer, not a browser's: nothing on the LAN has to
-install or trust anything, and an endpoint reached from this page describes the
-path a forwarded connection would take.
+This is the router's own answer, not a browser's: nothing on the LAN installs or
+trusts anything, and a server reached from this page describes the path a
+forwarded connection would take.
 
-## Endpoints
+## How the fleet is assembled
 
-| Endpoint | Region | Answer |
-| --- | --- | --- |
-| ipify | Global | the bare address |
-| ipinfo | Global | the bare address |
-| icanhazip | Global | the bare address |
-| ifconfig.me | Global | the bare address |
-| AWS checkip | Global | the bare address |
-| Cloudflare | Global | the `ip=` line of `cdn-cgi/trace` |
-| ipip.net | China | the address inside a Chinese sentence |
+Ookla's server list answers with servers near the caller unless asked for a
+place, so the fleet is built from one search per country over a fixed list (48
+entries covering every continent), merged round-robin and capped at 1200
+servers. The list is cached for six hours; a run does not re-read it.
 
-The list is short and fixed on purpose. A provider belongs here only when it
-answers with the caller's address and stays reachable without an account or a
-key. It is a set of independent vantage points, not a census of the internet, and
-the page reports coverage per run: a run where two endpoints answered is a
-reading about two endpoints.
+Each probe is one request:
+
+```
+GET http://<server>:8080/getip?nocache=<nonce>
+```
+
+The canonical server name answers with the caller's address as text. A server
+that still answers on its own name redirects there first, which the client
+follows. Probes run 32 at a time, each with an 8-second timeout, and the whole
+run is bounded at 180 seconds.
 
 ## The answer
 
 ```json
-{"probes":[
-  {"probe":"ipify","region":"Global","ip":"203.0.113.9","latency_ms":210.4},
-  {"probe":"ipip.net","region":"China","ip":"198.51.100.8","latency_ms":35.1}
- ],
+{"asked":1200,"answered":1111,
  "egresses":[
-  {"ip":"203.0.113.9","place":{"city":"Hong Kong","country":"HK"},"probes":["ipify"]},
-  {"ip":"198.51.100.8","place":{"city":"Beijing","country":"CN"},"probes":["ipip.net"]}
- ]
-}
+   {"ip":"203.0.113.9","place":{"city":"Hong Kong","country":"HK"},"count":1111,
+    "countries":["Australia","Brazil","Canada","…"],"servers":["CSL · Hong Kong","…"]}
+ ],
+ "failures":[{"server":"HOT Mobile · Israel","error":"EOF"}]}
 ```
 
-Groups appear in the order their first probe was asked, so the same answers
-produce the same page. Places come from the same ip.sb lookup the traffic map
-uses ([ip.sb](https://ip.sb)) and are approximate.
+`servers` is a sample of four per group; with a thousand probes in one group the
+count and the country list are the answer. Failures keep their row, and the
+totals stay on screen so a run that answered 1111 of 1200 servers reads as one
+about 1111 servers. Places come from the same ip.sb lookup the traffic map uses
+([ip.sb](https://ip.sb)) and are approximate.
 
-`POST /api/tools/split-check` runs the check; the whole run is bounded at 12
-seconds and every probe is one small request. Failures are reported per probe
-and never removed from the denominator.
+## What it does and does not say
 
-## What it does not do yet
-
-The sweep is not a census. A full sweep — the kind that asks thousands of
-Ookla speed-test servers and maps the answer over the whole address space — is
-not implemented; the endpoint list above is the part that can be relied on
-without a reverse-engineered protocol. Adding a fleet is a change to
-`splitProbes`, and the probe interface already separates fetching from parsing.
-
-- Only IPv4 is asked. IPv6 egress can differ from IPv4 and is not covered.
+- The fleet is Ookla's public speed-test server list, not every network on the
+  internet. It spans 36+ countries in a typical run, which is enough to tell one
+  way out from several, and not enough to prove a claim about every destination.
+- A server that answers with a private, loopback, link-local or carrier-grade
+  NAT address is a failed probe. Some servers behind their own NAT answer that
+  way; reporting such an address as an egress would be worse than reporting the
+  failure.
+- Only IPv4 is asked. IPv6 egress can differ and is not covered.
 - The check does not say *why* two addresses differ: DNS, an exit's routing, or
-  the operator's own proxy rules all produce the same two rows.
+  the operator's own proxy rules all produce the same two groups.
+- A server answering with this router's address is evidence about the path to
+  that server's network, not a promise about that server's own reachability.
 - Nothing is stored and no configuration changes. Each run reveals this
-  router's egress to the listed providers.
+  router's egress to up to 1200 third parties.

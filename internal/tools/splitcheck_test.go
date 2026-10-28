@@ -3,30 +3,170 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
 	"github.com/open-linux-router/open-linux-router/internal/geoip"
 )
 
-func TestSplitCheckGroupsAnswers(t *testing.T) {
-	original := splitProbes
-	splitProbes = []splitProbe{
-		{name: "one", region: "Global", url: textServer(t, "203.0.113.9\n"), read: readBareAddress},
-		{name: "two", region: "Global", url: textServer(t, "203.0.113.9"), read: readBareAddress},
-		{name: "three", region: "China", url: textServer(t, "198.51.100.4"), read: readBareAddress},
+func TestMeasureSplitGroupsByEgress(t *testing.T) {
+	fleet := []splitServer{
+		{host: "a.example:8080", country: "Hong Kong", sponsor: "A"},
+		{host: "b.example:8080", country: "Japan", sponsor: "B"},
+		{host: "c.example:8080", country: "China", sponsor: "C"},
 	}
-	defer func() { splitProbes = original }()
-
-	h := &HTTP{Locate: func(context.Context, []netip.Addr) (map[string]geoip.Place, error) {
+	probe := func(_ context.Context, server splitServer) (string, error) {
+		if strings.HasPrefix(server.host, "c.") {
+			return "198.51.100.4", nil
+		}
+		return "203.0.113.9", nil
+	}
+	locate := func(context.Context, []netip.Addr) (map[string]geoip.Place, error) {
 		return map[string]geoip.Place{
 			"203.0.113.9":  {City: "Hong Kong", Country: "HK", CountryName: "Hong Kong"},
 			"198.51.100.4": {City: "Beijing", Country: "CN", CountryName: "China"},
 		}, nil
-	}}
+	}
+	report, err := measureSplit(context.Background(),
+		func(context.Context) ([]splitServer, error) { return fleet, nil }, probe, locate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Asked != 3 || report.Answered != 3 {
+		t.Fatalf("totals: %+v", report)
+	}
+	if len(report.Egresses) != 2 {
+		t.Fatalf("got %d egresses: %+v", len(report.Egresses), report.Egresses)
+	}
+	// The larger group first.
+	if report.Egresses[0].IP != "203.0.113.9" || report.Egresses[0].Count != 2 {
+		t.Fatalf("first egress: %+v", report.Egresses[0])
+	}
+	if got := report.Egresses[0].Countries; len(got) != 2 || got[0] != "Hong Kong" || got[1] != "Japan" {
+		t.Fatalf("countries: %+v", got)
+	}
+	if report.Egresses[0].Place == nil || report.Egresses[0].Place.City != "Hong Kong" {
+		t.Fatalf("place: %+v", report.Egresses[0])
+	}
+	if report.Egresses[1].IP != "198.51.100.4" || report.Egresses[1].Count != 1 {
+		t.Fatalf("second egress: %+v", report.Egresses[1])
+	}
+}
+
+func TestMeasureSplitKeepsFailuresInTheDenominator(t *testing.T) {
+	fleet := []splitServer{
+		{host: "a.example:8080", country: "Hong Kong", sponsor: "A"},
+		{host: "b.example:8080", country: "Japan", sponsor: "B"},
+	}
+	probe := func(_ context.Context, server splitServer) (string, error) {
+		if strings.HasPrefix(server.host, "b.") {
+			return "", errors.New("HTTP 503")
+		}
+		return "203.0.113.9", nil
+	}
+	report, err := measureSplit(context.Background(),
+		func(context.Context) ([]splitServer, error) { return fleet, nil }, probe, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Asked != 2 || report.Answered != 1 {
+		t.Fatalf("totals: %+v", report)
+	}
+	if len(report.Failures) != 1 || !strings.Contains(report.Failures[0].Error, "503") {
+		t.Fatalf("failures: %+v", report.Failures)
+	}
+	if len(report.Egresses) != 1 || report.Egresses[0].Count != 1 {
+		t.Fatalf("egresses: %+v", report.Egresses)
+	}
+}
+
+func TestMeasureSplitReportsAnEmptyFleet(t *testing.T) {
+	_, err := measureSplit(context.Background(),
+		func(context.Context) ([]splitServer, error) { return nil, errors.New("list unavailable") }, nil, nil)
+	if err == nil {
+		t.Fatal("an unavailable fleet was accepted")
+	}
+}
+
+func TestSearchSplitCountryReadsTheFleet(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("search") != "Japan" || r.URL.Query().Get("engine") != "js" {
+			t.Errorf("query: %s", r.URL.RawQuery)
+		}
+		if r.Header.Get("Referer") == "" {
+			t.Error("no referer")
+		}
+		_, _ = w.Write([]byte(`[{"host":"a.example:8080","country":"Japan","sponsor":"A"},{"host":"","country":"X"}]`))
+	}))
+	defer server.Close()
+	original := splitServersURL
+	splitServersURL = server.URL
+	defer func() { splitServersURL = original }()
+
+	servers, err := searchSplitCountry(context.Background(), "Japan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(servers) != 1 || servers[0].host != "a.example:8080" || servers[0].country != "Japan" {
+		t.Fatalf("servers: %+v", servers)
+	}
+}
+
+func TestProbeSplitServerFollowsTheRedirect(t *testing.T) {
+	canonical := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/getip" {
+			t.Errorf("path: %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte("203.0.113.9\n"))
+	}))
+	defer canonical.Close()
+	alias := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, canonical.URL+"/getip", http.StatusTemporaryRedirect)
+	}))
+	defer alias.Close()
+
+	ip, err := probeSplitServer(context.Background(), splitServer{host: strings.TrimPrefix(alias.URL, "http://")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ip != "203.0.113.9" {
+		t.Fatalf("ip: %q", ip)
+	}
+}
+
+func TestProbeSplitServerRejectsAnAnswerThatIsNotAnAddress(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("<html>no</html>"))
+	}))
+	defer server.Close()
+	if _, err := probeSplitServer(context.Background(), splitServer{host: strings.TrimPrefix(server.URL, "http://")}); err == nil {
+		t.Fatal("accepted a non-address answer")
+	}
+}
+
+func TestHostWithPort(t *testing.T) {
+	if got := hostWithPort("a.example"); got != "a.example:8080" {
+		t.Fatalf("got %q", got)
+	}
+	if got := hostWithPort("a.example:8080"); got != "a.example:8080" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestSplitCheckServesTheReport(t *testing.T) {
+	originalFleet, originalProbe := splitServers, splitProbeOnce
+	splitServers = func(context.Context) ([]splitServer, error) {
+		return []splitServer{{host: "a.example:8080", country: "Japan", sponsor: "A"}}, nil
+	}
+	splitProbeOnce = func(context.Context, splitServer) (string, error) { return "203.0.113.9", nil }
+	defer func() { splitServers, splitProbeOnce = originalFleet, originalProbe }()
+
+	h := &HTTP{}
 	w := httptest.NewRecorder()
 	core.RouteTable(h.Routes()).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/split-check", nil))
 	if w.Code != http.StatusOK {
@@ -36,76 +176,17 @@ func TestSplitCheckGroupsAnswers(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Probes) != 3 {
-		t.Fatalf("got %d probes", len(report.Probes))
-	}
-	if len(report.Egresses) != 2 {
-		t.Fatalf("got %d egresses: %+v", len(report.Egresses), report.Egresses)
-	}
-	if got := report.Egresses[0].Probes; len(got) != 2 || got[0] != "one" || got[1] != "two" {
-		t.Fatalf("grouping: %+v", report.Egresses)
-	}
-	if report.Egresses[0].Place == nil || report.Egresses[0].Place.City != "Hong Kong" {
-		t.Fatalf("place: %+v", report.Egresses[0])
-	}
-	if report.Probes[2].Place == nil || report.Probes[2].Place.City != "Beijing" {
-		t.Fatalf("probe place: %+v", report.Probes[2])
+	if report.Asked != 1 || len(report.Egresses) != 1 || report.Egresses[0].IP != "203.0.113.9" {
+		t.Fatalf("report: %+v", report)
 	}
 }
 
-func TestSplitCheckKeepsAFailedProbe(t *testing.T) {
-	original := splitProbes
-	splitProbes = []splitProbe{
-		{name: "one", region: "Global", url: textServer(t, "203.0.113.9"), read: readBareAddress},
-		{name: "refuses", region: "Global", url: refusingServer(t), read: readBareAddress},
-	}
-	defer func() { splitProbes = original }()
-
-	report, err := measureSplit(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if report.Probes[1].Error == "" {
-		t.Fatalf("a failed probe carried no error: %+v", report.Probes[1])
-	}
-	if len(report.Egresses) != 1 {
-		t.Fatalf("a failed probe was grouped: %+v", report.Egresses)
-	}
-}
-
-func TestSplitReaders(t *testing.T) {
-	trace := &http.Response{
-		Body: readCloser("fl=abc\nip=203.0.113.7\nts=1\n"),
-	}
-	if ip, err := readTraceIP(trace); err != nil || ip != "203.0.113.7" {
-		t.Fatalf("trace: %q %v", ip, err)
-	}
-	sentence := &http.Response{
-		Body: readCloser("当前 IP：198.51.100.8  来自于：中国 北京 北京  联通"),
-	}
-	if ip, err := readAddressInText(sentence); err != nil || ip != "198.51.100.8" {
-		t.Fatalf("sentence: %q %v", ip, err)
-	}
-	nothing := &http.Response{Body: readCloser("no address here")}
-	if _, err := readAddressInText(nothing); err == nil {
-		t.Fatal("accepted an answer with no address")
-	}
-}
-
-func textServer(t *testing.T, body string) string {
-	t.Helper()
+func TestProbeSplitServerRejectsAPrivateAddress(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(body))
+		_, _ = w.Write([]byte("192.168.1.20"))
 	}))
-	t.Cleanup(server.Close)
-	return server.URL
-}
-
-func refusingServer(t *testing.T) string {
-	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "no", http.StatusServiceUnavailable)
-	}))
-	t.Cleanup(server.Close)
-	return server.URL
+	defer server.Close()
+	if _, err := probeSplitServer(context.Background(), splitServer{host: strings.TrimPrefix(server.URL, "http://")}); err == nil {
+		t.Fatal("accepted a private address as an egress")
+	}
 }

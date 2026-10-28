@@ -853,32 +853,32 @@ function DNSExitTest() {
   </div>
 }
 
-interface SplitProbeResult {
-  probe: string
-  region: string
-  ip?: string
-  place?: Place
-  latency_ms: number
-  error?: string
-}
-
 interface SplitEgress {
   ip: string
   place?: Place
-  probes: string[]
+  count: number
+  countries: string[]
+  servers: string[]
+}
+
+interface SplitFailure {
+  server: string
+  error: string
 }
 
 interface SplitReport {
-  probes: SplitProbeResult[]
+  asked: number
+  answered: number
   egresses: SplitEgress[]
+  failures: SplitFailure[]
 }
 
 /**
  * How many ways out this network uses.
  *
- * The answer is the grouping, so the groups come first and the endpoints that
- * produced them second. A run where most probes failed says so: coverage is
- * part of the reading, not a footnote.
+ * The answer is the grouping, so the groups come first and the servers that
+ * produced them second. The totals stay on screen because a run that answered
+ * nine hundred of twelve hundred servers is a reading about nine hundred.
  */
 function SplitCheckTest() {
   useLocale()
@@ -898,20 +898,18 @@ function SplitCheckTest() {
     }
   }
 
-  const answered = report?.probes.filter(probe => probe.ip).length ?? 0
-
   return <div className="space-y-6">
       <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
-        <p className="text-sm text-muted-foreground">{t('Each endpoint reports the address it sees this router leave from. One address means every probe took the same way out; several means the network sends different destinations out differently.')}</p>
+        <p className="text-sm text-muted-foreground">{t('Each speed-test server reports the address it sees this router leave from. One address means every server took the same way out; several means the network sends different destinations out differently.')}</p>
         <Button className="mt-4" onClick={checkEgress} disabled={running}>
           {running ? <LoaderCircle className="animate-spin" aria-hidden /> : <Globe aria-hidden />}
           {running ? t('Checking egress…') : t('Check egress')}
         </Button>
-        {running && <p role="status" className="mt-4 text-sm text-muted-foreground">{t('One small request per endpoint. This takes a few seconds.')}</p>}
+        {running && <p role="status" className="mt-4 text-sm text-muted-foreground">{t('Asking up to {count} servers. A full run takes about a minute.', { count: 1200 })}</p>}
         {error && <Alert variant="destructive" className="mt-5"><AlertTitle>{t('Could not check the egress')}</AlertTitle><AlertDescription className="break-words">{error}</AlertDescription></Alert>}
         {report && (
           <>
-            <p className="mt-6 text-sm text-muted-foreground">{t('Egress addresses: {count} · endpoints answered: {answered}/{total}', { count: report.egresses.length, answered, total: report.probes.length })}</p>
+            <p className="mt-6 text-sm text-muted-foreground">{t('Egress addresses: {count} · servers answered: {answered}/{asked}', { count: report.egresses.length, answered: report.answered, asked: report.asked })}</p>
             <ul className="mt-3 space-y-3" aria-live="polite">
               {report.egresses.map(egress => {
                 const place = placeSummary(egress.place)
@@ -920,26 +918,21 @@ function SplitCheckTest() {
                     <span className="font-mono text-sm font-medium">{egress.ip}</span>
                     {place && <span className="text-sm text-muted-foreground">{place}</span>}
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">{t('Seen by: {probes}', { probes: egress.probes.join(', ') })}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{t('{count} servers · {countries} countries', { count: egress.count, countries: egress.countries.length })}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{egress.servers.join(' · ')}</p>
                 </li>
               })}
             </ul>
-            <ul className="mt-6 divide-y divide-border rounded-lg bg-muted/20">
-              {report.probes.map(probe => (
-                <li key={probe.probe} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-2 text-sm">
-                  <span>{probe.probe} <span className="text-xs text-muted-foreground">{t(probe.region)}</span></span>
-                  {probe.error
-                    ? <span className="text-destructive">{probe.error}</span>
-                    : <span className="flex items-baseline gap-3">
-                        <span className="font-mono text-xs">{probe.ip}</span>
-                        <span className="text-xs text-muted-foreground">{probe.latency_ms < 1 ? '<1' : Math.round(probe.latency_ms)} ms</span>
-                      </span>}
-                </li>
-              ))}
-            </ul>
+            {report.failures.length > 0 && (
+              <Disclosure summary={t('Servers that did not answer ({count})', { count: report.asked - report.answered })}>
+                <ul className="space-y-1 text-xs text-muted-foreground">
+                  {report.failures.map(failure => <li key={failure.server}>{failure.server}: <span className="break-words">{failure.error}</span></li>)}
+                </ul>
+              </Disclosure>
+            )}
           </>
         )}
-        {report && <p className="mt-3 text-xs text-muted-foreground">{t('The endpoints are a fixed, short list rather than every network on the internet. Several addresses is the finding; which address each one belongs to is approximate (ip.sb).')}</p>}
+        {report && <p className="mt-3 text-xs text-muted-foreground">{t('The fleet is Ookla’s public speed-test server list. Several addresses is the finding; each address’s location is approximate (ip.sb).')}</p>}
       </section>
   </div>
 }
