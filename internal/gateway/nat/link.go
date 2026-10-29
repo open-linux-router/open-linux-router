@@ -209,7 +209,7 @@ func DialInInterfaces(links LinkView, tunnel, uplink string) []LinkInfo {
 }
 
 // OverlapsServed reports whether prefix shares addresses with a network this
-// box serves.
+// box serves, excluding the tunnel and the uplink.
 //
 // The dial-in masquerade is safe only while the tunnel's addresses are foreign
 // to every network it rewrites traffic onto. `remote` refuses to create a tunnel
@@ -218,13 +218,18 @@ func DialInInterfaces(links LinkView, tunnel, uplink string) []LinkInfo {
 // would rewrite the LAN's own traffic to this router and break every device on
 // it. So the check is repeated where the rule is built, and an unreadable link
 // view counts as an overlap: writing no rule is the safe direction.
-func OverlapsServed(links LinkView, prefix netip.Prefix) bool {
+//
+// The tunnel itself is skipped because its prefix **is** the prefix being
+// checked — `link` adopts `wg0` like any other interface, and counting that as a
+// conflict would suppress the rule on every box. The uplink is skipped for the
+// same reason DialInInterfaces skips it.
+func OverlapsServed(links LinkView, prefix netip.Prefix, tunnel, uplink string) bool {
 	all, err := links.Interfaces()
 	if err != nil {
 		return true
 	}
 	for _, l := range all {
-		if !l.Adopted {
+		if !l.Adopted || l.Name == tunnel || l.Name == uplink {
 			continue
 		}
 		for _, p := range l.Prefixes {

@@ -290,7 +290,7 @@ func Render(c Config, links LinkView) Desired {
 	// device on it. OverlapsServed has the argument, and the tunnel is broken
 	// in that state anyway.
 	if c.DialIn != nil {
-		if prefix := c.DialIn.Prefix.Masked(); prefix.IsValid() && prefix.Addr().Is4() && !OverlapsServed(links, prefix) {
+		if prefix := c.DialIn.Prefix.Masked(); prefix.IsValid() && prefix.Addr().Is4() && !OverlapsServed(links, prefix, c.DialIn.Tunnel, c.DialIn.Uplink) {
 			for _, l := range DialInInterfaces(links, c.DialIn.Tunnel, c.DialIn.Uplink) {
 				d.Table.DialIn = append(d.Table.DialIn, DialInRule{Prefix: prefix, Out: l.Name})
 			}

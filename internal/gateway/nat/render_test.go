@@ -348,3 +348,38 @@ func TestDialInOnlyAddsRules(t *testing.T) {
 		}
 	}
 }
+
+// `link` adopts the tunnel like any other interface, so wg0 appears in the link
+// view holding the very prefix the rule rewrites. That is not a conflict; the
+// rule must still be written for the networks beside it.
+func TestDialInIsRenderedWhenOnlyTheTunnelHoldsItsPrefix(t *testing.T) {
+	links := StaticLinks{
+		"wg0": {
+			Adopted:  true,
+			Prefixes: []netip.Prefix{netip.MustParsePrefix("10.6.0.1/24")},
+		},
+		"br-lan": {
+			Adopted:  true,
+			Prefixes: []netip.Prefix{netip.MustParsePrefix("192.168.1.1/24")},
+		},
+	}
+	c := Config{
+		Enabled: true,
+		DialIn: &DialIn{
+			Prefix: netip.MustParsePrefix("10.6.0.0/24"),
+			Tunnel: "wg0",
+		},
+	}
+	c.Normalize()
+	lines := Render(c, links).Lines()
+
+	want := "nft dialin out br-lan from 10.6.0.0/24"
+	if !contains(lines, want) {
+		t.Errorf("missing %q; the tunnel's own prefix suppressed the rule: %s", want, dump(lines))
+	}
+	for _, l := range lines {
+		if strings.HasPrefix(l, "nft dialin out wg0 ") {
+			t.Errorf("a rule was written for the tunnel: %q", l)
+		}
+	}
+}
