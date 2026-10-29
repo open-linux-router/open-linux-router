@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -17,24 +18,22 @@ import (
 
 const maxCustomLatencySites = 20
 
-// Categories are stable keys, not labels: the UI translates them, and a saved
-// document must keep its grouping when the interface language changes. Empty
-// means a site the operator added by hand, which the UI shows as Custom.
-var latencyCategories = map[string]bool{
-	"communication": true,
-	"social":        true,
-	"entertainment": true,
-	"news":          true,
-	"shopping":      true,
-	"tools":         true,
+type CustomLatencySite struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+	Exit string `json:"exit,omitempty"`
+	Icon string `json:"icon,omitempty"`
 }
 
-type CustomLatencySite struct {
-	Name     string `json:"name"`
-	URL      string `json:"url"`
-	Exit     string `json:"exit,omitempty"`
-	Icon     string `json:"icon,omitempty"`
-	Category string `json:"category,omitempty"`
+// monitorSite is one probe target: a catalog site with its override, or a site
+// the operator added by hand.
+type monitorSite struct {
+	Name     string
+	URL      string
+	Exit     string
+	Icon     string
+	Category string
+	Builtin  bool
 }
 
 // Custom targets are independent of the Internet candidate selection.
@@ -44,6 +43,8 @@ type CustomLatencyMonitor struct {
 	path         string
 	store        *core.Store
 	sites        []CustomLatencySite
+	common       []CommonLatencySite
+	commonExits  map[string]string
 	results      []LatencySite
 	icons        map[string]latencyIcon
 	probe        func(context.Context, string) (float64, error)
@@ -105,10 +106,62 @@ func OpenCustomLatencyConfig(store *core.Store) (*CustomLatencyMonitor, error) {
 			return nil, err
 		}
 	}
-	m := &CustomLatencyMonitor{store: store, probe: probePage, probeThrough: probePageMarked, results: []LatencySite{}, inflight: map[string]bool{}}
-	m.sites = cfg.LatencySites
+	// Sites whose names are now catalog sites move to overrides: the catalog
+	// owns their URL and category, and only the exit remains operator intent.
+	commonExits := map[string]string{}
+	for _, entry := range cfg.LatencyCommon {
+		if _, ok := commonLatencySite(entry.Name); ok && entry.Exit != "" {
+			commonExits[entry.Name] = entry.Exit
+		}
+	}
+	custom := make([]CustomLatencySite, 0, len(cfg.LatencySites))
+	for _, site := range cfg.LatencySites {
+		if _, ok := commonLatencySite(site.Name); ok {
+			if _, exists := commonExits[site.Name]; !exists && site.Exit != "" {
+				commonExits[site.Name] = site.Exit
+			}
+			continue
+		}
+		custom = append(custom, site)
+	}
+	nextCommon := make([]CommonLatency, 0, len(commonExits))
+	for _, site := range latencyCatalog() {
+		if exit := commonExits[site.Name]; exit != "" {
+			nextCommon = append(nextCommon, CommonLatency{Name: site.Name, Exit: exit})
+		}
+	}
+	if len(custom) != len(cfg.LatencySites) || !sameCommon(nextCommon, cfg.LatencyCommon) {
+		cfg.LatencySites = custom
+		cfg.LatencyCommon = nextCommon
+		raw, err := MarshalConfig(cfg)
+		if err != nil {
+			return nil, err
+		}
+		doc.Set(ModuleName, raw)
+		if err := store.Save(doc); err != nil {
+			return nil, err
+		}
+	}
+	m := &CustomLatencyMonitor{
+		store: store, probe: probePage, probeThrough: probePageMarked,
+		results: []LatencySite{}, inflight: map[string]bool{},
+		common: latencyCatalog(), commonExits: commonExits,
+	}
+	m.sites = custom
 	m.resetResults()
 	return m, nil
+}
+
+func sameCommon(a, b []CommonLatency) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func NewCustomLatencyMonitor(path string) (*CustomLatencyMonitor, error) {
@@ -147,9 +200,6 @@ func validateCustomSites(sites []CustomLatencySite) error {
 			return fmt.Errorf("duplicate site name: %s", name)
 		}
 		names[strings.ToLower(name)] = true
-		if site.Category != "" && !latencyCategories[site.Category] {
-			return fmt.Errorf("%s: unknown category %q", name, site.Category)
-		}
 		u, err := url.Parse(site.URL)
 		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" || u.Opaque != "" || u.Port() != "" {
 			return fmt.Errorf("%s: use an HTTPS URL without credentials, port, or fragment", name)
@@ -158,21 +208,35 @@ func validateCustomSites(sites []CustomLatencySite) error {
 	return nil
 }
 
+// allSitesLocked returns the catalog sites followed by the operator's sites.
+// Callers hold m.mu (or run before the monitor is shared).
+func (m *CustomLatencyMonitor) allSitesLocked() []monitorSite {
+	sites := make([]monitorSite, 0, len(m.common)+len(m.sites))
+	for _, site := range m.common {
+		sites = append(sites, monitorSite{Name: site.Name, URL: site.URL, Exit: m.commonExits[site.Name], Category: site.Category, Builtin: true})
+	}
+	for _, site := range m.sites {
+		sites = append(sites, monitorSite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon})
+	}
+	return sites
+}
+
 func (m *CustomLatencyMonitor) resetResults() {
 	previous := make(map[string]LatencySite, len(m.results))
 	for _, result := range m.results {
 		previous[result.URL+"\x00"+result.Exit] = result
 	}
-	m.results = make([]LatencySite, len(m.sites))
-	for i, site := range m.sites {
-		result := LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, Category: site.Category}
+	sites := m.allSitesLocked()
+	m.results = make([]LatencySite, 0, len(sites))
+	for _, site := range sites {
+		result := LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, Category: site.Category, Builtin: site.Builtin}
 		if old, ok := previous[site.URL+"\x00"+site.Exit]; ok {
 			result.Milliseconds, result.CheckedAt, result.Error = old.Milliseconds, old.CheckedAt, old.Error
 		}
 		// A reorder or rename during an on-demand probe keeps its spinner on the
 		// row that still names the same target.
 		result.Measuring = m.inflight[site.URL+"\x00"+site.Exit]
-		m.results[i] = result
+		m.results = append(m.results, result)
 	}
 }
 
@@ -190,19 +254,20 @@ func (m *CustomLatencyMonitor) setContext(ctx context.Context) {
 // slow site cannot accumulate parallel probes.
 func (m *CustomLatencyMonitor) Measure(name string) error {
 	m.refreshConfig()
-	var site CustomLatencySite
+	m.mu.Lock()
+	var site monitorSite
 	found := false
-	for _, candidate := range m.Config() {
+	for _, candidate := range m.allSitesLocked() {
 		if candidate.Name == name {
 			site, found = candidate, true
 			break
 		}
 	}
 	if !found {
+		m.mu.Unlock()
 		return fmt.Errorf("no monitored site named %q", name)
 	}
 	key := site.URL + "\x00" + site.Exit
-	m.mu.Lock()
 	if m.inflight[key] {
 		m.mu.Unlock()
 		return nil
@@ -226,7 +291,7 @@ func (m *CustomLatencyMonitor) Measure(name string) error {
 }
 
 // probeOne runs one on-demand probe and publishes its outcome.
-func (m *CustomLatencyMonitor) probeOne(ctx context.Context, site CustomLatencySite) {
+func (m *CustomLatencyMonitor) probeOne(ctx context.Context, site monitorSite) {
 	bounded, cancel := context.WithTimeout(ctx, pageProbeTimeout)
 	defer cancel()
 	var value float64
@@ -258,7 +323,7 @@ func (m *CustomLatencyMonitor) probeOne(ctx context.Context, site CustomLatencyS
 		}
 		return
 	}
-	result := LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, Category: site.Category, CheckedAt: time.Now().UTC()}
+	result := LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, Category: site.Category, Builtin: site.Builtin, CheckedAt: time.Now().UTC()}
 	if site.Exit != "" && err != nil && strings.Contains(err.Error(), "gateway exit") {
 		result.Error = "Gateway exit unavailable"
 	}
@@ -275,9 +340,12 @@ func (m *CustomLatencyMonitor) probeOne(ctx context.Context, site CustomLatencyS
 // a click — and the older one finishing last must not overwrite the newer one.
 func (m *CustomLatencyMonitor) storeResult(result LatencySite) {
 	key := result.URL + "\x00" + result.Exit
-	for i, site := range m.sites {
+	for i, site := range m.allSitesLocked() {
 		if site.URL != result.URL || site.Exit != result.Exit {
 			continue
+		}
+		if i >= len(m.results) {
+			return
 		}
 		if current := m.results[i]; !current.CheckedAt.IsZero() && current.CheckedAt.After(result.CheckedAt) {
 			return
@@ -285,6 +353,7 @@ func (m *CustomLatencyMonitor) storeResult(result LatencySite) {
 		result.Name = site.Name
 		result.Icon = site.Icon
 		result.Category = site.Category
+		result.Builtin = site.Builtin
 		result.Measuring = m.inflight[key]
 		m.results[i] = result
 	}
@@ -301,13 +370,27 @@ func (m *CustomLatencyMonitor) refreshConfig() {
 	if m.store == nil {
 		return
 	}
-	sites := m.Config()
+	doc, err := m.store.Load()
+	if err != nil {
+		return
+	}
+	cfg, err := FromDocument(doc)
+	if err != nil {
+		return
+	}
+	exits := map[string]string{}
+	for _, entry := range cfg.LatencyCommon {
+		if _, ok := commonLatencySite(entry.Name); ok && entry.Exit != "" {
+			exits[entry.Name] = entry.Exit
+		}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	old, _ := json.Marshal(m.sites)
-	next, _ := json.Marshal(sites)
-	if string(old) != string(next) {
-		m.sites = sites
+	next, _ := json.Marshal(cfg.LatencySites)
+	if string(old) != string(next) || !reflect.DeepEqual(m.commonExits, exits) {
+		m.sites = append([]CustomLatencySite{}, cfg.LatencySites...)
+		m.commonExits = exits
 		m.resetResults()
 		m.icons = nil
 	}
@@ -328,18 +411,45 @@ func (m *CustomLatencyMonitor) Config() []CustomLatencySite {
 	return append([]CustomLatencySite{}, m.sites...)
 }
 
+// Replace stores the operator's list. Entries that name a catalog site update
+// that site's exit and are not stored as custom sites; everything else is the
+// custom list. Omitting a catalog site never removes it.
 func (m *CustomLatencyMonitor) Replace(sites []CustomLatencySite) error {
-	if err := validateCustomSites(sites); err != nil {
+	m.mu.RLock()
+	nextExits := make(map[string]string, len(m.commonExits))
+	for name, exit := range m.commonExits {
+		nextExits[name] = exit
+	}
+	m.mu.RUnlock()
+	custom := make([]CustomLatencySite, 0, len(sites))
+	splitCatalog := m.store != nil || m.common != nil
+	for _, site := range sites {
+		if splitCatalog {
+			if _, ok := commonLatencySite(site.Name); ok {
+				nextExits[site.Name] = site.Exit
+				continue
+			}
+		}
+		custom = append(custom, site)
+	}
+	if err := validateCustomSites(custom); err != nil {
 		return err
 	}
 	for _, site := range sites {
-		if site.Exit != "" {
-			if m.ValidateExit == nil {
-				return errors.New("gateway exit validation unavailable")
-			}
-			if err := m.ValidateExit(site.Exit); err != nil {
-				return err
-			}
+		if site.Exit == "" {
+			continue
+		}
+		if m.ValidateExit == nil {
+			return errors.New("gateway exit validation unavailable")
+		}
+		if err := m.ValidateExit(site.Exit); err != nil {
+			return err
+		}
+	}
+	common := make([]CommonLatency, 0, len(nextExits))
+	for _, site := range latencyCatalog() {
+		if exit := nextExits[site.Name]; exit != "" {
+			common = append(common, CommonLatency{Name: site.Name, Exit: exit})
 		}
 	}
 	m.mu.Lock()
@@ -353,7 +463,8 @@ func (m *CustomLatencyMonitor) Replace(sites []CustomLatencySite) error {
 		if err != nil {
 			return err
 		}
-		cfg.LatencySites = append([]CustomLatencySite{}, sites...)
+		cfg.LatencySites = append([]CustomLatencySite{}, custom...)
+		cfg.LatencyCommon = common
 		data, err := MarshalConfig(cfg)
 		if err != nil {
 			return err
@@ -362,19 +473,21 @@ func (m *CustomLatencyMonitor) Replace(sites []CustomLatencySite) error {
 		if err := m.store.Save(doc); err != nil {
 			return err
 		}
-		m.sites = append([]CustomLatencySite{}, sites...)
+		m.sites = append([]CustomLatencySite{}, custom...)
+		m.commonExits = nextExits
 		m.resetResults()
 		m.icons = nil
 		return nil
 	}
-	data, err := json.MarshalIndent(sites, "", "  ")
+	data, err := json.MarshalIndent(custom, "", "  ")
 	if err != nil {
 		return err
 	}
 	if err := core.WriteFileAtomic(m.path, append(data, '\n'), 0o644); err != nil {
 		return err
 	}
-	m.sites = append([]CustomLatencySite{}, sites...)
+	m.sites = append([]CustomLatencySite{}, custom...)
+	m.commonExits = nextExits
 	m.resetResults()
 	m.icons = nil
 	return nil
@@ -382,12 +495,14 @@ func (m *CustomLatencyMonitor) Replace(sites []CustomLatencySite) error {
 
 func (m *CustomLatencyMonitor) sample(ctx context.Context) {
 	m.refreshConfig()
-	sites := m.Config()
+	m.mu.RLock()
+	sites := m.allSitesLocked()
+	m.mu.RUnlock()
 	results := make([]LatencySite, len(sites))
 	var wg sync.WaitGroup
 	for i, site := range sites {
 		wg.Add(1)
-		go func(i int, site CustomLatencySite) {
+		go func(i int, site monitorSite) {
 			defer wg.Done()
 			bounded, cancel := context.WithTimeout(ctx, pageProbeTimeout)
 			defer cancel()
@@ -406,7 +521,7 @@ func (m *CustomLatencyMonitor) sample(ctx context.Context) {
 					value, err = m.probeThrough(bounded, site.URL, mark)
 				}
 			}
-			results[i] = LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, Category: site.Category, CheckedAt: time.Now().UTC()}
+			results[i] = LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, Category: site.Category, Builtin: site.Builtin, CheckedAt: time.Now().UTC()}
 			if site.Exit != "" && err != nil && strings.Contains(err.Error(), "gateway exit") {
 				results[i].Error = "Gateway exit unavailable"
 			}

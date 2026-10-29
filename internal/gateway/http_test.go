@@ -522,6 +522,51 @@ func TestLatencySitesEndpoint(t *testing.T) {
 	}
 }
 
+// A catalog site can gain an exit through the same list, but an empty list
+// removes only the custom sites: the catalog is still there afterwards.
+func TestLatencyCommonExitAndRemoval(t *testing.T) {
+	custom, err := OpenCustomLatencyConfig(core.NewStore(filepath.Join(t.TempDir(), "olr.json"), ModuleName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	custom.ValidateExit = func(name string) error {
+		if name != "Gateway2" {
+			return fmt.Errorf("unknown exit %q", name)
+		}
+		return nil
+	}
+	monitor := NewLatencyMonitor()
+	monitor.Custom = custom
+	h := HTTP{Latency: monitor, Lock: core.NewLock()}.Handler()
+	body := []CustomLatencySite{
+		{Name: "Google", URL: "https://www.gstatic.com/", Exit: "Gateway2"},
+		{Name: "NAS", URL: "https://nas.example/"},
+	}
+	if w := do(t, h, http.MethodPut, "/latency/sites", body); w.Code != http.StatusOK {
+		t.Fatalf("PUT: %d %s", w.Code, w.Body.String())
+	}
+	snapshot := decode[LatencySnapshot](t, do(t, h, http.MethodGet, "/latency", nil))
+	if site := latencySite(snapshot.Custom, "Google"); site == nil || !site.Builtin || site.Exit != "Gateway2" {
+		t.Fatalf("Google: %+v", site)
+	}
+	if site := latencySite(snapshot.Custom, "NAS"); site == nil || site.Builtin {
+		t.Fatalf("NAS: %+v", site)
+	}
+	if w := do(t, h, http.MethodPut, "/latency/sites", []CustomLatencySite{}); w.Code != http.StatusOK {
+		t.Fatalf("clear: %d %s", w.Code, w.Body.String())
+	}
+	snapshot = decode[LatencySnapshot](t, do(t, h, http.MethodGet, "/latency", nil))
+	if len(snapshot.Custom) != len(latencyCatalog()) {
+		t.Fatalf("%d sites after clearing, want the catalog's %d", len(snapshot.Custom), len(latencyCatalog()))
+	}
+	if site := latencySite(snapshot.Custom, "Google"); site == nil || site.Exit != "Gateway2" {
+		t.Fatalf("Google exit lost: %+v", site)
+	}
+	if latencySite(snapshot.Custom, "NAS") != nil {
+		t.Fatal("custom site survived clearing")
+	}
+}
+
 func TestLatencyIconMissingSite(t *testing.T) {
 	custom, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
 	if err != nil {

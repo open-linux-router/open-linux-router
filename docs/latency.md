@@ -44,27 +44,38 @@ runs, and the card replaces that value with a spinner. Other sites, the Internet
 target and DNS are left alone. The route changes no configuration and is only a
 request to probe one stored site.
 
-Up to 20 named HTTPS URLs can be stored with `PUT /api/gateway/latency/sites`
-using objects such as `{"name":"YouTube","url":"https://www.youtube.com/","exit":"Proxy","category":"entertainment"}`.
-`exit` is optional and must name a configured gateway exit. `category` is
-optional and must be one of `communication`, `social`, `entertainment`, `news`,
-`shopping` or `tools`; an empty category marks a site added by hand, which the
-settings page shows under Custom. Categories only group the settings list; the
-monitor treats every site alike. An empty array clears the list. Names are
-unique and 1–40 characters; URLs cannot contain credentials, custom ports or
-fragments. Sites live in `gateway.latency_sites` in `olr.json`; measurements are
-ephemeral.
+Common sites are part of the binary's catalog, not the operator's document.
+They are present on a fresh install, always probed, and cannot be removed from
+the settings page. The catalog carries one URL per site — the faster of the
+app's main page and its static asset host, chosen from measurements on the
+reference router — and a category (`communication`, `social`, `entertainment`,
+`news`, `shopping` or `tools`). A CDN root may answer 403/404; the probe still
+counts the response as the edge's latency. Only an exit is per-operator: it
+lives in `gateway.latency_common` as `{"name":"Google","exit":"Gateway2"}`,
+and omitting an entry leaves that site on the default route.
 
-The settings page offers a preset catalog of common sites under those
-categories. Each preset stores one URL — the faster of the app's main page and
-its static asset host — so a preset costs one probe per round like any other
-site. Presets are added one at a time, and the operator still chooses each
-site's exit.
+Up to 20 custom HTTPS URLs can be stored with `PUT /api/gateway/latency/sites`
+using objects such as `{"name":"NAS","url":"https://nas.example/","exit":"Proxy"}`.
+The same route carries catalog entries: an entry whose name matches a common
+site updates its exit and is not stored as a custom site. An empty array clears
+the custom list but not the catalog. `exit` is optional and must name a
+configured gateway exit. Names are unique and 1–40 characters; URLs cannot
+contain credentials, custom ports or fragments. Custom sites live in
+`gateway.latency_sites` in `olr.json`; measurements are ephemeral. A custom
+site saved before the catalog existed, under a catalog name, moves to the
+catalog with its exit preserved.
+
+The settings page groups the catalog under its category headings, lists custom
+sites under Custom, and lets an operator add or remove only the custom ones.
+Each tile shows the site's latest sample; selecting it opens its exit, its
+latest error and a measure-now action.
 
 The response includes `state` (`measuring`, `ok`, `unreachable`, `unavailable`),
 nullable `milliseconds`, `dns_milliseconds`, `checked_at`, the selected
-`target` name and `target_url`, built-in `sites` and `custom` sites. A custom
-site also carries `measuring` while its on-demand probe runs.
+`target` name and `target_url`, built-in `sites` and the `custom` list. That
+list holds the catalog's common sites (`builtin: true`, with a `category`)
+followed by the operator's custom sites. A site also carries `measuring` while
+its on-demand probe runs.
 A failed fixed target retains its identity but clears its measurement.
 Each site carries its latest attempt, nullable measurement and short error.
 Custom sites keep their last completed outcome while the next probe runs;

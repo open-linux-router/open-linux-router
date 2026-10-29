@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
 func TestLatencySelectsOnceAndKeepsFailedTarget(t *testing.T) {
@@ -173,7 +175,7 @@ func TestCustomLatencyPersistenceAndProbes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sites := []CustomLatencySite{{Name: "YouTube", URL: "https://www.youtube.com/", Category: "entertainment"}, {Name: "WeChat", URL: "https://weixin.qq.com/", Category: "communication"}}
+	sites := []CustomLatencySite{{Name: "YouTube", URL: "https://www.youtube.com/"}, {Name: "WeChat", URL: "https://weixin.qq.com/"}}
 	if err := m.Replace(sites); err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +216,6 @@ func TestCustomLatencyValidationPreservesSettings(t *testing.T) {
 		{Name: "Video", URL: "https://user:pass@example.com"},
 		{Name: "Video", URL: "https://example.com:8443"},
 		{Name: "Video", URL: "https://example.com/#fragment"},
-		{Name: "Video", URL: "https://example.com/", Category: "unknown"},
 	} {
 		if err := m.Replace([]CustomLatencySite{bad}); err == nil {
 			t.Fatalf("accepted %+v", bad)
@@ -228,7 +229,7 @@ func TestCustomLatencyValidationPreservesSettings(t *testing.T) {
 	}
 }
 
-func TestCustomLatencySiteLimitAndCategorySnapshot(t *testing.T) {
+func TestCustomLatencySiteLimit(t *testing.T) {
 	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -236,22 +237,104 @@ func TestCustomLatencySiteLimitAndCategorySnapshot(t *testing.T) {
 	sites := make([]CustomLatencySite, 0, maxCustomLatencySites)
 	for i := 0; i < maxCustomLatencySites; i++ {
 		sites = append(sites, CustomLatencySite{
-			Name:     fmt.Sprintf("Site %d", i),
-			URL:      fmt.Sprintf("https://site%d.example/", i),
-			Category: "tools",
+			Name: fmt.Sprintf("Site %d", i),
+			URL:  fmt.Sprintf("https://site%d.example/", i),
 		})
 	}
 	if err := m.Replace(sites); err != nil {
 		t.Fatal(err)
 	}
-	got := m.Snapshot()
-	if len(got) != maxCustomLatencySites || got[0].Category != "tools" {
-		t.Fatalf("snapshot: %d sites, first %+v", len(got), got[0])
+	if got := m.Snapshot(); len(got) != maxCustomLatencySites {
+		t.Fatalf("snapshot: %d sites", len(got))
 	}
 	tooMany := append(append([]CustomLatencySite{}, sites...), CustomLatencySite{Name: "Extra", URL: "https://extra.example/"})
 	if err := m.Replace(tooMany); err == nil {
 		t.Fatalf("accepted %d sites", len(tooMany))
 	}
+}
+
+// The catalog is the product's list, not the operator's: it is present on a
+// fresh document and cannot be removed, while a custom site lives beside it.
+func TestCommonLatencySitesAreAlwaysPresent(t *testing.T) {
+	store := core.NewStore(filepath.Join(t.TempDir(), "olr.json"), ModuleName)
+	m, err := OpenCustomLatencyConfig(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := m.Snapshot()
+	if len(snapshot) != len(latencyCatalog()) {
+		t.Fatalf("%d sites, want %d", len(snapshot), len(latencyCatalog()))
+	}
+	for _, site := range snapshot {
+		if !site.Builtin || site.Category == "" {
+			t.Fatalf("catalog site not marked: %+v", site)
+		}
+	}
+	if len(m.Config()) != 0 {
+		t.Fatal("catalog sites leaked into the custom list")
+	}
+}
+
+// A site saved before the catalog existed becomes a catalog site with its exit
+// preserved, not a duplicate next to it.
+func TestCommonLatencyMigrationAndExitOverride(t *testing.T) {
+	store := core.NewStore(filepath.Join(t.TempDir(), "olr.json"), ModuleName)
+	doc, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := FromDocument(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.LatencySites = []CustomLatencySite{
+		{Name: "Google", URL: "https://www.google.com/generate_204", Exit: "Proxy"},
+		{Name: "Example", URL: "https://example.org/"},
+	}
+	raw, err := MarshalConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc.Set(ModuleName, raw)
+	if err := store.Save(doc); err != nil {
+		t.Fatal(err)
+	}
+	m, err := OpenCustomLatencyConfig(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Config(); len(got) != 1 || got[0].Name != "Example" {
+		t.Fatalf("custom list after migration: %+v", got)
+	}
+	if site := latencySite(m.Snapshot(), "Google"); site == nil || !site.Builtin || site.Exit != "Proxy" {
+		t.Fatalf("Google after migration: %+v", site)
+	}
+	m.ValidateExit = func(string) error { return nil }
+	if err := m.Replace([]CustomLatencySite{
+		{Name: "Google", URL: "https://www.gstatic.com/", Exit: "Other"},
+		{Name: "Example", URL: "https://example.org/"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := OpenCustomLatencyConfig(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if site := latencySite(reopened.Snapshot(), "Google"); site == nil || site.Exit != "Other" {
+		t.Fatalf("Google exit not persisted: %+v", site)
+	}
+	if got := reopened.Config(); len(got) != 1 || got[0].Name != "Example" {
+		t.Fatalf("custom list changed: %+v", got)
+	}
+}
+
+func latencySite(sites []LatencySite, name string) *LatencySite {
+	for i := range sites {
+		if sites[i].Name == name {
+			return &sites[i]
+		}
+	}
+	return nil
 }
 
 func TestCustomLatencyUsesSelectedExit(t *testing.T) {

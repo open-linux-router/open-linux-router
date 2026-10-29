@@ -84,6 +84,23 @@ func Validate(c Config, links LinkView) Result {
 			}
 		}
 	}
+	seenCommon := map[string]bool{}
+	for _, site := range c.LatencyCommon {
+		if _, ok := commonLatencySite(site.Name); !ok {
+			r.errorf("latency_common", "%q is not a common site", site.Name)
+			continue
+		}
+		if seenCommon[site.Name] {
+			r.errorf("latency_common", "duplicate common site %s", site.Name)
+			continue
+		}
+		seenCommon[site.Name] = true
+		if site.Exit != "" {
+			if _, ok := c.Find(site.Exit); !ok {
+				r.errorf("latency_common", "%s: unknown exit %s", site.Name, site.Exit)
+			}
+		}
+	}
 
 	validateExits(&r, c, links)
 	validateDefault(&r, c)

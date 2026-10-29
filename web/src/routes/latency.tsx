@@ -1,7 +1,7 @@
 import { t, useLocale } from '@/lib/i18n'
-import { useState, type DragEvent } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { ArrowDown, ArrowUp, GripVertical, Trash2 } from 'lucide-react'
+import { LoaderCircle, Plus, Trash2 } from 'lucide-react'
 
 import { PageHeading } from '@/components/layout/page-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -11,22 +11,36 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Heading } from '@/components/ui/heading'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { RowAction } from '@/components/ui/row-action'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { brandLogoSrc, useBrandLogoSearch } from '@/features/brand-logos/brand-logos'
-import {
-  LATENCY_CATALOG,
-  LATENCY_GROUPS,
-  type CatalogSite,
-  type LatencyCategory,
-} from '@/features/gateway/latency-catalog'
 import { SiteIcon } from '@/features/gateway/latency-site-icon'
-import { useGatewayConfig, useGatewayLatency, useSaveLatencySites } from '@/features/gateway/queries'
+import { useGatewayConfig, useGatewayLatency, useMeasureLatencySite, useSaveLatencySites } from '@/features/gateway/queries'
 import type { GatewayLatency } from '@/lib/api-types'
 
 const MAX_SITES = 20
 const DEFAULT_ROUTE = ' default'
+const CATEGORY_ORDER = ['communication', 'social', 'entertainment', 'news', 'shopping', 'tools']
+const CATEGORY_LABELS: Record<string, string> = {
+  communication: 'Communication',
+  social: 'Social',
+  entertainment: 'Entertainment',
+  news: 'News',
+  shopping: 'Shopping',
+  tools: 'Tools',
+}
+
+type MonitoredSite = { name: string; url: string; exit?: string; icon?: string; category?: string; builtin?: boolean }
+type DraftSite = MonitoredSite & { id: string }
+
+function formatLatency(ms: number) {
+  return ms < 1 ? '<1 ms' : `${Math.round(ms)} ms`
+}
+
+function siteValue(result?: GatewayLatency['custom'][number]) {
+  if (!result || result.milliseconds == null) return '—'
+  return formatLatency(result.milliseconds)
+}
 
 export function LatencyPage() {
   useLocale()
@@ -57,89 +71,51 @@ export function LatencyPage() {
   </div>
 }
 
-type MonitoredSite = { name: string; url: string; exit?: string; icon?: string; category?: string }
-type DraftSite = MonitoredSite & { id: string }
-
-// Sites saved before categories existed, and hand-added sites, have none. Match
-// a known catalog entry by name or URL so an existing list lands in the right
-// group without a migration; the inferred value is saved on the next edit.
-function inferCategory(name: string, url: string): LatencyCategory | '' {
-  return LATENCY_CATALOG.find((entry) => entry.name === name || entry.url === url)?.category ?? ''
-}
-
 function LatencySettings({ sites, exits, latency, onClose }: { sites: MonitoredSite[]; exits: string[]; latency?: GatewayLatency; onClose: () => void }) {
   useLocale()
   const [target, setTarget] = useState(latency?.target_url || 'auto')
   const [targetChanged, setTargetChanged] = useState(false)
-  const [draft, setDraft] = useState<DraftSite[]>(() => sites.map(({ name, url, exit, icon, category }) => ({
-    id: crypto.randomUUID(),
-    name,
-    url,
-    exit,
-    icon,
-    category: category && LATENCY_GROUPS.some((group) => group.key === category) ? category : inferCategory(name, url),
+  const [draft, setDraft] = useState<DraftSite[]>(() => sites.map(({ name, url, exit, icon, category, builtin }) => ({
+    id: crypto.randomUUID(), name, url, exit, icon, category, builtin,
   })))
-  const [name, setName] = useState('')
-  const [url, setUrl] = useState('')
-  const [exit, setExit] = useState(DEFAULT_ROUTE)
-  const [editing, setEditing] = useState<number | null>(null)
-  const [iconFor, setIconFor] = useState<number | null>(null)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newUrl, setNewUrl] = useState('')
+  const [newExit, setNewExit] = useState(DEFAULT_ROUTE)
+  const [addError, setAddError] = useState('')
+  const [iconFor, setIconFor] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [iconError, setIconError] = useState('')
-  const [dragging, setDragging] = useState<number | null>(null)
-  const [catalogOpen, setCatalogOpen] = useState(false)
-  const [catalogSearch, setCatalogSearch] = useState('')
-  const [catalogExit, setCatalogExit] = useState(DEFAULT_ROUTE)
   const { slugs: matches } = useBrandLogoSearch(search)
   const save = useSaveLatencySites()
-  const update = (index: number, changes: Partial<MonitoredSite>) => setDraft((current) => current.map((site, i) => i === index ? { ...site, ...changes } : site))
-  const add = () => {
-    if (!name.trim() || !url.trim() || draft.length >= MAX_SITES) return
-    setDraft([...draft, { id: crypto.randomUUID(), name: name.trim(), url: url.trim(), exit: exit === DEFAULT_ROUTE ? undefined : exit, icon: undefined, category: '' }])
-    setName('')
-    setUrl('')
-    setExit(DEFAULT_ROUTE)
+  const measure = useMeasureLatencySite()
+  const update = (id: string, changes: Partial<MonitoredSite>) => setDraft((current) => current.map((site) => site.id === id ? { ...site, ...changes } : site))
+  const customCount = draft.filter((site) => !site.builtin).length
+  const groups = CATEGORY_ORDER
+    .map((category) => ({ category, label: CATEGORY_LABELS[category], sites: draft.filter((site) => site.builtin && site.category === category) }))
+    .filter((group) => group.sites.length > 0)
+  const custom = draft.filter((site) => !site.builtin)
+  const addSite = () => {
+    const name = newName.trim()
+    const url = newUrl.trim()
+    if (!name || !url.startsWith('https://') || customCount >= MAX_SITES || draft.some((site) => site.name.toLowerCase() === name.toLowerCase())) {
+      setAddError(t('Use a unique name and an HTTPS URL.'))
+      return
+    }
+    setDraft([...draft, { id: crypto.randomUUID(), name, url, exit: newExit === DEFAULT_ROUTE ? undefined : newExit, icon: undefined, builtin: false }])
+    setNewName('')
+    setNewUrl('')
+    setNewExit(DEFAULT_ROUTE)
+    setAdding(false)
   }
-  const addCatalogSite = (entry: CatalogSite) => {
-    if (draft.length >= MAX_SITES) return
-    if (draft.some((site) => site.name.toLowerCase() === entry.name.toLowerCase())) return
-    setDraft([...draft, {
-      id: crypto.randomUUID(),
-      name: entry.name,
-      url: entry.url,
-      exit: catalogExit === DEFAULT_ROUTE ? undefined : catalogExit,
-      icon: undefined,
-      category: entry.category,
-    }])
-  }
-  const siblings = (index: number) => draft.map((site, i) => ({ site, i })).filter(({ site }) => site.category === draft[index].category)
-  const moveWithinGroup = (index: number, delta: number) => {
-    const group = siblings(index)
-    const position = group.findIndex(({ i }) => i === index)
-    const other = group[position + delta]
-    if (!other) return
-    const next = [...draft]
-    ;[next[index], next[other.i]] = [next[other.i], next[index]]
-    setDraft(next)
-  }
-  const canMove = (index: number, delta: number) => {
-    const group = siblings(index)
-    const position = group.findIndex(({ i }) => i === index)
-    return Boolean(group[position + delta])
-  }
-  const drop = (target: number) => {
-    if (dragging == null || dragging === target) return
-    if (draft[dragging].category !== draft[target].category) return
-    const next = [...draft]
-    const [site] = next.splice(dragging, 1)
-    next.splice(target, 0, site)
-    setDraft(next)
-    setDragging(null)
-    setEditing(null)
-    setIconFor(null)
+  const removeSite = (id: string) => {
+    setDraft((current) => current.filter((site) => site.id !== id))
+    setSelected(null)
   }
   const upload = async (file?: File) => {
-    if (iconFor == null || !file) return
+    const site = draft.find((candidate) => candidate.id === iconFor)
+    if (!site || !file) return
     setIconError('')
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
       setIconError('Choose a PNG, JPEG or WebP under 2 MiB')
@@ -155,37 +131,26 @@ function LatencySettings({ sites, exits, latency, onClose }: { sites: MonitoredS
       image.close()
       const data = canvas.toDataURL('image/png')
       if (data.length > 130000) throw new Error('Image is too large after resizing')
-      update(iconFor, { icon: data })
+      update(site.id, { icon: data })
       setIconFor(null)
     } catch (error) { setIconError(error instanceof Error ? error.message : 'Could not read image') }
   }
-  const groups = LATENCY_GROUPS
-    .map((group) => ({ ...group, items: draft.map((site, index) => ({ site, index })).filter(({ site }) => site.category === group.key) }))
-    .filter((group) => group.items.length > 0)
-  const custom = draft.map((site, index) => ({ site, index })).filter(({ site }) => !site.category)
-  const catalogQuery = catalogSearch.trim().toLowerCase()
-  const full = draft.length >= MAX_SITES
+  const site = draft.find((candidate) => candidate.id === selected)
+  const result = site ? latency?.custom.find((candidate) => candidate.name === site.name) : undefined
+  const saved = site ? latency?.custom.some((candidate) => candidate.name === site.name) ?? false : false
 
-  const siteRow = (site: DraftSite, i: number) => <div key={site.id} className="rounded-xl bg-muted/60 p-2 text-sm"
-    onDragOver={(event: DragEvent<HTMLDivElement>) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); drop(i) }}>
-    <div className="grid grid-cols-[44px_minmax(0,1fr)_44px_44px] items-center gap-2 sm:flex sm:flex-nowrap">
-      <span draggable onDragStart={() => setDragging(i)} onDragEnd={() => setDragging(null)} aria-label={`Drag ${site.name} to reorder`} className="hidden cursor-grab touch-none text-muted-foreground sm:block" title={t('Drag to reorder')}><GripVertical className="size-4" /></span>
-      <Button variant="quiet" size="icon-sm" onClick={() => { setIconFor(i); setSearch(''); setIconError('') }} aria-label={`Change ${site.name} icon`}><SiteIcon name={site.name} url={site.url} icon={site.icon} /></Button>
-      <div className="col-span-2 col-start-3 row-start-2 flex justify-end gap-2 sm:hidden"><Button variant="quiet" size="icon-sm" aria-label={`Move ${site.name} up`} title={`${t('Move up')}`} disabled={!canMove(i, -1)} onClick={() => moveWithinGroup(i, -1)}><ArrowUp aria-hidden /></Button><Button variant="quiet" size="icon-sm" aria-label={`Move ${site.name} down`} title={`${t('Move down')}`} disabled={!canMove(i, 1)} onClick={() => moveWithinGroup(i, 1)}><ArrowDown aria-hidden /></Button></div>
-      <Button variant="quiet" onClick={() => setEditing(editing === i ? null : i)} className="col-span-2 h-auto min-h-11 min-w-0 flex-1 justify-start px-0 whitespace-normal break-words text-left sm:min-h-9" title={site.url}>{site.name}</Button>
-      <Select value={site.exit || DEFAULT_ROUTE} onValueChange={(value) => update(i, { exit: !value || value === DEFAULT_ROUTE ? undefined : value })}>
-        <SelectTrigger size="sm" className="col-span-2 col-start-1 row-start-2 w-full min-w-0 sm:w-auto sm:max-w-32" aria-label={`Internet via, for ${site.name}`}><SelectValue /></SelectTrigger>
-        <SelectContent><SelectItem value={DEFAULT_ROUTE}>{t('Default')}</SelectItem>{exits.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
-          {site.exit && !exits.includes(site.exit) && <SelectItem value={site.exit}>{site.exit} {t('(unavailable)')}</SelectItem>}
-        </SelectContent>
-      </Select>
-      <RowAction icon={Trash2} label={`${t('Remove')} ${site.name}`} destructive onClick={() => { setDraft(draft.filter((_, index) => index !== i)); setEditing(null); setIconFor(null) }} />
-    </div>
-    {editing === i && <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_2fr]">
-      <Input aria-label={`Name for ${site.name}`} value={site.name} maxLength={40} onChange={(event) => update(i, { name: event.target.value })} />
-      <Input aria-label={`URL for ${site.name}`} value={site.url} onChange={(event) => update(i, { url: event.target.value })} />
-    </div>}
-  </div>
+  const tile = (entry: DraftSite) => {
+    const live = latency?.custom.find((candidate) => candidate.name === entry.name)
+    return <button key={entry.id} type="button" onClick={() => { measure.reset(); setSelected(entry.id) }}
+      aria-label={`${entry.name}: ${siteValue(live)}`}
+      className="flex min-h-14 min-w-0 items-center gap-2 rounded-xl border bg-muted/40 px-3 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+      <SiteIcon name={entry.name} url={entry.url} icon={entry.icon} />
+      <span className="min-w-0 flex-1 truncate text-sm font-medium">{entry.name}</span>
+      {live?.measuring
+        ? <LoaderCircle className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label={t('Measuring')} />
+        : <span className="shrink-0 text-sm tabular-nums text-muted-foreground">{siteValue(live)}</span>}
+    </button>
+  }
 
   return <>
     <Card>
@@ -193,79 +158,93 @@ function LatencySettings({ sites, exits, latency, onClose }: { sites: MonitoredS
         <div className="space-y-2">
           <Label htmlFor="internet-latency-target">{t('Internet target')}</Label>
           <Select value={target} onValueChange={(value) => { setTarget(value ?? 'auto'); setTargetChanged(true) }}>
-            <SelectTrigger id="internet-latency-target" className="w-full"><SelectValue>{target === 'auto' ? t('Choose fastest once') : latency?.sites.find((site) => site.url === target)?.name}</SelectValue></SelectTrigger>
+            <SelectTrigger id="internet-latency-target" className="w-full"><SelectValue>{target === 'auto' ? t('Choose fastest once') : latency?.sites.find((entry) => entry.url === target)?.name}</SelectValue></SelectTrigger>
             <SelectContent>
               <SelectItem value="auto">{t('Choose fastest once')}</SelectItem>
-              {latency?.sites.map((site) => <SelectItem key={site.url} value={site.url}>{site.name}</SelectItem>)}
+              {latency?.sites.map((entry) => <SelectItem key={entry.url} value={entry.url}>{entry.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <p className="text-sm text-muted-foreground">{t('The chosen target stays fixed until you change it.')}</p>
         </div>
-        <section aria-labelledby="monitored-sites-heading" className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Heading id="monitored-sites-heading">{t('Monitored sites')}</Heading>
-            <Button variant="secondary" size="sm" onClick={() => { setCatalogSearch(''); setCatalogOpen(true) }}>{t('Add common site')}</Button>
-          </div>
-          {groups.map((group) => <section key={group.key} aria-label={t(group.label)} className="space-y-2">
+        <section aria-labelledby="monitored-sites-heading" className="space-y-5">
+          <Heading id="monitored-sites-heading">{t('Monitored sites')}</Heading>
+          {groups.map((group) => <section key={group.category} aria-label={t(group.label)} className="space-y-2">
             <Heading as="h3" size="sm" className="text-muted-foreground">{t(group.label)}</Heading>
-            <div className="space-y-2">{group.items.map(({ site, index }) => siteRow(site, index))}</div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">{group.sites.map(tile)}</div>
           </section>)}
-          {custom.length > 0 && <section aria-label={t('Custom')} className="space-y-2">
+          <section aria-label={t('Custom')} className="space-y-2">
             <Heading as="h3" size="sm" className="text-muted-foreground">{t('Custom')}</Heading>
-            <div className="space-y-2">{custom.map(({ site, index }) => siteRow(site, index))}</div>
-          </section>}
-          {draft.length === 0 && <p className="text-sm text-muted-foreground">{t('No monitored sites yet. Add a common site or one of your own.')}</p>}
-          <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-            <Input className="min-w-24 flex-1 sm:w-24" aria-label={t('Site name')} placeholder={t('Name')} maxLength={40} value={name} onChange={(event) => setName(event.target.value)} />
-            <Input className="min-w-40 flex-[2] sm:w-52" aria-label="HTTPS URL" placeholder="https://example.com/" value={url} onChange={(event) => setUrl(event.target.value)} />
-            <Select value={exit} onValueChange={(value) => setExit(value ?? DEFAULT_ROUTE)}>
-              <SelectTrigger className="w-28 shrink-0" aria-label={t('Internet via for new site')}><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value={DEFAULT_ROUTE}>{t('Default')}</SelectItem>{exits.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>
-            </Select>
-            <Button variant="secondary" onClick={add} disabled={!name.trim() || !url.startsWith('https://') || full}>{t('Add')}</Button>
-          </div>
-          {full && <p className="text-sm text-muted-foreground">{t('At most {count} sites can be monitored.', { count: MAX_SITES })}</p>}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {custom.map(tile)}
+              <button type="button" disabled={customCount >= MAX_SITES} onClick={() => { setAddError(''); setAdding(true) }}
+                className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-dashed px-3 text-sm text-muted-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50">
+                <Plus className="size-4" aria-hidden />{t('Add site')}
+              </button>
+            </div>
+            {customCount >= MAX_SITES && <p className="text-sm text-muted-foreground">{t('At most {count} sites can be monitored.', { count: MAX_SITES })}</p>}
+          </section>
         </section>
         {save.isError && <p role="alert" className="text-sm text-destructive">{save.error.message}</p>}
       </CardContent>
-      <CardFooter className="justify-end gap-2"><Button variant="quiet" onClick={onClose}>{t('Cancel')}</Button><Button disabled={save.isPending} onClick={() => save.mutate({ sites: draft.map(({ name, url, exit, icon, category }) => ({ name, url, exit, icon, category })), target: targetChanged ? (target === 'auto' ? '' : target) : undefined }, { onSuccess: onClose })}>{t('Save')}</Button></CardFooter>
+      <CardFooter className="justify-end gap-2"><Button variant="quiet" onClick={onClose}>{t('Cancel')}</Button><Button disabled={save.isPending} onClick={() => save.mutate({ sites: draft.map(({ name, url, exit, icon }) => ({ name, url, exit, icon })), target: targetChanged ? (target === 'auto' ? '' : target) : undefined }, { onSuccess: onClose })}>{t('Save')}</Button></CardFooter>
     </Card>
-    {catalogOpen && <Dialog open onOpenChange={(open) => { if (!open) setCatalogOpen(false) }}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader><DialogTitle>{t('Common sites')}</DialogTitle><DialogDescription>{t('Each site uses the faster of its main page and its static host. Choose an exit before adding; you can change it per site afterwards.')}</DialogDescription></DialogHeader>
-        <div className="flex flex-wrap gap-2">
-          <Input className="min-w-40 flex-1" aria-label={t('Search common sites')} placeholder={t('Search')} value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} />
-          <Select value={catalogExit} onValueChange={(value) => setCatalogExit(value ?? DEFAULT_ROUTE)}>
-            <SelectTrigger className="w-32" aria-label={t('Internet via for new site')}><SelectValue /></SelectTrigger>
+    {site && <Dialog open onOpenChange={(open) => { if (!open) setSelected(null) }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <div className="flex min-w-0 items-center gap-2"><SiteIcon name={site.name} url={site.url} icon={site.icon} /><DialogTitle className="truncate">{site.name}</DialogTitle></div>
+          <DialogDescription className="truncate">{site.url}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="flex items-baseline justify-between rounded-lg bg-muted/50 px-3 py-2">
+            <span className="text-sm text-muted-foreground">{t('Latest sample')}</span>
+            <span className="text-lg font-semibold tabular-nums">{result?.measuring ? t('Measuring…') : siteValue(result)}</span>
+          </div>
+          {result?.error && <p className="text-sm text-destructive">{result.error}</p>}
+          <div className="space-y-2">
+            <Label htmlFor="site-exit">{t('Internet via')}</Label>
+            <Select value={site.exit || DEFAULT_ROUTE} onValueChange={(value) => update(site.id, { exit: !value || value === DEFAULT_ROUTE ? undefined : value })}>
+              <SelectTrigger id="site-exit" className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value={DEFAULT_ROUTE}>{t('Default')}</SelectItem>{exits.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+                {site.exit && !exits.includes(site.exit) && <SelectItem value={site.exit}>{site.exit} {t('(unavailable)')}</SelectItem>}
+              </SelectContent>
+            </Select>
+          </div>
+          {!site.builtin && <div className="grid gap-2 sm:grid-cols-2">
+            <Input aria-label={t('Name')} value={site.name} maxLength={40} onChange={(event) => update(site.id, { name: event.target.value })} />
+            <Input aria-label="HTTPS URL" value={site.url} onChange={(event) => update(site.id, { url: event.target.value })} />
+          </div>}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex gap-2">
+              {!site.builtin && <Button variant="quiet" size="sm" onClick={() => { setSelected(null); setSearch(''); setIconError(''); setIconFor(site.id) }}>{t('Change icon')}</Button>}
+              {!site.builtin && <Button variant="quiet" size="sm" className="text-destructive" onClick={() => removeSite(site.id)}><Trash2 aria-hidden />{t('Remove')}</Button>}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="quiet" size="sm" onClick={() => setSelected(null)}>{t('Close')}</Button>
+              <Button variant="secondary" size="sm" disabled={!saved || result?.measuring || measure.isPending} onClick={() => measure.mutate(site.name)}>{t('Measure now')}</Button>
+            </div>
+          </div>
+          {!saved && <p className="text-sm text-muted-foreground">{t('Save this site before measuring it.')}</p>}
+          {measure.isError && <p role="alert" className="text-sm text-destructive">{measure.error.message}</p>}
+        </div>
+      </DialogContent>
+    </Dialog>}
+    {adding && <Dialog open onOpenChange={(open) => { if (!open) setAdding(false) }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>{t('Add site')}</DialogTitle><DialogDescription>{t('A custom site is measured with the others and can be removed at any time.')}</DialogDescription></DialogHeader>
+        <div className="space-y-3">
+          <Input aria-label={t('Site name')} placeholder={t('Name')} maxLength={40} value={newName} onChange={(event) => setNewName(event.target.value)} />
+          <Input aria-label="HTTPS URL" placeholder="https://example.com/" value={newUrl} onChange={(event) => setNewUrl(event.target.value)} />
+          <Select value={newExit} onValueChange={(value) => setNewExit(value ?? DEFAULT_ROUTE)}>
+            <SelectTrigger className="w-full" aria-label={t('Internet via for new site')}><SelectValue /></SelectTrigger>
             <SelectContent><SelectItem value={DEFAULT_ROUTE}>{t('Default')}</SelectItem>{exits.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>
           </Select>
+          {addError && <p role="alert" className="text-sm text-destructive">{addError}</p>}
+          <div className="flex justify-end gap-2"><Button variant="quiet" onClick={() => setAdding(false)}>{t('Cancel')}</Button><Button variant="secondary" onClick={addSite} disabled={!newName.trim() || !newUrl.startsWith('https://')}>{t('Add')}</Button></div>
         </div>
-        <div className="max-h-80 space-y-4 overflow-y-auto pr-1">
-          {LATENCY_GROUPS.map((group) => {
-            const entries = LATENCY_CATALOG.filter((entry) => entry.category === group.key && (!catalogQuery || entry.name.toLowerCase().includes(catalogQuery)))
-            if (entries.length === 0) return null
-            return <section key={group.key} className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t(group.label)}</p>
-              <div className="grid gap-1 sm:grid-cols-2">
-                {entries.map((entry) => {
-                  const added = draft.some((site) => site.name.toLowerCase() === entry.name.toLowerCase())
-                  return <button key={entry.name} type="button" disabled={added || full} onClick={() => addCatalogSite(entry)}
-                    className="flex min-w-0 items-center gap-2 rounded-lg border px-2 py-2 text-left text-sm hover:bg-muted disabled:opacity-50">
-                    <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground/10 text-[10px] font-bold uppercase">{entry.name.slice(0, 2)}</span>
-                    <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-                    {added && <span className="shrink-0 text-xs text-muted-foreground">{t('Added')}</span>}
-                  </button>
-                })}
-              </div>
-            </section>
-          })}
-          {LATENCY_CATALOG.every((entry) => catalogQuery && !entry.name.toLowerCase().includes(catalogQuery)) && <p className="text-sm text-muted-foreground">{t('No matching sites.')}</p>}
-        </div>
-        {full && <p className="text-sm text-muted-foreground">{t('At most {count} sites can be monitored.', { count: MAX_SITES })}</p>}
       </DialogContent>
     </Dialog>}
     {iconFor != null && <Dialog open onOpenChange={(open) => { if (!open) setIconFor(null) }}>
-      <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{t('Icon for')} {draft[iconFor]?.name}</DialogTitle><DialogDescription>{t('Upload an image or search theSVG library. Auto uses the site favicon.')}</DialogDescription></DialogHeader>
+      <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{t('Icon for')} {draft.find((entry) => entry.id === iconFor)?.name}</DialogTitle><DialogDescription>{t('Upload an image or search theSVG library. Auto uses the site favicon.')}</DialogDescription></DialogHeader>
         <div className="flex gap-2"><Button variant="secondary" onClick={() => { update(iconFor, { icon: undefined }); setIconFor(null) }}>{t('Auto')}</Button>
           <label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-sm focus-within:outline-2 focus-within:outline-ring sm:min-h-9">{t('Upload image')}<input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => upload(event.target.files?.[0])} /></label></div>
         <Input aria-label={t('Search theSVG icons')} placeholder={t('Search theSVG (e.g. wechat)')} value={search} onChange={(event) => setSearch(event.target.value)} />

@@ -42,6 +42,7 @@ type LatencySite struct {
 	Exit         string    `json:"exit,omitempty"`
 	Icon         string    `json:"icon,omitempty"`
 	Category     string    `json:"category,omitempty"`
+	Builtin      bool      `json:"builtin,omitempty"`
 	Error        string    `json:"error,omitempty"`
 	// Measuring marks an on-demand probe of this site. Background rounds never
 	// set it, so the card shows a spinner only for the site somebody clicked.

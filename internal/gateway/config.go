@@ -54,6 +54,10 @@ const ModuleName = "gateway"
 type Config struct {
 	LatencyTarget string              `json:"latency_target,omitempty"`
 	LatencySites  []CustomLatencySite `json:"latency_sites"`
+	// LatencyCommon holds only the operator's exit overrides for the catalog
+	// sites; the sites themselves are always present. Keeping them out of
+	// latency_sites is what makes "cannot be deleted" true rather than a UI rule.
+	LatencyCommon []CommonLatency `json:"latency_common,omitempty"`
 	// Enabled controls whether any of this is programmed into the kernel at
 	// all. Disabling tears down our tables, our rules and our route tables and
 	// leaves the box routing and translating exactly as it did before olr was
@@ -858,6 +862,11 @@ func (c *Config) Rename(from, to string) bool {
 	for i := range c.LatencySites {
 		if c.LatencySites[i].Exit == from {
 			c.LatencySites[i].Exit = to
+		}
+	}
+	for i := range c.LatencyCommon {
+		if c.LatencyCommon[i].Exit == from {
+			c.LatencyCommon[i].Exit = to
 		}
 	}
 	c.Normalize()

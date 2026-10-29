@@ -26,9 +26,9 @@ func (m *CustomLatencyMonitor) Icon(ctx context.Context, name string) ([]byte, s
 	m.refreshConfig()
 	m.mu.RLock()
 	var site CustomLatencySite
-	for _, candidate := range m.sites {
+	for _, candidate := range m.allSitesLocked() {
 		if candidate.Name == name {
-			site = candidate
+			site = CustomLatencySite{Name: candidate.Name, URL: candidate.URL, Exit: candidate.Exit, Icon: candidate.Icon}
 			break
 		}
 	}
