@@ -284,8 +284,13 @@ func Render(c Config, links LinkView) Desired {
 	// rewriting it to this router's address on the way out is what makes the
 	// reply come back. One rule per inside interface, because that is the only
 	// fact the rule needs.
+	//
+	// Skipped when the tunnel's network overlaps one of ours: the rule would
+	// then rewrite that network's own source range, which would break every
+	// device on it. OverlapsServed has the argument, and the tunnel is broken
+	// in that state anyway.
 	if c.DialIn != nil {
-		if prefix := c.DialIn.Prefix.Masked(); prefix.IsValid() && prefix.Addr().Is4() {
+		if prefix := c.DialIn.Prefix.Masked(); prefix.IsValid() && prefix.Addr().Is4() && !OverlapsServed(links, prefix) {
 			for _, l := range DialInInterfaces(links, c.DialIn.Tunnel, c.DialIn.Uplink) {
 				d.Table.DialIn = append(d.Table.DialIn, DialInRule{Prefix: prefix, Out: l.Name})
 			}

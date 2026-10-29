@@ -559,6 +559,12 @@ oifname "br-lan" ip saddr 10.6.0.0/24 masquerade
 The cost is the one every masquerade has: a device's log, or a rule written
 against its address, shows the router rather than the peer.
 
+The rule is skipped when the tunnel's subnet overlaps a network this box
+serves — `remote` refuses to create such a tunnel, and if `link` later moves a
+network onto its prefix, rewriting that network's own source range would break
+every device on it. A tunnel whose addresses collide is unusable either way,
+and writing nothing is the safe half of that failure.
+
 The tunnel's subnet is in the egress masquerade's source set for the same
 reason, which is what makes `routes everything` reach the internet at all: a
 peer that sends all of its traffic leaves with the uplink's address, the same

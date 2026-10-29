@@ -900,11 +900,14 @@ func (c Config) NAT(uplink string, networks []netip.Prefix, dialIn *nat.DialIn) 
 	}
 	if c.SNATOrDefault() && uplink != "" && len(networks) > 0 {
 		sources := slices.Clone(networks)
-		if out.DialIn != nil {
-			// The tunnel is a network behind this box like any other, so its
-			// peers join the egress source set: a peer that sends everything
-			// must leave with an address the internet can reply to, exactly as
-			// a laptop on the LAN does (docs/remote-access.md §6.2).
+		// The tunnel is a network behind this box like any other, so its peers
+		// join the egress source set: a peer that sends everything must leave
+		// with an address the internet can reply to, exactly as a laptop on the
+		// LAN does (docs/remote-access.md §6.2). Not when it overlaps one of
+		// those networks: the set is an interval set, and overlapping elements
+		// are either rejected by the kernel or meant something nobody asked
+		// for. nat.OverlapsServed skips the rule for the same reason.
+		if out.DialIn != nil && !overlapsAny(out.DialIn.Prefix, networks) {
 			sources = append(sources, out.DialIn.Prefix.Masked())
 		}
 		slices.SortFunc(sources, func(a, b netip.Prefix) int {
@@ -913,4 +916,14 @@ func (c Config) NAT(uplink string, networks []netip.Prefix, dialIn *nat.DialIn) 
 		out.Egress = &nat.Egress{Interface: uplink, Sources: sources}
 	}
 	return out
+}
+
+// overlapsAny reports whether prefix shares addresses with any of networks.
+func overlapsAny(prefix netip.Prefix, networks []netip.Prefix) bool {
+	for _, n := range networks {
+		if n.Overlaps(prefix) {
+			return true
+		}
+	}
+	return false
 }

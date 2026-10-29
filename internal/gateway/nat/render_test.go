@@ -306,3 +306,45 @@ func interfaceNames(infos []LinkInfo) []string {
 	}
 	return out
 }
+
+// A tunnel whose subnet overlaps a served network is unusable already. Writing
+// the rule would rewrite that network's own traffic to this router, so the
+// safe half of the failure is no rule at all.
+func TestDialInIsNotRenderedWhenItOverlapsAServedNetwork(t *testing.T) {
+	for _, overlapping := range []string{
+		"192.168.1.0/24",   // exactly br-lan
+		"192.168.0.0/16",   // contains br-lan
+		"192.168.1.128/25", // inside br-lan
+	} {
+		c := testConfig()
+		c.DialIn = &DialIn{
+			Prefix: netip.MustParsePrefix(overlapping),
+			Tunnel: "wg0",
+		}
+		for _, l := range rendered(t, c) {
+			if strings.HasPrefix(l, "nft dialin ") {
+				t.Errorf("%s: rendered %q over a served network", overlapping, l)
+			}
+		}
+	}
+}
+
+// The tunnel's rule is additive: nothing a working box already relies on is
+// removed or rewritten by turning remote access on.
+func TestDialInOnlyAddsRules(t *testing.T) {
+	base := rendered(t, testConfig())
+
+	c := testConfig()
+	c.DialIn = &DialIn{
+		Prefix: netip.MustParsePrefix("10.6.0.0/24"),
+		Tunnel: "wg0",
+		Uplink: "wan0",
+	}
+	got := rendered(t, c)
+
+	for _, l := range base {
+		if !contains(got, l) {
+			t.Errorf("the dial-in masquerade removed %q", l)
+		}
+	}
+}

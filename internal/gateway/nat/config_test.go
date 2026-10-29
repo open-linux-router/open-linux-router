@@ -258,6 +258,29 @@ func TestTheZeroConfigIsEmpty(t *testing.T) {
 	}
 }
 
+// A box whose only NAT rule is the tunnel's still has something to program at
+// boot; Empty alone would say otherwise.
+func TestATunnelAloneStillPrograms(t *testing.T) {
+	c := Config{DialIn: &DialIn{Prefix: netip.MustParsePrefix("10.6.0.0/24")}}
+	if !c.Empty() {
+		t.Error("Empty is about the document; a tunnel is not a forward")
+	}
+	if c.ProgramsNothing() {
+		t.Error("a config with only a dial-in rule was reported as programming nothing")
+	}
+
+	var egressOnly Config
+	egressOnly.Egress = &Egress{Interface: "pppoe0", Sources: []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24")}}
+	if egressOnly.ProgramsNothing() {
+		t.Error("a config with only an egress rule was reported as programming nothing")
+	}
+
+	var zero Config
+	if !zero.ProgramsNothing() {
+		t.Error("the zero config is not empty")
+	}
+}
+
 // mustAddrPort is netip.MustParseAddrPort under a local name, so the test files
 // read as one fixture set rather than as four importers of netip.
 func mustAddrPort(s string) netip.AddrPort { return netip.MustParseAddrPort(s) }

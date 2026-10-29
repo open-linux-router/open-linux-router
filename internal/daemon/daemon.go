@@ -1504,7 +1504,7 @@ func startForwards(ctx context.Context, a nat.Applier, logger *slog.Logger) {
 			"error", err)
 		return
 	}
-	if cfg.Empty() && cfg.Egress.Empty() {
+	if cfg.ProgramsNothing() {
 		return
 	}
 

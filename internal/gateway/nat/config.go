@@ -247,8 +247,21 @@ func (c Config) Find(name string) (Forward, bool) {
 	return Forward{}, false
 }
 
-// Empty reports whether anything has been configured at all.
+// Empty reports whether the stored document has anything for this package:
+// forwards, and nothing else, because Egress and DialIn are projected from
+// facts owned outside it.
 func (c Config) Empty() bool { return len(c.Forwards) == 0 }
+
+// ProgramsNothing reports whether applying this config would ask the kernel to
+// hold nothing at all: no forwards, no egress masquerade and no dial-in
+// masquerade.
+//
+// Separate from Empty because the two derived rules are not in the document,
+// and the boot path must not skip a box whose only rule is one of them. A
+// tunnel with no forwards and no uplink is exactly that box.
+func (c Config) ProgramsNothing() bool {
+	return c.Empty() && c.Egress.Empty() && c.DialIn == nil
+}
 
 // Normalize puts the config in canonical form: names and interfaces trimmed,
 // forwards sorted, slots allocated.

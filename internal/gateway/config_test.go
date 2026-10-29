@@ -431,6 +431,12 @@ func TestNATProjectsTheDialInNetwork(t *testing.T) {
 	if want := netip.MustParsePrefix("10.6.0.0/24"); !hasPrefix(got.Egress.Sources, want) {
 		t.Errorf("egress sources %v do not cover the tunnel", got.Egress.Sources)
 	}
+	if want := netip.MustParsePrefix("192.168.1.0/24"); !hasPrefix(got.Egress.Sources, want) {
+		t.Errorf("egress sources %v dropped a served network", got.Egress.Sources)
+	}
+	if len(got.Egress.Sources) != 2 {
+		t.Errorf("egress sources = %v, want the served network and the tunnel", got.Egress.Sources)
+	}
 }
 
 func TestNATWithoutATunnelWritesNoDialInRule(t *testing.T) {
@@ -448,4 +454,19 @@ func hasPrefix(prefixes []netip.Prefix, want netip.Prefix) bool {
 		}
 	}
 	return false
+}
+
+// An interval set cannot carry overlapping elements, and the egress rule must
+// not pretend an overlapping tunnel is one of the networks it serves.
+func TestNATLeavesAnOverlappingTunnelOutOfTheEgressSources(t *testing.T) {
+	c := Config{Enabled: true}
+	served := netip.MustParsePrefix("10.6.0.0/24")
+	got := c.NAT("pppoe0", []netip.Prefix{served}, &nat.DialIn{Prefix: served})
+
+	if got.Egress == nil {
+		t.Fatal("no egress rule")
+	}
+	if len(got.Egress.Sources) != 1 || got.Egress.Sources[0] != served {
+		t.Errorf("egress sources = %v, want just the served network", got.Egress.Sources)
+	}
 }

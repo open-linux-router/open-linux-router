@@ -208,6 +208,34 @@ func DialInInterfaces(links LinkView, tunnel, uplink string) []LinkInfo {
 	return out
 }
 
+// OverlapsServed reports whether prefix shares addresses with a network this
+// box serves.
+//
+// The dial-in masquerade is safe only while the tunnel's addresses are foreign
+// to every network it rewrites traffic onto. `remote` refuses to create a tunnel
+// that overlaps one, but the rule is built from stored intent, and `link` can
+// move a network onto the tunnel's prefix afterwards — at which point the rule
+// would rewrite the LAN's own traffic to this router and break every device on
+// it. So the check is repeated where the rule is built, and an unreadable link
+// view counts as an overlap: writing no rule is the safe direction.
+func OverlapsServed(links LinkView, prefix netip.Prefix) bool {
+	all, err := links.Interfaces()
+	if err != nil {
+		return true
+	}
+	for _, l := range all {
+		if !l.Adopted {
+			continue
+		}
+		for _, p := range l.Prefixes {
+			if p.Overlaps(prefix) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // hasIPv4 reports whether the interface holds an IPv4 network, which is the
 // only family a dial-in peer's traffic can arrive on: `remote` refuses a v6
 // subnet, so there is no v6 source address to rewrite.
