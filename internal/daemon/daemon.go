@@ -492,6 +492,9 @@ func run(args []string) error {
 		// is design.md §4.1's `dial → gateway` arrow, and the first thing to
 		// walk it.
 		Uplink: gatewayUplink{store: store},
+		// The tunnel's network, read through `remote`, for the masquerade that
+		// makes peers look like this router on the networks it serves.
+		DialIn: gatewayDialIn{store: remote.Store{Store: store}},
 	}
 	natApplier := gatewayApplier.NATApplier(nat.NewKernel(), natLinks)
 
@@ -600,12 +603,13 @@ func run(args []string) error {
 		Object: remote.ObjectSocks,
 	}
 
-	// design.md §4.1's remote → dns arrow: moving the tunnel changes an address
-	// the relay was rendered to answer on, and nothing in dns's own intent
-	// moved, so dns cannot notice by itself. Re-applied under the same apply
-	// lock as the tunnel edit.
+	// design.md §4.1's remote → dns and remote → gateway arrows: moving the
+	// tunnel changes an address the relay was rendered to answer on, and the
+	// subnet the NAT table masquerades, and nothing in either dependent's own
+	// intent moved — so neither can notice by itself. Re-applied under the same
+	// apply lock as the tunnel edit.
 	remoteTunnel.Follow = func(ctx context.Context) []core.Step {
-		return applyDependents(ctx, logger, dnsDependent(dnsApplier))
+		return applyDependents(ctx, logger, dnsDependent(dnsApplier), natDependent(natApplier))
 	}
 
 	srv.Mount(remote.ModuleName, remote.HTTP{

@@ -38,6 +38,11 @@ type Applier struct {
 	// needs: which interface is the box's own way out. Nil means none, which is
 	// the reference topology and writes no rule.
 	Uplink UplinkView
+
+	// DialIn is the window onto `remote`, for the one fact the tunnel's
+	// masquerade needs: the network peers hold addresses on. Nil means no remote
+	// access, and then no rule is written.
+	DialIn DialInView
 }
 
 // NATApplier is the other half of this module, wired to the same document.
@@ -89,7 +94,16 @@ func (a Applier) natOf(cfg Config) nat.Config {
 			networks = nets
 		}
 	}
-	return cfg.NAT(uplink, networks)
+	// The tunnel's network, read through `remote`. A failure writes no dial-in
+	// rule, the same call the two reads above make: losing a fact can only ever
+	// remove a rule, never invent one.
+	var dialIn *nat.DialIn
+	if a.DialIn != nil {
+		if info, err := a.DialIn.DialIn(); err == nil && info.Enabled {
+			dialIn = &nat.DialIn{Prefix: info.Prefix, Tunnel: info.Interface}
+		}
+	}
+	return cfg.NAT(uplink, networks, dialIn)
 }
 
 // HealthSource is where exit health comes from.

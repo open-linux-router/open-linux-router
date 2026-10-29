@@ -156,7 +156,19 @@ func validateBackup(ctx context.Context, doc core.Document, source link.Source) 
 			if e != nil {
 				return e
 			}
-			return nat.Validate(c.NAT(dial.DesiredFor(dc).Interface, networks), natLinkView{facts: facts}).Err()
+			// The tunnel's network, when the backup being restored has one.
+			// Read here rather than through gateway's DialInView because this
+			// validates a document that is not the live store yet.
+			var dialIn *nat.DialIn
+			if rc, e := remote.FromDocument(doc); e != nil {
+				return e
+			} else if rc.WireGuard.Enabled {
+				dialIn = &nat.DialIn{
+					Prefix: rc.WireGuard.SubnetOrDefault(),
+					Tunnel: rc.WireGuard.InterfaceOrDefault(),
+				}
+			}
+			return nat.Validate(c.NAT(dial.DesiredFor(dc).Interface, networks, dialIn), natLinkView{facts: facts}).Err()
 		},
 		func() error {
 			c, e := remote.FromDocument(doc)

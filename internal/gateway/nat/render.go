@@ -37,11 +37,12 @@ type Desired struct {
 
 // NFTable is the `inet olr_nat` table (docs/port-forwarding.md §3.1).
 //
-// Two chains and three kinds of rule:
+// Two chains and four kinds of rule:
 //
 //	dnat      a connection from outside, redirected inward
 //	hairpin   the same connection, opened from inside instead (§4)
 //	masq      the other half of the hairpin, so replies come back through us
+//	dialin    the tunnel's peers, rewritten to this router on each network
 //
 // The hairpin pair is one feature described in two chains, and neither half
 // works alone: without the DNAT a LAN client reaches the router and is refused,
@@ -58,6 +59,14 @@ type NFTable struct {
 	// Masq are the postrouting rules that bring hairpinned replies back through
 	// this box, one per (forward, protocol, source prefix).
 	Masq []MasqRule
+
+	// DialIn are the masquerades that make the tunnel's peers look like this
+	// router on every network it serves, one per inside interface.
+	//
+	// The same trade as Masq, one layer up: it exists so a reply comes back
+	// through this box, and it costs the far side the ability to tell one peer
+	// from another. docs/remote-access.md §6.2.
+	DialIn []DialInRule
 
 	// Egress is the outbound masquerade, nil when there is none to write.
 	//
@@ -154,6 +163,22 @@ type MasqRule struct {
 	Ports PortRange
 
 	Protocol Protocol
+}
+
+// DialInRule rewrites the source address of traffic from the dial-in network as
+// it leaves for one of our networks.
+//
+// Without it the device at the far end sees 10.6.0.7, has no route to 10.6.0.0/24
+// — it is neither on its network nor on its default route — and drops the reply.
+// Scoped by output interface rather than by destination, because there is no
+// destination to name: a peer may be talking to anything on the network,
+// including this box.
+type DialInRule struct {
+	// Prefix is the dial-in network the packet's source is rewritten from.
+	Prefix netip.Prefix
+
+	// Out is the inside interface the packet leaves by.
+	Out string
 }
 
 // EgressRule is the outbound masquerade: traffic from one of our networks,
@@ -254,6 +279,19 @@ func Render(c Config, links LinkView) Desired {
 		}
 	}
 
+	// The tunnel's half. A peer holds an address on a network this box does not
+	// serve, so every device on ours sees a source it cannot route to;
+	// rewriting it to this router's address on the way out is what makes the
+	// reply come back. One rule per inside interface, because that is the only
+	// fact the rule needs.
+	if c.DialIn != nil {
+		if prefix := c.DialIn.Prefix.Masked(); prefix.IsValid() && prefix.Addr().Is4() {
+			for _, l := range DialInInterfaces(links, c.DialIn.Tunnel, c.DialIn.Uplink) {
+				d.Table.DialIn = append(d.Table.DialIn, DialInRule{Prefix: prefix, Out: l.Name})
+			}
+		}
+	}
+
 	// The outbound half. Rendered last so it sits after the hairpin
 	// masquerades in the chain — see NFTable.Egress for why the order decides
 	// which source address a hairpinned connection ends up with.
@@ -294,6 +332,7 @@ func sortRules(t *NFTable) {
 	sort.SliceStable(t.DNAT, func(i, j int) bool { return t.DNAT[i].Line() < t.DNAT[j].Line() })
 	sort.SliceStable(t.Hairpin, func(i, j int) bool { return t.Hairpin[i].Line() < t.Hairpin[j].Line() })
 	sort.SliceStable(t.Masq, func(i, j int) bool { return t.Masq[i].Line() < t.Masq[j].Line() })
+	sort.SliceStable(t.DialIn, func(i, j int) bool { return t.DialIn[i].Line() < t.DialIn[j].Line() })
 }
 
 // --- canonical text -------------------------------------------------------
@@ -338,6 +377,13 @@ func (r HairpinRule) Line() string {
 func (r MasqRule) Line() string {
 	return fmt.Sprintf("nft masq from %s to %s %s port %s for %s",
 		r.Prefix, r.To, r.Protocol, r.Ports, r.Forward)
+}
+
+// Line is this rule's canonical form, stored in its userdata for the same
+// reason. `out` first, like the egress rule: the interface is what a reader
+// compares across boxes, and it is the fact the rule is scoped by.
+func (r DialInRule) Line() string {
+	return fmt.Sprintf("nft dialin out %s from %s", r.Out, r.Prefix)
 }
 
 // Line is this rule's canonical form, stored in its userdata for the same
@@ -401,9 +447,12 @@ func (d Desired) objectLines() []string {
 		out = append(out, r.Line())
 	}
 
-	if len(d.Table.Masq) > 0 || d.Table.Egress != nil {
+	if len(d.Table.Masq) > 0 || len(d.Table.DialIn) > 0 || d.Table.Egress != nil {
 		out = append(out, fmt.Sprintf("nft chain %s postrouting srcnat", PostroutingChain))
 		for _, r := range d.Table.Masq {
+			out = append(out, r.Line())
+		}
+		for _, r := range d.Table.DialIn {
 			out = append(out, r.Line())
 		}
 		// After the hairpin masquerades, which is the ordering NFTable.Egress

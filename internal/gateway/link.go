@@ -56,6 +56,34 @@ type UplinkView interface {
 	Uplink() (string, error)
 }
 
+// DialInInfo is the one fact this module needs from `remote`: the network peers
+// hold addresses on, and the tunnel that carries it.
+type DialInInfo struct {
+	// Enabled reports whether the tunnel exists at all. False means no peer can
+	// be on the network, so no rule is worth writing.
+	Enabled bool
+
+	// Prefix is the dial-in network, e.g. 10.6.0.0/24.
+	Prefix netip.Prefix
+
+	// Interface is the tunnel's kernel name, e.g. wg0.
+	Interface string
+}
+
+// DialInView is this module's read-only window onto `remote`.
+//
+// A third interface rather than a method on UplinkView, for the reason that one
+// gives about LinkView: it names a different module's fact. The tunnel's
+// network belongs to `remote`, not to `link`, because its addresses are handed
+// out in a client configuration rather than by DHCP — docs/remote-access.md
+// §3.2 — and this is where gateway asks what it is without learning how it is
+// addressed.
+type DialInView interface {
+	// DialIn returns the tunnel's network, or a zero DialInInfo when `remote`
+	// has no tunnel.
+	DialIn() (DialInInfo, error)
+}
+
 // LinkInfo is the subset of an interface's state that routing decisions depend
 // on.
 type LinkInfo struct {

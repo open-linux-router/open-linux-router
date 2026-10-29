@@ -176,6 +176,50 @@ func InsideInterfaces(links LinkView, outward string) []LinkInfo {
 	return out
 }
 
+// DialInInterfaces lists the adopted interfaces a dial-in peer's traffic can
+// leave by: every network this box serves, minus the tunnel itself and minus
+// `dial`'s uplink.
+//
+// The tunnel is skipped because a rule scoped to it would rewrite peer-to-peer
+// packets to this box's address, which is wrong. The uplink is skipped because
+// the egress masquerade already owns that direction — the tunnel is in its
+// source set — and a second rule matching the same packet would be a line that
+// never runs.
+//
+// An interface with no IPv4 address is skipped too: the rule is scoped by
+// output interface, so a network with no IPv4 clients on it has nothing that
+// could reply to a peer, and a rule for it would only be text to read past.
+func DialInInterfaces(links LinkView, tunnel, uplink string) []LinkInfo {
+	all, err := links.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var out []LinkInfo
+	for _, l := range all {
+		if !l.Adopted || l.Name == "" || l.Name == tunnel || l.Name == uplink {
+			continue
+		}
+		if !hasIPv4(l.Prefixes) {
+			continue
+		}
+		out = append(out, l)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// hasIPv4 reports whether the interface holds an IPv4 network, which is the
+// only family a dial-in peer's traffic can arrive on: `remote` refuses a v6
+// subnet, so there is no v6 source address to rewrite.
+func hasIPv4(prefixes []netip.Prefix) bool {
+	for _, p := range prefixes {
+		if p.Addr().Is4() {
+			return true
+		}
+	}
+	return false
+}
+
 // StaticLinks is a LinkView backed by a map, for tests.
 type StaticLinks map[string]LinkInfo
 

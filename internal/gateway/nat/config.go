@@ -76,6 +76,14 @@ type Config struct {
 	// §3.9 has the whole argument; from this package's side it is simply
 	// another rule in the table it owns.
 	Egress *Egress
+
+	// DialIn is the tunnel's network, when `remote` has one. Nil means no
+	// tunnel, and then no rule is written for it.
+	//
+	// Projected from `remote` rather than stored here, for the same reason
+	// Egress is projected from `dial` and `link`: a tunnel is not a network
+	// `link` serves, so this package cannot read it, and gateway owns the seam.
+	DialIn *DialIn
 }
 
 // Egress is the outbound half: rewrite the source address of traffic from
@@ -90,8 +98,9 @@ type Egress struct {
 	// forbids.
 	Interface string
 
-	// Sources are the subnets `link` declares, in canonical order. Never empty
-	// when Egress is non-nil: a masquerade with no source set would either
+	// Sources are the subnets behind this box, in canonical order: the ones
+	// `link` declares, plus the tunnel's network when `remote` has one. Never
+	// empty when Egress is non-nil: a masquerade with no source set would either
 	// match everything or nothing, and both are worse than not writing it.
 	Sources []netip.Prefix
 }
@@ -99,6 +108,32 @@ type Egress struct {
 // Empty reports whether an egress rule would write nothing.
 func (e *Egress) Empty() bool {
 	return e == nil || e.Interface == "" || len(e.Sources) == 0
+}
+
+// DialIn is the tunnel's network: source addresses that are on no network this
+// box serves, but whose traffic still has to be able to come back from one.
+//
+// A peer holds one of these addresses and keeps it. A device on the LAN
+// therefore sees a source it cannot route to — 10.6.0.7 is not on the device's
+// network and not on its default route — so the reply leaves by that device's
+// own gateway and never returns. The rule this type feeds is the same shape as
+// the hairpin masquerade and exists for the same reason: the connection has to
+// come back through this box. docs/remote-access.md §6.2 has the whole argument.
+type DialIn struct {
+	// Prefix is the dial-in network. Always IPv4: `remote` refuses an IPv6
+	// subnet outright, because a client configuration carries one address and
+	// has nowhere to put a second family's.
+	Prefix netip.Prefix
+
+	// Tunnel is the dial-in interface's kernel name. No rule is written for it:
+	// masquerading traffic leaving by the tunnel would rewrite peer-to-peer
+	// packets to this box's own address, which is both wrong and useless.
+	Tunnel string
+
+	// Uplink is `dial`'s interface, when the box has one. No rule is written
+	// for it either — the egress masquerade owns that direction, and the tunnel
+	// is in its source set for exactly the reason a served network is.
+	Uplink string
 }
 
 // Forward is one standing instruction: connections arriving on this interface,

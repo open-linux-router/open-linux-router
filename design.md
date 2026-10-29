@@ -539,7 +539,9 @@ link ──┬─→ dial ──┬─→ dns      (upstream resolvers)
 
 ingress ─→ dns     (only: the zone the resolver answers, so a published
                    domain inside it is refused)
-remote ──→ dns     (the dial-in address peers are told to resolve through)
+remote ──┬─→ dns     (the dial-in address peers are told to resolve through)
+         └─→ gateway (the dial-in subnet, so peers reach the networks this box
+                      serves and the internet behind it)
 ```
 
 **When a cycle appears, invert one side into a fact subscription.** The real
@@ -568,8 +570,9 @@ that dependent, in the same operation and under the same lock: one no-op
 apply per arrow, and a step reported for the ones that were not. §5.2 still
 holds — this is a sequence of independent applies, not a transaction, and a
 half-applied change follows nothing until it is re-run. The dependents a
-change reaches are `dhcp` and `gateway` (from `link` and `dial`) and `dns` (from
-`ingress` and `remote`), and internal/daemon's `dependents.go` is the list.
+change reaches are `dhcp` and `gateway` (from `link` and `dial`), `dns` and
+`gateway` (from `remote`), and `dns` (from `ingress`); internal/daemon's
+`dependents.go` is the list.
 
 The `remote → dns` arrow is the one worth spelling out, because the fact at its
 tail is not something `dns` could have inferred. `remote` writes this box's
@@ -580,6 +583,14 @@ consistent, and nobody owning the intersection. So `dns` subscribes to the
 tunnel's address and answers on it, derived rather than pinned, because the
 address is olr's to create and not the operator's to keep correct
 (internal/dns/dialin.go).
+
+The `remote → gateway` arrow is the same shape on the data path. A peer's
+address is on no network `link` serves, so a device on one of them has no route
+back and its reply leaves by whatever gateway that device has. `gateway` reads
+the dial-in subnet and rewrites it to this router's address on each network it
+serves, because a tunnel that connects and reaches nothing is the DNS arrow's
+failure met again — both modules internally consistent, and nobody owning the
+intersection (internal/gateway/link.go's DialInView, docs/remote-access.md §6.2).
 
 ### 4.2 One backend, one owner
 

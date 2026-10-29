@@ -218,3 +218,91 @@ func TestRenderIsStable(t *testing.T) {
 		t.Errorf("two renders of one config differ:\n%s\n---\n%s", first, second)
 	}
 }
+
+// docs/remote-access.md §6.2: a peer holds an address on no network this box
+// serves, so a device on one of ours cannot route the reply. Every inside
+// interface gets a masquerade; the tunnel and the uplink do not.
+func TestDialInIsMasqueradedOntoEveryServedNetwork(t *testing.T) {
+	c := testConfig()
+	c.DialIn = &DialIn{
+		Prefix: netip.MustParsePrefix("10.6.0.0/24"),
+		Tunnel: "wg0",
+		Uplink: "wan0",
+	}
+	got := rendered(t, c)
+
+	if want := "nft dialin out br-lan from 10.6.0.0/24"; !contains(got, want) {
+		t.Errorf("missing %q in %s", want, dump(got))
+	}
+	for _, l := range got {
+		if strings.HasPrefix(l, "nft dialin out wan0 ") {
+			t.Errorf("a rule was written for the uplink, which the egress masquerade owns: %q", l)
+		}
+		if strings.HasPrefix(l, "nft dialin out wg0 ") {
+			t.Errorf("a rule was written for the tunnel itself: %q", l)
+		}
+	}
+}
+
+func TestNoDialInRendersNoTunnelRule(t *testing.T) {
+	for _, l := range rendered(t, testConfig()) {
+		if strings.HasPrefix(l, "nft dialin ") {
+			t.Errorf("a box with no tunnel rendered %q", l)
+		}
+	}
+}
+
+// A tunnel with no forwards and no uplink still needs the postrouting chain:
+// the dial-in rule is the only thing in it.
+func TestDialInAloneCreatesThePostroutingChain(t *testing.T) {
+	c := Config{Enabled: true, DialIn: &DialIn{
+		Prefix: netip.MustParsePrefix("10.6.0.0/24"),
+		Tunnel: "wg0",
+	}}
+	got := rendered(t, c)
+
+	if !contains(got, "nft chain postrouting postrouting srcnat") {
+		t.Errorf("no chain for the dial-in rule: %s", dump(got))
+	}
+	if !contains(got, "nft dialin out br-lan from 10.6.0.0/24") {
+		t.Errorf("missing the dial-in masquerade: %s", dump(got))
+	}
+}
+
+// The rule matches `ip saddr`, and remote refuses a v6 subnet, so a v6 prefix
+// here can only be a caller bug — and a rule for it would match nothing.
+func TestDialInIgnoresAnIPv6Prefix(t *testing.T) {
+	c := testConfig()
+	c.DialIn = &DialIn{
+		Prefix: netip.MustParsePrefix("fd00::/64"),
+		Tunnel: "wg0",
+	}
+	for _, l := range rendered(t, c) {
+		if strings.HasPrefix(l, "nft dialin ") {
+			t.Errorf("rendered a rule for a v6 dial-in network: %q", l)
+		}
+	}
+}
+
+func TestDialInInterfacesSkipsTheTunnelAndTheUplink(t *testing.T) {
+	links := StaticLinks{
+		"br-lan": {Adopted: true, Prefixes: []netip.Prefix{netip.MustParsePrefix("192.168.1.1/24")}},
+		"wg0":    {Adopted: true, Prefixes: []netip.Prefix{netip.MustParsePrefix("10.6.0.1/24")}},
+		"wan0":   {Adopted: true, Prefixes: []netip.Prefix{netip.MustParsePrefix("203.0.113.7/24")}},
+		"lan6":   {Adopted: true, Prefixes: []netip.Prefix{netip.MustParsePrefix("fd00::1/64")}},
+		"eth9":   {Adopted: false, Prefixes: []netip.Prefix{netip.MustParsePrefix("192.168.9.1/24")}},
+	}
+
+	got := DialInInterfaces(links, "wg0", "wan0")
+	if len(got) != 1 || got[0].Name != "br-lan" {
+		t.Errorf("interfaces = %v, want only br-lan", interfaceNames(got))
+	}
+}
+
+func interfaceNames(infos []LinkInfo) []string {
+	out := make([]string, 0, len(infos))
+	for _, i := range infos {
+		out = append(out, i.Name)
+	}
+	return out
+}

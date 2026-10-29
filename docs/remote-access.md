@@ -544,6 +544,26 @@ The prefixes behind `home` are read from `link`'s networks per request, never
 copied (`design.md` §4.1). A box with no networks configured yet gets a warning
 saying the configuration will reach the router and nothing behind it.
 
+**Peers leave by the router's own address.** A peer holds an address on no
+network this box serves, so a device on one of them sees a source it cannot
+route to — `10.6.0.7` is neither on its network nor on its default route — and
+its reply leaves by whatever gateway it has and never comes back. Every network
+`link` serves therefore gets a masquerade for the dial-in subnet, so the device
+sees the connection coming from this router on that network and replies to it:
+
+```
+oifname "br-lan" ip saddr 10.6.0.0/24 masquerade
+```
+
+`olr diff` prints the same rule as `nft dialin out br-lan from 10.6.0.0/24`.
+The cost is the one every masquerade has: a device's log, or a rule written
+against its address, shows the router rather than the peer.
+
+The tunnel's subnet is in the egress masquerade's source set for the same
+reason, which is what makes `routes everything` reach the internet at all: a
+peer that sends all of its traffic leaves with the uplink's address, the same
+one a laptop on the LAN leaves with.
+
 ### 6.3 `DNS` points at the router
 
 So that a dial-in device resolves local names the way a device at home does:

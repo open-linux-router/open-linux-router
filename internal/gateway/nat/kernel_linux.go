@@ -463,7 +463,7 @@ func applyNFT(d Desired) error {
 		})
 	}
 
-	if len(d.Table.Masq) > 0 || d.Table.Egress != nil {
+	if len(d.Table.Masq) > 0 || len(d.Table.DialIn) > 0 || d.Table.Egress != nil {
 		natPolicy := nftables.ChainPolicyAccept
 		post := conn.AddChain(&nftables.Chain{
 			Name:     PostroutingChain,
@@ -477,6 +477,13 @@ func applyNFT(d Desired) error {
 			conn.AddRule(&nftables.Rule{
 				Table: table, Chain: post,
 				Exprs:    masqExprs(r),
+				UserData: comment(r.Line()),
+			})
+		}
+		for _, r := range d.Table.DialIn {
+			conn.AddRule(&nftables.Rule{
+				Table: table, Chain: post,
+				Exprs:    dialInExprs(r),
 				UserData: comment(r.Line()),
 			})
 		}
@@ -600,6 +607,37 @@ func masqExprs(r MasqRule) []expr.Any {
 
 	out = append(out, dportExprs(r.Ports)...)
 	return append(out, &expr.Masq{})
+}
+
+// dialInExprs builds the tunnel's masquerade: traffic from the dial-in network,
+// leaving by one of our networks, gets this router's address on that network.
+//
+// Matched on the output interface and the source prefix, and nothing else. The
+// destination is deliberately not named: a peer may be talking to any address
+// on the network, including a service on this router, and the reason the rule
+// exists — the far side cannot route back to the dial-in network — is the same
+// for all of them (docs/remote-access.md §6.2).
+func dialInExprs(r DialInRule) []expr.Any {
+	prefix := r.Prefix.Masked()
+	bits := prefix.Bits()
+	addr := prefix.Addr().AsSlice()
+	mask := cidrMask(bits, len(addr)*8)
+
+	return []expr.Any{
+		&expr.Meta{Key: expr.MetaKeyNFPROTO, Register: 1},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{unix.NFPROTO_IPV4}},
+
+		// oifname "<interface>"
+		&expr.Meta{Key: expr.MetaKeyOIFNAME, Register: 1},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: nulTerminated(r.Out)},
+
+		// ip saddr <prefix>
+		&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseNetworkHeader, Offset: 12, Len: 4},
+		&expr.Bitwise{SourceRegister: 1, DestRegister: 1, Len: 4, Mask: mask, Xor: make([]byte, 4)},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: addr},
+
+		&expr.Masq{},
+	}
 }
 
 // egressSet is the source set the egress rule matches on.

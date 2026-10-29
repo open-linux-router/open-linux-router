@@ -882,18 +882,31 @@ func (c Config) SNATOrDefault() bool { return c.SNAT == nil || bool(*c.SNAT) }
 // what it passes for Enabled — this module's single switch, which is why
 // turning the module off closes every forwarded port.
 //
-// `uplink` and `networks` come from outside: the uplink is `dial`'s (read
-// through UplinkView) and the networks are `link`'s. Either being absent means
-// no egress rule, which is the correct answer for the reference topology —
-// olr beside the modem, with no interface of its own facing outward and no
-// business guessing which one does.
-func (c Config) NAT(uplink string, networks []netip.Prefix) nat.Config {
+// `uplink`, `networks` and `dialIn` come from outside: the uplink is `dial`'s
+// (read through UplinkView), the networks are `link`'s, and the dial-in network
+// is `remote`'s. Any being absent means the rule built from it is not written,
+// which is the correct answer for the reference topology — olr beside the
+// modem, with no interface of its own facing outward and no business guessing
+// which one does — and for a box with no tunnel.
+func (c Config) NAT(uplink string, networks []netip.Prefix, dialIn *nat.DialIn) nat.Config {
 	out := nat.Config{
 		Enabled:  c.Enabled,
 		Forwards: c.Forwards,
 	}
+	if dialIn != nil && dialIn.Prefix.IsValid() {
+		d := *dialIn
+		d.Uplink = uplink
+		out.DialIn = &d
+	}
 	if c.SNATOrDefault() && uplink != "" && len(networks) > 0 {
 		sources := slices.Clone(networks)
+		if out.DialIn != nil {
+			// The tunnel is a network behind this box like any other, so its
+			// peers join the egress source set: a peer that sends everything
+			// must leave with an address the internet can reply to, exactly as
+			// a laptop on the LAN does (docs/remote-access.md §6.2).
+			sources = append(sources, out.DialIn.Prefix.Masked())
+		}
 		slices.SortFunc(sources, func(a, b netip.Prefix) int {
 			return strings.Compare(a.String(), b.String())
 		})

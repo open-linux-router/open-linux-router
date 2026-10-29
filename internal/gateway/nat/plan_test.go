@@ -2,6 +2,7 @@ package nat
 
 import (
 	"context"
+	"net/netip"
 	"strings"
 	"testing"
 )
@@ -44,6 +45,22 @@ func TestPlanAgainstAnAppliedKernelIsEmpty(t *testing.T) {
 	}
 	if plan.Impact != ImpactNone {
 		t.Errorf("impact = %v, want none", plan.Impact)
+	}
+}
+
+// The dial-in rule reads back from its comment like the others, so an applied
+// tunnel masquerade is not drift.
+func TestPlanAgainstAnAppliedDialInKernelIsEmpty(t *testing.T) {
+	cfg := testConfig()
+	cfg.DialIn = &DialIn{
+		Prefix: netip.MustParsePrefix("10.6.0.0/24"),
+		Tunnel: "wg0",
+		Uplink: "wan0",
+	}
+	plan := planAgainst(t, cfg, applied(t, cfg))
+	if !plan.Empty() {
+		t.Errorf("an applied tunnel masquerade still wants to change %d things: %+v",
+			len(plan.Changes), plan.Changes)
 	}
 }
 

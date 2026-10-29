@@ -634,6 +634,13 @@ an interface**. A network that has been declared and whose interface has not com
 up yet still gets its rule, which is the same reason `dhcp` validates a range
 against a network rather than against a NIC.
 
+The tunnel's subnet joins them when `remote` has one. It is not `link`'s, and it
+is not a network in the DHCP sense, but the question this set answers — "did this
+packet come from something behind me" — has the same answer for a peer as for a
+laptop, and a peer sending everything needs an address the far side can reply to
+for exactly the reason the paragraph above gives. `remote` reads as absent on a
+box with no tunnel, and then the set is unchanged.
+
 #### Not keyed on an exit existing
 
 The same argument §3.8 makes about the sysctl, and it lands harder here: the

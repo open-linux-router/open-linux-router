@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/gateway/nat"
 )
 
 func hop(s string) *netip.Addr {
@@ -404,4 +405,47 @@ func TestFromDocumentTreatsBothKeysAbsentAsUnconfigured(t *testing.T) {
 	if cfg.Enabled || len(cfg.Exits) != 0 {
 		t.Fatalf("config = %+v, want the zero value", cfg)
 	}
+}
+
+// docs/remote-access.md §6.2: the tunnel is a network behind this box like any
+// other, so it reaches the table twice — once as a source the egress masquerade
+// covers, and once as the set of sources the inside rules rewrite.
+func TestNATProjectsTheDialInNetwork(t *testing.T) {
+	c := Config{Enabled: true}
+	networks := []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24")}
+	dialIn := &nat.DialIn{
+		Prefix: netip.MustParsePrefix("10.6.0.0/24"),
+		Tunnel: "wg0",
+	}
+
+	got := c.NAT("pppoe0", networks, dialIn)
+	if got.DialIn == nil {
+		t.Fatal("the dial-in network was dropped")
+	}
+	if got.DialIn.Uplink != "pppoe0" {
+		t.Errorf("dial-in uplink = %q, want the one the caller read from dial", got.DialIn.Uplink)
+	}
+	if got.Egress == nil {
+		t.Fatal("no egress rule")
+	}
+	if want := netip.MustParsePrefix("10.6.0.0/24"); !hasPrefix(got.Egress.Sources, want) {
+		t.Errorf("egress sources %v do not cover the tunnel", got.Egress.Sources)
+	}
+}
+
+func TestNATWithoutATunnelWritesNoDialInRule(t *testing.T) {
+	c := Config{Enabled: true}
+	got := c.NAT("pppoe0", []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24")}, nil)
+	if got.DialIn != nil {
+		t.Errorf("a box with no tunnel got a dial-in network: %+v", got.DialIn)
+	}
+}
+
+func hasPrefix(prefixes []netip.Prefix, want netip.Prefix) bool {
+	for _, p := range prefixes {
+		if p == want {
+			return true
+		}
+	}
+	return false
 }

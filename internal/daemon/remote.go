@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"github.com/open-linux-router/open-linux-router/internal/dns"
+	"github.com/open-linux-router/open-linux-router/internal/gateway"
 	"github.com/open-linux-router/open-linux-router/internal/link"
 	"github.com/open-linux-router/open-linux-router/internal/remote"
 )
@@ -65,4 +66,30 @@ func (d dnsDialIn) DialIn() (dns.DialInInfo, error) {
 		return dns.DialInInfo{}, nil
 	}
 	return dns.DialInInfo{Enabled: true, Addr: cfg.WireGuard.RouterAddr()}, nil
+}
+
+// gatewayDialIn is gateway's window onto the tunnel (internal/gateway's
+// DialInView).
+//
+// It answers the one question the dial-in masquerade asks: which network do
+// peers hold addresses on, and which interface carries them. Read through
+// remote's own defaults rather than recomputed, so the network the NAT rule
+// rewrites from and the one in every client configuration are the same value —
+// the argument internal/dns/dialin.go makes about the address in `DNS =`.
+type gatewayDialIn struct{ store remote.Store }
+
+// DialIn implements gateway.DialInView.
+func (g gatewayDialIn) DialIn() (gateway.DialInInfo, error) {
+	cfg, err := g.store.Load()
+	if err != nil {
+		return gateway.DialInInfo{}, err
+	}
+	if !cfg.WireGuard.Enabled {
+		return gateway.DialInInfo{}, nil
+	}
+	return gateway.DialInInfo{
+		Enabled:   true,
+		Prefix:    cfg.WireGuard.SubnetOrDefault(),
+		Interface: cfg.WireGuard.InterfaceOrDefault(),
+	}, nil
 }
