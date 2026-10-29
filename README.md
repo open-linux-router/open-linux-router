@@ -67,7 +67,7 @@ design, and our job is to stay out of its way.
 | Device inventory | dnsmasq leases, kernel neighbours, IEEE OUI registry |
 | Static uplink and IPv6 tunnel | [netlink](https://github.com/vishvananda/netlink) |
 | IPv6 prefix delegation | In-tree DHCPv6 client |
-| Dynamic DNS | [ddns-go](https://github.com/jeessy2/ddns-go) (ported provider code) |
+| DDNS | [ddns-go](https://github.com/jeessy2/ddns-go) (ported provider code) |
 | Exits and egress NAT | [nftables](https://github.com/google/nftables), [netlink](https://github.com/vishvananda/netlink) |
 | Port forwarding and firewall | [nftables](https://github.com/google/nftables) |
 | QoS policy (storage only) | In-tree config/API; no packet shaping yet |

@@ -146,7 +146,7 @@ External setup stays explicit.
 Advanced is the same launcher, with three grids headed “System”, “Services” and
 “Diagnostics”, in that order. System holds the machine and what may reach it
 (firewall, administrator access, port forwarding); Services holds the background
-jobs it runs for the network (Dynamic DNS, IPTV multicast); Diagnostics holds the
+jobs it runs for the network (DDNS, IPTV multicast); Diagnostics holds the
 five tools. Each tile wears a capital initial on a tinted tile, and the tiles of
 one group share a single hue, so the tint groups them without a legend. The one
 exception is a diagnostic that names an upstream tool: it wears that tool's own

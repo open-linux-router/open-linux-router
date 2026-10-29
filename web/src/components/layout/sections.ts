@@ -31,7 +31,7 @@ import type { LucideIcon } from 'lucide-react'
  * Access is the directory of remote-access technologies; configuration stays
  * with its module. Advanced is the low-level plumbing and the machine itself:
  * System (firewall, the way in to configure it, port forwarding), Services
- * (Caddy, Dynamic DNS, multicast) and Diagnostics (the tools). Firewall and
+ * (Caddy, DDNS, multicast) and Diagnostics (the tools). Firewall and
  * Tools keep their URLs; Tools is flattened into the directory, its detail
  * pages remain.
  *
@@ -246,7 +246,7 @@ export const SECTIONS: Section[] = [
         get label() { return t('External filtering') },
         get blurb() { return t('Read-only forwarding policies outside OLR management.') },
       },
-      { slug: 'ddns', get label() { return t('Dynamic DNS') }, blurb: '' },
+      { slug: 'ddns', get label() { return t('DDNS') }, blurb: '' },
       { slug: 'iptv', get label() { return t('IPTV multicast') }, blurb: '' },
       {
         slug: 'caddy',

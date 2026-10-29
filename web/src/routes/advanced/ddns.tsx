@@ -17,7 +17,7 @@ import type { RecordStatus } from '@/lib/api-types'
 import type { Record as DdnsRecord } from '@/lib/config-types'
 
 /**
- * Dynamic DNS, which had an API, a CLI and a publisher for two weeks and no
+ * DDNS, which had an API, a CLI and a publisher for two weeks and no
  * page at all.
  *
  * One list, because a record is the only object here (docs/ddns.md §1): a name
@@ -48,7 +48,7 @@ export function DdnsPage() {
       <SubPage section="/advanced" slug="ddns">
         <Alert variant="destructive">
           <AlertTriangle />
-          <AlertTitle>{t('Could not load dynamic DNS')}</AlertTitle>
+          <AlertTitle>{t('Could not load DDNS')}</AlertTitle>
           <AlertDescription>{(config.error as Error).message}</AlertDescription>
         </Alert>
       </SubPage>

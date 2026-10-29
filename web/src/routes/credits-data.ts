@@ -30,7 +30,7 @@ export const CREDITS: readonly Credit[] = [
   { name: 'mitmproxy', version: 'distro', url: 'https://mitmproxy.org/', use: 'Optional device request inspection', logo: '/credit-logos/mitmproxy.svg' },
   { name: 'Caddy', version: 'v2', url: 'https://caddyserver.com/', use: 'HTTPS ingress, certificates and reverse proxy', logo: '/service-logos/caddy.svg' },
   { name: 'igmpproxy', version: 'distro', url: 'https://github.com/pali/igmpproxy', use: 'IGMP and IPTV multicast routing' },
-  { name: 'ddns-go', version: '7aad574', url: 'https://github.com/jeessy2/ddns-go', use: 'Dynamic DNS provider code, ported' },
+  { name: 'ddns-go', version: '7aad574', url: 'https://github.com/jeessy2/ddns-go', use: 'DDNS provider code, ported' },
   { name: 'ip.sb', version: 'API', url: 'https://ip.sb', use: 'Public addresses and city locations' },
   { name: 'IEEE OUI registry', version: 'registry', url: 'https://standards-oui.ieee.org/', use: 'Device vendor identification', logo: '/credit-logos/ieee.svg' },
   { name: 'pro-bing', version: 'v0.9.1', url: 'https://github.com/prometheus-community/pro-bing', use: 'Ping, loss and reachability checks' },

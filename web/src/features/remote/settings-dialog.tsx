@@ -85,7 +85,7 @@ export function SettingsDialog({
             <p className="text-xs text-muted-foreground">
               The name or address your devices dial from outside. If a name already follows this
               router&rsquo;s address, use it — keeping one current is what{' '}
-              <Link to="/advanced/ddns" className="underline underline-offset-2">{t('Dynamic DNS')}</Link>{' '}
+              <Link to="/advanced/ddns" className="underline underline-offset-2">{t('DDNS')}</Link>{' '}
               is for. It is shared by every way in, so give the host alone.
             </p>
           </div>

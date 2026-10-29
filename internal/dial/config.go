@@ -15,7 +15,7 @@
 //     §3.4 means by not squatting shared state — the main route table is
 //     touched "only when a module explicitly owns that concern", which is a
 //     condition rather than a ban, and this is the module that owns it.
-//   - **Dynamic DNS** (Record), which is here because docs/ddns.md §2 decided
+//   - **DDNS** (Record), which is here because docs/ddns.md §2 decided
 //     that the module owning the fact owns the feature, and the value published
 //     is the uplink's public address.
 //

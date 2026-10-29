@@ -96,7 +96,7 @@ export const ADVANCED_GROUPS: AdvancedGroup[] = [
       },
       {
         slug: 'ddns',
-        get name() { return t('Dynamic DNS') },
+        get name() { return t('DDNS') },
         letter: 'D',
         description: 'Keep a public name pointing at this changing address.',
         to: '/advanced/ddns',
