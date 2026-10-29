@@ -487,7 +487,7 @@ function IPerf3() {
 
   return <div className="space-y-6">
     <section className="panel-surface p-4 sm:p-6" aria-labelledby="tool-title">
-      <p className="max-w-2xl text-sm text-muted-foreground">{t('iPerf3 measures sustained TCP streams with its own client on the other device. It is the honest choice for a wired link faster than a browser can measure, and it needs iperf3 installed on the router and on that device. It tests the link and the router’s own receive/send capacity, not LAN-to-WAN forwarding or NAT.')}</p>
+      <p className="max-w-2xl text-sm text-muted-foreground">{t('iperf3 measures sustained TCP streams with its own client on the other device. It is the honest choice for a wired link faster than a browser can measure, and it needs iperf3 installed on the router and on that device. It tests the link and the router’s own receive/send capacity, not LAN-to-WAN forwarding or NAT.')}</p>
       {lan.isError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('LAN addresses unavailable')}</AlertTitle><AlertDescription>{lan.error.message}</AlertDescription></Alert>}
       {lan.data && <div className="mt-5 space-y-4">
         <div className="max-w-sm space-y-1.5">
@@ -520,7 +520,7 @@ function IPerf3() {
           </div>)}
         </div>}
       </div>}
-      {lanError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('iPerf3 is unavailable')}</AlertTitle><AlertDescription>{lanError}</AlertDescription></Alert>}
+      {lanError && <Alert variant="destructive" className="mt-4"><AlertTitle>{t('iperf3 is unavailable')}</AlertTitle><AlertDescription>{lanError}</AlertDescription></Alert>}
     </section>
   </div>
 }

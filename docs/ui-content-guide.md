@@ -453,12 +453,13 @@ sentences from translated fragments. Keep state decisions independent of copy.
 Use familiar tool names and concise task labels. A diagnostic that is a named
 upstream project takes that project's full name, which is why the tools
 directory reads Speedtest by Ookla, Cloudflare Speed Test, Fast.com, LibreSpeed
-and iPerf3 rather than one "speed test" and a service picker: the service is the
+and iperf3 rather than one "speed test" and a service picker: the service is the
 distinction that helps an operator select one, and each measures a different
 path. A shortened name would make two entries ambiguous — "Cloudflare" alone
 also names the tunnel on Access — so the tile carries the same name as its
-page. Preserve established names such as Ping, NatTypeTester and Traceroute. Do not
-invent broad category labels for a single item.
+page. Preserve established names and their own spelling, such as Ping,
+NatTypeTester, Traceroute and iperf3 (all lowercase). Do not invent broad
+category labels for a single item.
 
 Name a state for what it means for the user, not for how it is carried out. The
 IPv6 DNS card on Gateway reads IPv6 disabled, not AAAA filtered: dropping AAAA

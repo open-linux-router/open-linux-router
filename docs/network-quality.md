@@ -469,7 +469,7 @@ Existing code provides useful starting points, not complete catalog coverage:
 | Tools speed test | Router-originated download/upload/latency/jitter against Ookla (selectable server), Cloudflare or fast.com; all three accept a way out, and the two command-line services take it through an nftables socket-group mark; not per-service or per-CDN coverage beyond those three |
 | Tools ping | Finite ICMP RTT/loss test; not a continuous representative stability window |
 | Tools NatTypeTester | Default-route IPv4 NatTypeTester 10.0.10: its RFC 3489 probe names the NAT type and its RFC 5780 probe reports mapping/filtering, run in parallel against one STUN server with a second server as fallback; a partial answer is reported when only one probe completes; still subject to server support, and not actual P2P or inbound verification |
-| LibreSpeed and iPerf3 | Browser-based LibreSpeed test between one device and this router (download/upload/latency/jitter), plus a temporary iperf3 server for sustained wired throughput; neither supplies whole-site Wi-Fi telemetry |
+| LibreSpeed and iperf3 | Browser-based LibreSpeed test between one device and this router (download/upload/latency/jitter), plus a temporary iperf3 server for sustained wired throughput; neither supplies whole-site Wi-Fi telemetry |
 
 See [device link testing](device-link-test.md) for local-test scope. Reuse test
 implementations behind shared measurement interfaces where appropriate rather

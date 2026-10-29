@@ -31,6 +31,12 @@ service icons. The dependency is pinned, so the files below are what
   resized to 256px; the artwork itself is unchanged. theSVG carries no NextTrace
   entry, so the project's own file is the source. The mark already has a rounded
   background, so the launcher draws it edge to edge rather than in a white tile.
+- iperf3: the iperf3 project's own lockup from
+  [`software.es.net/iperf`](https://software.es.net/iperf/), supplied as a
+  1080×608 image with a `#30333b` rounded plate. theSVG carries no iperf3 entry.
+  The swoosh, wordmark, colours and proportions are unchanged; the plate is
+  extended above and below the lockup so the mark fills the square launcher
+  tile, and the file is `iperf3.png` at 256px.
 
-Trademarks remain with their owners. No launcher artwork is generated or drawn
-locally.
+Trademarks remain with their owners. No launcher artwork is drawn or recoloured
+locally; iperf3's plate is only extended to square the tile.
