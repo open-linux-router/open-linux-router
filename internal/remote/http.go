@@ -273,7 +273,7 @@ func classifyEndpoint(previous, next Config) (Impact, []string) {
 			"%s already has a configuration naming %s, and it will stop connecting",
 			core.Plural(len(previous.WireGuard.Peers), "device"), previous.EndpointHost()))
 	}
-	if previous.Socks.Enabled && previous.Socks.Password != "" && previous.Socks.ListenScopeOrDefault() == ListenInternet {
+	if previous.Socks.Enabled && previous.Socks.Password != "" {
 		reasons = append(reasons, "every SOCKS5 link already handed out names the old address and has to be replaced")
 	}
 	if len(reasons) == 0 {

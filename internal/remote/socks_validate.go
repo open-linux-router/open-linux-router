@@ -9,12 +9,7 @@ func ValidateSocks(c Config) Result {
 	var r Result
 	s := c.Socks
 
-	if !s.Listen.Valid() {
-		r.errorf("socks5.listen", "unknown listen scope %q (want %s or %s)",
-			s.Listen, ListenTunnel, ListenInternet)
-	}
-
-	validateSocksScope(&r, c)
+	validateSocksRemovedScope(&r, s)
 	validateSocksPorts(&r, c)
 	validateSocksUser(&r, s)
 
@@ -26,50 +21,37 @@ func ValidateSocks(c Config) Result {
 			"this box has no password yet. `olr remote enable socks5` generates one")
 	}
 
+	// The proxy listens where anything that can route here can reach it, and
+	// that is now the only shape it has — so the warning belongs to the object
+	// rather than to a value the operator chose. It is attached at `socks5`
+	// because there is no field to point at any more, and the honest reading of
+	// the warning is "about this proxy", not "about one of its settings".
+	if s.Enabled {
+		r.warnf("socks5", "%s", SocksExposureWarning)
+	}
+
 	validateSocksExtra(&r, s)
 	return r
 }
 
-// validateSocksScope checks where the proxy will listen, which is this object's
-// one real decision.
-func validateSocksScope(r *Result, c Config) {
-	s := c.Socks
-
-	switch s.ListenScopeOrDefault() {
-	case ListenTunnel:
-		// The coupling, checked. Refused rather than warned because the failure
-		// it prevents is invisible: 3proxy given an address no interface holds
-		// starts cleanly, serves nobody, and looks healthy in `systemctl status`.
-		if !c.WireGuard.Enabled {
-			r.errorf("socks5.listen",
-				"listening on the tunnel needs the tunnel: WireGuard is turned off, so there "+
-					"is no address to bind to. Enable it, or set `listen` to %s and read the "+
-					"warning that comes with it", ListenInternet)
-			break
-		}
-		// Defensive, and not reachable today: the tunnel's subnet has a default,
-		// so RouterAddr always resolves. Kept because the thing it guards
-		// against fails silently — 3proxy given an address no interface holds
-		// starts, binds nothing and looks healthy — and because that would
-		// become reachable the moment the subnet stops having a default. A test
-		// asserts the current behaviour so this comment cannot quietly go stale.
-		if !c.WireGuard.RouterAddr().IsValid() {
-			r.errorf("socks5.listen",
-				"the tunnel has no address on this box yet, so there is nothing to bind to. "+
-					"Set the tunnel's subnet first")
-		}
-
-	case ListenInternet:
-		if s.Enabled {
-			// A warning and never a refusal. design.md §5.6 puts the line at
-			// whether olr can know the operator is wrong, and here it cannot: a
-			// proxy reached only across a trusted private WAN, or through
-			// somebody else's VPN, is a legitimate thing to run. So olr states
-			// the three consequences and the one-setting remedy, and leaves the
-			// decision where it belongs.
-			r.warnf("socks5.listen", "%s", SocksExposureWarning)
-		}
+// validateSocksRemovedScope refuses a document that still asks for the removed
+// tunnel scope.
+//
+// Not converted, and deliberately not converted in silence: the proxy has one
+// shape, and that shape is the one the internet can reach. An operator who
+// selected `tunnel` asked for the opposite, so the only honest answers are "do
+// what you asked" (impossible now) or "stop and let you decide" (this).
+func validateSocksRemovedScope(r *Result, s Socks5) {
+	if s.removedListen == "" {
+		return
 	}
+	r.errorf("socks5",
+		"`listen: %s` was removed: SOCKS5 always listens on every interface, and saying so "+
+			"is the only shape it has. This proxy was confined to the tunnel, so applying it "+
+			"now would put it on the internet — a decision olr will not make for you. If that "+
+			"is what you want, save the proxy with `listen` set to `%s` (or drop the field); "+
+			"if it is not, turn the proxy off first",
+		s.removedListen, "internet")
 }
 
 func validateSocksPorts(r *Result, c Config) {
@@ -82,16 +64,6 @@ func validateSocksPorts(r *Result, c Config) {
 		r.warnf("socks5.listen_port",
 			"%d is a privileged port; the convention is %d and nothing here needs a low one",
 			s.ListenPort, DefaultSocksPort)
-	}
-
-	if s.PublicPort != 0 && s.ListenScopeOrDefault() == ListenTunnel {
-		// Refused rather than ignored. A public port is a statement about a
-		// router in front forwarding something, and nothing forwards a port into
-		// a WireGuard tunnel — so a config carrying both is one where the
-		// operator believes something that is not true.
-		r.errorf("socks5.public_port",
-			"a public port only means something when `listen` is %s: nothing forwards a port "+
-				"into the tunnel", ListenInternet)
 	}
 }
 

@@ -13,15 +13,15 @@ func (h HTTP) socksRoutes() []core.Route {
 	return []core.Route{
 		{
 			Method: "GET", Path: "/socks5/config", Tool: "show socks5",
-			Summary: "Show the stored SOCKS5 configuration: the port, where it listens and the " +
-				"account name. The password is never returned here.",
+			Summary: "Show the stored SOCKS5 configuration: the port and the account name. " +
+				"The password is never returned here.",
 			Handler: h.getSocksConfig,
 		},
 		{
 			Method: "PATCH", Path: "/socks5/config",
 			Summary: "Change the SOCKS5 proxy's settings, or turn it on and off. " +
-				"Moving it between the tunnel and the internet changes who can reach it, " +
-				"so every device has to be given the new link.",
+				"Changing the port or the credentials invalidates the link every device " +
+				"was given.",
 			Body:     core.BodyRelaxed,
 			Query:    gate(),
 			Mutating: true,
@@ -50,7 +50,7 @@ func (h HTTP) socksRoutes() []core.Route {
 		},
 		{
 			Method: "GET", Path: "/socks5/status", Tool: "status socks5",
-			Summary: "Show whether the SOCKS5 proxy is installed and running, where it listens, " +
+			Summary: "Show whether the SOCKS5 proxy is installed and running, on which port, " +
 				"and whether the box still matches the stored configuration.",
 			Handler: h.getSocksStatus,
 		},
@@ -194,18 +194,13 @@ func (h HTTP) getSocksLink(w http.ResponseWriter, r *http.Request) {
 // socksStatus is the SOCKS5 half of health.
 //
 // Not proxyStatus: that one carries a cipher and a UDP flag, and this object has
-// neither. What it has instead is the field that decides everything about it —
-// where it listens.
+// neither. What it has instead is what the one shape it has costs — a listener
+// anyone who can route here can reach.
 type socksStatus struct {
-	Enabled bool        `json:"enabled"`
-	Port    uint16      `json:"listen_port"`
-	Listen  ListenScope `json:"listen"`
+	Enabled bool   `json:"enabled"`
+	Port    uint16 `json:"listen_port"`
 
-	// Exposed is `listen` reduced to the question a surface actually asks, so
-	// that a UI does not have to know which scope values mean "on the internet".
-	Exposed bool `json:"exposed"`
-
-	// Warning is SocksExposureWarning when the proxy is exposed, and empty
+	// Warning is SocksExposureWarning while the proxy is on, and empty
 	// otherwise. Carried here rather than left to each client to reproduce:
 	// there is one wording, and a second copy would drift from it.
 	Warning string `json:"warning,omitempty"`
@@ -237,11 +232,9 @@ func (h HTTP) socksStatusFor(r *http.Request, cfg Config) socksStatus {
 	out := socksStatus{
 		Enabled: s.Enabled,
 		Port:    s.PortOrDefault(),
-		Listen:  s.ListenScopeOrDefault(),
-		Exposed: s.ListenScopeOrDefault().Exposed(),
 		AsOf:    stamp(),
 	}
-	if out.Exposed && s.Enabled {
+	if s.Enabled {
 		out.Warning = SocksExposureWarning
 	}
 

@@ -2,6 +2,7 @@ package remote
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"net/netip"
 	"strings"
 	"testing"
@@ -21,7 +22,6 @@ func socksConfig() Config {
 		},
 		Socks: Socks5{
 			Enabled:  true,
-			Listen:   ListenTunnel,
 			Password: "c29tZSBwYXNzd29yZA==",
 		},
 	}
@@ -31,17 +31,11 @@ func socksConfig() Config {
 
 func TestSocksDefaults(t *testing.T) {
 	var s Socks5
-	if got := s.ListenScopeOrDefault(); got != ListenInternet {
-		t.Errorf("default listen scope = %q, want %q", got, ListenInternet)
-	}
 	if got := s.PortOrDefault(); got != DefaultSocksPort {
 		t.Errorf("default port = %d, want %d", got, DefaultSocksPort)
 	}
 	if got := s.UserOrDefault(); got != DefaultSocksUser {
 		t.Errorf("default user = %q, want %q", got, DefaultSocksUser)
-	}
-	if !ListenScope("").Exposed() {
-		t.Error("the zero listen scope must listen independently of WireGuard")
 	}
 }
 
@@ -116,46 +110,53 @@ func TestWithGeneratedPasswordKeepsAnExistingOne(t *testing.T) {
 	}
 }
 
-func TestValidateSocksTunnelScopeNeedsTheTunnel(t *testing.T) {
-	c := socksConfig()
-	c.WireGuard.Enabled = false
-
-	r := ValidateSocks(c)
+func TestAStoredTunnelScopeIsRefusedRatherThanConverted(t *testing.T) {
+	// The field is gone, and a document that still sets it must not be quietly
+	// turned into a proxy the internet can reach: `tunnel` was the one value
+	// that kept this listener off the public network, and applying it now would
+	// undo that without anybody deciding to.
+	s, err := UnmarshalSocks([]byte(`{"enabled":true,"password":"secret","listen":"tunnel"}`))
+	if err != nil {
+		t.Fatalf("an old document no longer loads at all: %v", err)
+	}
+	r := ValidateSocks(Config{Socks: s})
 	if r.OK() {
-		t.Fatal("tunnel scope with WireGuard off was accepted; it binds nothing and looks healthy")
+		t.Fatal("a stored tunnel scope was accepted; applying it would expose a proxy that was confined")
 	}
-	if !hasPath(r, "socks5.listen") {
-		t.Errorf("error is not attached to socks5.listen: %v", r.Errors)
+	if !hasPath(r, "socks5") {
+		t.Errorf("the refusal is attached to no field: %v", r.Errors)
+	}
+	if !strings.Contains(r.Errors[0].Message, "internet") {
+		t.Errorf("the refusal does not say what to do instead: %s", r.Errors[0].Message)
+	}
+
+	// `internet` described what the proxy still does, so it is accepted and
+	// dropped rather than refused.
+	s, err = UnmarshalSocks([]byte(`{"enabled":true,"password":"secret","listen":"internet"}`))
+	if err != nil {
+		t.Fatalf("a document saying `internet` was refused: %v", err)
+	}
+	if r := ValidateSocks(Config{Socks: s}); !r.OK() {
+		t.Fatalf("a document saying `internet` did not validate: %v", r.Errors)
+	}
+	data, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "listen") {
+		t.Errorf("the removed field is still written back: %s", data)
 	}
 }
 
-func TestTunnelScopeResolvesAnAddressEvenWithNoSubnetSet(t *testing.T) {
-	// The tunnel's subnet has a default, so clearing it does *not* leave the
-	// proxy with nothing to bind — which is why ValidateSocks' "no address"
-	// branch is defensive rather than reachable. Asserted here so that a future
-	// change making SubnetOrDefault fallible is caught by a failing test rather
-	// than by a proxy that binds nothing and reports itself healthy.
+func TestValidateSocksWarnsAboutTheExposure(t *testing.T) {
 	c := socksConfig()
-	c.WireGuard.Subnet = netip.Prefix{}
-
-	if r := ValidateSocks(c); !r.OK() {
-		t.Fatalf("an unset subnet was refused, but it has a default: %v", r.Errors)
-	}
-	if !c.WireGuard.RouterAddr().IsValid() {
-		t.Fatal("RouterAddr() is invalid with no subnet set; the defensive branch is now reachable")
-	}
-}
-
-func TestValidateSocksInternetWarnsButDoesNotRefuse(t *testing.T) {
-	c := socksConfig()
-	c.Socks.Listen = ListenInternet
 
 	r := ValidateSocks(c)
 	if !r.OK() {
-		t.Fatalf("exposing the proxy was refused; it must be a warning: %v", r.Errors)
+		t.Fatalf("the proxy's only shape was refused; the exposure is a warning: %v", r.Errors)
 	}
 	if len(r.Warnings) == 0 {
-		t.Fatal("exposing a plaintext proxy produced no warning")
+		t.Fatal("a plaintext proxy reachable from anywhere produced no warning")
 	}
 	// The warning has to name consequences and the remedy, not just say
 	// "insecure" — an operator who cannot act on it will learn to scroll past.
@@ -167,20 +168,29 @@ func TestValidateSocksInternetWarnsButDoesNotRefuse(t *testing.T) {
 	}
 }
 
-func TestValidateSocksTunnelScopeIsSilent(t *testing.T) {
-	// The good configuration must not warn. A warning on the default is a
-	// warning nobody reads.
-	if r := ValidateSocks(socksConfig()); len(r.Warnings) != 0 {
-		t.Errorf("the default scope produced warnings: %v", r.Warnings)
+func TestValidateSocksIsSilentWhileTheProxyIsOff(t *testing.T) {
+	// The warning is about a proxy somebody is running. A box that has one
+	// configured and switched off is not exposing anything, and a warning there
+	// is the kind operators learn to ignore.
+	c := socksConfig()
+	c.Socks.Enabled = false
+
+	if r := ValidateSocks(c); len(r.Warnings) != 0 {
+		t.Errorf("a switched-off proxy produced warnings: %v", r.Warnings)
 	}
 }
 
-func TestValidateSocksPublicPortNeedsInternetScope(t *testing.T) {
+func TestValidateSocksAcceptsAPublicPort(t *testing.T) {
+	// A router in front forwarding 11080 to our 1080 is the case this field is
+	// for, and it is meaningful in the proxy's only shape.
 	c := socksConfig()
 	c.Socks.PublicPort = 11080
 
-	if r := ValidateSocks(c); r.OK() {
-		t.Fatal("a public port on a tunnel-scoped proxy was accepted; nothing forwards into a tunnel")
+	if r := ValidateSocks(c); !r.OK() {
+		t.Fatalf("a public port was refused: %v", r.Errors)
+	}
+	if got := c.Socks.DialPort(); got != 11080 {
+		t.Errorf("DialPort() = %d, want the public port", got)
 	}
 }
 
@@ -219,7 +229,7 @@ func TestValidateSocksExtraCannotUndoAuthentication(t *testing.T) {
 	}
 }
 
-func TestRenderSocksBindsTheTunnelAddress(t *testing.T) {
+func TestRenderSocksBindsEveryInterface(t *testing.T) {
 	c := socksConfig()
 	rendered, err := RenderSocks(c, RootedPaths(t.TempDir()))
 	if err != nil {
@@ -238,9 +248,13 @@ func TestRenderSocksBindsTheTunnelAddress(t *testing.T) {
 	}
 
 	conf := string(f.Data)
-	// 10.6.0.1 is the first host address of the tunnel subnet.
-	if !strings.Contains(conf, "socks -p1080 -i10.6.0.1") {
-		t.Errorf("did not bind the tunnel address:\n%s", conf)
+	// Spelled out rather than left to 3proxy's default. The proxy has one
+	// shape, and this is the line that says which.
+	if !strings.Contains(conf, "socks -p1080 -i0.0.0.0") {
+		t.Errorf("did not bind every interface:\n%s", conf)
+	}
+	if strings.Contains(conf, "10.6.0.1") {
+		t.Errorf("the proxy still depends on the tunnel's address:\n%s", conf)
 	}
 	if !strings.Contains(conf, "auth strong") {
 		t.Errorf("authentication is not required:\n%s", conf)
@@ -264,19 +278,6 @@ func TestRenderSocksBindsTheTunnelAddress(t *testing.T) {
 	}
 }
 
-func TestRenderSocksInternetScopeBindsEverything(t *testing.T) {
-	c := socksConfig()
-	c.Socks.Listen = ListenInternet
-
-	rendered, err := RenderSocks(c, RootedPaths(t.TempDir()))
-	if err != nil {
-		t.Fatalf("RenderSocks() error: %v", err)
-	}
-	if conf := string(rendered.Files[0].Data); !strings.Contains(conf, "-i0.0.0.0") {
-		t.Errorf("did not bind every interface:\n%s", conf)
-	}
-}
-
 func TestRenderSocksAppendsTheHatchAfterTheAllowRule(t *testing.T) {
 	c := socksConfig()
 	c.Socks.ExtraConf = "maxconn 200"
@@ -296,26 +297,23 @@ func TestRenderSocksAppendsTheHatchAfterTheAllowRule(t *testing.T) {
 func TestSocksClientURL(t *testing.T) {
 	c := socksConfig()
 
-	// Tunnel scope: the client dials this box *inside* the tunnel, never the
-	// public endpoint — that is where the tunnel itself is dialled.
 	got, err := SocksClientURL(c)
 	if err != nil {
 		t.Fatalf("SocksClientURL() error: %v", err)
 	}
-	if !strings.Contains(got, "@10.6.0.1:1080") {
-		t.Errorf("tunnel-scoped URL does not dial the tunnel address: %s", got)
-	}
-	if strings.Contains(got, "home.example.net") {
-		t.Errorf("tunnel-scoped URL points at the public endpoint: %s", got)
+	if !strings.Contains(got, "@home.example.net:1080") {
+		t.Errorf("the link does not dial the public endpoint: %s", got)
 	}
 
-	c.Socks.Listen = ListenInternet
+	// The public port, when one is set: a router in front forwards it, and a
+	// link naming 1080 would be a link that does not connect.
+	c.Socks.PublicPort = 11080
 	got, err = SocksClientURL(c)
 	if err != nil {
 		t.Fatalf("SocksClientURL() error: %v", err)
 	}
-	if !strings.Contains(got, "@home.example.net:1080") {
-		t.Errorf("internet-scoped URL does not dial the endpoint: %s", got)
+	if !strings.Contains(got, "@home.example.net:11080") {
+		t.Errorf("the link does not dial the public port: %s", got)
 	}
 }
 
@@ -344,36 +342,23 @@ func TestConfigRedactsTheSocksPassword(t *testing.T) {
 }
 
 func TestUnmarshalSocksRejectsUnknownFields(t *testing.T) {
-	// The mistake this catches is the one that matters for this object: an
-	// operator who believes they confined the proxy to the tunnel and did not.
 	if _, err := UnmarshalSocks([]byte(`{"listen_scope":"tunnel"}`)); err == nil {
 		t.Error("a misspelled key was accepted")
 	}
-	if _, err := UnmarshalSocks([]byte(`{"listen":"tunnel"}`)); err != nil {
-		t.Errorf("a valid document was refused: %v", err)
+	if _, err := UnmarshalSocks([]byte(`{"listen":"sideways"}`)); err == nil {
+		t.Error("an unknown listen value was accepted")
 	}
 }
 
-func TestEndpointNotRequiredForATunnelScopedProxy(t *testing.T) {
-	c := Config{
-		WireGuard: WireGuard{Enabled: true, Subnet: netip.MustParsePrefix("10.6.0.0/24")},
-		Socks:     Socks5{Enabled: true, Password: "x"},
-	}
-	c.WireGuard.Enabled = false
-	c.Socks.Listen = ListenInternet
+func TestEndpointRequiredForASocks5ProxyWithTheTunnelOff(t *testing.T) {
+	// One of the two ways in being on is enough to require the address they are
+	// dialled at — the proxy needs its own, whatever the tunnel is doing.
+	c := Config{Socks: Socks5{Enabled: true, Password: "x"}}
 
 	var r Result
 	validateEndpoint(&r, c)
 	if r.OK() {
-		t.Error("an internet-scoped proxy with no endpoint was accepted")
-	}
-
-	// And the other way: tunnel-scoped needs no public endpoint at all.
-	c.Socks.Listen = ListenTunnel
-	r = Result{}
-	validateEndpoint(&r, c)
-	if !r.OK() {
-		t.Errorf("a tunnel-scoped proxy was made to require an endpoint: %v", r.Errors)
+		t.Error("a proxy with no endpoint was accepted; its link would name no address")
 	}
 }
 
@@ -416,13 +401,14 @@ func TestBuildSocksPlanDisabledRendersNothing(t *testing.T) {
 	}
 }
 
-func TestClassifySocksScopeMoveIsDisruptive(t *testing.T) {
+func TestChangingTheCredentialReissuesEveryLink(t *testing.T) {
 	paths := RootedPaths(t.TempDir())
 	before := socksConfig()
 	after := before.Clone()
-	after.Socks.Listen = ListenInternet
+	after.Socks.Password = "bmV3IHBhc3N3b3Jk"
 
-	// Pretend the old config is live and its file is on disk.
+	// Pretend the old config is live and its file is on disk, so this is a
+	// change to a proxy people are already using.
 	rendered, err := RenderSocks(before, paths)
 	if err != nil {
 		t.Fatalf("RenderSocks() error: %v", err)
@@ -437,7 +423,7 @@ func TestClassifySocksScopeMoveIsDisruptive(t *testing.T) {
 		t.Fatalf("BuildSocksPlan() error: %v", err)
 	}
 	if plan.Impact != ImpactDisruptive {
-		t.Errorf("impact = %v, want disruptive: moving onto the internet re-issues every link", plan.Impact)
+		t.Errorf("impact = %v, want disruptive: the link carries the password", plan.Impact)
 	}
 	if len(plan.Reasons) == 0 {
 		t.Fatal("no reason given for a disruptive change")

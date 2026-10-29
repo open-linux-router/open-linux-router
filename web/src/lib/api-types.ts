@@ -1489,15 +1489,13 @@ export interface ProxyPlan {
 
 /**
  * Whether the SOCKS5 proxy is installed, running and undrifted —
- * internal/remote socksStatus. No cipher and no UDP flag; what it has instead
- * is where it listens, which decides everything about it.
+ * internal/remote socksStatus. No cipher and no UDP flag, and no scope either:
+ * the proxy has one shape, and it is the one anything that can route here can
+ * reach.
  */
 export interface SocksStatus {
   enabled: boolean
   listen_port: number
-  /** `tunnel`: only reachable from inside WireGuard. `internet`: every interface. */
-  listen: 'tunnel' | 'internet'
-  exposed: boolean
   /** The daemon's one wording of the plaintext-on-the-internet warning. */
   warning?: string
   service?: UnitStatus

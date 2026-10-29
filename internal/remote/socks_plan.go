@@ -104,33 +104,16 @@ func classifySocks(c, previous Config, plan ProxyPlan, obs ProxyObserved) (Impac
 			"the username changes, and a link carries it — every device has to be given a new one")
 	}
 
-	// The move this object has and the other does not. It is disruptive in both
-	// directions and for different reasons, so each gets its own sentence rather
-	// than a shared "the scope changed".
-	if issued && before.ListenScopeOrDefault() != after.ListenScopeOrDefault() {
-		impact = ImpactDisruptive
-		switch after.ListenScopeOrDefault() {
-		case ListenTunnel:
-			reasons = append(reasons,
-				"the proxy moves inside the tunnel, so it stops answering on this box's public "+
-					"address — only devices already dialled in to the tunnel can reach it, and "+
-					"every link has to be given out again")
-		case ListenInternet:
-			reasons = append(reasons,
-				"the proxy moves out onto the internet, so it answers at this box's public "+
-					"address in the clear, and every link has to be given out again")
-		}
-	}
-
-	// The address a client dials depends on the scope, so this compares the
-	// rendered links rather than the endpoint — a tunnel-scoped proxy does not
-	// move when the public endpoint does, and saying it did would be a
-	// disruptive warning about nothing.
+	// The move this object used to have — between the tunnel and the internet —
+	// is gone with the scope itself. What is left is the address a client
+	// dials, which is compared through the rendered links rather than through
+	// the endpoint: a proxy whose public name moved has invalidated every link
+	// already handed out, and the link is the only place that is visible.
 	//
 	// A link that cannot be produced on either side is not a change worth
 	// reporting: there was nothing to invalidate, or there is nothing to hand
 	// out yet.
-	if issued && before.ListenScopeOrDefault() == after.ListenScopeOrDefault() {
+	if issued {
 		oldURL, oldErr := SocksClientURL(previous)
 		newURL, newErr := SocksClientURL(c)
 		if oldErr == nil && newErr == nil && oldURL != newURL &&

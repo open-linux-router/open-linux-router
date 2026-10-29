@@ -25,7 +25,7 @@ func writeConfigText(w io.Writer, c Config) error {
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Proxy (SOCKS5) is %s\n", onOff(c.Socks.Enabled))
-	fmt.Fprintf(w, "  port: %d\n  listen: %s\n", c.Socks.PortOrDefault(), c.Socks.ListenScopeOrDefault())
+	fmt.Fprintf(w, "  port: %d, on every interface\n", c.Socks.PortOrDefault())
 	return nil
 }
 
@@ -182,7 +182,7 @@ func writeStatusText(w io.Writer, s moduleStatus) error {
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Proxy (SOCKS5) is %s\n", onOff(s.Proxy.Enabled))
-	fmt.Fprintf(w, "  port: %d\n  listen: %s\n", s.Proxy.Port, s.Proxy.Listen)
+	fmt.Fprintf(w, "  port: %d, on every interface\n", s.Proxy.Port)
 	if s.Proxy.ServiceError != "" {
 		fmt.Fprintf(w, "  service: unknown (%s)\n", s.Proxy.ServiceError)
 	} else if s.Proxy.Service != nil {

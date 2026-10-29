@@ -59,10 +59,6 @@ const udpNotRendered = "raw_3proxy_conf"
 // nonsense rather than an error, which is why every caller validates first
 // (design.md §5.3.1).
 func RenderSocks(c Config, paths Paths) (Rendered, error) {
-	conf, err := socksConf(c)
-	if err != nil {
-		return Rendered{}, err
-	}
 	return Rendered{Files: []File{{
 		Path: paths.SocksConf,
 		// 0600 and not a byte looser. The file holds the password in the clear —
@@ -70,41 +66,19 @@ func RenderSocks(c Config, paths Paths) (Rendered, error) {
 		// proxy. systemd reads it as PID 1 before the service starts, so nothing
 		// is lost by keeping it unreadable to everything else.
 		Mode:   0o600,
-		Data:   conf,
+		Data:   socksConf(c),
 		Secret: true,
 	}}}, nil
 }
 
-// socksListenAddr is the address 3proxy binds to, which is the whole point of
-// the object.
+// socksConf is the file 3proxy reads.
 //
-// Tunnel scope resolves to this box's own address inside WireGuard, so the
-// listening socket is only reachable by a peer that has already authenticated to
-// the tunnel. Internet scope is spelled `0.0.0.0` explicitly rather than by
-// omitting the flag: an omitted `-i` also means every interface, but it means it
-// by default rather than by decision, and this is the one line of this file an
-// operator should be able to read the intent off.
-func socksListenAddr(c Config) (string, error) {
-	if c.Socks.ListenScopeOrDefault() == ListenInternet {
-		return "0.0.0.0", nil
-	}
-	addr := c.WireGuard.RouterAddr()
-	if !addr.IsValid() {
-		// Unreachable through the validator, which refuses this combination with
-		// a message an operator can act on. Kept as an error rather than a
-		// zero value because a bound-to-nothing proxy reports itself as running.
-		return "", fmt.Errorf(
-			"listen scope is %q but the tunnel has no address on this box", ListenTunnel)
-	}
-	return addr.String(), nil
-}
-
-func socksConf(c Config) ([]byte, error) {
+// The listening socket is spelled `-i0.0.0.0` rather than by omitting the flag:
+// an omitted `-i` also means every interface, but it means it by default rather
+// than by decision, and this is the one line of this file an operator should be
+// able to read the intent off.
+func socksConf(c Config) []byte {
 	s := c.Socks
-	addr, err := socksListenAddr(c)
-	if err != nil {
-		return nil, err
-	}
 
 	var b strings.Builder
 	b.WriteString(socksHeader(c))
@@ -112,7 +86,7 @@ func socksConf(c Config) ([]byte, error) {
 
 	// `auth strong` is what makes the users line mean anything. Without it
 	// 3proxy accepts anonymous clients and the `allow` rule below is decoration
-	// — which on an internet-scoped listener is an open proxy. There is no
+	// — which on a listener anyone can reach is an open proxy. There is no
 	// configuration in which olr renders anything weaker.
 	b.WriteString("auth strong\n")
 
@@ -124,7 +98,7 @@ func socksConf(c Config) ([]byte, error) {
 	fmt.Fprintf(&b, "users %s:CL:%s\n", s.UserOrDefault(), s.Password)
 	fmt.Fprintf(&b, "allow %s\n", s.UserOrDefault())
 
-	fmt.Fprintf(&b, "socks -p%d -i%s\n", s.PortOrDefault(), addr)
+	fmt.Fprintf(&b, "socks -p%d -i0.0.0.0\n", s.PortOrDefault())
 
 	if extra := strings.TrimSpace(s.ExtraConf); extra != "" {
 		// Appended last so it can add services or ACL lines after ours. 3proxy
@@ -136,7 +110,7 @@ func socksConf(c Config) ([]byte, error) {
 		b.WriteString("\n")
 	}
 
-	return []byte(b.String()), nil
+	return []byte(b.String())
 }
 
 // socksHeader is the ownership banner every generated file carries
@@ -159,22 +133,12 @@ func SocksClientURL(c Config) (string, error) {
 		return "", fmt.Errorf("no password has been generated yet")
 	}
 
-	// Which host a client dials depends on where the proxy is listening, and
-	// getting this wrong would hand somebody a line that cannot work. A
-	// tunnel-scoped proxy is reached at this box's address *inside* the tunnel —
-	// never at the public endpoint, which is where the tunnel itself is dialled.
-	var host string
-	if s.ListenScopeOrDefault() == ListenTunnel {
-		addr := c.WireGuard.RouterAddr()
-		if !addr.IsValid() {
-			return "", fmt.Errorf("the tunnel has no address on this box yet")
-		}
-		host = fmt.Sprintf("%s:%d", addr, s.PortOrDefault())
-	} else {
-		host = c.DialAddress(s.DialPort())
-		if host == "" {
-			return "", fmt.Errorf("no endpoint is set, so there is no address for a client to dial")
-		}
+	// The public endpoint, always: the proxy listens on every interface, so the
+	// address a client dials is the address the box answers on, not one of its
+	// own inside some other network.
+	host := c.DialAddress(s.DialPort())
+	if host == "" {
+		return "", fmt.Errorf("no endpoint is set, so there is no address for a client to dial")
 	}
 
 	user := url.User(s.UserOrDefault())

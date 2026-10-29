@@ -681,11 +681,22 @@ guess:
 routes. The link is deliberately absent from MCP tools because it contains the
 password. Config and plan responses redact secrets.
 
-The default listener scope is `internet` (all interfaces), with authentication.
-`tunnel` restricts the listener to the WireGuard address. SOCKS5 carries no
-transport encryption; the UI reports the exposure warning from the backend.
-Moving the listener or replacing credentials can invalidate existing links and
-uses the normal disruptive-change confirmation gate.
+The proxy listens on every interface and has no other shape. It stands alone:
+nothing in it is derived from the tunnel, and a box serves it with WireGuard
+switched off — a proxy is a way *out* of this network, and the tunnel that gets
+devices *in* plays no part in that. SOCKS5 carries no transport encryption, so
+the backend attaches its exposure warning whenever the proxy is on, and the UI
+renders it. Replacing credentials can invalidate existing links and uses the
+normal disruptive-change confirmation gate.
+
+There used to be a `listen` scope that could confine the listener to the
+WireGuard address. It was removed rather than kept: it coupled two independent
+objects, it was never reachable from the UI or the CLI, and the encryption it
+implied is one SOCKS5 does not have. A stored `listen: internet` is accepted and
+dropped on the next save; a stored `listen: tunnel` is refused by the validator
+rather than converted, because turning a proxy that only a dialled-in device
+could reach into one the internet can reach is not a change olr may make on
+somebody's behalf.
 
 ### 8.1 The binary is found, not assumed
 

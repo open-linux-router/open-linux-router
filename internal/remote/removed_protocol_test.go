@@ -70,9 +70,4 @@ func TestEndpointChangeStillProtectsIssuedSocksLinks(t *testing.T) {
 	if impact != ImpactDisruptive || len(reasons) == 0 {
 		t.Fatalf("issued SOCKS5 links not protected: %s %v", impact, reasons)
 	}
-	previous.Socks.Listen = ListenTunnel
-	impact, _ = classifyEndpoint(previous, next)
-	if impact != ImpactNone {
-		t.Fatalf("tunnel-scoped SOCKS5 link does not use the public endpoint: %s", impact)
-	}
 }

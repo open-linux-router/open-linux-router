@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 )
 
@@ -21,6 +20,22 @@ const DefaultSocksPort = 1080
 const DefaultSocksUser = "olr"
 
 // Socks5 is everything about the plain SOCKS5 proxy.
+//
+// **It listens on every interface, and it stands alone.** Nothing in this
+// object is derived from the tunnel, and a box serves it with WireGuard
+// switched off: a proxy is a way *out* of this network, and the tunnel that
+// gets devices *in* has no part in that.
+//
+// It used to carry a `listen` scope that could confine the proxy to the
+// WireGuard address. That field was removed rather than kept: it coupled two
+// independent objects, it was never reachable from the UI or the CLI, and the
+// only thing it bought was an encryption SOCKS5 does not have anyway — an
+// operator who wants their traffic inside WireGuard can use WireGuard.
+//
+// Old documents still load (UnmarshalJSON), and a stored `tunnel` is refused by
+// the validator rather than quietly converted. Turning a proxy that was
+// reachable only through the tunnel into one the internet can reach is not a
+// change olr gets to make on somebody's behalf.
 type Socks5 struct {
 	// Enabled controls whether the proxy runs at all. Disabling stops the
 	// service and leaves the configuration in place, so it can be turned back
@@ -33,15 +48,7 @@ type Socks5 struct {
 
 	// PublicPort is the port clients dial, when a router in front forwards a
 	// different one to us. Empty — the ordinary case — means ListenPort.
-	//
-	// Only meaningful with ListenInternet: nothing forwards a port into a
-	// WireGuard tunnel, so the validator refuses the combination rather than
-	// letting it read as configured.
 	PublicPort uint16 `json:"public_port,omitempty"`
-
-	// Listen is where the proxy accepts connections, and it is the field this
-	// object exists to get right. Empty means ListenInternet; SOCKS5 runs independently.
-	Listen ListenScope `json:"listen,omitempty"`
 
 	// Username is the account clients authenticate as. Empty means
 	// DefaultSocksUser.
@@ -58,61 +65,22 @@ type Socks5 struct {
 	// socks_render.go, which explains what is unverified and why guessing would
 	// have been worse than leaving it out.
 	ExtraConf string `json:"raw_3proxy_conf,omitempty"`
+
+	// removedListen holds a `listen` value this object no longer has, for the
+	// validator to refuse. Unexported so it is neither stored nor published:
+	// the config this box saves carries no trace of the field, and the only
+	// effect of an old document is one clear error at plan time.
+	removedListen string
 }
 
-// ListenScope is where the proxy accepts connections.
-type ListenScope string
-
-const (
-	// ListenTunnel binds the proxy to this box's address inside the WireGuard
-	// tunnel, so only a dialled-in peer can reach it.
-	//
-	// An explicit opt-in for operators who want a restricted listener.
-	//
-	// It depends on the tunnel being configured, which is a real coupling and
-	// is checked: ValidateSocks refuses this scope when WireGuard is disabled
-	// or has no address, because the alternative is a proxy that binds nothing
-	// and reports itself as running.
-	ListenTunnel ListenScope = "tunnel"
-
-	// ListenInternet binds the proxy to every interface, so anything that can
-	// route to this box can reach it.
-	//
-	// The default, with a plaintext transport warning. SocksExposureWarning is the text,
-	// and it is attached to *this value* rather than to the object, because a
-	// tunnel-scoped proxy has nothing to warn about and an operator who sees a
-	// warning every time learns to scroll past it.
-	ListenInternet ListenScope = "internet"
-)
-
-// ListenScopes lists the vocabulary. One source, so the enum published in the
-// schema and the check in the validator cannot disagree.
-func ListenScopes() []ListenScope { return []ListenScope{ListenTunnel, ListenInternet} }
-
-// Valid reports whether s is a known scope. The empty string is valid and means
-// ListenInternet.
-func (s ListenScope) Valid() bool { return s == "" || slices.Contains(ListenScopes(), s) }
-
-// OrDefault resolves the empty value.
-func (s ListenScope) OrDefault() ListenScope {
-	if s == "" {
-		return ListenInternet
-	}
-	return s
-}
-
-// Exposed reports whether this scope puts the proxy where the internet can
-// reach it.
-func (s ListenScope) Exposed() bool { return s.OrDefault() == ListenInternet }
-
-// SocksExposureWarning is what an operator is told when they expose a plaintext
-// proxy, and it is written to be acted on rather than dismissed.
+// SocksExposureWarning is what an operator is told when they switch the proxy
+// on, and it is written to be acted on rather than dismissed.
 //
 // Deliberately a warning and not a refusal. design.md §5.6 draws that line at
 // whether olr can know the operator is wrong, and here it cannot: a proxy
-// exposed to a trusted private WAN, or reached only through someone else's VPN,
-// is a legitimate configuration. The user's instruction when this was decided
-// was exactly that — hint, and let them decide.
+// reached only across a trusted private WAN, or through somebody else's VPN, is
+// a legitimate configuration — and now that the proxy has one shape, the
+// warning is attached to the object rather than to a scope value.
 const SocksExposureWarning = "SOCKS5 sends credentials and traffic in the clear, " +
 	"so exposing it to the internet means: the username and password cross every " +
 	"network in between as plaintext; anyone on the path sees which sites are " +
@@ -139,9 +107,6 @@ func (s Socks5) UserOrDefault() string {
 	}
 	return DefaultSocksUser
 }
-
-// ListenScopeOrDefault resolves the empty scope.
-func (s Socks5) ListenScopeOrDefault() ListenScope { return s.Listen.OrDefault() }
 
 // --- the password -----------------------------------------------------------
 
@@ -170,7 +135,6 @@ func (s Socks5) WithGeneratedPassword() (Socks5, bool, error) {
 
 // Normalize puts the proxy's config in canonical form.
 func (s *Socks5) Normalize() {
-	s.Listen = ListenScope(strings.TrimSpace(strings.ToLower(string(s.Listen))))
 	s.Username = strings.TrimSpace(s.Username)
 	s.Password = strings.TrimSpace(s.Password)
 	// The password is trimmed but never re-cased: it is base64, and altering it
@@ -188,23 +152,64 @@ func (s Socks5) Clone() Socks5 { return s }
 
 // Empty reports whether this object has been configured at all.
 func (s Socks5) Empty() bool {
-	return !s.Enabled && s.Password == "" && s.Username == "" && s.Listen == "" &&
+	return !s.Enabled && s.Password == "" && s.Username == "" &&
 		s.ListenPort == 0 && s.PublicPort == 0 && s.ExtraConf == ""
 }
 
 // UnmarshalSocks parses the proxy's section, rejecting unknown fields.
 //
 // Strict for the reason UnmarshalConfig is: a typo'd key that is silently
-// ignored produces a box quietly not doing what its config says — here, an
-// operator who believes they confined the proxy to the tunnel and did not,
-// which is the one mistake in this object that matters.
+// ignored produces a box quietly not doing what its config says.
 func UnmarshalSocks(data []byte) (Socks5, error) {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
 	var s Socks5
-	if err := dec.Decode(&s); err != nil {
+	if err := json.Unmarshal(data, &s); err != nil {
 		return Socks5{}, fmt.Errorf("%s socks5 configuration: %w", ModuleName, err)
 	}
 	s.Normalize()
 	return s, nil
+}
+
+// socksAlias is Socks5 without its own UnmarshalJSON, so the decoder below can
+// read the struct's fields without calling back into this file.
+type socksAlias Socks5
+
+// socksWire is the proxy's section plus the one key it no longer has.
+type socksWire struct {
+	socksAlias
+	Listen *string `json:"listen"`
+}
+
+// UnmarshalJSON reads the section, including a key this object has dropped.
+//
+// `listen` used to choose between listening on every interface and listening
+// only inside WireGuard. The proxy has one shape now, so the key is accepted
+// and discarded — a stored document must keep loading, and `internet` was the
+// value that described what the proxy still does.
+//
+// `tunnel` is different, and it is carried rather than dropped. An operator who
+// asked for a proxy only a dialled-in device could reach is not asking for one
+// the internet can reach, and quietly converting it would be the worst kind of
+// upgrade: the plan would be empty, the box would look unchanged, and the only
+// difference would be who can connect. So the value reaches ValidateSocks,
+// which refuses to plan anything until a person decides.
+func (s *Socks5) UnmarshalJSON(data []byte) error {
+	var wire socksWire
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&wire); err != nil {
+		return err
+	}
+
+	*s = Socks5(wire.socksAlias)
+	if wire.Listen != nil {
+		switch v := strings.ToLower(strings.TrimSpace(*wire.Listen)); v {
+		case "", "internet":
+			// What the proxy does anyway. Dropped on the next save.
+		case "tunnel":
+			s.removedListen = v
+		default:
+			return fmt.Errorf("unknown listen scope %q", *wire.Listen)
+		}
+	}
+	return nil
 }

@@ -76,10 +76,10 @@ export function SocksCard({
               </AlertDescription>
             </Alert>
           ) : enabled ? (
-            <p> {t('Listening on TCP port')} <span className="font-mono">{status?.listen_port}</span>,{' '}
-              {status?.exposed
-                ? 'on every interface, including the internet.'
-                : 'inside WireGuard only. Connect over WireGuard first, then use this proxy.'}
+            <p>
+              {' '}
+              {t('Listening on TCP port')} <span className="font-mono">{status?.listen_port}</span>,{' '}
+              {t('on every interface, including the internet.')}
             </p>
           ) : (
             <p>{t('Starting generates a password. Listens on every interface; no VPN required.')}</p>

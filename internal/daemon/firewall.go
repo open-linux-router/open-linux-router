@@ -73,9 +73,10 @@ func (b firewallBoundary) Openings() ([]firewall.Opening, error) {
 		out = append(out, firewall.Opening{For: "remote access (WireGuard)",
 			Protocol: firewall.UDP, Port: rc.WireGuard.PortOrDefault()})
 	}
-	// Only when it listens on the internet. The tunnel-scoped default binds
-	// the WireGuard address, and the tunnel is inside.
-	if s := rc.Socks; s.Enabled && s.ListenScopeOrDefault() == remote.ListenInternet {
+	// The proxy listens on every interface and has no other shape, so switching
+	// it on is what opens the port. Nothing here is conditional on the tunnel:
+	// the two ways in are independent.
+	if s := rc.Socks; s.Enabled {
 		out = append(out, firewall.Opening{For: "remote access (SOCKS5)",
 			Protocol: firewall.TCP, Port: s.PortOrDefault()})
 	}

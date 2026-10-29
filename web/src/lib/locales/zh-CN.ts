@@ -109,6 +109,7 @@ export const zhCN: Record<string, string> = {
   'Listening on': '监听地址',
   'Listening on TCP and UDP port': '监听 TCP 和 UDP 端口',
   'Listening on TCP port': '监听 TCP 端口',
+  'on every interface, including the internet.': '所有接口，包括互联网。',
   'Loading DNS configuration…': '正在加载 DNS 配置…',
   'Loading Gateway…': '正在加载网关…',
   'Loading device…': '正在加载设备…',
