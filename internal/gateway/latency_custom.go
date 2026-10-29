@@ -15,13 +15,26 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-const maxCustomLatencySites = 12
+const maxCustomLatencySites = 20
+
+// Categories are stable keys, not labels: the UI translates them, and a saved
+// document must keep its grouping when the interface language changes. Empty
+// means a site the operator added by hand, which the UI shows as Custom.
+var latencyCategories = map[string]bool{
+	"communication": true,
+	"social":        true,
+	"entertainment": true,
+	"news":          true,
+	"shopping":      true,
+	"tools":         true,
+}
 
 type CustomLatencySite struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
-	Exit string `json:"exit,omitempty"`
-	Icon string `json:"icon,omitempty"`
+	Name     string `json:"name"`
+	URL      string `json:"url"`
+	Exit     string `json:"exit,omitempty"`
+	Icon     string `json:"icon,omitempty"`
+	Category string `json:"category,omitempty"`
 }
 
 // Custom targets are independent of the Internet candidate selection.
@@ -134,6 +147,9 @@ func validateCustomSites(sites []CustomLatencySite) error {
 			return fmt.Errorf("duplicate site name: %s", name)
 		}
 		names[strings.ToLower(name)] = true
+		if site.Category != "" && !latencyCategories[site.Category] {
+			return fmt.Errorf("%s: unknown category %q", name, site.Category)
+		}
 		u, err := url.Parse(site.URL)
 		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" || u.Opaque != "" || u.Port() != "" {
 			return fmt.Errorf("%s: use an HTTPS URL without credentials, port, or fragment", name)
@@ -149,7 +165,7 @@ func (m *CustomLatencyMonitor) resetResults() {
 	}
 	m.results = make([]LatencySite, len(m.sites))
 	for i, site := range m.sites {
-		result := LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon}
+		result := LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, Category: site.Category}
 		if old, ok := previous[site.URL+"\x00"+site.Exit]; ok {
 			result.Milliseconds, result.CheckedAt, result.Error = old.Milliseconds, old.CheckedAt, old.Error
 		}
@@ -242,7 +258,7 @@ func (m *CustomLatencyMonitor) probeOne(ctx context.Context, site CustomLatencyS
 		}
 		return
 	}
-	result := LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, CheckedAt: time.Now().UTC()}
+	result := LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, Category: site.Category, CheckedAt: time.Now().UTC()}
 	if site.Exit != "" && err != nil && strings.Contains(err.Error(), "gateway exit") {
 		result.Error = "Gateway exit unavailable"
 	}
@@ -268,6 +284,7 @@ func (m *CustomLatencyMonitor) storeResult(result LatencySite) {
 		}
 		result.Name = site.Name
 		result.Icon = site.Icon
+		result.Category = site.Category
 		result.Measuring = m.inflight[key]
 		m.results[i] = result
 	}
@@ -389,7 +406,7 @@ func (m *CustomLatencyMonitor) sample(ctx context.Context) {
 					value, err = m.probeThrough(bounded, site.URL, mark)
 				}
 			}
-			results[i] = LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, CheckedAt: time.Now().UTC()}
+			results[i] = LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, Category: site.Category, CheckedAt: time.Now().UTC()}
 			if site.Exit != "" && err != nil && strings.Contains(err.Error(), "gateway exit") {
 				results[i].Error = "Gateway exit unavailable"
 			}

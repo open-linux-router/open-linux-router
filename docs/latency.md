@@ -44,12 +44,22 @@ runs, and the card replaces that value with a spinner. Other sites, the Internet
 target and DNS are left alone. The route changes no configuration and is only a
 request to probe one stored site.
 
-Up to 12 named HTTPS URLs can be stored with `PUT /api/gateway/latency/sites`
-using objects such as `{"name":"YouTube","url":"https://www.youtube.com/","exit":"Proxy"}`.
-`exit` is optional and must name a configured gateway exit. An empty array
-clears the list. Names are unique and 1–40 characters; URLs cannot contain
-credentials, custom ports or fragments. Sites live in `gateway.latency_sites`
-in `olr.json`; measurements are ephemeral.
+Up to 20 named HTTPS URLs can be stored with `PUT /api/gateway/latency/sites`
+using objects such as `{"name":"YouTube","url":"https://www.youtube.com/","exit":"Proxy","category":"entertainment"}`.
+`exit` is optional and must name a configured gateway exit. `category` is
+optional and must be one of `communication`, `social`, `entertainment`, `news`,
+`shopping` or `tools`; an empty category marks a site added by hand, which the
+settings page shows under Custom. Categories only group the settings list; the
+monitor treats every site alike. An empty array clears the list. Names are
+unique and 1–40 characters; URLs cannot contain credentials, custom ports or
+fragments. Sites live in `gateway.latency_sites` in `olr.json`; measurements are
+ephemeral.
+
+The settings page offers a preset catalog of common sites under those
+categories. Each preset stores one URL — the faster of the app's main page and
+its static asset host — so a preset costs one probe per round like any other
+site. Presets are added one at a time, and the operator still chooses each
+site's exit.
 
 The response includes `state` (`measuring`, `ok`, `unreachable`, `unavailable`),
 nullable `milliseconds`, `dns_milliseconds`, `checked_at`, the selected

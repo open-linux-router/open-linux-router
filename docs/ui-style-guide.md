@@ -256,6 +256,10 @@ Latency settings place a full-width labeled Internet target Select above the
 monitored-site list on /latency, with Save and Cancel in the settings card footer. Keep the
 selected provider and automatic selection in this control, without extra
 badges or explanatory content on the card.
+Monitored sites are grouped under Communication, Social, Entertainment, News,
+Shopping, Tools and Custom headings, omitting empty groups. Add common site
+opens a grouped catalog dialog with a search field and one exit choice for the
+sites it adds; an entry that is already monitored is disabled.
 The public-network summary uses a locally bundled flag-icons country flag.
 Clicking any Status row opens its details in a shared dialog, without chevrons.
 Public addresses use monospace and wrap within the dialog.

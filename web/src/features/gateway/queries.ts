@@ -265,7 +265,7 @@ export function useMeasureLatencySite() {
 export function useSaveLatencySites() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ sites, target }: { sites: { name: string; url: string; exit?: string; icon?: string }[]; target?: string }) => {
+    mutationFn: async ({ sites, target }: { sites: { name: string; url: string; exit?: string; icon?: string; category?: string }[]; target?: string }) => {
       await api.put('/api/gateway/latency/sites', sites)
       if (target !== undefined) await api.put('/api/gateway/latency/target', { target })
     },

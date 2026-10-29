@@ -173,7 +173,7 @@ func TestCustomLatencyPersistenceAndProbes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sites := []CustomLatencySite{{Name: "YouTube", URL: "https://www.youtube.com/"}, {Name: "WeChat", URL: "https://weixin.qq.com/"}}
+	sites := []CustomLatencySite{{Name: "YouTube", URL: "https://www.youtube.com/", Category: "entertainment"}, {Name: "WeChat", URL: "https://weixin.qq.com/", Category: "communication"}}
 	if err := m.Replace(sites); err != nil {
 		t.Fatal(err)
 	}
@@ -214,6 +214,7 @@ func TestCustomLatencyValidationPreservesSettings(t *testing.T) {
 		{Name: "Video", URL: "https://user:pass@example.com"},
 		{Name: "Video", URL: "https://example.com:8443"},
 		{Name: "Video", URL: "https://example.com/#fragment"},
+		{Name: "Video", URL: "https://example.com/", Category: "unknown"},
 	} {
 		if err := m.Replace([]CustomLatencySite{bad}); err == nil {
 			t.Fatalf("accepted %+v", bad)
@@ -224,6 +225,32 @@ func TestCustomLatencyValidationPreservesSettings(t *testing.T) {
 	}
 	if err := m.Replace([]CustomLatencySite{valid[0], {Name: "video", URL: "https://other.com"}}); err == nil {
 		t.Fatal("duplicate names accepted")
+	}
+}
+
+func TestCustomLatencySiteLimitAndCategorySnapshot(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sites := make([]CustomLatencySite, 0, maxCustomLatencySites)
+	for i := 0; i < maxCustomLatencySites; i++ {
+		sites = append(sites, CustomLatencySite{
+			Name:     fmt.Sprintf("Site %d", i),
+			URL:      fmt.Sprintf("https://site%d.example/", i),
+			Category: "tools",
+		})
+	}
+	if err := m.Replace(sites); err != nil {
+		t.Fatal(err)
+	}
+	got := m.Snapshot()
+	if len(got) != maxCustomLatencySites || got[0].Category != "tools" {
+		t.Fatalf("snapshot: %d sites, first %+v", len(got), got[0])
+	}
+	tooMany := append(append([]CustomLatencySite{}, sites...), CustomLatencySite{Name: "Extra", URL: "https://extra.example/"})
+	if err := m.Replace(tooMany); err == nil {
+		t.Fatalf("accepted %d sites", len(tooMany))
 	}
 }
 
