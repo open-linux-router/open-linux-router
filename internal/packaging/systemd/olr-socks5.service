@@ -31,12 +31,16 @@ Type=simple
 
 # The binary olr does not ship.
 #
-# 3proxy is not in Debian but publishes its own signed apt repository, so this
-# path is the fallback for an operator who installed it by hand;
-# internal/remote/socks_binary.go also finds it on PATH and in the sbin
-# directories, and `olr enable` writes a drop-in when it is somewhere else. A
-# drop-in rather than an edited unit, because an edited unit is overwritten by
-# the next upgrade.
+# 3proxy is not in Debian but publishes its own signed apt repository, and the
+# package it installs puts the binary in /usr/bin — not here. So the path below
+# is the default an operator building 3proxy by hand is told to use, not a place
+# every box has one: internal/remote/socks_binary.go also finds it on PATH and in
+# the sbin directories, and the apply writes a drop-in naming whatever binary it
+# found when that is not this one (internal/remote/socks_unit.go). Written by the
+# apply rather than by `olr enable`, because 3proxy is usually installed after
+# olr is enabled — the moment olr knows where the binary is, it points the unit
+# at it. A drop-in rather than an edited unit, because an edited unit is
+# overwritten by the next upgrade.
 ExecStart=/usr/lib/open-linux-router/3proxy /etc/open-linux-router/rendered/remote/3proxy.cfg
 
 # No ExecReload. 3proxy reloads on SIGUSR1, but olr does not use it: the

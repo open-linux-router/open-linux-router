@@ -177,6 +177,7 @@ func (a ProxyApplier) ApplyPlanned(ctx context.Context, desired Config, plan Pro
 		}
 	}
 
+	var binary string
 	if plan.Action != ActionNone || plan.Enable != nil {
 		// The binary before the unit, because it is the more likely of the two
 		// to be missing and the one whose absence olr can explain. A unit that
@@ -184,9 +185,11 @@ func (a ProxyApplier) ApplyPlanned(ctx context.Context, desired Config, plan Pro
 		// naming a path and nothing else.
 		if kind.Enabled(desired) {
 			if err := run("check a "+kind.Object+" server is available", func() error {
-				if _, err := a.locate()(); err != nil {
+				path, err := a.locate()()
+				if err != nil {
 					return kind.Missing()
 				}
+				binary = path
 				return nil
 			}); err != nil {
 				return result, err
@@ -211,6 +214,28 @@ func (a ProxyApplier) ApplyPlanned(ctx context.Context, desired Config, plan Pro
 			})
 		}
 		return result, nil
+	}
+
+	// The unit named a path when it shipped, and this is where that path and the
+	// binary that was actually found are allowed to disagree — see
+	// socks_unit.go for the box this happened on and the 203/EXEC it produced.
+	// Before the enable and the start, because both act on the unit descriptor
+	// systemd holds, not on the file on disk.
+	if binary != "" && kind.Point != nil {
+		changed, err := kind.Point(ctx, binary, a.Paths)
+		if err != nil {
+			result.Steps = append(result.Steps, Step{
+				Description: "point " + kind.Unit + " at " + binary,
+				Error:       err.Error(),
+			})
+			return result, err
+		}
+		if changed {
+			result.Steps = append(result.Steps, Step{
+				Description: "point " + kind.Unit + " at " + binary,
+				Done:        true,
+			})
+		}
 	}
 
 	// Boot-time state before the service action, so a backend that then fails
@@ -300,9 +325,14 @@ func (a ProxyApplier) verifyServing(ctx context.Context) error {
 		case err != nil:
 			return err
 		case !status.Active:
+			// Where it stopped, when systemd has an answer. Without it the
+			// operator gets "did not stay running" and no way in: the reason
+			// (203/EXEC, a rejected config, a port already taken) is only in the
+			// journal, and the difference between those is the whole diagnosis.
 			return fmt.Errorf(
-				"%s did not stay running. The server exits rather than serving a configuration "+
-					"it cannot load, so check `olr remote status`", status.Unit)
+				"%s did not stay running%s. The server exits rather than serving a configuration "+
+					"it cannot load, so check `olr remote status` and `journalctl -u %s`",
+				status.Unit, whereItStopped(status), status.Unit)
 		}
 		if !time.Now().Before(deadline) {
 			return nil
@@ -312,5 +342,22 @@ func (a ProxyApplier) verifyServing(ctx context.Context) error {
 			return ctx.Err()
 		case <-time.After(settleInterval):
 		}
+	}
+}
+
+// whereItStopped is systemd's own answer to "what happened", when it has one.
+//
+// State and SubState rather than an exit status: systemd reports the latter on
+// the service interface, which core's shared read does not touch, and
+// "activating/auto-restart" is enough to say "it is crash-looping" — the exit
+// status it is looping on is in the journal the message points at.
+func whereItStopped(status core.UnitStatus) string {
+	switch {
+	case status.State == "":
+		return ""
+	case status.SubState == "":
+		return " (" + status.State + ")"
+	default:
+		return " (" + status.State + "/" + status.SubState + ")"
 	}
 }

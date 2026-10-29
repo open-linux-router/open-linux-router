@@ -1,6 +1,10 @@
 package remote
 
-import "github.com/open-linux-router/open-linux-router/internal/core"
+import (
+	"context"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
+)
 
 type ProxyObject string
 
@@ -25,6 +29,11 @@ type proxyKind struct {
 	// Locate finds the backend binary, and Missing explains its absence.
 	Locate  func() (string, error)
 	Missing func() error
+
+	// Point makes the unit run the binary Locate returned, for the case where
+	// it is not where the unit's ExecStart looks. It reports whether the box
+	// changed, so the applier can say so and systemd can be told to re-read.
+	Point func(ctx context.Context, binary string, paths Paths) (bool, error)
 
 	// Build is the object's plan builder.
 	Build func(desired, previous Config, paths Paths, obs ProxyObserved) (ProxyPlan, Rendered, error)
@@ -53,6 +62,7 @@ func (o ProxyObject) kind() proxyKind {
 			Enabled:  func(c Config) bool { return c.Socks.Enabled },
 			Locate:   FindSocks,
 			Missing:  ErrSocksMissing,
+			Point:    PointSocksUnit,
 			Build:    BuildSocksPlan,
 			Validate: ValidateSocks,
 			Redacted: func(c Config) any { s := c.Socks; return &s },

@@ -235,6 +235,28 @@ func (s systemdUnit) reloadDaemon(ctx context.Context, conn *dbus.Conn) error {
 	return nil
 }
 
+// DaemonReload makes systemd re-read unit files and drop-ins.
+//
+// For code that writes a drop-in rather than editing a unit — `olr remote`'s
+// 3proxy path, for one, and the reason is the same in every case: systemd keeps
+// the parsed unit from its last reload, so a file on disk it has not been told
+// about is a file it will not run. Enable and Disable already end with this,
+// which is why nothing needed it exposed before.
+//
+// Over D-Bus rather than by running systemctl, for the reason §3.6 gives: olrd
+// executing no subprocesses is most of what its sandbox costs.
+func DaemonReload(ctx context.Context) error {
+	conn, err := dbus.NewSystemdConnectionContext(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrNoServiceManager, err)
+	}
+	defer conn.Close()
+	if err := conn.ReloadContext(ctx); err != nil {
+		return fmt.Errorf("reloading the systemd manager: %w", err)
+	}
+	return nil
+}
+
 // job runs a unit job and waits for systemd to report how it finished.
 //
 // Waiting matters: `olr dhcp set` applies on return (design.md §5.1), so

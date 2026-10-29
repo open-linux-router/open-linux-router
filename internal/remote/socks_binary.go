@@ -9,15 +9,24 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
+// SocksUnitPath is the binary the shipped unit's ExecStart names, which is why
+// it is also the first place FindSocks looks. The two are one answer: a path
+// the unit runs and the search does not prefer is a path the unit runs by
+// accident.
+//
+// It is a default and not a requirement. 3proxy's own package installs to
+// /usr/bin, and the unit is written before that package exists on most boxes —
+// internal/remote/socks_unit.go is where the difference is reconciled, by
+// pointing the unit at the binary that was actually found.
+const SocksUnitPath = "/usr/lib/open-linux-router/3proxy"
+
 // SocksSearchPath is where a 3proxy binary is looked for, in order.
 //
 // The first entry is checked before PATH for the reason the other two backends
 // use the same layout: a binary olr found there is unambiguously the one an
 // operator put there for olr, and it wins over whatever a distribution may
 // later drop in.
-var SocksSearchPath = []string{
-	"/usr/lib/open-linux-router/3proxy",
-}
+var SocksSearchPath = []string{SocksUnitPath}
 
 // ErrNoSocks reports that no 3proxy binary could be found.
 var ErrNoSocks = errors.New("no 3proxy server found")

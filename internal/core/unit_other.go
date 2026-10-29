@@ -30,3 +30,7 @@ func (n noUnit) Restart(context.Context) error { return ErrNoServiceManager }
 func (n noUnit) Reload(context.Context) error  { return ErrNoServiceManager }
 func (n noUnit) Enable(context.Context) error  { return ErrNoServiceManager }
 func (n noUnit) Disable(context.Context) error { return ErrNoServiceManager }
+
+// DaemonReload reports the same absence as the methods above: there is no
+// manager here holding a parsed unit that a drop-in could change.
+func DaemonReload(context.Context) error { return ErrNoServiceManager }

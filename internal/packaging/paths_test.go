@@ -12,6 +12,7 @@ import (
 	"github.com/open-linux-router/open-linux-router/internal/dns"
 	"github.com/open-linux-router/open-linux-router/internal/ingress"
 	"github.com/open-linux-router/open-linux-router/internal/packaging"
+	"github.com/open-linux-router/open-linux-router/internal/remote"
 )
 
 // dropInName is packaging's name for the file, which is unexported. Restated
@@ -85,6 +86,34 @@ func TestTheDropInNamesTheSamePaths(t *testing.T) {
 	}
 	if !anyDirective(body, "ExecStartPre=", "-a "+paths.TrustAnchor) {
 		t.Errorf("the olr-dns drop-in does not bootstrap the anchor at %s:\n%s", paths.TrustAnchor, body)
+	}
+}
+
+// The SOCKS5 unit runs the binary the module searches for.
+//
+// Two copies of one answer, and they were allowed to drift: the unit shipped
+// naming /usr/lib/open-linux-router/3proxy while the install hint the module
+// itself prints is `apt install 3proxy`, whose package puts the binary in
+// /usr/bin. Every operator who followed the hint got 203/EXEC from a unit whose
+// rendered configuration was perfect — and `olr remote status` said the config
+// matched, because it did.
+//
+// The apply now points the unit at whatever it found (remote.PointSocksUnit),
+// which is what makes the two paths an allowed difference rather than a bug.
+// Holding the *default* here is what keeps that reconciliation meaningful: if
+// the unit's default path and the module's first search path disagree again,
+// every box pays for an unnecessary drop-in at best.
+func TestTheSOCKS5UnitRunsTheBinaryTheModuleLooksFor(t *testing.T) {
+	unit := unitNamed(t, "olr-socks5.service")
+	paths := remote.DefaultPaths()
+
+	if !anyDirective(unit, "ExecStart=", remote.SocksUnitPath+" ") {
+		t.Errorf("no ExecStart line runs %s, the first place FindSocks looks:\n%s",
+			remote.SocksUnitPath, execLines(unit))
+	}
+	if !anyDirective(unit, "ExecStart=", paths.SocksConf) {
+		t.Errorf("no ExecStart line passes %s, which is the file the module renders:\n%s",
+			paths.SocksConf, execLines(unit))
 	}
 }
 

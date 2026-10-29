@@ -687,6 +687,25 @@ transport encryption; the UI reports the exposure warning from the backend.
 Moving the listener or replacing credentials can invalidate existing links and
 uses the normal disruptive-change confirmation gate.
 
+### 8.1 The binary is found, not assumed
+
+olr ships no 3proxy. The unit ships naming `/usr/lib/open-linux-router/3proxy` —
+the place the install hint tells an operator who builds it by hand to put it —
+and `FindSocks` looks there first, then `$PATH`, then the sbin directories.
+
+3proxy's own package installs to `/usr/bin` instead, and the ordinary order of
+events is *install olr, enable it, turn SOCKS5 on, then install 3proxy*. So the
+path the unit names and the binary the box has are allowed to differ, and the
+apply is what closes the gap: it writes
+`/etc/systemd/system/olr-socks5.service.d/10-path.conf` naming the binary it
+found and reloads systemd (`internal/remote/socks_unit.go`).
+
+A drop-in rather than an edited unit, because `olr enable` rewrites the units on
+every upgrade; and written by the apply rather than by `olr enable`, because
+installing 3proxy is the step that comes last. Without it the unit fails at
+`ExecStart` with `203/EXEC` — a rendered config that is exactly right, a proxy
+that never starts, and nothing on screen connecting the two.
+
 ## 9. Removed protocol migration
 
 Shadowsocks is no longer supported. Its API, CLI, renderer, installer guidance,
