@@ -1,7 +1,7 @@
 # World traffic
 
 Overview's Traffic card flips to a MapLibre preview with a bundled Natural
-Earth 1:110m country map (public domain). Opening fullscreen loads a separate,
+Earth 1:110m country map (public domain). Opening /map loads a separate,
 fingerprinted local GeoJSON asset with 1:50m countries and simplified global
 1:10m first-order administrative boundaries, label points and major cities.
 State/province boundaries appear from zoom 2; their names and capital/world-city
@@ -10,12 +10,11 @@ major cities from zoom 5, with collision handling and population priority.
 Administrative label thresholds are brought forward for this regional view
 rather than copied from a street basemap; integer thresholds match MapLibre's
 symbol layout evaluation. Zoom stops at 6: this is an
-administrative traffic map, without roads or buildings. The fullscreen view is
-map only: no title, legend, status, credit or other text overlaps it, and the
-single floating close button at top right is its only control. It has its own
-/map address, so a link or bookmark opens the map directly. Pan, pinch, scroll
-and double-click zoom stand alone. Resizing preserves the chosen
-fullscreen view. MapLibre renders labels with local system fonts; there are
+administrative traffic map, without roads or buildings. /map is a regular
+Overview detail page with the shared header, page heading and footer. The map
+occupies a bounded responsive panel without text overlays or a close control.
+Links and bookmarks open the page directly. Pan, pinch, scroll and double-click
+zoom stand alone. Resizing preserves the chosen map view. MapLibre renders labels with local system fonts; there are
 no external map, font, sprite or tile requests, including on first use.
 The asset ships inside OLR and uses the existing immutable asset cache.
 
@@ -60,7 +59,7 @@ uses one amber hue for every arc, deliberately outside the teal-green-blue
 country palette, so colour marks traffic as a category. Every arc carries one
 weight — 2px where the map fits the world into a laptop or a large window,
 about 1px where it fits into a few hundred pixels, as the card preview and a
-phone's fullscreen map do — and keeps that weight for as long as its location
+phone's detail map do — and keeps that weight for as long as its location
 reports traffic in the sampled window; an arc fades out only when the location
 leaves the window — no eligible bytes in the last thirty seconds, or pushed
 below the top forty. A line that dimmed while its flow continued would claim

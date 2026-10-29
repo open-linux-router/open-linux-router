@@ -1,16 +1,18 @@
 import { t, useLocale } from '@/lib/i18n'
 import { Heading } from '@/components/ui/heading'
+import { PageHeading } from '@/components/layout/page-heading'
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
-import { X } from 'lucide-react'
 import * as maplibregl from 'maplibre-gl'
 import type { ExpressionSpecification, GeoJSONSource } from 'maplibre-gl'
 import type * as GeoJSON from 'geojson'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { usePublicAddresses } from '@/features/system/queries'
 import { api } from '@/lib/api'
 import { cn, formatRate } from '@/lib/utils'
 import type { GeoPlace } from '@/lib/api-types'
@@ -75,8 +77,8 @@ const glowGradient = (dark: boolean) => {
 // the same ramp thins the arcs on a map too small for them. The card preview
 // fits the world into a few hundred pixels: there, 2px covers more than a
 // degree of longitude and the six-pixel halo under it merges the fan of East
-// Asian destinations into one ribbon. Below the zoom a desktop fullscreen fits
-// at — the card, and a phone's fullscreen map — the arc thins to 1px, which is
+// Asian destinations into one ribbon. Below the zoom a desktop map page fits
+// at — the card, and a phone's map page — the arc thins to 1px, which is
 // still two device pixels on a retina screen and keeps the gap between arcs.
 // Zoom may only be the input of a top-level interpolate, so the scale wraps
 // the width instead of multiplying it.
@@ -169,7 +171,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
     try {
       instance = new maplibregl.Map({ container: container.current,
         // The detailed administrative map is a fingerprinted local asset. Only
-        // fullscreen maps fetch it; the small preview keeps the 110m outline.
+        // map pages fetch it; the small preview keeps the 110m outline.
         // Omitting glyphs uses local fonts, without a third-party glyph server.
         style: { version: 8, sources: { countries: { type: 'geojson', data: expanded ? regionsUrl : countries as GeoJSON.FeatureCollection, maxzoom: 6 } }, layers: [
           { id: 'ocean', type: 'background', paint: { 'background-color': '#f6f7f9' } },
@@ -398,22 +400,7 @@ function TrafficMap({ peers, origin, dark, expanded = false }: { peers: Peer[]; 
   return <div className={cn('relative h-full min-h-32 w-full overflow-hidden', !expanded && 'rounded-lg')} style={expanded ? { backgroundColor: dark ? '#1c3545' : '#d6effb' } : undefined}><div ref={container} style={{ position: 'absolute', inset: 0 }} aria-hidden={!expanded} />{failed && <p className="absolute inset-0 flex items-center justify-center bg-muted p-3 text-xs text-muted-foreground">{t('Map unavailable.')}</p>}</div>
 }
 
-export function WorldTraffic({ origin, embedded = false, expanded, onExpandedChange }: {
-  origin?: Origin
-  embedded?: boolean
-  /** Whether the fullscreen map is open. The page may own this, so its URL can. */
-  expanded?: boolean
-  onExpandedChange?: (expanded: boolean) => void
-}) {
-  useLocale()
-  const [open, setOpen] = useState(false)
-  // Uncontrolled when the card is used on its own; Overview passes the state
-  // through so the address bar can hold the fullscreen map.
-  const [ownExpanded, setOwnExpanded] = useState(false)
-  const fullscreen = expanded ?? ownExpanded
-  const setFullscreen = onExpandedChange ?? setOwnExpanded
-  const preview = useRef<HTMLButtonElement>(null)
-  const { resolvedTheme } = useTheme()
+function useWorldTraffic() {
   const query = useQuery({ queryKey: ['gateway', 'world-traffic'], queryFn: () => api.get<Snapshot>('/api/gateway/world-traffic'), refetchInterval: pollMs })
   const data = query.data
   const stale = data?.as_of && Date.now() - Date.parse(data.as_of) > 10000
@@ -422,21 +409,57 @@ export function WorldTraffic({ origin, embedded = false, expanded, onExpandedCha
   const share = data?.total ? Math.round(peers.reduce((n, p) => n + p.download + p.upload, 0) / data.total * 100) : 0
   const unknown = peers.filter(p => !position(p.place)).length
   const status = query.isError || stale ? t('Unavailable') : !data ? t('Loading…') : data.state === 'disabled' ? 'Counting off' : data.state === 'warming' ? 'Measuring…' : data.state !== 'ready' ? t('Unavailable') : peers.length ? `Top ${peers.length} · ${share}%` : 'No observed traffic'
+  return { data, ready, peers, unknown, status }
+}
+
+export function WorldTraffic({ origin, embedded = false }: {
+  origin?: Origin
+  embedded?: boolean
+}) {
+  useLocale()
+  const [open, setOpen] = useState(false)
+  const { resolvedTheme } = useTheme()
+  const traffic = useWorldTraffic()
   return <section aria-label={t('Traffic map')} className={embedded ? 'flex min-h-0 w-full min-w-0 flex-col gap-1' : 'col-span-2 flex min-w-0 flex-col gap-2 panel-surface p-3 sm:p-4 lg:col-span-1 lg:row-span-3'}>
     {!embedded && <Heading size="sm" className="flex h-6 items-center"><button onClick={() => setOpen(true)} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 focus-visible:outline-2 focus-visible:outline-ring" aria-label={t('Map details')}>{t('Map')}</button></Heading>}
-    <button ref={preview} type="button" onClick={() => setFullscreen(true)} aria-label={t('Open fullscreen map')} aria-haspopup="dialog" className={embedded ? 'flex min-h-32 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring' : '-mx-1 -mb-1 flex min-h-44 flex-1 cursor-zoom-in rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2'}><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} /></button>
-    {(!ready || !peers.length) && <p className="text-xs text-muted-foreground">{status}</p>}
-    <Dialog open={fullscreen} onOpenChange={setFullscreen}><DialogContent showCloseButton={false} finalFocus={preview} className="flex h-dvh max-h-dvh w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none p-0 sm:max-w-none sm:p-0">
-      <DialogTitle className="sr-only">{t('Map')}</DialogTitle>
-      <DialogClose render={<Button variant="subtle" size="icon-lg" className="absolute top-3 right-3 z-10 rounded-full bg-card/95 shadow-md ring-1 ring-border backdrop-blur-sm sm:size-9" />}><X aria-hidden="true" /><span className="sr-only">{t('Close')}</span></DialogClose>
-      <div className="min-h-0 flex-1" role="region" aria-label={t('World traffic map, drag to pan and scroll to zoom')}><TrafficMap peers={peers} origin={origin} dark={resolvedTheme === 'dark'} expanded /></div>
-    </DialogContent></Dialog>
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>{t('Map')}</DialogTitle><DialogDescription>{t('Remote IPs by upload and download in the last 30 seconds. Every arc is the same width. A few arcs at a time carry a soft highlight that travels out and back — new locations first, then the rest take turns — and an arc fades out when its location leaves the window. IP locations are approximate.')}{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
-      <p className="text-sm text-muted-foreground">{status}{data?.seconds ? ` · ${Math.round(data.seconds)}s sampled` : ''}. {data?.state === 'disabled' ? 'Connection byte accounting is off. Enable Gateway traffic counting and apply its configuration.' : 'Counts include router and forwarded connections observed in Linux conntrack. Connections ending between samples and traffic bypassing conntrack may be missed.'} {(!origin || !position(origin)) && 'Router location is unknown; arcs cannot be drawn.'}</p>
-      {data?.error && <p className="break-words text-sm text-destructive">{data.error}</p>}
-      {data?.locations?.error && <p className="break-words text-sm text-destructive">{data.locations.error}</p>}
-      <ul className="divide-y">{peers.map(peer => <li key={peer.ip} className="space-y-1 py-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><span className="break-all font-mono">{peer.ip}</span><span>{[peer.place.city || peer.place.region, peer.place.country_name].filter(Boolean).join(', ') || 'Location unknown'}</span></div><div className="flex justify-between gap-2 text-xs tabular-nums"><span className="text-receive">↓ {formatRate(peer.download)}</span><span className="text-transmit">↑ {formatRate(peer.upload)}</span></div></li>)}</ul>
-      <p className="text-xs text-muted-foreground">{t('IP locations:')} {data?.locations?.state || 'Unavailable'} · <a href="https://ip.sb" target="_blank" rel="noreferrer" className="underline">ip.sb</a>. Map: <a href="https://www.naturalearthdata.com" target="_blank" rel="noreferrer" className="underline">Natural Earth</a> (public domain), rendered with MapLibre.</p>
-    </DialogContent></Dialog>
+    <Link to="/map" aria-label={t('Map')} className={embedded ? 'flex min-h-32 flex-1 rounded-lg focus-visible:outline-2 focus-visible:outline-ring' : '-mx-1 -mb-1 flex min-h-44 flex-1 rounded-lg focus-visible:outline-2 focus-visible:outline-ring sm:-mx-2 sm:-mb-2'}><TrafficMap peers={traffic.peers} origin={origin} dark={resolvedTheme === 'dark'} /></Link>
+    {(!traffic.ready || !traffic.peers.length) && <p className="text-xs text-muted-foreground">{traffic.status}</p>}
+    <WorldTrafficDetails open={open} onOpenChange={setOpen} origin={origin} {...traffic} />
   </section>
+}
+
+export function WorldTrafficPage() {
+  useLocale()
+  const publicAddresses = usePublicAddresses()
+  const origin = publicAddresses.data?.ipv4.ip ? publicAddresses.data.ipv4 : publicAddresses.data?.ipv6
+  const { resolvedTheme } = useTheme()
+  const [open, setOpen] = useState(false)
+  const traffic = useWorldTraffic()
+
+  return <div className="space-y-6">
+    <PageHeading title={t('Map')} action={<Button variant="secondary" onClick={() => setOpen(true)}>{t('Map details')}</Button>} />
+    <div className="panel-surface h-[clamp(20rem,65dvh,48rem)] overflow-hidden sm:h-[clamp(24rem,70dvh,48rem)]" role="region" aria-label={t('World traffic map, drag to pan and scroll to zoom')}>
+      <TrafficMap peers={traffic.peers} origin={origin} dark={resolvedTheme === 'dark'} expanded />
+    </div>
+    {(!traffic.ready || !traffic.peers.length) && <p className="text-sm text-muted-foreground" role="status">{traffic.status}</p>}
+    <WorldTrafficDetails open={open} onOpenChange={setOpen} origin={origin} {...traffic} />
+  </div>
+}
+
+function WorldTrafficDetails({ open, onOpenChange, origin, data, peers, unknown, status }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  origin?: Origin
+  data?: Snapshot
+  peers: Peer[]
+  unknown: number
+  status: string
+}) {
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>{t('Map')}</DialogTitle><DialogDescription>{t('Remote IPs by upload and download in the last 30 seconds. Every arc is the same width. A few arcs at a time carry a soft highlight that travels out and back — new locations first, then the rest take turns — and an arc fades out when its location leaves the window. IP locations are approximate.')}{unknown ? ` ${unknown} locations unknown.` : ''}</DialogDescription></DialogHeader>
+    <p className="text-sm text-muted-foreground">{status}{data?.seconds ? ` · ${Math.round(data.seconds)}s sampled` : ''}. {data?.state === 'disabled' ? 'Connection byte accounting is off. Enable Gateway traffic counting and apply its configuration.' : 'Counts include router and forwarded connections observed in Linux conntrack. Connections ending between samples and traffic bypassing conntrack may be missed.'} {(!origin || !position(origin)) && 'Router location is unknown; arcs cannot be drawn.'}</p>
+    {data?.error && <p className="break-words text-sm text-destructive">{data.error}</p>}
+    {data?.locations?.error && <p className="break-words text-sm text-destructive">{data.locations.error}</p>}
+    <ul className="divide-y">{peers.map(peer => <li key={peer.ip} className="space-y-1 py-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><span className="break-all font-mono">{peer.ip}</span><span>{[peer.place.city || peer.place.region, peer.place.country_name].filter(Boolean).join(', ') || 'Location unknown'}</span></div><div className="flex justify-between gap-2 text-xs tabular-nums"><span className="text-receive">↓ {formatRate(peer.download)}</span><span className="text-transmit">↑ {formatRate(peer.upload)}</span></div></li>)}</ul>
+    <p className="text-xs text-muted-foreground">{t('IP locations:')} {data?.locations?.state || 'Unavailable'} · <a href="https://ip.sb" target="_blank" rel="noreferrer" className="underline">ip.sb</a>. Map: <a href="https://www.naturalearthdata.com" target="_blank" rel="noreferrer" className="underline">Natural Earth</a> (public domain), rendered with MapLibre.</p>
+  </DialogContent></Dialog>
 }

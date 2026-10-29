@@ -196,7 +196,8 @@ lint failure rather than a habit.
 | `icon-sm` | 32px | — | square | 44px |
 
 `sm` must actually be smaller than `default` (today both are `h-9`). Remove
-`icon-xs`; keep `icon-lg` only for the two floating fullscreen close controls.
+`icon-xs`; use the standard icon sizes for page actions. Overview detail pages
+use normal navigation and have no floating fullscreen close controls.
 Icons inside buttons are 16px, never `size-5`.
 
 ### 5.3 Placement and labels

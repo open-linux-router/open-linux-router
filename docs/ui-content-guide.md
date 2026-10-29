@@ -53,7 +53,7 @@ hidden page title. Detail and operation pages keep their identifying titles.
 - Overview shows Status, Traffic, Latency and Quality cards. Traffic's
   title-right map icon toggles statistics and map views in place. Its pressed
   state identifies the active map, and its accessible label names the next view.
-  The fullscreen map has its own /map address. The
+  The detailed map has its own /map address. The
   quality radar shows Speed, Latency, Stability, Wireless and Functionality
   on a 0–100 higher-is-better scale. Wireless defaults to 80 when unmeasured or
   stale; explain this display-only default in details and the accessible chart
@@ -61,7 +61,7 @@ hidden page title. Detail and operation pages keep their identifying titles.
   five axes have display scores. Omit the card total and measured-category caption.
   Details show the total out of 100 using normalized weights of current scored
   categories and components. Missing tests never reduce the score; measured
-  failures still count. Clicking Quality or its chart opens the fullscreen assessment view. It leads
+  failures still count. Clicking Quality or its chart links to the assessment page at /quality. It leads
   with the overall score, one display grade, the count of scored categories and
   the measured coverage, with the reference transfer's download and upload rates
   beside them: the numbers a reader can check lead, and the score stands next to
@@ -80,13 +80,13 @@ hidden page title. Detail and operation pages keep their identifying titles.
   and the router-default-route scope visible without restating the workflow.
   The view has its own /quality address. Snapshot reads never start
   tests. Clicking the Latency title opens
-  latency settings, without a separate plus button. The dialog starts with an
+  latency settings at /latency, without a separate plus button. The page starts with an
   Internet target selector: a named provider or “Choose fastest once”. The
   selected target stays fixed across failures and restarts. Show the latest
   single HTTPS latency sample, with `<1 ms` for sub-millisecond values; keep
   DNS lookup simple and omit bandwidth tests. Monitored sites follow the target.
   Clicking one monitored site measures that site again in place without opening
-  the dialog; replace only that site's value with a spinner until its probe
+  the settings page; replace only that site's value with a spinner until its probe
   lands, and keep the title as the only settings control. Say when the request
   to measure failed, and read measurements without starting any.
   `Up` and elapsed uptime
@@ -97,8 +97,9 @@ hidden page title. Detail and operation pages keep their identifying titles.
   retain the visible fault alerts below the cards.
   Latency and Map have no information icons. Traffic flips to reveal its map
   on the back, without a Map details row;
-  clicking the enlarged grayscale map opens a viewport-filling color map,
-  with a close control and Escape support. Country colors distinguish geography,
+  clicking the grayscale map links to the color map at /map. All three detail
+  pages use the shared header, PageHeading, content area and footer, with Overview
+  selected in navigation. Country colors distinguish geography,
   while download/upload retain their semantic colors.
   omit the inline direction legend and top-ten summary.
 - Overview Status shows one public-network summary using IPv4's country flag,
@@ -126,7 +127,7 @@ hidden page title. Detail and operation pages keep their identifying titles.
 
 ## State and data contracts
 
-Quality assessments run on demand from the fullscreen assessment view opened by
+Quality assessments run on demand from the /quality page reached through
 the card heading or chart. The page always includes the reference transfer. A
 full run replaces the snapshot; rerunning one category or service test reuses
 the other evidence, merges the fresh result and recalculates every affected
@@ -175,10 +176,10 @@ World traffic ranks remote IPs over a rolling thirty-second observed window,
 then locates only the top forty using cached ip.sb city lookups. Details show
 city (or region) and country; arcs use only valid returned coordinates,
 omitting IPs without coordinates. State that IP locations are approximate in the
-details dialog, which also carries the sampling caveats and ip.sb attribution. The fullscreen
+details dialog, which also carries the sampling caveats and ip.sb attribution. The detailed
 administrative map adds country, province/state and major-city names progressively
 on zoom, stopping at regional detail because IP locations are approximate; it
-shows no title, legend, summary, status or credits, only the map and a close button.
+sits in a bounded panel below the page heading, with no text overlay or close button.
 Country fill colors distinguish geography and carry no traffic or status meaning.
 Traffic has no GeoIP city, region or country labels. Map labels use bundled
 geography and local fonts, without fetching an external basemap.

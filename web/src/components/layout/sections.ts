@@ -259,20 +259,12 @@ export const SECTIONS: Section[] = [
   },
 ]
 
-/**
- * Overview's fullscreen states. They have addresses of their own so they can be
- * linked and closed with Back, but they are states of the overview rather than
- * destinations: navigation and scroll position stay where the overview was.
- */
-const OVERVIEW_PANELS = new Set(['/map', '/quality'])
-
-export function isOverviewPanel(pathname: string) {
-  return OVERVIEW_PANELS.has(pathname)
-}
+/** Overview detail pages share the section's navigation highlight. */
+const OVERVIEW_PAGES = new Set(['/latency', '/map', '/quality'])
 
 /** The section a path belongs to, section landing pages and sub-pages alike. */
 export function sectionOf(pathname: string): Section | undefined {
-  const path = isOverviewPanel(pathname) ? '/' : pathname
+  const path = OVERVIEW_PAGES.has(pathname) ? '/' : pathname
   return [...SECTIONS].reverse().find(({ to, end }) =>
     end ? path === to : path === to || path.startsWith(`${to}/`),
   )

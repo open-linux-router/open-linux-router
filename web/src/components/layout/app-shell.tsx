@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router'
 
 import { GithubMark } from '@/components/layout/github-mark'
 import { Logo } from '@/components/layout/logo'
-import { SECTIONS, isOverviewPanel, sectionOf } from '@/components/layout/sections'
+import { SECTIONS, sectionOf } from '@/components/layout/sections'
 import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { LanguageToggle } from '@/components/layout/language-toggle'
 import { TokenButton } from '@/components/layout/token-button'
@@ -15,15 +15,11 @@ export function AppShell() {
   const { pathname, hash } = useLocation()
   const section = sectionOf(pathname)
   const landing = section && pathname === section.to
-  // A section keeps its place in the navigation when the address belongs to a
-  // state of it rather than to the section's own path — /map and /quality are
-  // still Overview.
+  // Detail pages keep their owning section selected in both navigation bars.
   const owns = (to: string) => section?.to === to || section?.navTo === to
 
   useLayoutEffect(() => {
-    // A fullscreen state of the overview keeps the page where it was, so
-    // closing it lands on the card it was opened from.
-    if (!hash && !isOverviewPanel(pathname)) window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    if (!hash) window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   }, [pathname, hash])
 
   return (

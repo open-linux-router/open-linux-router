@@ -423,7 +423,7 @@ normalized total for the available scope.
 
 ### 9.4 Report layout
 
-The fullscreen report is one column: an overall-score band, then the five
+The assessment report is one column: an overall-score band, then the five
 categories. A category opens to its scored tests, and a test opens to the
 measurements behind it. Nothing is summarised twice and nothing is explained in
 a block of its own.
@@ -519,7 +519,8 @@ Snapshots identify the fixed `reference` profile at version `1` separately
 from the scoring and catalog versions.
 All measurements originate at the router over its default route, without
 environment proxies. The UI is reached through Overview's Quality card, whose
-fullscreen assessment view has its own /quality address.
+assessment page at /quality uses the shared header, content area and footer,
+with Overview selected in navigation.
 It replaces the fixed sample scores and renames Reachability to Functionality.
 
 ### API and lifecycle
@@ -528,7 +529,7 @@ It replaces the fixed sample scores and renames Reachability to Functionality.
   category/overall results. It is also published as the `tools_show_quality`
   read tool. The initial state is `idle`, with null scores.
 - `POST /api/tools/quality?scope=all&speed=true` starts a finite asynchronous
-  full assessment and returns 202. The fullscreen view always sends
+  full assessment and returns 202. The assessment page always sends
   `speed=true`; API callers may omit it for a lighter run. `scope=responses`
   reruns every service probe, `scope=target&target=cloudflare` reruns one
   service, `scope=speed` reruns the reference transfer and `scope=nat` reruns
@@ -578,7 +579,7 @@ invokes the upstream Rust `cloudflare-speed-cli` with JSON output and history
 saving disabled; OLR does not reimplement its
 measurement algorithm. The packaged version is v1.0.10, with six concurrent
 workers and ten-second download and upload phases. It has no fixed byte cap
-and can consume substantial data. The fullscreen view always runs it; the API
+and can consume substantial data. The assessment page always runs it; the API
 leaves `speed` optional and off by default for callers that need a lighter run.
 This measures the router's default route to Cloudflare, not Wi-Fi or all
 internet services. Speed scoring uses the existing curves, weighting download

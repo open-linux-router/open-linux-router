@@ -253,7 +253,7 @@ and site probes follow their primary metrics without divider lines. Status
 flows naturally. Below desktop, cards use their own content height.
 Site probes use two columns on phones and three from 640px.
 Latency settings place a full-width labeled Internet target Select above the
-monitored-site list, sharing the dialog's Save and Cancel actions. Keep the
+monitored-site list on /latency, with Save and Cancel in the settings card footer. Keep the
 selected provider and automatic selection in this control, without extra
 badges or explanatory content on the card.
 The public-network summary uses a locally bundled flag-icons country flag.
@@ -430,7 +430,7 @@ and a relevant next action where one exists.
 ## Responsive behavior and motion
 
 Overview has four desktop cards: Status, Traffic, Latency and Quality.
-Clicking the Latency heading opens its site configuration dialog; omit an add icon.
+Clicking the Latency heading links to /latency; omit an add icon.
 Map and Quality chart content use half the normal card side and bottom gutters
 (6px on phones, 8px on larger screens), while headings retain their normal inset.
 Desktop cards target 4:3 proportions with a 240px minimum height and grow for
@@ -442,18 +442,17 @@ continuity. Rotate the whole card 180 degrees around its vertical axis over
 600ms, with 1200px perspective and hidden backfaces. Each face has its own
 title and toggle so the map appears on the back of the card. Reduced motion
 switches faces immediately. Make the inactive face inert and hidden to assistive
-technology. Do not add a Map details row; clicking the map opens fullscreen.
-The Quality heading and radar open the fullscreen assessment view; omit a
+technology. Do not add a Map details row; clicking the map links to /map.
+The Quality heading and radar link to /quality; omit a
 separate Test button on the card. Retain measured scores without age-based fading or hiding.
 Network quality uses a five-axis radar with theme-aware primary fill and border
 grid lines. It occupies one card at every breakpoint. Only measured, current
 axes have points; missing/stale axes show dashes and prevent a filled polygon,
 except Wireless, which defaults to 80 for display. Omit the title-right total
-and below-plot scope caption. The heading and plot open the shared
-fullscreen assessment view, with one floating close control at top right and no
-other chrome. The report keeps the shell's 80rem content width and gutters
-instead of narrowing to a reading column, because a fullscreen diagnostic left
-at article width reads as a stray text page on a wide display. The page header
+and below-plot scope caption. /latency, /quality and /map are normal detail pages
+inside AppShell, with its header, footer, content width and gutters. All three
+keep Overview selected in desktop and mobile navigation. Use PageHeading for
+their visible h1; they have no fullscreen dialog or floating close control. The page header
 names the view, dates the snapshot and carries the run action with the one line
 naming the included bandwidth test. A four-column summary then sits beside an
 eight-column category panel on desktop and stacks in that order on phones. The
@@ -481,12 +480,11 @@ the first plain disclosure row in Status, above system health. Both rows use
 aligned 16px Lucide CircleCheck icons in success color when healthy. Uptime
 opens a dialog with CPU, memory and root disk used/total values. Map has no information icon,
 direction legend or top-ten summary. The
-grayscale preview fills Traffic's remaining content area. Clicking it opens a
-viewport-filling dialog with a pastel country map (muted colors in dark mode),
-pan/zoom and one floating close control at top right. The fullscreen dialog is
-map only: no title, direction labels, status, credit or other text overlaps
-overlaps it, and nothing but the close control floats above it. The local
-fullscreen map reveals province/state boundaries, their names and major cities
+grayscale preview fills Traffic's remaining content area. /map contains a
+pastel country map (muted colors in dark mode) in a bounded responsive panel
+below the page heading, with pan/zoom. Keep direction labels, status, credit and
+other text outside the map. The local
+detailed map reveals province/state boundaries, their names and major cities
 on zoom, stopping at regional detail (zoom 6). State names and capital/world-city
 names begin at zoom 3; other major cities appear at zooms 4–5. Country fill
 indices are stable and checked against neighboring countries, with separate
@@ -494,17 +492,15 @@ light/dark palettes. Keep administrative labels neutral and secondary
 to traffic; traffic carries no GeoIP text labels.
 Pan, pinch, scroll and double-click zoom stand alone, so place no zoom or
 whole-world reset buttons over the map. Resizing must preserve the current
-fullscreen view. Escape
-closes it and restores focus to the preview. Both fullscreen views are page
-states with addresses of their own, /map and /quality, so a shared link or a
-bookmark lands on the open view; Back and the close control return to Overview.
+map view. Links and bookmarks open each detail page directly, and the Overview
+navigation returns to the overview.
 On phones each card uses the full column. Its local MapLibre map draws one amber
 arc per remote location at a single weight — about 1px where the world is fitted
-into a few hundred pixels, 2px at the world view of a fullscreen map — and the
+into a few hundred pixels, 2px at the world view of the detailed map — and the
 arcs thin further as the map zooms in, so a regional view is not buried under
 globe-width ribbons and a small map is not buried under a bundle of them. An arc
 stays at full weight while its location is in the window and fades out when the
-location leaves; nothing periodic touches it. Card preview and fullscreen map
+location leaves; nothing periodic touches it. Card preview and detailed map
 show the same rotation: only a few arcs hold a highlight at a time, each a short
 blurred warm stroke that travels out and back along the line, four seconds each
 way, with a feathered tail and faded ends, so the light never lands at the hub or
