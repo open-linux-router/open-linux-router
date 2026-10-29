@@ -627,3 +627,41 @@ func TestLatencySiteMeasureEndpoint(t *testing.T) {
 		t.Fatalf("missing monitor: status = %d", w.Code)
 	}
 }
+
+func TestLatencyMeasureAllEndpoint(t *testing.T) {
+	custom, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := custom.Replace([]CustomLatencySite{
+		{Name: "A", URL: "https://a.example/"},
+		{Name: "B", URL: "https://b.example/"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+	defer close(release)
+	custom.probe = func(context.Context, string) (float64, error) {
+		started <- struct{}{}
+		<-release
+		return 5, nil
+	}
+	monitor := NewLatencyMonitor()
+	monitor.Custom = custom
+	h := HTTP{Latency: monitor}.Handler()
+
+	w := do(t, h, http.MethodPost, "/latency/measure", nil)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d %s", w.Code, w.Body.String())
+	}
+	<-started
+	<-started
+	snapshot := decode[LatencySnapshot](t, w)
+	if len(snapshot.Custom) != 2 || !snapshot.Custom[0].Measuring || !snapshot.Custom[1].Measuring {
+		t.Fatalf("Test all did not mark every site: %+v", snapshot.Custom)
+	}
+	if w := do(t, (HTTP{}).Handler(), http.MethodPost, "/latency/measure", nil); w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("missing monitor: status = %d", w.Code)
+	}
+}

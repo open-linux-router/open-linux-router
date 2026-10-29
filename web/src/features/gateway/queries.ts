@@ -262,6 +262,17 @@ export function useMeasureLatencySite() {
   })
 }
 
+export function useMeasureAllLatency() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post<GatewayLatency>('/api/gateway/latency/measure'),
+    onSuccess: (snapshot) => {
+      queryClient.setQueryData(['gateway', 'latency'], snapshot)
+      queryClient.invalidateQueries({ queryKey: ['gateway', 'latency'] })
+    },
+  })
+}
+
 export function useSaveLatencySites() {
   const queryClient = useQueryClient()
   return useMutation({

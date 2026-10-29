@@ -247,6 +247,24 @@ func (m *CustomLatencyMonitor) setContext(ctx context.Context) {
 	m.base = ctx
 }
 
+// MeasureAll starts one on-demand probe for every site. It is the page's
+// "Test all": like a single click, it changes no configuration.
+func (m *CustomLatencyMonitor) MeasureAll() error {
+	m.refreshConfig()
+	m.mu.RLock()
+	names := make([]string, 0, len(m.common)+len(m.sites))
+	for _, site := range m.allSitesLocked() {
+		names = append(names, site.Name)
+	}
+	m.mu.RUnlock()
+	for _, name := range names {
+		if err := m.Measure(name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Measure probes one stored site now and marks only that row as measuring.
 //
 // It returns without waiting: the result replaces the stored one when it

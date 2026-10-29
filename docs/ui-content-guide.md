@@ -85,11 +85,11 @@ hidden page title. Detail and operation pages keep their identifying titles.
   selected target stays fixed across failures and restarts. Show the latest
   single HTTPS latency sample, with `<1 ms` for sub-millisecond values; keep
   DNS lookup simple and omit bandwidth tests. Monitored sites follow the target.
-  Group the settings list under Communication, Social, Entertainment, News,
-  Shopping, Tools and Custom, and render each site as a tile with its icon, name
-  and latest sample. The catalog is always present and cannot be removed; only
-  custom tiles are removable. Selecting a tile opens its exit, latest error and
-  measure-now action.
+  Group the test list under Communication, Social, Entertainment, News,
+  Shopping, Tools and Custom, and render each site as an icon tile with its name
+  and latest sample. The catalog is always present and cannot be added to,
+  removed or edited here; only custom sites follow under Custom. Test all probes
+  every site, and selecting a tile probes that one.
   Clicking one monitored site measures that site again in place without opening
   the settings page; replace only that site's value with a spinner until its probe
   lands, and keep the title as the only settings control. Say when the request

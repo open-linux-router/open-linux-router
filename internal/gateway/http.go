@@ -76,6 +76,7 @@ func (h HTTP) Routes() []core.Route {
 		{Method: "GET", Path: "/world-traffic", Tool: "show world traffic", Summary: "Top forty remote IPs by observed connection bytes over the last thirty seconds.", Handler: h.getWorldTraffic},
 		{Method: "GET", Path: "/latency", Tool: "show latency", Summary: "Latest router HTTPS response measurements and selected websites.", Handler: h.getLatency},
 		{Method: "POST", Path: "/latency/sites/{name}/measure", Summary: "Probe one monitored site now instead of waiting for the next round.", Handler: h.postLatencySiteMeasure},
+		{Method: "POST", Path: "/latency/measure", Summary: "Probe every monitored site now instead of waiting for the next round.", Handler: h.postLatencyMeasureAll},
 		{Method: "PUT", Path: "/latency/target", Summary: "Choose an Internet latency target; empty selects the fastest once.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencyTarget},
 		{Method: "GET", Path: "/latency/sites/{name}/icon", Summary: "Discover a monitored site icon.", Handler: h.getLatencyIcon},
 		{Method: "PUT", Path: "/latency/sites", Summary: "Replace custom HTTPS response targets.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencySites},
@@ -861,6 +862,22 @@ func (h HTTP) postLatencySiteMeasure(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.Latency.Custom.Measure(r.PathValue("name")); err != nil {
 		core.WriteError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	snapshot := h.Latency.Snapshot()
+	snapshot.Custom = h.Latency.Custom.Snapshot()
+	core.WriteJSON(w, http.StatusAccepted, snapshot)
+}
+
+// postLatencyMeasureAll is the page's Test all. Like the per-site route, it
+// starts probes and leaves configuration alone.
+func (h HTTP) postLatencyMeasureAll(w http.ResponseWriter, r *http.Request) {
+	if h.Latency == nil || h.Latency.Custom == nil {
+		core.WriteError(w, http.StatusServiceUnavailable, "latency monitor unavailable")
+		return
+	}
+	if err := h.Latency.Custom.MeasureAll(); err != nil {
+		core.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	snapshot := h.Latency.Snapshot()

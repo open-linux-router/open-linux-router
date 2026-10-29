@@ -3,7 +3,7 @@ import { useLocale } from '@/lib/i18n'
 import { brandLogoHref } from '@/features/brand-logos/brand-logos'
 import { getToken } from '@/lib/api'
 
-export function SiteIcon({ name, url, icon: iconChoice }: { name: string; url: string; icon?: string }) {
+export function SiteIcon({ name, url, icon: iconChoice, big = false }: { name: string; url: string; icon?: string; big?: boolean }) {
   useLocale()
   const [autoIcon, setAutoIcon] = useState<string>()
   const [broken, setBroken] = useState<string>()
@@ -29,7 +29,8 @@ export function SiteIcon({ name, url, icon: iconChoice }: { name: string; url: s
   const preview = iconChoice?.startsWith('data:') ? iconChoice : (brandLogoHref(iconChoice) ?? autoIcon)
   // A mark this build does not carry falls back to the site's initials, the
   // same answer as a site with no favicon at all.
-  return preview && preview !== broken ? <img src={preview} alt="" className="size-5 shrink-0 rounded-sm object-contain" onError={() => setBroken(preview)} />
-    : <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground/10 text-[10px] font-bold uppercase">{name.slice(0, 2)}</span>
+  const box = big ? 'size-10' : 'size-5'
+  return preview && preview !== broken ? <img src={preview} alt="" className={`${box} shrink-0 rounded-sm object-contain`} onError={() => setBroken(preview)} />
+    : <span aria-hidden className={`flex ${box} shrink-0 items-center justify-center rounded-md bg-foreground/10 ${big ? 'text-lg' : 'text-[10px]'} font-bold uppercase`}>{name.slice(0, 2)}</span>
 }
 

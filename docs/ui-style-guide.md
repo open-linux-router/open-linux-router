@@ -256,12 +256,12 @@ Latency settings place a full-width labeled Internet target Select above the
 monitored-site list on /latency, with Save and Cancel in the settings card footer. Keep the
 selected provider and automatic selection in this control, without extra
 badges or explanatory content on the card.
-Monitored sites are grouped under Communication, Social, Entertainment, News,
-Shopping, Tools and Custom headings, omitting empty groups. Each site is a
-compact tile with its icon, name and latest sample, in a two-column grid on
-phones and four columns from 1024px. The catalog is always present and has no
-remove control; only Custom tiles can be removed. Selecting a tile opens its
-exit, latest error and measure-now action.
+The /latency page is a test view, not an editor. Categories use large headings;
+each site is an 80px icon tile on a muted rounded square with its name and
+latest sample beneath, in three columns on phones and five from 1024px. The
+catalog is always present and has no add, remove or edit control; only Custom
+sites follow under Custom. A Test all button sits beside the page heading, and
+selecting a tile probes that site.
 The public-network summary uses a locally bundled flag-icons country flag.
 Clicking any Status row opens its details in a shared dialog, without chevrons.
 Public addresses use monospace and wrap within the dialog.

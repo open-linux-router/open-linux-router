@@ -28,25 +28,24 @@ only that target, including after restart. Failure never changes the target.
 If all candidates fail, selection retries on the next one-minute round.
 Custom sites also run once per minute.
 
-Clicking Latency opens settings with an Internet target selector and the existing
-monitored sites. Choose a provider or “Choose fastest once”, then Save.
 `PUT /api/gateway/latency/target` accepts `{"target":"<listed URL>"}`; an empty
 target requests a fresh selection. Changes wake the background monitor and
 discard any in-flight Internet result from the old selection. GET stays passive.
+The test page does not edit it; the route remains for API and CLI clients.
 
 A click on one monitored site measures that site now.
 `POST /api/gateway/latency/sites/{name}/measure` answers `202 Accepted` with the
 current snapshot; only the clicked row's `measuring` flag is set until its probe
 publishes. A second click while that probe runs is accepted and starts no second
-probe. Background rounds leave every row's flag false, so the card spins only
-where somebody clicked. The row keeps its last completed value while the probe
-runs, and the card replaces that value with a spinner. Other sites, the Internet
-target and DNS are left alone. The route changes no configuration and is only a
-request to probe one stored site.
+probe. `POST /api/gateway/latency/measure` does the same for every site, which
+is the page's Test all. Background rounds leave every row's flag false, so a
+tile spins only where somebody clicked. A row keeps its last completed value
+while the probe runs, and the card replaces that value with a spinner. Other
+sites, the Internet target and DNS are left alone. These routes change no
+configuration; they only ask for probes.
 
 Common sites are part of the binary's catalog, not the operator's document.
-They are present on a fresh install, always probed, and cannot be removed from
-the settings page. The catalog carries one URL per site — the faster of the
+They are present on a fresh install, always probed, and cannot be removed. The catalog carries one URL per site — the faster of the
 app's main page and its static asset host, chosen from measurements on the
 reference router — and a category (`communication`, `social`, `entertainment`,
 `news`, `shopping` or `tools`). A CDN root may answer 403/404; the probe still
@@ -65,10 +64,10 @@ contain credentials, custom ports or fragments. Custom sites live in
 site saved before the catalog existed, under a catalog name, moves to the
 catalog with its exit preserved.
 
-The settings page groups the catalog under its category headings, lists custom
-sites under Custom, and lets an operator add or remove only the custom ones.
-Each tile shows the site's latest sample; selecting it opens its exit, its
-latest error and a measure-now action.
+The /latency page is a test view, not an editor: it groups the catalog under
+its category headings as icon tiles with the latest sample, lists custom sites
+under Custom, and offers Test all. Selecting a tile probes that site. Exits and
+custom sites are changed through the API or CLI; the page writes nothing.
 
 The response includes `state` (`measuring`, `ok`, `unreachable`, `unavailable`),
 nullable `milliseconds`, `dns_milliseconds`, `checked_at`, the selected

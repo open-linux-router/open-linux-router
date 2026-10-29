@@ -153,6 +153,9 @@ func TestEveryReadRouteIsPublishedAsATool(t *testing.T) {
 		// stored state. The card's measure-now control is a UI action, and the
 		// latency GET remains the tool that reads the outcomes.
 		"gateway POST /latency/sites/{name}/measure": true,
+		// The page's Test all, with the same reasoning: it starts probes and
+		// changes no configuration.
+		"gateway POST /latency/measure": true,
 	}
 
 	for module, routes := range moduleRoutes() {
