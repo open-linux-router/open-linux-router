@@ -254,26 +254,23 @@ flows naturally. Below desktop, cards use their own content height.
 Site probes use two columns on phones and three from 640px.
 Internet target selection and monitored-site configuration remain API/CLI
 operations; /latency presents measurements and test actions.
-The /latency page is a test view, not an editor. Keep category headings with a
-refresh icon at the right. Each category is one list panel, one site per row:
-a bare icon and name, 24 aligned 10px square samples, the day's latest measurement
-and a test button. A shared 00–23 axis names the fixed router-local hours;
-00 means 00:00–01:00 and 23 means 23:00–24:00. Do not slide, stretch or reorder
-the samples as measurements arrive. Missing, future and skipped hours stay gray;
-failed attempts have their own error fill. Retests replace the current hour.
-The router's date and UTC offset appear above the lists, beside one short line
-about automatic :30 tests and manual updates to the current hour. Tooltips and
-accessible names identify each exact range and outcome. Keep columns aligned
-across sites, use a 56px minimum row height, and scroll each panel horizontally
-on narrow screens while keeping site identities pinned at the left. Prefer the
-locally bundled theSVG mark for built-in sites, then favicon discovery and bare
-initials, without added backgrounds, borders or clipping. Adapt black marks for
-contrast in dark mode without a backing. Use MetricValue md for the latest value
-and unit, without Avg: below 100 ms uses success text, 100–299 ms warning text,
-and 300 ms or more destructive text. A failed or missing latest result is a
-neutral dash. Test all sits beside the page heading; category and row test
-controls also update only the current hour. There is no add, remove or edit
-control.
+The /latency page is a test view, not an editor. Show all sites in one list
+panel without category headings, a visible hour axis, router-time or scheduling
+copy, a latest-value column, or category and row test controls. Each row has a
+bare icon and name followed by 24 aligned 16px square samples. Keep the name
+column fixed at 160px on phones and 192px from 640px, with an 8px/12px gap to
+the sample grid, rather than letting the name column absorb available width.
+The samples retain fixed router-local hours from 00:00–01:00 to 23:00–24:00;
+do not slide or reorder them as measurements arrive. Missing, future and skipped
+hours stay gray; failed attempts have their own error fill. Retests replace the
+current hour. Tooltips and accessible names identify each exact date, range and
+outcome. Keep columns aligned across sites, use a 56px minimum row height and
+at least 24px per sample column, and scroll the panel horizontally on narrow
+screens while keeping site identities pinned at the left. Prefer the locally
+bundled theSVG mark for built-in sites, then favicon discovery and bare initials,
+without added backgrounds, borders or clipping. Adapt black marks for contrast
+in dark mode without a backing. Test all sits beside the page heading and
+updates only the current hour. There is no add, remove or edit control.
 The public-network summary uses a locally bundled flag-icons country flag.
 Clicking any Status row opens its details in a shared dialog, without chevrons.
 Public addresses use monospace and wrap within the dialog.

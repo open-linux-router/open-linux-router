@@ -83,22 +83,21 @@ hidden page title. Detail and operation pages keep their identifying titles.
   separate plus button. Internet target selection remains available through the
   API and CLI; failure never silently switches the chosen target. Show the latest
   single HTTPS latency sample, with `<1 ms` for sub-millisecond values; keep
-  DNS lookup simple and omit bandwidth tests. Group monitored sites under
-  Communication, Social, Entertainment, News, Shopping, Tools and Custom.
-  Each site occupies one row: a bare icon, name, 24 fixed squares for the
-  router-local day's hours and the latest measurement on the right. Label the
-  axis 00–23 and show the router's date and UTC offset. Each tooltip gives the
-  exact hour range and result. Missing and future hours stay gray, failures
-  remain distinct, and a retest replaces the current hour rather than appending
-  another sample or changing other hours. Automatic tests run at about :30;
-  manual Test all, category refresh and individual tests update the current
-  hour. Retain history through daemon and router restarts without inventing
-  measurements for downtime. The latest value uses green below 100 ms, amber
-  below 300 ms, red from 300 ms and a neutral dash for missing or failed data.
+  DNS lookup simple and omit bandwidth tests. Show all monitored sites in one
+  table without category headings. Each site occupies one row: a bare icon,
+  name and 24 fixed squares for the router-local day's hours. Omit the visible
+  hour axis, router date/offset and scheduling copy, latest-value column, and
+  category and individual refresh controls. Each tooltip gives the exact date,
+  hour range and result. Missing and future hours stay gray, failures remain
+  distinct, and a retest replaces the current hour rather than appending another
+  sample or changing other hours. Automatic tests run at about :30; the page's
+  Test all action updates the current hour. Retain history through daemon and
+  router restarts without inventing measurements for downtime. Samples use green
+  below 100 ms, amber below 300 ms and red from 300 ms; missing data stays neutral.
   Prefer matching bundled theSVG marks, then favicons and bare initials; add no
   icon frame. The catalog cannot be added to, removed or edited here. Keep
-  completed results visible while a row's test button spins. Say when a request
-  to measure fails; reading the page never starts tests.
+  completed results visible while Test all is running. Say when a request to
+  measure fails; reading the page never starts tests.
   `Up` and elapsed uptime
   lead Status above system health. Click uptime for a dialog with CPU, memory and root disk
   used/total values; omit the separate System card.
