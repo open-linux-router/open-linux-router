@@ -85,27 +85,36 @@ hidden page title. Detail and operation pages keep their identifying titles.
   single HTTPS latency sample, with `<1 ms` for sub-millisecond values; keep
   DNS lookup simple and omit bandwidth tests. Overview's site grid contains only
   pinned sites, with none selected by default; Internet and DNS remain visible.
-  Clicking the Latency title opens /latency to manage pins. In that table, click
-  a site's identity or its small pin to toggle its Overview visibility. The pin
-  indicates saved state, and its accessible action names the site and whether it
-  will be pinned or unpinned. Save immediately to router configuration, retain
-  choices across sessions and restarts, and show a failed save explicitly. Pinning
-  changes presentation without starting probes or changing measurements.
-  Show all monitored sites in one
-  table without category headings. Each site occupies one row: a bare icon,
-  name and 24 fixed squares for the router-local day's hours. Omit the visible
-  hour axis, router date/offset and scheduling copy, latest-value column, and
-  category and individual refresh controls. Each tooltip gives the exact date,
-  hour range and result. Missing and future hours stay gray, failures remain
-  distinct, and a retest replaces the current hour rather than appending another
-  sample or changing other hours. Automatic tests run at about :30; the page's
-  Test all action updates the current hour. Retain history through daemon and
-  router restarts without inventing measurements for downtime. Samples use green
-  below 100 ms, amber below 300 ms and red from 300 ms; missing data stays neutral.
-  Prefer matching bundled theSVG marks, then favicons and bare initials; add no
-  icon frame. The catalog cannot be added to, removed or edited here. Keep
-  completed results visible while Test all is running. Say when a request to
-  measure fails; reading the page never starts tests.
+  Clicking the Latency title opens /latency to manage pins. The pin is a small
+  button before the site mark; an unpinned pin is hidden until its row is hovered
+  or the button is focused, while a coarse pointer keeps it visible. Only the pin
+  toggles Overview visibility — the mark and name are not a control. It indicates
+  saved state, and its accessible action names the site and whether it will be
+  pinned or unpinned. Save immediately to router configuration, retain choices
+  across sessions and restarts, and show a failed save explicitly. A pin change
+  is serialized, with progress on its row. Pinning changes presentation without
+  starting probes or changing measurements.
+  Show all monitored sites in one table, divided into the catalog's category
+  sections (Communication, Social, Entertainment, News, Shopping, Tools, then
+  Custom). A category heading is a plain semibold line; rows sit indented beneath
+  it. Each site occupies one row: pin slot, bare icon, name, 24 fixed squares for
+  the router-local day's hours, and a right-aligned daily average. Omit the
+  visible hour axis, router date/offset and scheduling copy, and per-row test
+  controls. Each tooltip gives the exact date, hour range and result. Missing and
+  future hours stay neutral, and a failed attempt uses the same neutral fill;
+  green is below 100 ms, amber from 100 to 499 ms and red from 500 ms. A retest
+  replaces the current hour rather than appending another sample or changing
+  other hours. Automatic tests run at about :30; the page's Test all measures one
+  site at a time in reading order and updates only the current hour. It names the
+  progress position and draws the current hour's probe as a spinner that settles
+  into its square; it does not scroll or highlight the active row. A site that
+  fails or times out does not stop the rest. Retain history through daemon and
+  router restarts without inventing measurements for downtime. The row's average
+  is the mean of that day's successful samples, in the same colour bands, and is a
+  dash when none succeeded. Prefer matching bundled theSVG marks, then favicons
+  and bare initials; add no icon frame. The catalog cannot be added to, removed
+  or edited here. Keep completed results visible while Test all is running. Say
+  when a request to measure fails; reading the page never starts tests.
   `Up` and elapsed uptime
   lead Status above system health. Click uptime for a dialog with CPU, memory and root disk
   used/total values; omit the separate System card.

@@ -523,6 +523,7 @@ export const zhCN: Record<string, string> = {
   'News': '新闻',
   'Shopping': '购物',
   'Custom': '自定义',
+  'Other': '其他',
   'Test all': '全部测试',
   'Router time': '路由器时间',
   'Latest': '最新',
@@ -1378,4 +1379,7 @@ export const zhCN: Record<string, string> = {
   'Global': '全球',
   'China': '中国',
   'The fleet is Ookla’s public speed-test server list. Several addresses is the finding; each address’s location is approximate (ip.sb).': '服务器群来自 Ookla 的公开测速服务器列表。出现多个地址就是结论；每个地址的归属只是近似值（来自 ip.sb）。',
+  'Average {value} today': '今天平均 {value}',
+  'No measurements today': '今天还没有测量',
+  'Testing {current}/{total}': '正在测试 {current}/{total}',
 }

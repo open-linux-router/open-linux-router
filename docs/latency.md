@@ -48,9 +48,11 @@ A click on one monitored site measures that site now.
 `POST /api/gateway/latency/sites/{name}/measure` answers `202 Accepted` with the
 current snapshot; only the clicked row's `measuring` flag is set until its probe
 publishes. A second click while that probe runs is accepted and starts no second
-probe. `POST /api/gateway/latency/measure` does the same for every site, which is the
-page's Test all. API clients can pass `?category=<key>` (or `custom`) to limit
-probes to that group; the merged table has no category refresh controls.
+probe. `POST /api/gateway/latency/measure` does the same for every site in one round.
+API clients can pass `?category=<key>` (or `custom`) to limit probes to that
+group. The /latency page does not use this batch route: it walks the sites in
+reading order through the per-site route so one row at a time can show its own
+probe. The merged table has no category refresh controls.
 Background rounds leave every row's flag false, so a row spins
 only where somebody asked. A row keeps its last completed value while the
 probe runs. Other sites, the Internet target and DNS are left alone. These
@@ -77,20 +79,28 @@ the runtime database. A custom
 site saved before the catalog existed, under a catalog name, moves to the
 catalog with its exit preserved.
 
-The /latency page uses one merged table for catalog and custom sites, with one
-row per site and 24 fixed hourly positions for the router's current day (00–01
+The /latency page uses one merged table for catalog and custom sites, grouped
+into the catalog's categories (communication, social, entertainment, news,
+shopping, tools) with a final group for custom and uncategorized sites. One row
+per site and 24 fixed hourly positions for the router's current day (00–01
 through 23–24). Each position holds the latest attempt begun in that calendar
 hour; manual tests replace the same hour's point rather than appending another.
 Missing hours remain empty, while failed attempts keep their error and a nil
-measurement. The row shows the latest measurement and an explicit site test
-button. Test all probes everything. Exits and custom sites are changed through
-the API or CLI; pin selection is the page's configuration exception.
+measurement. Each row ends with the arithmetic mean of that day's successful
+samples. There is no per-row test control: Test all asks for each site in turn
+through the per-site route and keeps the completed results visible; a site that
+fails or never answers does not stop the rest. Exits and custom sites are changed
+through the API or CLI; pin selection is the page's configuration exception.
 
-Each site's name area can pin or unpin it, with a small indicator for pinned
-sites. The homepage Latency card shows only pinned monitored sites; no sites are
-pinned by default. Pins are router configuration shared by all browsers and
-survive daemon restarts. They do not affect which sites are probed or their
-URLs, exits, latest results, hourly history, or in-flight probes.
+Each row has a pin button before its site mark. An unpinned site's pin is
+hidden until its row is hovered or the button is focused; a pinned site keeps a
+primary pin visible, and a coarse-pointer device always shows it because it has
+no hover. Only that button toggles Overview visibility; the mark and name are
+not a control. While a pin change saves, its row shows progress and the other
+pin buttons wait. The homepage Latency card shows only pinned monitored sites;
+no sites are pinned by default. Pins are router configuration shared by all
+browsers and survive daemon restarts. They do not affect which sites are probed
+or their URLs, exits, latest results, hourly history, or in-flight probes.
 
 `PUT /api/gateway/latency/sites/{name}/pin` accepts exactly one required boolean
 field, `{"pinned":true}` or `{"pinned":false}`, and returns `200 OK` with the

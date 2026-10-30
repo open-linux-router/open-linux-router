@@ -250,17 +250,6 @@ export function useMeasureLatencySite() {
   })
 }
 
-export function useMeasureAllLatency() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (category?: string) => api.post<GatewayLatency>(category ? `/api/gateway/latency/measure?category=${encodeURIComponent(category)}` : '/api/gateway/latency/measure'),
-    onSuccess: (snapshot) => {
-      queryClient.setQueryData(['gateway', 'latency'], snapshot)
-      queryClient.invalidateQueries({ queryKey: ['gateway', 'latency'] })
-    },
-  })
-}
-
 export function usePinLatencySite() {
   const queryClient = useQueryClient()
   return useMutation({

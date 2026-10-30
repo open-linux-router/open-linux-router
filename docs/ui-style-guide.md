@@ -258,31 +258,47 @@ card's expanded height on the number of pinned sites rather than the full catalo
 Internet target selection and monitored-site configuration remain API/CLI
 operations; /latency presents measurements, test actions and Overview pin toggles.
 The /latency page is a test view, not an editor. Show all sites in one list
-panel without category headings, a visible hour axis, router-time or scheduling
-copy, a latest-value column, or category and row test controls. Each row has a
-bare icon and name followed by 24 aligned 16px square samples. Keep the name
-column fixed at 160px on phones and 192px from 640px, with an 8px/12px gap to
-the sample grid, rather than letting the name column absorb available width.
-The samples retain fixed router-local hours from 00:00–01:00 to 23:00–24:00;
-do not slide or reorder them as measurements arrive. Missing, future and skipped
-hours stay gray; failed attempts have their own error fill. Retests replace the
-current hour. Tooltips and accessible names identify each exact date, range and
-outcome. Keep columns aligned across sites, use a 56px minimum row height and
-at least 24px per sample column, and scroll the panel horizontally on narrow
-screens while keeping site identities pinned at the left. Prefer the locally
-bundled theSVG mark for built-in sites, then favicon discovery and bare initials,
-without added backgrounds, borders or clipping. Adapt black marks for contrast
-in dark mode without a backing. Test all sits beside the page heading and
-updates only the current hour. Each site's pinned identity area is a button that
-toggles its Overview pin, with an accessible action name and aria-pressed state.
-Show a small neutral outline pin beside the name when unpinned, and a primary
-pin with a tinted fill when pinned; the shape and pressed state carry the state
-as well as color. Keep the full 56px identity area clickable, including on touch,
-without adding another action column or widening the name column. During a save,
-show progress on that row and serialize pin changes. Commit the visible state
-only after a successful save, and expose failures without dropping measurements.
-Pin choices persist in router configuration and do not start a measurement.
-There is no add, remove or site-edit control.
+panel, divided into plain 16px semibold category headings: no band, rule or
+count, a 40px heading row, and 16px between one group and the next. The heading
+stays at the left when the panel scrolls horizontally, and the rows beneath it
+are indented by the pin slot.
+
+Each row has a 24px pin slot before a bare icon and name, 24 aligned 20px square
+samples with 4px visible gaps, and a right-aligned average. Keep the name column
+fixed at 176px on phones and 192px from 640px, with an 8px/12px gap to the
+sample grid, rather than letting the name column absorb available width. The
+sample band is 24 slots of 24px (576px), left-aligned; it does not stretch to
+fill the row. The samples retain fixed router-local hours from 00:00–01:00 to
+23:00–24:00; do not slide or reorder them as measurements arrive. Missing,
+future and skipped hours stay neutral gray, and a failed attempt uses the same
+neutral fill because it is not a value on the day's scale. Use success below
+100 ms, warning from 100 to 499 ms and destructive at 500 ms and above. Retests
+replace the current hour. Tooltips and accessible names identify each exact
+date, range and outcome. While a site's on-demand probe runs, its current-hour
+square becomes a primary spinner and crossfades and scales into the result over
+200ms. The average is the arithmetic mean of that day's successful samples,
+right-aligned in its own column, with the same colour bands and an em dash when
+none succeeded. Keep columns aligned across sites, and scroll the panel
+horizontally on narrow screens while keeping site identities pinned at the left.
+
+Prefer the locally bundled theSVG mark for built-in sites, then favicon discovery
+and bare initials, without added backgrounds, borders or clipping. Adapt black
+marks for contrast in dark mode without a backing.
+
+The pin is a 24px button before the mark, not the whole identity. An unpinned
+pin is transparent until its row is hovered or the button is focused, and stays
+visible on coarse pointers; a pinned pin remains visible in primary. Hover
+changes only the pin's background and icon colour; the mark and name do not
+react. During a save, show progress on that row and serialize pin changes.
+Commit the visible state only after a successful save, and expose failures
+without dropping measurements. Pin choices persist in router configuration and
+do not start a measurement. There is no add, remove or site-edit control.
+
+Test all sits beside the page heading and updates only the current hour. It asks
+for sites one at a time in reading order and names the progress position on the
+button. It does not highlight or scroll the active row; a failed or timed-out
+site does not stop the rest, and completed results stay visible. There are no
+category or row test controls.
 The public-network summary uses a locally bundled flag-icons country flag.
 Clicking any Status row opens its details in a shared dialog, without chevrons.
 Public addresses use monospace and wrap within the dialog.
