@@ -58,6 +58,9 @@ type Config struct {
 	// sites; the sites themselves are always present. Keeping them out of
 	// latency_sites is what makes "cannot be deleted" true rather than a UI rule.
 	LatencyCommon []CommonLatency `json:"latency_common,omitempty"`
+	// LatencyPins selects monitored sites for the homepage, independently of
+	// probe targets and exits. An absent list means no sites are pinned.
+	LatencyPins []string `json:"latency_pins,omitempty"`
 	// Enabled controls whether any of this is programmed into the kernel at
 	// all. Disabling tears down our tables, our rules and our route tables and
 	// leaves the box routing and translating exactly as it did before olr was
@@ -683,6 +686,27 @@ func FromDocument(d core.Document) (Config, error) {
 // It deliberately does not validate: a malformed exit is left as-is for
 // Validate to report against a proper path.
 func (c *Config) Normalize() {
+	// Pins name monitored sites, not probe identities. Drop removed custom
+	// names here so any config write also prevents their later resurrection.
+	pins := make([]string, 0, len(c.LatencyPins))
+	for _, name := range c.LatencyPins {
+		known := false
+		if _, ok := commonLatencySite(name); ok {
+			known = true
+		}
+		for _, site := range c.LatencySites {
+			if site.Name == name {
+				known = true
+				break
+			}
+		}
+		if known {
+			pins = append(pins, name)
+		}
+	}
+	slices.Sort(pins)
+	c.LatencyPins = slices.Compact(pins)
+
 	for i := range c.Destinations {
 		a := &c.Destinations[i]
 		a.Prefix = strings.TrimSpace(a.Prefix)

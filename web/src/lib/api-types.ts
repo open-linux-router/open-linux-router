@@ -1652,5 +1652,5 @@ export interface GatewayLatency {
   checked_at: string | null
   dns_milliseconds: number | null
   sites: { name: string; url: string; milliseconds: number | null; checked_at: string; selected: boolean }[]
-  custom: { name: string; url: string; exit?: string; icon?: string; category?: string; builtin?: boolean; milliseconds: number | null; checked_at: string; error?: string; measuring?: boolean; samples?: { milliseconds: number | null; error?: string; checked_at: string; hour_start?: string }[] }[]
+  custom: { name: string; url: string; exit?: string; icon?: string; category?: string; builtin?: boolean; pinned?: boolean; milliseconds: number | null; checked_at: string; error?: string; measuring?: boolean; samples?: { milliseconds: number | null; error?: string; checked_at: string; hour_start?: string }[] }[]
 }

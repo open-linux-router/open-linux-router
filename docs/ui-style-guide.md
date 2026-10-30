@@ -251,9 +251,12 @@ Cumulative traffic rows use Download and Upload labels with plain byte values.
 On desktop, Overview cards share title and primary metric boundaries. Totals
 and site probes follow their primary metrics without divider lines. Status
 flows naturally. Below desktop, cards use their own content height.
-Site probes use two columns on phones and three from 640px.
+Site probes use two columns on phones and three from 640px. Overview shows only
+sites pinned from /latency; no site is pinned by default. Internet and DNS keep
+their existing rows. With no pins, omit the site grid and its padding. Base the
+card's expanded height on the number of pinned sites rather than the full catalog.
 Internet target selection and monitored-site configuration remain API/CLI
-operations; /latency presents measurements and test actions.
+operations; /latency presents measurements, test actions and Overview pin toggles.
 The /latency page is a test view, not an editor. Show all sites in one list
 panel without category headings, a visible hour axis, router-time or scheduling
 copy, a latest-value column, or category and row test controls. Each row has a
@@ -270,7 +273,16 @@ screens while keeping site identities pinned at the left. Prefer the locally
 bundled theSVG mark for built-in sites, then favicon discovery and bare initials,
 without added backgrounds, borders or clipping. Adapt black marks for contrast
 in dark mode without a backing. Test all sits beside the page heading and
-updates only the current hour. There is no add, remove or edit control.
+updates only the current hour. Each site's pinned identity area is a button that
+toggles its Overview pin, with an accessible action name and aria-pressed state.
+Show a small neutral outline pin beside the name when unpinned, and a primary
+pin with a tinted fill when pinned; the shape and pressed state carry the state
+as well as color. Keep the full 56px identity area clickable, including on touch,
+without adding another action column or widening the name column. During a save,
+show progress on that row and serialize pin changes. Commit the visible state
+only after a successful save, and expose failures without dropping measurements.
+Pin choices persist in router configuration and do not start a measurement.
+There is no add, remove or site-edit control.
 The public-network summary uses a locally bundled flag-icons country flag.
 Clicking any Status row opens its details in a shared dialog, without chevrons.
 Public addresses use monospace and wrap within the dialog.

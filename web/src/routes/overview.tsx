@@ -481,7 +481,7 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
   const dnsMeasured = !latencyFailed && latency?.dns_milliseconds != null
   const latencyValue = measured ? formatLatency(latency.milliseconds!) : latency?.state === 'unreachable' ? 'No response' : '—'
   const measure = useMeasureLatencySite()
-  const sites = latency?.custom ?? []
+  const sites = latency?.custom?.filter((site) => site.pinned) ?? []
   const rate = (direction: 'downRate' | 'upRate') => !trafficFailed && flows.rated ? formatRate(flows.total[direction] ?? 0) : trafficFailed ? t('Unavailable') : '—'
   // Keep four columns for wide screens so values and units fit on one line.
   return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:gap-4">
@@ -534,12 +534,12 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
         <MetricPill label={t('Upload')} value={flows.counting && !trafficFailed ? formatBytes(flows.total.up) : trafficFailed ? t('Unavailable') : '—'} valueRight />
       </div>
     </StatCard>
-    <StatCard title={<Link to="/latency" aria-label={t('Edit latency configuration')} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">{t('Latency')}</Link>} className={(latency?.custom?.length ?? 0) > 3 ? 'lg:aspect-auto' : undefined}>
+    <StatCard title={<Link to="/latency" aria-label={t('Manage latency pins')} className="relative rounded-sm before:absolute before:inset-x-0 before:-inset-y-2.5 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">{t('Latency')}</Link>} className={sites.length > 3 ? 'lg:aspect-auto' : undefined}>
       <div className="space-y-1">
         <div title={latency?.target ? `Internet latency to ${latency.target}` : undefined}><MetricPill label={t('Internet')} value={latencyValue} valueRight /></div>
         <MetricPill label={t('DNS lookup')} value={dnsMeasured ? formatLatency(latency.dns_milliseconds!) : '—'} valueRight />
       </div>
-      <div className="pt-1">
+      {sites.length > 0 && <div className="pt-1">
         <div className="grid grid-cols-2 items-center gap-x-2 gap-y-1.5 sm:grid-cols-3">
           {sites.map((site) => {
             // Only a probe started by clicking this row sets its flag; the
@@ -557,8 +557,8 @@ function Stats({ flows, host, publicAddresses, modules, faults, known, idle, fai
             </button>
           })}
         </div>
-        {measure.isError && <p role="alert" className="pt-1 text-xs text-destructive">{t('Could not measure {name}. Try again.', { name: measure.variables ?? '' })}</p>}
-      </div>
+      </div>}
+      {measure.isError && <p role="alert" className="pt-1 text-xs text-destructive">{t('Could not measure {name}. Try again.', { name: measure.variables ?? '' })}</p>}
     </StatCard>
     <NetworkQuality />
     <BandwidthLimitDialog key={editing ?? 'closed'} direction={editing} limits={limits} onClose={() => setEditing(null)} onSave={saveLimits} />

@@ -44,8 +44,9 @@ A click on one monitored site measures that site now.
 current snapshot; only the clicked row's `measuring` flag is set until its probe
 publishes. A second click while that probe runs is accepted and starts no second
 probe. `POST /api/gateway/latency/measure` does the same for every site, which is the
-page's Test all; `?category=<key>` (or `custom`) limits it to one section's
-refresh button. Background rounds leave every row's flag false, so a row spins
+page's Test all. API clients can pass `?category=<key>` (or `custom`) to limit
+probes to that group; the merged table has no category refresh controls.
+Background rounds leave every row's flag false, so a row spins
 only where somebody asked. A row keeps its last completed value while the
 probe runs. Other sites, the Internet target and DNS are left alone. These
 routes change no configuration; they only ask for probes.
@@ -55,7 +56,7 @@ They are present on a fresh install, always probed, and cannot be removed. The c
 app's main page and its static asset host, chosen from measurements on the
 reference router — and a category (`communication`, `social`, `entertainment`,
 `news`, `shopping` or `tools`). A CDN root may answer 403/404; the probe still
-counts the response as the edge's latency. Only an exit is per-operator: it
+counts the response as the edge's latency. A per-operator probe exit
 lives in `gateway.latency_common` as `{"name":"Google","exit":"Gateway2"}`,
 and omitting an entry leaves that site on the default route.
 
@@ -71,14 +72,39 @@ the runtime database. A custom
 site saved before the catalog existed, under a catalog name, moves to the
 catalog with its exit preserved.
 
-The /latency page is a test view, not an editor: it groups sites under category
-headings, with one row per site and 24 fixed hourly positions for the router's
-current day (00–01 through 23–24). Each position holds the latest attempt begun
-in that calendar hour; manual tests replace the same hour's point rather than
-appending another. Missing hours remain empty, while failed attempts keep their
-error and a nil measurement. The row shows the latest measurement and an explicit
-site test button. Test all probes everything, and each section has its own
-refresh. Exits and custom sites are changed through the API or CLI.
+The /latency page uses one merged table for catalog and custom sites, with one
+row per site and 24 fixed hourly positions for the router's current day (00–01
+through 23–24). Each position holds the latest attempt begun in that calendar
+hour; manual tests replace the same hour's point rather than appending another.
+Missing hours remain empty, while failed attempts keep their error and a nil
+measurement. The row shows the latest measurement and an explicit site test
+button. Test all probes everything. Exits and custom sites are changed through
+the API or CLI; pin selection is the page's configuration exception.
+
+Each site's name area can pin or unpin it, with a small indicator for pinned
+sites. The homepage Latency card shows only pinned monitored sites; no sites are
+pinned by default. Pins are router configuration shared by all browsers and
+survive daemon restarts. They do not affect which sites are probed or their
+URLs, exits, latest results, hourly history, or in-flight probes.
+
+`PUT /api/gateway/latency/sites/{name}/pin` accepts exactly one required boolean
+field, `{"pinned":true}` or `{"pinned":false}`, and returns `200 OK` with the
+full `LatencySnapshot` (including Internet `sites` and monitored `custom`). The
+name is an exact, case-sensitive catalog or custom monitored-site name, URL
+encoded as one path segment. Missing/null/nonboolean `pinned`, malformed JSON,
+trailing JSON and unknown fields return `400 Bad Request`; an unknown site
+returns `404 Not Found`, including when unpinning. Missing monitor/configuration
+or a failed persistence operation returns `503 Service Unavailable`.
+
+Repeating the same selection is a no-op. Selection lives separately in
+`gateway.latency_pins` as an optional array of monitored-site names; an absent or
+empty list means none. Successful changes publish the gateway `applied` event.
+General gateway configuration changes are reflected in subsequent snapshots.
+Saving configuration removes unknown/deleted custom-site names and duplicate
+pins; deleting a custom site through either the site-list API or general
+configuration therefore clears its pin before the name can be reused. Renaming
+a custom site clears its old pin; changing its URL or exit under the same name
+retains the pin. These display selections never enter runtime history.
 
 The response includes `state` (`measuring`, `ok`, `unreachable`, `unavailable`),
 nullable `milliseconds`, `dns_milliseconds`, `checked_at`, the selected
@@ -86,6 +112,7 @@ nullable `milliseconds`, `dns_milliseconds`, `checked_at`, the selected
 `local_time` is the current router-local RFC3339 time **with its UTC offset**, read
 fresh for every snapshot. The `custom` list holds catalog sites (`builtin: true`,
 with a `category`) followed by the operator's custom sites. A monitored site
+includes `pinned: true` when selected for the homepage; false is omitted. It also
 carries `measuring` while its on-demand probe runs, and chronological `samples`:
 one latest attempt per router calendar hour retained for 48 hours. Each sample
 has `milliseconds`, optional `error`, `checked_at` (the attempt's start in UTC),
@@ -116,11 +143,10 @@ sub-millisecond results show `<1 ms`, never a rounded zero.
 Browser-session caching uses a new hourly-history key; old rolling samples are
 not merged back into snapshots, because durable history comes from the daemon.
 
-The monitoring dialog preserves the order of the `custom` list. Rows can be
-reordered, edited, and given a custom icon. Clicking an icon offers automatic
-favicon discovery, a resized PNG/JPEG/WebP upload (at most 96 KiB in stored
-form), or a searchable theSVG icon ID. Uploaded images are stored as validated
-base64 in the saved site configuration; a theSVG ID names one of the marks
-bundled in `olrd`, which is served from the binary and never fetched from a third
-party (`internal/brandlogo`). Supplying an icon is independent of the latency
-probe.
+The custom-site API preserves list order and accepts a custom icon. Icons may
+use automatic favicon discovery through `GET /api/gateway/latency/sites/{name}/icon`,
+a PNG/JPEG/WebP image (at most 96 KiB in stored form), or a theSVG icon ID.
+Uploaded images are stored as validated base64 in the saved site configuration;
+a theSVG ID names one of the marks bundled in `olrd`, which is served from the
+binary and never fetched from a third party (`internal/brandlogo`). Supplying an
+icon is independent of the latency probe.

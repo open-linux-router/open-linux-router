@@ -261,6 +261,20 @@ export function useMeasureAllLatency() {
   })
 }
 
+export function usePinLatencySite() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, pinned }: { name: string; pinned: boolean }) => api.put<GatewayLatency>(`/api/gateway/latency/sites/${encodeURIComponent(name)}/pin`, { pinned }),
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['gateway', 'latency'] }),
+    onSuccess: (snapshot) => {
+      queryClient.setQueryData(['gateway', 'latency'], snapshot)
+      try { sessionStorage.setItem(LATENCY_SNAPSHOT_KEY, JSON.stringify(snapshot)) } catch { /* storage may be disabled */ }
+      queryClient.invalidateQueries({ queryKey: ['gateway', 'config'] })
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['gateway', 'latency'] }),
+  })
+}
+
 export function useSaveLatencySites() {
   const queryClient = useQueryClient()
   return useMutation({

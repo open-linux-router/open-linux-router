@@ -83,7 +83,15 @@ hidden page title. Detail and operation pages keep their identifying titles.
   separate plus button. Internet target selection remains available through the
   API and CLI; failure never silently switches the chosen target. Show the latest
   single HTTPS latency sample, with `<1 ms` for sub-millisecond values; keep
-  DNS lookup simple and omit bandwidth tests. Show all monitored sites in one
+  DNS lookup simple and omit bandwidth tests. Overview's site grid contains only
+  pinned sites, with none selected by default; Internet and DNS remain visible.
+  Clicking the Latency title opens /latency to manage pins. In that table, click
+  a site's identity or its small pin to toggle its Overview visibility. The pin
+  indicates saved state, and its accessible action names the site and whether it
+  will be pinned or unpinned. Save immediately to router configuration, retain
+  choices across sessions and restarts, and show a failed save explicitly. Pinning
+  changes presentation without starting probes or changing measurements.
+  Show all monitored sites in one
   table without category headings. Each site occupies one row: a bare icon,
   name and 24 fixed squares for the router-local day's hours. Omit the visible
   hour axis, router date/offset and scheduling copy, latest-value column, and

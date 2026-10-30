@@ -52,6 +52,7 @@ type LatencySite struct {
 	Milliseconds *float64        `json:"milliseconds"`
 	CheckedAt    time.Time       `json:"checked_at"`
 	Selected     bool            `json:"selected"`
+	Pinned       bool            `json:"pinned,omitempty"`
 	Exit         string          `json:"exit,omitempty"`
 	Icon         string          `json:"icon,omitempty"`
 	Category     string          `json:"category,omitempty"`

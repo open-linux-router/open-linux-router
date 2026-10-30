@@ -77,6 +77,7 @@ func (h HTTP) Routes() []core.Route {
 		{Method: "GET", Path: "/latency", Tool: "show latency", Summary: "Latest router HTTPS response measurements and selected websites.", Handler: h.getLatency},
 		{Method: "POST", Path: "/latency/sites/{name}/measure", Summary: "Probe one monitored site now instead of waiting for the next round.", Handler: h.postLatencySiteMeasure},
 		{Method: "POST", Path: "/latency/measure", Query: []core.QueryParam{{Name: "category", Type: "string", Summary: "Only a catalog category, custom, or empty for every site."}}, Summary: "Probe every monitored site now instead of waiting for the next round.", Handler: h.postLatencyMeasureAll},
+		{Method: "PUT", Path: "/latency/sites/{name}/pin", Summary: "Pin or unpin a monitored site on the homepage.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencySitePin},
 		{Method: "PUT", Path: "/latency/target", Summary: "Choose an Internet latency target; empty selects the fastest once.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencyTarget},
 		{Method: "GET", Path: "/latency/sites/{name}/icon", Summary: "Discover a monitored site icon.", Handler: h.getLatencyIcon},
 		{Method: "PUT", Path: "/latency/sites", Summary: "Replace custom HTTPS response targets.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencySites},
@@ -888,6 +889,43 @@ func (h HTTP) postLatencyMeasureAll(w http.ResponseWriter, r *http.Request) {
 	snapshot := h.Latency.Snapshot()
 	snapshot.Custom = h.Latency.Custom.Snapshot()
 	core.WriteJSON(w, http.StatusAccepted, snapshot)
+}
+
+func (h HTTP) putLatencySitePin(w http.ResponseWriter, r *http.Request) {
+	if h.Latency == nil || h.Latency.Custom == nil || h.Lock == nil {
+		core.WriteError(w, http.StatusServiceUnavailable, "latency monitor unavailable")
+		return
+	}
+	var body struct {
+		Pinned *bool `json:"pinned"`
+	}
+	if err := core.DecodeJSON(w, r, &body); err != nil {
+		core.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if body.Pinned == nil {
+		core.WriteError(w, http.StatusBadRequest, "pinned must be a boolean")
+		return
+	}
+	if err := h.Lock.Do(r.Context(), func() error {
+		changed, err := h.Latency.Custom.SetPinned(r.PathValue("name"), *body.Pinned)
+		if err != nil {
+			return err
+		}
+		if changed && h.Events != nil {
+			h.Events.Publish(core.Event{Type: core.EventApplied, Module: ModuleName})
+		}
+		snapshot := h.Latency.Snapshot()
+		snapshot.Custom = h.Latency.Custom.Snapshot()
+		core.WriteJSON(w, http.StatusOK, snapshot)
+		return nil
+	}); err != nil {
+		status := http.StatusServiceUnavailable
+		if errors.Is(err, errLatencySiteNotFound) {
+			status = http.StatusNotFound
+		}
+		core.WriteError(w, status, err.Error())
+	}
 }
 
 func (h HTTP) putLatencyTarget(w http.ResponseWriter, r *http.Request) {

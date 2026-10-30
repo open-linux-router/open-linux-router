@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -53,6 +54,7 @@ type CustomLatencyMonitor struct {
 	sites        []CustomLatencySite
 	common       []CommonLatencySite
 	commonExits  map[string]string
+	pins         []string
 	results      []LatencySite
 	icons        map[string]latencyIcon
 	probe        func(context.Context, string) (float64, error)
@@ -153,7 +155,7 @@ func OpenCustomLatencyConfig(store *core.Store) (*CustomLatencyMonitor, error) {
 	m := &CustomLatencyMonitor{
 		store: store, probe: probePage, probeThrough: probePageMarked,
 		results: []LatencySite{}, inflight: map[string]bool{},
-		common: latencyCatalog(), commonExits: commonExits,
+		common: latencyCatalog(), commonExits: commonExits, pins: cfg.LatencyPins,
 	}
 	m.sites = custom
 	m.resetResults()
@@ -420,6 +422,7 @@ func (m *CustomLatencyMonitor) Snapshot() []LatencySite {
 	defer m.mu.Unlock()
 	out := append([]LatencySite{}, m.results...)
 	for i := range out {
+		out[i].Pinned = slices.Contains(m.pins, out[i].Name)
 		m.results[i].Samples = retainedLatencySamples(m.results[i].Samples, m.clock())
 		out[i].Samples = append([]LatencySample{}, m.results[i].Samples...)
 	}
@@ -430,6 +433,8 @@ func (m *CustomLatencyMonitor) refreshConfig() {
 	if m.store == nil {
 		return
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	doc, err := m.store.Load()
 	if err != nil {
 		return
@@ -444,8 +449,7 @@ func (m *CustomLatencyMonitor) refreshConfig() {
 			exits[entry.Name] = entry.Exit
 		}
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.pins = append([]string{}, cfg.LatencyPins...)
 	old, _ := json.Marshal(m.sites)
 	next, _ := json.Marshal(cfg.LatencySites)
 	if string(old) != string(next) || !reflect.DeepEqual(m.commonExits, exits) {
