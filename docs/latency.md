@@ -37,12 +37,12 @@ A click on one monitored site measures that site now.
 `POST /api/gateway/latency/sites/{name}/measure` answers `202 Accepted` with the
 current snapshot; only the clicked row's `measuring` flag is set until its probe
 publishes. A second click while that probe runs is accepted and starts no second
-probe. `POST /api/gateway/latency/measure` does the same for every site, which
-is the page's Test all. Background rounds leave every row's flag false, so a
-tile spins only where somebody clicked. A row keeps its last completed value
-while the probe runs, and the card replaces that value with a spinner. Other
-sites, the Internet target and DNS are left alone. These routes change no
-configuration; they only ask for probes.
+probe. `POST /api/gateway/latency/measure` does the same for every site, which is the
+page's Test all; `?category=<key>` (or `custom`) limits it to one section's
+refresh button. Background rounds leave every row's flag false, so a card spins
+only where somebody asked. A card keeps its last completed value while the
+probe runs. Other sites, the Internet target and DNS are left alone. These
+routes change no configuration; they only ask for probes.
 
 Common sites are part of the binary's catalog, not the operator's document.
 They are present on a fresh install, always probed, and cannot be removed. The catalog carries one URL per site — the faster of the
@@ -64,17 +64,22 @@ contain credentials, custom ports or fragments. Custom sites live in
 site saved before the catalog existed, under a catalog name, moves to the
 catalog with its exit preserved.
 
-The /latency page is a test view, not an editor: it groups the catalog under
-its category headings as icon tiles with the latest sample, lists custom sites
-under Custom, and offers Test all. Selecting a tile probes that site. Exits and
-custom sites are changed through the API or CLI; the page writes nothing.
+The /latency page is a test view, not an editor: it groups the catalog under its
+category headings, and each card shows the site's icon and name, the newest ten
+attempts as colored tiles (hover names the value) and the average of the
+successful ones, right-aligned. Test all probes everything; each section has
+its own refresh, and selecting a card probes that site. Exits and custom sites
+are changed through the API or CLI; the page writes nothing.
 
 The response includes `state` (`measuring`, `ok`, `unreachable`, `unavailable`),
 nullable `milliseconds`, `dns_milliseconds`, `checked_at`, the selected
 `target` name and `target_url`, built-in `sites` and the `custom` list. That
 list holds the catalog's common sites (`builtin: true`, with a `category`)
 followed by the operator's custom sites. A site also carries `measuring` while
-its on-demand probe runs.
+its on-demand probe runs, and `samples`: the newest ten attempts, oldest first.
+A failure stays in `samples` with its error and a nil measurement. History is
+ephemeral and clears on restart; the average is computed from successful
+attempts, never treating a failure as zero.
 A failed fixed target retains its identity but clears its measurement.
 Each site carries its latest attempt, nullable measurement and short error.
 Custom sites keep their last completed outcome while the next probe runs;

@@ -76,7 +76,7 @@ func (h HTTP) Routes() []core.Route {
 		{Method: "GET", Path: "/world-traffic", Tool: "show world traffic", Summary: "Top forty remote IPs by observed connection bytes over the last thirty seconds.", Handler: h.getWorldTraffic},
 		{Method: "GET", Path: "/latency", Tool: "show latency", Summary: "Latest router HTTPS response measurements and selected websites.", Handler: h.getLatency},
 		{Method: "POST", Path: "/latency/sites/{name}/measure", Summary: "Probe one monitored site now instead of waiting for the next round.", Handler: h.postLatencySiteMeasure},
-		{Method: "POST", Path: "/latency/measure", Summary: "Probe every monitored site now instead of waiting for the next round.", Handler: h.postLatencyMeasureAll},
+		{Method: "POST", Path: "/latency/measure", Query: []core.QueryParam{{Name: "category", Type: "string", Summary: "Only a catalog category, custom, or empty for every site."}}, Summary: "Probe every monitored site now instead of waiting for the next round.", Handler: h.postLatencyMeasureAll},
 		{Method: "PUT", Path: "/latency/target", Summary: "Choose an Internet latency target; empty selects the fastest once.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencyTarget},
 		{Method: "GET", Path: "/latency/sites/{name}/icon", Summary: "Discover a monitored site icon.", Handler: h.getLatencyIcon},
 		{Method: "PUT", Path: "/latency/sites", Summary: "Replace custom HTTPS response targets.", Body: core.BodyFull, Mutating: true, Handler: h.putLatencySites},
@@ -876,7 +876,12 @@ func (h HTTP) postLatencyMeasureAll(w http.ResponseWriter, r *http.Request) {
 		core.WriteError(w, http.StatusServiceUnavailable, "latency monitor unavailable")
 		return
 	}
-	if err := h.Latency.Custom.MeasureAll(); err != nil {
+	category := r.URL.Query().Get("category")
+	if !validLatencyCategory(category) {
+		core.WriteError(w, http.StatusBadRequest, "unknown latency category")
+		return
+	}
+	if err := h.Latency.Custom.MeasureAll(category); err != nil {
 		core.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

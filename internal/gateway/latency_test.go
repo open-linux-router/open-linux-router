@@ -253,6 +253,101 @@ func TestCustomLatencySiteLimit(t *testing.T) {
 	}
 }
 
+// The page draws ten tiles per site: the newest ten attempts, failures
+// included, so an error is visible as a gap rather than a zero.
+func TestLatencyKeepsLatestTenSamples(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Replace([]CustomLatencySite{{Name: "A", URL: "https://a.example/"}}); err != nil {
+		t.Fatal(err)
+	}
+	value := 0
+	m.probe = func(context.Context, string) (float64, error) {
+		value++
+		if value == 12 {
+			return 0, errors.New("offline")
+		}
+		return float64(value), nil
+	}
+	for i := 0; i < 12; i++ {
+		m.sample(context.Background())
+	}
+	got := m.Snapshot()[0]
+	if len(got.Samples) != latencySampleHistory {
+		t.Fatalf("%d samples, want %d", len(got.Samples), latencySampleHistory)
+	}
+	if got.Milliseconds != nil || got.Error != "Connection failed" {
+		t.Fatalf("latest failure: %+v", got)
+	}
+	if first := got.Samples[0]; first.Milliseconds == nil || *first.Milliseconds != 3 {
+		t.Fatalf("oldest kept sample: %+v", first)
+	}
+	if before := got.Samples[8]; before.Milliseconds == nil || *before.Milliseconds != 11 {
+		t.Fatalf("last success: %+v", before)
+	}
+	if last := got.Samples[9]; last.Milliseconds != nil || last.Error != "Connection failed" {
+		t.Fatalf("failure not recorded: %+v", last)
+	}
+}
+
+func TestMeasureAllSelectsOneCategory(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.common = latencyCatalog()
+	if err := m.Replace([]CustomLatencySite{{Name: "NAS", URL: "https://nas.example/"}}); err != nil {
+		t.Fatal(err)
+	}
+	settle := func() {
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			if !anyMeasuring(m.Snapshot()) {
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		t.Fatal("probes did not settle")
+	}
+	gate := make(chan struct{})
+	m.probe = func(context.Context, string) (float64, error) { <-gate; return 5, nil }
+	if err := m.MeasureAll("custom"); err != nil {
+		t.Fatal(err)
+	}
+	for _, site := range m.Snapshot() {
+		if site.Measuring != !site.Builtin {
+			t.Fatalf("%s: measuring=%v, want %v", site.Name, site.Measuring, !site.Builtin)
+		}
+	}
+	close(gate)
+	settle()
+
+	gate = make(chan struct{})
+	m.probe = func(context.Context, string) (float64, error) { <-gate; return 5, nil }
+	if err := m.MeasureAll("communication"); err != nil {
+		t.Fatal(err)
+	}
+	for _, site := range m.Snapshot() {
+		want := site.Builtin && site.Category == "communication"
+		if site.Measuring != want {
+			t.Fatalf("%s: measuring=%v, want %v", site.Name, site.Measuring, want)
+		}
+	}
+	close(gate)
+	settle()
+}
+
+func anyMeasuring(sites []LatencySite) bool {
+	for _, site := range sites {
+		if site.Measuring {
+			return true
+		}
+	}
+	return false
+}
+
 // The catalog is the product's list, not the operator's: it is present on a
 // fresh document and cannot be removed, while a custom site lives beside it.
 func TestCommonLatencySitesAreAlwaysPresent(t *testing.T) {

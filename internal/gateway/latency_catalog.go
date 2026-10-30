@@ -55,6 +55,18 @@ func latencyCatalog() []CommonLatencySite {
 	}
 }
 
+func validLatencyCategory(category string) bool {
+	if category == "" || category == "custom" {
+		return true
+	}
+	for _, site := range latencyCatalog() {
+		if site.Category == category {
+			return true
+		}
+	}
+	return false
+}
+
 func commonLatencySite(name string) (CommonLatencySite, bool) {
 	for _, site := range latencyCatalog() {
 		if site.Name == name {

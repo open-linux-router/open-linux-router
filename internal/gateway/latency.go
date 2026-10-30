@@ -33,17 +33,31 @@ type LatencyMonitor struct {
 	Lock       *core.Lock
 }
 type latencyTarget struct{ Name, URL string }
-type LatencySite struct {
-	Name         string    `json:"name"`
-	URL          string    `json:"url"`
+
+// latencySampleHistory is how many attempts the page draws as tiles. One
+// sample per background round (a minute) or click; restart clears them.
+const latencySampleHistory = 10
+
+// LatencySample is one completed attempt. A failure keeps its error and a nil
+// measurement, so the page can show it without inventing a zero.
+type LatencySample struct {
 	Milliseconds *float64  `json:"milliseconds"`
-	CheckedAt    time.Time `json:"checked_at"`
-	Selected     bool      `json:"selected"`
-	Exit         string    `json:"exit,omitempty"`
-	Icon         string    `json:"icon,omitempty"`
-	Category     string    `json:"category,omitempty"`
-	Builtin      bool      `json:"builtin,omitempty"`
 	Error        string    `json:"error,omitempty"`
+	CheckedAt    time.Time `json:"checked_at"`
+}
+
+type LatencySite struct {
+	Name         string          `json:"name"`
+	URL          string          `json:"url"`
+	Milliseconds *float64        `json:"milliseconds"`
+	CheckedAt    time.Time       `json:"checked_at"`
+	Selected     bool            `json:"selected"`
+	Exit         string          `json:"exit,omitempty"`
+	Icon         string          `json:"icon,omitempty"`
+	Category     string          `json:"category,omitempty"`
+	Builtin      bool            `json:"builtin,omitempty"`
+	Error        string          `json:"error,omitempty"`
+	Samples      []LatencySample `json:"samples,omitempty"`
 	// Measuring marks an on-demand probe of this site. Background rounds never
 	// set it, so the card shows a spinner only for the site somebody clicked.
 	Measuring bool `json:"measuring,omitempty"`

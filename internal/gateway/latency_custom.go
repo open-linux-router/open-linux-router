@@ -232,6 +232,7 @@ func (m *CustomLatencyMonitor) resetResults() {
 		result := LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, Category: site.Category, Builtin: site.Builtin}
 		if old, ok := previous[site.URL+"\x00"+site.Exit]; ok {
 			result.Milliseconds, result.CheckedAt, result.Error = old.Milliseconds, old.CheckedAt, old.Error
+			result.Samples = append([]LatencySample{}, old.Samples...)
 		}
 		// A reorder or rename during an on-demand probe keeps its spinner on the
 		// row that still names the same target.
@@ -247,13 +248,22 @@ func (m *CustomLatencyMonitor) setContext(ctx context.Context) {
 	m.base = ctx
 }
 
-// MeasureAll starts one on-demand probe for every site. It is the page's
-// "Test all": like a single click, it changes no configuration.
-func (m *CustomLatencyMonitor) MeasureAll() error {
+// MeasureAll starts one on-demand probe for every site in category, or for
+// every site when category is empty. "custom" selects the operator's sites.
+func (m *CustomLatencyMonitor) MeasureAll(category string) error {
 	m.refreshConfig()
 	m.mu.RLock()
 	names := make([]string, 0, len(m.common)+len(m.sites))
 	for _, site := range m.allSitesLocked() {
+		switch {
+		case category == "":
+		case category == "custom":
+			if site.Builtin {
+				continue
+			}
+		case !site.Builtin || site.Category != category:
+			continue
+		}
 		names = append(names, site.Name)
 	}
 	m.mu.RUnlock()
@@ -365,9 +375,16 @@ func (m *CustomLatencyMonitor) storeResult(result LatencySite) {
 		if i >= len(m.results) {
 			return
 		}
-		if current := m.results[i]; !current.CheckedAt.IsZero() && current.CheckedAt.After(result.CheckedAt) {
+		current := m.results[i]
+		if !current.CheckedAt.IsZero() && current.CheckedAt.After(result.CheckedAt) {
 			return
 		}
+		history := append([]LatencySample{}, current.Samples...)
+		history = append(history, LatencySample{Milliseconds: result.Milliseconds, Error: result.Error, CheckedAt: result.CheckedAt})
+		if len(history) > latencySampleHistory {
+			history = history[len(history)-latencySampleHistory:]
+		}
+		result.Samples = history
 		result.Name = site.Name
 		result.Icon = site.Icon
 		result.Category = site.Category

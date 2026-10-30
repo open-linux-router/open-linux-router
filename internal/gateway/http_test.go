@@ -664,4 +664,7 @@ func TestLatencyMeasureAllEndpoint(t *testing.T) {
 	if w := do(t, (HTTP{}).Handler(), http.MethodPost, "/latency/measure", nil); w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("missing monitor: status = %d", w.Code)
 	}
+	if w := do(t, h, http.MethodPost, "/latency/measure?category=unknown", nil); w.Code != http.StatusBadRequest {
+		t.Fatalf("unknown category: status = %d", w.Code)
+	}
 }
