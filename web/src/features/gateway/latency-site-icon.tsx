@@ -8,7 +8,7 @@ export function SiteIcon({ name, url, icon: iconChoice, big = false }: { name: s
   const [autoIcon, setAutoIcon] = useState<string>()
   const [broken, setBroken] = useState<string>()
   useEffect(() => {
-    if (iconChoice?.startsWith('data:')) return
+    if (iconChoice?.startsWith('data:') || brandLogoHref(iconChoice)) return
     const controller = new AbortController()
     let objectURL: string | undefined
     const token = getToken()
@@ -30,7 +30,9 @@ export function SiteIcon({ name, url, icon: iconChoice, big = false }: { name: s
   // A mark this build does not carry falls back to the site's initials, the
   // same answer as a site with no favicon at all.
   const box = big ? 'size-10' : 'size-5'
-  return preview && preview !== broken ? <img src={preview} alt="" className={`${box} shrink-0 rounded-sm object-contain`} onError={() => setBroken(preview)} />
-    : <span aria-hidden className={`flex ${box} shrink-0 items-center justify-center rounded-md bg-foreground/10 ${big ? 'text-lg' : 'text-[10px]'} font-bold uppercase`}>{name.slice(0, 2)}</span>
+  const darkMark = iconChoice === 'thesvg:x' || iconChoice === 'thesvg:github'
+    ? 'dark:invert' : iconChoice === 'thesvg:amazon' ? 'dark:invert dark:hue-rotate-180' : ''
+  return preview && preview !== broken ? <img src={preview} alt="" className={`${box} shrink-0 object-contain ${darkMark}`} onError={() => setBroken(preview)} />
+    : <span aria-hidden className={`flex ${box} shrink-0 items-center justify-center ${big ? 'text-lg' : 'text-[10px]'} font-bold uppercase`}>{name.slice(0, 2)}</span>
 }
 

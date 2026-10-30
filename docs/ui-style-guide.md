@@ -257,10 +257,17 @@ monitored-site list on /latency, with Save and Cancel in the settings card foote
 selected provider and automatic selection in this control, without extra
 badges or explanatory content on the card.
 The /latency page is a test view, not an editor. Categories use large headings
-with a refresh icon at the right. Each site is a card: a 48px icon, the name
-with the average of its successful samples right-aligned, and ten small colored
-tiles for the newest attempts beneath; hovering a tile names its value. Cards
-sit two, three or four across from phone to wide screens. Test all sits beside
+with a refresh icon at the right. Each site is a card: a bare 40px icon, the
+name above ten fixed 10px square samples with 2px gaps, and the successful-sample
+average right-aligned and vertically centered across both rows. Prefer the
+locally bundled theSVG mark for built-in sites; use favicon discovery and then
+bare initials when no matching mark exists, without added icon backgrounds,
+borders or clipping. Adapt black marks for contrast in dark mode without adding
+a backing. Use MetricValue md for the value and unit, without an Avg
+prefix: below 100 ms uses success text, 100–299 ms warning text, and 300 ms or
+more destructive text. Missing measurements stay a neutral dash. The squares
+do not stretch to fill the card; hovering one names its value. Cards sit one,
+two, three or four across as space permits. Test all sits beside
 the page heading; there is no add, remove or edit control.
 The public-network summary uses a locally bundled flag-icons country flag.
 Clicking any Status row opens its details in a shared dialog, without chevrons.

@@ -20,8 +20,8 @@ type latencyIcon struct {
 	checked time.Time
 }
 
-// Icon discovers a monitored site's favicon through the same selected exit.
-// The result is cached independently of probe measurements.
+// Icon resolves a monitored site's selected icon locally, or discovers its favicon
+// through the same selected exit. The result is cached independently of probes.
 func (m *CustomLatencyMonitor) Icon(ctx context.Context, name string) ([]byte, string, error) {
 	m.refreshConfig()
 	m.mu.RLock()
@@ -45,13 +45,6 @@ func (m *CustomLatencyMonitor) Icon(ctx context.Context, name string) ([]byte, s
 	if ok && time.Since(cached.checked) < 24*time.Hour && !strings.HasPrefix(site.Icon, "data:") {
 		return cached.data, cached.kind, nil
 	}
-	if m.iconClient != nil {
-		client, err := m.iconClient(&site)
-		if err != nil {
-			return nil, "", err
-		}
-		return m.discoverIcon(ctx, site, client)
-	}
 	if strings.HasPrefix(site.Icon, "thesvg:") {
 		data, kind, err := ingress.CustomIcon(site.Icon)
 		if err != nil {
@@ -66,6 +59,13 @@ func (m *CustomLatencyMonitor) Icon(ctx context.Context, name string) ([]byte, s
 		}
 		m.mu.Unlock()
 		return data, kind, nil
+	}
+	if m.iconClient != nil {
+		client, err := m.iconClient(&site)
+		if err != nil {
+			return nil, "", err
+		}
+		return m.discoverIcon(ctx, site, client)
 	}
 	transport := &http.Transport{DisableKeepAlives: true, TLSHandshakeTimeout: 3 * time.Second}
 	defer transport.CloseIdleConnections()
@@ -104,9 +104,9 @@ func (m *CustomLatencyMonitor) discoverIcon(ctx context.Context, site CustomLate
 
 // siteByName is called with m.mu held.
 func (m *CustomLatencyMonitor) siteByName(name string) CustomLatencySite {
-	for _, site := range m.sites {
+	for _, site := range m.allSitesLocked() {
 		if site.Name == name {
-			return site
+			return CustomLatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon}
 		}
 	}
 	return CustomLatencySite{}

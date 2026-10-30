@@ -86,9 +86,14 @@ hidden page title. Detail and operation pages keep their identifying titles.
   single HTTPS latency sample, with `<1 ms` for sub-millisecond values; keep
   DNS lookup simple and omit bandwidth tests. Monitored sites follow the target.
   Group the test list under Communication, Social, Entertainment, News,
-  Shopping, Tools and Custom, and render each site as a card: icon, name, the
-  average of its successful samples on the right, and ten colored tiles for the
-  newest attempts beneath. Hovering a tile names its value. Test all probes
+  Shopping, Tools and Custom, and render each site as a card: a bare icon, the
+  name above ten fixed square samples, and a larger successful-sample average
+  vertically centered on the right. Show only the number and ms, without Avg;
+  retain the average in the accessible name. The value follows the sample
+  thresholds: green below 100 ms, amber below 300 ms, red from 300 ms, with a
+  neutral dash when no successful measurement exists. Prefer matching bundled
+  theSVG marks for built-in sites, then discovered favicons and bare initials;
+  add no icon frame. Hovering a square names its value. Test all probes
   every site; each section refreshes only its own. The catalog cannot be added
   to, removed or edited here.
   Clicking one monitored site measures that site again in place without opening

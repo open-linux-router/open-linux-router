@@ -5,6 +5,7 @@ import { PageHeading } from '@/components/layout/page-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
+import { MetricValue } from '@/components/ui/metric-value'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SiteIcon } from '@/features/gateway/latency-site-icon'
 import { useGatewayLatency, useMeasureAllLatency, useMeasureLatencySite } from '@/features/gateway/queries'
@@ -49,6 +50,13 @@ function tone(sample: Sample | null) {
   if (ms < 100) return 'bg-success'
   if (ms < 300) return 'bg-warning'
   return 'bg-destructive'
+}
+
+function latencyTextTone(ms: number | null) {
+  if (ms == null) return 'text-muted-foreground'
+  if (ms < 100) return 'text-success-foreground'
+  if (ms < 300) return 'text-warning-foreground'
+  return 'text-destructive'
 }
 
 function sampleTitle(sample: Sample | null) {
@@ -104,19 +112,17 @@ function LatencySites({ latency, onMeasure, onRefresh, pendingCategory }: {
       aria-busy={Boolean(site.measuring)}
       aria-label={`${site.name}: ${averageMs == null ? t('No samples yet') : t('Average {value}', { value: formatLatency(averageMs) })}`}
       title={`${site.name} · ${site.url} via ${site.exit || 'router default'}`}
-      className="flex min-w-0 items-start gap-3 rounded-xl border bg-card p-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring">
-      <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-muted/60"><SiteIcon name={site.name} url={site.url} icon={site.icon} big /></span>
-      <span className="min-w-0 flex-1 space-y-2">
-        <span className="flex items-baseline justify-between gap-2">
-          <span className="min-w-0 truncate text-sm font-medium">{site.name}</span>
-          <span className="flex shrink-0 items-baseline gap-1 text-xs tabular-nums text-muted-foreground">
-            {site.measuring && <LoaderCircle className="size-3 animate-spin" aria-hidden />}
-            {averageMs == null ? '—' : <><span>{t('Avg')}</span><span className="text-foreground">{formatLatency(averageMs)}</span></>}
-          </span>
+      className="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border bg-card p-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring">
+      <SiteIcon name={site.name} url={site.url} icon={site.icon} big />
+      <span className="flex min-h-12 min-w-0 flex-col justify-center gap-2">
+        <span className="min-w-0 truncate text-sm font-medium">{site.name}</span>
+        <span className="flex gap-0.5" aria-hidden>
+          {slots.map((sample, index) => <span key={index} title={sampleTitle(sample)} className={`size-2.5 shrink-0 rounded-[3px] ${tone(sample)}`} />)}
         </span>
-        <span className="grid grid-cols-10 gap-1" aria-hidden>
-          {slots.map((sample, index) => <span key={index} title={sampleTitle(sample)} className={`h-2.5 rounded-[3px] ${tone(sample)}`} />)}
-        </span>
+      </span>
+      <span className={`flex shrink-0 items-center gap-1 ${latencyTextTone(averageMs)}`}>
+        {site.measuring && <LoaderCircle className="size-3 animate-spin" aria-hidden />}
+        <MetricValue size="md" value={averageMs == null ? null : formatLatency(averageMs)} />
       </span>
     </button>
   }

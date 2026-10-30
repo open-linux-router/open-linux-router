@@ -213,7 +213,7 @@ func validateCustomSites(sites []CustomLatencySite) error {
 func (m *CustomLatencyMonitor) allSitesLocked() []monitorSite {
 	sites := make([]monitorSite, 0, len(m.common)+len(m.sites))
 	for _, site := range m.common {
-		sites = append(sites, monitorSite{Name: site.Name, URL: site.URL, Exit: m.commonExits[site.Name], Category: site.Category, Builtin: true})
+		sites = append(sites, monitorSite{Name: site.Name, URL: site.URL, Exit: m.commonExits[site.Name], Icon: site.Icon, Category: site.Category, Builtin: true})
 	}
 	for _, site := range m.sites {
 		sites = append(sites, monitorSite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon})
