@@ -39,19 +39,19 @@ func latencyCatalog() []CommonLatencySite {
 		{Name: "Netflix", URL: "https://assets.nflxext.com/", Category: "entertainment", Icon: "thesvg:netflix"},
 		{Name: "Spotify", URL: "https://i.scdn.co/", Category: "entertainment", Icon: "thesvg:spotify"},
 
-		{Name: "Sina News", URL: "https://news.sina.com.cn/", Category: "news"},
+		{Name: "Sina News", URL: "https://n.sinaimg.cn/", Category: "news"},
 		{Name: "Tencent News", URL: "https://news.qq.com/", Category: "news"},
 		{Name: "NetEase News", URL: "https://news.163.com/", Category: "news"},
 		{Name: "CNN", URL: "https://www.cnn.com/", Category: "news", Icon: "thesvg:cnn"},
 
-		{Name: "Taobao", URL: "https://www.taobao.com/", Category: "shopping", Icon: "thesvg:taobao"},
+		{Name: "Taobao", URL: "https://gw.alicdn.com/", Category: "shopping", Icon: "thesvg:taobao"},
 		{Name: "JD", URL: "https://www.jd.com/", Category: "shopping"},
 		{Name: "Pinduoduo", URL: "https://img.pddpic.com/", Category: "shopping"},
 		{Name: "Amazon", URL: "https://m.media-amazon.com/", Category: "shopping", Icon: "thesvg:amazon"},
 
 		{Name: "Baidu", URL: "https://www.baidu.com/", Category: "tools", Icon: "thesvg:baidu"},
-		{Name: "Google", URL: "https://www.gstatic.com/", Category: "tools", Icon: "thesvg:google"},
-		{Name: "GitHub", URL: "https://github.com/", Category: "tools", Icon: "thesvg:github"},
+		{Name: "Google", URL: "https://www.google.com/generate_204", Category: "tools", Icon: "thesvg:google"},
+		{Name: "GitHub", URL: "https://github.githubassets.com/", Category: "tools", Icon: "thesvg:github"},
 		{Name: "Zhihu", URL: "https://pic1.zhimg.com/", Category: "tools", Icon: "thesvg:zhihu"},
 	}
 }

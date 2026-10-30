@@ -61,7 +61,8 @@ func TestCommonLatencyIconsPropagateThroughMeasurementsAndOverrides(t *testing.T
 		t.Fatal(err)
 	}
 	check(false)
-	if got := latencySite(m.Snapshot(), "Google"); got.Exit != "Proxy" || got.URL != "https://www.gstatic.com/" {
+	google, _ := commonLatencySite("Google")
+	if got := latencySite(m.Snapshot(), "Google"); got.Exit != "Proxy" || got.URL != google.URL {
 		t.Fatalf("catalog override = %+v", got)
 	}
 	m.probe = func(context.Context, string) (float64, error) { return 12, nil }
