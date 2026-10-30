@@ -89,7 +89,9 @@ func TestLatencySnapshotIsolationAndCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	m.sample(ctx)
-	if !reflect.DeepEqual(before, m.Snapshot()) {
+	after := m.Snapshot()
+	before.LocalTime = after.LocalTime
+	if !reflect.DeepEqual(before, after) {
 		t.Fatal("cancelled round published")
 	}
 }
@@ -253,9 +255,8 @@ func TestCustomLatencySiteLimit(t *testing.T) {
 	}
 }
 
-// The page draws ten tiles per site: the newest ten attempts, failures
-// included, so an error is visible as a gap rather than a zero.
-func TestLatencyKeepsLatestTenSamples(t *testing.T) {
+// Manual retries replace the current hour, including successful values with failures.
+func TestLatencyKeepsLatestAttemptPerHour(t *testing.T) {
 	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -263,6 +264,8 @@ func TestLatencyKeepsLatestTenSamples(t *testing.T) {
 	if err := m.Replace([]CustomLatencySite{{Name: "A", URL: "https://a.example/"}}); err != nil {
 		t.Fatal(err)
 	}
+	now := time.Date(2026, 10, 30, 12, 30, 0, 0, time.Local)
+	m.now = func() time.Time { return now }
 	value := 0
 	m.probe = func(context.Context, string) (float64, error) {
 		value++
@@ -273,22 +276,14 @@ func TestLatencyKeepsLatestTenSamples(t *testing.T) {
 	}
 	for i := 0; i < 12; i++ {
 		m.sample(context.Background())
+		now = now.Add(time.Minute)
 	}
 	got := m.Snapshot()[0]
-	if len(got.Samples) != latencySampleHistory {
-		t.Fatalf("%d samples, want %d", len(got.Samples), latencySampleHistory)
+	if len(got.Samples) != 1 {
+		t.Fatalf("%d samples, want one current-hour sample", len(got.Samples))
 	}
-	if got.Milliseconds != nil || got.Error != "Connection failed" {
+	if got.Milliseconds != nil || got.Error != "Connection failed" || got.Samples[0].Milliseconds != nil || got.Samples[0].Error != "Connection failed" {
 		t.Fatalf("latest failure: %+v", got)
-	}
-	if first := got.Samples[0]; first.Milliseconds == nil || *first.Milliseconds != 3 {
-		t.Fatalf("oldest kept sample: %+v", first)
-	}
-	if before := got.Samples[8]; before.Milliseconds == nil || *before.Milliseconds != 11 {
-		t.Fatalf("last success: %+v", before)
-	}
-	if last := got.Samples[9]; last.Milliseconds != nil || last.Error != "Connection failed" {
-		t.Fatalf("failure not recorded: %+v", last)
 	}
 }
 
@@ -794,7 +789,7 @@ func TestCustomLatencyBackgroundRoundKeepsOnDemandProgress(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		got := m.Snapshot()[0]
-		if !got.Measuring && got.Milliseconds != nil && *got.Milliseconds == 12 {
+		if !got.Measuring && got.Milliseconds != nil && *got.Milliseconds == 11 {
 			break
 		}
 		if time.Now().After(deadline) {

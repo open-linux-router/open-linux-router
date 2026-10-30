@@ -1,5 +1,6 @@
 import { t, useLocale } from '@/lib/i18n'
-import { LoaderCircle, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
+import { useState } from 'react'
 
 import { PageHeading } from '@/components/layout/page-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -7,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
 import { MetricValue } from '@/components/ui/metric-value'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { hourRange, hourlyLatency, latencyDay, type HourlySample, type LatencySite } from '@/features/gateway/hourly-latency'
 import { SiteIcon } from '@/features/gateway/latency-site-icon'
 import { useGatewayLatency, useMeasureAllLatency, useMeasureLatencySite } from '@/features/gateway/queries'
 import type { GatewayLatency } from '@/lib/api-types'
@@ -20,30 +23,14 @@ const CATEGORY_LABELS: Record<string, string> = {
   shopping: 'Shopping',
   tools: 'Tools',
 }
-const SAMPLE_COUNT = 10
-
-type Site = GatewayLatency['custom'][number]
-type Sample = NonNullable<Site['samples']>[number]
+const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
+const ROW = 'grid grid-cols-[128px_360px_80px_36px] items-center gap-3 px-3 sm:grid-cols-[minmax(160px,1fr)_minmax(360px,2fr)_96px_36px] sm:gap-4 sm:px-4'
 
 function formatLatency(ms: number) {
   return ms < 1 ? '<1 ms' : `${Math.round(ms)} ms`
 }
 
-// Older daemons and the first round after a restart have no history; fall back
-// to the one completed sample so a card is never blank while it has a value.
-function history(site: Site): Sample[] {
-  if (site.samples?.length) return site.samples.slice(-SAMPLE_COUNT)
-  if (site.milliseconds != null) return [{ milliseconds: site.milliseconds, checked_at: site.checked_at }]
-  return []
-}
-
-function average(samples: Sample[]) {
-  const values = samples.flatMap((sample) => sample.milliseconds == null ? [] : [sample.milliseconds])
-  if (values.length === 0) return null
-  return values.reduce((sum, value) => sum + value, 0) / values.length
-}
-
-function tone(sample: Sample | null) {
+function tone(sample: HourlySample | null) {
   if (!sample) return 'bg-muted'
   const ms = sample.milliseconds
   if (ms == null) return 'bg-destructive/70'
@@ -52,17 +39,28 @@ function tone(sample: Sample | null) {
   return 'bg-destructive'
 }
 
-function latencyTextTone(ms: number | null) {
+function latencyTextTone(ms: number | null | undefined) {
   if (ms == null) return 'text-muted-foreground'
   if (ms < 100) return 'text-success-foreground'
   if (ms < 300) return 'text-warning-foreground'
   return 'text-destructive'
 }
 
-function sampleTitle(sample: Sample | null) {
+function sampleDetail(sample: HourlySample | null) {
   if (!sample) return t('No sample')
-  if (sample.milliseconds == null) return sample.error || t('Failed')
-  return `${formatLatency(sample.milliseconds)} · ${new Date(sample.checked_at).toLocaleTimeString()}`
+  return sample.milliseconds == null ? sample.error || t('Failed') : formatLatency(sample.milliseconds)
+}
+
+function HourlyPoint({ sample, hour, date }: { sample: HourlySample | null; hour: number; date: string }) {
+  const [open, setOpen] = useState(false)
+  const label = `${date} ${hourRange(hour)} · ${sampleDetail(sample)}`
+  return <Tooltip open={open} onOpenChange={setOpen}>
+    <TooltipTrigger delay={0} aria-label={label} data-hour={hour} onClick={() => setOpen(true)}
+      className="flex h-8 min-w-0 items-center justify-center rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
+      <span className={`size-2.5 shrink-0 rounded-[3px] ${tone(sample)}`} />
+    </TooltipTrigger>
+    <TooltipContent className="flex-col items-start animate-none!"><span>{date} {hourRange(hour)}</span><span>{sampleDetail(sample)}</span></TooltipContent>
+  </Tooltip>
 }
 
 export function LatencyPage() {
@@ -72,10 +70,15 @@ export function LatencyPage() {
   const testAll = useMeasureAllLatency()
   const sites = latency.data?.custom ?? []
   const testing = testAll.isPending || sites.some((site) => site.measuring)
-  const pendingCategory = typeof testAll.variables === 'string' ? testAll.variables : undefined
+  const pendingCategory = testAll.isPending && typeof testAll.variables === 'string' ? testAll.variables : undefined
+  const day = latencyDay(latency.data?.local_time)
 
-  return <div className="space-y-10">
+  return <div className="space-y-8">
     <PageHeading title={t('Latency')} action={<Button variant="secondary" onClick={() => testAll.mutate(undefined)} disabled={testing}>{testing ? t('Testing…') : t('Test all')}</Button>} />
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm text-muted-foreground">
+      <span>{t('Router time')}: {day.date}{day.zone && ` · ${day.zone}`}</span>
+      <span>{t('Auto test at :30 each hour. Manual tests update this hour.')}</span>
+    </div>
     {latency.isError && <Alert variant="destructive">
       <AlertTitle>{t('Could not read measurements')}</AlertTitle>
       <AlertDescription className="space-y-3">
@@ -99,35 +102,32 @@ function LatencySites({ latency, onMeasure, onRefresh, pendingCategory }: {
 }) {
   useLocale()
   const sites = latency.custom ?? []
+  const day = latencyDay(latency.local_time)
   const groups = CATEGORY_ORDER
     .map((category) => ({ category, label: CATEGORY_LABELS[category], sites: sites.filter((site) => site.builtin && site.category === category) }))
     .filter((group) => group.sites.length > 0)
   const custom = sites.filter((site) => !site.builtin)
 
-  const card = (site: Site) => {
-    const samples = history(site)
-    const slots: (Sample | null)[] = [...Array<Sample | null>(Math.max(0, SAMPLE_COUNT - samples.length)).fill(null), ...samples]
-    const averageMs = average(samples)
-    return <button key={site.name} type="button" onClick={() => onMeasure(site.name)}
-      aria-busy={Boolean(site.measuring)}
-      aria-label={`${site.name}: ${averageMs == null ? t('No samples yet') : t('Average {value}', { value: formatLatency(averageMs) })}`}
-      title={`${site.name} · ${site.url} via ${site.exit || 'router default'}`}
-      className="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border bg-card p-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring">
-      <SiteIcon name={site.name} url={site.url} icon={site.icon} big />
-      <span className="flex min-h-12 min-w-0 flex-col justify-center gap-2">
-        <span className="min-w-0 truncate text-sm font-medium">{site.name}</span>
-        <span className="flex gap-0.5" aria-hidden>
-          {slots.map((sample, index) => <span key={index} title={sampleTitle(sample)} className={`size-2.5 shrink-0 rounded-[3px] ${tone(sample)}`} />)}
-        </span>
-      </span>
-      <span className={`flex shrink-0 items-center gap-1 ${latencyTextTone(averageMs)}`}>
-        {site.measuring && <LoaderCircle className="size-3 animate-spin" aria-hidden />}
-        <MetricValue size="md" value={averageMs == null ? null : formatLatency(averageMs)} />
-      </span>
-    </button>
+  const row = (site: LatencySite) => {
+    const slots = hourlyLatency(site, day)
+    const latest = [...slots].reverse().find((sample) => sample != null)
+    return <div key={site.name} role="listitem" data-site={site.name} className={`${ROW} min-h-14`}>
+      <div className="sticky left-0 z-10 -ml-3 flex min-h-14 min-w-0 items-center gap-3 bg-card pl-3 pr-2 sm:-ml-4 sm:pl-4" title={`${site.name} · ${site.url}`}>
+        <span className="flex size-8 shrink-0 items-center justify-center"><SiteIcon name={site.name} url={site.url} icon={site.icon} /></span>
+        <span className="truncate text-sm font-medium">{site.name}</span>
+      </div>
+      <div className="grid grid-cols-24 items-center" role="group" aria-label={t('{name}: hourly latency for {date}', { name: site.name, date: day.date })}>
+        {slots.map((sample, hour) => <HourlyPoint key={hour} sample={sample} hour={hour} date={day.date} />)}
+      </div>
+      <MetricValue size="md" className={`justify-self-end ${latencyTextTone(latest?.milliseconds)}`} value={latest?.milliseconds == null ? null : formatLatency(latest.milliseconds)} />
+      <Button variant="quiet" size="icon-sm" aria-label={t('Test {name} this hour', { name: site.name })}
+        title={t('Test {name} this hour', { name: site.name })} disabled={Boolean(site.measuring)} aria-busy={Boolean(site.measuring)} onClick={() => onMeasure(site.name)}>
+        <RefreshCw className={site.measuring ? 'animate-spin' : undefined} aria-hidden />
+      </Button>
+    </div>
   }
 
-  const section = (category: string, label: string, list: Site[]) => {
+  const section = (category: string, label: string, list: LatencySite[]) => {
     const busy = list.some((site) => site.measuring) || pendingCategory === category
     return <section key={category} aria-label={t(label)} className="space-y-4">
       <div className="flex items-center justify-between gap-2">
@@ -136,11 +136,22 @@ function LatencySites({ latency, onMeasure, onRefresh, pendingCategory }: {
           <RefreshCw className={busy ? 'animate-spin' : undefined} aria-hidden />
         </Button>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{list.map(card)}</div>
+      <div className="overflow-x-auto rounded-xl border bg-card" role="region" aria-label={t('{category}: hourly latency', { category: t(label) })} tabIndex={0}>
+        <div className="min-w-[680px] py-2 sm:min-w-[740px]">
+          <div className={`${ROW} h-8 text-xs text-muted-foreground`} aria-hidden>
+            <span />
+            <div className="grid grid-cols-24 text-center tabular-nums">
+              {HOURS.map((hour) => <span key={hour} className={hour === day.hour ? 'font-semibold text-primary' : undefined}>{String(hour).padStart(2, '0')}</span>)}
+            </div>
+            <span className="text-right">{t('Latest')}</span><span />
+          </div>
+          <div role="list">{list.map(row)}</div>
+        </div>
+      </div>
     </section>
   }
 
-  return <div className="space-y-10">
+  return <div className="space-y-8">
     {groups.map((group) => section(group.category, group.label, group.sites))}
     {custom.length > 0 && section('custom', 'Custom', custom)}
   </div>

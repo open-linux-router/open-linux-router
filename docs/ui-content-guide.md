@@ -79,27 +79,26 @@ hidden page title. Detail and operation pages keep their identifying titles.
   optional-bandwidth switch with one short line at the run action; keep freshness
   and the router-default-route scope visible without restating the workflow.
   The view has its own /quality address. Snapshot reads never start
-  tests. Clicking the Latency title opens
-  latency settings at /latency, without a separate plus button. The page starts with an
-  Internet target selector: a named provider or “Choose fastest once”. The
-  selected target stays fixed across failures and restarts. Show the latest
+  tests. Clicking the Latency title opens the /latency test page, without a
+  separate plus button. Internet target selection remains available through the
+  API and CLI; failure never silently switches the chosen target. Show the latest
   single HTTPS latency sample, with `<1 ms` for sub-millisecond values; keep
-  DNS lookup simple and omit bandwidth tests. Monitored sites follow the target.
-  Group the test list under Communication, Social, Entertainment, News,
-  Shopping, Tools and Custom, and render each site as a card: a bare icon, the
-  name above ten fixed square samples, and a larger successful-sample average
-  vertically centered on the right. Show only the number and ms, without Avg;
-  retain the average in the accessible name. The value follows the sample
-  thresholds: green below 100 ms, amber below 300 ms, red from 300 ms, with a
-  neutral dash when no successful measurement exists. Prefer matching bundled
-  theSVG marks for built-in sites, then discovered favicons and bare initials;
-  add no icon frame. Hovering a square names its value. Test all probes
-  every site; each section refreshes only its own. The catalog cannot be added
-  to, removed or edited here.
-  Clicking one monitored site measures that site again in place without opening
-  the settings page; replace only that site's value with a spinner until its probe
-  lands, and keep the title as the only settings control. Say when the request
-  to measure failed, and read measurements without starting any.
+  DNS lookup simple and omit bandwidth tests. Group monitored sites under
+  Communication, Social, Entertainment, News, Shopping, Tools and Custom.
+  Each site occupies one row: a bare icon, name, 24 fixed squares for the
+  router-local day's hours and the latest measurement on the right. Label the
+  axis 00–23 and show the router's date and UTC offset. Each tooltip gives the
+  exact hour range and result. Missing and future hours stay gray, failures
+  remain distinct, and a retest replaces the current hour rather than appending
+  another sample or changing other hours. Automatic tests run at about :30;
+  manual Test all, category refresh and individual tests update the current
+  hour. Retain history through daemon and router restarts without inventing
+  measurements for downtime. The latest value uses green below 100 ms, amber
+  below 300 ms, red from 300 ms and a neutral dash for missing or failed data.
+  Prefer matching bundled theSVG marks, then favicons and bare initials; add no
+  icon frame. The catalog cannot be added to, removed or edited here. Keep
+  completed results visible while a row's test button spins. Say when a request
+  to measure fails; reading the page never starts tests.
   `Up` and elapsed uptime
   lead Status above system health. Click uptime for a dialog with CPU, memory and root disk
   used/total values; omit the separate System card.

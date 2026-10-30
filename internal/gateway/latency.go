@@ -34,9 +34,8 @@ type LatencyMonitor struct {
 }
 type latencyTarget struct{ Name, URL string }
 
-// latencySampleHistory is how many attempts the page draws as tiles. One
-// sample per background round (a minute) or click; restart clears them.
-const latencySampleHistory = 10
+// Monitored-site history retains one latest attempt per router calendar hour.
+const latencyHistoryRetention = 48 * time.Hour
 
 // LatencySample is one completed attempt. A failure keeps its error and a nil
 // measurement, so the page can show it without inventing a zero.
@@ -44,6 +43,7 @@ type LatencySample struct {
 	Milliseconds *float64  `json:"milliseconds"`
 	Error        string    `json:"error,omitempty"`
 	CheckedAt    time.Time `json:"checked_at"`
+	HourStart    time.Time `json:"hour_start"`
 }
 
 type LatencySite struct {
@@ -63,6 +63,7 @@ type LatencySite struct {
 	Measuring bool `json:"measuring,omitempty"`
 }
 type LatencySnapshot struct {
+	LocalTime       time.Time     `json:"local_time"`
 	State           string        `json:"state"`
 	DNSMilliseconds *float64      `json:"dns_milliseconds"`
 	Milliseconds    *float64      `json:"milliseconds"`
@@ -254,23 +255,16 @@ func (m *LatencyMonitor) Snapshot() LatencySnapshot {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	s := m.snapshot
+	s.LocalTime = time.Now().In(time.Local)
+	if m.Custom != nil {
+		s.LocalTime = m.Custom.clock().In(time.Local)
+	}
 	s.Sites = append([]LatencySite{}, s.Sites...)
 	return s
 }
 func (m *LatencyMonitor) Run(ctx context.Context) {
-	// On-demand site probes are started by HTTP requests, so they cannot borrow
-	// a request context; they follow the daemon's lifetime instead.
-	if m.Custom != nil {
-		m.Custom.setContext(ctx)
-	}
 	for ctx.Err() == nil {
-		var custom sync.WaitGroup
-		if m.Custom != nil {
-			custom.Add(1)
-			go func() { defer custom.Done(); m.Custom.sample(ctx) }()
-		}
 		m.sample(ctx)
-		custom.Wait()
 		timer := time.NewTimer(latencySampleInterval)
 		select {
 		case <-ctx.Done():

@@ -456,6 +456,12 @@ func run(args []string) error {
 		return fmt.Errorf("loading custom latency sites: %w", err)
 	}
 	latency.Custom = customLatency
+	customLatency.Log = logger
+	if runtimeDB != nil {
+		if loadErr := customLatency.RestoreHistory(runtimeDB); loadErr != nil {
+			logger.Error("could not restore latency history", "error", loadErr)
+		}
+	}
 	customLatency.ValidateExit = func(name string) error {
 		cfg, err := (gateway.Applier{Store: store}).Load()
 		if err != nil {
@@ -1090,6 +1096,16 @@ func run(args []string) error {
 		}
 	}()
 	go latency.Run(ctx)
+	customLatencyCtx, stopCustomLatency := context.WithCancel(ctx)
+	customLatencyDone := make(chan struct{})
+	go func() {
+		defer close(customLatencyDone)
+		customLatency.Run(customLatencyCtx)
+	}()
+	defer func() {
+		stopCustomLatency()
+		<-customLatencyDone
+	}()
 	go world.Run(ctx)
 	go inspector.Activity.Run(ctx)
 	// The switch outlives the daemon: resume the device it names. A failure is

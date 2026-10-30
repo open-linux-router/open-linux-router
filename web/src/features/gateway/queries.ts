@@ -201,7 +201,7 @@ export function useReapplyGateway() {
   })
 }
 
-const LATENCY_SNAPSHOT_KEY = 'olr.gateway.latency-snapshot-v2'
+const LATENCY_SNAPSHOT_KEY = 'olr.gateway.latency-hourly-v1'
 
 function savedLatency(): GatewayLatency | undefined {
   try {
@@ -216,29 +216,17 @@ function savedLatency(): GatewayLatency | undefined {
   } catch { return undefined }
 }
 
-function hasAttempt(site: GatewayLatency['custom'][number]) {
-  return Boolean(site.checked_at && !site.checked_at.startsWith('0001-'))
-}
-
 export function useGatewayLatency() {
   return useQuery({
     queryKey: ['gateway', 'latency'],
     initialData: savedLatency,
     queryFn: async () => {
       const next = await api.get<GatewayLatency>('/api/gateway/latency')
-      const previous = savedLatency()
-      if (previous) {
-        next.custom = next.custom.map((site) => {
-          if (hasAttempt(site)) return site
-          const old = previous.custom?.find((candidate) => candidate.url === site.url && candidate.exit === site.exit && hasAttempt(candidate))
-          return old ? { ...site, milliseconds: old.milliseconds, checked_at: old.checked_at, error: old.error } : site
-        })
-      }
       try { sessionStorage.setItem(LATENCY_SNAPSHOT_KEY, JSON.stringify(next)) } catch { /* storage may be disabled */ }
       return next
     },
-    // Only a clicked site probes between the once-a-minute rounds, so only it
-    // needs a faster poll to end its spinner promptly.
+    // Poll faster during a manual test; automatic hourly samples arrive through
+    // the normal passive reads, which also advance the router's day and hour.
     refetchInterval: (query) => query.state.data?.custom.some((site) => site.measuring) ? 1000 : OBSERVED_REFETCH_MS,
   })
 }

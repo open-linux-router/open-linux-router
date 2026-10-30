@@ -76,22 +76,31 @@ func (s *Store) initialize() error {
 		if err := tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 			return err
 		}
-		if version > 3 {
+		if version > 4 {
 			return fmt.Errorf("unsupported runtime database version %d", version)
 		}
-		if version == 3 {
+		if version == 4 {
 			return nil
+		}
+		if version == 3 {
+			return createLatencySamples(tx)
 		}
 		if version == 2 {
 			// A device that is gone has no source to ask for its name, so the
 			// record keeps the last one it announced beside the time it was
 			// last heard. Both are observations with a time, never intent.
 			_, err := tx.Exec(`ALTER TABLE device_seen ADD COLUMN hostname TEXT NOT NULL DEFAULT ''; ALTER TABLE device_seen ADD COLUMN hostname_at TEXT NOT NULL DEFAULT ''; PRAGMA user_version=3;`)
-			return err
+			if err != nil {
+				return err
+			}
+			return createLatencySamples(tx)
 		}
 		if version == 1 {
 			_, err := tx.Exec(`CREATE TABLE geoip_cache (ip TEXT PRIMARY KEY, data BLOB NOT NULL, fetched INTEGER NOT NULL, used INTEGER NOT NULL); CREATE INDEX geoip_cache_used ON geoip_cache(used); ALTER TABLE device_seen ADD COLUMN hostname TEXT NOT NULL DEFAULT ''; ALTER TABLE device_seen ADD COLUMN hostname_at TEXT NOT NULL DEFAULT ''; PRAGMA user_version=3;`)
-			return err
+			if err != nil {
+				return err
+			}
+			return createLatencySamples(tx)
 		}
 		_, err := tx.Exec(`
 CREATE TABLE imports (name TEXT PRIMARY KEY);
@@ -104,7 +113,10 @@ CREATE TABLE recovery_state (name TEXT PRIMARY KEY, state BLOB NOT NULL);
 CREATE TABLE geoip_cache (ip TEXT PRIMARY KEY, data BLOB NOT NULL, fetched INTEGER NOT NULL, used INTEGER NOT NULL);
 CREATE INDEX geoip_cache_used ON geoip_cache(used);
 PRAGMA user_version=3;`)
-		return err
+		if err != nil {
+			return err
+		}
+		return createLatencySamples(tx)
 	})
 }
 

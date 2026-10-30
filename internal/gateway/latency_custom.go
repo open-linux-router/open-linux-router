@@ -5,15 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/open-linux-router/open-linux-router/internal/core"
+	"github.com/open-linux-router/open-linux-router/internal/runtimedb"
 )
 
 const maxCustomLatencySites = 20
@@ -37,9 +40,14 @@ type monitorSite struct {
 }
 
 // Custom targets are independent of the Internet candidate selection.
-// Their intent survives restarts, while measurements remain ephemeral.
+// Intent belongs to configuration; hourly measurements belong to runtime.db.
 type CustomLatencyMonitor struct {
 	mu           sync.RWMutex
+	db           *runtimedb.Store
+	dirty        []runtimedb.LatencySample
+	now          func() time.Time
+	wait         func(context.Context, time.Duration) bool
+	Log          *slog.Logger
 	path         string
 	store        *core.Store
 	sites        []CustomLatencySite
@@ -314,12 +322,13 @@ func (m *CustomLatencyMonitor) Measure(name string) error {
 	if base == nil {
 		base = context.Background()
 	}
-	go m.probeOne(base, site)
+	started := m.clock()
+	go m.probeOne(base, site, started)
 	return nil
 }
 
 // probeOne runs one on-demand probe and publishes its outcome.
-func (m *CustomLatencyMonitor) probeOne(ctx context.Context, site monitorSite) {
+func (m *CustomLatencyMonitor) probeOne(ctx context.Context, site monitorSite, started time.Time) {
 	bounded, cancel := context.WithTimeout(ctx, pageProbeTimeout)
 	defer cancel()
 	var value float64
@@ -351,7 +360,7 @@ func (m *CustomLatencyMonitor) probeOne(ctx context.Context, site monitorSite) {
 		}
 		return
 	}
-	result := LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, Category: site.Category, Builtin: site.Builtin, CheckedAt: time.Now().UTC()}
+	result := LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, Category: site.Category, Builtin: site.Builtin, CheckedAt: started.UTC()}
 	if site.Exit != "" && err != nil && strings.Contains(err.Error(), "gateway exit") {
 		result.Error = "Gateway exit unavailable"
 	}
@@ -363,42 +372,58 @@ func (m *CustomLatencyMonitor) probeOne(ctx context.Context, site monitorSite) {
 	m.storeResult(result)
 }
 
-// storeResult writes one outcome, keeping whichever attempt is newer. Callers
-// hold m.mu. Two probes of the same target can overlap — a background round and
-// a click — and the older one finishing last must not overwrite the newer one.
+// storeResult merges by target/hour, ordered by attempt start rather than finish.
+// Callers hold m.mu. An old hour may arrive late without replacing the live value.
 func (m *CustomLatencyMonitor) storeResult(result LatencySite) {
 	key := result.URL + "\x00" + result.Exit
 	for i, site := range m.allSitesLocked() {
-		if site.URL != result.URL || site.Exit != result.Exit {
+		if site.URL != result.URL || site.Exit != result.Exit || i >= len(m.results) {
 			continue
 		}
-		if i >= len(m.results) {
-			return
-		}
 		current := m.results[i]
-		if !current.CheckedAt.IsZero() && current.CheckedAt.After(result.CheckedAt) {
-			return
+		sample := LatencySample{Milliseconds: result.Milliseconds, Error: result.Error, CheckedAt: result.CheckedAt, HourStart: latencyHour(result.CheckedAt.In(time.Local))}
+		samples := append([]LatencySample{}, current.Samples...)
+		replaced := false
+		accepted := true
+		for j := range samples {
+			if samples[j].HourStart.Equal(sample.HourStart) {
+				replaced = true
+				if samples[j].CheckedAt.After(sample.CheckedAt) {
+					accepted = false
+				} else {
+					samples[j] = sample
+				}
+				break
+			}
 		}
-		history := append([]LatencySample{}, current.Samples...)
-		history = append(history, LatencySample{Milliseconds: result.Milliseconds, Error: result.Error, CheckedAt: result.CheckedAt})
-		if len(history) > latencySampleHistory {
-			history = history[len(history)-latencySampleHistory:]
+		if !replaced {
+			samples = append(samples, sample)
 		}
-		result.Samples = history
-		result.Name = site.Name
-		result.Icon = site.Icon
-		result.Category = site.Category
-		result.Builtin = site.Builtin
-		result.Measuring = m.inflight[key]
-		m.results[i] = result
+		if accepted && m.db != nil {
+			m.dirty = append(m.dirty, runtimedb.LatencySample{URL: result.URL, Exit: result.Exit, HourStart: sample.HourStart, CheckedAt: sample.CheckedAt, Milliseconds: sample.Milliseconds, Error: sample.Error})
+		}
+		sort.Slice(samples, func(a, b int) bool { return samples[a].HourStart.Before(samples[b].HourStart) })
+		samples = retainedLatencySamples(samples, m.clock())
+		if !current.CheckedAt.After(result.CheckedAt) {
+			current.Milliseconds, current.Error, current.CheckedAt = result.Milliseconds, result.Error, result.CheckedAt
+		}
+		current.Samples = samples
+		current.Measuring = m.inflight[key]
+		m.results[i] = current
 	}
+	m.saveHistoryLocked()
 }
 
 func (m *CustomLatencyMonitor) Snapshot() []LatencySite {
 	m.refreshConfig()
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return append([]LatencySite{}, m.results...)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := append([]LatencySite{}, m.results...)
+	for i := range out {
+		m.results[i].Samples = retainedLatencySamples(m.results[i].Samples, m.clock())
+		out[i].Samples = append([]LatencySample{}, m.results[i].Samples...)
+	}
+	return out
 }
 
 func (m *CustomLatencyMonitor) refreshConfig() {
@@ -529,53 +554,74 @@ func (m *CustomLatencyMonitor) Replace(sites []CustomLatencySite) error {
 }
 
 func (m *CustomLatencyMonitor) sample(ctx context.Context) {
+	m.sampleAt(ctx, m.clock(), false)
+}
+
+// missingOnly is startup catch-up: a restored or manually measured hour stays intact.
+func (m *CustomLatencyMonitor) sampleAt(ctx context.Context, started time.Time, missingOnly bool) {
 	m.refreshConfig()
 	m.mu.RLock()
 	sites := m.allSitesLocked()
+	if missingOnly {
+		pending := sites[:0]
+		hour := latencyHour(started.In(time.Local))
+		for i, site := range sites {
+			measured := false
+			if i < len(m.results) {
+				for _, sample := range m.results[i].Samples {
+					if sample.HourStart.Equal(hour) {
+						measured = true
+						break
+					}
+				}
+			}
+			if !measured && !m.inflight[site.URL+"\x00"+site.Exit] {
+				pending = append(pending, site)
+			}
+		}
+		sites = pending
+	}
 	m.mu.RUnlock()
-	results := make([]LatencySite, len(sites))
 	var wg sync.WaitGroup
-	for i, site := range sites {
-		wg.Add(1)
-		go func(i int, site monitorSite) {
-			defer wg.Done()
-			bounded, cancel := context.WithTimeout(ctx, pageProbeTimeout)
-			defer cancel()
-			var value float64
-			var err error
-			if site.Exit == "" {
-				value, err = m.probe(bounded, site.URL)
-			} else {
-				var mark uint32
-				if m.Resolve == nil {
-					err = errors.New("gateway exit unavailable")
-				} else {
-					mark, err = m.Resolve(site.Exit)
-				}
-				if err == nil {
-					value, err = m.probeThrough(bounded, site.URL, mark)
-				}
-			}
-			results[i] = LatencySite{Name: site.Name, URL: site.URL, Exit: site.Exit, Icon: site.Icon, Category: site.Category, Builtin: site.Builtin, CheckedAt: time.Now().UTC()}
-			if site.Exit != "" && err != nil && strings.Contains(err.Error(), "gateway exit") {
-				results[i].Error = "Gateway exit unavailable"
-			}
-			if err == nil {
-				results[i].Milliseconds = &value
-			} else if results[i].Error == "" {
-				results[i].Error = latencyError(err)
-			}
-		}(i, site)
+	for _, site := range sites {
+		wg.Go(func() { m.probeBackground(ctx, site, started) })
 	}
 	wg.Wait()
+}
+
+func (m *CustomLatencyMonitor) probeBackground(ctx context.Context, site monitorSite, started time.Time) {
+	bounded, cancel := context.WithTimeout(ctx, pageProbeTimeout)
+	defer cancel()
+	var value float64
+	var err error
+	if site.Exit == "" {
+		value, err = m.probe(bounded, site.URL)
+	} else {
+		var mark uint32
+		if m.Resolve == nil {
+			err = errors.New("gateway exit unavailable")
+		} else {
+			mark, err = m.Resolve(site.Exit)
+		}
+		if err == nil {
+			value, err = m.probeThrough(bounded, site.URL, mark)
+		}
+	}
 	if ctx.Err() != nil {
 		return
 	}
+	result := LatencySite{URL: site.URL, Exit: site.Exit, CheckedAt: started.UTC()}
+	if err == nil {
+		result.Milliseconds = &value
+	} else if site.Exit != "" && strings.Contains(err.Error(), "gateway exit") {
+		result.Error = "Gateway exit unavailable"
+	} else {
+		result.Error = latencyError(err)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// Reconcile by target rather than index: renames and reorders must not
-	// discard valid samples or attach a result to the wrong site.
-	for _, result := range results {
-		m.storeResult(result)
+	if ctx.Err() != nil {
+		return
 	}
+	m.storeResult(result)
 }
