@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"reflect"
@@ -59,7 +60,10 @@ type CustomLatencyMonitor struct {
 	icons        map[string]latencyIcon
 	probe        func(context.Context, string) (float64, error)
 	probeThrough func(context.Context, string, uint32) (float64, error)
-	iconClient   func(*CustomLatencySite) (*http.Client, error)
+	// probeThroughDNS resolves through the exit's own DNS before marking the
+	// connection, so an exit means its DNS and its gateway, not just the mark.
+	probeThroughDNS func(context.Context, string, uint32, netip.AddrPort) (float64, error)
+	iconClient      func(*CustomLatencySite) (*http.Client, error)
 	// inflight marks on-demand probes, keyed by URL and exit. Background rounds
 	// never enter it, so only a clicked site reports progress.
 	inflight map[string]bool
@@ -69,6 +73,9 @@ type CustomLatencyMonitor struct {
 	// Resolve returns the current exit mark; a missing or disabled exit is an error.
 	Resolve      func(string) (uint32, error)
 	ValidateExit func(string) error
+	// ResolveDNS returns the server this exit's clients resolve through. Zero
+	// means the router resolver (mode olr, or no DNS setting on the exit).
+	ResolveDNS func(string) (netip.AddrPort, error)
 }
 
 // OpenCustomLatencyConfig moves legacy targets into the operator document.
@@ -153,7 +160,7 @@ func OpenCustomLatencyConfig(store *core.Store) (*CustomLatencyMonitor, error) {
 		}
 	}
 	m := &CustomLatencyMonitor{
-		store: store, probe: probePage, probeThrough: probePageMarked,
+		store: store, probe: probePage, probeThrough: probePageMarked, probeThroughDNS: probePageViaDNS,
 		results: []LatencySite{}, inflight: map[string]bool{},
 		common: latencyCatalog(), commonExits: commonExits, pins: cfg.LatencyPins,
 	}
@@ -175,7 +182,7 @@ func sameCommon(a, b []CommonLatency) bool {
 }
 
 func NewCustomLatencyMonitor(path string) (*CustomLatencyMonitor, error) {
-	m := &CustomLatencyMonitor{path: path, probe: probePage, probeThrough: probePageMarked, results: []LatencySite{}, inflight: map[string]bool{}}
+	m := &CustomLatencyMonitor{path: path, probe: probePage, probeThrough: probePageMarked, probeThroughDNS: probePageViaDNS, results: []LatencySite{}, inflight: map[string]bool{}}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return m, nil
@@ -329,25 +336,40 @@ func (m *CustomLatencyMonitor) Measure(name string) error {
 	return nil
 }
 
+// probeSite sends one probe along the site's route. An exit is DNS plus
+// gateway: when it names a resolver, the probe resolves through that server
+// and then marks the connection, exactly as a client of that exit would.
+func (m *CustomLatencyMonitor) probeSite(ctx context.Context, site monitorSite) (float64, error) {
+	if site.Exit == "" {
+		return m.probe(ctx, site.URL)
+	}
+	if m.Resolve == nil {
+		return 0, errors.New("gateway exit unavailable")
+	}
+	mark, err := m.Resolve(site.Exit)
+	if err != nil {
+		return 0, err
+	}
+	if m.ResolveDNS != nil {
+		server, err := m.ResolveDNS(site.Exit)
+		if err != nil {
+			return 0, err
+		}
+		if server.IsValid() {
+			if m.probeThroughDNS == nil {
+				return 0, errors.New("exit DNS probe unavailable")
+			}
+			return m.probeThroughDNS(ctx, site.URL, mark, server)
+		}
+	}
+	return m.probeThrough(ctx, site.URL, mark)
+}
+
 // probeOne runs one on-demand probe and publishes its outcome.
 func (m *CustomLatencyMonitor) probeOne(ctx context.Context, site monitorSite, started time.Time) {
 	bounded, cancel := context.WithTimeout(ctx, pageProbeTimeout)
 	defer cancel()
-	var value float64
-	var err error
-	if site.Exit == "" {
-		value, err = m.probe(bounded, site.URL)
-	} else {
-		var mark uint32
-		if m.Resolve == nil {
-			err = errors.New("gateway exit unavailable")
-		} else {
-			mark, err = m.Resolve(site.Exit)
-		}
-		if err == nil {
-			value, err = m.probeThrough(bounded, site.URL, mark)
-		}
-	}
+	value, err := m.probeSite(bounded, site)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	key := site.URL + "\x00" + site.Exit
@@ -596,21 +618,7 @@ func (m *CustomLatencyMonitor) sampleAt(ctx context.Context, started time.Time, 
 func (m *CustomLatencyMonitor) probeBackground(ctx context.Context, site monitorSite, started time.Time) {
 	bounded, cancel := context.WithTimeout(ctx, pageProbeTimeout)
 	defer cancel()
-	var value float64
-	var err error
-	if site.Exit == "" {
-		value, err = m.probe(bounded, site.URL)
-	} else {
-		var mark uint32
-		if m.Resolve == nil {
-			err = errors.New("gateway exit unavailable")
-		} else {
-			mark, err = m.Resolve(site.Exit)
-		}
-		if err == nil {
-			value, err = m.probeThrough(bounded, site.URL, mark)
-		}
-	}
+	value, err := m.probeSite(bounded, site)
 	if ctx.Err() != nil {
 		return
 	}

@@ -488,6 +488,34 @@ func run(args []string) error {
 		}
 		return 0, fmt.Errorf("gateway exit %q is unavailable", name)
 	}
+	// The other half of an exit: where its clients resolve. Zero means the
+	// router's own resolver, which is also what a site with no exit uses.
+	customLatency.ResolveDNS = func(name string) (netip.AddrPort, error) {
+		cfg, err := (gateway.Applier{Store: store}).Load()
+		if err != nil {
+			return netip.AddrPort{}, err
+		}
+		if cfg.Enabled {
+			for _, exit := range cfg.Exits {
+				if exit.Name != name {
+					continue
+				}
+				if exit.DNS == nil {
+					return netip.AddrPort{}, nil
+				}
+				switch exit.DNS.Mode {
+				case "exit":
+					if exit.Via.NextHop != nil {
+						return netip.AddrPortFrom(*exit.Via.NextHop, 53), nil
+					}
+				case "custom":
+					return exit.DNS.Server, nil
+				}
+				return netip.AddrPort{}, nil
+			}
+		}
+		return netip.AddrPort{}, fmt.Errorf("gateway exit %q is unavailable", name)
+	}
 	prober.Log = logger
 	gatewayApplier := gateway.Applier{
 		Kernel: gateway.NewKernel(),

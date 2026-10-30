@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptrace"
+	"net/netip"
 	"net/url"
 	"sync"
 	"time"
@@ -190,6 +191,46 @@ func probePage(ctx context.Context, target string) (float64, error) {
 }
 func probePageMarked(ctx context.Context, target string, mark uint32) (float64, error) {
 	return probePageWithDial(ctx, target, markedLatencyDial(mark))
+}
+
+// probePageViaDNS resolves the host through the exit's own resolver and then
+// dials the answer with the exit's mark. An exit is DNS plus gateway: a
+// fake-IP resolver returns an address that only the paired gateway can
+// interpret, so using the router's resolver here would test a different path.
+func probePageViaDNS(ctx context.Context, target string, mark uint32, server netip.AddrPort) (float64, error) {
+	dial := func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		resolver := &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+				dialer := net.Dialer{Timeout: 4 * time.Second}
+				return dialer.DialContext(ctx, network, server.String())
+			},
+		}
+		addrs, err := resolver.LookupNetIP(ctx, "ip", host)
+		if err != nil {
+			return nil, err
+		}
+		var chosen netip.Addr
+		for _, addr := range addrs {
+			addr = addr.Unmap()
+			if addr.Is4() {
+				chosen = addr
+				break
+			}
+			if !chosen.IsValid() {
+				chosen = addr
+			}
+		}
+		if !chosen.IsValid() {
+			return nil, fmt.Errorf("no address for %s", host)
+		}
+		return markedLatencyDial(mark)(ctx, network, net.JoinHostPort(chosen.String(), port))
+	}
+	return probePageWithDial(ctx, target, dial)
 }
 func probePageWithDial(ctx context.Context, target string, dial func(context.Context, string, string) (net.Conn, error)) (float64, error) {
 	transport := &http.Transport{DisableKeepAlives: true, TLSHandshakeTimeout: 4 * time.Second, DialContext: dial}

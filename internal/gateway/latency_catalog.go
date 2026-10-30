@@ -24,18 +24,18 @@ type CommonLatency struct {
 func latencyCatalog() []CommonLatencySite {
 	return []CommonLatencySite{
 		{Name: "WeChat", URL: "https://res.wx.qq.com/", Category: "communication", Icon: "thesvg:wechat"},
-		{Name: "QQ", URL: "https://qq.com/", Category: "communication", Icon: "thesvg:qq"},
+		{Name: "QQ", URL: "https://qzonestyle.gtimg.cn/", Category: "communication", Icon: "thesvg:qq"},
 		{Name: "Telegram", URL: "https://t.me/", Category: "communication", Icon: "thesvg:telegram"},
 		{Name: "Feishu", URL: "https://sf3-scmcdn-cn.feishucdn.com/", Category: "communication"},
 
 		{Name: "Weibo", URL: "https://weibo.com/", Category: "social", Icon: "thesvg:sina-weibo"},
 		{Name: "Xiaohongshu", URL: "https://sns-img-qc.xhscdn.com/", Category: "social", Icon: "thesvg:xiaohongshu"},
-		{Name: "X", URL: "https://x.com/", Category: "social", Icon: "thesvg:x"},
+		{Name: "X", URL: "https://abs.twimg.com/favicons/twitter.3.ico", Category: "social", Icon: "thesvg:x"},
 		{Name: "Douban", URL: "https://www.douban.com/", Category: "social", Icon: "thesvg:douban"},
 
 		{Name: "Douyin", URL: "https://p3-pc-sign.douyinpic.com/", Category: "entertainment"},
 		{Name: "Bilibili", URL: "https://i0.hdslb.com/", Category: "entertainment", Icon: "thesvg:bilibili"},
-		{Name: "YouTube", URL: "https://www.youtube.com/", Category: "entertainment", Icon: "thesvg:youtube"},
+		{Name: "YouTube", URL: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg", Category: "entertainment", Icon: "thesvg:youtube"},
 		{Name: "Netflix", URL: "https://assets.nflxext.com/", Category: "entertainment", Icon: "thesvg:netflix"},
 		{Name: "Spotify", URL: "https://i.scdn.co/", Category: "entertainment", Icon: "thesvg:spotify"},
 

@@ -15,11 +15,16 @@ answering ICMP locally cannot complete this authenticated HTTPS exchange on
 behalf of an unreachable destination. Sites that reject HEAD can still return
 a measurable HTTP error response.
 
-Internet candidates use the router's default route. Custom sites can choose a
-gateway exit; TCP sockets are marked with its current routing mark on Linux.
-DNS uses the router's resolver and default route. If a chosen exit is removed,
+Internet candidates use the router's default route. A monitored site can choose
+a gateway exit; the probe then uses both halves of that exit: its DNS setting
+selects where the name is resolved (mode `exit` uses the next hop on port 53,
+`custom` the configured server, `olr` or none the router resolver), and the TCP
+socket carries the exit's current routing mark on Linux. This matches what a
+client of that exit experiences, including a fake-IP resolver whose answers
+only the paired gateway can use. DNS time remains outside the sample; timing
+starts once the connection is established. If a chosen exit is removed,
 disabled or unsupported, no default-route fallback is attempted.
-The DNS row independently times one lookup of `example.com`.
+The DNS row independently times one lookup of `example.com` through the router.
 
 The built-in Internet choices are Google, Baidu, Yandex and Cloudflare. With no
 saved target, one round probes each once and saves the fastest successful

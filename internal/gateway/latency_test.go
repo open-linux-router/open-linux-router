@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"path/filepath"
 	"reflect"
 	"sync"
@@ -476,6 +477,48 @@ func TestCustomLatencyUsesSelectedExit(t *testing.T) {
 	reloaded, err := NewCustomLatencyMonitor(filepath.Join(filepath.Dir(m.path), "sites.json"))
 	if err != nil || !reflect.DeepEqual(reloaded.Config(), sites) {
 		t.Fatalf("stored routes: %v, %v", reloaded.Config(), err)
+	}
+}
+
+func TestLatencyExitUsesItsDNS(t *testing.T) {
+	m, err := NewCustomLatencyMonitor(filepath.Join(t.TempDir(), "sites.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.ValidateExit = func(string) error { return nil }
+	m.Resolve = func(string) (uint32, error) { return 0x30000, nil }
+	server := netip.MustParseAddrPort("172.16.1.137:53")
+	m.ResolveDNS = func(string) (netip.AddrPort, error) { return server, nil }
+	m.probeThroughDNS = func(_ context.Context, url string, mark uint32, dns netip.AddrPort) (float64, error) {
+		if url != "https://proxy.example/" || mark != 0x30000 || dns != server {
+			t.Errorf("wrong route: %s %#x %s", url, mark, dns)
+		}
+		return 21, nil
+	}
+	m.probeThrough = func(context.Context, string, uint32) (float64, error) {
+		t.Error("marked probe skipped the exit DNS")
+		return 0, nil
+	}
+	if err := m.Replace([]CustomLatencySite{{Name: "Proxy site", URL: "https://proxy.example/", Exit: "Proxy"}}); err != nil {
+		t.Fatal(err)
+	}
+	m.sample(context.Background())
+	if got := m.Snapshot()[0]; got.Milliseconds == nil || *got.Milliseconds != 21 {
+		t.Fatalf("exit DNS result: %+v", got)
+	}
+
+	// An exit with no DNS setting falls back to the router resolver, still
+	// through the exit's mark.
+	m.ResolveDNS = func(string) (netip.AddrPort, error) { return netip.AddrPort{}, nil }
+	m.probeThrough = func(_ context.Context, url string, mark uint32) (float64, error) {
+		if url != "https://proxy.example/" || mark != 0x30000 {
+			t.Errorf("wrong fallback route: %s %#x", url, mark)
+		}
+		return 22, nil
+	}
+	m.sample(context.Background())
+	if got := m.Snapshot()[0]; got.Milliseconds == nil || *got.Milliseconds != 22 {
+		t.Fatalf("router DNS fallback: %+v", got)
 	}
 }
 
