@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"syscall"
 )
 
 // killOrphans stops a mitmweb left behind by a hard kill. SIGKILL, a panic or
@@ -17,7 +16,7 @@ import (
 // process and nothing else's.
 func (s *Service) killOrphans() {
 	for _, pid := range orphanPIDs("/proc", s.Dir) {
-		_ = syscall.Kill(pid, syscall.SIGKILL)
+		terminate(pid)
 	}
 }
 

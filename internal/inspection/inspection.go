@@ -427,7 +427,8 @@ func (s *Service) open(mac string, ips []string, ctx context.Context) error {
 		return err
 	}
 	cmd.Stdout = output
-	cmd.Stderr = nil
+	startupLog := &proxyLog{}
+	cmd.Stderr = startupLog
 	for _, address := range []string{"127.0.0.1:" + port, "127.0.0.1:" + webPort} {
 		if conn, dialErr := net.DialTimeout("tcp", address, 100*time.Millisecond); dialErr == nil {
 			conn.Close()
@@ -442,7 +443,7 @@ func (s *Service) open(mac string, ips []string, ctx context.Context) error {
 		return err
 	}
 	_ = output.Close()
-	cancel := func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cancel := func() { terminate(-cmd.Process.Pid) }
 	// The launcher can exit while its listener child still owns stdout.
 	go func() { _ = cmd.Wait() }()
 	ready := false
@@ -471,7 +472,11 @@ func (s *Service) open(mac string, ips []string, ctx context.Context) error {
 	if !ready {
 		cancel()
 		_ = stdout.Close()
-		return unavailable("mitmweb did not become ready; no traffic was redirected")
+		message := "mitmweb did not become ready; no traffic was redirected"
+		if detail := startupLog.message(webToken); detail != "" {
+			message += ": " + detail
+		}
+		return unavailable(message)
 	}
 	// A fresh table is owned wholly by this module. Cleanup of a previous
 	// daemon's table also runs at startup; never modify someone else's table.

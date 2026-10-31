@@ -36,16 +36,21 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
     queryFn: () => api.get<Status>('/api/inspection/status'),
     refetchInterval: 2000,
   })
+  const statusState = JSON.stringify([status.data?.active, status.data?.pending ?? false, status.data?.mac])
+  const [mutationError, setMutationError] = useState<{ message: string; state: string } | null>(null)
   const start = useMutation({
     mutationFn: (addresses?: string[]) => api.post<Status>('/api/inspection/session', { mac, ips: addresses?.length ? addresses : ipv4 }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['inspection'] }),
-    onError: (error) => toast.error(String(error)),
+    onMutate: () => setMutationError(null),
+    onError: (error) => { setMutationError({ message: error.message, state: statusState }); toast.error(String(error)) },
+    onSettled: () => client.invalidateQueries({ queryKey: ['inspection'] }),
   })
   const stop = useMutation({
     mutationFn: () => api.send<Status>('DELETE', '/api/inspection/session'),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['inspection'] }),
-    onError: (error) => toast.error(String(error)),
+    onMutate: () => setMutationError(null),
+    onError: (error) => { setMutationError({ message: error.message, state: statusState }); toast.error(String(error)) },
+    onSettled: () => client.invalidateQueries({ queryKey: ['inspection'] }),
   })
+  const busy = start.isPending || stop.isPending
   const [showSetup, setShowSetup] = useState(false)
   const [viewerReady, setViewerReady] = useState(false)
   const caURL = `${window.location.origin}/inspection-setup.html`
@@ -60,8 +65,9 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
   const on = sameDevice && (active || pending)
   const live = sameDevice && active
   const other = Boolean(status.data?.mac) && !sameDevice && (active || pending)
+  const error = status.data?.error || (mutationError?.state === statusState ? mutationError.message : null)
   // A reason the switch cannot be used, in the space the session would fill.
-  const notice = status.isError || Boolean(status.data?.error) || other || (on && !active) || (!on && !other && (ipv4.length === 0 || ipv4.length > 8))
+  const notice = status.isError || Boolean(error) || other || (on && !active) || (!on && !other && (ipv4.length === 0 || ipv4.length > 8))
 
   useEffect(() => {
     if (!live) return
@@ -89,7 +95,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <div className="flex flex-wrap items-center justify-end gap-3">
           {status.isPending && <span className="text-xs text-muted-foreground">{t('Checking…')}</span>}
           {on && <Button variant="quiet" size="icon" aria-label={t('Inspection setup')} title={t('Inspection setup')} onClick={() => setShowSetup(true)}><Settings className="size-5" /></Button>}
-          <Switch id="device-inspection" aria-labelledby="inspection-title" checked={on} busy={start.isPending || stop.isPending} disabled={status.isPending || status.isError || other || (!on && (ipv4.length === 0 || ipv4.length > 8))} onCheckedChange={(checked) => { if (checked) start.mutate(undefined); else stop.mutate() }} />
+          <Switch id="device-inspection" aria-labelledby="inspection-title" checked={on} busy={busy} disabled={status.isPending || status.isError || other || (!on && (ipv4.length === 0 || ipv4.length > 8))} onCheckedChange={(checked) => { if (busy) return; if (checked) start.mutate(undefined); else stop.mutate() }} />
         </div>
       </div>
     </div>
@@ -112,9 +118,9 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         {status.isError ? <p role="alert" className="text-sm text-destructive">{t('Inspection status is unavailable. Do not assume interception has stopped.')}</p> : null}
         {other ? <p className="text-sm text-muted-foreground">{t('Another device is set for inspection. Turn its switch off before starting this one.')}</p> : null}
         {on && !active ? <div className="flex flex-wrap items-center gap-3">
-          <p role="alert" className="text-sm text-destructive">{status.data?.error || t('The inspection proxy is not running.')}</p>
-          <Button size="sm" variant="secondary" onClick={() => start.mutate(status.data?.ips)}>{t('Retry')}</Button>
-        </div> : live && status.data?.error ? <p role="alert" className="text-sm text-destructive">{status.data.error}</p> : null}
+          <p role="alert" className="min-w-0 text-sm text-destructive [overflow-wrap:anywhere]">{error || t('The inspection proxy is not running.')}</p>
+          <Button size="sm" variant="secondary" disabled={busy} aria-busy={start.isPending || undefined} onClick={() => { if (!busy) start.mutate(status.data?.ips) }}>{start.isPending ? t('Starting…') : t('Retry')}</Button>
+        </div> : error ? <p role="alert" className="min-w-0 text-sm text-destructive [overflow-wrap:anywhere]">{error}</p> : null}
         {!on && !other && ipv4.length === 0 && !active && <p className="text-sm text-muted-foreground">OLR has not observed an IPv4 address for this device yet. Connect it to the network and refresh this page to enable inspection.</p>}
         {!on && !other && ipv4.length > 8 && !active && <p className="text-sm text-muted-foreground">{t('Too many addresses are associated with this device to start inspection safely.')}</p>}
       </div>}
