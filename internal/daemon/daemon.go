@@ -723,17 +723,11 @@ func run(args []string) error {
 		},
 	}.Routes(), socksout.Config{})
 
-	// Remove any inspection rule left by an unclean stop before accepting API
-	// requests. Failing startup is safer than leaving interception unmanaged.
-	if opts.root == "" {
-		if err := inspection.Recover(); err != nil {
-			return fmt.Errorf("recovering inspection: %w", err)
-		}
-	}
-	inspector := &inspection.Service{Enabled: opts.root == "", Dir: filepath.Join(opts.root, "/var/lib/open-linux-router/inspection")}
-	// The chart belongs to the inspection session: the service starts and drops
-	// it with the session, and this sampler reads the table only while one is
-	// open rather than keeping a history of its own.
+	// Inspection owns an independent proxy unit. Reattachment must happen before
+	// stale-rule recovery so redeploy leaves the active data path untouched.
+	inspector := &inspection.Service{Enabled: opts.root == "", Managed: opts.root == "", Dir: filepath.Join(opts.root, "/var/lib/open-linux-router/inspection")}
+	// The recorder samples only while inspection is on and checkpoints retained
+	// per-device activity independently of the live proxy's request archive.
 	//
 	// Two name sources, relay first: it names every client, including the ones
 	// the proxy never sees. The proxy's own observations come second and fill
@@ -743,6 +737,9 @@ func run(args []string) error {
 		inspectionNames(dnsApplier.Observer),
 		func(context.Context) ([]inspection.Name, error) { return inspector.Names(), nil },
 	))
+	if err := inspector.ConfigureActivityStorage(filepath.Join(inspector.Dir, "activity")); err != nil {
+		logger.Warn("inspection activity history is unavailable", "error", err)
+	}
 	inspector.ExitMark = func(mac string) (uint32, error) {
 		cfg, err := gatewayApplier.Load()
 		if err != nil {
@@ -1136,11 +1133,22 @@ func run(args []string) error {
 	}()
 	go world.Run(ctx)
 	go inspector.Activity.Run(ctx)
-	// The switch outlives the daemon: resume the device it names. A failure is
-	// reported on the device page rather than refusing to start the router.
+	// Reattach without restarting the proxy before serving the device controls.
+	if err := inspector.Resume(ctx); err != nil {
+		logger.Error("could not resume inspection", "error", err)
+	}
 	go func() {
-		if err := inspector.Resume(ctx); err != nil {
-			logger.Error("could not resume inspection", "error", err)
+		tick := time.NewTicker(time.Minute)
+		defer tick.Stop()
+		for {
+			if err := inspector.SweepHistory(ctx); err != nil {
+				logger.Warn("could not prune inspection history", "error", err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+			}
 		}
 	}()
 	activityDone := make(chan struct{})

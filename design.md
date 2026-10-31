@@ -1395,7 +1395,9 @@ belongs to the network, a second and deliberate act.
    and the DNS relay's current query ring remains in memory. SQLite stores
    retained samples and OLR's own recovery/session records. Flash wear and
    privacy still require bounded retention and batched writes; selecting a
-   database does not justify writing every DNS query or flow to disk.
+   database does not itself justify writing every DNS query or flow to disk.
+   Explicitly enabled device inspection is a separate, bounded archive described
+   below; ordinary traffic is not archived by enabling SQLite.
 
    **Device activity exception:** a bounded sampler now retains up
    to 90 days of half-hour counter differences for the device-card dot matrix
@@ -1414,12 +1416,32 @@ belongs to the network, a second and deliberate act.
    volumes, not exact accounting totals. Restart restores retained buckets but
    starts new counter baselines; abrupt termination may lose the latest minute.
 
-   **Outside the bounded activity history, there are no persistent historical graphs.** "Traffic today"
-   is answerable and "traffic last month" is not. Kernel counters survive an
-   `olrd` restart and not a reboot, so the window is really "since the box came
-   up", bounded above by `statTimeout`. A router UI that shows a month of
-   throughput is a thing we are choosing not to have, and if that choice is
-   wrong this is the entry to reopen.
+   **Continuous device inspection is an explicit retention exception.** Its
+   per-device switch survives stop/start of the control daemon, deployments and
+   reboots. On packaged Linux systems the proxy is a separate systemd service,
+   so an OLR daemon restart can reattach to it without interrupting capture.
+   The live mitmweb viewer keeps only its latest 1000 flows in memory, while a
+   separate archive writes full native `.mitm` files after each captured HTTP
+   request completes or fails. Saved content survives turning inspection off
+   and proxy/control-daemon restarts. A still-running request is not yet a
+   completed archive and may be lost if the proxy terminates; archive errors
+   are reported separately from live interception state.
+
+   Inspection defaults to 30 days and a **5 GiB total router-wide archive cap
+   shared across all devices**, with oldest-first removal. Operators can set
+   1–365 days and 1 MiB–1 TiB. The UI always exposes retained per-device history,
+   including when another device is active, with search, cursor pagination,
+   inline headers/body previews and full native-flow downloads. Clearing a
+   device's saved requests requires confirmation and leaves site activity and
+   other devices' archives intact. Storage-limit controls explicitly name their
+   global scope. Inspection site activity retains per-device samples with
+   4-hour, 24-hour, 7-day and 30-day views after interception stops or restarts;
+   control-daemon downtime remains an unsampled gap. Site activity has its own
+   30-day/64-MiB bound across devices, separate from request archive limits.
+   Filesystem overhead and transient files can need additional disk space.
+   This does not create a complete browsing history or change the DNS relay's
+   recent-memory log.
+   See `docs/device-inspection.md` for setup, API and capture boundaries.
 
    Configuration revision history and rollback remain separate, unimplemented
    features. **Intent stays a JSON file** (§3.2 rule 1): "SSH in and read the

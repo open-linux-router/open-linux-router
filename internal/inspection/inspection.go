@@ -1,8 +1,6 @@
 // Package inspection owns one per-device transparent proxy, switched on and
-// off from the device page. The switch is a setting, not a session: it
-// survives restarts and upgrades and stays where the operator left it. What
-// the proxy sees is not persisted; the durable facts are mitmproxy's CA and
-// the switch in confdir.
+// off from the device page. The setting, CA and bounded request archive survive
+// restarts. A systemd-owned proxy keeps capturing across control-plane redeploys.
 package inspection
 
 import (
@@ -67,7 +65,8 @@ type Event struct {
 }
 
 type Status struct {
-	Active bool `json:"active"`
+	Active       bool   `json:"active"`
+	HistoryError string `json:"history_error,omitempty"`
 	// Pending is the switch turned on with no proxy behind it: the setting was
 	// restored but mitmweb could not start, or the proxy exited. Error says
 	// why, so the page can offer a retry instead of showing "off".
@@ -91,6 +90,10 @@ func Flows(ctx context.Context) ([]Flow, error) { return readFlows(ctx) }
 type Service struct {
 	Enabled bool
 	Dir     string
+	// Managed leaves the proxy under systemd across control-plane restarts.
+	Managed   bool
+	ProxyUnit core.Unit
+	UnitPath  string
 	// ExitMark resolves an explicit per-device exit at session start.
 	ExitMark func(string) (uint32, error)
 	mu       sync.Mutex
@@ -101,11 +104,10 @@ type Service struct {
 	armed *setting
 	// problem is why an armed switch has no session, as the device page reads
 	// it. Empty while the proxy is running.
-	problem string
-	// Activity is the per-site series the device page draws while the switch
-	// is on. It begins with the session and is dropped when the session ends,
-	// so turning inspection off clears what it saw. Nil means this build cannot
-	// observe, and the endpoint says so.
+	problem        string
+	historyProblem string
+	// Activity samples while inspection is on and retains per-device history.
+	// A nil recorder means this build cannot observe the device's traffic.
 	Activity *Activity
 
 	// names is the host each intercepted connection was for, in the shape the
@@ -148,14 +150,22 @@ type session struct {
 	mark     uint32
 	webToken string
 	retrying bool
+	managed  bool
+	detach   chan struct{}
 }
 
 func (s *Service) Routes() []core.Route {
 	return []core.Route{
-		{Method: "GET", Path: "/activity", Tool: "show activity", Summary: "Show per-site traffic for one device since inspection started.", Handler: s.activity},
+		{Method: "GET", Path: "/activity", Tool: "show activity", Query: []core.QueryParam{{Name: "mac", Type: "string", Summary: "Device MAC whose retained samples to read."}, {Name: "range", Type: "string", Summary: "Selected range: 4h, 24h, 7d or 30d."}, {Name: "address", Type: "string", Summary: "Legacy IP address query when mac is omitted."}}, Summary: "Show retained per-site traffic for one device.", Handler: s.activity},
 		{Method: "GET", Path: "/status", Tool: "status", Summary: "Show the device request inspection switch and whether its proxy is running.", Handler: s.status},
 		{Method: "POST", Path: "/session", Summary: "Turn inspection on for observed device IPv4 addresses; it stays on until turned off.", Mutating: true, Handler: s.start},
-		{Method: "DELETE", Path: "/session", Summary: "Stop inspection, remove interception and clear captured requests.", Mutating: true, Handler: s.stop},
+		{Method: "DELETE", Path: "/session", Summary: "Stop inspection and remove interception; keep captured history.", Mutating: true, Handler: s.stop},
+		{Method: "GET", Path: "/history", Tool: "show history", Query: []core.QueryParam{{Name: "mac", Type: "string", Summary: "Device MAC whose saved requests to read."}, {Name: "before", Type: "string", Summary: "Cursor returned by the preceding page."}, {Name: "limit", Type: "integer", Summary: "Maximum entries, 1 to 200."}, {Name: "search", Type: "string", Summary: "Match method, URL or HTTP status."}}, Summary: "List saved requests for a device.", Handler: s.history},
+		{Method: "GET", Path: "/history/detail", Tool: "show request", Query: []core.QueryParam{{Name: "mac", Type: "string", Summary: "Device MAC that owns the archive."}, {Name: "id", Type: "string", Summary: "Saved flow ID from inspection history."}}, Summary: "Read a saved request and response preview.", Handler: s.historyDetail},
+		{Method: "GET", Path: "/history/flow", Summary: "Download a complete saved mitmproxy flow.", Handler: s.historyFlow},
+		{Method: "DELETE", Path: "/history", Summary: "Delete a device's saved requests and responses.", Mutating: true, Handler: s.history},
+		{Method: "GET", Path: "/retention", Tool: "show retention", Summary: "Show inspection archive retention limits.", Handler: s.retention},
+		{Method: "PUT", Path: "/retention", Summary: "Set the archive retention period and total disk limit.", Mutating: true, Handler: s.retention},
 		{Method: "GET", Path: "/ca", Tool: "show ca", Summary: "Download the public debugging CA certificate, never its private key.", Handler: s.ca},
 		{Method: "POST", Path: "/viewer-access", Summary: "Authorize this browser to view the active inspection session.", Mutating: true, Handler: s.viewerAccess},
 	}
@@ -164,7 +174,28 @@ func (s *Service) Routes() []core.Route {
 func (s *Service) snapshot() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := Status{Events: []Event{}}
+	out := Status{Events: []Event{}, HistoryError: s.historyProblem}
+	if data, err := os.ReadFile(filepath.Join(s.Dir, "archive-status.json")); err == nil {
+		var capture struct {
+			Error        string `json:"error"`
+			LastFailure  string `json:"last_failure"`
+			FailureCount int    `json:"failure_count"`
+		}
+		if json.Unmarshal(data, &capture) == nil {
+			message := capture.Error
+			if message == "" && capture.FailureCount > 0 {
+				message = "some requests were not saved: " + capture.LastFailure
+			}
+			out.HistoryError = strings.TrimSpace(out.HistoryError + " " + message)
+		} else {
+			out.HistoryError = strings.TrimSpace(out.HistoryError + " capture status is unreadable; saved requests may be incomplete")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		out.HistoryError = strings.TrimSpace(out.HistoryError + " capture status is unavailable; saved requests may be incomplete")
+	}
+	if s.Activity != nil && s.Activity.Problem() != "" {
+		out.HistoryError = strings.TrimSpace(out.HistoryError + " " + s.Activity.Problem())
+	}
 	if q := s.session; q != nil {
 		out.Active, out.MAC, out.IPs = true, q.mac, append([]string(nil), q.ips...)
 		out.Events = append(out.Events, q.events...)
@@ -378,7 +409,6 @@ func (s *Service) startLocked(mac string, ips []string, ctx context.Context) (St
 // session. It records nothing: start decides what the switch says afterwards,
 // and Resume keeps the setting it restored.
 func (s *Service) open(mac string, ips []string, ctx context.Context) error {
-	s.killOrphans()
 	var (
 		mark uint32
 		err  error
@@ -386,12 +416,27 @@ func (s *Service) open(mac string, ips []string, ctx context.Context) error {
 	if s.ExitMark != nil {
 		mark, err = s.ExitMark(mac)
 		if err != nil {
-			return unavailable("cannot resolve inspection exit: " + err.Error())
+			return s.rejectManaged(unavailable("cannot resolve inspection exit: " + err.Error()))
 		}
 	}
 	if mark&0xff00ffff != 0 || mark == 0x00ff0000 {
-		return unavailable("inspection exit has no usable routing mark")
+		return s.rejectManaged(unavailable("inspection exit has no usable routing mark"))
 	}
+	if s.Managed {
+		attached, attachErr := s.attachManaged(ctx, mac, ips, mark)
+		if attached {
+			if err := s.beginActivity(ctx, mac, ips); err != nil {
+				s.problem = "could not restore activity history: " + err.Error()
+			}
+			return nil
+		}
+		// A mismatched or unauthenticated proxy must not retain a redirect.
+		if err := errors.Join(cleanup(), s.stopManaged()); err != nil {
+			return fmt.Errorf("cannot recover stale inspection proxy: %w", err)
+		}
+		_ = attachErr // A fresh start below reports the actionable startup error.
+	}
+	s.killOrphans()
 	if _, err = exec.LookPath("mitmweb"); err != nil {
 		return unavailable("install mitmproxy (mitmweb) on the router first")
 	}
@@ -414,9 +459,14 @@ func (s *Service) open(mac string, ips []string, ctx context.Context) error {
 	if err = os.WriteFile(script, source, 0o600); err != nil {
 		return err
 	}
-	cmd := exec.Command("mitmweb", "--mode", "transparent", "--listen-host", "0.0.0.0", "--listen-port", port,
+	args := []string{"--mode", "transparent", "--listen-host", "0.0.0.0", "--listen-port", port,
 		"--web-host", "127.0.0.1", "--web-port", webPort, "--no-web-open-browser",
-		"--set", "confdir="+s.Dir, "--set", "termlog_verbosity=error", "--set", "web_password="+webToken, "-s", script)
+		"--set", "confdir=" + s.Dir, "--set", "termlog_verbosity=error", "--set", "web_password=" + webToken,
+		"--set", "olr_device=" + mac, "-s", script}
+	if s.Managed {
+		return s.openManaged(ctx, mac, ips, mark, webToken, args)
+	}
+	cmd := exec.Command("mitmweb", args...)
 	// mitmdump may fork; its launcher is not the lifetime of the listener.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if mark != 0 {
@@ -497,7 +547,9 @@ func (s *Service) open(mac string, ips []string, ctx context.Context) error {
 	}
 	q := &session{mac: mac, ips: ips, mark: mark, webToken: webToken, cancel: cancel, done: make(chan struct{})}
 	s.session = q
-	s.Activity.Begin(ctx, ips)
+	if err := s.beginActivity(ctx, mac, ips); err != nil {
+		s.problem = "could not restore activity history: " + err.Error()
+	}
 	go s.consume(q, stdout)
 	go s.watch(q)
 	return nil
@@ -519,6 +571,11 @@ func (s *Service) Resume(ctx context.Context) error {
 	// running cannot be resurrected by this read.
 	st, err := s.readSetting()
 	if err != nil || st == nil {
+		if s.Managed {
+			if recoverErr := errors.Join(Recover(), s.stopManaged()); recoverErr != nil {
+				return errors.Join(err, recoverErr)
+			}
+		}
 		return err
 	}
 	s.armed = st
@@ -533,7 +590,7 @@ func (s *Service) Resume(ctx context.Context) error {
 func (s *Service) snapshotLocked() Status {
 	q := s.session
 	if q == nil {
-		out := Status{Events: []Event{}}
+		out := Status{Events: []Event{}, HistoryError: s.historyProblem}
 		if a := s.armed; a != nil {
 			out.Pending = true
 			out.MAC = a.MAC
@@ -542,7 +599,7 @@ func (s *Service) snapshotLocked() Status {
 		}
 		return out
 	}
-	return Status{Active: true, MAC: q.mac, IPs: append([]string(nil), q.ips...), Events: []Event{}, CAPresent: true, ExitRouted: q.mark != 0, Error: s.problem}
+	return Status{Active: true, MAC: q.mac, IPs: append([]string(nil), q.ips...), Events: []Event{}, CAPresent: true, ExitRouted: q.mark != 0, Error: s.problem, HistoryError: s.historyProblem}
 }
 
 // Names returns the hosts this session's proxy saw, in the shape the activity
@@ -716,10 +773,23 @@ func (s *Service) end(q *session) {
 		}
 		return
 	}
-	q.cancel()
+	if q.managed {
+		if err := s.stopManaged(); err != nil {
+			s.problem = "inspection stopped redirecting but its proxy could not stop: " + err.Error()
+			if !q.retrying {
+				q.retrying = true
+				go s.retryCleanup(q)
+			}
+			return
+		}
+	} else {
+		q.cancel()
+	}
 	s.session = nil
-	// The chart belongs to the session; once interception stopped there is no
-	// reason to keep what it saw.
+	if q.managed {
+		close(q.detach)
+	}
+	// Stop sampling while keeping the completed series on disk.
 	s.Activity.End()
 	// The names were derived from the same session, so they go with it: a later
 	// session must not be attributed by what an earlier one happened to see.
@@ -769,21 +839,29 @@ func (s *Service) stop(w http.ResponseWriter, r *http.Request) {
 	core.WriteJSON(w, http.StatusOK, s.snapshot())
 }
 
-// Close is called on daemon shutdown; the next startup removes any table left
-// by an unclean shutdown and resumes the switch before accepting requests.
+// Close detaches from a systemd-owned proxy during redeploy. Only the operator's
+// switch stops interception. Direct fallback processes retain their old cleanup.
 func (s *Service) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	checkpointErr := s.Activity.Checkpoint()
 	if s.session == nil {
-		return nil
+		return checkpointErr
+	}
+	if s.session.managed {
+		q := s.session
+		s.session = nil
+		close(q.detach)
+		s.Activity.End()
+		return checkpointErr
 	}
 	if err := cleanup(); err != nil {
-		return err
+		return errors.Join(checkpointErr, err)
 	}
 	s.session.cancel()
 	s.session = nil
 	s.Activity.End()
-	return nil
+	return checkpointErr
 }
 
 // unavailable marks a start failure the operator can fix on the router: a

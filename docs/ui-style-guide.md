@@ -440,17 +440,25 @@ the existing network-change confirmation flow. Separate the
 desktop identity/settings and traffic halves with a 64px gutter; stack them with
 32px spacing below desktop.
 Never style a pending or failed read as a disabled service.
-Active device inspection expands one panel below a 72px title bar whose height
-stays fixed. The panel has three sections — Activity, then DNS queries, then
-Requests (the embedded mitmproxy viewer) — under one full-width divider below the
-title bar. The sections are told apart by their headings and spacing, not by a
-rule each: one line per section turned the panel into ruled paper. The DNS list
-draws no rules between rows either. Nothing repeats the divider outside it, so a
-device has one Inspection switch and one card. The title names the switch, so no
-"Inspection" label repeats beside it; keep the setup gear icon to the left of the
-switch, and the QR code and setup guide link belong in the setup dialog, not in
-the title bar. Disable scroll anchoring on the panel and reserve the document
+Device inspection uses one panel below a fixed 72px title bar, separated by one
+full-width divider. Keep Activity and saved Requests visible with inspection off,
+including when another device is active. Current DNS queries appear while active.
+Use headings and spacing between sections, without a rule per section or DNS row.
+The title names the only Inspection switch; keep the setup gear at its left in
+every state. QR code, certificate guide and global retention settings live in the
+setup dialog. Disable scroll anchoring on the panel and reserve the document
 scrollbar gutter to prevent horizontal movement.
+Activity's range controls wrap on phones and identify the selected range with a
+shared secondary button and `aria-pressed`. Requests uses the same controls for
+Saved and Live while active. Saved history is the default, with a wrapping search
+and clear action above plain rows; long URLs wrap and each row has a separate
+44px download target. A saved row opens the shared dialog for request/response
+headers and bounded, scrollable body previews. Show binary/truncated content as
+text status with full native download access. Clear opens a separate confirmation
+dialog. Live retains the embedded mitmproxy viewer at its existing height.
+Keep device request storage, router-wide request storage and age retention in
+one auxiliary line;
+retention fields explicitly name the router total and preserve units on phones.
 DNS uses the shared table without a visible header, with Time, Record, Type and
 right-aligned Answer columns, and without a switch of its own: the panel's
 switch already opened it. Its search icon reveals a compact filter in the

@@ -27,6 +27,13 @@ if [ "$1" = purge ]; then
 	rm -rf /etc/unbound/open-linux-router /var/lib/unbound/open-linux-router
 fi
 
+# The inspection unit is generated on demand outside packaged unit files. It
+# has already been stopped by prerm; keep it across upgrades, remove it only on
+# uninstall. Saved inspection data and the CA remain the operator's files.
+case "$1" in
+remove | purge | 0) rm -f /etc/systemd/system/olr-inspection.service ;;
+esac
+
 [ -d /run/systemd/system ] || exit 0
 
 systemctl daemon-reload >/dev/null 2>&1 || true

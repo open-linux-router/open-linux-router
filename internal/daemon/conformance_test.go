@@ -149,6 +149,9 @@ func TestEveryReadRouteIsPublishedAsATool(t *testing.T) {
 		"ingress GET /services/{name}/icon": true,
 		// Binary image bytes are for the UI; the latency JSON already names sites and outcomes.
 		"gateway GET /latency/sites/{name}/icon": true,
+		// Full native mitmproxy flows are binary downloads. The structured
+		// history list and request/response previews are published as tools.
+		"inspection GET /history/flow": true,
 		// Not a read: it starts one site's probe rather than answering from
 		// stored state. The card's measure-now control is a UI action, and the
 		// latency GET remains the tool that reads the outcomes.

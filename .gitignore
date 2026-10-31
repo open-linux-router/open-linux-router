@@ -16,6 +16,9 @@
 
 /web/node_modules/
 
+# Inspection addon tests import the embedded Python source.
+/internal/inspection/__pycache__/
+
 # Working directory for launch content: strategy, copy, screenshots, renders.
 # Deliberately ignored — it is thinking-in-progress, not something the Go build
 # or the release should depend on.

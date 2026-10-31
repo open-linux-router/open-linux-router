@@ -331,17 +331,32 @@ reloads, daemon restarts and upgrades, so no copy may promise a countdown or a
 temporary window. When the proxy cannot start, the card keeps the switch on, says
 why beside it and offers Retry instead of showing the switch off.
 Device Inspection is one card, and its title names the switch in the title bar:
-no second "Inspection" label sits beside it, and a setup gear icon joins from the
-left while active; keep the QR code and guide link inside the setup dialog. That
-one switch opens one panel with three sections — Activity, DNS queries and
-Requests (the live session) — so inspecting a device is one card and one answer,
-never a second switch for part of it. Show the mitmproxy viewer directly, without
-duplicate request lists, diagnostics or a disclosure. Certificate installation,
-trust and cleanup belong in the public five-step setup guide, with the
-certificate download at step two.
-Activity covers the time the switch has been on, not a retained history: its
-total reads "in this inspection", and the footer says the series is recorded
-while inspection is on and cleared when it is turned off. Sites are named by
+no second "Inspection" label sits beside it. The setup gear remains available
+whether the switch is on or off; QR code, guide link and global retention controls
+belong in that dialog. The panel remains visible with Inspection off or another
+device active: Activity shows retained samples and Requests shows saved history.
+Current DNS queries appear while this device is active. Requests defaults to
+Saved; its Live choice opens the embedded mitmproxy viewer while active, without
+adding another card or duplicating its request list. Certificate installation,
+trust and cleanup belong in the public five-step guide, with the certificate
+at step two.
+Saved requests include complete native flows after a captured request completes
+or fails. Keep the unfinished-request boundary visible: in-flight content may be
+lost if the proxy stops. Expose `history_error` as an archiving failure, rather
+than implying a live response proves it was saved. Saved rows open request and
+response headers/body previews; identify binary content and truncated previews,
+and offer the full `.mitm` download. Search and pagination work independently of
+current inspection state. Clear saved requests requires an explicit confirmation
+that names this device and explains that activity and other devices are kept.
+Activity offers 4-hour, 24-hour, 7-day and 30-day ranges; the total reads "in
+selected range". Retained samples survive stopping inspection and control-daemon
+restarts. Sampling occurs while inspection is on; downtime is not reconstructed.
+Saved-request retention defaults to 30 days and 5 GiB total across all devices
+on the router; sampled site activity has its own 30-day/64-MiB bound.
+Always make the shared router scope explicit beside the storage limit and usage;
+never imply a per-device allowance. Global settings accept 1–365 days and
+1 MiB–1 TiB. Lowering limits can remove older saved requests immediately.
+Sites are named by
 registrable domain under the public suffix list, so a multi-label suffix such as
 `com.cn` is never shown as a site.
 The DNS section lists Time, Record, Type and right-aligned Answer values without
@@ -349,7 +364,7 @@ a visible header row and without a switch of its own: the panel's switch already
 opened it. An accessible search icon in the section heading reveals a compact
 filter that opens to the left of itself; closing clears the filter. The panel
 keeps its title bar fixed and expands content downward under one divider below
-that bar; its three sections are separated by headings and spacing rather than by
+that bar; its sections are separated by headings and spacing rather than by
 a rule each, and the DNS rows carry no rules. The switch keeps its place at the
 trailing edge as content changes.
 WireGuard devices keep DNS as its own card with its own Inspection switch,

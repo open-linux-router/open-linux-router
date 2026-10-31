@@ -44,6 +44,9 @@ jobs:
       - name: Vet and test
         run: make check
 
+      - name: Test inspection addon
+        run: python3 -B -m unittest discover -s internal/inspection -p '*_test.py'
+
       # Both shipping architectures compile. Cross-compiling is pure Go here
       # (CGO_ENABLED=0), so this needs no toolchain beyond the one above.
       - name: Cross-compile

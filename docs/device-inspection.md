@@ -1,21 +1,173 @@
 # Device request inspection
 
-The device detail page shows DNS queries separately from HTTP(S) requests. A DNS lookup is not proof of a visit. The DNS list is a recent network-wide sample matched to the device's current IPs; the relay's query log must be enabled.
+Inspection is a device setting that stays on until you turn it off. Page reloads,
+OLR daemon restarts, package upgrades and router reboots preserve that choice.
+Completed and failed captured HTTP(S) requests are saved with their full native
+mitmproxy content, so stopping inspection does not erase what was already saved.
+Only one device can be inspected at a time; saved history for every device remains
+available while its switch is off or another device is being inspected.
 
-Request inspection is a per-device switch. Turn it on and it stays on — across page reloads, daemon restarts, package upgrades and reboots — until you turn it off. Install `mitmproxy` (`mitmweb`) on the Linux router before starting. On Debian, use `sudo apt install mitmproxy`. It is not a package dependency because it is only needed for debugging. OLR starts its own transparent mitmweb instance and creates a debugging CA in `/var/lib/open-linux-router/inspection` (directory mode 0700); the switch is one small file beside the CA. Back up or remove this directory only with the implications for devices that trust its CA in mind. The API exposes only the public PEM, never the private key. A daemon restart or reboot resumes the switch; if the proxy cannot start (mitmproxy removed, a taken port, a stale process), the device page keeps the switch on, says why, and offers Retry rather than silently showing it off.
+## Setup
 
-1. Open a device's detail page, confirm or edit the source IPv4 address, and turn Inspection on. The first start generates the CA.
-2. Download the public CA from the page, or show its QR code and scan the public-certificate link from a phone on a network that can reach the router. The link needs no admin token and serves only the public certificate. Install it **on that device** as a trusted root certificate for HTTPS. On iPhone, after installing the profile, enable full trust in Settings > General > About > Certificate Trust Settings. Compare the certificate's SHA-256 fingerprint to the value on this page; if they differ, remove the old profile and install the current public CA. Never bypass the Safari warning for an unverified CA. There is no proxy address to configure.
-3. Browse from that device. HTTP requests need no CA; HTTPS requests appear only if the app accepts the user CA. Stop and clear when finished, and remove the CA from the device's trust store. Stopping interception does **not** revoke trust on the device.
+Install `mitmproxy` (`mitmweb`) on the Linux router before starting. On Debian,
+use `sudo apt install mitmproxy`. It is optional rather than a package dependency.
 
-Only one switch and one explicitly chosen source IPv4 address are on at a time; turning a second device on is refused until the first is turned off. The device list suggests an address, but OLR does not verify its MAC ownership or track address changes. If the address is wrong or reassigned during a session, traffic from another device may be intercepted. Confirm the address before starting and stop when finished. IPv6 traffic is not intercepted. OLR redirects only TCP 80/443 to public destinations; UDP/443 (QUIC), local/LAN destinations, IPv6, other ports and non-HTTP protocols are not inspected. OLR does not block UDP/443 to force fallback. When the selected device has an explicit gateway exit, OLR marks only mitmweb's locally generated upstream packets to follow that exit (for example, Clash) so fake-IP DNS answers remain usable and inspectable. This process-group-scoped rule is installed and removed with the session. With no explicit exit, fake-IP destinations (`198.18.0.0/15`) still bypass interception rather than leak toward the router's default uplink. Do not change the device's exit during an active inspection session; stop and restart inspection to pick up the new exit. Certificate pinning and apps with separate trust stores may fail to connect or remain uninspected. The page does not claim a complete connections list.
+1. Open the device page, check its IPv4 addresses, and turn Inspection on. OLR
+   creates its CA on the first start. The switch starts interception directly.
+2. Open the gear beside the switch. Scan the QR code on the device or follow
+   **Open setup guide** to the public five-step guide at `/inspection-setup.html`.
+   The certificate download is at step two. The guide and public certificate need
+   no administrator token; they never expose the private key.
+3. Install and trust the CA on the device for HTTPS. On iPhone, enable full trust
+   in Settings > General > About > Certificate Trust Settings after installing
+   the profile. Compare its SHA-256 fingerprint with the guide's current CA.
+4. Browse from that device and open saved requests or the Live request viewer.
+   HTTP needs no CA. HTTPS content is available only when the app accepts the CA.
+5. Turn Inspection off when you want interception to stop. Saved requests and
+   activity remain available. Remove the CA from the device when it is no longer
+   needed; stopping inspection does not revoke the device's trust.
 
-While the switch is on, the page shows redirect-rule packet and proxy-accepted connection totals. They are diagnostics, not a complete connections list: the redirect counter counts packets matching the IPv4 TCP rule, while the proxy counter counts accepted sockets. A zero redirect count after an IPv4 HTTP test means the rule did not match; a growing redirect count with zero proxy accepts points to delivery between netfilter and mitmdump. Neither count proves that an HTTP response completed.
+OLR keeps the CA, device switch and inspection data beneath
+`/var/lib/open-linux-router/inspection` with restricted permissions. Removing or
+backing up that directory also affects the CA trusted by devices. The API serves
+only the public PEM, never its private key. If the configured proxy cannot start,
+the device page keeps the switch on, shows the reason and offers **Retry**.
 
-The listener input guard accepts only the selected IPv4 source when conntrack records an original TCP destination port of 80/443; direct connections to the proxy port from the LAN are dropped. A redirect is not reliably identified by `ct status dnat`, so do not use that bit for this guard.
+## Saved requests and the Live viewer
 
-The proxy must be ready before nftables interception is installed. OLR removes its own nftables table at stop/proxy exit and before startup, and restores normal forwarding on failure. OLR's compact list holds at most 200 request/failure events, including headers, the device and destination addresses, but not bodies. The same session runs mitmweb for full request and response inspection without OLR-imposed size or content-type limits. Mitmweb listens only on router loopback (`127.0.0.1:18082`). OLR embeds it under `/inspection-web/` on the device page automatically during an active session. The browser obtains a short-lived, HttpOnly viewer cookie through OLR's API; OLR supplies the per-session mitmweb bearer token server-side on HTTP and WebSocket requests. No second login or token display is needed; turning the switch off revokes access. The embedded surface supports mitmweb's WebSocket and full response viewer without a separate LAN listener. The only persisted state is the switch: `session.json` beside the CA, naming the device and the addresses its rule matched, never flows. Turning it off kills mitmweb and clears its in-memory flows. The viewer keeps its most recent 1000 flows; older ones age out so an inspection left on for days cannot grow the router's memory without bound. The Activity chart above the viewer is sampled only while the switch is on and is cleared when it is turned off, so it covers this inspection rather than a retained history; it also restarts with the proxy, so a daemon restart clears the series even though the switch stays on. The chart names a flow by asking the DNS relay what that address was called, and falls back to what the proxy itself saw on the same (device, destination) pair: a connection dialled by address, resolved somewhere other than the relay, or opened before the switch was on is still named rather than counted as 未命名. That fallback only covers connections interception actually handled — a flow that predates the redirect, QUIC, IPv6 and ports other than 80/443 remain unnamed. Treat all flow contents as sensitive. CA trust and the CA key remain after inspection is turned off; a future rotation workflow should coordinate removing trust from devices.
+The Inspection card shows **Activity**, current **DNS queries** while active, and
+**Requests**. Requests opens saved history by default. During active inspection,
+**Saved** and **Live** select between that history and the embedded mitmweb viewer.
+Saved history is independent of the live viewer's rolling memory list.
 
-Startup failures include the latest 4 KiB of mitmweb's stderr, with OLR's viewer token redacted. Retry shows Starting… until the attempt and status refresh finish, and keeps a failed attempt's reason visible inline. Normal stop, daemon shutdown and orphan recovery send SIGTERM first, allowing a standalone PyInstaller launcher to remove its temporary `_MEI*` extraction directory; a process that has not exited within three seconds is killed. Earlier releases killed the launcher immediately, so repeated restarts could fill `/tmp` with roughly 100 MiB per attempt. If upgrading a router already affected, remove only verified unused mitmweb extraction directories before retrying; OLR does not sweep unrelated temporary files.
+Search saved requests and use **Load older requests** to page through them. Each
+row shows the timestamp, method, URL, HTTP status (or failure) and archived size.
+Select a row to read request/response headers and text bodies inline. Each body
+preview is limited to 64 KiB and labels truncation; binary bodies are identified
+instead of rendered as text. Failed requests can have no response. **Download
+.mitm** downloads the full native flow, including content beyond the preview.
+Open it in mitmproxy or mitmweb, for example `mitmweb -r inspection-ID.mitm`.
+Downloads use the administrator bearer credential in an HTTP header, never a URL.
 
-Validation on a real Linux router is required before relying on this in production: test HTTP and trusted HTTPS, an untrusted/pinned app, IPv4 address changes, QUIC, proxy crash, daemon restart and nft cleanup failure. macOS Go/UI tests cannot exercise the netfilter path.
+The archive saves a flow after the captured HTTP request completes or fails. A
+request still in progress is not yet a durable archive: stopping or crashing the
+proxy can lose that unfinished content. A router reboot also ends those requests.
+An OLR daemon restart does not stop an already running inspection proxy on the
+packaged Linux service; its completed flows continue to be archived while the
+control daemon is restarting. Archiving failures appear explicitly in the card.
+A live response alone is not proof that its archive was successfully written.
+
+**Clear saved requests** opens a confirmation dialog and deletes only the current
+device's saved request/response archive. It leaves other devices' archives and
+site activity intact, and an enabled inspection continues capturing new requests.
+Turning Inspection off leaves all saved history intact.
+
+The gear dialog contains global retention settings. Defaults are **30 days** and
+**5 GiB of saved request storage total across all devices on this router**. The
+request list shows device usage and router-wide usage against that shared cap.
+The oldest saved requests are removed when the age or storage limit is reached.
+Retention is adjustable from 1 to 365 days and from 1 MiB to 1 TiB. Reducing a
+limit can remove older saved requests immediately. This is bounded local history;
+export flows you need to keep beyond those limits. Filesystem metadata and
+transient files can require additional disk space beyond saved archive usage.
+
+The live viewer keeps the latest 1000 flows in memory so leaving inspection on
+cannot grow its working set without bound. This limit does not limit the archive
+to 1000 flows. Mitmweb binds only to router loopback (`127.0.0.1:18082`); OLR
+embeds it at `/inspection-web/` for the active device. The browser obtains a
+short-lived HttpOnly viewer cookie through the authenticated API, and OLR adds
+the proxy's bearer token server-side for HTTP and WebSocket traffic. No second
+login or LAN listener is required. Turning Inspection off revokes live access.
+
+## Retained site activity and DNS
+
+The Activity chart offers **4 hours**, **24 hours**, **7 days** and **30 days**.
+It reads retained samples by device MAC, including when the device has no current
+address, inspection is off, or another device is active. Its total is for the
+selected range. Samples are collected only while this device's inspection is on;
+saved samples survive stop/start and OLR restarts. There are no samples during
+control-daemon downtime, and retaining earlier samples does not fill those gaps.
+Site samples have a separate fixed bound of 30 days and 64 MiB across devices;
+they do not consume the configurable 5 GiB saved-request allowance.
+
+Sites use registrable domains under the public suffix list, so a suffix such as
+`com.cn` is not itself presented as a site. The chart uses the DNS relay's address
+names, then names observed by the proxy for the same device/destination pair.
+Connections outside interception's scope can remain unnamed. Activity is sampled
+connection traffic, not the request archive's file size or a complete browsing
+history. Clearing saved requests does not clear these activity samples.
+
+DNS queries are a separate recent network-wide sample matched to the device's
+current IPs; the relay's query log must be enabled. A DNS lookup is not proof of
+a visit. The DNS sample is not the saved request archive.
+
+## Scope and service behavior
+
+OLR intercepts only selected source IPv4 traffic on TCP ports 80/443 to public
+destinations. IPv6, UDP/443 (QUIC), LAN destinations, other ports and non-HTTP
+protocols are outside scope. OLR does not block QUIC to force fallback. A device
+can have up to eight explicitly selected IPv4 addresses. Check their ownership:
+OLR does not prove the MAC owns them or automatically follow reassignment.
+Certificate pinning and separate app trust stores can prevent decryption or make
+an app fail to connect. The page does not claim a complete list of connections.
+
+When the device has an explicit gateway exit, OLR marks only mitmweb's upstream
+packets to follow that exit so fake-IP DNS answers can remain usable. Without an
+explicit exit, `198.18.0.0/15` destinations bypass interception. Stop and restart
+inspection after changing the device's exit to pick up that change.
+
+On packaged Linux systems the inspection proxy runs as its own systemd service,
+independent of the OLR daemon, so a control-daemon deployment does not interrupt
+capture. Reboot starts the configured inspection again. An explicit stop ends the
+proxy and restores normal forwarding. OLR waits for proxy readiness before
+installing interception and reconciles its own nftables rules after failure.
+The listener guard accepts only selected sources whose conntrack original TCP
+destination was port 80/443; direct LAN connections to the proxy port are dropped.
+Do not use `ct status dnat` alone to identify these redirects.
+
+Redirect-rule packet counts and accepted proxy socket counts are diagnostics,
+not evidence of a completed or saved response. A zero redirect count after a
+known IPv4 HTTP request indicates a rule mismatch; growing redirects with zero
+proxy accepts points to delivery between netfilter and the proxy.
+
+Startup errors include recent proxy stderr with its viewer token redacted. Retry
+shows progress and preserves the failure reason. Process cleanup requests normal
+termination before forced termination so standalone PyInstaller extraction files
+can be removed by their owner. OLR does not sweep unrelated temporary files.
+
+Validate on a real Linux router before relying on the interception path: HTTP,
+trusted HTTPS, pinned apps, IPv4 changes, QUIC, proxy failure, OLR restart,
+reboot, archive persistence/retention and nftables cleanup. macOS Go/UI checks
+cannot exercise that path.
+
+The opt-in `TestManagedSystemdContinuity` smoke test validates the generated unit
+on a real root/systemd host with mitmweb installed. Build the inspection test
+binary for that host, then run
+`sudo env OLR_INSPECTION_SYSTEMD_SMOKE=1 ./inspection.test -test.v -test.run '^TestManagedSystemdContinuity$'`.
+It uses its own temporary service, CA, and loopback ports 28081/28082, with a
+no-op stop hook instead of nftables. It verifies an unchanged proxy PID and
+continued capture after control-plane detachment, then checks retained records
+after proxy restart. The test removes its own service and temporary data.
+
+## History API
+
+All endpoints below require the same administrator authentication as other API
+operations. MAC identifies the archive owner independently of current addresses.
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /api/inspection/history?mac=&before=&limit=&search=` | Newest-first saved entries, opaque pagination cursor, device/router byte usage and current retention limits |
+| `GET /api/inspection/history/detail?mac=&id=` | Saved entry metadata with request/response headers and bounded text previews |
+| `GET /api/inspection/history/flow?mac=&id=` | Full native `.mitm` download |
+| `DELETE /api/inspection/history?mac=` | Clear this device's saved request archive only, after explicit UI confirmation |
+| `GET /api/inspection/retention` | Global `{days,max_bytes}` retention settings |
+| `PUT /api/inspection/retention` | Update global `{days,max_bytes}` limits |
+| `GET /api/inspection/activity?mac=&range=4h\|24h\|7d\|30d` | Retained activity buckets and current `recording` state |
+
+History entries carry `id`, Unix-seconds `at`, `method`, `url`, `status` and
+`bytes`. `status: 0` identifies failed captured requests. List responses include
+`entries`, `next_before`, per-device `retained_bytes`, router-wide `total_bytes`,
+`retention_days` and global `max_bytes`. Detail messages are nullable and include
+`headers: [{name,value}]`, `body`, `body_bytes`, `body_truncated` and
+`body_binary`; a failed flow may also include `error`. Inspection status includes
+`history_error` when archiving fails.

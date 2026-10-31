@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/open-linux-router/open-linux-router/internal/core"
 )
 
-// The switch is the one durable thing about inspection besides the CA: which
-// device was being inspected, and the addresses its rule matched. It lives
-// beside the CA rather than in the configuration backup, because restoring a
-// backup on another router must not arm interception there.
+// The saved switch identifies the device and addresses to resume. It lives
+// beside the CA and history rather than in configuration backups: restoring a
+// network configuration on another router must not arm interception there.
 const settingFile = "session.json"
 
 // setting is the switch as it outlives the process. Flows never live here.
@@ -45,16 +46,7 @@ func (s *Service) writeSetting(st *setting) error {
 	if err != nil {
 		return err
 	}
-	target := filepath.Join(s.Dir, settingFile)
-	tmp := target + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, target); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return nil
+	return core.WriteFileAtomic(filepath.Join(s.Dir, settingFile), data, 0600)
 }
 
 func (s *Service) clearSetting() error {

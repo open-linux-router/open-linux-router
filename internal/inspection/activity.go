@@ -11,28 +11,10 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-// What this device did, per site, while the inspection session ran.
-//
-// The device page's chart asks a question nothing else in olr answers: not "who
-// is this device talking to now" (conntrack) and not "what names did it look
-// up" (the relay's log), but "where did the bytes go, over time, and under which
-// name" while inspection runs. That join is (device address, remote address)
-// from conntrack against the relay's observed name map, accumulated into
-// buckets.
-//
-// Three properties, each a decision:
-//
-//   - **Only while the switch is on.** The chart is a live view, not history:
-//     Begin starts the series with the session and End drops it, and nothing
-//     survives the process. Turning inspection off clears what it saw rather
-//     than leaving a week of somebody's evening behind. That is the same
-//     argument design.md §10 makes against writing flow events to disk,
-//     applied to keeping them after the operator stopped looking.
-//   - **Attribution is fixed at sample time.** A bucket is written once, from
-//     the name the relay had at that moment. Later queries never rewrite it, so
-//     the numbers already on screen do not change while nobody is looking.
-//   - **Unnamed is a bucket, not a gap.** Traffic whose address was never
-//     resolved is kept under "未命名"; dropping it would make the totals lie.
+// Activity records per-site minute buckets while inspection runs. The live ring
+// stays bounded; optional per-device storage retains history independently of
+// the current session. Attribution is fixed at sample time, and unnamed traffic
+// remains visible rather than disappearing from totals.
 const (
 	// activityWidth is the width of a stored bucket. The switch stays on as
 	// long as the operator leaves it, so a minute is the resolution the chart
@@ -87,18 +69,18 @@ type ActivityBucket struct {
 
 // Activity keeps a bounded ring of per-site traffic for one session's addresses.
 //
-// Sampling and reading never block each other for longer than a copy: the
-// sampler holds the lock for the length of one diff, and a reader copies the
-// buckets it wants.
+// Sampling, checkpoints, and history queries are serialized. History is read
+// one bounded hourly shard at a time rather than loaded into the live ring.
 type Activity struct {
-	mu      sync.Mutex
-	flows   func(context.Context) ([]Flow, error)
-	names   func(context.Context) ([]Name, error)
-	now     func() time.Time
-	prev    map[flowKey][2]uint64
-	buckets map[int64]map[netip.Addr]map[string]*counters
-	order   []int64
-	entries int
+	mu       sync.Mutex
+	sampleMu sync.Mutex
+	flows    func(context.Context) ([]Flow, error)
+	names    func(context.Context) ([]Name, error)
+	now      func() time.Time
+	prev     map[flowKey][2]uint64
+	buckets  map[int64]map[netip.Addr]map[string]*counters
+	order    []int64
+	entries  int
 
 	// watched and started are the open session. A zero started means idle: the
 	// sampler reads nothing and the endpoint has nothing to return.
@@ -113,6 +95,16 @@ type Activity struct {
 	// lived, so a stale copy would name traffic after the wrong site.
 	siteByFlow map[flowKey]string
 	namesAt    time.Time
+
+	storage      string
+	device       string
+	deviceSince  time.Time
+	sampledAt    time.Time
+	baselineAt   time.Time
+	pending      map[int64]map[string]*counters
+	storageErr   error
+	storageLimit int64
+	sessionID    uint64
 }
 
 type flowKey struct {
@@ -141,7 +133,7 @@ const SampleInterval = 30 * time.Second
 
 // Run samples until ctx ends.
 func (a *Activity) Run(ctx context.Context) {
-	if a == nil || a.flows == nil {
+	if a == nil {
 		return
 	}
 	tick := time.NewTicker(SampleInterval)
@@ -168,7 +160,12 @@ func (a *Activity) Begin(ctx context.Context, addresses []string) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	_ = a.checkpointLocked()
 	a.reset()
+	a.beginLocked(ctx, addresses)
+}
+
+func (a *Activity) beginLocked(ctx context.Context, addresses []string) {
 	a.watched = make(map[netip.Addr]bool, len(addresses))
 	for _, raw := range addresses {
 		if addr, err := netip.ParseAddr(strings.TrimSpace(raw)); err == nil {
@@ -185,6 +182,7 @@ func (a *Activity) Begin(ctx context.Context, addresses []string) {
 		}
 	}
 	a.started = a.now()
+	a.baselineAt = a.started
 }
 
 // remember records the counters of the flows the session watches, without
@@ -199,13 +197,21 @@ func (a *Activity) remember(flows []Flow) {
 	}
 }
 
-// End stops recording and forgets the session.
+// End stops recording. Durable history is retained; Checkpoint reports write errors.
 func (a *Activity) End() {
 	if a == nil {
 		return
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if err := a.checkpointLocked(); err != nil {
+		a.storageErr = err
+		// Keep failed writes available for a later Checkpoint retry.
+		a.started = time.Time{}
+		a.watched = nil
+		a.prev = map[flowKey][2]uint64{}
+		return
+	}
 	a.reset()
 }
 
@@ -231,6 +237,12 @@ func (a *Activity) Started() time.Time {
 
 // reset drops the session's counters. The caller holds the lock.
 func (a *Activity) reset() {
+	a.sessionID++
+	a.device = ""
+	a.deviceSince = time.Time{}
+	a.sampledAt = time.Time{}
+	a.baselineAt = time.Time{}
+	a.pending = nil
 	a.prev = map[flowKey][2]uint64{}
 	a.buckets = map[int64]map[netip.Addr]map[string]*counters{}
 	a.order = nil
@@ -250,9 +262,25 @@ func (a *Activity) recording() bool {
 
 // Sample reads the table once and folds the differences into the current bucket.
 func (a *Activity) Sample(ctx context.Context) error {
-	if a == nil || a.flows == nil || !a.recording() {
+	if a == nil {
 		return nil
 	}
+	if a.flows == nil || !a.recording() {
+		// Retention also runs while inspection is off. A stopped recorder with a
+		// failed final write retries its bounded pending checkpoint here.
+		return a.Checkpoint()
+	}
+	a.sampleMu.Lock()
+	defer a.sampleMu.Unlock()
+	a.mu.Lock()
+	if len(a.pending) > 0 {
+		if err := a.checkpointLocked(); err != nil {
+			a.mu.Unlock()
+			return err
+		}
+	}
+	sessionID := a.sessionID
+	a.mu.Unlock()
 	flows, err := a.flows(ctx)
 	if err != nil {
 		return err
@@ -263,7 +291,7 @@ func (a *Activity) Sample(ctx context.Context) error {
 	defer a.mu.Unlock()
 	// The session can end while conntrack is being read; its ring is already
 	// gone and must not be rebuilt from a reading nothing asked for.
-	if a.started.IsZero() {
+	if a.started.IsZero() || a.sessionID != sessionID {
 		return nil
 	}
 
@@ -293,7 +321,9 @@ func (a *Activity) Sample(ctx context.Context) error {
 		// from before the session, so it becomes the baseline instead of traffic.
 		a.prev = seen
 		a.baseline = false
-		return nil
+		a.baselineAt = now
+		a.sampledAt = now
+		return a.checkpointLocked()
 	}
 	for _, k := range watched {
 		before := a.prev[k]
@@ -310,8 +340,9 @@ func (a *Activity) Sample(ctx context.Context) error {
 		a.add(now, k.src, a.siteFor(k), up, down)
 	}
 	a.prev = seen
+	a.sampledAt = now
 	a.prune()
-	return nil
+	return a.checkpointLocked()
 }
 
 // attributable reports whether a flow is a device reaching the internet. The
@@ -370,6 +401,15 @@ func siteOf(name string) string {
 
 func (a *Activity) add(now time.Time, addr netip.Addr, site string, up, down uint64) {
 	key := now.Truncate(activityWidth).Unix()
+	if a.device != "" && a.storage != "" {
+		if a.pending == nil {
+			a.pending = map[int64]map[string]*counters{}
+		}
+		if a.pending[key] == nil {
+			a.pending[key] = map[string]*counters{}
+		}
+		mergeUsage(a.pending[key], site, up, down)
+	}
 	byAddr, ok := a.buckets[key]
 	if !ok {
 		byAddr = map[netip.Addr]map[string]*counters{}
@@ -396,6 +436,10 @@ func (a *Activity) add(now time.Time, addr netip.Addr, site string, up, down uin
 // to make room for new data in the same bucket: the direction that keeps what is
 // already on screen correct.
 func (a *Activity) prune() {
+	cutoff := a.now().Truncate(activityWidth).Add(-(activityBuckets - 1) * activityWidth).Unix()
+	for len(a.order) > 0 && a.order[0] < cutoff {
+		a.dropBucket(a.order[0])
+	}
 	for len(a.order) > activityBuckets {
 		a.dropBucket(a.order[0])
 	}
@@ -477,7 +521,11 @@ func foldSites(merged map[string]*counters) []SiteUsage {
 		rows = append(rows, SiteUsage{Site: site, Up: c.up, Down: c.down})
 	}
 	sort.Slice(rows, func(i, j int) bool {
-		return rows[i].Up+rows[i].Down > rows[j].Up+rows[j].Down
+		left, right := rows[i].Up+rows[i].Down, rows[j].Up+rows[j].Down
+		if left == right {
+			return rows[i].Site < rows[j].Site
+		}
+		return left > right
 	})
 	if len(rows) <= activitySites {
 		return rows
@@ -488,6 +536,13 @@ func foldSites(merged map[string]*counters) []SiteUsage {
 	for _, row := range rows[activitySites-1:] {
 		other.Up += row.Up
 		other.Down += row.Down
+	}
+	for i := range out {
+		if out[i].Site == otherSite {
+			out[i].Up += other.Up
+			out[i].Down += other.Down
+			return out
+		}
 	}
 	return append(out, other)
 }

@@ -8,6 +8,7 @@ import { Settings } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { ClientQueries } from '@/features/dns/client-queries'
 import { SiteActivity } from '@/features/devices/site-activity'
+import { InspectionHistory, InspectionRetention } from '@/features/devices/inspection-history'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -18,6 +19,7 @@ interface Status {
   /* The switch was restored but the proxy is not running; error says why. */
   pending?: boolean
   error?: string
+  history_error?: string
   mac?: string
   ips?: string[]
   ca_present: boolean
@@ -53,6 +55,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
   const busy = start.isPending || stop.isPending
   const [showSetup, setShowSetup] = useState(false)
   const [viewerReady, setViewerReady] = useState(false)
+  const [requestView, setRequestView] = useState<'saved' | 'live'>('saved')
   const caURL = `${window.location.origin}/inspection-setup.html`
   const caQR = useMemo(() => {
     try { return encodeQR(caURL, 'svg') } catch { return null }
@@ -67,7 +70,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
   const other = Boolean(status.data?.mac) && !sameDevice && (active || pending)
   const error = status.data?.error || (mutationError?.state === statusState ? mutationError.message : null)
   // A reason the switch cannot be used, in the space the session would fill.
-  const notice = status.isError || Boolean(error) || other || (on && !active) || (!on && !other && (ipv4.length === 0 || ipv4.length > 8))
+  const notice = status.isError || Boolean(error) || (sameDevice && Boolean(status.data?.history_error)) || other || (on && !active) || (!on && !other && (ipv4.length === 0 || ipv4.length > 8))
 
   useEffect(() => {
     if (!live) return
@@ -80,13 +83,8 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
     return () => { cancelled = true; setViewerReady(false) }
   }, [live])
 
-  // One rule under the title bar separates the switch from what it turned on;
-  // the sections below are told apart by their headings and spacing rather than
-  // by a line each, which turned the panel into ruled paper.
-  const divided = Boolean(notice) || on
-
   return <section className="overflow-hidden rounded-xl border bg-card shadow-xs [overflow-anchor:none]" aria-labelledby="inspection-title">
-    <div className={`px-4 sm:px-6 ${divided ? 'border-b' : ''}`}>
+    <div className="border-b px-4 sm:px-6">
       <div className="flex h-18 items-center justify-between gap-3">
         <Heading id="inspection-title">{t('Inspection')}</Heading>
         {/* The title names the switch, so the title bar needs no second
@@ -94,7 +92,7 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
             left without moving the control the operator came for. */}
         <div className="flex flex-wrap items-center justify-end gap-3">
           {status.isPending && <span className="text-xs text-muted-foreground">{t('Checking…')}</span>}
-          {on && <Button variant="quiet" size="icon" aria-label={t('Inspection setup')} title={t('Inspection setup')} onClick={() => setShowSetup(true)}><Settings className="size-5" /></Button>}
+          <Button variant="quiet" size="icon" aria-label={t('Inspection setup')} title={t('Inspection setup')} onClick={() => setShowSetup(true)}><Settings className="size-5" /></Button>
           <Switch id="device-inspection" aria-labelledby="inspection-title" checked={on} busy={busy} disabled={status.isPending || status.isError || other || (!on && (ipv4.length === 0 || ipv4.length > 8))} onCheckedChange={(checked) => { if (busy) return; if (checked) start.mutate(undefined); else stop.mutate() }} />
         </div>
       </div>
@@ -104,39 +102,41 @@ export function DeviceInspection({ mac, addresses }: { mac: string; addresses: s
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{t('Inspection setup')}</DialogTitle>
-            <DialogDescription>Scan on the device you are inspecting to open the five-step certificate setup guide. Connect it to a network that can reach this router.</DialogDescription>
+            <DialogDescription>{t('Scan on the device you are inspecting to open the five-step certificate setup guide. Connect it to a network that can reach this router.')}</DialogDescription>
           </DialogHeader>
           {caQR && <div className="mx-auto rounded-md bg-white p-3 [&>svg]:size-56" dangerouslySetInnerHTML={{ __html: caQR }} role="img" aria-label={t('Inspection setup guide QR code')} />}
           <a href={caURL} target="_blank" rel="noreferrer" className="break-all text-sm text-primary underline">{t('Open setup guide')}</a>
+          <InspectionRetention />
         </DialogContent>
       </Dialog>
-      {/* Everything the switch turned on lives here, so there is one card, one
-          switch and one answer to "is this device being inspected". The chart
-          covers this switch, DNS is where the names in it came from, and the
-          last section is the content the session can see. */}
       {notice && <div className="space-y-3 px-4 py-4 sm:px-6 sm:py-6">
         {status.isError ? <p role="alert" className="text-sm text-destructive">{t('Inspection status is unavailable. Do not assume interception has stopped.')}</p> : null}
+        {sameDevice && status.data?.history_error && <p role="alert" className="text-sm text-destructive [overflow-wrap:anywhere]">{t('Requests could not be saved.')} {status.data.history_error}</p>}
         {other ? <p className="text-sm text-muted-foreground">{t('Another device is set for inspection. Turn its switch off before starting this one.')}</p> : null}
         {on && !active ? <div className="flex flex-wrap items-center gap-3">
           <p role="alert" className="min-w-0 text-sm text-destructive [overflow-wrap:anywhere]">{error || t('The inspection proxy is not running.')}</p>
           <Button size="sm" variant="secondary" disabled={busy} aria-busy={start.isPending || undefined} onClick={() => { if (!busy) start.mutate(status.data?.ips) }}>{start.isPending ? t('Starting…') : t('Retry')}</Button>
         </div> : error ? <p role="alert" className="min-w-0 text-sm text-destructive [overflow-wrap:anywhere]">{error}</p> : null}
-        {!on && !other && ipv4.length === 0 && !active && <p className="text-sm text-muted-foreground">OLR has not observed an IPv4 address for this device yet. Connect it to the network and refresh this page to enable inspection.</p>}
+        {!on && !other && ipv4.length === 0 && !active && <p className="text-sm text-muted-foreground">{t('OLR has not observed an IPv4 address for this device yet. Connect it to the network and refresh this page to enable inspection.')}</p>}
         {!on && !other && ipv4.length > 8 && !active && <p className="text-sm text-muted-foreground">{t('Too many addresses are associated with this device to start inspection safely.')}</p>}
       </div>}
-      {live && <div>
-        <h3 className="px-4 pt-4 text-sm font-medium sm:px-6">{t('Activity')}</h3>
-        <SiteActivity addresses={ipv4} />
-      </div>}
+      <SiteActivity key={mac} mac={mac} addresses={ipv4} />
       {live && <ClientQueries addresses={ipv4} section />}
-      {live && <div className="pt-4">
-        <h3 className="px-4 pb-3 text-sm font-medium sm:px-6">{t('Requests')}</h3>
-        <div className="px-4 pb-4 sm:px-6 sm:pb-6">
+      <div className="space-y-3 px-4 pb-4 pt-4 sm:px-6 sm:pb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-sm font-medium">{t('Requests')}</h3>
+          {live && <div className="inline-flex items-center gap-1" role="group" aria-label={t('Request view')}>
+            <Button size="sm" variant={requestView === 'saved' ? 'secondary' : 'quiet'} aria-pressed={requestView === 'saved'} onClick={() => setRequestView('saved')}>{t('Saved')}</Button>
+            <Button size="sm" variant={requestView === 'live' ? 'secondary' : 'quiet'} aria-pressed={requestView === 'live'} onClick={() => setRequestView('live')}>{t('Live')}</Button>
+          </div>}
+        </div>
+        {(!live || requestView === 'saved') ? <InspectionHistory key={mac} mac={mac} /> : <>
+          <p className="text-xs text-muted-foreground">{t('Live viewer keeps the latest 1000 flows in memory. Completed and failed requests are saved separately in history.')}</p>
           {viewerReady
             ? <iframe title={t('Full request and response inspection')} src="/inspection-web/" className="h-[75vh] min-h-[480px] w-full rounded border bg-white" />
             : <div className="text-sm text-muted-foreground">{t('Opening the inspection viewer…')}</div>}
-        </div>
-      </div>}
+        </>}
+      </div>
     </div>
   </section>
 }
